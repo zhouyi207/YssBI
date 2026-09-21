@@ -48,15 +48,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Test,
     ),
     node(
-        "yssbi.statistics.adf.summary",
-        "DF / ADF Summary",
-        "DF / ADF 汇总",
-        &["ADF report", "critical values", "unit root"],
-        &["ADF 报告", "临界值", "单位根"],
-        Family::Adf,
-        Stage::Summary,
-    ),
-    node(
         "yssbi.statistics.linear.fit",
         "Linear Regression",
         "线性回归",
@@ -89,6 +80,15 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
+        "yssbi.statistics.iv.2sls.fit",
+        "Fit IV 2SLS",
+        "拟合 工具变量 2SLS",
+        &["IV 2SLS"],
+        &["工具变量 2SLS"],
+        Family::Iv2sls,
+        Stage::Fit,
+    ),
+    node(
         "yssbi.statistics.iv.2sls.summary",
         "IV 2SLS Summary",
         "工具变量 2SLS 汇总",
@@ -96,6 +96,15 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["2SLS 报告", "工具变量", "第一阶段"],
         Family::Iv2sls,
         Stage::Summary,
+    ),
+    node(
+        "yssbi.statistics.iv.liml.fit",
+        "Fit IV LIML",
+        "拟合 工具变量 LIML",
+        &["IV LIML"],
+        &["工具变量 LIML"],
+        Family::IvLiml,
+        Stage::Fit,
     ),
     node(
         "yssbi.statistics.iv.liml.summary",
@@ -129,6 +138,15 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
+        "yssbi.statistics.panel.fit",
+        "Fit Panel Model",
+        "拟合 面板模型",
+        &["Panel Model"],
+        &["面板模型"],
+        Family::Panel,
+        Stage::Fit,
+    ),
+    node(
         "yssbi.statistics.panel.summary",
         "Panel Model Summary",
         "面板模型汇总",
@@ -149,7 +167,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         ],
         &["双重差分", "双向固定效应", "事件研究", "平行趋势"],
         Family::PanelDid,
-        Stage::Summary,
+        Stage::Fit,
     ),
     node(
         "yssbi.statistics.prais.fit",
@@ -222,6 +240,15 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["滞后阶数", "赤池信息准则", "贝叶斯信息准则"],
         Family::Var,
         Stage::Test,
+    ),
+    node(
+        "yssbi.statistics.var.fit",
+        "Fit VAR",
+        "拟合 VAR",
+        &["VAR"],
+        &["VAR"],
+        Family::Var,
+        Stage::Fit,
     ),
     node(
         "yssbi.statistics.var.summary",

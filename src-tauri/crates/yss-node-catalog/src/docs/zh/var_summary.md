@@ -1,7 +1,5 @@
 # VAR Summary
 
-向量自回归 VAR($p$)（Stata `varbasic`）：
+接收 `yssbi.statistics.var.fit` 产生的已拟合 `model`，基于该模型输出 `result` 和 `report`。不接收原始数据或估计配置，不重新拟合。
 
-$$
-Y_t = A_1 Y_{t-1} + \cdots + A_p Y_{t-p} + B X_t + u_t
-$$
+当前已定义目录契约，执行内核尚未注册。

@@ -1,3 +1,5 @@
-# IV:LIML Summary
+# IV LIML Summary
 
-有限信息极大似然 IV 估计（Stata `ivregress liml`）。输入布局与 **IV:2SLS Summary** 相同。
+接收 `yssbi.statistics.iv.liml.fit` 产生的已拟合 `model`，基于该模型输出 `result` 和 `report`。不接收原始数据或估计配置，不重新拟合。
+
+当前已定义目录契约，执行内核尚未注册。

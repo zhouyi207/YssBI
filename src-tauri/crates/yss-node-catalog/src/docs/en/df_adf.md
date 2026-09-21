@@ -1,5 +1,5 @@
 # DF & ADF
 
-Augmented Dickey–Fuller unit root test (Stata `dfuller`).
+Input `series` is a numeric series in time order. Parameters `lags` and `regression` select the lag order and deterministic terms. Outputs `result` (`statistics.result.adf`) and `report` from the same test; no fitted model is produced. The result contract covers the test statistic, p-value, critical values, used lags, effective sample size and specification.
 
-Tests $H_0$: unit root in **Y** against stationarity.
+The null hypothesis is that the series has a unit root. This node has a catalog contract; its execution kernel is not yet registered.

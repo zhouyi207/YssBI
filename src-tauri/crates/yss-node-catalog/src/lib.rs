@@ -60,6 +60,116 @@ mod tests {
     use yss_node_protocol::{NodeTypeId, PortCardinality};
 
     #[test]
+    fn statistical_navigation_preserves_hierarchy_and_separates_postestimation() {
+        let system = build_builtin_node_system().unwrap();
+        let catalog = system.catalog.localize(&system.registry, "en-US");
+        let categories: Vec<_> = catalog
+            .categories
+            .iter()
+            .filter(|category| category.parent_category_id.as_deref() == Some("statistics"))
+            .collect();
+        assert_eq!(categories.len(), 22);
+        let orders: BTreeSet<_> = categories.iter().map(|category| category.order).collect();
+        assert_eq!(orders.len(), categories.len());
+        for (node, expected) in [
+            ("linear.fit", "regression"),
+            ("linear.summary", "regression"),
+            ("linear.predict", "postestimation"),
+            ("logit.predict", "postestimation"),
+            ("probit.predict", "postestimation"),
+            ("iv.2sls.fit", "causal"),
+            ("iv.liml.summary", "causal"),
+            ("panel.did.twfe", "causal"),
+            ("panel.fit", "panel"),
+            ("adf.test", "timeseries"),
+            ("vec.rank_test", "timeseries"),
+        ] {
+            let id = NodeTypeId::new(format!("yssbi.statistics.{node}")).unwrap();
+            let protocol = system.registry.protocol(&id).unwrap();
+            assert_eq!(
+                protocol.catalog.category_id.as_str(),
+                format!("statistics.{expected}"),
+                "{node}"
+            );
+        }
+    }
+
+    #[test]
+    fn statistical_summaries_consume_their_fit_model_without_estimation_parameters() {
+        use yss_node_protocol::PortDirection;
+        let system = build_builtin_node_system().unwrap();
+        let mut count = 0;
+        for (id, _) in system.registry.iter().filter(|(id, _)| {
+            id.as_str().starts_with("yssbi.statistics.") && id.as_str().ends_with(".summary")
+        }) {
+            let summary = system.registry.protocol(id).unwrap();
+            let inputs: Vec<_> = summary
+                .interface
+                .ports
+                .iter()
+                .filter(|port| port.direction == PortDirection::Input)
+                .collect();
+            assert_eq!(inputs.len(), 1, "{id}");
+            assert_eq!(inputs[0].key.as_str(), "model", "{id}");
+            assert!(summary.parameters.parameters.is_empty(), "{id}");
+            let fit_id = NodeTypeId::new(format!(
+                "{}.fit",
+                id.as_str().strip_suffix(".summary").unwrap()
+            ))
+            .unwrap();
+            let fit = system.registry.protocol(&fit_id).unwrap();
+            let model = fit
+                .interface
+                .ports
+                .iter()
+                .find(|port| port.key.as_str() == "model")
+                .unwrap();
+            assert_eq!(model.direction, PortDirection::Output);
+            assert_eq!(inputs[0].value_type, model.value_type, "{id}");
+            count += 1;
+        }
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn adf_test_consumes_series_and_emits_result_and_report() {
+        use yss_node_protocol::{PortDirection, TypeExpr};
+        let system = build_builtin_node_system().unwrap();
+        let adf = system
+            .registry
+            .protocol(&NodeTypeId::new("yssbi.statistics.adf.test").unwrap())
+            .unwrap();
+        let ports: Vec<_> = adf
+            .interface
+            .ports
+            .iter()
+            .map(|port| (port.key.as_str(), port.direction))
+            .collect();
+        assert_eq!(
+            ports,
+            [
+                ("series", PortDirection::Input),
+                ("result", PortDirection::Output),
+                ("report", PortDirection::Output)
+            ]
+        );
+        assert_eq!(
+            adf.interface.ports[1].value_type,
+            TypeExpr::Concrete("statistics.result.adf".parse().unwrap())
+        );
+        assert_eq!(
+            adf.interface.ports[2].value_type,
+            TypeExpr::Concrete("statistics.report".parse().unwrap())
+        );
+        assert!(
+            system
+                .registry
+                .protocol(&NodeTypeId::new("yssbi.statistics.adf.summary").unwrap())
+                .is_none()
+        );
+    }
+
+    #[test]
     fn builtin_output_pins_support_unbounded_fan_out() {
         use yss_node_protocol::{ConnectionsPerPort, PortDirection};
         let system = build_builtin_node_system().unwrap();

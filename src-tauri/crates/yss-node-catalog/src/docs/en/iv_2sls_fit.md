@@ -1,0 +1,5 @@
+# IV 2SLS Fit
+
+Consumes `response, predictors, endogenous, instruments` and estimation parameters `configuration`. Outputs the fitted `model`, `fitted` values and `residuals`. Connect `model` to the corresponding Summary.
+
+This node has a catalog contract; its execution kernel is not yet registered.

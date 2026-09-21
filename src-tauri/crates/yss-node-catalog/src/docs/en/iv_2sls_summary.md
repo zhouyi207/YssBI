@@ -1,8 +1,5 @@
-# IV:2SLS Summary
+# IV 2SLS Summary
 
-Two-Stage Least Squares (Stata `ivregress 2sls`):
+Consumes the fitted `model` produced by `yssbi.statistics.iv.2sls.fit`. Outputs `result` and `report` from that model. It does not accept raw data or estimation parameters and does not refit.
 
-$$
-Y = X_{\mathrm{exog}}\beta_1 + X_{\mathrm{endog}}\beta_2 + \varepsilon,\quad
-X_{\mathrm{endog}} = Z\pi + X_{\mathrm{exog}}\gamma + u
-$$
+This node has a catalog contract; its execution kernel is not yet registered.

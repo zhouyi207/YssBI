@@ -457,6 +457,8 @@ Pin 查询与当前结果搜索重新验证数据库内容及函数依赖；报�
 统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
 
 线性回归统一使用 `yssbi.statistics.linear.fit`、`linear.summary` 与 `linear.predict`。Fit 在配置中选择 OLS/WLS/GLS，输出 `model`、`fitted`、`residuals`；Summary 只接收 `model`，无拟合参数，也不重新估计；Predict 使用同一模型的系数与截距。
+
+统计目录的其他 Summary 同样只接收对应方法的已拟合模型。ADF 不属于模型汇总：`adf.test` 接收序列及检验配置，声明 `result` 和 `report` 输出；Graph 仅将其 `report` 分类为 ADF 统计报告，`result` 保持普通结果。ADF 及非线性回归的相关目录定义尚未注册执行内核，不能据此视为已贯通；当前定义与接入边界见 [Node Catalog](../../src-tauri/crates/yss-node-catalog/README.md)。
 WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通过按顺序添加的 `sigma` 数列接收完整相对误差协方差矩阵的各列，验证有限、方阵、对称与正定。只允许所选方法需要的辅助输入。WLS 权重与训练列联合读取以验证共同样本；协方差矩阵的行列顺序由调用者对应训练样本。GLS 当前仅支持常规标准误；其他标准误配置被拒绝。
 执行计划保留端口实例分组身份和模板名，内核只接收中立模板名来区分 predictors/weights/sigma，不解析图地址。
 

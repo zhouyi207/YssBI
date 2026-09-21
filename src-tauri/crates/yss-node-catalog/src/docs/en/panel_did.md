@@ -7,3 +7,5 @@ Regresses **Y** on optional **X** and **Treat×Post** only — main effects of T
 $$
 Y_{it} = \alpha_i + \gamma_t + \beta (Treat_i \times Post_t) + X_{it}'\delta + \varepsilon_{it}
 $$
+
+This Fit node consumes `response`, `predictors`, `entity`, `time`, and `treatment`, with `event_study` and `placebo_repetitions` parameters. Outputs `model`, `fitted`, `residuals`, and `report`. Its execution kernel is not yet registered.

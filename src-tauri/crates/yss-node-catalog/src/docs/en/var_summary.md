@@ -1,7 +1,5 @@
 # VAR Summary
 
-Vector Autoregression VAR($p$) (Stata `varbasic`):
+Consumes the fitted `model` produced by `yssbi.statistics.var.fit`. Outputs `result` and `report` from that model. It does not accept raw data or estimation parameters and does not refit.
 
-$$
-Y_t = A_1 Y_{t-1} + \cdots + A_p Y_{t-p} + B X_t + u_t
-$$
+This node has a catalog contract; its execution kernel is not yet registered.

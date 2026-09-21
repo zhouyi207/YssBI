@@ -43,7 +43,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             title_key: node_key(spec.id, "title")?,
             documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
-            category_id: sid(category(spec.family), NodeCategoryId::new)?,
+            category_id: sid(category(spec), NodeCategoryId::new)?,
             icon_id: sid("builtin.statistics", IconId::new)?,
             style_id: sid("builtin.dataframe", NodeStyleId::new)?,
             hidden: false,
@@ -69,7 +69,7 @@ fn ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 
 fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let mut ports = Vec::new();
-    if matches!(spec.family, Family::Vec) {
+    if matches!(spec.family, Family::Vec | Family::Var) {
         ports.push(user_data_input(
             "variables",
             "Variables",
@@ -78,6 +78,25 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         )?);
     } else {
         ports.extend(regression_inputs(spec.family)?);
+    }
+    if matches!(spec.family, Family::Iv2sls | Family::IvLiml) {
+        ports.push(bounded_user_data_input(
+            "endogenous",
+            "Endogenous",
+            series_type()?,
+            1,
+            Some(1),
+        )?);
+        ports.push(bounded_user_data_input(
+            "instruments",
+            "Instruments",
+            series_type()?,
+            1,
+            Some(1),
+        )?);
+    }
+    if spec.family == Family::PanelDid {
+        ports.push(data_input("treatment", "Treatment", series_type()?)?);
     }
     if spec.family == Family::Linear {
         ports.push(bounded_user_data_input(
@@ -97,51 +116,18 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     ports.push(data_output("model", "Model", model_type(spec)?)?);
     ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
     ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
+    if spec.family == Family::PanelDid {
+        ports.push(data_output("report", "Report", report_type()?)?);
+    }
     Ok(ports)
 }
 
 fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
-    let family = spec.family;
-    let mut ports = Vec::new();
-    match family {
-        Family::Linear => ports.push(data_input("model", "Model", model_type(spec)?)?),
-        Family::Adf => ports.push(data_input(
-            "test_result",
-            "Test Result",
-            result_type(Family::Adf)?,
-        )?),
-        Family::PanelDid => {
-            ports.extend(regression_inputs(Family::Panel)?);
-            ports.push(data_input("treatment", "Treatment", series_type()?)?);
-        }
-        Family::Var => ports.push(user_data_input(
-            "variables",
-            "Variables",
-            series_type()?,
-            2,
-        )?),
-        Family::Iv2sls | Family::IvLiml => {
-            ports.extend(regression_inputs(family)?);
-            ports.push(bounded_user_data_input(
-                "endogenous",
-                "Endogenous",
-                series_type()?,
-                1,
-                Some(1),
-            )?);
-            ports.push(bounded_user_data_input(
-                "instruments",
-                "Instruments",
-                series_type()?,
-                1,
-                Some(1),
-            )?);
-        }
-        _ => ports.extend(regression_inputs(family)?),
-    }
-    ports.push(data_output("result", "Result", summary_result_type(spec)?)?);
-    ports.push(data_output("report", "Report", report_type()?)?);
-    Ok(ports)
+    Ok(vec![
+        data_input("model", "Model", model_type(spec)?)?,
+        data_output("result", "Result", result_type(spec.family)?)?,
+        data_output("report", "Report", report_type()?)?,
+    ])
 }
 
 fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
@@ -165,6 +151,9 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         _ => ports.push(data_input("series", "DataSeries", series_type()?)?),
     }
     ports.push(data_output("result", "Result", result_type(family)?)?);
+    if family == Family::Adf {
+        ports.push(data_output("report", "Report", report_type()?)?);
+    }
     Ok(ports)
 }
 
@@ -181,7 +170,7 @@ fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErr
 }
 
 fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyError> {
-    if spec.family == Family::Linear && spec.stage == Stage::Summary {
+    if spec.stage == Stage::Summary {
         return Ok(vec![]);
     }
     let mut parameters = match spec.stage {
@@ -198,17 +187,17 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyErro
             positive_integer_parameter("lags", 1)?,
             select_parameter("trend", "constant")?,
         ],
-        Stage::Summary if spec.family == Family::Var => vec![
+        Stage::Fit if spec.family == Family::Var => vec![
             positive_integer_parameter("lags", 1)?,
             select_parameter("trend", "constant")?,
         ],
-        Stage::Summary if spec.family == Family::PanelDid => vec![
+        Stage::Fit if spec.family == Family::PanelDid => vec![
             toggle_parameter("event_study", false)?,
             positive_integer_parameter("placebo_repetitions", 100)?,
         ],
         _ => vec![],
     };
-    if matches!(spec.stage, Stage::Fit | Stage::Summary)
+    if spec.stage == Stage::Fit
         && matches!(
             spec.family,
             Family::Linear
@@ -521,7 +510,7 @@ fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
             "types.statistics_model_panel_did.title",
         ),
         ("statistics.model.var", "types.statistics_model_var.title"),
-        ("statistics.model.adf", "types.statistics_model_adf.title"),
+        ("statistics.result.adf", "types.statistics_result_adf.title"),
         (
             "statistics.model.vec_rank",
             "types.statistics_model_vec_rank.title",
@@ -542,31 +531,110 @@ fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
     })
     .collect()
 }
+// Navigation categories are independent of method families and execution stages.
+const CATEGORIES: &[(&str, &str, &str)] = &[
+    (
+        "statistics.descriptive",
+        "Descriptive Statistics",
+        "描述统计",
+    ),
+    ("statistics.tests", "Hypothesis Tests", "假设检验"),
+    (
+        "statistics.association",
+        "Association and Agreement",
+        "相关与一致性",
+    ),
+    ("statistics.regression", "Regression Models", "回归模型"),
+    ("statistics.anova", "Analysis of Variance", "方差分析"),
+    (
+        "statistics.multivariate",
+        "Multivariate Analysis",
+        "多元分析",
+    ),
+    (
+        "statistics.longitudinal",
+        "Longitudinal and Multilevel Models",
+        "纵向与多层模型",
+    ),
+    ("statistics.panel", "Panel Models", "面板模型"),
+    (
+        "statistics.causal",
+        "Econometrics and Causal Analysis",
+        "计量与因果分析",
+    ),
+    ("statistics.timeseries", "Time Series", "时间序列"),
+    ("statistics.survival", "Survival Analysis", "生存分析"),
+    ("statistics.spatial", "Spatial Analysis", "空间分析"),
+    (
+        "statistics.psychometrics",
+        "Psychometrics and Structural Equation Models",
+        "测量、问卷与结构方程",
+    ),
+    (
+        "statistics.decision",
+        "Evaluation and Decision Analysis",
+        "综合评价与决策",
+    ),
+    (
+        "statistics.machine_learning",
+        "Machine Learning",
+        "机器学习",
+    ),
+    ("statistics.meta", "Meta-analysis", "Meta 分析"),
+    (
+        "statistics.design_quality",
+        "Experimental Design and Quality Control",
+        "实验设计与质量控制",
+    ),
+    ("statistics.power", "Power and Sample Size", "功效与样本量"),
+    (
+        "statistics.survey",
+        "Complex Survey Analysis",
+        "复杂抽样分析",
+    ),
+    (
+        "statistics.inference",
+        "Inference and Resampling",
+        "推断与重抽样",
+    ),
+    (
+        "statistics.diagnostics",
+        "Model Diagnostics and Comparison",
+        "模型诊断与比较",
+    ),
+    (
+        "statistics.postestimation",
+        "Prediction and Post-estimation",
+        "预测与估计后分析",
+    ),
+];
+
 fn statistics_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyError> {
-    [
-        ("statistics", None, 70),
-        ("statistics.regression", Some("statistics"), 71),
-        ("statistics.panel", Some("statistics"), 72),
-        ("statistics.timeseries", Some("statistics"), 73),
-    ]
-    .into_iter()
-    .map(|(id, parent, order)| {
-        Ok(CategoryRegistration {
+    let mut categories = vec![CategoryRegistration {
+        id: sid("statistics", NodeCategoryId::new)?,
+        title_key: iid("categories.statistics.title")?,
+        parent: None,
+        order: 70,
+    }];
+    for (index, &(id, _, _)) in CATEGORIES.iter().enumerate() {
+        categories.push(CategoryRegistration {
             id: sid(id, NodeCategoryId::new)?,
             title_key: iid(leak(format!("categories.{id}.title")))?,
-            parent: parent
-                .map(|value| sid(value, NodeCategoryId::new))
-                .transpose()?,
-            order,
-        })
-    })
-    .collect()
+            parent: Some(sid("statistics", NodeCategoryId::new)?),
+            order: 71 + index as i32,
+        });
+    }
+    Ok(categories)
 }
-fn category(family: Family) -> &'static str {
-    match family {
-        Family::Panel | Family::PanelDid => "statistics.panel",
+fn category(spec: &NodeSpec) -> &'static str {
+    if spec.stage == Stage::Predict {
+        return "statistics.postestimation";
+    }
+    match spec.family {
+        Family::Iv2sls | Family::IvLiml | Family::PanelDid => "statistics.causal",
+        Family::Panel => "statistics.panel",
         Family::Adf | Family::Var | Family::Vec | Family::VecRank => "statistics.timeseries",
-        _ => "statistics.regression",
+        Family::Linear | Family::Logit | Family::Probit | Family::Prais => "statistics.regression",
     }
 }
 fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
@@ -582,13 +650,12 @@ fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
         Family::Probit => "statistics.model.probit",
         Family::Prais => "statistics.model.prais",
         Family::Vec => "statistics.model.vec",
-        Family::Adf
-        | Family::Iv2sls
-        | Family::IvLiml
-        | Family::Panel
-        | Family::PanelDid
-        | Family::Var
-        | Family::VecRank => {
+        Family::Iv2sls => "statistics.model.iv_2sls",
+        Family::IvLiml => "statistics.model.iv_liml",
+        Family::Panel => "statistics.model.panel",
+        Family::PanelDid => "statistics.model.panel_did",
+        Family::Var => "statistics.model.var",
+        Family::Adf | Family::VecRank => {
             return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
                 context: "statistics fit model family",
                 value: format!("{:?}", spec.family).into(),
@@ -623,12 +690,9 @@ fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyErro
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.numeric")?))
 }
-fn summary_result_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
-    result_type(spec.family)
-}
 fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete(match family {
-        Family::Adf => "statistics.model.adf",
+        Family::Adf => "statistics.result.adf",
         Family::Linear => "statistics.result.linear",
         Family::Iv2sls => "statistics.model.iv_2sls",
         Family::IvLiml => "statistics.model.iv_liml",
@@ -721,7 +785,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "面板 DID 模型",
         ),
         ("types.statistics_model_var.title", "VAR Model", "VAR 模型"),
-        ("types.statistics_model_adf.title", "ADF Result", "ADF 结果"),
+        (
+            "types.statistics_result_adf.title",
+            "ADF Result",
+            "ADF 结果",
+        ),
         (
             "types.statistics_model_vec_rank.title",
             "VEC Rank Result",
@@ -738,22 +806,12 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "统计报告",
         ),
         ("categories.statistics.title", "Statistics", "统计"),
-        (
-            "categories.statistics.regression.title",
-            "Regression",
-            "回归",
-        ),
-        (
-            "categories.statistics.panel.title",
-            "Panel Statistics",
-            "面板统计",
-        ),
-        (
-            "categories.statistics.timeseries.title",
-            "Time-Series Statistics",
-            "时间序列统计",
-        ),
     ] {
+        out.push(("en-US", key, Text(en)));
+        out.push(("zh-CN", key, Text(zh)));
+    }
+    for &(id, en, zh) in CATEGORIES {
+        let key = leak(format!("categories.{id}.title"));
         out.push(("en-US", key, Text(en)));
         out.push(("zh-CN", key, Text(zh)));
     }

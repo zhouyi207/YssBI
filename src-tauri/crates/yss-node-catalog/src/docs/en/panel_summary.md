@@ -1,11 +1,5 @@
 # Panel Summary
 
-Panel data regression (Stata `xtset` + `xtreg` family). Requires **Entity ID** and **Time ID** (`Categorical` or `Int64`, same length as **Y**).
+Consumes the fitted `model` produced by `yssbi.statistics.panel.fit`. Outputs `result` and `report` from that model. It does not accept raw data or estimation parameters and does not refit.
 
-## Model family (report)
-
-- Fixed effects (Within)
-- LSDV
-- First difference
-- Random effects (RE)
-- Hausman test FE vs RE
+This node has a catalog contract; its execution kernel is not yet registered.

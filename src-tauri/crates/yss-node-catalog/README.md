@@ -27,7 +27,41 @@ GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配�
 统计节点的 `Family` 表示方法族，`Stage` 表示对该方法执行的操作，目录分类表示用户在哪里找到节点。
 线性回归的 Fit、Summary、Predict 均使用 `Family::Linear`，预测由 `Stage::Predict` 表达。
 当前操作还包括独立统计检验使用的 `Test`；未来独立模型诊断应使用 `Diagnose` 操作，不新增诊断方法族。
-`category(family)` 仅提供目录位置映射，不参与端口、模型类型或操作语义的判定。
+`category(spec)` 仅提供目录位置映射，不参与端口、模型类型或操作语义的判定。
+
+统计目录在 `statistics` 下按以下顺序注册，分类不表示相应算法已实现。每个节点有一个主分类；跨领域检索复用节点别名，不重复注册节点。
+
+| 目录                 | 分类 ID                       | 内容与边界                                     |
+| -------------------- | ----------------------------- | ---------------------------------------------- |
+| 描述统计             | `statistics.descriptive`      | 频数、描述摘要、分布特征、不平等指标           |
+| 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验       |
+| 相关与一致性         | `statistics.association`      | 相关、偏相关、一致性、Kappa、ICC 等            |
+| 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性       |
+| 方差分析             | `statistics.anova`            | 单因素、多因素、协方差分析、重复测量等入口     |
+| 多元分析             | `statistics.multivariate`     | 主成分、因子、判别、典型相关等                 |
+| 纵向与多层模型       | `statistics.longitudinal`     | GEE、LMM、GLMM、多层模型；统一导航但不混同方法 |
+| 面板模型             | `statistics.panel`            | 固定效应、随机效应、组间与差分估计等           |
+| 计量与因果分析       | `statistics.causal`           | 工具变量、GMM、DID、断点、匹配等子领域         |
+| 时间序列             | `statistics.timeseries`       | 平稳性、协整、单变量与多变量模型、预测         |
+| 生存分析             | `statistics.survival`         | 生存曲线、风险模型、参数生存模型等             |
+| 空间分析             | `statistics.spatial`          | 空间设计对象、空间相关、空间回归               |
+| 测量、问卷与结构方程 | `statistics.psychometrics`    | 信效度、测量模型、结构方程等                   |
+| 综合评价与决策       | `statistics.decision`         | 赋权、排序、综合评价、决策方法                 |
+| 机器学习             | `statistics.machine_learning` | 树、集成、聚类等；与回归目录交叉检索           |
+| Meta 分析            | `statistics.meta`             | 效应量、合并模型、异质性、敏感性分析           |
+| 实验设计与质量控制   | `statistics.design_quality`   | 实验设计、过程能力、控制图相关分析             |
+| 功效与样本量         | `statistics.power`            | 按研究设计和检验目标组织                       |
+| 复杂抽样分析         | `statistics.survey`           | 抽样设计、加权估计、设计型方差与回归           |
+| 推断与重抽样         | `statistics.inference`        | 重抽样过程、区间构造、多重推断等               |
+| 模型诊断与比较       | `statistics.diagnostics`      | 残差诊断、模型检验、模型比较                   |
+| 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等             |
+
+现有 IV 和 DID 节点归入“计量与因果分析”，Panel 模型归入“面板模型”；ADF、VAR、VEC 与协整检验归入“时间序列”。现有 Predict 节点归入“预测与估计后分析”；Summary 跟随方法所在主分类，不因包含诊断指标就归入“模型诊断与比较”。尚无节点的分类保留注册，展示与筛选由通用目录树处理。
+
+所有统计 Summary 的唯一输入为对应方法的已拟合 `model`，输出 `result` 和 `report`，不接收原始数据或估计参数。
+原始输入与估计配置属于 Fit；IV 2SLS、IV LIML、Panel、VAR 均有对应 Fit 定义，Panel DID 的 TWFE 节点也属于 Fit。
+ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验，输出 `statistics.result.adf` 类型的 `result` 和 `report`。
+`adf.summary` 已删除，不提供旧节点或旧端口的兼容转换。上述为目录契约；目前统计节点仅 Linear 的 Fit/Summary/Predict 已注册执行内核，其他方法仍暂不可用。
 
 “运算”下按“算术”“逻辑”“转换”排列；“类别转换”节点位于“转换”中，处理标量和数列的语义转换。分类及其中英文名称由 Rust 目录统一提供。
 

@@ -1,11 +1,5 @@
 # Panel Summary
 
-面板数据回归（类似 Stata `xtset` + `xtreg` 系列）。需要 **Entity ID** 与 **Time ID**（`Categorical` 或 `Int64`，与 **Y** 等长）。
+接收 `yssbi.statistics.panel.fit` 产生的已拟合 `model`，基于该模型输出 `result` 和 `report`。不接收原始数据或估计配置，不重新拟合。
 
-## 模型族（报告内）
-
-- 固定效应（Within）
-- LSDV
-- 一阶差分
-- 随机效应（RE）
-- Hausman 检验（FE vs RE）
+当前已定义目录契约，执行内核尚未注册。

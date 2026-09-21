@@ -1,8 +1,5 @@
-# IV:2SLS Summary
+# IV 2SLS Summary
 
-两阶段最小二乘（Stata `ivregress 2sls`）：
+接收 `yssbi.statistics.iv.2sls.fit` 产生的已拟合 `model`，基于该模型输出 `result` 和 `report`。不接收原始数据或估计配置，不重新拟合。
 
-$$
-Y = X_{\mathrm{exog}}\beta_1 + X_{\mathrm{endog}}\beta_2 + \varepsilon,\quad
-X_{\mathrm{endog}} = Z\pi + X_{\mathrm{exog}}\gamma + u
-$$
+当前已定义目录契约，执行内核尚未注册。

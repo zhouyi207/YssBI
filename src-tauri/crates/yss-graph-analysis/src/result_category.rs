@@ -54,7 +54,7 @@ pub(crate) fn result_category_for_output(
         ("yssbi.statistics.var.lag_order", "result") => GraphStatisticalReportKind::VarSoc,
         ("yssbi.statistics.panel.summary", "report") => GraphStatisticalReportKind::PanelSummary,
         ("yssbi.statistics.panel.did.twfe", "report") => GraphStatisticalReportKind::PanelDid,
-        ("yssbi.statistics.adf.summary", "report") => GraphStatisticalReportKind::DfAdfSummary,
+        ("yssbi.statistics.adf.test", "report") => GraphStatisticalReportKind::DfAdfSummary,
         ("yssbi.statistics.vec.fit", "model") => GraphStatisticalReportKind::VecSummary,
         ("yssbi.statistics.vec.rank_test", "result") => GraphStatisticalReportKind::VecRankSummary,
         _ => return plot_category_for_output(node_type_id, port_key),
@@ -73,7 +73,7 @@ pub fn result_category_for_node(node_type_id: &str) -> GraphResultCategory {
         | "yssbi.statistics.var.summary"
         | "yssbi.statistics.panel.summary"
         | "yssbi.statistics.panel.did.twfe"
-        | "yssbi.statistics.adf.summary" => "report",
+        | "yssbi.statistics.adf.test" => "report",
         "yssbi.statistics.var.lag_order"
         | "yssbi.plot.scatter.view"
         | "yssbi.plot.line.view"
@@ -164,7 +164,7 @@ mod tests {
                 GraphStatisticalReportKind::PanelDid,
             ),
             (
-                "yssbi.statistics.adf.summary",
+                "yssbi.statistics.adf.test",
                 "report",
                 GraphStatisticalReportKind::DfAdfSummary,
             ),
@@ -186,6 +186,14 @@ mod tests {
                 "{node_type}:{output_key}",
             );
         }
+        assert_eq!(
+            result_category_for_node("yssbi.statistics.adf.test"),
+            GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::DfAdfSummary),
+        );
+        assert_eq!(
+            result_category_for_output("yssbi.statistics.adf.test", "result"),
+            GraphResultCategory::Value,
+        );
 
         let plot_cases = [
             ("yssbi.plot.scatter.view", GraphPlotDataKind::Scatter),
