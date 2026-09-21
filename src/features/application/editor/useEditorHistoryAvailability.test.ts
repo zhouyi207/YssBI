@@ -13,7 +13,8 @@ const activeEditor = vi.hoisted(() => ({
 }));
 
 vi.mock("./editorGroupContext", () => ({
-  useActiveEditorGroup: () => ({ activeResourceRef: activeEditor.activeResourceRef }),
+  useActiveGraphContext: () =>
+    activeEditor.activeResourceRef ? { graphPath: activeEditor.activeResourceRef } : null,
 }));
 
 const draftDocument = { nodes: {}, port_bindings: [], connections: {}, input_states: [] };

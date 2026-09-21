@@ -3,17 +3,14 @@ import { useTranslation } from "react-i18next";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import { useActiveEditorGroup } from "@/features/application/editor/editorGroupContext";
-import { executeGraphEdit } from "@/features/application/graphEditing";
-import { canDeleteNode } from "@/features/core/dataStore/graphNodeSelectors";
-import { logger } from "@/features/application/observability/appLogger";
+import { useActiveGraphContext } from "@/features/application/editor/editorGroupContext";
 import {
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
 } from "@/features/application/editor/editorCommandFocus";
 
 export function useNodeManagement() {
-  const { activeResourceRef } = useActiveEditorGroup();
+  const activeResourceRef = useActiveGraphContext()?.graphPath ?? null;
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
 
@@ -43,51 +40,5 @@ export function useNodeManagement() {
     [activeResourceRef, locale],
   );
 
-  const deleteNode = useCallback(
-    async (nodeId: string): Promise<boolean> => {
-      if (!activeResourceRef) {
-        logger.graph.warn("Cannot delete node: no active tab", "NodeManagement");
-        return false;
-      }
-      if (!canDeleteNode(activeResourceRef, nodeId)) return false;
-
-      try {
-        return (
-          (await executeGraphEdit(activeResourceRef, "DeleteNodes", { nodeIds: [nodeId] }))
-            .status === "applied"
-        );
-      } catch (error) {
-        logger.graph.error(
-          `Failed to delete node: ${error instanceof Error ? error.message : String(error)}`,
-          "NodeManagement",
-        );
-        return false;
-      }
-    },
-    [activeResourceRef],
-  );
-
-  const deleteNodes = useCallback(
-    async (nodeIds: string[]): Promise<string[]> => {
-      if (!activeResourceRef || nodeIds.length === 0) return [];
-      const deletableIds = nodeIds.filter((id) => canDeleteNode(activeResourceRef, id));
-      if (deletableIds.length === 0) return [];
-
-      try {
-        const applied = await executeGraphEdit(activeResourceRef, "DeleteNodes", {
-          nodeIds: deletableIds,
-        });
-        return applied.status === "applied" ? deletableIds : [];
-      } catch (error) {
-        logger.graph.error(
-          `Failed to delete nodes: ${error instanceof Error ? error.message : String(error)}`,
-          "NodeManagement",
-        );
-        return [];
-      }
-    },
-    [activeResourceRef],
-  );
-
-  return { createNode, deleteNode, deleteNodes };
+  return { createNode };
 }
