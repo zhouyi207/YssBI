@@ -7,7 +7,6 @@ import { DeleteProjectConfirmDialog } from "./DeleteProjectConfirmDialog";
 import { NewProjectModal } from "./NewProjectModal";
 import { ProjectLibrary } from "./ProjectLibrary";
 import { ProjectPickerActionPanel } from "./ProjectPickerActionPanel";
-import { ProjectPickerHero } from "./ProjectPickerHero";
 import { ProjectPickerPageIssueAlert } from "./ProjectPickerPageIssueAlert";
 import { ProjectPickerTitleBar, ProjectSettingsDialog } from "./ProjectPickerChrome";
 import { buildProjectPickerContextMenuSections } from "./projectPickerContextMenu";
@@ -178,31 +177,19 @@ export function ProjectPickerScreen() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <main className="project-picker-surface flex min-h-0 min-w-0 flex-1 flex-col">
-          <ProjectPickerHero
-            isBusy={isBusy}
-            creating={busy === "new"}
-            importing={busy === "import"}
-            scanning={busy === "scan"}
-            onNewProject={() => setNewProjectOpen(true)}
-            onImportProject={() => void importProjectFromDisk()}
-            onScanProjects={() => void scanProjectsFromFolder()}
-          />
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ProjectLibrary
+            filterQuery={filterQuery}
+            sortMode={sortMode}
+            onSetFilterQuery={setFilterQuery}
+            onSetSortMode={setSortMode}
             projects={projects}
             filteredProjects={filteredProjects}
             selectedId={selectedId}
             currentProjectId={currentProjectId}
-            filterQuery={filterQuery}
-            sortMode={sortMode}
-            isBusy={isBusy}
-            onFilterQueryChange={setFilterQuery}
-            onSortModeChange={setSortMode}
             onSelectProject={setSelectedId}
             onOpenProject={(path) => void openRecentProject(path)}
             onToggleFavorite={(id) => void toggleFavorite(id)}
-            onNewProject={() => setNewProjectOpen(true)}
-            onImportProject={() => void importProjectFromDisk()}
             onListContextMenu={openListContextMenu}
             onProjectContextMenu={(event, project) => {
               setSelectedId(project.id);
@@ -211,12 +198,16 @@ export function ProjectPickerScreen() {
           />
         </main>
         <ProjectPickerActionPanel
+          creating={busy === "new"}
+          importing={busy === "import"}
+          scanning={busy === "scan"}
+          onNewProject={() => setNewProjectOpen(true)}
+          onImportProject={() => void importProjectFromDisk()}
+          onScanProjects={() => void scanProjectsFromFolder()}
           selected={selected}
-          currentProjectId={currentProjectId}
           isBusy={isBusy}
           cleaningUp={busy === "cleanup"}
           onOpenProject={(path) => void openRecentProject(path)}
-          onRevealProject={(path) => void revealProjectInExplorer(path)}
           onToggleFavorite={(id) => void toggleFavorite(id)}
           onRemoveProject={(id) => void removeProject(id)}
           onDeleteProject={setDeleteConfirmProject}

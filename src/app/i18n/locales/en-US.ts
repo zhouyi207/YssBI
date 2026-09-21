@@ -1522,7 +1522,7 @@ export const enUS = {
   aboutModal: {
     title: "About {{appName}}",
     version: "Version {{version}}",
-    description: "Statistical computing and visualization workbench.",
+    description: "Statistical computing and visualization workbench",
   },
   bottomBar: {
     nodes: "{{count}} Nodes",

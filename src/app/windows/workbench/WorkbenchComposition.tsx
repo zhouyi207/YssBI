@@ -2,7 +2,6 @@ import {
   requestCloseWorkbenchPanel,
   requestCloseWorkbenchGroup,
 } from "@/features/application/editor/workbenchPanelClose";
-import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useEditorKeyboard, useWorkbenchWindowCloseGuard } from "@/features/application/editor";
@@ -45,7 +44,6 @@ function WorkbenchReadyComposition() {
   const dndCoordinator = useActivityEditorDndCoordinator();
   const commands = useWorkbenchCommandCoordinator();
   const themeMode = useApplicationThemeMode();
-  const watermarkComponent = useCallback(() => <WatermarkView commands={commands} />, [commands]);
 
   useProjectSync();
   useProjectionLocaleSync();
@@ -63,7 +61,7 @@ function WorkbenchReadyComposition() {
         onClosePanel={closePanel}
         onCloseGroup={closeGroup}
         layoutTheme={resolveYssbiLayoutTheme(themeMode)}
-        watermarkComponent={watermarkComponent}
+        watermarkComponent={WatermarkView}
         menuBar={<WorkbenchMenuContribution commands={commands} />}
         statusBar={statusBar}
         dragOverlay={dragOverlay}

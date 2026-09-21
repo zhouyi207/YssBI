@@ -28,7 +28,6 @@ import {
 import { useProjectProjection } from "@/features/application/project/projectProjection";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { settingsUi } from "@/features/core/settings/ui";
-import { BrandLockup } from "@/shared/ui/BrandMark";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowMenuBar } from "@/shared/ui/WindowChrome";
@@ -138,9 +137,8 @@ export function ProjectPickerTitleBar({
         />
       }
     >
-      <BrandLockup className="pointer-events-none self-center px-4" />
-      <div className="pointer-events-none my-2.5 flex items-center border-l border-[var(--strong-border)] pl-4 font-heading text-[11px] font-medium tracking-wide text-muted-foreground">
-        {t("projectPicker.title")}
+      <div className="pointer-events-none self-center px-4 text-sm font-bold tracking-tight text-foreground">
+        Yss<span className="text-[var(--accent-color)]">BI</span>
       </div>
     </WindowMenuBar>
   );

@@ -88,7 +88,7 @@ Project Explorer obtains its active resource through
 
 | Capability / Hook                  | Interface                                                    | Mount/caller            |
 | ---------------------------------- | ------------------------------------------------------------ | ----------------------- |
-| `WorkbenchCommandCapability`       | Menu, keyboard, and welcome actions composed by the app      | `WorkbenchWindow` props |
+| `WorkbenchCommandCapability`       | Menu and keyboard actions composed by the app                | `WorkbenchWindow` props |
 | `useGraphConstants(graphPath)`     | Constants in the active graph draft                          | Event/Function Details  |
 | `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `interaction` | `GraphCanvasController` |
 

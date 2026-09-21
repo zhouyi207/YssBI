@@ -1371,7 +1371,7 @@ export const zhCN = {
   aboutModal: {
     title: "关于 {{appName}}",
     version: "版本 {{version}}",
-    description: "统计计算与可视化工作台。",
+    description: "统计计算与可视化工作台",
   },
   bottomBar: {
     nodes: "{{count}} 节点",

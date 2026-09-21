@@ -35,6 +35,8 @@ Escape、失活、保存锁定、关闭图和替换项目都撤销手势；回�
 共享同一坐标系。当前保持全部节点挂载，供 F/Home 与 Problems 定位读取完整节点边界；
 不默认启用可见区域裁剪，也不随迁移引入自动布局引擎。
 
+工作台空白区域的 `WatermarkView` 仅居中显示 YssBI 和本地化描述，不接收操作命令，也不包含按钮、背景图案或动画。
+
 ## 相关模块
 
 [编辑器应用层](../../features/application/editor/README.md) · [工作台布局](../workbench/README.md)
