@@ -1,8 +1,8 @@
 # YssBI Agent Rules
 
 This file owns instruction loading and scope.
-Repository-wide agent behavior and cross-system invariants are defined in
-`docs/development/AGENT_RULES.md`.
+Repository-wide change discipline and cross-system invariants are defined in
+`docs/development/AGENT_RULES.md`. Validation discipline is defined below.
 
 All paths in this file are relative to the repository root.
 
@@ -42,6 +42,64 @@ changes or validation.
   unrelated module documentation.
 - Tool-specific instruction files must reference the corresponding `.rules`
   file instead of duplicating its contents.
+
+
+## Testing and validation
+
+- Do not add speculative matrices, duplicate coverage, tests for unchanged
+  framework behavior, or tests that only prove a historical refactor occurred.
+- Before adding more than two tests, identify the distinct regression each
+  additional test catches and omit cases without one.
+- Use repository-root `pnpm` scripts as stable task entry points. `package.json` owns the
+  command definitions; root and module READMEs explain their usage.
+- Default to L1 focused validation during iteration and L2 affected-scope
+  validation for a completed change, as defined below. Small changes
+  must not default to workspace-wide check/lint/test or complete CI as a routine
+  finishing step.
+- Before validation, briefly identify affected modules, selected checks, and
+  their rationale. Rust focused commands must explicitly select packages and
+  appropriate test targets; frontend focused tests should select test files.
+- Escalate to L3 complete validation only for an explicit user request, an
+  established merge/release gate, or a high-risk change whose impact cannot be
+  reliably bounded. State the trigger before running it. Touching both frontend
+  and backend is not by itself a reason to run complete CI.
+- Changes to public APIs, shared types, serialization, or cross-module behavior
+  require assessing affected consumers; passing only the edited crate's tests
+  is not sufficient evidence for those changes.
+- Confirm focused tests actually ran the relevant cases. Zero matched tests,
+  compilation-only checks, and failed environment initialization are not passing
+  tests.
+- Reuse fresh results within the same task while the relevant code, dependencies,
+  configuration, and test inputs are unchanged. Repeat or broaden checks only
+  for new changes, failures, or unresolved risks; diagnose failures before
+  expanding the suite. If validation becomes unexpectedly expensive, report its
+  stage and reassess scope before starting additional checks.
+- Run `git diff --check` before delivery. Report actual commands, scope, and
+  relevant checks not run or not completed. Do not claim a check passed without
+  fresh output or describe focused validation as complete validation.
+- Do not perform unrelated repository-wide formatting or hardcode global Cargo
+  build-job/test-thread limits.
+
+### Validation levels
+
+| Level | When | Scope |
+| --- | --- | --- |
+| L1 | During iteration | Relevant test files or Rust package/target/case; focused compile checks as needed |
+| L2 | Delivering a coherent change | Changed modules and affected consumers, relevant contract tests, lint/check and local formatting |
+| L3 | Explicit request, established gate, or impact that cannot be bounded reliably | One complete `pnpm run ci`, then any risk-specific validation |
+
+- Documentation-only changes use the documentation contract and changed-file
+  formatting checks; do not rebuild the desktop application for them. Reuse the
+  module-map check already included in the documentation contract.
+- Assess broad toolchain, workspace feature and test-infrastructure changes for
+  their actual consumer impact before selecting L3. Frontend/backend edits or
+  large diffs alone do not establish that impact.
+- Packaging, permission and platform changes may require an application build
+  and manual target-platform validation in addition to focused checks.
+- Do not reduce coverage, skip tests or split crates merely to make validation
+  faster. Diagnose build versus test cost before changing the test scope.
+- If affected-test selection is introduced, account explicitly for shared
+  contracts and generated files rather than relying only on static imports.
 
 
 ## Addition

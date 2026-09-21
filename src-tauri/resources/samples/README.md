@@ -1,10 +1,28 @@
 # Bundled sample data
 
+> Status: Current
+> Scope: 内置示例源数据、版本化 Parquet 生成、校验与打包边界
+> Canonical owners: sources.json 拥有源定义；Application build_samples 与 samples 模块拥有生成和运行期行为
+> Update when: 示例来源、准备语义、版本或打包流程改变时
+
 The CSV files in this directory are maintainer-supplied source inputs. They remain
 unchanged when preparing the desktop resources. The flights and vic_elec v2 sources
 remove timezone suffixes while retaining the original date and clock fields.
 Their original upstream attribution
 and licenses have not been specified; filenames alone are not provenance evidence.
+
+## Generate and verify
+
+Run from the repository root:
+
+```sh
+pnpm samples:build
+pnpm samples:check
+```
+
+The generator is [build_samples.rs](../../crates/yss-application/examples/build_samples.rs).
+The desktop before-build hook runs the check before building Vite; it does not regenerate
+resources implicitly. Source CSVs and generation tools are excluded from the installed bundle.
 
 The source definitions and display names live in
 `../../../scripts/samples/sources.json`. Run `pnpm samples:build` from the repository

@@ -158,7 +158,7 @@ Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；
 | command rejection               | yss-application::ipc stable error wire |
 | 用户反馈                        | React localization / UI                |
 
-详见 [Runtime Signals](../../../../../src/features/application/observability/README.md)、[API contract](../ipc/README.md)、[Workbench](../../../../../src/modules/workbench/README.md) 与 [Local Workflow](../../../../../docs/development/LOCAL_WORKFLOW.md)。
+详见 [Runtime Signals](../../../../../src/features/application/observability/README.md)、[API contract](../ipc/README.md)、[Workbench](../../../../../src/modules/workbench/README.md) 与 [Rust workspace 验证](../../../../README.md)。
 
 ## 相关模块
 

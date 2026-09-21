@@ -304,7 +304,7 @@ Channel adapters parse strict wire DTOs before publishing to application project
 - [Runtime Signals](../../../../../src/features/application/observability/README.md)
 - [Statistical Harness](../../../yss-harness-core/README.md)
 - [Change Process](../../../../../docs/development/CHANGE_PROCESS.md)
-- [Local Workflow](../../../../../docs/development/LOCAL_WORKFLOW.md)
+- [Rust workspace validation](../../../../README.md)
 
 The exact command list is executable source in `mod.rs` and must not be copied into this README.
 

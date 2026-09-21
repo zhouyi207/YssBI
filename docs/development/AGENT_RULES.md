@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: Repository-wide coding-agent behavior and cross-system guardrails
-> Canonical owners: This file owns agent policy; the root `.rules` owns instruction loading and scope
+> Canonical owners: This file owns change discipline and cross-system guardrails; the root `.rules` owns instruction loading, scope and validation discipline
 > Update when: Repository-wide agent policy or cross-system guardrails change
 
 This policy applies throughout the repository, regardless of its location
@@ -117,39 +117,9 @@ add or commit them unless explicitly requested.
 
 ## Testing and validation
 
-- Do not add speculative matrices, duplicate coverage, tests for unchanged
-  framework behavior, or tests that only prove a historical refactor occurred.
-- Before adding more than two tests, identify the distinct regression each
-  additional test catches and omit cases without one.
-- Use repository-root `pnpm` scripts as stable task entry points. The canonical
-  command matrix is `docs/development/LOCAL_WORKFLOW.md`.
-- Default to L1 focused validation during iteration and L2 affected-scope
-  validation for a completed change, as defined in that workflow. Small changes
-  must not default to workspace-wide check/lint/test or complete CI as a routine
-  finishing step.
-- Before validation, briefly identify affected modules, selected checks, and
-  their rationale. Rust focused commands must explicitly select packages and
-  appropriate test targets; frontend focused tests should select test files.
-- Escalate to L3 complete validation only for an explicit user request, an
-  established merge/release gate, or a high-risk change whose impact cannot be
-  reliably bounded. State the trigger before running it. Touching both frontend
-  and backend is not by itself a reason to run complete CI.
-- Changes to public APIs, shared types, serialization, or cross-module behavior
-  require assessing affected consumers; passing only the edited crate's tests
-  is not sufficient evidence for those changes.
-- Confirm focused tests actually ran the relevant cases. Zero matched tests,
-  compilation-only checks, and failed environment initialization are not passing
-  tests.
-- Reuse fresh results within the same task while the relevant code, dependencies,
-  configuration, and test inputs are unchanged. Repeat or broaden checks only
-  for new changes, failures, or unresolved risks; diagnose failures before
-  expanding the suite. If validation becomes unexpectedly expensive, report its
-  stage and reassess scope before starting additional checks.
-- Run `git diff --check` before delivery. Report actual commands, scope, and
-  relevant checks not run or not completed. Do not claim a check passed without
-  fresh output or describe focused validation as complete validation.
-- Do not perform unrelated repository-wide formatting or hardcode global Cargo
-  build-job/test-thread limits.
+Validation levels, scope selection and delivery evidence are owned by the root
+[`.rules`](../../.rules). Concrete commands and module-specific prerequisites
+belong to the corresponding module README; `package.json` owns executable scripts.
 
 ## Documentation routing
 
@@ -170,7 +140,8 @@ Use `docs/README.md` for the module index. Representative owners are:
   by each plugin and the host protocol/runtime READMEs.
 - Tauri/IPC transport contracts: `src-tauri/crates/yss-application/src/ipc/README.md`
 - Architecture review and documentation checks: `docs/development/ARCHITECTURE_GATES.md`
-- Commands and validation: `docs/development/LOCAL_WORKFLOW.md`
+- Validation discipline: root `.rules`; command usage: root `README.md`,
+  `src/README.md`, `src-tauri/README.md` and the affected module README.
 - Feature, fix, refactor, and behavior changes:
   `docs/development/CHANGE_PROCESS.md`
 

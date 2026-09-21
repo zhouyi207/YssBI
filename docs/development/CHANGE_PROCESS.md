@@ -56,7 +56,7 @@
 
 ## 5. Delivery
 
-- [ ] 根据风险从 focused validation 扩展到 stack/cross-stack gate；命令只查 [Local Workflow](LOCAL_WORKFLOW.md)。
+- [ ] 根据[根验证规则](../../.rules)选择受影响范围；命令以根 `package.json` 为准，通过[开发入口](../README.md#开发与交付)定位对应模块 README。
 - [ ] 保存并报告新鲜验证输出；未运行的相关检查说明原因。
 - [ ] 运行 `git diff --check`，复核未跟踪文件、生成文件 drift 和 unrelated user changes。
 - [ ] 确认 acceptance criteria 已满足，roadmap/TODO 只保留真正未完成的工作。

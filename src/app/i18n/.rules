@@ -1,0 +1,6 @@
+# Localization validation
+
+- Translation text, locale switching and fallback do not need standalone unit
+  tests or key-inventory fixtures.
+- Business tests may mock translation, but their assertions must protect behavior,
+  state or contracts rather than enumerate locale names and translation keys.

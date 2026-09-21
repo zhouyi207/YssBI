@@ -68,6 +68,8 @@
 
 ## 快速开始
 
+从仓库根目录运行命令。Node.js 与 pnpm 版本以 [package.json](package.json) 的 `engines` / `packageManager` 为准，Rust 使用 [rust-toolchain.toml](rust-toolchain.toml) 固定的工具链。Julia 仅在使用或验证 [Julia 插件](plugins/julia/README.md)时需要。
+
 ```bash
 # 安装依赖
 pnpm install
@@ -75,12 +77,26 @@ pnpm install
 # 开发
 pnpm dev
 
-# 检查
-pnpm run ci
-
 # 构建
 pnpm build
 ```
+
+## 开发与验证入口
+
+[package.json](package.json) 是命令定义的唯一来源。前端检查见 [src/README.md](src/README.md)，Rust workspace、桌面构建及按 crate 验证见 [src-tauri/README.md](src-tauri/README.md)；插件、生成器与示例数据见[开发与交付入口](docs/README.md#开发与交付)。
+
+| 全仓任务       | 根命令              |
+| -------------- | ------------------- |
+| 类型与编译检查 | `pnpm check`        |
+| 静态检查       | `pnpm lint`         |
+| 测试           | `pnpm test`         |
+| 只读格式检查   | `pnpm format:check` |
+| 写入格式化     | `pnpm format`       |
+| 完整交付检查   | `pnpm run ci`       |
+
+日常改动按[验证规则](.rules)选择受影响范围。全仓写入格式化会改动无关文件，局部修改使用对应 README 中的命令。
+
+`pnpm run ci` 依次执行格式检查、TypeScript/Rust 检查、lint 和测试，不启动应用或构建安装包。必须写 `pnpm run ci`；裸 `pnpm ci` 是包管理器的 frozen install 命令。
 
 <!-- ## 致谢
 

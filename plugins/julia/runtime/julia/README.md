@@ -1,5 +1,10 @@
 # Julia Bayes worker protocol
 
+> Status: Current
+> Scope: Julia worker 协议、环境资产与源码测试入口
+> Canonical owners: 本目录的 Project.toml、worker 与 Bayes operation 源码拥有实现事实
+> Update when: worker 协议、环境或开发验证流程改变时
+
 The Julia worker is a separate, restartable process owned by Rust. It is the production adapter for Bayesian inference only; it does not own project state, write project DuckDB files, or implement ACF/serial/hypothesis operations.
 
 ## Current operation
@@ -102,3 +107,14 @@ The runtime probe accepts Julia `>=1.10,<2.0`, matching `Project.toml`; incompat
 ## Interface rule
 
 Plugin callers enter through `yss-bayes-runtime` and the `yss-bayes-worker::BayesWorkerClient`/`BayesWorkerPort` boundary. Inputs, cancellation and deadline contracts belong to `yss-bayes-worker`. No host SCI crate participates in this path. The Julia adapter owns process calls, exchange files, typed error mapping and artifact retention.
+
+## 开发验证
+
+Julia 版本约束以 [Project.toml](Project.toml) 的 compat 为准。直接运行本仓库的 Julia-backed 测试前，从仓库根目录初始化开发项目：
+
+```sh
+julia --project=plugins/julia/runtime/julia -e 'using Pkg; Pkg.instantiate()'
+julia --project=plugins/julia/runtime/julia plugins/julia/runtime/julia/tests/bayes_fit_tests.jl
+```
+
+初始化可能下载依赖与 artifacts。以上是源码测试环境；安装后的插件仍通过显式依赖准备操作管理自己的私有环境。真实插件进程测试和指定安装包的方式见 [Julia 插件 README](../../README.md#验证与能力边界)。

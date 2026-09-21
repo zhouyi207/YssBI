@@ -9,16 +9,16 @@
 
 ## 按用途查找
 
-| 位置             | 内容                                           | 入口                                        |
-| ---------------- | ---------------------------------------------- | ------------------------------------------- |
-| `architecture/`  | 系统上下文、所有权与跨模块关系                 | [系统架构索引](architecture/README.md)      |
-| 模块 `README.md` | 该模块的职责、接口、数据流、生命周期与验证方式 | 下方模块入口                                |
-| 模块 `.rules`    | 作用于当前目录及后代的开发约束                 | [根规则](../.rules)                         |
-| `development/`   | 全仓开发与交付流程                             | [本地工作流](development/LOCAL_WORKFLOW.md) |
-| `decisions/`     | 仍适用的设计理由                               | [决策索引](decisions/README.md)             |
-| `roadmap/`       | 开放工作、阶段与人工验收                       | [路线图](roadmap/README.md)                 |
-| `reference/`     | 生成索引与更多源码旁说明                       | [实现参考](reference/README.md)             |
-| `benchmark/`     | 测量方法、样本与结果                           | [基准索引](benchmark/README.md)             |
+| 位置             | 内容                                           | 入口                                      |
+| ---------------- | ---------------------------------------------- | ----------------------------------------- |
+| `architecture/`  | 系统上下文、所有权与跨模块关系                 | [系统架构索引](architecture/README.md)    |
+| 模块 `README.md` | 该模块的职责、接口、数据流、生命周期与验证方式 | 下方模块入口                              |
+| 模块 `.rules`    | 作用于当前目录及后代的开发约束                 | [根规则](../.rules)                       |
+| `development/`   | 变更流程与文档检查                             | [变更流程](development/CHANGE_PROCESS.md) |
+| `decisions/`     | 仍适用的设计理由                               | [决策索引](decisions/README.md)           |
+| `roadmap/`       | 开放工作、阶段与人工验收                       | [路线图](roadmap/README.md)               |
+| `reference/`     | 生成索引与更多源码旁说明                       | [实现参考](reference/README.md)           |
+| `benchmark/`     | 测量方法、样本与结果                           | [基准索引](benchmark/README.md)           |
 
 ## 模块契约入口
 
@@ -46,10 +46,12 @@
 
 ## 开发与交付
 
-- [Agent 规则](development/AGENT_RULES.md)：根 `.rules` 加载的行为与跨系统约束。
-- [本地工作流](development/LOCAL_WORKFLOW.md)：根命令、开发环境和验证范围。
+- [根规则](../.rules)拥有验证纪律，[Agent 规则](development/AGENT_RULES.md)维护变更纪律与跨系统约束。
+- [启动与全仓命令](../README.md#快速开始)：环境版本、依赖安装、开发与打包。
 - [变更流程](development/CHANGE_PROCESS.md)：实现与自审要求。
 - [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：人工边界复核及独立文档契约。
+
+开发命令直接查阅[前端](../src/README.md)、[Rust workspace](../src-tauri/README.md)、[诊断生成器](../src-tauri/crates/yss-graph-diagnostics/README.md)和[示例数据](../src-tauri/resources/samples/README.md) README。插件构建与进程测试见 [Julia 插件](../plugins/julia/README.md)，源码测试的环境说明在 [worker README](../plugins/julia/runtime/julia/README.md)；schema 生成见 [Plugin protocol](../src-tauri/crates/yss-plugin-protocol/README.md)，索引生成见[实现参考](reference/README.md)。
 
 ## 维护约定
 

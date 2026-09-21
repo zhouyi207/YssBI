@@ -7,6 +7,8 @@
 
 [模块索引](MODULE_MAP.md)从 Cargo metadata 和前端模块目录生成。运行 `pnpm docs:module-map` 更新，使用 `pnpm docs:module-map:check` 只读校验；不手工维护平行模块清单。
 
+应用内的 crate 依赖图由 [generate-crate-dependencies.mjs](../../scripts/generate-crate-dependencies.mjs) 维护。修改 Cargo workspace 依赖后使用 `pnpm docs:crate-dependencies` 更新、`pnpm docs:crate-dependencies:check` 校验；模块成员或 README 归属变化同时检查 module map。
+
 ## 前端与应用
 
 - [前端源码](../../src/README.md)与[分层边界](../../src/features/README.md)

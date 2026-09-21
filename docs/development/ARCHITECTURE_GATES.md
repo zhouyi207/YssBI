@@ -22,7 +22,7 @@ Cargo/TypeScript 编译检查验证类型和依赖可解析性，业务测试验
 
 ## 2. 按变更选择验证
 
-依照 [Local Workflow](LOCAL_WORKFLOW.md) 选择 L1/L2 验证：
+依照[根验证规则](../../.rules)选择 L1/L2 范围，具体命令见[前端 README](../../src/README.md)、[Rust workspace README](../../src-tauri/README.md)及受影响模块的说明：
 
 - TypeScript 修改运行类型检查、lint 和受影响的业务测试。
 - Rust 修改显式选择受影响 package、target 和消费者，运行编译、Clippy 与业务测试。

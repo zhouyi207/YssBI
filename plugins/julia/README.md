@@ -17,6 +17,7 @@ pnpm plugin:julia:package
 
 输出在 `target/plugin-packages/`。发布版本由本目录的 `plugin.json` 显式维护；相同发布版本不能覆盖不同内容。
 本插件的构建入口调用 `plugins/scripts/package-plugin.mjs` 完成通用签名与封装；打包规则测试也位于该目录。
+只构建独立网页时运行 `pnpm plugin:julia:ui`；宿主的 `pnpm build` 不自动构建或捆绑此插件。
 需要优化构建时使用 `pnpm plugin:julia:package --release`；`--skip-build` 只封装已有产物。
 开发迭代使用 `--dev`，生成带时间顺序和完整清单/资产摘要的预发布版本。`packageDigest` 始终标识完整签名载荷，
 版本中的 build metadata 不用于新旧排序，遵循 [SemVer](https://semver.org/)。
@@ -93,7 +94,9 @@ pnpm test:rs:package -p yss-plugin-runtime --test installation
 pnpm test:plugin:native
 ```
 
-原生测试使用本地最新包和真实 Julia，冷环境可能需要数分钟。宿主侧生成的投影契约使用 `pnpm generate:plugins:check` 检查。
+`test:plugin:package` 验证通用清单内容身份和发布版本规则。原生测试需要已构建的包和兼容 Julia，覆盖环境准备、推断、取消、上下文失效和卸载；普通单元测试不会隐式启动它。
+默认验证本地最新包；可通过 `YSSBI_PLUGIN_TEST_PACKAGE` 指定待验证的 `.yssplugin`。冷环境准备和 Julia 编译可能需要数分钟。
+直接运行 Julia 源码测试的初始化方式见 [worker 开发验证](runtime/julia/README.md#开发验证)。宿主投影 schema 的生成与检查由 [Plugin protocol](../../src-tauri/crates/yss-plugin-protocol/README.md) 维护。
 历史、预算、缓存、签名身份和诊断的当前宿主行为见 [Plugin runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)。
 
 [Plugin 架构](../README.md) 是完整目标契约。当前发行能力是签名本地包、通用受监督任务和隔离网页；在线目录/自动更新、OS sandbox、声明式标准 UI provider、动态 Graph compute provider、完整任务 checkpoint/recover 与依赖自动下载尚未开放，未知必需能力直接拒绝。目录服务未接入时不制造可安装市场条目。

@@ -91,7 +91,7 @@ Graph 运行失败由 Output panel 的失败摘要反馈：React 本地化 Rust 
 4. 容量、backpressure、drop/gap/terminal semantics 在哪里由代码定义？
 5. payload 是否跨越数据、隐私或用户文案边界？
 
-具体修改检查项放在 [Change Process](../../../../docs/development/CHANGE_PROCESS.md)，命令放在 [Local Workflow](../../../../docs/development/LOCAL_WORKFLOW.md)，本文不复制 checklist 或容量表。
+具体修改检查项见 [Change Process](../../../../docs/development/CHANGE_PROCESS.md)，前端命令见 [src README](../../../README.md)，本文不复制 checklist 或容量表。
 
 ## 相关模块
 

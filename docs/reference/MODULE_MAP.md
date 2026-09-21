@@ -41,7 +41,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
 | `yss-graph-analysis` | `src-tauri/crates/yss-graph-analysis` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis/Cargo.toml) | [README](../../src-tauri/crates/yss-graph-analysis/README.md) |
 | `yss-graph-analysis-contract` | `src-tauri/crates/yss-graph-analysis-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis-contract/Cargo.toml) | — |
-| `yss-graph-diagnostics` | `src-tauri/crates/yss-graph-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-graph-diagnostics/Cargo.toml) | — |
+| `yss-graph-diagnostics` | `src-tauri/crates/yss-graph-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-graph-diagnostics/Cargo.toml) | [README](../../src-tauri/crates/yss-graph-diagnostics/README.md) |
 | `yss-graph-document` | `src-tauri/crates/yss-graph-document` | [Cargo.toml](../../src-tauri/crates/yss-graph-document/Cargo.toml) | — |
 | `yss-graph-document-edit` | `src-tauri/crates/yss-graph-document-edit` | [Cargo.toml](../../src-tauri/crates/yss-graph-document-edit/Cargo.toml) | — |
 | `yss-graph-editor` | `src-tauri/crates/yss-graph-editor` | [Cargo.toml](../../src-tauri/crates/yss-graph-editor/Cargo.toml) | — |
@@ -85,7 +85,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-sci-linalg` | `src-tauri/crates/yss-sci-linalg` | [Cargo.toml](../../src-tauri/crates/yss-sci-linalg/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-linalg/README.md) |
 | `yss-sci-runtime` | `src-tauri/crates/yss-sci-runtime` | [Cargo.toml](../../src-tauri/crates/yss-sci-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-runtime/README.md) |
 | `yss-ui-contract` | `src-tauri/crates/yss-ui-contract` | [Cargo.toml](../../src-tauri/crates/yss-ui-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-ui-contract/README.md) |
-| `yssbi` | `src-tauri` | [Cargo.toml](../../src-tauri/Cargo.toml) | — |
+| `yssbi` | `src-tauri` | [Cargo.toml](../../src-tauri/Cargo.toml) | [README](../../src-tauri/README.md) |
 
 ## Frontend modules
 
