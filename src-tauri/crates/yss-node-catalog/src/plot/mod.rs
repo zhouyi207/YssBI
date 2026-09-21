@@ -9,6 +9,9 @@ use yss_node_registry::CategoryRegistration;
 
 const CATEGORY: &str = "plot";
 
+mod inventory;
+pub(crate) use inventory::documentation as inventory_documentation;
+
 #[derive(Clone, Copy)]
 enum PlotInputs {
     Pair,
@@ -107,8 +110,12 @@ const SPECS: &[PlotSpec] = &[
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
     let mut messages = vec![
-        ("en-US", "categories.plot.title", Message::Text("Plots")),
-        ("zh-CN", "categories.plot.title", Message::Text("绘图")),
+        (
+            "en-US",
+            "categories.plot.title",
+            Message::Text("Visualization"),
+        ),
+        ("zh-CN", "categories.plot.title", Message::Text("可视化")),
         (
             "en-US",
             "parameters.plot.maximum_lag.title",
@@ -130,12 +137,14 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         add_messages(&mut messages, spec);
         nodes.push(leaf(protocol(spec)?, spec.kernel));
     }
-    Ok(ProviderFragment {
+    let mut fragment = ProviderFragment {
         categories,
         nodes,
         messages,
         ..ProviderFragment::default()
-    })
+    };
+    inventory::append(&mut fragment)?;
+    Ok(fragment)
 }
 
 fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {

@@ -3,6 +3,7 @@
 #![deny(unused_must_use)]
 
 mod builtin;
+mod catalog_entry;
 mod core_nodes;
 mod dataframe;
 mod distribution;

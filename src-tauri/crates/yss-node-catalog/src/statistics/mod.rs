@@ -6,6 +6,9 @@
 
 use yss_data_contract::DataValue;
 mod families;
+mod inventory;
+
+pub(crate) use inventory::documentation as inventory_documentation;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
@@ -27,13 +30,15 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             Ok(leaf(protocol(spec)?, spec.id))
         })
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
-    Ok(ProviderFragment {
+    let mut fragment = ProviderFragment {
         types: statistics_types()?,
         categories: statistics_categories()?,
         nodes,
         messages,
         ..ProviderFragment::default()
-    })
+    };
+    inventory::append(&mut fragment)?;
+    Ok(fragment)
 }
 
 fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {

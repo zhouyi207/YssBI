@@ -15,9 +15,12 @@ macro_rules! markdown {
     };
 }
 
-pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<&'static str> {
-    let documentation = mapped_documentation(node_type_id.as_str())?;
-    Some(select_locale(documentation, locale))
+pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<Box<str>> {
+    mapped_documentation(node_type_id.as_str())
+        .map(|documentation| select_locale(documentation, locale).into())
+        .or_else(|| super::statistics::inventory_documentation(node_type_id.as_str(), locale))
+        .or_else(|| super::plot::inventory_documentation(node_type_id.as_str(), locale))
+        .or_else(|| super::dataframe::inventory_documentation(node_type_id.as_str(), locale))
 }
 
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {

@@ -8,6 +8,8 @@ use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
 
 const CATEGORY: &str = "distribution";
+const CONTINUOUS_CATEGORY: &str = "distribution.continuous";
+const DISCRETE_CATEGORY: &str = "distribution.discrete";
 
 #[derive(Clone, Copy)]
 enum NumericRepresentation {
@@ -34,6 +36,7 @@ struct DistributionParameter {
 #[derive(Clone, Copy)]
 struct DistributionSpec {
     id: &'static str,
+    category: &'static str,
     kernel: &'static str,
     en: &'static str,
     zh: &'static str,
@@ -60,6 +63,7 @@ const fn setting(
 const SPECS: &[DistributionSpec] = &[
     DistributionSpec {
         id: "yssbi.distribution.normal.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.normal.sample",
         en: "Normal Samples",
         zh: "正态分布采样",
@@ -74,6 +78,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.uniform.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.uniform.sample",
         en: "Uniform Samples",
         zh: "连续均匀分布采样",
@@ -88,6 +93,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.exponential.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.exponential.sample",
         en: "Exponential Samples",
         zh: "指数分布采样",
@@ -101,6 +107,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.gamma.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.gamma.sample",
         en: "Gamma Samples",
         zh: "伽马分布采样",
@@ -115,6 +122,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.beta.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.beta.sample",
         en: "Beta Samples",
         zh: "贝塔分布采样",
@@ -129,6 +137,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.students_t.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.students_t.sample",
         en: "Student's t Samples",
         zh: "学生 t 分布采样",
@@ -146,6 +155,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.cauchy.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.cauchy.sample",
         en: "Cauchy Samples",
         zh: "柯西分布采样",
@@ -160,6 +170,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.chi_squared.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.chi_squared.sample",
         en: "Chi-squared Samples",
         zh: "卡方分布采样",
@@ -177,6 +188,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.log_normal.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.log_normal.sample",
         en: "Log-normal Samples",
         zh: "对数正态分布采样",
@@ -191,6 +203,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.weibull.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.weibull.sample",
         en: "Weibull Samples",
         zh: "威布尔分布采样",
@@ -205,6 +218,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.laplace.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.laplace.sample",
         en: "Laplace Samples",
         zh: "拉普拉斯分布采样",
@@ -219,6 +233,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.pareto.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.pareto.sample",
         en: "Pareto Samples",
         zh: "帕累托分布采样",
@@ -233,6 +248,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.inverse_gamma.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.inverse_gamma.sample",
         en: "Inverse-gamma Samples",
         zh: "逆伽马分布采样",
@@ -247,6 +263,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.triangular.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.triangular.sample",
         en: "Triangular Samples",
         zh: "三角分布采样",
@@ -262,6 +279,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.fisher_snedecor.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.fisher_snedecor.sample",
         en: "F-distribution Samples",
         zh: "F 分布采样",
@@ -288,6 +306,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.erlang.sample",
+        category: CONTINUOUS_CATEGORY,
         kernel: "yssbi.distribution.erlang.sample",
         en: "Erlang Samples",
         zh: "爱尔朗分布采样",
@@ -302,6 +321,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.bernoulli.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.bernoulli.sample",
         en: "Bernoulli Samples",
         zh: "伯努利分布采样",
@@ -315,6 +335,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.binomial.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.binomial.sample",
         en: "Binomial Samples",
         zh: "二项分布采样",
@@ -329,6 +350,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.poisson.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.poisson.sample",
         en: "Poisson Samples",
         zh: "泊松分布采样",
@@ -342,6 +364,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.geometric.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.geometric.sample",
         en: "Geometric Samples",
         zh: "几何分布采样",
@@ -355,6 +378,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.negative_binomial.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.negative_binomial.sample",
         en: "Negative-binomial Samples",
         zh: "负二项分布采样",
@@ -369,6 +393,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.discrete_uniform.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.discrete_uniform.sample",
         en: "Discrete-uniform Samples",
         zh: "离散均匀分布采样",
@@ -383,6 +408,7 @@ const SPECS: &[DistributionSpec] = &[
     },
     DistributionSpec {
         id: "yssbi.distribution.hypergeometric.sample",
+        category: DISCRETE_CATEGORY,
         kernel: "yssbi.distribution.hypergeometric.sample",
         en: "Hypergeometric Samples",
         zh: "超几何分布采样",
@@ -414,14 +440,48 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             "categories.distribution.title",
             Message::Text("概率分布"),
         ),
+        (
+            "en-US",
+            "categories.distribution.continuous.title",
+            Message::Text("Continuous Distributions"),
+        ),
+        (
+            "zh-CN",
+            "categories.distribution.continuous.title",
+            Message::Text("连续分布"),
+        ),
+        (
+            "en-US",
+            "categories.distribution.discrete.title",
+            Message::Text("Discrete Distributions"),
+        ),
+        (
+            "zh-CN",
+            "categories.distribution.discrete.title",
+            Message::Text("离散分布"),
+        ),
     ];
     let types = Vec::new();
-    let categories = vec![CategoryRegistration {
-        id: category_id(CATEGORY)?,
-        title_key: i18n_key("categories.distribution.title")?,
-        parent: None,
-        order: 60,
-    }];
+    let categories = vec![
+        CategoryRegistration {
+            id: category_id(CATEGORY)?,
+            title_key: i18n_key("categories.distribution.title")?,
+            parent: None,
+            order: 60,
+        },
+        CategoryRegistration {
+            id: category_id(CONTINUOUS_CATEGORY)?,
+            title_key: i18n_key("categories.distribution.continuous.title")?,
+            parent: Some(category_id(CATEGORY)?),
+            order: 61,
+        },
+        CategoryRegistration {
+            id: category_id(DISCRETE_CATEGORY)?,
+            title_key: i18n_key("categories.distribution.discrete.title")?,
+            parent: Some(category_id(CATEGORY)?),
+            order: 62,
+        },
+    ];
     for spec in SPECS {
         add_messages(&mut messages, spec);
         for field in spec.parameters {
@@ -488,7 +548,7 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
             title_key: node_key(spec.id, "title")?,
             documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
-            category_id: category_id(CATEGORY)?,
+            category_id: category_id(spec.category)?,
             icon_id: icon_id("builtin.distribution")?,
             style_id: style_id("builtin.value")?,
             hidden: false,

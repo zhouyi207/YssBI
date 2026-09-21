@@ -16,6 +16,55 @@ fn runtime() -> GraphRuntimeState {
     .unwrap()
 }
 
+#[test]
+fn inventory_entries_remain_visible_but_unavailable_without_kernels() {
+    let runtime = runtime();
+    let mut catalog = runtime.localized_catalog_with_resources(&[], "zh-CN");
+    runtime.annotate_catalog_availability(&mut catalog, |id| id == "yssbi.statistics.linear.fit");
+    let mut placeholders = 0;
+    let mut visualization_placeholders = 0;
+    for item in &catalog.items {
+        if item.node_type_id.starts_with("yssbi.statistics.") && item.ports.is_empty() {
+            assert!(
+                !item.available,
+                "{} must not be creatable",
+                item.node_type_id
+            );
+            placeholders += 1;
+        }
+        if item.node_type_id.starts_with("yssbi.plot.") && item.ports.is_empty() {
+            assert!(
+                !item.available,
+                "{} must not be creatable",
+                item.node_type_id
+            );
+            visualization_placeholders += 1;
+        }
+    }
+    assert_eq!(placeholders, 309);
+    assert_eq!(visualization_placeholders, 12);
+    for id in [
+        "yssbi.dataframe.labels",
+        "yssbi.dataframe.encode",
+        "yssbi.dataframe.impute.single",
+        "yssbi.dataframe.impute.multiple",
+        "yssbi.dataframe.impute.mice",
+    ] {
+        let item = catalog
+            .items
+            .iter()
+            .find(|item| item.node_type_id.as_ref() == id)
+            .unwrap();
+        assert_eq!(item.category_id.as_ref(), "data_processing");
+        assert!(!item.available);
+        assert!(item.ports.is_empty());
+        assert!(item.documentation.is_some());
+    }
+    assert!(catalog.items.iter().any(|item| {
+        item.node_type_id.as_ref() == "yssbi.statistics.linear.fit" && item.available
+    }));
+}
+
 fn graph() -> GraphResourcePath {
     GraphResourcePath::new("events/Cache.yssbi-event").unwrap()
 }

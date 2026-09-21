@@ -5,6 +5,8 @@
 
 use yss_data_contract::DataValue;
 mod families;
+mod inventory;
+pub(crate) use inventory::documentation as inventory_documentation;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters,
@@ -34,7 +36,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         })
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
 
-    Ok(ProviderFragment {
+    let mut fragment = ProviderFragment {
         types: dataframe_types()?,
         categories: dataframe_categories()?,
         interface_resolvers: vec![sid(DATAFRAME_COLUMNS_RESOLVER, InterfaceResolverId::new)?],
@@ -47,7 +49,9 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         nodes,
         messages,
         ..ProviderFragment::default()
-    })
+    };
+    inventory::append(&mut fragment)?;
+    Ok(fragment)
 }
 
 fn registered_node(spec: &NodeSpec) -> Result<RegisteredNode, BuiltinAssemblyError> {
