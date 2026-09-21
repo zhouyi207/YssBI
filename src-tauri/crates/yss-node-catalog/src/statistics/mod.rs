@@ -577,7 +577,7 @@ fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
     let id = match spec.family {
-        Family::Linear | Family::Prediction => "statistics.model.linear",
+        Family::Linear => "statistics.model.linear",
         Family::Logit => "statistics.model.logit",
         Family::Probit => "statistics.model.probit",
         Family::Prais => "statistics.model.prais",
@@ -599,7 +599,7 @@ fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     let id = match family {
-        Family::Linear | Family::Prediction => "statistics.model.linear",
+        Family::Linear => "statistics.model.linear",
         Family::Logit => "statistics.model.logit",
         Family::Probit => "statistics.model.probit",
         Family::Adf
@@ -629,7 +629,7 @@ fn summary_result_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError
 fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete(match family {
         Family::Adf => "statistics.model.adf",
-        Family::Linear | Family::Prediction => "statistics.result.linear",
+        Family::Linear => "statistics.result.linear",
         Family::Iv2sls => "statistics.model.iv_2sls",
         Family::IvLiml => "statistics.model.iv_liml",
         Family::Logit => "statistics.result.logit",

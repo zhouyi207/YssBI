@@ -1,5 +1,6 @@
 //! Stable inventory for statistical node families.
 
+/// Operation performed within a method family, independent of catalog placement.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Stage {
     Fit,
@@ -8,6 +9,7 @@ pub(super) enum Stage {
     Test,
 }
 
+/// Statistical method identity shared by its fit, summary, and prediction nodes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Family {
     Adf,
@@ -22,7 +24,6 @@ pub(super) enum Family {
     Var,
     Vec,
     VecRank,
-    Prediction,
 }
 
 #[derive(Clone, Copy)]
@@ -174,7 +175,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         "线性预测",
         &["predict", "fitted values", "linear model"],
         &["预测", "拟合值", "线性模型"],
-        Family::Prediction,
+        Family::Linear,
         Stage::Predict,
     ),
     node(
