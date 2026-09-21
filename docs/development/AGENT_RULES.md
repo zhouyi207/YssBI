@@ -17,7 +17,8 @@ Use repository knowledge in this order:
 
 1. Code, tests, and manifests own executable facts such as versions, paths,
    dependencies, constants, and command registration.
-2. `docs/architecture/` owns the current architecture model and stable contracts.
+2. Module `README.md` files own their current responsibilities and stable contracts;
+   `docs/architecture/` owns only the system overview and cross-module relationships.
 3. `.rules` owns coding-agent behavior and cross-system guardrails.
 4. `docs/development/` owns change, validation, and delivery workflows.
 5. `docs/decisions/` explains accepted design choices.
@@ -152,16 +153,21 @@ add or commit them unless explicitly requested.
 
 ## Documentation routing
 
-Before changing a subsystem, read its canonical owner:
+Before changing a subsystem, read its local README and applicable `.rules`.
+Use `docs/README.md` for the module index. Representative owners are:
 
 - Graph, projection, plan preparation, execution, Results, and run state/failures:
-  `docs/architecture/GRAPH_AND_EXECUTION.md`
+  `src-tauri/crates/yss-application/src/graph/README.md`
 - Workbench layout and panel lifecycle:
-  `docs/architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md`
-- Logging, operational diagnostics, feedback, and signal boundaries:
-  `docs/architecture/RUNTIME_SIGNALS.md`
+  `src/modules/workbench/README.md`
+- Logging delivery and storage: `src-tauri/crates/tauri-plugin-tracing/README.md`
+- Operational observations, feedback, and signal boundaries:
+  `src/features/application/observability/README.md`
 - Statistical Harness current implementation:
-  `docs/architecture/STATISTICAL_HARNESS.md`
+  `src-tauri/crates/yss-harness-core/README.md`
+- JSON pages and UI intents: `src-tauri/crates/yss-ui-contract/README.md`
+- Plugin target contract: `plugins/README.md`; current behavior remains documented
+  by each plugin and the host protocol/runtime READMEs.
 - Tauri/IPC transport contracts: `src-tauri/crates/yss-application/src/ipc/README.md`
 - Architecture review and documentation checks: `docs/development/ARCHITECTURE_GATES.md`
 - Commands and validation: `docs/development/LOCAL_WORKFLOW.md`
@@ -169,5 +175,5 @@ Before changing a subsystem, read its canonical owner:
   `docs/development/CHANGE_PROCESS.md`
 
 Do not create generic language/framework manuals such as `ts.md`, `rust.md`, or
-`tauri.md`. Add a focused document only when one stable responsibility lacks a
-canonical owner; otherwise link to the existing owner.
+`tauri.md`. Put module details in the existing owner's README, and scoped editing
+constraints in its `.rules`; keep system documentation short and link to these owners.

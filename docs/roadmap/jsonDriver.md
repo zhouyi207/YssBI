@@ -5,7 +5,7 @@
 > Canonical owners: 本文维护进度；当前页面协议由 Presentation 架构与源码维护
 > Update when: 页面范围、组件、持久化、AI 接入或验收状态改变时
 
-首个完整接入场景是线性回归结果报告：GUI 和 Harness 共用 Rust Application 的页面状态与动作，后端提交 JSON 并生成稳定元素增量，React 安装投影。当前契约见 [JSON 页面与界面意图](../../src-tauri/crates/yss-ui-contract/README.md)，统计数据仍归 [Results](../architecture/GRAPH_AND_EXECUTION.md#6-results)。
+首个完整接入场景是线性回归结果报告：GUI 和 Harness 共用 Rust Application 的页面状态与动作，后端提交 JSON 并生成稳定元素增量，React 安装投影。当前契约见 [JSON 页面与界面意图](../../src-tauri/crates/yss-ui-contract/README.md)，统计数据仍归 [Results](../../src/features/application/results/README.md#results)。
 
 ## 已接入
 

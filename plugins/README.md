@@ -8,8 +8,8 @@
 
 本文是面向实现、审查和验收的完整目标契约。“必须”“不得”是实现约束，不表示对应代码已经完成。当前生产行为仍以代码、测试、manifest 和各 Current 专项文档为准。原型文件存在、页面可打开或某个 RPC 可调用，均不能作为整个契约已满足的证据。
 
-当前生命周期实现见 [Plugin runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)，源码与分发入口见
-[Julia 插件](../../plugins/julia/README.md)。当前协议 2 引入有保留期的操作标识、实际预算、进度和诊断投影；
+当前生命周期实现见 [Plugin runtime](../src-tauri/crates/yss-plugin-runtime/README.md)，源码与分发入口见
+[Julia 插件](julia/README.md)。当前协议 2 引入有保留期的操作标识、实际预算、进度和诊断投影；
 同仓库仍发布一个 `yssbi.julia` 包。在线目录、自动更新、OS sandbox 和 checkpoint/recover 等其余目标不因此视为完成。
 
 采用稳定 Extension API、声明式扩展点、宿主标准 UI、独立插件进程、隔离 Webview 和消息通信。源码组织、发布单位、进程边界和业务 authority 分别建模，不按 Rust crate 数量划分插件。
@@ -321,7 +321,7 @@ Project replacement 协调者先冻结旧项目的新准入，drain 或取消任
 
 有序订阅返回 snapshot、streamId 与一致的 sequence 起点。生产者原子建立订阅与快照边界，避免先读快照再监听导致间隙。消费者遇到 gap 或 stream 更换停止套用增量，重新请求 snapshot。
 
-ack 用于流量控制与恢复位置，不是业务 commit。日志、计算输出、Graph Problems 和用户反馈仍遵循 [Runtime Signals](RUNTIME_SIGNALS.md)，不能互相替代。
+ack 用于流量控制与恢复位置，不是业务 commit。日志、计算输出、Graph Problems 和用户反馈仍遵循 [Runtime Signals](../src/features/application/observability/README.md)，不能互相替代。
 
 ### 8.2 ResourcePolicy
 
@@ -417,7 +417,7 @@ Analysis Graph 仍只表达数据依赖。安装、联网、项目写入和控�
 
 默认位置仅在首次创建时生效，之后使用 root FlexLayout Model 的用户布局。插件管理入口固定在 Activity Bar 底部。插件贡献入口由 installed、enabled 与兼容状态决定；外部依赖未就绪时仍可展示配置页，不通过隐藏标签伪造未安装。
 
-布局恢复在安装状态未确定时先保留通用插件 metadata 和占位，不因查询失败重置 layout。registry 确认未安装时移除该插件的贡献面板及 tab；已安装但禁用或暂不可用时可保留占位。项目资源的持久化内容不随贡献面板删除。dirty 关闭、项目替换、reset 继续使用 [Workbench FlexLayout](WORKBENCH_LAYOUT_ARCHITECTURE.md) 的唯一协调者。
+布局恢复在安装状态未确定时先保留通用插件 metadata 和占位，不因查询失败重置 layout。registry 确认未安装时移除该插件的贡献面板及 tab；已安装但禁用或暂不可用时可保留占位。项目资源的持久化内容不随贡献面板删除。dirty 关闭、项目替换、reset 继续使用 [Workbench FlexLayout](../src/modules/workbench/README.md) 的唯一协调者。
 
 ### 11.3 注册事务
 
@@ -638,17 +638,17 @@ operationId 和 taskId 的命名空间、回执保留期限、snapshot/lease 到
 | 性能        | 达到版本化 release profile 的延迟、吞吐和资源阈值，无无限增长                  |
 | 端到端      | 安装插件、读取真实项目数据、完成计算和结果接收、取消任务、卸载后宿主仍正常工作 |
 
-验证命令与范围由 [本地开发工作流](../development/LOCAL_WORKFLOW.md) 管理。模拟状态测试不能描述成真实运行时安装或完整端到端验证，不能通过降低本表要求宣称完成。
+验证命令与范围由 [本地开发工作流](../docs/development/LOCAL_WORKFLOW.md) 管理。模拟状态测试不能描述成真实运行时安装或完整端到端验证，不能通过降低本表要求宣称完成。
 
 ## 20. 专项文档关系
 
 本契约提供目标职责，不给过渡实现豁免，也不以当前原型的 crate 和字段反向限制架构。实现偏差应在对应变更中消除，并同步 Current 专项文档；尚未通过验收时不得声称已完成完整插件化。
 
-- 当前系统 authority 与链路：[系统架构](ARCHITECTURE.md)。
-- 宿主 Tauri wire：[yss-application::ipc](../../src-tauri/crates/yss-application/src/ipc/README.md)。
-- 布局、关闭、reset 和项目替换：[Workbench FlexLayout](WORKBENCH_LAYOUT_ARCHITECTURE.md)。
-- Graph、执行和结果：[Graph 与 Execution](GRAPH_AND_EXECUTION.md)。
-- 日志、错误、反馈与运行信号：[Runtime Signals](RUNTIME_SIGNALS.md)。
-- Assistant 能力网关：[Statistical Harness](STATISTICAL_HARNESS.md)。
+- 当前系统 authority 与链路：[系统架构](../docs/architecture/ARCHITECTURE.md)。
+- 宿主 Tauri wire：[yss-application::ipc](../src-tauri/crates/yss-application/src/ipc/README.md)。
+- 布局、关闭、reset 和项目替换：[Workbench FlexLayout](../src/modules/workbench/README.md)。
+- Graph、执行和结果：[Graph 与 Execution](../src-tauri/crates/yss-application/src/graph/README.md)。
+- 日志、错误、反馈与运行信号：[Runtime Signals](../src/features/application/observability/README.md)。
+- Assistant 能力网关：[Statistical Harness](../src-tauri/crates/yss-harness-core/README.md)。
 
 插件包、运行时或占位视图的存在不是完整实现的证据。实现满足契约后，Current 文档记录经过验证的生产行为，本文继续拥有稳定的目标语义和验收边界。

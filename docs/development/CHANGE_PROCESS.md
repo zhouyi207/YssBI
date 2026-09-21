@@ -29,10 +29,10 @@
 专项 owner：
 
 - [系统总览](../architecture/ARCHITECTURE.md)
-- [Graph / Execution / Results / Run failures](../architecture/GRAPH_AND_EXECUTION.md)
-- [Workbench layout](../architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)
-- [Runtime signals / feedback](../architecture/RUNTIME_SIGNALS.md)
-- [Statistical Harness](../architecture/STATISTICAL_HARNESS.md)
+- [Graph / Execution / Results / Run failures](../../src-tauri/crates/yss-application/src/graph/README.md)
+- [Workbench layout](../../src/modules/workbench/README.md)
+- [Runtime signals / feedback](../../src/features/application/observability/README.md)
+- [Statistical Harness](../../src-tauri/crates/yss-harness-core/README.md)
 - [Tauri / IPC transport](../../src-tauri/crates/yss-application/src/ipc/README.md)
 
 ## 3. Scale, safety, and errors

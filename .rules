@@ -31,8 +31,15 @@ changes or validation.
 
 ## Documentation and tool entries
 
-- Use `docs/README.md` to locate canonical documentation, then read only the
-  documents relevant to the requested work. Do not bulk-read unrelated docs.
+- Module responsibilities, interfaces, state ownership and lifecycle contracts
+  belong in the corresponding module's `README.md`. Read that README before
+  changing the module. Use `docs/README.md` to locate its canonical owner.
+- `docs/architecture/` contains only the system overview and cross-module
+  relationships. Do not accumulate module implementation details there.
+- Put actionable module-specific development constraints in the nearest `.rules`;
+  keep interface descriptions in the README and link instead of duplicating them.
+- Read only the documents relevant to the requested work. Do not bulk-read
+  unrelated module documentation.
 - Tool-specific instruction files must reference the corresponding `.rules`
   file instead of duplicating its contents.
 

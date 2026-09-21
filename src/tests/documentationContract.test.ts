@@ -30,8 +30,28 @@ function markdownLinkTargets(source: string): string[] {
   );
 }
 
+function indexedModuleDocumentation(): string[] {
+  const indexPath = resolve(DOCS_ROOT, "README.md");
+  return [
+    ...new Set(
+      markdownLinkTargets(readFileSync(indexPath, "utf8"))
+        .filter((target) => !target.startsWith("#") && !/^[a-z]+:/iu.test(target))
+        .map((target) => resolve(dirname(indexPath), decodeURI(target.split("#", 1)[0]!)))
+        .filter(
+          (path) =>
+            /^(?:src|src-tauri|plugins)\//u.test(repositoryPath(path)) &&
+            /\/readme\.md$/iu.test(repositoryPath(path)),
+        ),
+    ),
+  ];
+}
+
+function maintainedDocumentation(): string[] {
+  return [...markdownFiles(DOCS_ROOT), ...indexedModuleDocumentation()];
+}
+
 function currentDocumentation(): string[] {
-  return markdownFiles(DOCS_ROOT).filter(
+  return maintainedDocumentation().filter(
     (path) => documentStatus(readFileSync(path, "utf8")) === "Current",
   );
 }
@@ -44,9 +64,12 @@ describe("documentation contract", () => {
         .filter((target) => !target.startsWith("#") && !/^[a-z]+:/iu.test(target))
         .map((target) => resolve(dirname(indexPath), decodeURI(target.split("#", 1)[0]!))),
     );
-    const maintained = ["architecture", "development"].flatMap((directory) =>
-      markdownFiles(resolve(DOCS_ROOT, directory)),
-    );
+    const maintained = [
+      ...["architecture", "development"].flatMap((directory) =>
+        markdownFiles(resolve(DOCS_ROOT, directory)),
+      ),
+      ...indexedModuleDocumentation(),
+    ];
 
     const wrongStatus = maintained
       .filter((path) => {
@@ -54,7 +77,8 @@ describe("documentation contract", () => {
         const status = documentStatus(source);
         if (status === "Current") return /^> Contract: Target Architecture$/mu.test(source);
         return !(
-          repositoryPath(path).startsWith("docs/architecture/") &&
+          (repositoryPath(path).startsWith("docs/architecture/") ||
+            !repositoryPath(path).startsWith("docs/")) &&
           status === "Accepted Decision" &&
           /^> Contract: Target Architecture$/mu.test(source)
         );
@@ -67,7 +91,7 @@ describe("documentation contract", () => {
   });
 
   it("keeps maintained relative Markdown links resolvable", () => {
-    const maintained = markdownFiles(DOCS_ROOT);
+    const maintained = maintainedDocumentation();
     const missing: string[] = [];
 
     for (const documentPath of maintained) {
@@ -98,8 +122,15 @@ describe("documentation contract", () => {
         if (/[<>*|]/u.test(value) || /\s/u.test(value)) continue;
         const normalized = value.split("#", 1)[0]!.replace(/[,:;.]$/u, "");
         if (normalized === "src-tauri/target/") continue;
-        const target = resolve(REPOSITORY_ROOT, normalized);
-        if (!existsSync(target) || !(statSync(target).isFile() || statSync(target).isDirectory())) {
+        const targets = [resolve(REPOSITORY_ROOT, normalized)];
+        if (!repositoryPath(documentPath).startsWith("docs/"))
+          targets.push(resolve(dirname(documentPath), normalized));
+        if (
+          !targets.some(
+            (target) =>
+              existsSync(target) && (statSync(target).isFile() || statSync(target).isDirectory()),
+          )
+        ) {
           missing.push(`${repositoryPath(documentPath)} -> ${value}`);
         }
       }

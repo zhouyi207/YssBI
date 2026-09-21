@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: 文件访问、目录身份、文件事务、变化契约与监听会话
-> Canonical owners: [Cargo.toml](Cargo.toml) 和 [src/](src/) 拥有 API 与依赖事实；项目规则由 [Project](../yss-project/README.md) 拥有
+> Canonical owners: [Cargo.toml](Cargo.toml) 和 [src/](src) 拥有 API 与依赖事实；项目规则由 [Project](../yss-project/README.md) 拥有
 > Update when: FS API、路径安全、事务或监听生命周期改变时
 
 本 crate 不依赖任何 YssBI 内部 crate，也不依赖 Tauri。它不知道项目、图、图表、数据库、资源版本或项目目录结构；调用方只传入文件系统路径、字节和可选的内容/路径过滤规则。

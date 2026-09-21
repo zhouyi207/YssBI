@@ -2,10 +2,10 @@
 
 > Status: Planned
 > Scope: Statistical Harness 尚未成为当前生产能力的 gated work
-> Canonical owners: 本文拥有未完成项；当前实现以 `architecture/STATISTICAL_HARNESS.md` 为准
+> Canonical owners: 本文拥有未完成项；当前实现由 [Harness Core README](../../src-tauri/crates/yss-harness-core/README.md) 维护
 > Update when: roadmap item 开始、完成、取消或改变 gate/验收条件时
 
-本文件只记录未来工作，不描述当前产品能力。已实现边界见 [Statistical Harness 当前架构](../architecture/STATISTICAL_HARNESS.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。
+本文件只记录未来工作，不描述当前产品能力。已实现边界见 [Statistical Harness 当前架构](../../src-tauri/crates/yss-harness-core/README.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。
 
 ## Baseline
 
@@ -135,7 +135,7 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 4. 定义 approval、idempotency、deadline、cancel 和 receipt；
 5. 定义 bounded payload、隐私与 network policy；
 6. 通过 focused contract/behavior/recovery tests 和 architecture gates；
-7. 更新 [Statistical Harness 当前架构](../architecture/STATISTICAL_HARNESS.md)；
+7. 更新 [Statistical Harness 当前架构](../../src-tauri/crates/yss-harness-core/README.md)；
 8. 从本文件删除已完成项，并在 release history 中记录结果。
 
 ## Deferred decisions

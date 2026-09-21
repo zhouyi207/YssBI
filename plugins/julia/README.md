@@ -1,5 +1,10 @@
 # Julia 计算插件
 
+> Status: Current
+> Scope: Julia/Bayes 插件的源码、构建、打包与安装
+> Canonical owners: 本插件 manifests、native crates、web 与构建脚本拥有实现事实
+> Update when: 插件能力、构建、分发或测试入口改变时
+
 Julia/Bayes 的可选安装单元，包含独立原生程序与独立网页。宿主不链接这些业务 crates，也不导入这里的前端源文件。共享 Cargo workspace 只用于源码维护和构建；发布物不需要用户安装 Rust、Node.js 或访问本仓库。
 
 ## 构建与安装
@@ -91,4 +96,4 @@ pnpm test:plugin:native
 原生测试使用本地最新包和真实 Julia，冷环境可能需要数分钟。宿主侧生成的投影契约使用 `pnpm generate:plugins:check` 检查。
 历史、预算、缓存、签名身份和诊断的当前宿主行为见 [Plugin runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)。
 
-[Plugin 架构](../../docs/architecture/PLUGIN.md) 是完整目标契约。当前发行能力是签名本地包、通用受监督任务和隔离网页；在线目录/自动更新、OS sandbox、声明式标准 UI provider、动态 Graph compute provider、完整任务 checkpoint/recover 与依赖自动下载尚未开放，未知必需能力直接拒绝。目录服务未接入时不制造可安装市场条目。
+[Plugin 架构](../README.md) 是完整目标契约。当前发行能力是签名本地包、通用受监督任务和隔离网页；在线目录/自动更新、OS sandbox、声明式标准 UI provider、动态 Graph compute provider、完整任务 checkpoint/recover 与依赖自动下载尚未开放，未知必需能力直接拒绝。目录服务未接入时不制造可安装市场条目。

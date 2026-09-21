@@ -1,21 +1,14 @@
-# 架构文档
+# 系统架构入口
 
 > Status: Current
-> Scope: 当前架构和已接受目标契约的阅读入口
-> Canonical owners: 各专项文档拥有其架构内容；总路由由 docs/README.md 维护
-> Update when: 架构文档的职责、状态或阅读入口改变时
+> Scope: 系统级架构文档的范围与阅读入口
+> Canonical owners: ARCHITECTURE.md 拥有系统总览；模块 README 拥有各自契约
+> Update when: 系统文档职责或阅读入口改变时
 
-先读[系统架构总览](ARCHITECTURE.md)，理解状态归属和依赖方向，再按任务查阅专项文档。
+本目录只保留[系统总览](ARCHITECTURE.md)，说明系统上下文、状态所有权、依赖方向和跨模块数据流。
 
-| 文档                                                     | 状态              | 负责内容                               |
-| -------------------------------------------------------- | ----------------- | -------------------------------------- |
-| [系统架构](ARCHITECTURE.md)                              | Current           | 系统上下文、状态归属、依赖方向和主链路 |
-| [Graph 与 Execution](GRAPH_AND_EXECUTION.md)             | Current           | 编辑、解析、保存、执行、诊断和结果     |
-| [Workbench FlexLayout](WORKBENCH_LAYOUT_ARCHITECTURE.md) | Current           | 工作台布局、面板身份和生命周期         |
-| [Runtime Signals](RUNTIME_SIGNALS.md)                    | Current           | 日志、运行观测、错误与反馈             |
-| [Statistical Harness](STATISTICAL_HARNESS.md)            | Current           | Agent runtime、能力网关、持久化和投影  |
-| [Plugin](PLUGIN.md)                                      | Accepted Decision | 插件目标契约；不表示已全部实现         |
+模块实现、接口、持久化、生命周期和验证说明放在对应源码目录的 README；开发约束放在适用的 `.rules`。按[模块契约入口](../README.md#模块契约入口)查找 Workbench、Graph、Execution、Results、Harness、Plugin 等模块，不在这里维护重复正文。
 
-具体 crate 与传输层说明见[参考索引](../reference/README.md)，重构和后续工作见[路线图](../roadmap/README.md)。完成摘要见 [v0.3](../roadmap/v0_3.md#已完成)，旧分析通过 Git 追溯。
+完整模块清单见[生成索引](../reference/MODULE_MAP.md)，开放工作与人工验收见[路线图](../roadmap/README.md)。
 
 [返回文档索引](../README.md)

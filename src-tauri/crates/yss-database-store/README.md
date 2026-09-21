@@ -2,7 +2,7 @@
 
 This adapter owns the dataset catalog and immutable data generations used by production Project
 activation, DataView editing, and relation sources. Cross-module boundaries are described in
-[Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
+[Graph and Execution](../yss-application/src/graph/README.md).
 
 The project layout is `database/catalog.sqlite` plus
 `database/datasets/<dataset-id>/<generation-id>/part-000000.parquet`. SQLite owns the committed

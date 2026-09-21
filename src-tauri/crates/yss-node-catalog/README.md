@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: 内置节点定义、创建描述、分类、文档与节点目录本地化
-> Canonical owners: 本 crate 的源码拥有内置目录；Node 与 Graph 的边界见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md#2-module-ownership)
+> Canonical owners: 本 crate 的源码拥有内置目录；Node 与 Graph 的边界见 [Graph 与 Execution](../yss-application/src/graph/README.md#module-ownership)
 > Update when: 节点目录装配、创建描述、本地化接口或依赖边界改变时
 
 Node 由三个 crate 组成：

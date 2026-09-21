@@ -7,9 +7,9 @@
 
 工作台使用一个原生 FlexLayout Model 保存已提交的物理布局。React 的 Layout 和组件注册表呈现该模型，Application 通过语义操作协调面板生命周期。工作台布局、Graph 文档和统计结果具有独立的 owner。
 
-Rust 可以通过受控界面意图请求打开图、定位节点、打开结果或显示固定目录中的面板。工作台先认领请求，再调用现有编辑器、结果租约与面板入口，并回传实际执行状态。页面内容的 JSON 与增量由 Rust Application session 拥有，不能直接 patch FlexLayout；具体协议见 [JSON 页面与界面意图](../../src-tauri/crates/yss-ui-contract/README.md)。
+Rust 可以通过受控界面意图请求打开图、定位节点、打开结果或显示固定目录中的面板。工作台先认领请求，再调用现有编辑器、结果租约与面板入口，并回传实际执行状态。页面内容的 JSON 与增量由 Rust Application session 拥有，不能直接 patch FlexLayout；具体协议见 [JSON 页面与界面意图](../../../src-tauri/crates/yss-ui-contract/README.md)。
 
-Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与历史由 Harness 持久化，关闭或移动面板不结束对话。项目归属、恢复与多对话切换见 [Harness 会话契约](STATISTICAL_HARNESS.md#5-session-turn-and-events)。
+Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与历史由 Harness 持久化，关闭或移动面板不结束对话。项目归属、恢复与多对话切换见 [Harness 会话契约](../../../src-tauri/crates/yss-harness-core/README.md#5-session-turn-and-events)。
 
 ## 1. 渲染层级与 authority
 
@@ -66,8 +66,8 @@ React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路�
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
 当前 registry 分别从 `src/modules/logs/public.ts`、`src/modules/output/public.ts` 和
 `src/modules/problems/public.ts` 组合三个独立 panel contribution；Workbench 只拥有它们的位置和
-生命周期。Problems、Results 与运行失败的业务语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)，
-Logs 的业务语义见 [Runtime Signals](RUNTIME_SIGNALS.md)。
+生命周期。Problems、Results 与运行失败的业务语义见 [Graph 与 Execution](../../../src-tauri/crates/yss-application/src/graph/README.md)，
+Logs 的业务语义见 [Runtime Signals](../../features/application/observability/README.md)。
 
 ### 1.1 Activity 文档与模板
 
@@ -238,7 +238,7 @@ Singleton 与 multi-instance contract：
 
 Result panel 固定读取 `reference`，不订阅 pin 的当前结果。删除来源节点或重新运行不会清空已打开的报告。
 Application 的结果租约控制器订阅完成 hydration 后的真实面板集合，按 `leaseId` 与后端对账；切换标签、移动、重置布局保留持有关系，真实关闭才释放。
-跨窗口交接和后端窗口销毁负责独立报告的租约生命周期，详见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)。
+跨窗口交接和后端窗口销毁负责独立报告的租约生命周期，详见 [Graph 与 Execution](../../features/application/results/README.md#results)。
 结果引用的来源信息留在不可变 provenance 中，不随图重命名改写；会话结束后关闭对应独立窗口并移除项目面板。
 
 ## 5. Module seams 与布局 mutation
@@ -365,7 +365,7 @@ root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前�
 原生窗口的位置、尺寸和最大化状态由桌面根包装配的 `tauri-plugin-window-state` 维护，
 持久化到应用配置目录的 `.window-state.json`。前端不再持有几何快照、保存命令或次级窗口几何 localStorage。
 主窗口默认尺寸来自 Tauri 配置，子窗口逻辑像素默认尺寸来自
-[createPersistedWindow](../../src/features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
+[createPersistedWindow](../../features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
 所有原生窗口均参与状态管理，以 label 第一个 `-` 前的部分作为状态键，按种类共享状态；实例 label 仍用于窗口及结果租约身份。
 
 插件在窗口创建时自动恢复几何；配置中的主窗口在应用 setup 前完成插件恢复，随后由 Rust setup 显示。
@@ -390,6 +390,10 @@ src/app/workbench-layout.css 设置宿主尺寸、字体尺度、标题图标/di
 
 ## 10. Verification
 
-检查入口见 [本地开发工作流](../development/LOCAL_WORKFLOW.md)。布局库替换需验证所有公共查询和操作的消费者、架构依赖策略、类型和前端构建。保留应用层关闭、焦点、项目切换和 Result 生命周期的行为检查；移除依赖旧 Dockview 实例与 JSON 结构的专属测试夹具。
+检查入口见 [本地开发工作流](../../../docs/development/LOCAL_WORKFLOW.md)。布局库替换需验证所有公共查询和操作的消费者、架构依赖策略、类型和前端构建。保留应用层关闭、焦点、项目切换和 Result 生命周期的行为检查；移除依赖旧 Dockview 实例与 JSON 结构的专属测试夹具。
 
 遵守仓库规则，UI 不新增单元测试。交互验收覆盖原生拖动/分屏、折叠、主题切换、面板状态保留、取消关闭、结果租约和项目切换。浏览器中使用模拟平台边界的检查不能替代真实 Tauri 数据与窗口生命周期验收。
+
+## 相关模块
+
+[画布交互](../graph-editor/README.md) · [Results 生命周期](../../features/application/results/README.md) · [JSON 页面](../../../src-tauri/crates/yss-ui-contract/README.md)

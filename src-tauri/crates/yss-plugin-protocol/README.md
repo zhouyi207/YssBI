@@ -1,5 +1,10 @@
 # Plugin protocol
 
+> Status: Current
+> Scope: 插件清单、协议类型、预算、任务身份与 schema 生成
+> Canonical owners: 本 crate 类型与生成器拥有当前 wire；插件体系目标见[插件 README](../../../plugins/README.md)
+> Update when: 协议、清单、schema 或生成入口改变时
+
 Version 0.2 of the shared contract implements wire protocol major 2. The package owns manifests,
 budgets, task states, diagnostics and operation identity validation; it has no host implementation
 dependency. Rust schemas generate host transport types, while the Web SDK carries the same protocol.

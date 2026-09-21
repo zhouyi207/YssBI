@@ -22,14 +22,14 @@ Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initiali
 
 Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, Application startup plugin or binding registry. Platform plugins own their namespaced command registries.
 
-`tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Structured runtime observations are submitted through Rust tracing or the frontend LogService. Application has no separate operational-diagnostic command registry or stream. See [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md).
+`tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Structured runtime observations are submitted through Rust tracing or the frontend LogService. Application has no separate operational-diagnostic command registry or stream. See [Runtime Signals](../../../../../src/features/application/observability/README.md).
 
 `HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal Application capabilities and read-only graph receipt recovery. Graph activity is a separate projection channel. Logging, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
 
 Native window geometry uses the official Window State plugin registered by the composition root.
 There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
 windows through the platform adapter and the Rust plugin owns restoration and persistence;
-see [Workbench window geometry](../../../../../docs/architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md#81-原生窗口几何与关闭).
+see [Workbench window geometry](../../../../../src/modules/workbench/README.md#81-原生窗口几何与关闭).
 
 ## Command responsibilities
 
@@ -150,7 +150,7 @@ Every ordered stream defines its source identity, ordering key, capacity/backpre
 
 Events are notifications, not state stores. Consumers recover authoritative data through the domain’s snapshot/query command rather than rebuilding it from an assumed complete event history.
 
-Graph editor projections arrive in load/hydrate/mutation/Resolve/Save command responses. Execution prepares plans internally. Graph Activity notifies consumers when editing or execution changes; Logs and Execution retain their own contracts. Log delivery and failure semantics are documented in [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md#3-logging).
+Graph editor projections arrive in load/hydrate/mutation/Resolve/Save command responses. Execution prepares plans internally. Graph Activity notifies consumers when editing or execution changes; Logs and Execution retain their own contracts. Log delivery and failure semantics are documented in [Runtime Signals](../../../tauri-plugin-tracing/README.md#logging).
 
 Project registration commands consume Application's process-wide `ProjectManagement`. Application owns registry construction from the injected store and picker-task cancellation admission/cleanup. Commands retain progress-channel binding, draining and wire/error mapping. Project activation and replacement continue to use the existing Application session slot; registry state is not replaced with that session.
 
@@ -202,7 +202,7 @@ unique ids and final tree depth before publication. Malformed batches do not par
 the visible projection. A failed delta gets one explicit snapshot recovery; a repeated failure
 is surfaced. Requests within a binding are serialized and coalesced. Project/language/epoch
 replacement invalidates the binding; mounted consumers share the existing sidebarStore document cache. UI expansion creates no request and only expansion preferences are persisted.
-See [Workbench](../../../../../docs/architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md) for UI ownership.
+See [Workbench](../../../../../src/modules/workbench/README.md) for UI ownership.
 
 Resource command replies and matching `ResourceMutationCommitted` events enter the same frontend
 publication coordinator. A committed mutation carries a positive monotonic publication revision and
@@ -215,7 +215,7 @@ Unchanged indexes do not republish sidebar state. Watcher refreshes do not react
 `expectedRevision` argument. Chart documents carry no resource revision. `load_chart` accepts an optional
 `expectedPublicationRevision` for reads prepared against an authoritative index; Rust rejects a mismatched
 project snapshot before returning the document. Save and publication ownership are defined in
-[Graph and Execution](../../../../../docs/architecture/GRAPH_AND_EXECUTION.md#save).
+[Graph and Execution](../graph/README.md#save).
 
 ## Presentation delivery
 
@@ -250,11 +250,11 @@ Successful DTOs and asynchronous statuses may not bypass this rule with backend 
 
 Editor diagnostics carry code, messageKey, safe arguments, severity, explicit blocking, location and related locations. Rust owns definitions/templates; React uses the generated vocabulary for localization. This domain fact contract remains separate from CommandError.
 
-The read-only `resolve_editor_graph` command supplies current projections for refresh, including execution capability diagnostics. `execute_graph` accepts the current editing `version`, `semanticInputHash` and explicit demand, reads the matching document and prepares its plan internally. A stale semantic identity returns `graph_draft_changed`; blocking diagnostics return `graph_not_ready`. Internal resolution/plan failures retain diagnostic incidents. Plan identities and caches stay inside Execution. See [Graph and Execution](../../../../../docs/architecture/GRAPH_AND_EXECUTION.md).
+The read-only `resolve_editor_graph` command supplies current projections for refresh, including execution capability diagnostics. `execute_graph` accepts the current editing `version`, `semanticInputHash` and explicit demand, reads the matching document and prepares its plan internally. A stale semantic identity returns `graph_draft_changed`; blocking diagnostics return `graph_not_ready`. Internal resolution/plan failures retain diagnostic incidents. Plan identities and caches stay inside Execution. See [Graph and Execution](../graph/README.md).
 
 Frontend application code localizes `code + safe details`; `IpcError.message` is a technical summary and must not be rendered directly.
 
-Harness event types use snake_case while envelope and payload fields use camelCase. Provider turn failures retain stable categories for authentication, rate limits, rejected requests, connection failures, unavailable services and invalid responses. The error wire never includes a raw provider response or credential. See [Statistical Harness](../../../../../docs/architecture/STATISTICAL_HARNESS.md).
+Harness event types use snake_case while envelope and payload fields use camelCase. Provider turn failures retain stable categories for authentication, rate limits, rejected requests, connection failures, unavailable services and invalid responses. The error wire never includes a raw provider response or credential. See [Statistical Harness](../../../yss-harness-core/README.md).
 
 Execution channels deliver `RunEventDto` directly for lifecycle and result notifications. Analysis Graph has no stdout/stderr message or callback. Terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire. Harness events and plugin process communication retain their own protocols.
 
@@ -300,9 +300,9 @@ Channel adapters parse strict wire DTOs before publishing to application project
 ## Related owners
 
 - [System architecture](../../../../../docs/architecture/ARCHITECTURE.md)
-- [Graph and Execution](../../../../../docs/architecture/GRAPH_AND_EXECUTION.md)
-- [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md)
-- [Statistical Harness](../../../../../docs/architecture/STATISTICAL_HARNESS.md)
+- [Graph and Execution](../graph/README.md)
+- [Runtime Signals](../../../../../src/features/application/observability/README.md)
+- [Statistical Harness](../../../yss-harness-core/README.md)
 - [Change Process](../../../../../docs/development/CHANGE_PROCESS.md)
 - [Local Workflow](../../../../../docs/development/LOCAL_WORKFLOW.md)
 
@@ -319,3 +319,15 @@ Snapshot and delta frames carry `snapshotBytes`, the Rust-computed serialized si
 `get_graph_edit_receipt` is a read-only, project/graph/editing-version/operation-bound query. It waits behind that graph's active operation and returns the original committed version, command kind and changed flag, or null when no receipt is retained. Null is not proof of rollback. On a missing/malformed command reply, the client queries once and hydrates the latest state only after confirming the original commit. A known business rejection is not converted into success. Save recovery retains the original saved revision and the latest backend dirty/history facts. Released frontend epochs and expired backend editing sessions cannot install a recovered projection.
 
 Graph write and projection encoding work runs on blocking workers. Window destruction, frontend cleanup and project session replacement release graph activity channels. The retired Harness graph-client prepare/claim/adopt commands and wire models are removed.
+
+## IPC errors and incidents
+
+Transport failure 的 exact wire、DTO ownership 和 frontend invoke adapter 由 [`yss-application::ipc` README](#error-contract) 唯一维护。本文只规定跨信号关系：
+
+- expected domain/application failure 映射为 stable machine code 和安全 details；
+- internal/infrastructure failure 可以生成 incident identity，并在 sanitized technical record 中保留关联信息；
+- wire 不携带 backend-owned user prose 或 raw error；
+- successful DTO 和 asynchronous status 不能用 `message`、`detail`、`hint` 等字段透传原始内部错误；Graph diagnostic 的安全模板契约由 Graph owner 维护；
+- 日志记录不能反过来成为 command response 或 UI 状态来源。
+
+一个失败可以同时具有 stable domain/transport outcome 和 incident-linked technical observation，但两者的可靠性、受众和保留策略仍然独立。

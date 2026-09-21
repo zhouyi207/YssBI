@@ -5,7 +5,7 @@
 > Canonical owners: Harness/Application/API/Frontend 源码与测试拥有可执行事实；本文拥有当前跨模块 contract
 > Update when: Harness authority、已注册 capabilities、持久化、事件流或生产接入状态改变时
 
-Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime。它不是一个 frontend chat store，也不把 Tauri commands 或 MCP 当作内部业务总线。设计理由见 [Decision 0001](../decisions/0001-statistical-harness.md)，未完成能力见 [Harness roadmap](../roadmap/STATISTICAL_HARNESS.md)。
+Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime。它不是一个 frontend chat store，也不把 Tauri commands 或 MCP 当作内部业务总线。设计理由见 [Decision 0001](../../../docs/decisions/0001-statistical-harness.md)，未完成能力见 [Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
 
 ## 1. Current production path
 
@@ -82,6 +82,9 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 | `inspect_ui`              | 读取组件 Schema、当前结果页面或界面意图回执                           |
 | `update_ui`               | 按页面修订原子替换、局部修改、排序、显隐或重置展示                    |
 | `request_ui_intent`       | 请求打开图/结果、定位节点或显示允许的面板，返回待执行回执             |
+
+页面与动作契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
+页面变更不写入 Project；模型必须区分意图被接受与前端已完成操作，具体校验、回执、恢复与会话边界见 [JSON 页面与界面意图](../yss-ui-contract/README.md)。
 
 `inspect_result` 与界面复用 Application 的 `query_result_json`，返回 `ResultValueInspection::Json` 中的完整 JSON。结果字段、嵌套对象、统计数组与文本不做 AI 专用裁剪；不保留 title/observations/rSquared 三字段白名单，也不使用原有 100 项、4 层或 4096 字符截断。工具的通用响应字节预算不限制此 JSON 分支。
 
@@ -215,7 +218,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 
 ## 10. MCP status
 
-当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [roadmap](../roadmap/STATISTICAL_HARNESS.md)。
+当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
 
 ## 11. Error, safety, and observability
 
@@ -226,7 +229,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - external/provider payload 在 adapter 边界完成 schema、size、time 和 failure validation；
 - operational ledger 是 durable业务记录，不等同于 lossy diagnostics log。
 
-通用 transport contract 见 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md)，技术信号边界见 [Runtime Signals](RUNTIME_SIGNALS.md)。
+通用 transport contract 见 [`yss-application::ipc` README](../yss-application/src/ipc/README.md)，技术信号边界见 [Runtime Signals](../../../src/features/application/observability/README.md)。
 
 ## 12. Current limits
 
@@ -240,6 +243,10 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - remote Skill install/signing；
 - autonomous background or multi-agent execution。
 
-这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../roadmap/STATISTICAL_HARNESS.md) 维护。
+这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md) 维护。
 
-图工具直接通过 Application 操作 Project 当前驻留文档，不经过 Webview prepare/claim/adopt 握手。图活动 Channel 负责 UI 通知及执行事件，编辑数据和历史不依赖客户端存活。图编辑 snapshot/delta 和保存语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)。
+图工具直接通过 Application 操作 Project 当前驻留文档，不经过 Webview prepare/claim/adopt 握手。图活动 Channel 负责 UI 通知及执行事件，编辑数据和历史不依赖客户端存活。图编辑 snapshot/delta 和保存语义见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
+
+## 相关模块
+
+[Application](../yss-application/README.md) · [UI 页面契约](../yss-ui-contract/README.md)

@@ -35,6 +35,6 @@ pnpm test:rs:package -p yss-graph-runtime --release --lib benchmark_repeated_res
 
 该比较只说明完整语义快照复用的局部收益，不包含 Project 提交、结果有效性、Tauri 传输或 React 绘制，也不是所有优化相对旧版本的总体收益。
 
-当前图与报告契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)，完成记录与待验收事项见 [v0.3](../roadmap/v0_3.md)。
+当前图与报告契约见 [Graph 与 Execution](../../src-tauri/crates/yss-application/src/graph/README.md)，完成记录与待验收事项见 [v0.3](../roadmap/v0_3.md)。
 
 [返回文档索引](../README.md)

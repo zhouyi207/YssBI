@@ -2,7 +2,7 @@
 
 > Status: Accepted Decision
 > Scope: Statistical Harness 的 authority、ports、Gateway、durability 和 adapter 边界
-> Canonical owners: 本文记录设计理由；当前实现由 `architecture/STATISTICAL_HARNESS.md` 描述
+> Canonical owners: 本文记录设计理由；当前实现由 [Harness Core README](../../src-tauri/crates/yss-harness-core/README.md) 描述
 > Update when: 该决策被 supersede，或核心 authority/adapter 方向被重新决定时
 
 Date: 2026-09-01
@@ -87,9 +87,9 @@ Framework types 不得进入 Core contract，adapter 不拥有 approval、workfl
 
 ## Follow-up ownership
 
-- 当前生产状态：[Statistical Harness](../architecture/STATISTICAL_HARNESS.md)
+- 当前生产状态：[Statistical Harness](../../src-tauri/crates/yss-harness-core/README.md)
 - 尚未完成的 gated 能力：[Harness roadmap](../roadmap/STATISTICAL_HARNESS.md)
 - Transport contract：[Application IPC](../../src-tauri/crates/yss-application/src/ipc/README.md)
-- Runtime logging/security：[Runtime Signals](../architecture/RUNTIME_SIGNALS.md)
+- Runtime logging/security：[Runtime Signals](../../src/features/application/observability/README.md)
 
 本 decision 不维护当前 command 列表、crate 文件树、phase 完成百分比或未来 interface 草案。

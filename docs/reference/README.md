@@ -31,6 +31,6 @@
 - [Linear algebra boundary](../../src-tauri/crates/yss-sci-linalg/README.md)
 - [Julia 插件开发](../../plugins/julia/README.md)与[Bayes worker protocol](../../plugins/julia/runtime/julia/README.md)
 
-跨模块契约见[架构索引](../architecture/README.md)，测量与样本见[基准索引](../benchmark/README.md)。
+系统关系见[架构索引](../architecture/README.md)，模块契约统一进入源码旁 README；Graph、Workbench、Results、Harness 与 UI 页面等入口见[模块契约导航](../README.md#模块契约入口)。测量与样本见[基准索引](../benchmark/README.md)。
 
 [返回文档索引](../README.md)

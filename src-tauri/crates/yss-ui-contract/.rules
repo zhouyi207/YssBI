@@ -1,0 +1,6 @@
+# Presentation contract changes
+
+- Read `README.md` before changing the page or intent protocol.
+- Component/action changes must update the Rust contract, TypeScript domain and
+  wire validators, and `UiPageRenderer` together. Harness schemas derive from
+  the Rust types; do not maintain a separate handwritten component catalog.

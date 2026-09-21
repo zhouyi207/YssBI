@@ -113,4 +113,4 @@ and source metadata is checked during staging. Project documents retain their ty
 The DuckDB and Polars adapter crates have been removed. Julia plugins also use DataFusion and
 Arrow within their process boundary. Current storage and graph integration contracts are described in
 [Dataset store](../yss-database-store/README.md) and
-[Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
+[Graph and Execution](../yss-application/src/graph/README.md).

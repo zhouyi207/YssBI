@@ -37,7 +37,7 @@ Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEdit
 
 项目尚未发布，只支持当前格式。打开其他格式版本的项目会在 manifest 校验时失败，不执行旧变量资源或节点的兼容转换，也不改写原文件。新建和保存项目继续写入当前 `schemaVersion`。
 
-常量增删改使用当前图编辑、Save 与后端图历史，项目查询不再发布独立变量集合。复制图时常量及 Get 引用同时生成新身份。格式、类型和执行语义由 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md) 维护。
+常量增删改使用当前图编辑、Save 与后端图历史，项目查询不再发布独立变量集合。复制图时常量及 Get 引用同时生成新身份。格式、类型和执行语义由 [Graph 与 Execution](../yss-application/src/graph/README.md) 维护。
 
 `graph_resource_revisions` 是 Project-owned `GraphResourcePath → ResourceRevision` 索引，不是 editor projection 的请求计数器。它仍有生产读写方：
 
@@ -52,7 +52,7 @@ Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEdit
 
 以下字段不能互相替代：`ResourceRevision` 标识已提交资源版本；frontend lifecycle token 拒绝旧 editor 请求；编辑版本标识当前文档；semantic input hash 标识语义内容与分析输入，供运行校验和计划复用。单独的 revision 也不能替代 Project instance/session identity。若以后合并 revision 的存储位置，必须同时迁移以上使用方，保持提交前重验与事务/执行资源校验语义。
 
-Graph 编辑、Save 和 Execute 的当前流程见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md)。
+Graph 编辑、Save 和 Execute 的当前流程见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
 
 ## Resource publication and external files
 
@@ -80,4 +80,4 @@ writer 不再重复构造 delta。刷新文档时可绑定 Project publication r
 图文件通过 `GraphResourceFile` 直接序列化、反序列化当前类型契约。项目尚未发布，不提供旧类型
 声明迁移或兼容转换，也不维护单独的类型迁移版本字段。
 
-`read_graph_editing` 返回文档只读快照和编辑身份。`capture_graph_edit` 检查编辑会话与资源修订，`commit_graph_edit` 在同一 publication 边界安装候选文档、revision 及可逆历史。内容指纹用于 dirty 判断；历史没有完整文档或解析投影副本。保存、重命名与图卸载在各自事务中同步维护这些元数据。详情见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md)。
+`read_graph_editing` 返回文档只读快照和编辑身份。`capture_graph_edit` 检查编辑会话与资源修订，`commit_graph_edit` 在同一 publication 边界安装候选文档、revision 及可逆历史。内容指纹用于 dirty 判断；历史没有完整文档或解析投影副本。保存、重命名与图卸载在各自事务中同步维护这些元数据。详情见 [Graph 与 Execution](../yss-application/src/graph/README.md)。

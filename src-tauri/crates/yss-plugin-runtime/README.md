@@ -1,5 +1,10 @@
 # Plugin runtime
 
+> Status: Current
+> Scope: 宿主插件安装、授权、进程、任务与结果交接的当前实现
+> Canonical owners: 本 crate 的 Plugin Manager 与适配器；体系目标另由[插件 README](../../../plugins/README.md)维护
+> Update when: 安装、任务、权限、清理或恢复契约改变时
+
 The host owns installation, grants, process supervision, task admission and result handoff. It
 does not link Julia/Bayes implementations. The existing `yss-plugin-protocol` and `yss-plugin-sdk` crates remain under `src-tauri/crates`; plugin
 implementations, runtime scripts and system-test fixtures live under `plugins/julia`.

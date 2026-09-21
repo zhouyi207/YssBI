@@ -1,0 +1,6 @@
+# Workbench documentation and changes
+
+- Read `README.md` before changing layout, panel identity or lifecycle behavior.
+- Layout defaults belong to `internal/layout/workbenchLayoutDefaults.ts`.
+  Update the code owner and its documented behavior together; do not maintain
+  another defaults table in system documentation.

@@ -1,0 +1,6 @@
+# Plugin documentation scope
+
+- `README.md` is an accepted target contract. Read the affected plugin's README,
+  manifest and host protocol/runtime README to establish current behavior.
+- Keep target requirements and implemented capabilities explicitly distinguished
+  when updating package documentation or claiming support for an extension point.
