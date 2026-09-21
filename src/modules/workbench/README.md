@@ -362,13 +362,20 @@ root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前�
 
 ### 8.1 原生窗口几何与关闭
 
-原生窗口的位置、尺寸和最大化状态由桌面根包装配的 `tauri-plugin-window-state` 维护，
-持久化到应用配置目录的 `.window-state.json`。前端不再持有几何快照、保存命令或次级窗口几何 localStorage。
-主窗口默认尺寸来自 Tauri 配置，子窗口逻辑像素默认尺寸来自
-[createPersistedWindow](../../features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
-所有原生窗口均参与状态管理，以 label 第一个 `-` 前的部分作为状态键，按种类共享状态；实例 label 仍用于窗口及结果租约身份。
+主窗口的项目管理页（`/`、`/projects`）与编辑页（`/editor`）分别记忆位置、尺寸和最大化状态。
+[mainWindowGeometry](../../services/platform/mainWindowGeometry.ts) 在 localStorage 的
+`yssbi-main-window:projects` 与 `yssbi-main-window:editor` 中保存物理几何，监听移动和缩放，
+路由切换时先保存离开页面再恢复目标页面；最大化保留普通窗口尺寸，最小化不覆盖记录。
+首次进入项目管理页使用 1100×720、编辑页使用 1600×900 逻辑像素并居中，已保存的几何优先。
+Tauri 主窗口创建尺寸与项目管理页默认尺寸一致；保存位置不在可用显示器上时重新居中。
+两页共用同一个原生窗口和项目会话，所有项目共用编辑页窗口偏好。
 
-插件在窗口创建时自动恢复几何；配置中的主窗口在应用 setup 前完成插件恢复，随后由 Rust setup 显示。
+主窗口排除在 `tauri-plugin-window-state` 之外。次级窗口的位置、尺寸和最大化状态仍由桌面根包装配的插件维护，
+持久化到应用配置目录的 `.window-state.json`。子窗口逻辑像素默认尺寸来自
+[createPersistedWindow](../../features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
+次级窗口以 label 第一个 `-` 前的部分作为状态键，按种类共享状态；实例 label 仍用于窗口及结果租约身份。
+
+插件在次级窗口创建时自动恢复几何；主窗口由 Rust setup 显示，前端路由初始化时恢复页面几何。
 插件不管理可见性、装饰或全屏：子窗口隐藏创建，由内容准备流程显示；
 装饰继续采用当前应用设置。创建 Promise 等待原生 `tauri://created` 或 `tauri://error`，结果租约据此判断打开是否成功。
 

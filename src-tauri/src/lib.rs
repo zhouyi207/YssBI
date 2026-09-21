@@ -25,6 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["main"])
                 .with_state_flags(WINDOW_STATE_FLAGS)
                 .map_label(window_state_key)
                 .build(),

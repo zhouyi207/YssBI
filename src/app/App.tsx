@@ -1,8 +1,9 @@
 import "./App.css";
 import "./i18n";
 
-import React, { Suspense } from "react";
-import { HashRouter, Route, Routes } from "react-router";
+import React, { Suspense, useEffect } from "react";
+import { HashRouter, Route, Routes, useLocation } from "react-router";
+import { restoreMainWindowPage } from "@/services/platform/mainWindowGeometry";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChartThemeProvider } from "./providers/ChartThemeProvider";
 import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
@@ -39,6 +40,12 @@ const ProjectPickerScreen = React.lazy(() =>
 );
 
 function AppRouter() {
+  const { pathname } = useLocation();
+  const page = pathname === "/editor" ? "editor" : "projects";
+  useEffect(() => {
+    void restoreMainWindowPage(page);
+  }, [page]);
+
   return (
     <Suspense fallback={null}>
       <Routes>
