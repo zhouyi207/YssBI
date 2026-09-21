@@ -8,10 +8,10 @@ import { workbenchLayoutInternal } from "./workbenchLayoutInternal";
 export interface WorkbenchLayoutRootBinding {
   create(): LayoutModelBinding;
   dispatchAction(action: Action): void;
-  focusPanel(id: string): void;
+  activatePanel(id: string): void;
 }
 export const workbenchLayoutRootBinding: WorkbenchLayoutRootBinding = {
   create: () => new LayoutModelBinding(createEmptyWorkbenchLayout(), configureWorkbenchModel),
   dispatchAction: (action) => workbenchLayoutInternal.dispatchAction(action),
-  focusPanel: (id) => workbenchLayoutInternal.focusPanel(id),
+  activatePanel: (id) => workbenchLayoutInternal.activatePanel(id),
 };

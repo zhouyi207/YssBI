@@ -1587,6 +1587,7 @@ export const zhCN = {
     functionRunUnavailable: "函数图通过其调用方运行",
     problemsBlockExecution: "请先解决图中的阻断问题再运行",
     executeCurrentGraph: "运行当前图",
+    savingGraph: "正在保存图，请稍候",
     newEventGraph: "新建事件",
     newFunctionGraph: "新建函数",
     coreLogic: "核心逻辑",

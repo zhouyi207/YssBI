@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorStore } from "@/features/core/editor";
-import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
 import { GraphProblemsPanel } from "./GraphProblemsPanel";
 import {
@@ -15,7 +15,8 @@ import {
   clearProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
@@ -28,9 +29,7 @@ function diagnostic(nodeId: string, code: string, message: string): DiagnosticDt
   return {
     code: code === "node.error" ? "graph.node.unknown" : "graph.input.unbound",
     messageKey:
-      code === "node.error"
-        ? "diagnostics.graph.node.unknown"
-        : "diagnostics.graph.input.unbound",
+      code === "node.error" ? "diagnostics.graph.node.unknown" : "diagnostics.graph.input.unbound",
     arguments: { node_type: message, port: message },
     severity: code === "node.error" ? "error" : "warning",
     blocking: code === "node.error",
@@ -70,7 +69,15 @@ describe("GraphProblemsPanel", () => {
     startProjectLifecycle("project-problems");
     useGraphProjectionStore.setState({ graphEntities: {} });
     useEditorStore.getState().clearDetailFocus();
-    useGraphSessionStore.getState().reset();
+    vi.spyOn(workbenchLayoutRead, "getActiveEditorPanel").mockReturnValue({
+      panelInstanceId: "graph-panel",
+      groupId: "group-1",
+      component: "EditorResource",
+      metadata: { role: "editor", resourceKind: "event", resourceRef: graphPath },
+      active: true,
+      visible: true,
+      location: { type: "grid" },
+    });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -80,11 +87,11 @@ describe("GraphProblemsPanel", () => {
     clearProjectLifecycle();
     act(() => root.unmount());
     host.remove();
+    vi.restoreAllMocks();
   });
 
-  it("lists canonical problems for the focused graph and locates node-owned rows", () => {
+  it("lists canonical problems for the native active graph and locates node-owned rows", () => {
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
-    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
 
     act(() => {
       root.render(
@@ -111,7 +118,6 @@ describe("GraphProblemsPanel", () => {
   });
 
   it("shows an empty state when the canonical projection has no problems", () => {
-    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
     useGraphProjectionStore.setState({
       graphEntities: { [graphPath]: { ...bucket, diagnostics: [] } },
     });

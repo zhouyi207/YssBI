@@ -15,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react"
 import { getSettingsSnapshot, useSettingsRead } from "@/features/core/settings/read";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { getActiveGraphContext } from "@/features/application/editor/editorGroupContext";
 import {
   HarnessService,
   type HarnessEvent,
@@ -310,11 +310,7 @@ class AssistantHarnessProjection {
     this.submitting = true;
     this.update({ ...this.snapshot, isRunning: true, activity: null, error: null });
     try {
-      await HarnessService.submitTurn(
-        sessionId,
-        text,
-        useGraphSessionStore.getState().getFocusedGraphPath(),
-      );
+      await HarnessService.submitTurn(sessionId, text, getActiveGraphContext()?.graphPath ?? null);
     } catch (error) {
       if (generation !== this.generation || sessionId !== this.snapshot.sessionId) return;
       const failure = toErrorReference(error, "assistant_turn_failed");

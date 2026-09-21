@@ -11,6 +11,8 @@ Execution channel 直接交付 `RunEventDto`，传递运行生命周期与结果
 
 Output panel 展示当前图的运行失败摘要：从 RunErrored 投影原因、阶段和节点，可定位失败节点；运行开始前的 command rejection 使用安全错误代码回退。失败时 Application 打开 Output；清除错误或开始下一次运行清除本地摘要，不改变 Rust 的运行结果。日志、Assistant text 和 Graph Problems 各自保持原有职责与生命周期。
 
+当前图来自 `useActiveGraphContext` 对 FlexLayout 顶部活动 Graph 的读取；切到非 Graph 标签时不继续显示旧加载会话的失败。点击底部或右侧面板不会覆盖顶部选择。
+
 API 在成功交付 terminal event 后，用 command error details 的 `terminalRunEventSent: true` 标识拒绝路径；ProjectService 等待 channel 排空后才结束失败调用，确保原因投影先于错误收尾。incidentId 只用于关联技术诊断，前端不把 IpcError.message 作为用户文案。
 
 Harness 事件及其恢复、插件进程通信由各自协议拥有，不通过 Graph 执行通道转发。

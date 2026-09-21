@@ -5,7 +5,6 @@ import {
   type GraphEntityBucket,
 } from "@/features/core/dataStore/graphEntityAccess";
 import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
-import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useGraphEditingStore, type GraphEditorState } from "@/features/core/graphEditing";
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import {
@@ -105,7 +104,6 @@ function capturePreviewRequest(
   const graphKind = getGraphResourceKind(graphPath);
   if (graphKind === "function") return "nested-function";
   if (graphKind !== "event") return "missing-resource";
-  if (!useGraphSessionStore.getState().isFocusedGraphPath(graphPath)) return "missing-session";
   if (!isGraphCachedInMemory(graphPath)) return "missing-resource";
 
   const bucket = useGraphProjectionStore.getState().graphEntities[graphPath];
@@ -114,7 +112,8 @@ function capturePreviewRequest(
   const invalid = validatePin(pin);
   if (invalid) return invalid;
   const draft = useGraphEditingStore.getState().sessions[graphPath];
-  if (!draft || draft.saving || !isGraphProjectionExecutable(bucket)) {
+  if (!draft) return "missing-session";
+  if (draft.saving || !isGraphProjectionExecutable(bucket)) {
     return "blocking-problems";
   }
 

@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   setConnections: vi.fn(),
 }));
 vi.mock("./editorCommandFocus", () => ({
-  captureActiveEditorCommandTarget: () => mocks.target,
+  captureEditorCommandTarget: () => mocks.target,
   isEditorCommandTargetCurrent: (target: unknown) => target === mocks.target,
 }));
 vi.mock("./editorGroupInteraction", () => ({ prepareEditorGroupForInteraction: mocks.prepare }));

@@ -1750,6 +1750,7 @@ export const enUS = {
     functionRunUnavailable: "Function graphs run through their consumers",
     problemsBlockExecution: "Resolve blocking graph problems before running",
     executeCurrentGraph: "Run current graph",
+    savingGraph: "Saving graph, please wait",
     newEventGraph: "New Event Graph",
     newFunctionGraph: "New Function",
     coreLogic: "Core logic",

@@ -6,14 +6,12 @@ export type FocusedGraphSession = {
 };
 
 interface GraphSessionState {
-  /** Hydrated graph document bound to the focused editor group (at most one). */
+  /** Hydration bookkeeping only; active tabs and command targets come from FlexLayout. */
   focusedSession: FocusedGraphSession | null;
   setFocusedSession: (groupId: string, graphPath: string) => string | null;
   clearFocusedSession: (groupId: string) => void;
-  getFocusedGraphPath: () => string | null;
   getFocusedGroupId: () => string | null;
   isFocusedGraphPath: (graphPath: string) => boolean;
-  remapFocusedGraphPath: (from: string, to: string) => void;
   reset: () => void;
 }
 
@@ -32,19 +30,9 @@ export const useGraphSessionStore = create<GraphSessionState>((set, get) => ({
       return { focusedSession: null };
     }),
 
-  getFocusedGraphPath: () => get().focusedSession?.graphPath ?? null,
-
   getFocusedGroupId: () => get().focusedSession?.groupId ?? null,
 
   isFocusedGraphPath: (graphPath) => get().focusedSession?.graphPath === graphPath,
-
-  remapFocusedGraphPath: (from, to) =>
-    set((state) => {
-      if (state.focusedSession?.graphPath !== from) return state;
-      return {
-        focusedSession: { ...state.focusedSession, graphPath: to },
-      };
-    }),
 
   reset: () => set({ focusedSession: null }),
 }));

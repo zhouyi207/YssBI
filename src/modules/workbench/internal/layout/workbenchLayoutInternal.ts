@@ -1,6 +1,6 @@
-import { Actions, TabNode, TabSetNode, type Action } from "flexlayout-react";
+import { Actions, type Action } from "flexlayout-react";
 import { LayoutModelBinding } from "./layoutModelBinding";
-import { WorkbenchModelOperations, focusActions, metadataEqual } from "./workbenchLayoutOperations";
+import { WorkbenchModelOperations, metadataEqual } from "./workbenchLayoutOperations";
 import { PendingWorkbenchTransaction } from "./workbenchLayoutTransaction";
 import { canRemoveWorkbenchPanel } from "./workbenchActivityGroup";
 import {
@@ -22,7 +22,7 @@ export interface WorkbenchLayoutInternal {
   invalidatePendingOperations(): void;
   whenIdle(): Promise<void>;
   dispatchAction(action: Action): void;
-  focusPanel(id: string): void;
+  activatePanel(id: string): void;
   commitRemove(
     expected: readonly WorkbenchPanelCommitToken[],
     authorize?: () => boolean,
@@ -245,20 +245,9 @@ export function createWorkbenchLayoutRuntime(): {
       )
         return;
       const model = binding.getModel();
-      let id: string | undefined;
-      if (action.type === Actions.SELECT_TAB) id = action.data.tabNode;
-      if (action.type === Actions.MOVE_NODE) id = action.data.fromNode;
-      if (action.type === Actions.SET_ACTIVE_TABSET) {
-        const group = model.getNodeById(action.data.tabsetNode);
-        if (group instanceof TabSetNode) id = group.getSelectedNode()?.getId();
-      }
-      model.doAction(
-        id && model.getNodeById(id) instanceof TabNode
-          ? Actions.group([action, ...focusActions(model, id)])
-          : action,
-      );
+      model.doAction(action);
     },
-    focusPanel(id) {
+    activatePanel(id) {
       if (hydrated) ops()?.activate(id);
     },
     commitRemove: (expected, authorize) =>

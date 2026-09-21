@@ -123,6 +123,7 @@ describe("requestPinPreview", () => {
     "settles the exact projected $name preview when frontend and backend project identities differ",
     async ({ address }) => {
       const { outputKey } = installGraph(eventGraphPath, address);
+      useGraphSessionStore.getState().reset();
       const execute = vi
         .spyOn(ProjectService, "executeGraph")
         .mockImplementation(async ({ demand, onEvent }) => {
@@ -136,7 +137,7 @@ describe("requestPinPreview", () => {
       expect(execute).toHaveBeenCalledWith({
         projectInstanceId: frontendProjectInstanceId,
         graphPath: eventGraphPath,
-        document: useGraphEditingStore.getState().sessions[eventGraphPath].document,
+        version: useGraphEditingStore.getState().sessions[eventGraphPath].version,
         semanticInputHash:
           useGraphEditingStore.getState().sessions[eventGraphPath].semanticInputHash,
         demand: {
@@ -199,7 +200,7 @@ describe("requestPinPreview", () => {
         return {
           graphPath: eventGraphPath,
           pinId: graph.outputKey,
-          reason: "blocking-problems",
+          reason: "missing-session",
         } as const;
       },
     },
@@ -233,18 +234,6 @@ describe("requestPinPreview", () => {
       prepare: () => {
         installGraph();
         return { graphPath: eventGraphPath, pinId: "missing-pin", reason: "missing-pin" } as const;
-      },
-    },
-    {
-      name: "missing focused graph session",
-      prepare: () => {
-        const graph = installGraph();
-        useGraphSessionStore.getState().reset();
-        return {
-          graphPath: eventGraphPath,
-          pinId: graph.outputKey,
-          reason: "missing-session",
-        } as const;
       },
     },
     {
@@ -353,7 +342,7 @@ describe("requestPinPreview", () => {
         expect.objectContaining({
           projectInstanceId: frontendProjectInstanceId,
           graphPath: eventGraphPath,
-          document: useGraphEditingStore.getState().sessions[eventGraphPath].document,
+          version: useGraphEditingStore.getState().sessions[eventGraphPath].version,
           semanticInputHash:
             useGraphEditingStore.getState().sessions[eventGraphPath].semanticInputHash,
           demand: expect.objectContaining({ type: "pinPreview" }),

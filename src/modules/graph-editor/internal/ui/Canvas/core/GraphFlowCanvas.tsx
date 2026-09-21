@@ -541,6 +541,17 @@ function GraphFlowRuntime({
           }
         }}
         onNodesChange={onNodesChange}
+        onNodeClick={(event, node) => {
+          if (
+            event.shiftKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            suppressClick.current ||
+            !interaction.isInteractive()
+          )
+            return;
+          void commands.revealNodeDetails(node.id);
+        }}
         onNodeDragStart={startNodeDrag}
         onNodeDragStop={stopNodeDrag}
         onSelectionDragStart={startNodeDrag}

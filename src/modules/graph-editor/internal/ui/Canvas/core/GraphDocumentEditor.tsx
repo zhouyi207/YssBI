@@ -1,6 +1,5 @@
 import { memo } from "react";
 import { GraphCanvasController } from "./GraphCanvasController";
-import { useIsActiveEditorPanel } from "@/features/application/editor";
 import { CanvasDropZone } from "./CanvasDropZone";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useProjectProjection } from "@/features/application/project/projectProjection";
@@ -17,7 +16,7 @@ export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function"> & 
 
 /**
  * Graph editor shell per FlexLayout panel.
- * Each panel renders its own resource; only the physically active panel is interactive.
+ * Each visible panel edits its own resource independently of keyboard focus.
  */
 export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   panelInstanceId,
@@ -29,7 +28,7 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
 }: GraphDocumentEditorProps) {
   useVisibleGraphPanel(isVisible, { groupId, graphPath });
   const { saving } = useGraphEditingUi(graphPath);
-  const mode = useIsActiveEditorPanel(panelInstanceId) && !saving ? "interactive" : "preview";
+  const mode = isVisible && !saving ? "interactive" : "preview";
   const { graphLoadStatus: graphLoads } = useProjectProjection();
   const graphLoadStatus = graphLoads[graphPath];
   const graphProjectionReady = useGraphRead((snapshot) =>

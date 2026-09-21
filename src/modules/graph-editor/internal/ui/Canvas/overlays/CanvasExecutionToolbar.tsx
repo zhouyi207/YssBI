@@ -4,6 +4,7 @@ import { useExecutionRead } from "@/features/core/execution/read";
 import { graphHasClearableArtifacts } from "@/features/core/execution/graphRunArtifacts";
 import { VscClearAll, VscDebugStop, VscRunAll } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
+import { useGraphEditingUi } from "@/features/core/graphEditing/ui";
 
 function CanvasToolbarButton({
   tooltip,
@@ -36,12 +37,13 @@ export function CanvasExecutionToolbar({
   onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
+  const { saving } = useGraphEditingUi(graphPath);
   const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
   const graphStatus = graphState?.status ?? "idle";
 
   const isLiveRunning = graphStatus === "running";
   const canClear = !isLiveRunning && graphHasClearableArtifacts(graphState);
-  const canRun = canExecute && !isLiveRunning;
+  const canRun = canExecute && !saving && !isLiveRunning;
 
   return (
     <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
@@ -92,11 +94,13 @@ export function CanvasExecutionToolbar({
         tooltip={
           isLiveRunning
             ? t("canvas.executing")
-            : executeUnavailableReason === "functionGraph"
-              ? t("canvas.functionRunUnavailable")
-              : executeUnavailableReason === "blockingProblems"
-                ? t("canvas.problemsBlockExecution")
-                : t("canvas.executeCurrentGraph")
+            : saving
+              ? t("canvas.savingGraph")
+              : executeUnavailableReason === "functionGraph"
+                ? t("canvas.functionRunUnavailable")
+                : executeUnavailableReason === "blockingProblems"
+                  ? t("canvas.problemsBlockExecution")
+                  : t("canvas.executeCurrentGraph")
         }
       >
         <VscRunAll size={14} />

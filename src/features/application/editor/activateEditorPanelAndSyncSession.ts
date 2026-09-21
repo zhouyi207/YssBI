@@ -40,10 +40,6 @@ export function focusEditorGroupSync(groupId: string): boolean {
   return previousGroupId !== groupId;
 }
 
-export async function awaitEditorGroupSessionChain(): Promise<void> {
-  await editorGroupSessionChain;
-}
-
 export async function hydrateEditorGroup(groupId: string): Promise<boolean> {
   await editorGroupSessionChain;
   return activateCurrentEditorPanel(groupId);
@@ -115,9 +111,4 @@ export async function activateCurrentEditorPanel(groupId: string): Promise<boole
   }
   const request = ++latestPanelActivationRequest;
   return synchronizePanelSession(request, active);
-}
-
-export async function activateEditorGroup(groupId: string): Promise<boolean> {
-  const active = workbenchLayoutRead.getActiveEditorPanelInGroup(groupId);
-  return active ? activateEditorPanelAndSyncSession(active) : false;
 }

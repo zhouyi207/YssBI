@@ -36,10 +36,6 @@ vi.mock("@/services/assistant/harnessService", () => ({
     closeSession: vi.fn(),
   },
 }));
-vi.mock("./assistantGraphTools", () => ({
-  assistantActiveGraphPath: () => null,
-  subscribeAssistantGraphTools: async () => ({ close: async () => {} }),
-}));
 
 beforeEach(() => {
   vi.mocked(HarnessService.listSessions).mockResolvedValue([]);

@@ -44,7 +44,7 @@ describe("activateGraphPanelSession", () => {
     expect(ok).toBe(true);
     expect(loadGraph).toHaveBeenCalledTimes(1);
     expect(loadGraph).toHaveBeenCalledWith(graphPath);
-    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe(graphPath);
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBe(graphPath);
   });
 
   it("does not mark an empty graph cache loaded when loadGraph reports success", async () => {
@@ -54,7 +54,7 @@ describe("activateGraphPanelSession", () => {
     const ok = await activateGraphPanelSession(graphPath, "editor-1");
 
     expect(ok).toBe(false);
-    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBeNull();
     expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).not.toBe(true);
   });
 
@@ -98,7 +98,7 @@ describe("activateGraphPanelSession", () => {
     pendingB.resolve(false);
     await expect(activationB).resolves.toBe(false);
 
-    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe(pathC);
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBe(pathC);
   });
 });
 
@@ -112,7 +112,7 @@ describe("deactivateGraphPanelSession", () => {
 
     deactivateGraphPanelSession("editor", "g1");
 
-    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBeNull();
   });
 
   it("keeps session when a background tab is closed", () => {
@@ -120,6 +120,6 @@ describe("deactivateGraphPanelSession", () => {
 
     deactivateGraphPanelSession("editor", "g2");
 
-    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe("g1");
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBe("g1");
   });
 });

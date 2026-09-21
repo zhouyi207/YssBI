@@ -64,6 +64,17 @@ vi.mock("./editorCommandFocus", () => ({
       resourceKind: panel.metadata.resourceKind,
     };
   },
+  captureEditorShortcutTarget: () => {
+    const panel = mocks.activePanel;
+    if (!panel || panel.metadata.role !== "editor") return null;
+    return {
+      panelInstanceId: panel.panelInstanceId,
+      groupId: panel.groupId,
+      resourceRef: panel.metadata.resourceRef,
+      resourceKind: panel.metadata.resourceKind,
+    };
+  },
+  keyboardPanelInstanceId: () => null,
   isEditorCommandTargetCurrent: (target: {
     panelInstanceId: string;
     groupId: string;
@@ -93,6 +104,7 @@ vi.mock("@/features/core/keyboard", () => ({
 vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
   workbenchLayoutRead: {
     getActivePanel: () => mocks.activePanel ?? undefined,
+    getPanel: (id: string) => mocks.groupPanels.find((panel) => panel.panelInstanceId === id),
     listPanels: () => mocks.groupPanels,
     listGroupPanels: (groupId: string) =>
       mocks.groupPanels.filter((panel) => panel.groupId === groupId),

@@ -16,6 +16,7 @@ export interface WorkbenchLayoutRead {
   subscribe(listener: () => void): () => void;
   getSnapshot(): DeepReadonly<{ revision: number; ready: boolean; hydrated: boolean }>;
   getPanel(panelInstanceId: string): DeepReadonly<WorkbenchPanelInfo> | undefined;
+  /** Selected tab in the active central group, independent of sidebar input focus. */
   getActivePanel(): DeepReadonly<WorkbenchPanelInfo> | undefined;
   getActiveEditorPanel(): DeepReadonly<WorkbenchEditorPanelInfo> | undefined;
   getActiveEditorPanelInGroup(groupId: string): DeepReadonly<WorkbenchEditorPanelInfo> | undefined;

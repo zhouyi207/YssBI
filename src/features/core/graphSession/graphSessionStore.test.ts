@@ -12,7 +12,9 @@ describe("graphSessionStore", () => {
     expect(store.setFocusedSession("editor-a", "events/B.yssbi-event")).toBe(
       "events/A.yssbi-event",
     );
-    expect(store.getFocusedGraphPath()).toBe("events/B.yssbi-event");
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBe(
+      "events/B.yssbi-event",
+    );
     expect(store.getFocusedGroupId()).toBe("editor-a");
     expect(store.isFocusedGraphPath("events/B.yssbi-event")).toBe(true);
     expect(store.isFocusedGraphPath("events/A.yssbi-event")).toBe(false);
@@ -22,15 +24,10 @@ describe("graphSessionStore", () => {
     const store = useGraphSessionStore.getState();
     store.setFocusedSession("editor-a", "events/A.yssbi-event");
     store.clearFocusedSession("editor-b");
-    expect(store.getFocusedGraphPath()).toBe("events/A.yssbi-event");
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBe(
+      "events/A.yssbi-event",
+    );
     store.clearFocusedSession("editor-a");
-    expect(store.getFocusedGraphPath()).toBeNull();
-  });
-
-  it("remaps focused graph path on rename", () => {
-    const store = useGraphSessionStore.getState();
-    store.setFocusedSession("editor-a", "events/Old.yssbi-event");
-    store.remapFocusedGraphPath("events/Old.yssbi-event", "events/New.yssbi-event");
-    expect(store.getFocusedGraphPath()).toBe("events/New.yssbi-event");
+    expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBeNull();
   });
 });

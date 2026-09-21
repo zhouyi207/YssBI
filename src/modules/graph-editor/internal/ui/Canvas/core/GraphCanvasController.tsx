@@ -204,11 +204,7 @@ export function GraphCanvasController({
       graphKind={graphKind}
       viewportGridSlot={<ViewportGrid viewportScope={viewportScope} />}
       graphContentSlot={graphContentSlot}
-      overlaySlot={
-        interactive ? (
-          <CanvasOverlays model={overlayModel} catalogRowRenderer={catalogRowRenderer} />
-        ) : null
-      }
+      overlaySlot={<CanvasOverlays model={overlayModel} catalogRowRenderer={catalogRowRenderer} />}
     />
   );
 }

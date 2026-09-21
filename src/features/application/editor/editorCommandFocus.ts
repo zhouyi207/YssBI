@@ -14,7 +14,13 @@ export interface EditorCommandTarget {
   readonly resourceKind: "event" | "function" | "chart";
 }
 
-const projectIdentityByTarget = new WeakMap<EditorCommandTarget, ProjectIdentitySnapshot>();
+const targetOwnership = new WeakMap<
+  EditorCommandTarget,
+  {
+    readonly project: ProjectIdentitySnapshot;
+    readonly panelScoped: boolean;
+  }
+>();
 
 const SHORTCUT_CONSUMER_SELECTOR = [
   "input",
@@ -38,6 +44,20 @@ const SHORTCUT_CONSUMER_SELECTOR = [
 
 export function captureActiveEditorCommandTarget(): EditorCommandTarget | null {
   const panel = workbenchLayoutRead.getActiveEditorPanel();
+  return captureTarget(panel);
+}
+
+/** Explicit canvas actions belong to that visible panel, not the global active group. */
+export function captureEditorCommandTarget(panelInstanceId: string): EditorCommandTarget | null {
+  const panel = workbenchLayoutRead.getPanel(panelInstanceId);
+  if (!panel?.visible) return null;
+  return captureTarget(panel, true);
+}
+
+function captureTarget(
+  panel: ReturnType<typeof workbenchLayoutRead.getPanel>,
+  panelScoped = false,
+): EditorCommandTarget | null {
   if (!panel || panel.metadata.role !== "editor" || panel.metadata.resourceKind === "database")
     return null;
 
@@ -54,16 +74,20 @@ export function captureActiveEditorCommandTarget(): EditorCommandTarget | null {
     resourceRef: panel.metadata.resourceRef,
     resourceKind: panel.metadata.resourceKind,
   });
-  projectIdentityByTarget.set(target, projectIdentity);
+  targetOwnership.set(target, { project: projectIdentity, panelScoped });
   return target;
 }
 
 export function isEditorCommandTargetCurrent(target: EditorCommandTarget): boolean {
-  const projectIdentity = projectIdentityByTarget.get(target);
-  if (!projectIdentity || !isCurrentProjectIdentity(projectIdentity)) return false;
+  const ownership = targetOwnership.get(target);
+  if (!ownership || !isCurrentProjectIdentity(ownership.project)) return false;
 
-  const panel = workbenchLayoutRead.getActiveEditorPanel();
+  const scoped = ownership.panelScoped;
+  const panel = scoped
+    ? workbenchLayoutRead.getPanel(target.panelInstanceId)
+    : workbenchLayoutRead.getActiveEditorPanel();
   return (
+    (!scoped || panel?.visible === true) &&
     panel?.metadata.role === "editor" &&
     panel.panelInstanceId === target.panelInstanceId &&
     panel.groupId === target.groupId &&
@@ -98,4 +122,23 @@ function consumesEditorShortcut(target: EventTarget): boolean {
 export function shouldIgnoreEditorShortcutEvent(event: KeyboardEvent): boolean {
   if (uiStore.getState().modals.length > 0 || isAppModalOpen()) return true;
   return eventPath(event).some(consumesEditorShortcut);
+}
+
+/** Resolve keyboard ownership from the DOM, including portaled/shadow-root event paths. */
+export function keyboardPanelInstanceId(event: KeyboardEvent): string | null {
+  const targets = [...eventPath(event)];
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  if (focused) targets.push(focused);
+  for (const target of targets) {
+    const panel = targetElement(target)?.closest("[data-panel-instance-id]");
+    const id = panel?.getAttribute("data-panel-instance-id");
+    if (id) return id;
+  }
+  return null;
+}
+
+export function captureEditorShortcutTarget(event: KeyboardEvent): EditorCommandTarget | null {
+  const id = keyboardPanelInstanceId(event);
+  return id ? captureEditorCommandTarget(id) : null;
 }

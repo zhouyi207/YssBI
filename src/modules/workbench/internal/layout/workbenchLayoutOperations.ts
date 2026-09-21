@@ -77,16 +77,6 @@ function nodeLocation(group: TabSetNode | BorderNode): WorkbenchGroupInfo["locat
     ? { type: "edge", position: group.getLocation().getName() as WorkbenchEdgePosition }
     : { type: "grid" };
 }
-export function focusActions(model: Model, id: string): Action[] {
-  return modelTabs(model).flatMap((tab) => {
-    const config = tab.getConfig() ?? {};
-    const focused = tab.getId() === id;
-    return Boolean(config.focused) === focused
-      ? []
-      : [Actions.updateNodeAttributes(tab.getId(), { config: { ...config, focused } })];
-  });
-}
-
 export class WorkbenchModelOperations {
   constructor(readonly model: Model) {}
   serialize = () => structuredClone(this.model.toJson());
@@ -100,12 +90,7 @@ export class WorkbenchModelOperations {
       throw new WorkbenchLayoutError("group_not_found", { groupId: id });
     return node;
   };
-  private activeTab = (): TabNode | undefined => {
-    const focused = modelTabs(this.model).find(
-      (tab) => tab.getConfig()?.focused && panelIsVisible(tab),
-    );
-    return focused ?? this.model.getActiveTabset()?.getSelectedNode();
-  };
+  private activeTab = (): TabNode | undefined => this.model.getActiveTabset()?.getSelectedNode();
   private panelInfo = (
     tab: TabNode | undefined,
     active: TabNode | undefined,
@@ -296,7 +281,6 @@ export class WorkbenchModelOperations {
       actions.push(Actions.updateNodeAttributes(parent.getId(), { show: true }));
     if (parent instanceof TabSetNode && this.model.getActiveTabset() !== parent)
       actions.push(Actions.setActiveTabset(parent.getId()));
-    actions.push(...focusActions(this.model, id));
     if (actions.length) this.model.doAction(Actions.group(actions));
     return true;
   };

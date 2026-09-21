@@ -18,6 +18,8 @@ import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 import type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 import {
   captureActiveEditorCommandTarget,
+  captureEditorShortcutTarget,
+  keyboardPanelInstanceId,
   isEditorCommandTargetCurrent,
   shouldIgnoreEditorShortcutEvent,
   type EditorCommandTarget,
@@ -31,8 +33,8 @@ import {
   toggleWorkbenchView,
 } from "@/modules/workbench/public";
 
-function currentEditorCommandTarget(): EditorCommandTarget | null {
-  const target = captureActiveEditorCommandTarget();
+function currentEditorCommandTarget(event: KeyboardEvent): EditorCommandTarget | null {
+  const target = captureEditorShortcutTarget(event);
   return target && isEditorCommandTargetCurrent(target) ? target : null;
 }
 
@@ -49,8 +51,9 @@ function getActiveCanvasLocalPoint(target: EditorCommandTarget, clientX: number,
   };
 }
 
-function cyclePhysicalPanel(backward: boolean): boolean {
-  const activePanel = workbenchLayoutRead.getActivePanel();
+function cyclePhysicalPanel(event: KeyboardEvent, backward: boolean): boolean {
+  const id = keyboardPanelInstanceId(event);
+  const activePanel = id ? workbenchLayoutRead.getPanel(id) : workbenchLayoutRead.getActivePanel();
   if (!activePanel) return false;
   const panels = workbenchLayoutRead.listGroupPanels(activePanel.groupId);
   if (panels.length < 2) return false;
@@ -60,7 +63,13 @@ function cyclePhysicalPanel(backward: boolean): boolean {
   if (currentIndex < 0) return false;
   const offset = backward ? -1 : 1;
   const nextIndex = (currentIndex + offset + panels.length) % panels.length;
-  void workbenchLayoutControl.activate(panels[nextIndex].panelInstanceId);
+  const nextId = panels[nextIndex].panelInstanceId;
+  void workbenchLayoutControl.activate(nextId).then((activated) => {
+    if (!activated || !workbenchLayoutRead.getPanel(nextId)?.visible) return;
+    document
+      .querySelector<HTMLElement>(`[data-panel-instance-id="${CSS.escape(nextId)}"]`)
+      ?.focus({ preventScroll: true });
+  });
   return true;
 }
 
@@ -89,7 +98,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       const key = event.key.toLowerCase();
 
       if (event.key === "Escape") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target || target.resourceKind === "chart") return;
         const interaction = getCanvasInteraction(
           useGraphInteractionStore.getState(),
@@ -119,7 +128,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (!event.repeat && isControlKey && key === "a") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target) return;
         event.preventDefault();
         void commands.selectAllNodes(target);
@@ -127,7 +136,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && key === "f") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (target && commands.focusSelectedNodes(target)) event.preventDefault();
         return;
       }
@@ -139,13 +148,13 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
         !event.shiftKey &&
         event.key === "Home"
       ) {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (target && commands.fitCompleteGraph(target)) event.preventDefault();
         return;
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         void commands.deleteSelected(target);
@@ -153,7 +162,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "z") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target) return;
         const session = useGraphEditingStore.getState().sessions[target.resourceRef];
         const canUndo = Boolean(session?.canUndo);
@@ -167,7 +176,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "y") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target) return;
         const session = useGraphEditingStore.getState().sessions[target.resourceRef];
         if (session?.canRedo && !session.saving) {
@@ -178,7 +187,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "c") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat) void commands.copy(target);
@@ -186,7 +195,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "x") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat) void commands.cut(target);
@@ -194,7 +203,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "v") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
@@ -209,7 +218,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "d") {
-        const target = currentEditorCommandTarget();
+        const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) {
@@ -224,7 +233,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
           void commands.saveGraphAs();
           return;
         }
-        const target = currentEditorCommandTarget();
+        const target = captureActiveEditorCommandTarget();
         if (!target || !isEditorCommandTargetCurrent(target)) return;
         event.preventDefault();
         void commands.saveGraph(target);
@@ -244,7 +253,10 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "w") {
-        const activePanel = workbenchLayoutRead.getActivePanel();
+        const id = keyboardPanelInstanceId(event);
+        const activePanel = id
+          ? workbenchLayoutRead.getPanel(id)
+          : workbenchLayoutRead.getActivePanel();
         if (!activePanel) return;
         event.preventDefault();
         void requestCloseWorkbenchPanel(activePanel.panelInstanceId);
@@ -252,12 +264,12 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && event.key === "Tab") {
-        if (cyclePhysicalPanel(event.shiftKey)) event.preventDefault();
+        if (cyclePhysicalPanel(event, event.shiftKey)) event.preventDefault();
         return;
       }
 
       if (isControlKey && event.key === "\\") {
-        const target = currentEditorCommandTarget();
+        const target = captureActiveEditorCommandTarget();
         if (!target || !isEditorCommandTargetCurrent(target)) return;
         event.preventDefault();
         commands.splitEditorRight(target.groupId);

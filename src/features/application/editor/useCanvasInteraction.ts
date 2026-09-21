@@ -22,10 +22,7 @@ import type {
 import { isGraphSaving } from "@/features/core/graphEditing";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
-import {
-  captureActiveEditorCommandTarget,
-  isEditorCommandTargetCurrent,
-} from "./editorCommandFocus";
+import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "./editorCommandFocus";
 import { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
 import type { EditorCanvasScope } from "./editorCanvasTypes";
 
@@ -68,7 +65,7 @@ export function useCanvasInteraction({
   });
   const captureTarget = useCallback(() => {
     if (!enabledRef.current || isGraphSaving(graphPath)) return null;
-    const target = captureActiveEditorCommandTarget();
+    const target = captureEditorCommandTarget(panelInstanceId);
     return target?.panelInstanceId === panelInstanceId &&
       target.groupId === groupId &&
       target.resourceRef === graphPath &&

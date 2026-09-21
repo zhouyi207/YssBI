@@ -134,6 +134,10 @@ export function RootPanelTabRenderer({
   return (
     <>
       <span
+        tabIndex={-1}
+        onPointerDown={(event) => {
+          if (event.button === 0) event.currentTarget.focus({ preventScroll: true });
+        }}
         className="workbench-tab-label"
         title={title}
         data-panel-instance-id={props.panelInstanceId}

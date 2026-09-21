@@ -107,7 +107,7 @@ describe("resolveEditorOpenTargetGroupId", () => {
     expect(mocks.ensureCentralGroup).not.toHaveBeenCalled();
   });
 
-  it("falls back from an invalid explicit group to the focused matching graph", async () => {
+  it("uses the native active group instead of an old graph session", async () => {
     const focused = editorPanel("editor-focused", "focused-group", "events/Focused.yssbi-event");
     const tool = toolPanel("logs", "tool-group");
     mocks.panels = [focused, tool];
@@ -120,11 +120,12 @@ describe("resolveEditorOpenTargetGroupId", () => {
       .getState()
       .setFocusedSession("focused-group", "events/Focused.yssbi-event");
 
-    await expect(resolveEditorOpenTargetGroupId("removed-group")).resolves.toBe("focused-group");
-    expect(mocks.ensureCentralGroup).not.toHaveBeenCalled();
+    mocks.ensureCentralGroup.mockResolvedValue("tool-group");
+    await expect(resolveEditorOpenTargetGroupId("removed-group")).resolves.toBe("tool-group");
+    expect(mocks.ensureCentralGroup).toHaveBeenCalledOnce();
   });
 
-  it("uses a live-validated recent editor group when its focused graph no longer matches", async () => {
+  it("keeps new editors in the native group when its selected tab is a tool", async () => {
     const recentEditor = editorPanel(
       "editor-recent",
       "recent-group",
@@ -142,8 +143,9 @@ describe("resolveEditorOpenTargetGroupId", () => {
     mocks.activePanel = tool;
     useGraphSessionStore.getState().setFocusedSession("recent-group", "events/Closed.yssbi-event");
 
+    mocks.ensureCentralGroup.mockResolvedValue("recent-group");
     await expect(resolveEditorOpenTargetGroupId()).resolves.toBe("recent-group");
-    expect(mocks.ensureCentralGroup).not.toHaveBeenCalled();
+    expect(mocks.ensureCentralGroup).toHaveBeenCalledOnce();
   });
 
   it("ensures a central group when no live editor context remains", async () => {

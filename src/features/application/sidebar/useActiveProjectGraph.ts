@@ -1,5 +1,4 @@
-import { useGraphSessionUi } from "@/features/core/graphSession/ui";
-import { useLayoutPortSnapshot, workbenchLayoutRead } from "@/modules/workbench/public";
+import { useActiveGraphContext } from "@/features/application/editor/editorGroupContext";
 import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
 export interface ActiveProjectGraph {
@@ -9,31 +8,16 @@ export interface ActiveProjectGraph {
 }
 
 export function useActiveProjectGraph(): ActiveProjectGraph | null {
-  useLayoutPortSnapshot(workbenchLayoutRead);
-  const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
-  // Tool focus keeps the existing graph context; an actual editor switch always takes priority.
-  const activeEditor =
-    workbenchLayoutRead.getActiveEditorPanel()?.metadata ??
-    (focusedSession
-      ? workbenchLayoutRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata
-      : null);
+  const activeGraph = useActiveGraphContext();
 
   return useResourceRead((snapshot) => {
-    if (
-      !activeEditor ||
-      activeEditor.role !== "editor" ||
-      (activeEditor.resourceKind !== "event" && activeEditor.resourceKind !== "function")
-    ) {
-      return null;
-    }
+    if (!activeGraph) return null;
     const resource =
-      snapshot.resources[
-        resourceKey({ id: activeEditor.resourceRef, kind: activeEditor.resourceKind })
-      ];
+      snapshot.resources[resourceKey({ id: activeGraph.graphPath, kind: activeGraph.kind })];
     return resource
       ? {
-          path: activeEditor.resourceRef,
-          kind: activeEditor.resourceKind,
+          path: activeGraph.graphPath,
+          kind: activeGraph.kind,
           name: resource.name,
         }
       : null;

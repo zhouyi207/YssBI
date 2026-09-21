@@ -135,7 +135,7 @@ describe("useProjectOperations execution demand", () => {
     expect(ProjectService.executeGraph).toHaveBeenCalledWith({
       projectInstanceId,
       graphPath,
-      document: useGraphEditingStore.getState().sessions[graphPath].document,
+      version: useGraphEditingStore.getState().sessions[graphPath].version,
       semanticInputHash: useGraphEditingStore.getState().sessions[graphPath].semanticInputHash,
       demand: { type: "default" },
       onEvent: expect.any(Function),
@@ -251,13 +251,13 @@ describe("useProjectOperations execution demand", () => {
     );
 
     const execution = operations.executeGraph();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledOnce());
     startProjectLifecycle("project-instance-2");
     emit(runStartedEvent());
     resolveExecution();
     await act(async () => execution);
 
     expect(executionState.setActiveRunId).not.toHaveBeenCalled();
-    expect(executionState.completeExecution).not.toHaveBeenCalled();
     expect(executionState.completeExecution).not.toHaveBeenCalled();
     expect(executionState.failExecution).not.toHaveBeenCalled();
     expect(executionState.interruptExecution).not.toHaveBeenCalled();

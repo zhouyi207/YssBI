@@ -44,7 +44,7 @@ const canvas = useEditorCanvas({
 });
 ```
 
-Use `mode: 'preview'` for an inactive or saving FlexLayout panel. Preview disables
+Use `mode: 'preview'` for a hidden or saving FlexLayout panel. Visible split panes remain interactive when another pane or sidebar receives input focus. Preview disables
 editing, selection, zoom/pan, and context-menu actions; its sidebar drop route remains
 registered so the workbench can activate the target before dropping.
 
@@ -54,9 +54,9 @@ Node/port views remain custom React components; dynamic handle IDs use the exist
 Controlled nodes retain measured dimensions and dragging flags, and unchanged nodes keep their
 references. Measurements are accepted in preview mode as well; losing them would hide nodes
 and reset connection anchors on every update.
-`useCanvasInteraction` grants a current, cancellable gesture; the renderer keeps its
+`useCanvasInteraction` captures the visible panel and project identity independently of the active central tab, and grants a current, cancellable gesture; the renderer keeps its
 position previews local and submits one existing mutation at gesture end. Escape,
-deactivation, graph close, and project replacement invalidate the gesture.
+hiding, save locking, graph close, and project replacement invalidate the gesture.
 Late mutation completion only clears that mutation's preview, never a newer drag.
 
 Cancellation also ends the visible selection preview and restores the pre-pointer node/edge
@@ -74,6 +74,10 @@ coordinate system. React Flow does not own draft history, save/execute, or FlexL
 the controller and must not assemble application commands.
 
 ### Other consumers
+
+`editorGroupContext` owns the shared native active Graph read. Problems, Output, Project sidebar and Assistant consume it; graph-session hydration bookkeeping is not a UI selection authority. Session path remapping is committed by `projectPublicationSnapshot` with the authoritative resource snapshot.
+
+Menus capture the native active central editor. Explicit canvas actions capture their own visible panel. Both revalidate identity before committing; the menu target also revalidates the central selection. Keyboard node commands resolve the owning panel from the DOM event path or focused element, while inputs, menus and modals retain their shortcuts. Execution controls use the canvas graph path and stay mounted while focus changes.
 
 Use the narrow capability matching the caller:
 

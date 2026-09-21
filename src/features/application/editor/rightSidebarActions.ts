@@ -1,10 +1,6 @@
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { useEditorStore } from "@/features/core/editor";
-import {
-  revealWorkbenchView,
-  updateEditorGroupSelectedNodeIds,
-  workbenchLayoutRead,
-} from "@/modules/workbench/public";
+import { revealWorkbenchView, workbenchLayoutRead } from "@/modules/workbench/public";
 import type { EditorResourceKind } from "@/modules/workbench/public";
 
 export function detailFocusForEditorResource(
@@ -56,15 +52,6 @@ export function setInspectionContext(graphPath: string, selectedNodeIds: readonl
 export async function revealDetails(focus: DetailFocus): Promise<void> {
   setDetailContext(focus);
   if (workbenchLayoutRead.isReady) await revealWorkbenchView("details");
-}
-
-export async function revealDiagnosticNode(
-  graphPath: string,
-  nodeId: string,
-  groupId: string,
-): Promise<void> {
-  updateEditorGroupSelectedNodeIds([nodeId], groupId);
-  await revealDetails({ kind: "node", id: nodeId, graphPath });
 }
 
 export async function revealInspect(

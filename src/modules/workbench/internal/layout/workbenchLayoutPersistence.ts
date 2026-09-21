@@ -32,7 +32,12 @@ export interface ParsedPersistedWorkbenchLayout {
 export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
   const identities = new Set<string>();
   return isLayoutJson(candidate, (tab, parent) => {
-    if (!isRecord(tab.config) || !isWorkbenchPanelMetadata(tab.config.metadata)) return false;
+    if (
+      !isRecord(tab.config) ||
+      Object.keys(tab.config).length !== 1 ||
+      !isWorkbenchPanelMetadata(tab.config.metadata)
+    )
+      return false;
     const metadata = tab.config.metadata;
     if (
       componentForWorkbenchMetadata(metadata) !== tab.component ||

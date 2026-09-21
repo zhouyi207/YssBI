@@ -11,15 +11,11 @@ export { useWorkbenchWindowCloseGuard } from "./useWorkbenchWindowCloseGuard";
 export { useEditorPanelCommands } from "./useEditorPanelCommands";
 export {
   activateEditorPanelAndSyncSession,
-  activateEditorGroup,
   activateCurrentEditorPanel,
   focusEditorGroupSync,
   hydrateEditorGroup,
 } from "./activateEditorPanelAndSyncSession";
-export {
-  prepareEditorGroupForInteraction,
-  shouldSkipEditorGroupShellActivation,
-} from "./editorGroupInteraction";
+export { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
 export {
   requestCloseEditorPanel,
   requestCloseEditorPanels,
@@ -36,7 +32,6 @@ export { useEditorCanvas } from "./useEditorCanvas";
 export { useDetailTarget } from "./useDetailTarget";
 export { resolveDetailTarget } from "./resolveDetailTarget";
 export { clearDetailFocusForClosedPanel } from "./clearDetailFocusForClosedPanel";
-export { useIsActiveEditorPanel } from "./useIsActiveEditorPanel";
 export type { GraphContextMenuActions } from "./graphContextMenuActions";
 export { useCanvasViewport } from "./useCanvasViewport";
 export { useCanvasDrop } from "./useCanvasDrop";

@@ -45,7 +45,9 @@ export type EditorCanvasCommandsSlice = Pick<
     ReturnType<typeof useProjectOperations>,
     "executeGraph" | "cancelGraphExecution" | "clearGraphArtifacts"
   > &
-  Pick<ReturnType<typeof useNodeManagement>, "createNode">;
+  Pick<ReturnType<typeof useNodeManagement>, "createNode"> & {
+    revealNodeDetails(nodeId: string): Promise<void>;
+  };
 
 export interface EditorCanvasWorkspaceSlice {
   groupId: string;

@@ -45,7 +45,7 @@ function interactionStillMatches(
 ): boolean {
   const panel = workbenchLayoutRead.getPanel(panelInstanceId);
   if (
-    !panel?.active ||
+    !panel?.visible ||
     panel.groupId !== groupId ||
     panel.metadata.role !== "editor" ||
     panel.metadata.resourceRef !== graphPath

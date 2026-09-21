@@ -1,4 +1,13 @@
-import { BorderNode, DockLocation, TabNode, type Model, type Node } from "flexlayout-react";
+import {
+  Actions,
+  BorderNode,
+  DockLocation,
+  TabNode,
+  TabSetNode,
+  type Model,
+  type Node,
+  type Action,
+} from "flexlayout-react";
 import {
   isWorkbenchActivityMetadata,
   isWorkbenchPanelMetadata,
@@ -50,6 +59,23 @@ export function hasWorkbenchPanelCloseButton(metadata: WorkbenchPanelMetadata): 
   );
 }
 export function configureWorkbenchModel(model: Model): void {
+  const ensureActiveTabset = (initial = false) => {
+    if (!initial && model.getActiveTabset()?.getSelectedNode()) return;
+    const groups: TabSetNode[] = [];
+    model.visitNodes((node) => {
+      if (node instanceof TabSetNode && node.getTabNodes().length) groups.push(node);
+    });
+    const actions: Action[] = groups.flatMap((group) =>
+      group.getSelectedNode() ? [] : [Actions.selectTab(group.getTabNodes()[0].getId())],
+    );
+    const active = model.getActiveTabset();
+    const next = active && groups.includes(active) ? active : groups[0];
+    if (next && (next !== active || actions.length))
+      actions.push(Actions.setActiveTabset(next.getId()));
+    if (actions.length) model.doAction(Actions.group(actions));
+  };
+  ensureActiveTabset(true);
+  model.addChangeListener({ onAfterAction: () => ensureActiveTabset() });
   model.setOnAllowDrop((source, drop) => {
     const tabs: TabNode[] = [];
     const visit = (node: Node): void => {

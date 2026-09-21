@@ -105,8 +105,23 @@ const PanelContent = memo(function PanelContent({
     <div
       className="h-full min-h-0 w-full min-w-0 overflow-hidden"
       data-panel-instance-id={id}
-      onPointerDownCapture={() => workbenchLayoutRootBinding.focusPanel(id)}
-      onFocusCapture={() => workbenchLayoutRootBinding.focusPanel(id)}
+      tabIndex={-1}
+      onPointerDownCapture={(event) => {
+        if (!(event.target instanceof Element) || !event.currentTarget.contains(event.target))
+          return;
+        workbenchLayoutRootBinding.activatePanel(id);
+        const control = event.target.closest(
+          "input, textarea, select, button, a[href], [contenteditable], [tabindex]",
+        );
+        // Give non-native canvas surfaces a DOM owner for subsequent keyboard events too.
+        (control instanceof HTMLElement ? control : event.currentTarget).focus({
+          preventScroll: true,
+        });
+      }}
+      onFocusCapture={(event) => {
+        if (event.currentTarget.contains(event.target))
+          workbenchLayoutRootBinding.activatePanel(id);
+      }}
     >
       <Component {...props} />
     </div>

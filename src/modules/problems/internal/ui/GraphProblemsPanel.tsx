@@ -4,8 +4,7 @@ import { VscError, VscInfo, VscWarning } from "react-icons/vsc";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { revealGraphProblem } from "@/features/application/editor/revealGraphProblem";
 import { useGraphRead } from "@/features/core/graph/read";
-import { useGraphSessionUi } from "@/features/core/graphSession/ui";
-import type { FocusedGraphSession } from "@/features/core/graphSession/graphSessionStore";
+import { useActiveGraphContext } from "@/features/application/editor/editorGroupContext";
 import {
   collectGraphProblems,
   formatDiagnosticLocationLabel,
@@ -25,16 +24,19 @@ function severityClass(severity: GraphProblem["diagnostic"]["severity"]): string
   return "text-muted-foreground";
 }
 
-function activateProblem(problem: GraphProblem, focusedSession: FocusedGraphSession | null): void {
-  if (!focusedSession || focusedSession.graphPath !== problem.graphPath) return;
+function activateProblem(
+  problem: GraphProblem,
+  activeGraph: ReturnType<typeof useActiveGraphContext>,
+): void {
+  if (!activeGraph || activeGraph.graphPath !== problem.graphPath) return;
 
-  void revealGraphProblem(problem.graphPath, problem.diagnostic.location, focusedSession.groupId);
+  void revealGraphProblem(problem.graphPath, problem.diagnostic.location, activeGraph.groupId);
 }
 
 export function GraphProblemsPanel() {
   const { t, i18n } = useTranslation();
-  const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
-  const graphPath = focusedSession?.graphPath ?? null;
+  const activeGraph = useActiveGraphContext();
+  const graphPath = activeGraph?.graphPath ?? null;
   const graphProjection = useGraphRead((snapshot) =>
     graphPath ? snapshot.graphEntities[graphPath] : undefined,
   );
@@ -83,7 +85,7 @@ export function GraphProblemsPanel() {
                     type="button"
                     data-graph-problem-row
                     className="flex w-full items-start gap-2 border-b border-border/10 px-3 py-2 text-left transition-colors enabled:hover:bg-accent/40 enabled:focus-visible:bg-accent/40 enabled:focus-visible:outline-none disabled:cursor-default"
-                    onClick={() => activateProblem(problem, focusedSession)}
+                    onClick={() => activateProblem(problem, activeGraph)}
                     title={t("panel.problemsLocate")}
                   >
                     <Icon className={`mt-0.5 size-3.5 shrink-0 ${iconClass}`} aria-hidden />
@@ -116,12 +118,8 @@ export function GraphProblemsPanel() {
                       className="block w-full px-8 py-1 text-left text-xs text-primary hover:underline"
                       data-graph-problem-related
                       onClick={() => {
-                        if (focusedSession)
-                          void revealGraphProblem(
-                            problem.graphPath,
-                            location,
-                            focusedSession.groupId,
-                          );
+                        if (activeGraph)
+                          void revealGraphProblem(problem.graphPath, location, activeGraph.groupId);
                       }}
                     >
                       {t("panel.problemsRelated")}:{" "}

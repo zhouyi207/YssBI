@@ -5,6 +5,7 @@ import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/wor
 
 const mocks = vi.hoisted(() => ({
   activePanel: null as WorkbenchPanelInfo | null,
+  visiblePanels: [] as WorkbenchPanelInfo[],
   project: { projectInstanceId: "project-a", epoch: 1 },
   modalCount: 0,
   renderedModalOpen: false,
@@ -14,6 +15,7 @@ vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
   workbenchLayoutRead: {
     getActiveEditorPanel: () =>
       mocks.activePanel?.metadata.role === "editor" ? mocks.activePanel : undefined,
+    getPanel: (id: string) => mocks.visiblePanels.find((panel) => panel.panelInstanceId === id),
   },
 }));
 
@@ -38,6 +40,8 @@ vi.mock("@/features/core/keyboard", () => ({
 
 import {
   captureActiveEditorCommandTarget,
+  captureEditorCommandTarget,
+  captureEditorShortcutTarget,
   isEditorCommandTargetCurrent,
   shouldIgnoreEditorShortcutEvent,
 } from "./editorCommandFocus";
@@ -89,12 +93,31 @@ function descendantOf(parent: HTMLElement): HTMLElement {
 beforeEach(() => {
   document.body.replaceChildren();
   mocks.activePanel = editorPanel();
+  mocks.visiblePanels = [];
   mocks.project = { projectInstanceId: "project-a", epoch: 1 };
   mocks.modalCount = 0;
   mocks.renderedModalOpen = false;
 });
 
 describe("editor command focus", () => {
+  it("routes canvas commands to their visible panel and excludes sidebar keyboard events", () => {
+    const first = editorPanel({ visible: true });
+    const second = editorPanel({ panelInstanceId: "editor-b", groupId: "group-b", visible: true });
+    mocks.visiblePanels = [first, second, toolPanel()];
+    mocks.activePanel = second;
+    const target = captureEditorCommandTarget(first.panelInstanceId)!;
+    expect(isEditorCommandTargetCurrent(target)).toBe(true);
+    expect(captureActiveEditorCommandTarget()?.panelInstanceId).toBe("editor-b");
+    const canvas = document.createElement("div");
+    canvas.dataset.panelInstanceId = first.panelInstanceId;
+    expect(captureEditorShortcutTarget(keyEvent(canvas))?.panelInstanceId).toBe("editor-a");
+    const sidebar = document.createElement("div");
+    sidebar.dataset.panelInstanceId = "logs-a";
+    expect(captureEditorShortcutTarget(keyEvent(sidebar))).toBeNull();
+    mocks.visiblePanels[0] = { ...first, visible: false };
+    expect(isEditorCommandTargetCurrent(target)).toBe(false);
+    expect(captureEditorCommandTarget(first.panelInstanceId)).toBeNull();
+  });
   it("captures only the physical active root editor and denies a later tool activation", () => {
     mocks.activePanel = toolPanel();
     expect(captureActiveEditorCommandTarget()).toBeNull();

@@ -197,6 +197,6 @@ describe("SidebarProjectTab", () => {
       useEditorStore.getState().setDetailFocus({ kind: "nodeDefinition", nodeType: "tests.other" });
       publishFlexLayout();
     });
-    expect(graphRowSelected(first.name)).toBe(true);
+    expect(graphRowSelected(first.name)).toBe(false);
   });
 });

@@ -28,7 +28,7 @@ WorkbenchWindow
 
 Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动和分屏。浮动窗口、浏览器 popout 和标签分组禁用。
 
-FlexLayout 分别记录中央 tabset 的活动状态和各 border 的选择。宿主将物理焦点标记保存在 TabNode.config.focused，与 config.metadata 一起属于同一个原生 Model；它用于工具面板和编辑器之间的快捷键焦点裁决。Zustand 不保存第二份布局树。
+FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和顶部活动分组；各 border 独立保存选择，不覆盖顶部活动 tab。`getActivePanel` 只读取顶部活动 tabset 的 selected tab。非空顶部分组始终有选中 tab，活动分组被删除后通过原生 Action 选定剩余分组。输入焦点由 DOM 和事件路径决定，不写入布局配置或另建状态库。
 
 中央 group 的最后一个 tab 关闭或移走后，由 FlexLayout 删除空组并回收分屏空间；空 border 自动隐藏，底部仅保留承载状态信息的条带，空的内容面板仍消失。只有中央工作区没有非空 group 时才显示一份 watermark，侧栏和底部工具面板不影响该判断。FlexLayout 内部保留的最后一个空投放容器用于接收新 tab，不计入 Workbench 的 group 查询，也不显示分组标签栏。恢复旧布局时移除阻止空组删除的节点配置，由原生模型清理空组；不逐帧扫描或重建布局。
 
@@ -37,7 +37,7 @@ Project sidebar 按 Events → Functions → Charts → Data 展示同级资源�
 Graph 分类与 Chart、Data 使用同一打开语义：单击即在当前 central grid 打开并固定资源标签，同一资源复用已有标签。Graph 不再区分侧栏预览与双击固定，也不再通过替换旧预览标签来控制标签数量。
 
 Graph 条目的选中背景由现有编辑器资源上下文决定，不使用 Details 的查看对象。
-实际活动的资源编辑器优先；工具面板获得焦点时，保留既有图会话所在组中仍活动的图标签高亮。
+高亮直接来自顶部活动资源编辑器；侧栏获得输入焦点不改变顶部选择，顶部选中工具或非 Graph 标签时清除图高亮。
 切换到另一张图时跟随切换，切换到非图编辑器或已无对应图标签时清除旧高亮。
 画布内单选、多选、框选和清空节点选择只改变节点选择及 Details，不改变所属 Graph 条目的背景。
 
@@ -247,7 +247,7 @@ Application 的结果租约控制器订阅完成 hydration 后的真实面板集
 
 - workbenchLayoutOperations.ts 在原生 Model 上执行 openEditor、ensureView、upsertResult、activate、reveal、move、split、边栏调整和资源重映射。
 - workbenchRead.ts 与 workbenchControl.ts 提供业务侧查询和语义命令；调用方不持有可写 Model。
-- workbenchRootBinding.ts 只为 RootLayoutHost 创建渲染绑定，并接收原生布局动作和物理焦点。
+- workbenchRootBinding.ts 只为 RootLayoutHost 创建渲染绑定，并接收原生布局动作与面板激活请求。
 - workbenchLayoutInternal.ts 拥有 FIFO、hydration gate、操作代际、关闭提交和复合事务。
 - workbenchLayoutController.ts 协调窗口绑定、恢复、项目资源就绪、持久化防抖和关闭时 flush。
 
@@ -263,7 +263,7 @@ PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化�
 
 这些边界减少宿主附加开销，不保证大型 Graph、统计图表或表格的实际帧率；真实数据和桌面 WebView 下的交互需要单独验收。
 
-## 6. Close、物理命令与 editor focus gate
+## 6. Close、命令目标与输入路由
 
 ### 6.1 Close coordinator
 
@@ -288,24 +288,21 @@ Coordinator 按顺序执行：
 
 命令以 root FlexLayout Model 的实时 group 为准：
 
-- `Ctrl+Tab` 在 active physical group 的全部 canonical panels 间循环；
+- `Ctrl+Tab` 在键盘事件所属面板的原生 group 中循环，未指向面板时使用顶部活动 group；
 - Close Group 关闭该 physical group 中 editor、Result 和 tool panels 的完整集合；若 group 同时包含 fixed Details，现有 close coordinator 拒绝整批关闭，Assistant 只能单独关闭；Assistant 移到不含 fixed panel 的普通 group 后沿用 Close Group；
 - editor tab 的 Close Others、Close All、Close Saved 只筛选该 group 中的 `editor` role；
 - split 作用于 active canonical editor，native FlexLayout drag/drop 继续拥有后续物理移动与顺序。
 
-### 6.3 Editor focus gate
+### 6.3 命令目标与输入焦点
 
-Editor mutation/selection/save shortcuts 必须先通过 `editorCommandFocus`：
+`editorCommandFocus` 从两个明确入口捕获目标：菜单和保存命令读取顶部活动编辑器；画布按钮、手势和编辑快捷键读取自身可见面板。执行时重验项目身份、面板、分组、资源和可见性；顶部菜单目标还要重验活动 tab。切到非编辑器 tab 后，不回退到旧 Graph 会话。
 
-- 目标必须是 root FlexLayout Model 当前 physically active 的 `editor` panel；
-- 捕获并在执行前重验 `panelInstanceId`、`groupId`、`resourceRef`、`resourceKind` 与 project identity；
-- tool 或 Result 激活、panel/group 改变、project replacement 都使旧 target 失效；
-- application modal、dialog、menu、input、contenteditable、popover 等 shortcut consumer 会阻止 editor command。
+输入框、菜单、弹窗等先消费自己的快捷键。Delete、复制粘贴、节点选择和画布导航根据键盘事件路径或 DOM 当前焦点定位面板，不能从侧栏误操作顶部 Graph。`Ctrl+W` 按实际键盘面板关闭；保存和分屏使用顶部活动编辑器。
 
-因此 focused session 投影不能替代 physical active panel 判定。
+可见 Graph 的交互由可见性、文档可用性和保存状态决定。各画布工具栏始终绑定自身 graphPath；侧栏或另一分组获得焦点不卸载工具栏。隐藏面板、保存锁定和项目替换仍取消对应手势。
 
 文件菜单提供事件图、函数和图表的新建入口；创建后打开对应编辑器。“保存”与 `Ctrl+S`
-共用当前物理激活 editor 的保存命令，仅保存该文件；无项目或非文件 panel 激活时禁用。
+共用顶部活动 editor 的保存命令，仅保存该文件；无项目或顶部选中非文件 panel 时禁用。
 “项目另存为”仍由项目状态决定是否可用。视图菜单提供 Activity、Assistant 的切换和
 布局重置；Problems、Output、Logs 由底部原生 tab 切换，不在视图菜单中提供入口。
 
@@ -325,7 +322,7 @@ Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提�
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 的原生 tab 顺序；重置完成时收起内容面板，用户点击底部 tab 再次展开；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
 - main Logs nested FlexLayout 恢复七 domain 默认布局；
-- 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
+- 优先恢复 reset 前顶部活动 editor，否则选择第一个 editor；无 editor 时显示 Project。
 
 ### 7.3 Project replacement
 
@@ -344,6 +341,8 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 ```text
 yssbi-workbench-flexlayout:<window-label>
 ```
+
+tab config 只包含 metadata，不持久化输入焦点；含其他 config 字段的布局按现有无效快照规则回退默认布局。
 
 value 为：
 

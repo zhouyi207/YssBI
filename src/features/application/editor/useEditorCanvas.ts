@@ -7,9 +7,13 @@ import {
   useEditorPaneStateStore,
   workbenchLayoutRead,
 } from "@/modules/workbench/public";
-import { setInspectionContext } from "./rightSidebarActions";
+import { revealDetails, setInspectionContext } from "./rightSidebarActions";
 import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
-import { captureActiveEditorCommandTarget, type EditorCommandTarget } from "./editorCommandFocus";
+import {
+  captureActiveEditorCommandTarget,
+  captureEditorCommandTarget,
+  type EditorCommandTarget,
+} from "./editorCommandFocus";
 import type {
   EditorCanvasCommandsSlice,
   EditorCanvasInteractionSlice,
@@ -113,8 +117,9 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   );
 
   const resolveCommandTarget = useCallback(
-    (target?: EditorCommandTarget) => target ?? captureActiveEditorCommandTarget() ?? undefined,
-    [],
+    (target?: EditorCommandTarget) =>
+      target ?? captureEditorCommandTarget(scope.panelInstanceId) ?? undefined,
+    [scope.panelInstanceId],
   );
 
   const createNode = useCallback(
@@ -123,6 +128,14 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       position: Parameters<typeof nodeCommands.createNode>[1],
     ) => nodeCommands.createNode(descriptor, position, resolveCommandTarget()),
     [nodeCommands.createNode, resolveCommandTarget],
+  );
+
+  const revealNodeDetails = useCallback(
+    async (nodeId: string) => {
+      if (!interactive || !paneStillMatches()) return;
+      await revealDetails({ kind: "node", id: nodeId, graphPath: scope.graphPath });
+    },
+    [interactive, paneStillMatches, scope.graphPath],
   );
 
   const canvasInteraction = useCanvasInteraction({
@@ -158,6 +171,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
         editorCommands.resetPinValue(nodeId, pinId, resolveCommandTarget(target)),
       setSelectedNodeIds,
       setSelectedConnectionIds,
+      revealNodeDetails,
       executeGraph: projectCommands.executeGraph,
       cancelGraphExecution: projectCommands.cancelGraphExecution,
       clearGraphArtifacts: projectCommands.clearGraphArtifacts,
@@ -176,6 +190,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       editorCommands.resetPinValue,
       setSelectedNodeIds,
       setSelectedConnectionIds,
+      revealNodeDetails,
       projectCommands.executeGraph,
       projectCommands.cancelGraphExecution,
       projectCommands.clearGraphArtifacts,
