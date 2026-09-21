@@ -29,3 +29,8 @@
 - [v1.0](docs/roadmap/v1_0.md)
 - [JSON Driver](docs/roadmap/jsonDriver.md)
 - [motion](docs/roadmap/motion.md)
+
+immer, zod, zustand, json patch
+
+FlexLayout 我认为还有好多功能没有用上，请分析目前项目还有哪些是可以让 Flexlayout 来管理的，无论是已实现的
+还是未实现的都列出来
