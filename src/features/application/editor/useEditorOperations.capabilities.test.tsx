@@ -24,7 +24,6 @@ const mocks = vi.hoisted(() => ({
   executeGraphEdit: vi.fn(),
   updateSelectedConnectionIds: vi.fn(),
   setInspectionContext: vi.fn(),
-  revealInspect: vi.fn(async () => undefined),
   graphError: vi.fn(),
 }));
 
@@ -67,7 +66,7 @@ vi.mock("@/modules/workbench/public", async (importOriginal) => ({
   },
   updateEditorGroupSelectedConnectionIds: mocks.updateSelectedConnectionIds,
 }));
-vi.mock("@/modules/workbench/internal/flexlayout", () => ({
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
   workbenchLayoutRead: {
     getActiveEditorPanelInGroup: (groupId: string) => {
       const resourceRef = mocks.activeResourceByGroup.get(groupId);
@@ -110,7 +109,6 @@ vi.mock("@/features/core/dataStore/graphProjectionStore", () => ({
 }));
 vi.mock("./rightSidebarActions", () => ({
   setInspectionContext: mocks.setInspectionContext,
-  revealInspect: mocks.revealInspect,
 }));
 vi.mock("@/features/application/observability/appLogger", () => ({
   logger: {
@@ -178,8 +176,6 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     mocks.executeGraphEdit.mockReset();
     mocks.updateSelectedConnectionIds.mockReset();
     mocks.setInspectionContext.mockReset();
-    mocks.revealInspect.mockReset();
-    mocks.revealInspect.mockResolvedValue(undefined);
     mocks.graphError.mockReset();
     mocks.activeRole = "editor";
     mocks.activeGroupId = "group-a";

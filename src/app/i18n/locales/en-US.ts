@@ -275,7 +275,6 @@ export const enUS = {
     assistantToolInterrupted: "Interrupted",
     assistantToolUnknown: "Outcome unknown",
     details: "Details",
-    inspect: "Inspect",
     logs: "Logs",
     output: "Output",
     problems: "Problems",
@@ -2098,13 +2097,6 @@ export const enUS = {
       maximum: "Maximum",
       updateFailed:
         "Could not apply settings. Check the value range, precision, allowed values, and compatibility between the current Semantic and Physical settings.",
-    },
-    inspect: {
-      emptyTitle: "No node selected",
-      empty: "Select a Canvas node to edit its configuration",
-      multipleTitle: "{{count}} nodes selected",
-      multiple: "Select one node to edit its configuration",
-      noParameters: "This node has no configurable properties",
     },
     result: {
       readFailedTitle: "Result unavailable",

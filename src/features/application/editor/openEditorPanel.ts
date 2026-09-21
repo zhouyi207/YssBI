@@ -45,7 +45,6 @@ export async function openEditorPanel(
         { id: target.resourceRef, kind: target.resourceKind },
         target.resourceRef,
       ),
-      ...(target.sticky === undefined ? {} : { sticky: target.sticky }),
       targetGroupId,
       index: options?.insertIndex,
       mode: "reuse-resource",

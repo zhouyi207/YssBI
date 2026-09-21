@@ -15,7 +15,6 @@ describe("workbench panel metadata", () => {
       role: "editor",
       resourceRef: "events/Main.yssbi-event",
       resourceKind: "event",
-      sticky: true,
     } as const;
 
     expect(isWorkbenchPanelMetadata(metadata)).toBe(true);
@@ -39,7 +38,6 @@ describe("workbench panel metadata", () => {
       { metadata: { role: "view", viewId: "nodes" }, component: "Nodes" },
       { metadata: { role: "view", viewId: "commands" }, component: "Commands" },
       { metadata: { role: "view", viewId: "details" }, component: "Details" },
-      { metadata: { role: "view", viewId: "inspect" }, component: "Inspect" },
       { metadata: { role: "view", viewId: "logs" }, component: "Logs" },
       { metadata: { role: "view", viewId: "output" }, component: "Output" },
       { metadata: { role: "view", viewId: "problems" }, component: "Problems" },

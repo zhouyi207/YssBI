@@ -21,13 +21,11 @@ const mocks = vi.hoisted(() => ({
   activePanel: null as TestPanel | null,
   groupPanels: [] as TestPanel[],
   interaction: { type: "idle" } as { type: string },
-  detailFocus: null as null | { kind: "node"; id: string; graphPath: string },
   selection: { nodeIds: new Set<string>(), connectionIds: new Set<string>() },
   setModifierKeys: vi.fn(),
   resetModifierKeys: vi.fn(),
   activate: vi.fn(async () => true),
   requestCloseWorkbenchPanel: vi.fn(async () => true),
-  toggleWorkbenchView: vi.fn(async () => true),
   toggleActivityWorkbenchGroup: vi.fn(async () => undefined),
   toggleBottomWorkbenchGroup: vi.fn(async () => undefined),
   clearSelection: vi.fn(),
@@ -120,7 +118,6 @@ vi.mock("./workbenchPanelClose", () => ({
   requestCloseWorkbenchPanel: mocks.requestCloseWorkbenchPanel,
 }));
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () => ({
-  toggleWorkbenchView: mocks.toggleWorkbenchView,
   toggleActivityWorkbenchGroup: mocks.toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup: mocks.toggleBottomWorkbenchGroup,
 }));
@@ -145,7 +142,6 @@ vi.mock("@/features/core/editor", () => ({
   useEditorStore: {
     getState: () => ({
       setContextMenu: vi.fn(),
-      detailFocus: mocks.detailFocus,
     }),
   },
 }));
@@ -191,11 +187,6 @@ describe("useEditorKeyboard", () => {
     mocks.activePanel = editorPanel();
     mocks.groupPanels = [editorPanel(), resultPanel(), logsPanel()];
     mocks.interaction = { type: "idle" };
-    mocks.detailFocus = {
-      kind: "node",
-      id: "node-a",
-      graphPath: "events/main.yssbi-event",
-    };
     mocks.selection = { nodeIds: new Set(), connectionIds: new Set() };
     callbacks.selectAllNodes.mockResolvedValue(true);
     callbacks.focusSelectedNodes.mockReturnValue(true);
@@ -359,13 +350,11 @@ describe("useEditorKeyboard", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it("uses semantic workbench layout actions for Ctrl+B, Ctrl+I, and Ctrl+backtick", () => {
+  it("uses semantic workbench layout actions for Ctrl+B and Ctrl+backtick", () => {
     keydown("b", { ctrlKey: true });
-    keydown("i", { ctrlKey: true });
     keydown("`", { ctrlKey: true });
 
     expect(mocks.toggleActivityWorkbenchGroup).toHaveBeenCalledOnce();
-    expect(mocks.toggleWorkbenchView).toHaveBeenCalledWith("inspect");
     expect(mocks.toggleBottomWorkbenchGroup).toHaveBeenCalledOnce();
   });
 });

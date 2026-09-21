@@ -21,7 +21,7 @@ WorkbenchWindow
 │  ├─ central column
 │  │  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
 │  │  └─ bottom content：Problems、Output、Logs 的内容面板
-│  ├─ right border：Details、Assistant、Inspect 和 Result 的默认位置
+│  ├─ right border：Details、Assistant 和 Result 的默认位置
 │  └─ bottom bar：贯穿窗口，最左侧设置、对齐中央区左边的原生 tab、对齐右边的状态信息
 └─ WorkbenchOverlayHost
 ```
@@ -177,7 +177,6 @@ bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标�
 | `view:commands`  | Commands activity panel                   | left Activity edge                  |
 | `view:details`   | permanent fixed Details                   | right edge index 0                  |
 | `view:assistant` | movable/closable Assistant                | right edge index 1 on default/reset |
-| `view:inspect`   | contextual Inspect                        | right edge                          |
 | `result`         | 一个可检查结果                            | right edge                          |
 | `view:logs`      | Logs workspace                            | bottom edge                         |
 | `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
@@ -189,7 +188,7 @@ bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标�
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom bar 使用原生 tab 切换、折叠和关闭面板，右侧承载状态信息；不保留另一套图标切换入口。
 
-right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts` 维护。
+right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。节点参数、配置、端口、诊断与文档统一由 Details 展示，节点选择只同步 Details 上下文；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts` 维护。
 
 Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
 exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
@@ -209,7 +208,7 @@ main Logs 的布局由 logsRuntime 在挂载时交给真实 Model，卸载时保
 `WorkbenchPanelMetadata` 是 root panel 的 canonical metadata：
 
 ```text
-editor → { role, resourceRef, resourceKind, sticky? }
+editor → { role, resourceRef, resourceKind }
 view   → { role, viewId }
 result → { role, reference, leaseId, title, presentation }
 ```
@@ -228,11 +227,10 @@ result → { role, reference, leaseId, title, presentation }
 
 Singleton 与 multi-instance contract：
 
-- Project、Nodes、Commands、Plugins、Details、Assistant、Inspect、Logs、Output、Problems 由 `viewId` 保证 singleton；
+- Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 由 `viewId` 保证 singleton；
 - Project、Nodes、Commands、Plugins 随默认 Activity group 安装且保持存在；
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
-- Inspect 只在上下文有效时按需创建；
 - Result 按完整结果引用复用并 reveal，不同运行产生的新引用创建独立面板；
 - 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
@@ -310,7 +308,7 @@ Coordinator 按顺序执行：
 
 ### 7.1 Reveal
 
-Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；Inspect 创建还要求有效 context；同一结果引用的 Result 只 reveal 既有 panel。
+Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；同一结果引用的 Result 只 reveal 既有 panel。
 
 ### 7.2 Reset
 
@@ -318,7 +316,7 @@ Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提�
 
 - Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到第一个 central tabset；
-- Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
+- Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Result 回到其后，reset 不凭空创建 Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 的原生 tab 顺序；重置完成时收起内容面板，用户点击底部 tab 再次展开；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
 - main Logs nested FlexLayout 恢复七 domain 默认布局；
@@ -329,10 +327,9 @@ Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提�
 Project replacement 先使 pending root operations、hydration generation 与 resources-ready callback 失效，再在当前 FIFO 中移除 project-scoped panels：
 
 - 所有 editor；
-- 所有 Result；
-- Inspect。
+- 所有 Result。
 
-随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
 
 ## 8. Persistence contract
 
@@ -355,7 +352,7 @@ value 为：
 
 root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。恢复时重新施加宿主的浮动、关闭和拖放约束。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。
 
-窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 和 Inspect 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
+窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
 
 旧 Dockview 存储不读取、不转换；第一次使用新键加载 FlexLayout 默认布局。此变化只影响工作台偏好，不迁移或修改项目资源。布局快照不保存后端结果本体和 Graph 撤销历史。
 
@@ -392,7 +389,7 @@ Tauri 主窗口创建尺寸与项目管理页默认尺寸一致；保存位置�
 
 src/app/workbench-layout.css 设置宿主尺寸、字体尺度、标题图标/dirty 标记与边框区域的排列。根布局将原生 border 元素排入 CSS Grid：左右侧栏延伸到底部栏上方，top/bottom border 的内容和分隔条与中央 tabsets 共用一列，bottom bar 横跨整个窗口。保留原生 Model、尺寸、测量与拖放能力，不增加布局模型或挪动组件 DOM。RootPanelTabRenderer 只贡献标题内容和业务右键菜单。关闭按钮、中键和原生关闭动作进入既有关闭协调者。
 
-底部直接使用 FlexLayout 原生 tab，取消独立 footer 和重复的面板 icon。StatusBar 只呈现状态条目，通过 onRenderTabSet 放进 bottom border 的原生 toolbar；Settings 使用同一底栏的 leading 插槽。整条栏贯穿窗口，通过 CSS subgrid 共用工作台列宽：设置位于窗口最左侧，三个 tab 对齐中央区左边，节点、连接、选中等状态对齐中央区右边。侧栏缩放和折叠时由 CSS 自动保持对齐，不测量边界、不维护偏移 CSS 变量。日志等内容仍只位于中央工作区下方。底部 tab 关闭后可从“视图”菜单重新打开。底部所有 tab 都关闭时不显示内容面板，条带仍承载状态信息。Details 和 Assistant 使用右侧原生 tab。
+底部直接使用 FlexLayout 原生 tab，取消独立 footer 和重复的面板 icon。StatusBar 只呈现状态条目，通过 onRenderTabSet 放进 bottom border 的原生 toolbar；Settings 使用同一底栏的 leading 插槽。整条栏贯穿窗口，通过 CSS subgrid 共用工作台列宽：设置位于窗口最左侧，三个 tab 对齐中央区左边，节点、连接、选中等状态对齐中央区右边。侧栏缩放和折叠时由 CSS 自动保持对齐，不测量边界、不维护偏移 CSS 变量。日志等内容仍只位于中央工作区下方。底部 tab 全部关闭后，可用 Ctrl+反引号重新打开 Logs，或重置布局恢复三个工具面板。底部所有 tab 都关闭时不显示内容面板，条带仍承载状态信息。Details 和 Assistant 使用右侧原生 tab。
 
 ## 10. Verification
 

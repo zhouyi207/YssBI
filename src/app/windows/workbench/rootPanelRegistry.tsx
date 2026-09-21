@@ -3,7 +3,7 @@ import { PluginsPanel, PluginViewFrame } from "@/modules/plugins/public";
 import { usePlugins } from "./integrations/PluginProvider";
 import { useEffect, useState } from "react";
 import { commandsActivityPanelContribution } from "@/modules/commands/public";
-import { DetailsPane, InspectPane } from "@/modules/details/public";
+import { DetailsPane } from "@/modules/details/public";
 import { nodeCatalogActivityPanelContribution } from "@/modules/node-catalog/public";
 import { projectActivityPanelContribution } from "@/modules/project-explorer/public";
 import { ResultPanel } from "@/modules/results/public";
@@ -77,7 +77,6 @@ export const rootPanelRegistry = {
   Plugin: PluginDockPanel,
   Details: DetailsPane,
   Assistant: AssistantPanel,
-  Inspect: InspectPane,
   Result: ResultDockPanel,
   Logs: MainLogsDockPanel,
   Output: RunFailurePanel,

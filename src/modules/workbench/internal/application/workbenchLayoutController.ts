@@ -150,7 +150,6 @@ function configurePermanentDetailsSidebar(
     position: "right",
     size,
     collapsed: false,
-    headerPosition: "right",
   });
   transaction.move({
     panelInstanceId: details.panelInstanceId,
@@ -184,14 +183,12 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     position: "left",
     size: WORKBENCH_EDGE_SIZES.left,
     collapsed: false,
-    headerPosition: "left",
   });
   const rightGroupId = configurePermanentDetailsSidebar(transaction, details);
   const bottom = transaction.configureEdge({
     position: "bottom",
     size: WORKBENCH_EDGE_SIZES.bottom,
     collapsed: false,
-    headerPosition: "bottom",
   });
   activityPanels.forEach((panel, index) => {
     transaction.move({
@@ -508,7 +505,6 @@ export function createWorkbenchLayoutController(
               position: "left",
               size: left.size,
               collapsed: left.collapsed ?? false,
-              headerPosition: "left",
             });
         }
       });

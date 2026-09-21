@@ -36,12 +36,7 @@ export type { GraphContextMenuActions } from "./graphContextMenuActions";
 export { useCanvasViewport } from "./useCanvasViewport";
 export { useCanvasDrop } from "./useCanvasDrop";
 export { useCanvasOverlayHandlers } from "./useCanvasOverlayHandlers";
-export {
-  revealDetails,
-  revealInspect,
-  setDetailContext,
-  setInspectionContext,
-} from "./rightSidebarActions";
+export { revealDetails, setDetailContext, setInspectionContext } from "./rightSidebarActions";
 export { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 export {
   isPinPreviewActionAvailable,

@@ -149,7 +149,6 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["com
       plugins: "Plugins",
       details: "Details",
       assistant: "Assistant",
-      inspect: "Inspect",
       logs: "Logs",
       output: "Output",
       problems: "Problems",
@@ -775,7 +774,7 @@ describe("resetWorkbenchLayout", () => {
       },
       {
         groupId: "edge-right",
-        panelInstanceIds: ["details", "editor-right", "result-right", "inspect"],
+        panelInstanceIds: ["details", "editor-right", "result-right"],
         collapsed: true,
         location: edgeLocation("right"),
       },
@@ -802,7 +801,6 @@ describe("resetWorkbenchLayout", () => {
       viewPanel("details", "details", "edge-right", edgeLocation("right")),
       editorPanel("editor-right", "events/Right.yssbi-event", "edge-right", edgeLocation("right")),
       resultPanel("result-right", "result-right", "edge-right", edgeLocation("right")),
-      viewPanel("inspect", "inspect", "edge-right", edgeLocation("right")),
       editorPanel(
         "editor-bottom-a",
         "events/BottomA.yssbi-event",
@@ -847,12 +845,11 @@ describe("resetWorkbenchLayout", () => {
       "created:assistant:2",
       "result-grid",
       "result-right",
-      "inspect",
     ]);
     expect(harness.configureCalls).toEqual([
-      { position: "left", size: 280, collapsed: false, headerPosition: "left" },
-      { position: "right", size: 330, collapsed: false, headerPosition: "right" },
-      { position: "bottom", size: 240, collapsed: true, headerPosition: "bottom" },
+      { position: "left", size: 280, collapsed: false },
+      { position: "right", size: 330, collapsed: false },
+      { position: "bottom", size: 240, collapsed: true },
     ]);
     expect(harness.activePanelId()).toBe("editor-grid-b");
     expect(harness.removeCalls).toEqual([]);

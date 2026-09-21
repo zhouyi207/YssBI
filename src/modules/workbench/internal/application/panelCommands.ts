@@ -45,12 +45,7 @@ export async function removeProjectScopedPanelsFromWorkbench(
     if (!isCurrent()) return;
     const panelInstanceIds = transaction
       .listPanels()
-      .filter(
-        (panel) =>
-          panel.metadata.role === "editor" ||
-          panel.metadata.role === "result" ||
-          (panel.metadata.role === "view" && panel.metadata.viewId === "inspect"),
-      )
+      .filter((panel) => panel.metadata.role === "editor" || panel.metadata.role === "result")
       .map((panel) => panel.panelInstanceId);
     if (isCurrent()) transaction.removePanels(panelInstanceIds);
   });

@@ -225,15 +225,10 @@ export class WorkbenchModelOperations {
           )
         : undefined;
     if (existing) {
-      const metadata = {
-        ...existing.metadata,
-        ...(request.sticky === undefined ? {} : { sticky: request.sticky }),
-      };
       const tab = this.tab(existing.panelInstanceId)!;
       this.model.doAction(
         Actions.updateNodeAttributes(tab.getId(), {
           name: request.title,
-          config: { ...tab.getConfig(), metadata },
         }),
       );
       this.reveal(existing.panelInstanceId);
@@ -248,7 +243,6 @@ export class WorkbenchModelOperations {
         role: "editor",
         resourceRef: request.resourceRef,
         resourceKind: request.resourceKind,
-        ...(request.sticky === undefined ? {} : { sticky: request.sticky }),
       },
       request.title,
       group.getId(),

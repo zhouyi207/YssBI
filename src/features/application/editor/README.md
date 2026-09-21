@@ -77,6 +77,8 @@ the controller and must not assemble application commands.
 
 `editorGroupContext` owns the shared native active Graph read. Problems, Output, Project sidebar and Assistant consume it; graph-session hydration bookkeeping is not a UI selection authority. Session path remapping is committed by `projectPublicationSnapshot` with the authoritative resource snapshot.
 
+Node selection synchronizes the existing Details context without opening another panel. Details owns node parameters, configuration, ports, diagnostics and documentation; explicit node-details commands reveal that same fixed panel. History availability and node creation use the shared active Graph read without subscribing to pane selections.
+
 Menus capture the native active central editor. Explicit canvas actions capture their own visible panel. Both revalidate identity before committing; the menu target also revalidates the central selection. Keyboard node commands resolve the owning panel from the DOM event path or focused element, while inputs, menus and modals retain their shortcuts. Execution controls use the canvas graph path and stay mounted while focus changes.
 
 Use the narrow capability matching the caller:

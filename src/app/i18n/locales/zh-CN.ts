@@ -260,7 +260,6 @@ export const zhCN = {
     assistantToolInterrupted: "已中断",
     assistantToolUnknown: "状态待确认",
     details: "详细信息",
-    inspect: "检查",
     logs: "日志",
     output: "输出",
     problems: "问题",
@@ -1924,13 +1923,6 @@ export const zhCN = {
       maximum: "最大值",
       updateFailed:
         "无法应用设置。请检查值域、精度、允许取值及当前 Semantic 与 Physical 的兼容性。",
-    },
-    inspect: {
-      emptyTitle: "未选择节点",
-      empty: "选择一个 Canvas 节点以编辑其配置",
-      multipleTitle: "已选择 {{count}} 个节点",
-      multiple: "请选择一个节点以编辑其配置",
-      noParameters: "该节点没有可配置属性",
     },
     result: {
       readFailedTitle: "结果不可用",

@@ -30,7 +30,6 @@ import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 import {
   toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,
-  toggleWorkbenchView,
 } from "@/modules/workbench/public";
 
 function currentEditorCommandTarget(event: KeyboardEvent): EditorCommandTarget | null {
@@ -279,17 +278,6 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "b") {
         event.preventDefault();
         void toggleActivityWorkbenchGroup();
-        return;
-      }
-
-      if (isControlKey && key === "i") {
-        event.preventDefault();
-        const inspectOpen = workbenchLayoutRead
-          .listPanels()
-          .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "inspect");
-        if (inspectOpen || useEditorStore.getState().detailFocus?.kind === "node") {
-          void toggleWorkbenchView("inspect");
-        }
         return;
       }
 

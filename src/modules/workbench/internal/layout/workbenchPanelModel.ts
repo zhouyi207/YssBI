@@ -14,7 +14,6 @@ export const WORKBENCH_VIEW_IDS = [
   ...WORKBENCH_ACTIVITY_VIEW_IDS,
   "details",
   "assistant",
-  "inspect",
   "logs",
   "output",
   "problems",
@@ -25,7 +24,6 @@ export type EditorResourceKind = "event" | "function" | "chart" | "database";
 export interface EditorResourceTarget {
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
-  readonly sticky?: boolean;
 }
 export type WorkbenchComponentId =
   | "EditorResource"
@@ -36,7 +34,6 @@ export type WorkbenchComponentId =
   | "Plugin"
   | "Details"
   | "Assistant"
-  | "Inspect"
   | "Result"
   | "Logs"
   | "Output"
@@ -109,7 +106,6 @@ const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentI
   plugins: "Plugins",
   details: "Details",
   assistant: "Assistant",
-  inspect: "Inspect",
   logs: "Logs",
   output: "Output",
   problems: "Problems",
@@ -194,11 +190,10 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
       );
     case "editor":
       return (
-        hasKnownKeys(value, ["role", "resourceRef", "resourceKind"], ["sticky"]) &&
+        hasKnownKeys(value, ["role", "resourceRef", "resourceKind"]) &&
         isNonEmptyString(value.resourceRef) &&
         typeof value.resourceKind === "string" &&
-        EDITOR_RESOURCE_KINDS.has(value.resourceKind as EditorResourceKind) &&
-        (value.sticky === undefined || typeof value.sticky === "boolean")
+        EDITOR_RESOURCE_KINDS.has(value.resourceKind as EditorResourceKind)
       );
     case "view":
       return (

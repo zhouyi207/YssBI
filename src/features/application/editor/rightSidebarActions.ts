@@ -1,5 +1,6 @@
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { useEditorStore } from "@/features/core/editor";
+import { useResourceStore } from "@/features/core/resource";
 import { revealWorkbenchView, workbenchLayoutRead } from "@/modules/workbench/public";
 import type { EditorResourceKind } from "@/modules/workbench/public";
 
@@ -53,14 +54,3 @@ export async function revealDetails(focus: DetailFocus): Promise<void> {
   setDetailContext(focus);
   if (workbenchLayoutRead.isReady) await revealWorkbenchView("details");
 }
-
-export async function revealInspect(
-  graphPath: string,
-  selectedNodeIds: readonly string[],
-): Promise<void> {
-  setInspectionContext(graphPath, selectedNodeIds);
-  const [nodeId] = selectedNodeIds;
-  if (selectedNodeIds.length !== 1 || graphPath.length === 0 || !nodeId) return;
-  await revealWorkbenchView("inspect");
-}
-import { useResourceStore } from "@/features/core/resource";

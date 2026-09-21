@@ -10,7 +10,7 @@ vi.mock("@/features/core/resource", () => ({
   isResourceDocumentDirty: vi.fn(() => false),
 }));
 
-vi.mock("@/modules/workbench/internal/flexlayout", () => ({
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
   workbenchLayoutRead: { listEditorPanelsInGroup: vi.fn(() => []) },
 }));
 

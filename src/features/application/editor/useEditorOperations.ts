@@ -26,7 +26,7 @@ import {
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
 } from "./editorCommandFocus";
-import { revealInspect, setInspectionContext } from "./rightSidebarActions";
+import { setInspectionContext } from "./rightSidebarActions";
 
 const DUPLICATE_SUBGRAPH_OFFSET = { x: 40, y: 40 } as const;
 const EDITOR_OPERATIONS_LOG_SOURCE = "EditorOperations";
@@ -256,7 +256,7 @@ export function useEditorOperations() {
     if (!isEditorOperationContextCurrent(context)) return false;
     const update = updateEditorGroupSelectedNodeIds([...linked], context.groupId);
     if (!update || !isEditorOperationContextCurrent(context)) return false;
-    await revealInspect(context.graphPath, update.nodeIds);
+    setInspectionContext(context.graphPath, update.nodeIds);
     return true;
   }, []);
 

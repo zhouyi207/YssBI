@@ -133,18 +133,11 @@ export function parsePersistedWorkbenchLayout(
   };
 }
 export function prepareRootLayoutForPersistence(layout: IJsonModel): IJsonModel {
-  return withoutPanels(
-    layout,
-    (metadata) =>
-      metadata.role === "result" || (metadata.role === "view" && metadata.viewId === "inspect"),
-  );
+  return withoutPanels(layout, (metadata) => metadata.role === "result");
 }
 export function scrubProjectScopedRootLayout(layout: IJsonModel): IJsonModel {
   return withoutPanels(
     layout,
-    (metadata) =>
-      metadata.role === "editor" ||
-      metadata.role === "result" ||
-      (metadata.role === "view" && metadata.viewId === "inspect"),
+    (metadata) => metadata.role === "editor" || metadata.role === "result",
   );
 }

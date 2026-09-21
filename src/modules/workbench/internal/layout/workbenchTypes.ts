@@ -78,14 +78,12 @@ export interface ConfigureWorkbenchEdgeRequest {
   readonly position: WorkbenchEdgePosition;
   readonly size: number;
   readonly collapsed: boolean;
-  readonly headerPosition?: "top" | "bottom" | "left" | "right";
 }
 
 export interface OpenEditorRequest {
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
   readonly title: string;
-  readonly sticky?: boolean;
   readonly targetGroupId?: string;
   readonly index?: number;
   readonly mode: "reuse-resource" | "new-instance";

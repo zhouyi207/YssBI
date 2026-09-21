@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { GraphCanvasViewportCommands } from "./editorCanvasTypes";
-import { revealInspect } from "./rightSidebarActions";
+import { setInspectionContext } from "./rightSidebarActions";
 import { isEditorCommandTargetCurrent, type EditorCommandTarget } from "./editorCommandFocus";
 import { collectCanvasNodeWorldBounds } from "@/features/core/canvas";
 import { useGraphProjectionStore } from "@/features/core/dataStore";
@@ -84,7 +84,7 @@ export function useGraphCanvasCommands(): GraphCanvasViewportCommands {
         if (selectableNodeIds.length === 0 || !isEditorCommandTargetCurrent(target)) return false;
         const update = updateEditorGroupSelectedNodeIds(selectableNodeIds, context.groupId);
         if (!update || !isEditorCommandTargetCurrent(target)) return false;
-        await revealInspect(context.graphPath, update.nodeIds);
+        setInspectionContext(context.graphPath, update.nodeIds);
         return true;
       },
 

@@ -52,7 +52,7 @@ Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用
 | Graph 当前文档、历史与保存指纹                                               | Rust Project / Graph document owners             | 当前编辑状态的只读投影                                       |
 | resolved type、schema、lineage、diagnostics、coercion、kernel specialization | Rust `GraphSemanticSnapshot`                     | Editor/Canvas/Problems projection                            |
 | Database declaration、physical runtime 和 schema                             | Rust Project + Database crates                   | Data explorer 和 editor projection                           |
-| Execution、当前 result identity、payload 和 provenance                       | Rust Execution `ResultStore`                     | Result、Inspect 和 preview UI                                |
+| Execution、当前 result identity、payload 和 provenance                       | Rust Execution `ResultStore`                     | Result 面板、独立结果查看器和 preview UI                     |
 | Statistical algorithms 与插件计算                                            | SCI / 独立插件进程；项目结果由 Core 提交         | report/chart presentation models                             |
 | 插件安装、启用、任务账本                                                     | Rust Plugin Manager                              | 插件列表与隔离页面                                           |
 | Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection                        |

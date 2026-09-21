@@ -14,7 +14,6 @@ export const WORKBENCH_HOME_EDGE = {
   plugins: "left",
   details: "right",
   assistant: "right",
-  inspect: "right",
   result: "right",
   logs: "bottom",
   output: "bottom",

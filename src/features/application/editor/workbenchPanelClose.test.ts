@@ -327,12 +327,10 @@ function viewPanel(
   const components = {
     project: "Project",
     nodes: "Nodes",
-    data: "Data",
     commands: "Commands",
     plugins: "Plugins",
     details: "Details",
     assistant: "Assistant",
-    inspect: "Inspect",
     logs: "Logs",
     output: "Output",
     problems: "Problems",
@@ -652,16 +650,14 @@ describe("workbench panel close coordinator", () => {
       editorPanel("editor-a", "events/Main.yssbi-event"),
       resultPanel("result-a"),
       viewPanel("details-a", "details"),
-      viewPanel("inspect-a", "inspect"),
     ]);
-    await expect(
-      requestCloseWorkbenchPanels(["editor-a", "result-a", "details-a", "inspect-a"]),
-    ).resolves.toBe(false);
+    await expect(requestCloseWorkbenchPanels(["editor-a", "result-a", "details-a"])).resolves.toBe(
+      false,
+    );
     expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual([
       "editor-a",
       "result-a",
       "details-a",
-      "inspect-a",
     ]);
   });
 

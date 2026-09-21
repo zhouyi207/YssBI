@@ -28,7 +28,6 @@ const VIEW_TITLE_KEYS = {
   plugins: "activityBar.plugins",
   details: "panel.details",
   assistant: "panel.assistant",
-  inspect: "panel.inspect",
   logs: "panel.logs",
   output: "panel.output",
   problems: "panel.problems",
@@ -129,7 +128,6 @@ export async function openPluginWorkbenchView(
             position: "left",
             size: left.size,
             collapsed: left.collapsed ?? false,
-            headerPosition: "left",
           });
       }
     });
@@ -182,7 +180,6 @@ export async function syncPluginWorkbenchViews(
           position: "left",
           size: left.size,
           collapsed: left.collapsed ?? false,
-          headerPosition: "left",
         });
     }
     return stalePanels.length > 0;
@@ -208,7 +205,6 @@ async function ensureActivityWorkbenchGroup(): Promise<void> {
       position: "left",
       size: WORKBENCH_EDGE_SIZES.left,
       collapsed: false,
-      headerPosition: "left",
     });
     panels.forEach((panel, index) => {
       tx.move({ panelInstanceId: panel.panelInstanceId, groupId: left.groupId, index });
@@ -287,19 +283,16 @@ export async function resetWorkbenchLayout(): Promise<void> {
         position: "left",
         size: WORKBENCH_EDGE_SIZES.left,
         collapsed: false,
-        headerPosition: "left",
       });
       const right = tx.configureEdge({
         position: "right",
         size: WORKBENCH_EDGE_SIZES.right,
         collapsed: false,
-        headerPosition: "right",
       });
       const bottom = tx.configureEdge({
         position: "bottom",
         size: WORKBENCH_EDGE_SIZES.bottom,
         collapsed: true,
-        headerPosition: "bottom",
       });
       const centralGroupId =
         tx.listGroups().find((group) => group.location.type === "grid")?.groupId ??
@@ -350,12 +343,8 @@ export async function resetWorkbenchLayout(): Promise<void> {
         });
       }
 
-      const contextual = ordered.filter(
-        (panel) =>
-          panel.metadata.role === "result" ||
-          (panel.metadata.role === "view" && panel.metadata.viewId === "inspect"),
-      );
-      for (const [index, panel] of contextual.entries()) {
+      const results = ordered.filter((panel) => panel.metadata.role === "result");
+      for (const [index, panel] of results.entries()) {
         tx.move({
           panelInstanceId: panel.panelInstanceId,
           groupId: right.groupId,

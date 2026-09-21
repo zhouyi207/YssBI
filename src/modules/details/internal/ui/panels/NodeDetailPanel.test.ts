@@ -8,7 +8,6 @@ import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjecti
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { NodeDetailPanel } from "./NodeDetailPanel";
-import { NodeInspectPanel } from "./NodeInspectPanel";
 
 const katexWarningSpy = vi.hoisted(() => {
   const warn = console.warn.bind(console);
@@ -112,7 +111,7 @@ describe("NodeDetailPanel projection selection", () => {
     }
   });
 
-  it("renders the shared parameter editor in Details and Inspect", () => {
+  it("renders the parameter editor in Details", () => {
     const graphPath = "events/Main.yssbi-event";
     const graphBucket = bucket(graphPath, "Node");
     graphBucket.nodes.shared.parameterEditors = [
@@ -132,9 +131,6 @@ describe("NodeDetailPanel projection selection", () => {
     const root = createRoot(container);
 
     act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: "shared" })));
-    expect(container.querySelector('[data-testid="parameter-editor"]')).not.toBeNull();
-
-    act(() => root.render(createElement(NodeInspectPanel, { graphPath, nodeId: "shared" })));
     expect(container.querySelector('[data-testid="parameter-editor"]')).not.toBeNull();
 
     act(() => root.unmount());
