@@ -71,15 +71,15 @@ export function ProjectLibrary({
   return (
     <>
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-3 py-2">
-        <div className="min-w-[10rem] flex-1">
-          <div className="flex h-7 items-center rounded-md border border-input bg-muted/50 shadow-inner">
+        <div className="w-64 max-w-full">
+          <div className="flex h-8 items-center rounded-md border border-border bg-input/30 shadow-xs transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
             <span className="pl-2 text-muted-foreground">
               <VscSearch size={14} />
             </span>
             <Input
               value={filterQuery}
               onChange={(event) => onSetFilterQuery(event.target.value)}
-              className="h-7 min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-sm text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-2 py-1 text-sm text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
               placeholder={t("projectPicker.searchPlaceholder")}
               aria-label={t("projectPicker.searchPlaceholder")}
             />
@@ -97,7 +97,7 @@ export function ProjectLibrary({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
+        <div className="ml-auto flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
           <Label htmlFor="project-sort" className="shrink-0 text-xs text-muted-foreground">
             {t("projectPicker.sortLabel")}:
           </Label>
@@ -108,7 +108,7 @@ export function ProjectLibrary({
             <SelectTrigger
               id="project-sort"
               size="sm"
-              className="h-7 min-h-7 w-[8rem] rounded-md border border-border bg-card/80 px-2 text-sm font-medium text-foreground shadow-sm data-[size=sm]:h-7 data-[size=sm]:min-h-7 data-[size=sm]:py-0"
+              className="w-32 px-2 font-normal data-[size=sm]:h-8"
             >
               <SelectValue />
             </SelectTrigger>
