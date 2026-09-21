@@ -39,7 +39,6 @@ interface ProjectLibraryProps {
   projects: ManagedProject[];
   filteredProjects: ManagedProject[];
   selectedId: string | null;
-  currentProjectId: string | null;
   onSelectProject: (id: string | null) => void;
   onOpenProject: (path: string) => void;
   onToggleFavorite: (id: string) => void;
@@ -55,7 +54,6 @@ export function ProjectLibrary({
   projects,
   filteredProjects,
   selectedId,
-  currentProjectId,
   onSelectProject,
   onOpenProject,
   onToggleFavorite,
@@ -212,11 +210,6 @@ export function ProjectLibrary({
                               <span className="min-w-0 truncate text-[15px] font-semibold leading-snug tracking-tight text-foreground">
                                 {project.name}
                               </span>
-                              {currentProjectId === project.id ? (
-                                <span className="rounded-full border border-[var(--accent-color)]/35 bg-[var(--accent-color)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent-color)]">
-                                  {t("projectPicker.currentBadge")}
-                                </span>
-                              ) : null}
                             </div>
                           </div>
                           <div className="flex min-w-0 items-center gap-2">

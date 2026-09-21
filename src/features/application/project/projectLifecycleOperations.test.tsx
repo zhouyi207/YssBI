@@ -543,7 +543,13 @@ describe("project lifecycle initiating operations", () => {
       await act(async () => {
         await picker.refresh();
       });
-      await vi.waitFor(() => expect(picker.currentProjectId).toBe("active-record"));
+      await vi.waitFor(() =>
+        expect(
+          picker.projects.find(
+            (project) => project.path === useProjectIOStore.getState().currentPath,
+          )?.id,
+        ).toBe("active-record"),
+      );
       const request = deferred<LifecycleMutationResultDto>();
       const remove = vi
         .spyOn(ProjectService, "deleteRegisteredProjectFiles")
@@ -605,7 +611,12 @@ describe("project lifecycle initiating operations", () => {
     await act(async () => {
       await picker.refresh();
     });
-    await vi.waitFor(() => expect(picker.currentProjectId).toBe("active-record"));
+    await vi.waitFor(() =>
+      expect(
+        picker.projects.find((project) => project.path === useProjectIOStore.getState().currentPath)
+          ?.id,
+      ).toBe("active-record"),
+    );
 
     const cleanup = deferred<void>();
     const cleanupAuthorities: Array<{ projectInstanceId: string | null; epoch: number }> = [];
@@ -706,7 +717,12 @@ describe("project lifecycle initiating operations", () => {
     await act(async () => {
       await picker.refresh();
     });
-    await vi.waitFor(() => expect(picker.currentProjectId).toBe("active-record"));
+    await vi.waitFor(() =>
+      expect(
+        picker.projects.find((project) => project.path === useProjectIOStore.getState().currentPath)
+          ?.id,
+      ).toBe("active-record"),
+    );
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi
       .spyOn(ProjectService, "deleteRegisteredProjectFiles")

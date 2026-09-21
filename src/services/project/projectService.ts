@@ -349,10 +349,10 @@ export class ProjectService {
   }
 
   /**
-   * 新建项目（清空当前状态）
+   * 关闭指定项目并释放后端会话。
    */
-  static async newProject(): Promise<void> {
-    await invokeCommand("new_project");
+  static async closeProject(projectInstanceId: string): Promise<void> {
+    await invokeCommand("close_project", { projectInstanceId });
   }
 
   static async defaultProjectParentDirectory(): Promise<string> {

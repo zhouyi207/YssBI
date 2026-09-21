@@ -10,6 +10,7 @@ import { EDITOR_MUTATION_CAPABILITIES } from "@/features/application/editor/edit
 import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useActiveProjectPath } from "@/features/application/project/projectSession";
+import { requestCloseProject } from "@/features/application/project/closeProject";
 import { useApplicationAppearance } from "@/features/application/settings/applicationSettings";
 import { getRememberedColorTheme } from "@/shared/theme/colorThemePresets";
 import {
@@ -216,7 +217,11 @@ export function WorkbenchMenuContribution({
       addFunction: () => void addFunction(undefined, { openAfterCreate: true }),
       addChart: () => void addChart(),
       openProject: () => void importGraph(),
-      closeProject: () => navigate("/projects"),
+      closeProject: () => {
+        void requestCloseProject().then((closed) => {
+          if (closed) navigate("/projects", { replace: true });
+        });
+      },
       saveGraph: () => void saveGraph(),
       saveGraphAs: () => void saveGraphAs(),
     },

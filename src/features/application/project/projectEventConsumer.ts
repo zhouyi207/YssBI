@@ -43,7 +43,7 @@ export interface ResourceMutationCommittedPayload {
 /** Low-rate Rust facts; resource receipts share the command publication owner. */
 export type ProjectEvent =
   | { readonly type: "ProjectLoaded"; readonly payload: ProjectLoadedPayload }
-  | { readonly type: "ProjectCleared"; readonly payload: undefined }
+  | { readonly type: "ProjectCleared"; readonly payload: { readonly projectInstanceId: string } }
   | {
       readonly type: "ProjectLifecycleCommitted";
       readonly payload: ProjectLifecycleCommittedPayload;
@@ -67,7 +67,7 @@ export interface ProjectEventConsumerDependencies {
   readonly refreshResourceIndex: () => Awaitable<boolean>;
   readonly activateProject: (result: ProjectLoadedPayload["result"]) => Awaitable<boolean>;
   readonly currentProjectInstanceId: () => string | null;
-  readonly publishProjectCleared?: () => Awaitable<void>;
+  readonly publishProjectCleared?: (projectInstanceId: string) => Awaitable<void>;
   readonly publishLifecycleCommitted?: (result: LifecycleMutationResultDto) => Awaitable<void>;
   readonly publishProjectSaved?: (result: ProjectSaveReceipt) => Awaitable<void>;
   readonly publishResourceMutationCommitted?: (
@@ -90,7 +90,7 @@ export function createProjectEventConsumer(
             ? { status: "applied" }
             : { status: "ignored" };
         case "ProjectCleared":
-          await dependencies.publishProjectCleared?.();
+          await dependencies.publishProjectCleared?.(event.payload.projectInstanceId);
           return { status: "applied" };
         case "ProjectLifecycleCommitted":
           await dependencies.publishLifecycleCommitted?.(event.payload.result);

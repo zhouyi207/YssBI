@@ -359,25 +359,31 @@ pub fn flush_project(
     Ok(result)
 }
 
-/// 新建项目（清空当前状态）
+/// 关闭指定项目并释放其应用会话。
 #[tauri::command]
-pub fn new_project(
+pub async fn close_project(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<WatcherState>,
+    watcher: State<'_, WatcherState>,
+    project_instance_id: ProjectInstanceId,
 ) -> Result<(), CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
         log_domain = "application",
-        log_event = "newProject",
-        "Creating new project"
+        log_event = "closeProject",
+        "Closing project"
     );
 
     application
-        .clear_project_for_application()
+        .clear_project_for_application(&project_instance_id)
         .map_err(map_application_project_lifecycle_error)?;
     watcher.stop();
-    emit_project_event(&app, Event::Project(Box::new(EventProject::ProjectCleared)));
+    emit_project_event(
+        &app,
+        Event::Project(Box::new(EventProject::ProjectCleared {
+            project_instance_id: project_instance_id.to_string(),
+        })),
+    );
     Ok(())
 }
 

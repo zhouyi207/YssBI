@@ -170,7 +170,9 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
     let first = application.capture_session().unwrap();
     let first_fingerprint = first.execution().kernels().fingerprint();
     // Session replacement must retain extension configuration instead of reinstalling defaults.
-    application.clear_project_for_application().unwrap();
+    application
+        .clear_project_for_application(first.project_instance_id())
+        .unwrap();
     let session = application.capture_session().unwrap();
     assert_eq!(
         session.execution().kernels().fingerprint(),

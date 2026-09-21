@@ -1,3 +1,4 @@
+import { applyProjectClosed } from "@/features/application/project/closeProject";
 import {
   loadCurrentProject,
   refreshProjectResourceIndex,
@@ -39,12 +40,7 @@ function createConsumer(): ProjectEventConsumer {
     refreshResourceIndex: refreshProjectResourceIndex,
     activateProject: async (result) => Boolean(await loadActivatedProject(result)),
     currentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
-    publishProjectCleared: () => {
-      projectPublicationCoordinator.cancelProject();
-      resetResultQueryProject();
-      const owner = captureProjectLifecycleState();
-      return createProjectLifecycleReceiptDependencies().clearProject(owner);
-    },
+    publishProjectCleared: applyProjectClosed,
     publishLifecycleCommitted: async (result) => {
       await applyProjectLifecycleReceipt(
         result,

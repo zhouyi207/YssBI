@@ -130,6 +130,7 @@ export const zhCN = {
     },
     project: {
       notLoaded: "项目尚未加载",
+      closeFailed: "关闭项目失败：{{error}}",
       saveAsFailed: "另存为失败：{{error}}",
       openResourceBeforeSaving: "请先打开一个图或图表",
       saveFailed: "保存失败：{{error}}",
@@ -365,7 +366,6 @@ export const zhCN = {
     title: "项目管理",
     heading: "选择一个 YssBI 项目",
     description: "从最近项目继续，或新建 / 打开一个 metadata.yssbi 项目。",
-    backToEditor: "返回编辑器",
     newProject: "新建项目",
     openProject: "打开项目",
     importProject: "导入项目",
@@ -394,7 +394,6 @@ export const zhCN = {
     emptyDescription: "打开现有 metadata.yssbi 项目或新建空项目后，它会出现在这里。",
     noMatchesTitle: "没有匹配的项目",
     noMatchesDescription: "尝试调整筛选关键词。",
-    currentBadge: "当前",
     actionsTitle: "项目操作",
     noSelection: "选择左侧项目后可进入或管理",
     enter: "进入项目",

@@ -91,8 +91,23 @@ impl ApplicationState {
         result.map_err(Into::into)
     }
 
-    pub fn clear_project_for_application(&self) -> Result<(), ApplicationProjectLifecycleError> {
+    pub fn clear_project_for_application(
+        &self,
+        expected_instance_id: &ProjectInstanceId,
+    ) -> Result<(), ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        if captured.project_instance_id() != expected_instance_id {
+            return Err(ApplicationProjectLifecycleError::SessionChanged(
+                SessionRevalidationError::Changed,
+            ));
+        }
         let replacement = begin_replacement(self)?;
+        if replacement.project().project_instance_id() != expected_instance_id.as_str() {
+            finish_replacement(self, replacement)?;
+            return Err(ApplicationProjectLifecycleError::SessionChanged(
+                SessionRevalidationError::Changed,
+            ));
+        }
         clear_project(replacement.project())?;
         finish_replacement(self, replacement)?;
         Ok(())

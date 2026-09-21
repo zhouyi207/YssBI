@@ -7,18 +7,13 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", content = "payload")]
 pub enum EventProject {
     #[serde(rename_all = "camelCase")]
-    ProjectLoaded {
-        result: ProjectActivationResultDto,
-    },
-    ProjectCleared,
+    ProjectLoaded { result: ProjectActivationResultDto },
     #[serde(rename_all = "camelCase")]
-    ProjectLifecycleCommitted {
-        result: LifecycleMutationResultDto,
-    },
+    ProjectCleared { project_instance_id: String },
     #[serde(rename_all = "camelCase")]
-    ResourceMutationCommitted {
-        result: ResourceMutationResultDto,
-    },
+    ProjectLifecycleCommitted { result: LifecycleMutationResultDto },
+    #[serde(rename_all = "camelCase")]
+    ResourceMutationCommitted { result: ResourceMutationResultDto },
     #[serde(rename_all = "camelCase")]
     ProjectSaved {
         result: crate::project::ProjectSaveResultDto,

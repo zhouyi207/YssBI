@@ -25,22 +25,14 @@ import {
   useCurrentWindowActions,
   useCustomTitleBar,
 } from "@/features/application/window";
-import { useProjectProjection } from "@/features/application/project/projectProjection";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { settingsUi } from "@/features/core/settings/ui";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowMenuBar } from "@/shared/ui/WindowChrome";
 
-export function ProjectPickerTitleBar({
-  onGoEditor,
-  onOpenSettings,
-}: {
-  onGoEditor: () => void;
-  onOpenSettings: () => void;
-}) {
+export function ProjectPickerTitleBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { t } = useTranslation();
-  const currentPath = useProjectProjection().currentPath;
   const themeMode = useSettingsRead((state) => state.theme.mode ?? "dark");
   const appearance = useSettingsRead((state) => state.appearance);
   const updateAppearance = settingsUi.updateAppearance;
@@ -63,17 +55,6 @@ export function ProjectPickerTitleBar({
       customChrome={customChrome}
       toolbar={
         <>
-          {currentPath ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onGoEditor}
-              className="mr-1 h-7 self-center px-3 text-muted-foreground hover:text-foreground"
-            >
-              {t("projectPicker.backToEditor")}
-            </Button>
-          ) : null}
           <ToolbarIconButton
             type="button"
             variant="ghost"

@@ -340,6 +340,6 @@ export async function clearProjectProjection(owner: ProjectLifecycleStateSnapsho
     return;
   if (!commitOwnedClear(synchronizeProjectPresentation)) return;
   commitOwnedClear(() => {
-    useProjectIOStore.setState({ status: LoadStatus.Ready, currentPath: null });
+    useProjectIOStore.setState({ status: LoadStatus.Ready, currentPath: null, error: null });
   });
 }

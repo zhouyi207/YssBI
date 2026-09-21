@@ -7,6 +7,8 @@
 
 YssBI's desktop IPC boundary has an Application-owned command module and three supporting crates:
 
+`close_project` takes the expected `projectInstanceId` and completes after backend session replacement and watcher shutdown. Its `ProjectCleared` event carries `{ projectInstanceId }` for the closed project. The initiating frontend applies the same clear on command completion; event/direct delivery share one cleanup, and a late event cannot clear a different project. The former unused `new_project` command is removed; creating a persisted project continues through the existing create workflow.
+
 | Owner                                                     | Responsibility                                                                                                                                   |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `yss-application::ipc`                                    | Application commands and invoke registry, request/response mapping and diagnosed errors; application execution and graph-client channel adapters |

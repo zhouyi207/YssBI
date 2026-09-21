@@ -135,6 +135,7 @@ export const enUS = {
     },
     project: {
       notLoaded: "No project is loaded",
+      closeFailed: "Could not close project: {{error}}",
       saveAsFailed: "Could not save project as: {{error}}",
       openResourceBeforeSaving: "Open a graph or chart before saving",
       saveFailed: "Could not save: {{error}}",
@@ -396,7 +397,6 @@ export const enUS = {
     title: "Project Management",
     heading: "Choose a YssBI Project",
     description: "Continue from recent projects, or create / open a metadata.yssbi project.",
-    backToEditor: "Back to Editor",
     newProject: "New Project",
     openProject: "Open Project",
     importProject: "Import Project",
@@ -426,7 +426,6 @@ export const enUS = {
       "Open an existing metadata.yssbi project or create an empty project to show it here.",
     noMatchesTitle: "No Matching Projects",
     noMatchesDescription: "Try adjusting the filter text.",
-    currentBadge: "Current",
     actionsTitle: "Project Actions",
     noSelection: "Select a project on the left to enter or manage it",
     enter: "Enter Project",

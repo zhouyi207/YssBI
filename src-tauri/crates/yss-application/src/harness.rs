@@ -433,7 +433,11 @@ mod tests {
             session.project,
             application.harness_project_binding().unwrap()
         );
-        application.clear_project_for_application().unwrap();
+        application
+            .clear_project_for_application(
+                application.capture_session().unwrap().project_instance_id(),
+            )
+            .unwrap();
         let replacement = application
             .create_harness_session(&host, principal)
             .await

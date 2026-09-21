@@ -560,7 +560,6 @@ export function useProjectPicker() {
 
   return {
     busy,
-    currentProjectId,
     projects,
     pageIssue,
     dismissPageIssue,

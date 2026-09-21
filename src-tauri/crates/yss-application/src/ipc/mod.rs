@@ -75,7 +75,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         toggle_registered_project_favorite,
         get_project_registry_path,
         create_project,
-        new_project,
+        close_project,
         load_project,
         flush_project,
         save_project_as,

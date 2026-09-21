@@ -36,7 +36,7 @@ export interface ResourceMutationCommittedPayload {
 
 export type ProjectEvent =
   | { readonly type: "ProjectLoaded"; readonly payload: ProjectLoadedPayload }
-  | { readonly type: "ProjectCleared"; readonly payload: undefined }
+  | { readonly type: "ProjectCleared"; readonly payload: { readonly projectInstanceId: string } }
   | {
       readonly type: "ProjectLifecycleCommitted";
       readonly payload: ProjectLifecycleCommittedPayload;
@@ -340,10 +340,6 @@ export function parseProjectEvent(value: unknown): ProjectEventParseOutcome {
 
   const nested = value.payload;
   if (!isProjectEventType(nested.type)) return unknownType();
-  if (nested.type === "ProjectCleared") {
-    if (value.type !== "Project" || !hasExactKeys(nested, ["type"])) return invalidEnvelope();
-    return { ok: true, event: { type: "ProjectCleared", payload: undefined } };
-  }
   if (!hasExactKeys(nested, ["type", "payload"])) return invalidEnvelope();
 
   const isResourceEvent = nested.type === "ProjectIndexInvalidated";
@@ -355,6 +351,21 @@ export function parseProjectEvent(value: unknown): ProjectEventParseOutcome {
   }
 
   switch (nested.type) {
+    case "ProjectCleared": {
+      const payload = nested.payload;
+      if (
+        !isRecord(payload) ||
+        !hasExactKeys(payload, ["projectInstanceId"]) ||
+        typeof payload.projectInstanceId !== "string" ||
+        !payload.projectInstanceId.trim()
+      ) {
+        return invalidPayload();
+      }
+      return {
+        ok: true,
+        event: { type: nested.type, payload: { projectInstanceId: payload.projectInstanceId } },
+      };
+    }
     case "ProjectLoaded": {
       const payload = parseProjectLoadedPayload(nested.payload);
       return payload === null

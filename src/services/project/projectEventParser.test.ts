@@ -40,7 +40,7 @@ const supportedEvents = [
       },
     },
   },
-  { type: "Project", payload: { type: "ProjectCleared" } },
+  { type: "Project", payload: { type: "ProjectCleared", payload: { projectInstanceId } } },
   {
     type: "Project",
     payload: { type: "ProjectLifecycleCommitted", payload: { result: lifecycleResult } },
@@ -74,7 +74,7 @@ describe("project event parser", () => {
     ]);
     expect(parsed[1]).toEqual({
       ok: true,
-      event: { type: "ProjectCleared", payload: undefined },
+      event: { type: "ProjectCleared", payload: { projectInstanceId } },
     });
     expect(parsed[4]).toEqual({
       ok: true,
@@ -112,7 +112,7 @@ describe("project event parser", () => {
         },
         "invalidPayload",
       ],
-      [{ type: "Project", payload: { type: "ProjectCleared", payload: null } }, "invalidEnvelope"],
+      [{ type: "Project", payload: { type: "ProjectCleared", payload: null } }, "invalidPayload"],
       [
         {
           code: "backend_failed",

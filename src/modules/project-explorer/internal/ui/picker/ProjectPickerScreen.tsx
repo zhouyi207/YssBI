@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
 import { useProjectPicker, type ManagedProject } from "@/features/application/project";
 import { ActionMenu, usePositionedActionMenu } from "@/shared/ui/actionMenu";
 import { DeleteProjectConfirmDialog } from "./DeleteProjectConfirmDialog";
@@ -15,10 +14,8 @@ import { sortAndFilterProjects, type ProjectSortMode } from "./projectPickerView
 
 export function ProjectPickerScreen() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const {
     busy,
-    currentProjectId,
     projects,
     pageIssue,
     dismissPageIssue,
@@ -33,7 +30,7 @@ export function ProjectPickerScreen() {
     toggleFavorite,
     revealProjectInExplorer,
   } = useProjectPicker();
-  const [selectedId, setSelectedId] = useState<string | null>(currentProjectId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState("");
   const [sortMode, setSortMode] = useState<ProjectSortMode>("lastOpened");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -138,10 +135,6 @@ export function ProjectPickerScreen() {
   );
 
   useEffect(() => {
-    if (currentProjectId) setSelectedId(currentProjectId);
-  }, [currentProjectId]);
-
-  useEffect(() => {
     if (selectedId && !projects.some((project) => project.id === selectedId)) {
       setSelectedId(null);
     }
@@ -149,10 +142,7 @@ export function ProjectPickerScreen() {
 
   return (
     <div className="flex h-screen min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background text-foreground">
-      <ProjectPickerTitleBar
-        onGoEditor={() => navigate("/editor")}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+      <ProjectPickerTitleBar onOpenSettings={() => setSettingsOpen(true)} />
       {pageIssue ? (
         <div className="shrink-0 border-b border-border bg-background p-2">
           <ProjectPickerPageIssueAlert
@@ -186,7 +176,6 @@ export function ProjectPickerScreen() {
             projects={projects}
             filteredProjects={filteredProjects}
             selectedId={selectedId}
-            currentProjectId={currentProjectId}
             onSelectProject={setSelectedId}
             onOpenProject={(path) => void openRecentProject(path)}
             onToggleFavorite={(id) => void toggleFavorite(id)}

@@ -133,6 +133,53 @@ async fn seed_stale_registration(registry: &ProjectRegistry, destination: &Path)
 }
 
 #[test]
+fn closing_project_releases_session_before_registered_deletion() {
+    let _serial = DELETE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _reset = DeleteHookReset;
+    block_on(async {
+        let directory = TestDirectory::new("close-then-delete-project");
+        let registry = initialize_registry(&directory).await;
+        let root = directory.child("project");
+        write_named_project(&root, "Close me");
+        let record = register_root(&registry, &root, "Close me").await;
+        let application = ApplicationState::initialize().unwrap();
+        let activation = application
+            .load_project_for_application(root.to_str().unwrap())
+            .unwrap();
+        let old = application.capture_session().unwrap();
+
+        assert!(
+            application
+                .clear_project_for_application(&ProjectInstanceId::new())
+                .is_err()
+        );
+        assert!(application.revalidate_captured_session(&old).is_ok());
+        application
+            .clear_project_for_application(&activation.project_instance_id)
+            .unwrap();
+        assert!(application.revalidate_captured_session(&old).is_err());
+        drop(old);
+        assert!(root.exists());
+        let current = application.capture_session().unwrap();
+        assert!(current.project().capture_project_session().is_err());
+        let deleted = delete_registered_project(
+            current.project(),
+            &registry,
+            record.id.as_str(),
+            None,
+            OperationId::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(deleted.outcome, ProjectLifecycleOutcome::Committed);
+        assert!(!deleted.invalidation.project);
+        assert!(!root.exists());
+    });
+}
+
+#[test]
 fn save_as_registry_failure_preserves_source_and_disk_with_exact_receipt() {
     block_on(async {
         let directory = TestDirectory::new("save-as-application-registry-failure");

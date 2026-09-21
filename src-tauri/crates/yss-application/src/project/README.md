@@ -28,6 +28,8 @@ Application session
 
 Project replacement 先关闭旧 session 的新任务准入并 drain 或取消活动工作，再构造和验证 candidate session，最后原子替换。旧 session 的 late event、result、database handle 和 Graph projection 因身份或 generation 不匹配而被拒绝；前端在 hydrate 新项目之前先清理旧的 backend-owned projection。
 
+工作台“关闭项目”在保存/放弃/取消确认后调用 `close_project(projectInstanceId)`，先按预期项目身份关闭旧会话、释放执行与数据库资源并停止 watcher，再清空前端项目投影、交互、执行结果及项目面板，完成后才返回项目选择页。关闭不删除项目文件或注册记录；随后可作为非活动项目移到回收站。取消或保存失败保持当前项目。窗口布局与应用设置保留。
+
 单窗口仍保留项目生命周期隔离：`projectInstanceId` 标识一次 Rust 项目激活并随 IPC 请求传递；前端 `epoch` 在本地生命周期启动或清理时递增，拒绝取消或重新加载之前的回调；`activationRevision` 为激活回执排序并去重，清理投影时仍保留其水位。三个值不可互换。节点目录读取通过 `projectIOStore.captureProjectReadContext` 捕获请求上下文，统一校验生命周期与已安装投影的身份；调用方用 `isCurrent()` 判断是否接收异步结果，不自行拼装 epoch 或重复读取项目 store。
 
 打开项目先通过 Project 的 activation preparation 检查目标文件，再进入 replacement。
