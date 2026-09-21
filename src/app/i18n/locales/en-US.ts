@@ -1631,7 +1631,6 @@ export const enUS = {
   settings: {
     title: "Settings",
     close: "Close settings",
-    applyHint: "Changes apply automatically",
     noResults: "No matching settings categories",
     noResultsHint: "Try another keyword or clear the search to see all settings.",
     clearSearch: "Clear search",

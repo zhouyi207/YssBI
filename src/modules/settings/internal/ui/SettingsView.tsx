@@ -338,7 +338,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
             <Button type="button" variant="ghost" onClick={handleResetAll} disabled={isResetting}>
               {isResetting ? t("common.restoring") : t("common.restoreAllDefaults")}
             </Button>
-            <span>{t("settings.applyHint")}</span>
           </div>
         </aside>
 
