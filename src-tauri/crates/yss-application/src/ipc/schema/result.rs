@@ -349,43 +349,4 @@ mod tests {
         assert!(large.len() < 4096);
         assert!(large.len() <= serde_json::to_vec(&small).unwrap().len() + 16);
     }
-
-    #[test]
-    #[ignore = "exports a real OLS result for the report renderer comparison"]
-    fn export_report_layout_probe() {
-        use crate::ipc::commands::execution_dto::ResultPageDto;
-
-        let (app, reference, _) = crate::graph::results::report::tests::fixture(1_000);
-        let report = app
-            .query_linear_regression_report(reference)
-            .unwrap()
-            .into_json();
-        let coefficients = ResultPageDto::from_application(
-            reference.result_id,
-            app.query_result_table(reference, ResultTablePart::Coefficients, 0, 200)
-                .unwrap(),
-        )
-        .unwrap();
-        let plot = ResultAnalysisResponseDto::from(
-            app.analyze_result(
-                reference,
-                ResultAnalysisRequest::ResidualPlot {
-                    max_points: 200,
-                    x_range: None,
-                },
-            )
-            .unwrap(),
-        );
-        let output = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../docs/reviews/probes/ols-layout-result.json");
-        let sample = serde_json::json!({
-            "origin": "Application -> Graph Execute -> ResultStore -> report/table/analysis DTO",
-            "liveSession": false,
-            "report": report,
-            "coefficients": coefficients,
-            "residualPlot": plot,
-        });
-        std::fs::write(&output, serde_json::to_vec_pretty(&sample).unwrap()).unwrap();
-        println!("{}", output.display());
-    }
 }
