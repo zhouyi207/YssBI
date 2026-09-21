@@ -24,7 +24,6 @@
     "test:ts": "vitest run",
     "bench:graph": "vitest bench --run src/tests/benchmarks/graphEditorSync.bench.ts",
     "test:rs": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
-    "test:architecture": "vitest run src/tests/architecture src/services/nodeSystem/nodeCatalogArchitectureContract.test.ts src/services/userFeedbackArchitectureContract.test.ts",
     "format": "pnpm format:ts && pnpm format:rs",
     "format:ts": "oxfmt",
     "format:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",

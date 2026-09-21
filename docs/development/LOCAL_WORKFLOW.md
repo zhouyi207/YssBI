@@ -9,13 +9,13 @@
 
 项目流程脚本随对应功能放置。根 `scripts/` 保留目录树和代码统计的四个可选 Python 工具，以及 `samples/sources.json` 示例源定义；示例生成程序归属 Rust 应用层。
 
-| 脚本                 | 所属位置                                                                                 |
-| -------------------- | ---------------------------------------------------------------------------------------- |
+| 脚本                 | 所属位置                                                                        |
+| -------------------- | ------------------------------------------------------------------------------- |
 | Graph 诊断模板生成器 | `src-tauri/crates/yss-graph-diagnostics/scripts/generate-graph-diagnostics.mjs` |
-| 插件协议生成器       | `src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs`              |
-| 通用插件打包器及测试 | `plugins/scripts/package-plugin.mjs`、`plugins/scripts/package-plugin.test.mjs`          |
-| 模块索引生成器       | `docs/reference/generate-module-map.mjs`                                                 |
-| 示例资源生成器       | `src-tauri/crates/yss-application/examples/build_samples.rs`                             |
+| 插件协议生成器       | `src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs`     |
+| 通用插件打包器及测试 | `plugins/scripts/package-plugin.mjs`、`plugins/scripts/package-plugin.test.mjs` |
+| 模块索引生成器       | `docs/reference/generate-module-map.mjs`                                        |
+| 示例资源生成器       | `src-tauri/crates/yss-application/examples/build_samples.rs`                    |
 
 通过下方根命令调用这些脚本；插件专属构建入口继续归属各插件目录。
 
@@ -33,22 +33,22 @@
 仓库不提供 `.cargo/` target 覆盖。以 `src-tauri/Cargo.toml` 为 workspace manifest 时，Cargo metadata 当前解析到 `src-tauri/target/`。所有 root Rust scripts 都显式指定该 manifest，并保留 Cargo 默认 build jobs 和 libtest threads。
 该 workspace 还包含 `plugins/julia/native/crates` 中的显式成员；协议、Rust SDK 和已有通用基础库继续位于 `src-tauri/crates`，共用锁文件和根构建入口。
 
-Windows 上 Rust linking 与 production architecture audit 成本较高。增量循环先选择 package、target 和相关用例；小修改不默认启动整个 workspace 的 check、lint 或 test。完整验证的升级条件见下文 L1/L2/L3。
+Windows 上 Rust linking 成本较高。增量循环先选择 package、target 和相关用例；小修改不默认启动整个 workspace 的 check、lint 或 test。完整验证的升级条件见下文 L1/L2/L3。
 
 ## Root commands
 
-| 目的                | 聚合命令               | 单栈命令                                                 |
-| ------------------- | ---------------------- | -------------------------------------------------------- |
-| 安装/同步依赖       | `pnpm install`         | —                                                        |
-| 启动 Tauri 桌面应用 | `pnpm dev`             | —                                                        |
-| 构建桌面安装包      | `pnpm build`           | —                                                        |
-| 类型/编译检查       | `pnpm check`           | `pnpm check:ts`、`pnpm check:rs`                         |
-| 静态检查            | `pnpm lint`            | `pnpm lint:ts`、`pnpm lint:rs`                           |
-| 测试                | `pnpm test`            | `pnpm test:ts`、`pnpm test:rs`、`pnpm test:architecture` |
-| 写入格式化          | `pnpm format`          | `pnpm format:ts`、`pnpm format:rs`                       |
-| 只读格式检查        | `pnpm format:check`    | `pnpm format:check:ts`、`pnpm format:check:rs`           |
-| 生成 module map     | `pnpm docs:module-map` | check-only：`pnpm docs:module-map:check`                 |
-| 完整交付门禁        | `pnpm run ci`          | —                                                        |
+| 目的                | 聚合命令               | 单栈命令                                       |
+| ------------------- | ---------------------- | ---------------------------------------------- |
+| 安装/同步依赖       | `pnpm install`         | —                                              |
+| 启动 Tauri 桌面应用 | `pnpm dev`             | —                                              |
+| 构建桌面安装包      | `pnpm build`           | —                                              |
+| 类型/编译检查       | `pnpm check`           | `pnpm check:ts`、`pnpm check:rs`               |
+| 静态检查            | `pnpm lint`            | `pnpm lint:ts`、`pnpm lint:rs`                 |
+| 测试                | `pnpm test`            | `pnpm test:ts`、`pnpm test:rs`                 |
+| 写入格式化          | `pnpm format`          | `pnpm format:ts`、`pnpm format:rs`             |
+| 只读格式检查        | `pnpm format:check`    | `pnpm format:check:ts`、`pnpm format:check:rs` |
+| 生成 module map     | `pnpm docs:module-map` | check-only：`pnpm docs:module-map:check`       |
+| 完整交付门禁        | `pnpm run ci`          | —                                              |
 
 `dev` 和 `build` 是完整 Tauri 应用入口。`src-tauri/tauri.conf.json` 的 `beforeDevCommand` 运行 Vite，`beforeBuildCommand` 校验示例资源后运行 Vite；两者不能回调 root `dev` / `build` scripts，否则会递归。
 
@@ -109,15 +109,14 @@ Rust 的 `-p` 选择 package，`--lib` / `--test` 选择测试目标，测试名
 
 确认输出中实际执行了相关测试；零匹配不能算修复通过。`cargo check` 不执行最终代码生成或链接，`--no-run` 只构建测试程序，二者都不能替代运行结果。
 
-仅在相关改动需要时选择专项检查，例如文档契约、Rust 根包架构门禁或 Julia-backed 测试：
+仅在相关改动需要时选择专项检查，例如文档契约或 Julia-backed 测试：
 
 ```sh
-pnpm test:ts src/tests/architecture/documentationContract.test.ts
-pnpm test:rs:package -p yssbi --lib architecture_tests
+pnpm test:ts src/tests/documentationContract.test.ts
 julia --project=plugins/julia/runtime/julia plugins/julia/runtime/julia/tests/bayes_fit_tests.jl
 ```
 
-Rust 架构门禁仍需构建根包测试目标，不保证很快。`pnpm test:architecture` 是完整前端架构检查，按涉及的依赖边界、分类、策略或 source discovery 决定是否运行；不要为普通局部实现修改机械执行完整架构审计。
+前后端均不再包含源码架构审计测试或专用扫描器。变更使用类型/编译检查、lint 和受影响的业务测试，并按当前架构规则复核依赖方向。各模块仍被使用的测试 fixtures 和辅助代码继续保留，文档契约单独验证索引、链接与命令入口。
 
 Graph diagnostic 词汇或模板变更后运行 `pnpm generate:diagnostics`，只读校验为 `pnpm generate:diagnostics:check`。生成表由 Rust definitions 拥有。
 
@@ -143,7 +142,7 @@ julia --project=plugins/julia/runtime/julia -e 'using Pkg; Pkg.instantiate()'
 - **前端局部行为**：选择相关测试文件；L2 补必要的 `pnpm check:ts`、`pnpm lint:ts` 和局部格式检查。`lint:ts` 固定扫描整个前端，追加文件不能缩小范围；按需运行，不因前端修改自动运行 Rust 检查。
 - **Rust 局部实现**：使用对应 `:package` 入口，显式选择 crate 和 target；L2 验证相关模块及调用方，不机械运行 workspace 级 check/Clippy。
 - **公共 API、共享类型、序列化和跨模块行为**：先评估直接和间接受影响的消费者，补充相应契约检查。比如 Graph 类型语义可能影响执行计划准备、Execution 和前端 Projection，不能只以 Graph Analysis 自身测试通过收尾；只有影响无法可靠限定时才升级 L3。
-- **架构策略、依赖边界或 source discovery**：运行对应的门禁回归和真实审计；涉及全局策略时扩大到对应语言的完整架构门禁，不自动扩大到所有业务测试。
+- **架构策略或依赖边界**：复核 TypeScript import/re-export、Cargo 依赖、模块可见性和实际调用方，并运行受影响模块的检查与业务测试，不自动扩大到所有业务测试；不再维护逐文件或逐符号的测试许可表。
 - **toolchain、workspace 公共依赖、features 或测试基础设施**：评估受影响构建图；广泛影响无法可靠限定时升级 L3。仅增加明确的聚焦命令入口不等于改变整个构建图。
 - **Tauri packaging、permission、plugin 或 build config**：按影响补充 `pnpm build` 及目标平台手动验证；局部业务代码修改不默认重新构建安装包。
 

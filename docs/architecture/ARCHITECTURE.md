@@ -117,7 +117,7 @@ app composition / routing
 
 `app/` 组合窗口、路由和跨业务 contribution；`modules/` 拥有 panel/window/editor UI，并通过根 `public.ts` 暴露；`features/application/` 编排用户用例；`features/core/` 保存领域投影和共享运行态；`features/domain/` 保存无 UI/framework 依赖的规则；`services/` 适配 IPC。普通 invoke 统一经过 `src/services/ipc/invokeCommand.ts`。
 
-这些方向由可执行架构门禁维护，分类算法和 policy 见[架构门禁](../development/ARCHITECTURE_GATES.md)，完整 workspace 索引见[生成的 Module Map](../reference/MODULE_MAP.md)。
+这些方向继续作为实现与审查约束。前后端通过实际依赖、模块可见性、代码审查和受影响业务测试复核，不再运行源码架构扫描或维护逐符号的测试许可表。检查范围见[架构复核与文档检查](../development/ARCHITECTURE_GATES.md)，完整 workspace 索引见[生成的 Module Map](../reference/MODULE_MAP.md)。
 
 ## 4. Project lifecycle
 

@@ -52,7 +52,7 @@
 - [ ] Current、Accepted Decision、Planned、Historical 内容放入正确目录并更新 `docs/README.md` 索引。
 - [ ] 版本、路径、阈值、commands 和 module inventory 尽量引用 manifest/source 或 generated reference。
 
-失败场景测试是否必要取决于它保护的行为。例如过期 session 被拒绝、sequence gap 可见、Blocked 不触发技术事件，都有可观察的回归风险。不要为每次重构新增“旧变量名/文件名永远不能出现”的全仓字符串检查；已有 AST/依赖门禁能保护的边界也不再重复扫描。测试取舍和门禁实现见 [Architecture Gates](ARCHITECTURE_GATES.md#5-policy-and-semantic-checks)。
+失败场景测试是否必要取决于它保护的行为。例如过期 session 被拒绝、sequence gap 可见、Blocked 不触发技术事件，都有可观察的回归风险。不要为每次重构新增“旧变量名/文件名永远不能出现”的全仓字符串检查，也不重建源码架构扫描器；依赖方向通过当前契约和实际调用复核。范围见[架构复核与文档检查](ARCHITECTURE_GATES.md)。
 
 ## 5. Delivery
 

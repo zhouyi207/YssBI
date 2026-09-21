@@ -10128,10 +10128,6 @@ dependencies = [
 name = "yssbi"
 version = "0.3.3"
 dependencies = [
- "proc-macro2",
- "serde",
- "serde_json",
- "syn 3.0.3",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -10140,9 +10136,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-tracing",
  "tauri-plugin-window-state",
- "thiserror 2.0.20",
  "tracing",
- "uuid",
  "yss-application",
 ]
 

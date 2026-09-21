@@ -156,11 +156,3 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-window-state = "=2.4.1"
 yss-application = { path = "./crates/yss-application" }
 tracing.workspace = true
-
-[dev-dependencies]
-thiserror.workspace = true
-uuid.workspace = true
-proc-macro2 = "1"
-serde.workspace = true
-serde_json.workspace = true
-syn = { version = "3", features = ["full", "visit"] }

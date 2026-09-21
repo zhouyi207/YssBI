@@ -163,7 +163,7 @@ Before changing a subsystem, read its canonical owner:
 - Statistical Harness current implementation:
   `docs/architecture/STATISTICAL_HARNESS.md`
 - Tauri/IPC transport contracts: `src-tauri/crates/yss-application/src/ipc/README.md`
-- Architecture enforcement: `docs/development/ARCHITECTURE_GATES.md`
+- Architecture review and documentation checks: `docs/development/ARCHITECTURE_GATES.md`
 - Commands and validation: `docs/development/LOCAL_WORKFLOW.md`
 - Feature, fix, refactor, and behavior changes:
   `docs/development/CHANGE_PROCESS.md`

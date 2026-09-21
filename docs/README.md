@@ -37,7 +37,7 @@
 - [仓库 Agent 规则](development/AGENT_RULES.md)：根 `.rules` 加载的全仓策略、跨系统约束和验证纪律。
 - [本地开发工作流](development/LOCAL_WORKFLOW.md)：环境、根命令和按改动范围验证。
 - [变更流程](development/CHANGE_PROCESS.md)：设计、实现、自审和交付问题。
-- [架构门禁](development/ARCHITECTURE_GATES.md)：源码分类、依赖审计、语义检查和文档契约。
+- [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：人工边界复核及独立文档契约。
 
 ## 事实源与维护约定
 

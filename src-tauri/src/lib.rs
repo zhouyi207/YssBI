@@ -2,12 +2,6 @@
 //!
 //! 入口连接 Application 运行服务与 IPC 适配器，并配置 Tauri 平台与窗口生命周期。
 
-#[cfg(test)]
-mod test_support;
-
-#[cfg(test)]
-mod architecture_tests;
-
 use tauri::Manager;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
