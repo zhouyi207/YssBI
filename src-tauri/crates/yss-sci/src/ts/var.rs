@@ -4,5 +4,4 @@
 
 include!("var/types.rs");
 include!("var/varsoc.rs");
-include!("var/stata.rs");
 include!("var/estimate.rs");

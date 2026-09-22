@@ -10,6 +10,9 @@ Tabular input alignment and transformations belong to `yss-sci-runtime::data`.
 results. `ts::models` prepares ADF/VAR/VEC computations. DID randomization inference
 belongs to `regression::panel::did`, and kernel density estimation to `stats::density`.
 
+Residual normality tests are owned by `regression::diagnostics::normality`;
+Durbin-Watson and other serial correlation tests by `ts::serial_correlation`.
+
 Panel first differences take entity IDs and original time values; they do not
 require a second time-ID vector. First-stage IV summaries derive dimensions from
 their matrices and receive covariance/estimator choices through `FirstStageOptions`.

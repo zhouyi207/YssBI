@@ -14,6 +14,9 @@ faer or `yss-sci-linalg` dependency and does not construct numerical matrices or
 estimators. Arrow remains the tabular exchange representation; SCI converts
 numeric inputs into Linalg matrices and returns computed results.
 
+Time alignment consumes Arrow `Int64` and `Date32` arrays directly. Alignment and
+panel preparation share the checked numeric-grid helpers in `data::time_series::align`.
+
 `ols` and `acf_pacf` accept neutral requests and `ScientificExecutionControl` from
 `yss-sci-contract`. The OLS kernel forwards the execution cancellation and deadline;
 result analyses and standalone IPC ACF/PACF use the existing 60-second deadline.

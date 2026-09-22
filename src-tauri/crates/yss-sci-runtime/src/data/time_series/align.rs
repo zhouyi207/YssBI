@@ -1,5 +1,4 @@
 //! Bounded alignment on a complete numeric or date grid using Arrow take indices.
-use super::types::TimeValue;
 use crate::data::{MAX_PREPARED_BYTES, PreparationError, check_size};
 use arrow::array::{
     Array, ArrayRef, Date32Array, Float64Array, Int64Array, UInt64Array, make_array,
@@ -47,44 +46,6 @@ pub(crate) fn time_array(
         ))),
         _ => Err(PreparationError::TimeType),
     }
-}
-
-pub fn array_to_time_values(values: &dyn Array) -> Result<Vec<TimeValue>, PreparationError> {
-    let numbers = time_numbers(values)?;
-    let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1).ok_or(PreparationError::Overflow)?;
-    numbers
-        .into_iter()
-        .map(|value| match values.data_type() {
-            DataType::Int64 => Ok(TimeValue::Num(value)),
-            DataType::Date32 => epoch
-                .checked_add_signed(chrono::Duration::days(value))
-                .map(TimeValue::Date)
-                .ok_or(PreparationError::Overflow),
-            _ => Err(PreparationError::TimeType),
-        })
-        .collect()
-}
-
-pub fn time_values_to_array(times: &[TimeValue]) -> Result<ArrayRef, PreparationError> {
-    check_size(times.len(), 16)?;
-    let date = matches!(times.first(), Some(TimeValue::Date(_)));
-    let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1).ok_or(PreparationError::Overflow)?;
-    let values = times
-        .iter()
-        .map(|time| match time {
-            TimeValue::Num(value) if !date => Ok(*value),
-            TimeValue::Date(value) if date => Ok(value.signed_duration_since(epoch).num_days()),
-            _ => Err(PreparationError::TimeType),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    time_array(
-        values,
-        if date {
-            &DataType::Date32
-        } else {
-            &DataType::Int64
-        },
-    )
 }
 
 pub fn check_no_duplicate_times(times: &dyn Array) -> Result<(), PreparationError> {

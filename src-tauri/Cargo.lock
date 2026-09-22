@@ -10106,7 +10106,6 @@ name = "yss-sci-runtime"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "chrono",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
