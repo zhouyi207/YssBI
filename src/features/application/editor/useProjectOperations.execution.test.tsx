@@ -1,3 +1,8 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 // @vitest-environment happy-dom
 
 import { act } from "react";
@@ -10,12 +15,8 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-} from "@/tests/helpers/editorProjectionFixtures";
+
 import { useProjectOperations } from "./useProjectOperations";
 import { revealWorkbenchView } from "@/modules/workbench/public";
 import { normalizeIpcError } from "@/services/ipc/ipcError";
@@ -34,7 +35,7 @@ function runStartedEvent(): RunEvent {
   };
 }
 
-const executionState = {
+const executionState = vi.hoisted(() => ({
   graphs: {} as Record<string, { status: string }>,
   startExecution: vi.fn((): (() => boolean) => {
     executionState.graphs[graphPath] = { status: "running" };
@@ -49,7 +50,7 @@ const executionState = {
   interruptExecution: vi.fn(),
   getGraph: vi.fn(() => ({ status: "completed" })),
   clearGraphRunProjections: vi.fn(),
-};
+}));
 
 vi.mock("@/features/application/graphProjection/graphActivity", () => ({
   recoverGraphExecution: vi.fn(async () => {}),
@@ -63,7 +64,7 @@ vi.mock("@/modules/workbench/public", async (importOriginal) => ({
   revealWorkbenchView: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("@/features/core/execution", () => ({
-  useExecutionStore: { getState: () => executionState },
+  useExecutionStore: { getState: () => executionState, subscribe: () => () => {} },
   graphHasClearableArtifacts: () => true,
 }));
 vi.mock("./resolveExecutionGraphPath", () => ({
@@ -115,8 +116,7 @@ describe("useProjectOperations execution demand", () => {
     vi.spyOn(ProjectService, "executeGraph").mockResolvedValue(undefined);
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     const session = makeGraphEditorSession(projection);
-    useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
-    useGraphEditingStore.getState().install(graphPath, session);
+    useGraphProjectionStore.getState().install(graphPath, session);
     function Harness() {
       operations = useProjectOperations();
       return null;
@@ -128,8 +128,7 @@ describe("useProjectOperations execution demand", () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
-    useGraphEditingStore.getState().clear();
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
     clearProjectLifecycle();
   });
 
@@ -141,8 +140,8 @@ describe("useProjectOperations execution demand", () => {
     expect(ProjectService.executeGraph).toHaveBeenCalledWith({
       projectInstanceId,
       graphPath,
-      version: useGraphEditingStore.getState().sessions[graphPath].version,
-      semanticInputHash: useGraphEditingStore.getState().sessions[graphPath].semanticInputHash,
+      version: useGraphProjectionStore.getState().sessions[graphPath].version,
+      semanticInputHash: useGraphProjectionStore.getState().sessions[graphPath].semanticInputHash,
       demand: { type: "default" },
       onEvent: expect.any(Function),
     });
@@ -161,7 +160,7 @@ describe("useProjectOperations execution demand", () => {
     });
     blocked.outcome = { type: "analysisBlocked" };
     blocked.hasBlockingDiagnostics = true;
-    useGraphProjectionStore.getState().replaceProjection(graphPath, blocked);
+    installGraphProjectionFixture(graphPath, blocked);
 
     await act(async () => {
       await operations.executeGraph();
@@ -172,23 +171,6 @@ describe("useProjectOperations execution demand", () => {
 
   it("leaves inspection opening to the public activity observer", async () => {
     vi.mocked(ProjectService.executeGraph).mockImplementation(async ({ onEvent }) => {
-      onEvent?.({
-        ...runStartedEvent(),
-        kind: {
-          type: "pinPreviewResultReady",
-          output: {
-            graphPath,
-            port: {
-              kind: "declared",
-              nodeId: "00000000-0000-0000-0000-000000000001",
-              portKey: "value",
-            },
-          },
-          generation: 3,
-          resultId: "16",
-        },
-      });
-      expect(openInspectableResult).not.toHaveBeenCalled();
       onEvent?.({
         ...runStartedEvent(),
         kind: {

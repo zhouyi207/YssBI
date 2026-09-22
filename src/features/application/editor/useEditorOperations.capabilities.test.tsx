@@ -1,11 +1,15 @@
-import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
+import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
+import {
+  makeGraphEditingState,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
 import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+
 import { useEditorOperations } from "./useEditorOperations";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -125,6 +129,9 @@ function appliedWithInserted(...nodeIds: string[]): GraphEditOutcome {
     status: "applied",
     insertedNodeIds: nodeIds,
     result: {
+      resultState: makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection)
+        .resultState,
+
       changed: true,
       editing: makeGraphEditingState({ dirty: true, canUndo: true }),
       document: {

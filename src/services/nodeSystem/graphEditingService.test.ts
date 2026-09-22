@@ -20,6 +20,8 @@ it("parses a graph save receipt and rejects a response from another project", as
   });
   const { document, editing } = makeGraphEditorSession(projection);
   const saved: GraphSaveResultDto = {
+    resultState: makeGraphEditorSession({ graphPath, projection }.projection).resultState,
+
     editing,
     projectInstanceId,
     resourceRevision: 3,
@@ -36,8 +38,18 @@ it("parses a graph save receipt and rejects a response from another project", as
     update: {
       kind: "snapshot",
       cursor: "saved",
-      snapshotBytes: JSON.stringify({ document, projection, editing }).length,
-      data: { document, projection, editing },
+      snapshotBytes: JSON.stringify({
+        resultState: makeGraphEditorSession(projection).resultState,
+        document,
+        projection,
+        editing,
+      }).length,
+      data: {
+        resultState: makeGraphEditorSession(projection).resultState,
+        document,
+        projection,
+        editing,
+      },
     },
   };
   vi.mocked(invoke)

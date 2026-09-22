@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +13,7 @@ import {
   ConnectionMode,
   SelectionMode,
   useStoreApi,
+  useConnection,
   type Connection,
   type NodeChange,
   type OnConnectStart,
@@ -26,18 +28,23 @@ import {
 } from "@/features/core/viewport/editorViewport";
 import { ConnectionContextMenu } from "../../ContextMenu";
 import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
-import { GraphFlowContext, GraphFlowInteractionContext } from "./GraphFlowContext";
+import {
+  GraphFlowContext,
+  GraphFlowInteractionContext,
+  createGraphFlowInteractionStore,
+} from "./GraphFlowContext";
 import { GraphFlowNode } from "./GraphFlowNode";
 import { GraphFlowEdge } from "./GraphFlowEdge";
 import { GraphFlowConnection, PendingFlowConnection } from "./GraphFlowConnection";
 import {
   buildGraphFlowModel,
+  projectFlowInteraction,
+  type FlowInteractionProjection,
   resolveFlowConnection,
   resolveFlowPinAction,
   type GraphFlowNode as FlowNode,
   type GraphFlowEdge as FlowEdge,
   type FlowConnectionIntent,
-  type FlowConnectionFeedback,
   type GraphFlowModel,
 } from "./graphFlowModel";
 import "@xyflow/react/dist/base.css";
@@ -213,38 +220,35 @@ function GraphFlowRuntime({
     return next;
   }, [model.edges, workspace.selectedConnectionIds, interactive]);
   const sourceId = connectionSource?.sourceId ?? interaction.pendingConnection?.id;
-  const connectionModel = sourceId ? model : null;
-  const feedbackForPin = useMemo(() => {
-    const feedback = new Map<string, FlowConnectionFeedback>();
-    return (pinId: string) => {
-      if (!sourceId || !connectionModel) return null;
-      let value = feedback.get(pinId);
-      if (!value) {
-        value = resolveFlowConnection(
-          connectionModel,
-          sourceId,
-          pinId,
-          connectionSource?.intent ?? "connect",
-        );
-        feedback.set(pinId, value);
-      }
-      return value;
+  const [connectionStore] = useState(createGraphFlowInteractionStore);
+  const previousFeedback = useRef<FlowInteractionProjection | undefined>(undefined);
+  const feedback = useMemo(() => {
+    const next = projectFlowInteraction(
+      model,
+      sourceId,
+      connectionSource?.intent ?? "connect",
+      previousFeedback.current,
+    );
+    previousFeedback.current = next;
+    return next;
+  }, [model, sourceId, connectionSource?.intent]);
+  const targetId = useConnection((connection) => connection.toHandle?.id ?? null);
+  const connectionState = useMemo(() => {
+    const target = targetId ? feedback.pins[targetId]?.feedback : null;
+    return {
+      ...feedback,
+      targetId,
+      replacedConnectionIds: new Set(
+        target?.kind === "replace" ? target.displacedConnectionIds : [],
+      ),
     };
-  }, [connectionModel, sourceId, connectionSource?.intent]);
-  const rawSourcePin =
-    (connectionSource ? model.pins[connectionSource.sourceId] : null) ??
-    interaction.pendingConnection;
-  const sourcePin = useMemo(
-    () => (rawSourcePin ? toInteractionPinData(rawSourcePin) : null),
-    [rawSourcePin],
-  );
+  }, [feedback, targetId]);
+  useLayoutEffect(() => {
+    connectionStore.setState(connectionState, true);
+  }, [connectionStore, connectionState]);
   const context = useMemo(
     () => ({ graphPath, groupId, interactive, contextMenuActions }),
     [graphPath, groupId, interactive, contextMenuActions],
-  );
-  const connectionContext = useMemo(
-    () => ({ sourcePin, feedbackForPin }),
-    [sourcePin, feedbackForPin],
   );
   const flowViewport = useMemo(
     () => ({ x: viewport.x, y: viewport.y, zoom: viewport.scale }),
@@ -492,7 +496,7 @@ function GraphFlowRuntime({
 
   return (
     <GraphFlowContext.Provider value={context}>
-      <GraphFlowInteractionContext.Provider value={connectionContext}>
+      <GraphFlowInteractionContext.Provider value={connectionStore}>
         <ReactFlow<FlowNode, FlowEdge>
           id={panelInstanceId}
           className="yss-flow"

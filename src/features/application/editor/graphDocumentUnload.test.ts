@@ -1,3 +1,8 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
@@ -12,10 +17,7 @@ import { resetGraphProjectionLifecycle } from "@/features/application/graphProje
 import * as graphProjectionLifecycle from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { GraphService } from "@/services/graph/graphService";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-} from "@/tests/helpers/editorProjectionFixtures";
+
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 
@@ -66,7 +68,7 @@ describe("graph document lifecycle ownership", () => {
     );
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject("project-instance-1", 0);
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: "project-instance-1" });
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
@@ -111,7 +113,7 @@ describe("graph document lifecycle ownership", () => {
   it("does not let an old unload completion overwrite a newer successful load", async () => {
     const current = makeEditorProjectionFixture({ graphPath, title: "Current" });
     const reopened = makeEditorProjectionFixture({ graphPath, title: "Reopened" });
-    useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection);
+    installGraphProjectionFixture(graphPath, current.projection);
     markResourceLoaded({ id: graphPath, kind: "event" });
     const pendingUnload = deferred<boolean>();
     vi.mocked(GraphService.unloadProjectGraph).mockReturnValue(pendingUnload.promise);

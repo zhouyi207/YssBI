@@ -1,6 +1,6 @@
 import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 import type {
   EditorResourceKind,
@@ -369,7 +369,7 @@ function seedPanels(panels: readonly WorkbenchPanelInfo[]): void {
       metadata.role === "editor" &&
       (metadata.resourceKind === "event" || metadata.resourceKind === "function")
     ) {
-      useGraphEditingStore.setState((state) => ({
+      useGraphProjectionStore.setState((state) => ({
         sessions: {
           ...state.sessions,
           [metadata.resourceRef]: {
@@ -387,7 +387,7 @@ function markDirty(resourceRef: string, resourceKind: EditorResourceKind): void 
 
 beforeEach(() => {
   mocks.reset();
-  useGraphEditingStore.getState().clear();
+  useGraphProjectionStore.getState().clear();
 });
 
 describe("workbench panel close coordinator", () => {

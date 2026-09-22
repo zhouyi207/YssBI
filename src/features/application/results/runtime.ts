@@ -1,15 +1,12 @@
+import type { GraphEditorState } from "@/features/core/dataStore/graphProjectionStore";
 import { shallow } from "zustand/shallow";
-import {
-  createReadProjection,
-  useReadProjection,
-  shareProjection,
-} from "@/features/core/state/readProjection";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 import { publishResultSessionEnd } from "@/services/result/resultSessionChannel";
 import { resultReferenceKey, type ResultReference } from "@/shared/types/domain/result";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
-import { pinPreviewCacheKey, useExecutionStore } from "@/features/core/execution";
-import { graphOutputKey } from "@/features/domain/editorProjection";
+
+import { useExecutionStore } from "@/features/core/execution";
+import { graphOutputKey, portAddressKey } from "@/features/domain/editorProjection";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import { createBoundApplicationStore } from "@/features/core/state/applicationStore";
 
@@ -34,33 +31,32 @@ import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { GraphResultState } from "@/shared/types/domain/result";
 import { projectGraphPresentation, type GraphResultPresentation } from "./graphPresentation";
 
-export interface GraphResultCacheProjection {
-  readonly executionSessionId: string;
-  readonly semanticInputHash: string;
-  readonly outputs: Readonly<Record<string, GraphResultState["outputs"][number]>>;
-  readonly connections: GraphResultState["connections"];
+interface OutputRun {
+  runId: string;
+  request: ResultPinRequest;
+  active: boolean;
+  pendingState: boolean;
+  semanticInputHash: string | undefined;
 }
 
 interface ResultProjectionState {
-  readonly graphCaches: Readonly<Record<string, GraphResultCacheProjection>>;
+  readonly runs: Readonly<Record<string, OutputRun>>;
   readonly descriptors: Record<string, DeepReadonly<ResultDescriptor | null>>;
   readonly values: Record<string, DeepReadonly<ResultValue | null>>;
   readonly pages: Record<string, DeepReadonly<ResultPage | null>>;
   readonly analyses: Record<string, DeepReadonly<ResultAnalysis | null>>;
   readonly pinResults: Record<string, DeepReadonly<ResultDescriptor | null>>;
-  readonly pinStatuses: Record<string, "running" | "unavailable" | "failed" | "cancelled">;
   readonly failures: Record<string, DeepReadonly<ErrorReference>>;
 }
 
 const emptyState: ResultProjectionState = {
-  graphCaches: {},
+  runs: {},
   descriptors: {},
   values: {},
   pages: {},
   analyses: {},
   pinResults: {},
   failures: {},
-  pinStatuses: {},
 };
 
 const resultProjection = createBoundApplicationStore<ResultProjectionState>(() => emptyState);
@@ -224,7 +220,6 @@ export const resultQueryCoordinator = createResultQueryCoordinator({
 export function resetResultQueryProject(): void {
   publishResultSessionEnd(resultExecutionSessionId);
   resultQueryCoordinator.resetProject();
-  outputRuns.clear();
   pendingGraphRefreshes.clear();
   resultExecutionSessionId = null;
   resultProjection.setState(emptyState);
@@ -263,16 +258,15 @@ export function resetResultQuery(reference: ResultReference): void {
 
 let resultExecutionSessionId: string | null = null;
 
-// Each output retains one run owner so delayed run events cannot invalidate a newer value.
-const outputRuns = new Map<string, { runId: string; request: ResultPinRequest; active: boolean }>();
 const pendingGraphRefreshes = new Set<string>();
 
 const EMPTY_GRAPH_PRESENTATION = projectGraphPresentation(undefined, [], null);
 const presentationInputs = new Map<
   string,
   {
-    cache: GraphResultCacheProjection | undefined;
+    cache: GraphResultState | undefined;
     running: string[];
+    pending: string[];
     failure: GraphResultPresentation["failure"];
     value: GraphResultPresentation;
   }
@@ -280,15 +274,19 @@ const presentationInputs = new Map<
 let previousPresentations: Record<string, GraphResultPresentation> = {};
 let previousPresentationSources: readonly unknown[] = [];
 const graphPresentations = createReadProjection(() => {
-  const { graphCaches: caches, pinStatuses } = resultProjection.getState();
-  const sessions = useGraphEditingStore.getState().sessions;
+  const { runs } = resultProjection.getState();
+  const { sessions, resultStates: caches } = useGraphProjectionStore.getState();
   const executions = useExecutionStore.getState().graphs;
-  const sources = [caches, pinStatuses, sessions, executions];
+  const sources = [caches, sessions, executions, runs];
   if (shallow(previousPresentationSources, sources)) return { graphs: previousPresentations };
   previousPresentationSources = sources;
   const runningByGraph: Record<string, string[]> = {};
-  for (const run of outputRuns.values()) {
+  const pendingByGraph: Record<string, string[]> = {};
+  for (const run of Object.values(runs)) {
+    if (run.semanticInputHash !== sessions[run.request.graphPath]?.semanticInputHash) continue;
     if (run.active) (runningByGraph[run.request.graphPath] ??= []).push(run.request.output.nodeId);
+    if (run.pendingState)
+      (pendingByGraph[run.request.graphPath] ??= []).push(portAddressKey(run.request.output));
   }
   const paths = new Set([
     ...Object.keys(caches),
@@ -302,18 +300,26 @@ const graphPresentations = createReadProjection(() => {
     const cache =
       cached?.semanticInputHash === sessions[path]?.semanticInputHash ? cached : undefined;
     const running = runningByGraph[path] ?? [];
+    const pending = pendingByGraph[path] ?? [];
     const failure = executions[path]?.runFailure ?? null;
     const previous = presentationInputs.get(path);
     if (
       previous &&
       previous.cache === cache &&
       previous.failure === failure &&
-      shallow(previous.running, running)
+      shallow(previous.running, running) &&
+      shallow(previous.pending, pending)
     ) {
       next[path] = previous.value;
     } else {
-      const value = projectGraphPresentation(cache, running, failure, previous?.value);
-      presentationInputs.set(path, { cache, running, failure, value });
+      const value = projectGraphPresentation(
+        cache,
+        running,
+        failure,
+        previous?.value,
+        new Set(pending),
+      );
+      presentationInputs.set(path, { cache, running, pending, failure, value });
       next[path] = value;
     }
   }
@@ -321,10 +327,10 @@ const graphPresentations = createReadProjection(() => {
     if (!paths.has(path)) presentationInputs.delete(path);
   if (!shallow(previousPresentations, next)) previousPresentations = next;
   return { graphs: previousPresentations };
-}, [resultProjection, useGraphEditingStore, useExecutionStore]);
+}, [resultProjection, useGraphProjectionStore, useExecutionStore]);
 
 function currentGraphStateRequest(request: ResultGraphStateRequest): boolean {
-  const current = useGraphEditingStore.getState().sessions[request.graphPath];
+  const current = useGraphProjectionStore.getState().sessions[request.graphPath];
   return Boolean(
     current &&
     current.sessionId === request.sessionId &&
@@ -342,7 +348,7 @@ function scheduleGraphStateRefresh(graphPath: string): void {
     pendingGraphRefreshes.clear();
     if (!captureProjectLifecycleState().projectInstanceId) return;
     for (const graphPath of graphs) {
-      const session = useGraphEditingStore.getState().sessions[graphPath];
+      const session = useGraphProjectionStore.getState().sessions[graphPath];
       if (!session) continue;
       void resultQueryCoordinator.loadGraphState({
         graphPath,
@@ -359,18 +365,39 @@ function publishGraphState(
   projection: DeepReadonly<GraphResultState | null>,
 ): void {
   if (!currentGraphStateRequest(request)) return;
+  // No matching backend basis is not a replacement for the currently displayed frame.
+  if (!projection) return;
   const graphPath = request.graphPath;
-  if (
-    projection &&
-    resultExecutionSessionId &&
-    resultExecutionSessionId !== projection.executionSessionId
-  )
+  if (resultExecutionSessionId && resultExecutionSessionId !== projection.executionSessionId)
     resetResultQueryProject();
-  if (projection) resultExecutionSessionId = projection.executionSessionId;
-  const outputs = Object.fromEntries(
+  resultExecutionSessionId = projection.executionSessionId;
+  useGraphProjectionStore.getState().setResultState(graphPath, projection);
+  resultProjection.setState((state) => {
+    const pending = Object.entries(state.runs).filter(
+      ([, run]) => run.request.graphPath === graphPath && run.pendingState,
+    );
+    if (!pending.length) return state;
+    return {
+      ...state,
+      runs: {
+        ...state.runs,
+        ...Object.fromEntries(pending.map(([key, run]) => [key, { ...run, pendingState: false }])),
+      },
+    };
+  });
+  reconcileCurrentResults(
+    graphPath,
+    useGraphProjectionStore.getState().resultStates[graphPath] ?? null,
+  );
+}
+
+function reconcileCurrentResults(
+  graphPath: string,
+  projection: DeepReadonly<GraphResultState | null>,
+): void {
+  const outputs = new Map(
     (projection?.outputs ?? []).map((entry) => [graphOutputKey(entry.output), entry]),
   );
-  const connections = projection?.connections ?? [];
   const previous = Object.values(resultProjection.getState().pinResults).filter(
     (value) => value?.provenance.output?.graphPath === graphPath,
   );
@@ -378,39 +405,68 @@ function publishGraphState(
     previous.flatMap((value) => {
       if (!value?.provenance.output) return [];
       const output = value.provenance.output;
-      const current = outputs[graphOutputKey(output)];
-      return current?.state === "valid" && current.resultId === value.resultId
+      const current = outputs.get(graphOutputKey(output));
+      return current?.state === "valid" &&
+        current.resultId === value.resultId &&
+        value.executionSessionId === projection?.executionSessionId
         ? []
         : [{ graphPath, output: output.port }];
     }),
   );
-  resultProjection.setState((state) => ({
-    ...state,
-    graphCaches: shareProjection(
-      state.graphCaches,
-      projection
-        ? {
-            ...state.graphCaches,
-            [graphPath]: {
-              executionSessionId: projection.executionSessionId,
-              semanticInputHash: projection.semanticInputHash,
-              outputs,
-              connections,
-            },
-          }
-        : Object.fromEntries(
-            Object.entries(state.graphCaches).filter(([key]) => key !== graphPath),
-          ),
-    ),
-    failures: Object.fromEntries(
-      Object.entries(state.failures).filter(([key]) => key !== `graphState:${graphPath}`),
-    ),
-  }));
+  resultProjection.setState((state) => {
+    const key = `graphState:${graphPath}`;
+    if (!state.failures[key]) return state;
+    const failures = { ...state.failures };
+    delete failures[key];
+    return { ...state, failures };
+  });
   for (const { output, state, resultId } of projection?.outputs ?? []) {
     const key = graphOutputKey(output);
     if (state === "valid" && resultProjection.getState().pinResults[key]?.resultId !== resultId)
       void resultQueryCoordinator.loadPinResult({ graphPath, output: output.port });
   }
+}
+
+/** The publication owner calls this after installing an entire graph frame. */
+export function reconcileGraphResultQueries(graphPath: string, previous?: GraphEditorState): void {
+  const { sessions, resultStates } = useGraphProjectionStore.getState();
+  const current = sessions[graphPath];
+  if (!current) {
+    resetGraphResultQueries(graphPath);
+    return;
+  }
+  resultQueryCoordinator.resetGraphState(graphPath);
+  pendingGraphRefreshes.delete(graphPath);
+  const resultState = resultStates[graphPath];
+  if (resultState) {
+    if (resultExecutionSessionId && resultExecutionSessionId !== resultState.executionSessionId)
+      resetResultQueryProject();
+    resultExecutionSessionId = resultState.executionSessionId;
+  }
+  if (
+    previous &&
+    (previous.semanticInputHash !== current.semanticInputHash ||
+      previous.sessionId !== current.sessionId)
+  ) {
+    const obsolete = new Set(
+      Object.entries(resultProjection.getState().runs)
+        .filter(([, run]) => run.request.graphPath === graphPath)
+        .map(([key]) => key),
+    );
+    if (obsolete.size)
+      resultProjection.setState((state) => ({
+        ...state,
+        runs: Object.fromEntries(Object.entries(state.runs).filter(([key]) => !obsolete.has(key))),
+      }));
+    useExecutionStore.getState().clearGraphRunProjections(graphPath);
+  }
+  reconcileCurrentResults(graphPath, resultState ?? null);
+  if (
+    Object.values(resultProjection.getState().runs).some(
+      (run) => run.request.graphPath === graphPath && run.pendingState,
+    )
+  )
+    scheduleGraphStateRefresh(graphPath);
 }
 
 function publishCurrentResult(
@@ -420,18 +476,19 @@ function publishCurrentResult(
   const key = pinResultKey(request);
   const previous = resultProjection.getState().pinResults[key];
   if (result) {
-    const draft = useGraphEditingStore.getState().sessions[request.graphPath];
+    const draft = useGraphProjectionStore.getState().sessions[request.graphPath];
     if (draft) {
-      const cache = resultProjection.getState().graphCaches[request.graphPath];
+      const cache = useGraphProjectionStore.getState().resultStates[request.graphPath];
+      const current = cache?.outputs.find((entry) => graphOutputKey(entry.output) === key);
       if (
         cache?.semanticInputHash !== draft.semanticInputHash ||
         cache.executionSessionId !== result.executionSessionId ||
-        cache.outputs[key]?.state !== "valid" ||
-        cache.outputs[key]?.resultId !== result.resultId
+        current?.state !== "valid" ||
+        current?.resultId !== result.resultId
       )
         return;
     }
-    const pending = outputRuns.get(key);
+    const pending = resultProjection.getState().runs[key];
     if (pending && BigInt(pending.runId) > BigInt(result.provenance.runId)) return;
   }
   if (
@@ -459,22 +516,16 @@ function invalidateOutputs(requests: readonly ResultPinRequest[]): void {
   for (const request of requests) {
     resultQueryCoordinator.resetPinResult(request);
     publishCurrentResult(request, null);
-    const execution = useExecutionStore.getState();
-    const preview = execution.graphs[request.graphPath]?.pinPreviews.get(
-      pinPreviewCacheKey(request.graphPath, request.output),
-    );
-    if (preview?.status === "ready")
-      execution.removePinPreview(request.graphPath, request.output, preview.generation);
   }
 }
 
-export function invalidateGraphResults(graphPath: string): void {
+export function resetGraphResultQueries(graphPath: string): void {
+  pendingGraphRefreshes.delete(graphPath);
   resultQueryCoordinator.resetGraphState(graphPath);
   const requests = new Map<string, ResultPinRequest>();
-  for (const [key, pending] of outputRuns) {
+  for (const [key, pending] of Object.entries(resultProjection.getState().runs)) {
     if (pending.request.graphPath === graphPath) {
       requests.set(key, pending.request);
-      outputRuns.delete(key);
     }
   }
   for (const result of Object.values(resultProjection.getState().pinResults)) {
@@ -487,14 +538,11 @@ export function invalidateGraphResults(graphPath: string): void {
   invalidateOutputs([...requests.values()]);
   resultProjection.setState((state) => ({
     ...state,
-    graphCaches: Object.fromEntries(
-      Object.entries(state.graphCaches).filter(([key]) => key !== graphPath),
+    runs: Object.fromEntries(
+      Object.entries(state.runs).filter(([, run]) => run.request.graphPath !== graphPath),
     ),
     pinResults: Object.fromEntries(
       Object.entries(state.pinResults).filter(([key]) => !requests.has(key)),
-    ),
-    pinStatuses: Object.fromEntries(
-      Object.entries(state.pinStatuses).filter(([key]) => !requests.has(key)),
     ),
   }));
 }
@@ -510,78 +558,48 @@ export function observeResultRunEvent(event: RunEvent): void {
     const requests = event.kind.outputs
       .map((output) => ({ graphPath: output.graphPath, output: output.port }))
       .filter((request) => {
-        const owner = outputRuns.get(pinResultKey(request));
+        const owner = resultProjection.getState().runs[pinResultKey(request)];
         return !owner || BigInt(owner.runId) < BigInt(event.run.runId);
       });
     if (requests.length === 0) return;
-    for (const request of requests)
-      outputRuns.set(pinResultKey(request), { runId: event.run.runId, request, active: true });
     invalidateOutputs(requests);
     resultProjection.setState((state) => ({
       ...state,
-      pinStatuses: {
-        ...state.pinStatuses,
+      runs: {
+        ...state.runs,
         ...Object.fromEntries(
-          requests.map((request) => [pinResultKey(request), "running" as const]),
+          requests.map((request) => [
+            pinResultKey(request),
+            {
+              runId: event.run.runId,
+              request,
+              active: true,
+              pendingState: true,
+              semanticInputHash:
+                useGraphProjectionStore.getState().sessions[request.graphPath]?.semanticInputHash,
+            },
+          ]),
         ),
       },
     }));
   } else if (["runCompleted", "runErrored", "runCancelled"].includes(event.kind.type)) {
     if (event.run.executionSessionId !== resultExecutionSessionId) return;
-    const terminalStatuses: ResultProjectionState["pinStatuses"] = {};
-    for (const [key, pending] of outputRuns) {
+    const terminalRuns: Record<string, OutputRun> = {};
+    for (const [key, pending] of Object.entries(resultProjection.getState().runs)) {
       if (pending.runId !== event.run.runId || !pending.active) continue;
-      pending.active = false;
-      const status =
-        event.kind.type === "runErrored"
-          ? "failed"
-          : event.kind.type === "runCancelled"
-            ? "cancelled"
-            : "unavailable";
-      terminalStatuses[key] = status;
+      terminalRuns[key] = { ...pending, active: false, pendingState: true };
       if (
         event.kind.type === "runCompleted" &&
-        !useGraphEditingStore.getState().sessions[event.run.graphPath]
+        !useGraphProjectionStore.getState().sessions[event.run.graphPath]
       )
         void resultQueryCoordinator.loadPinResult(pending.request);
     }
-    if (Object.keys(terminalStatuses).length > 0)
+    if (Object.keys(terminalRuns).length > 0)
       resultProjection.setState((state) => ({
         ...state,
-        pinStatuses: { ...state.pinStatuses, ...terminalStatuses },
+        runs: { ...state.runs, ...terminalRuns },
       }));
   }
+  resultQueryCoordinator.resetGraphState(event.run.graphPath);
   scheduleGraphStateRefresh(event.run.graphPath);
 }
-
-export function readPinResultStatus(
-  request: ResultPinRequest,
-): "running" | "unavailable" | "failed" | "cancelled" {
-  return resultProjection.getState().pinStatuses[pinResultKey(request)] ?? "unavailable";
-}
-
-useGraphProjectionStore.subscribe((state, previous) => {
-  for (const [graphPath, graph] of Object.entries(previous.graphEntities)) {
-    const current = state.graphEntities[graphPath];
-    if (!current || JSON.stringify(current.basis) !== JSON.stringify(graph.basis))
-      invalidateGraphResults(graphPath);
-  }
-  for (const [graphPath, graph] of Object.entries(state.graphEntities)) {
-    if (graph !== previous.graphEntities[graphPath]) scheduleGraphStateRefresh(graphPath);
-  }
-});
-
-useGraphEditingStore.subscribe((state, previous) => {
-  for (const [graphPath, session] of Object.entries(state.sessions)) {
-    const previousSession = previous.sessions[graphPath];
-    if (previousSession && session.semanticInputHash !== previousSession.semanticInputHash) {
-      useExecutionStore.getState().clearGraphRunProjections(graphPath);
-      invalidateGraphResults(graphPath);
-    }
-    if (session.projection !== previous.sessions[graphPath]?.projection)
-      scheduleGraphStateRefresh(graphPath);
-  }
-  for (const graphPath of Object.keys(previous.sessions)) {
-    if (!state.sessions[graphPath]) invalidateGraphResults(graphPath);
-  }
-});

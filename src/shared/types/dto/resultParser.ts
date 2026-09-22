@@ -13,8 +13,6 @@ import type {
   ResultValueKind,
   ResultLease,
   GraphResultState,
-  ResultCacheState,
-  ConnectionCacheState,
 } from "./result";
 
 type UnknownRecord = Record<string, unknown>;
@@ -76,15 +74,24 @@ export function parseGraphResultState(value: unknown): GraphResultState {
     typeof input === "string" && /^[0-9a-f]{64}$/.test(input);
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["executionSessionId", "semanticInputHash", "outputs", "connections"]) ||
+    !hasExactKeys(value, [
+      "executionSessionId",
+      "revision",
+      "semanticInputHash",
+      "outputs",
+      "connections",
+    ]) ||
     !isUuid(value.executionSessionId) ||
+    typeof value.revision !== "string" ||
+    !/^(0|[1-9][0-9]{0,19})$/u.test(value.revision) ||
+    BigInt(value.revision) > 18446744073709551615n ||
     !isHash(value.semanticInputHash) ||
     !Array.isArray(value.outputs) ||
     !Array.isArray(value.connections)
   )
     return fail("graph result state");
   const keys = new Set<string>();
-  const outputs = value.outputs.map((entry) => {
+  for (const entry of value.outputs) {
     if (
       !isRecord(entry) ||
       !hasExactKeys(entry, ["output", "state", "resultId"]) ||
@@ -101,14 +108,9 @@ export function parseGraphResultState(value: unknown): GraphResultState {
     const key = JSON.stringify([output.graphPath, portAddressKey(output.port)]);
     if (keys.has(key)) return fail("duplicate output result state");
     keys.add(key);
-    return {
-      output,
-      state: entry.state as ResultCacheState,
-      resultId: entry.resultId as string | null,
-    };
-  });
+  }
   const connectionKeys = new Set<string>();
-  const connections = value.connections.map((entry) => {
+  for (const entry of value.connections) {
     if (
       !isRecord(entry) ||
       !hasExactKeys(entry, ["output", "input", "state"]) ||
@@ -124,14 +126,9 @@ export function parseGraphResultState(value: unknown): GraphResultState {
     ]);
     if (connectionKeys.has(key)) return fail("duplicate connection result state");
     connectionKeys.add(key);
-    return { output, input: entry.input, state: entry.state as ConnectionCacheState };
-  });
-  return {
-    executionSessionId: value.executionSessionId,
-    semanticInputHash: value.semanticInputHash,
-    outputs,
-    connections,
-  };
+  }
+  // This is a validated read projection. Preserve untouched delta branches.
+  return value as unknown as GraphResultState;
 }
 
 export function parseResultPresentation(value: unknown): ResultPresentation {

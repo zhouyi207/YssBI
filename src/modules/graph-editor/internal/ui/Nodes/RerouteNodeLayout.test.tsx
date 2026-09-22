@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { UINode } from "@/features/core/dataStore/nodeView";
 import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { GraphNodeView } from "./GraphNodeView";
@@ -33,7 +33,7 @@ afterEach(() => {
   document.querySelector("[data-yssbi-overlay-root]")?.remove();
 });
 
-function projectedPin(nodeId: string, direction: "input" | "output"): PinView {
+function projectedPin(nodeId: string, direction: "input" | "output"): PinData {
   const id = `${nodeId}:${direction}`;
   return {
     ...makeProjectedPinData({
@@ -42,6 +42,14 @@ function projectedPin(nodeId: string, direction: "input" | "output"): PinView {
       name: direction === "input" ? "Input" : "Output",
       direction,
       dataType: { kind: "Scalar", inner: "Numeric" },
+      connections: {
+        current: 1,
+        maximum: direction === "input" ? 1 : null,
+        ordered: false,
+        canAppend: direction === "output",
+        canReplace: direction === "input",
+        canMove: true,
+      },
     }),
     address: { kind: "declared", nodeId, portKey: direction },
     acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
@@ -50,9 +58,6 @@ function projectedPin(nodeId: string, direction: "input" | "output"): PinView {
       display: "Float64",
       dataType: { kind: "Scalar", inner: "Numeric" },
     },
-    connected: true,
-    linkCount: 1,
-    connectionIds: [`${nodeId}:connection`],
   };
 }
 
@@ -60,10 +65,7 @@ function projectedReroute(): UINode {
   const id = "reroute-node";
   return {
     id,
-    nodeType: "yssbi.core.reroute",
-    title: "Forbidden reroute title",
-    styleId: "builtin.reroute",
-    position: { x: 135, y: 246 },
+    capabilities: { managed: false },
     display: {
       title: "Forbidden reroute title",
       userLabel: null,
@@ -77,7 +79,7 @@ function projectedReroute(): UINode {
   };
 }
 
-function renderNode(node: UINode, onPinPointerDown = vi.fn(), onPointerDown = vi.fn()) {
+function renderNode(node: UINode, onPinPointerDown = vi.fn()) {
   act(() =>
     root.render(
       <TooltipProvider>
@@ -93,13 +95,12 @@ function renderNode(node: UINode, onPinPointerDown = vi.fn(), onPointerDown = vi
               )}
             />
           }
-          onPointerDown={(event) => onPointerDown(node.id, event)}
           onContextMenu={vi.fn()}
         />
       </TooltipProvider>,
     ),
   );
-  return { onPinPointerDown, onPointerDown };
+  return { onPinPointerDown };
 }
 
 describe("RerouteNodeLayout", () => {
@@ -112,7 +113,7 @@ describe("RerouteNodeLayout", () => {
 
     expect(nodeRoot).not.toBeNull();
     expect(pins.map((pin) => pin.dataset.pinId)).toEqual([`${node.id}:input`, `${node.id}:output`]);
-    expect(container.textContent).not.toContain(node.title);
+    expect(container.textContent).not.toContain(node.display.title);
     expect(container.textContent).not.toContain("Hidden");
     expect(container.querySelector("input")).toBeNull();
 

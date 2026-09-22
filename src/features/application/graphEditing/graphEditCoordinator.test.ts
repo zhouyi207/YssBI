@@ -1,3 +1,8 @@
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+  makeGraphEditingState,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { saveGraph } from "./saveGraph";
 import {
@@ -5,8 +10,8 @@ import {
   enqueueGraphTask,
   resetGraphEditCoordinator,
 } from "./graphEditCoordinator";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -17,11 +22,7 @@ import {
   hydrateGraphProjection,
   resetGraphProjectionLifecycle,
 } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-  makeGraphEditingState,
-} from "@/tests/helpers/editorProjectionFixtures";
+
 import type { GraphEditResultDto, GraphSaveResultDto } from "@/shared/types/domain/editorMutation";
 
 const graphPath = "events/Queue.yssbi-event";
@@ -42,17 +43,15 @@ describe("Graph draft task ordering", () => {
     startProjectLifecycle("queue-project");
     resetGraphEditCoordinator();
     resetGraphProjectionLifecycle();
-    useGraphEditingStore.getState().clear();
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
-    useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
-    useGraphEditingStore.getState().install(graphPath, makeGraphEditorSession(projection));
+    useGraphProjectionStore.getState().install(graphPath, makeGraphEditorSession(projection));
   });
 
   it("orders edit and refresh without resolving the pre-edit document", async () => {
     const pendingEdit = deferred<GraphEditResultDto>();
     const pendingResolve = deferred<GraphEditResultDto>();
-    const current = useGraphEditingStore.getState().sessions[graphPath];
+    const current = useGraphProjectionStore.getState().sessions[graphPath];
     const document = structuredClone(current.document);
     document.nodes["local-node"] = {
       id: "local-node",
@@ -78,6 +77,8 @@ describe("Graph draft task ordering", () => {
     const refreshing = hydrateGraphProjection(graphPath, "en-US");
     expect(resolve).not.toHaveBeenCalled();
     pendingEdit.resolve({
+      resultState: makeGraphEditorSession(projection).resultState,
+
       changed: true,
       document,
       projection,
@@ -92,6 +93,8 @@ describe("Graph draft task ordering", () => {
     expect(resolve.mock.calls[0]?.[3]).toEqual({ ...current.version, revision: "1" });
     expect(hydrate).not.toHaveBeenCalled();
     pendingResolve.resolve({
+      resultState: makeGraphEditorSession(projection).resultState,
+
       changed: false,
       document,
       projection,
@@ -102,7 +105,7 @@ describe("Graph draft task ordering", () => {
       }),
     });
     expect(await refreshing).toBe(true);
-    expect(useGraphEditingStore.getState().sessions[graphPath].document).toEqual(document);
+    expect(useGraphProjectionStore.getState().sessions[graphPath].document).toEqual(document);
   });
 
   it("rejects queue overflow while allowing another graph to proceed and releases capacity", async () => {
@@ -124,8 +127,10 @@ describe("Graph draft task ordering", () => {
   it("releases the save lock before a queued refresh after Save fails", async () => {
     const pending = deferred<GraphSaveResultDto>();
     vi.spyOn(GraphEditingService, "save").mockReturnValueOnce(pending.promise);
-    const session = useGraphEditingStore.getState().sessions[graphPath];
+    const session = useGraphProjectionStore.getState().sessions[graphPath];
     const hydrate = vi.spyOn(GraphProjectionService, "hydrateGraph").mockResolvedValueOnce({
+      resultState: makeGraphEditorSession(session.projection).resultState,
+
       document: session.document,
       projection: session.projection,
       editing: makeGraphEditingState(),
@@ -138,11 +143,11 @@ describe("Graph draft task ordering", () => {
     pending.reject(new Error("save failed"));
     await failedSave;
     expect(await refreshing).toBe(true);
-    expect(useGraphEditingStore.getState().sessions[graphPath].saving).toBe(false);
+    expect(useGraphProjectionStore.getState().sessions[graphPath].saving).toBe(false);
   });
 
   it("rejects an invalid mutation projection before changing draft or history", async () => {
-    const before = structuredClone(useGraphEditingStore.getState().sessions[graphPath]);
+    const before = structuredClone(useGraphProjectionStore.getState().sessions[graphPath]);
     const projection = structuredClone(before.projection);
     projection.nodes.push(structuredClone(projection.nodes[0]));
     await expect(
@@ -150,6 +155,8 @@ describe("Graph draft task ordering", () => {
         { graphPath, locale: "en-US", mutation: { type: "moveNodes", payload: { positions: [] } } },
         {
           transform: async () => ({
+            resultState: makeGraphEditorSession(projection).resultState,
+
             changed: true,
             document: before.document,
             projection,
@@ -157,7 +164,7 @@ describe("Graph draft task ordering", () => {
           }),
         },
       ),
-    ).rejects.toThrow("could not be installed");
-    expect(useGraphEditingStore.getState().sessions[graphPath]).toEqual(before);
+    ).rejects.toThrow("duplicate node");
+    expect(useGraphProjectionStore.getState().sessions[graphPath]).toEqual(before);
   });
 });

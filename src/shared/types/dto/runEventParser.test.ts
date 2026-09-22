@@ -122,18 +122,6 @@ describe("execution wire parsers", () => {
     expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
   });
 
-  it("requires an exact pinPreviewResultReady generation wire", () => {
-    const preview = executionWire.runEvents.find(
-      (event) => event.kind.type === "pinPreviewResultReady",
-    );
-    if (!preview) throw new Error("missing pin preview result fixture");
-
-    const missingGeneration = clone(preview);
-    delete record(record(missingGeneration).kind).generation;
-    expect(() => parseRunEvent(missingGeneration)).toThrow();
-    expect(parseRunEvent(preview)).toEqual(preview);
-  });
-
   it("strictly parses typed deadline phases and rejects malformed timeout wire", () => {
     const valid = executionWire.runEvents[0];
     const deadline = {
@@ -176,42 +164,6 @@ describe("execution wire parsers", () => {
         run: { ...valid.run, graphPath },
       }),
     ).toThrow("graph run identity");
-  });
-
-  it("rejects malformed pinPreviewResultReady graph and port identities", () => {
-    const preview = executionWire.runEvents.find(
-      (event) => event.kind.type === "pinPreviewResultReady",
-    );
-    if (!preview) throw new Error("missing pinPreviewResultReady fixture");
-
-    const malformedPath = clone(preview);
-    (record(record(malformedPath).kind).output as Record<string, unknown>).graphPath = "";
-    expect(() => parseRunEvent(malformedPath)).toThrow("graph output reference");
-
-    const malformedPort = clone(preview);
-    const output = record(record(malformedPort).kind).output as Record<string, unknown>;
-    (output.port as Record<string, unknown>).nodeId = "not-a-uuid";
-    expect(() => parseRunEvent(malformedPort)).toThrow("graph output reference");
-  });
-
-  it("bounds safe integer preview generations", () => {
-    const preview = executionWire.runEvents.find(
-      (event) => event.kind.type === "pinPreviewResultReady",
-    );
-    if (!preview) throw new Error("missing preview event fixture");
-
-    expect(() =>
-      parseRunEvent({
-        ...preview,
-        kind: { ...preview.kind, generation: Number.MAX_SAFE_INTEGER },
-      }),
-    ).not.toThrow();
-    expect(() =>
-      parseRunEvent({
-        ...preview,
-        kind: { ...preview.kind, generation: Number.MAX_SAFE_INTEGER + 1 },
-      }),
-    ).toThrow();
   });
 });
 

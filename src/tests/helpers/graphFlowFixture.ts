@@ -34,7 +34,16 @@ export function makeGraphFlowFixture(): GraphEntityBucket {
       ]),
     ),
     pins: { out, left, right },
-    connections: { original: { id: "original", from: "out", to: "left" } },
+    connections: {
+      original: {
+        id: "original",
+        from: "out",
+        to: "left",
+        output: out.address,
+        input: left.address,
+        order: null,
+      },
+    },
     pinConnections: { out: ["original"], left: ["original"], right: [] },
   };
 }

@@ -1,10 +1,5 @@
-import {
-  memo,
-  type CSSProperties,
-  type MouseEventHandler,
-  type PointerEventHandler,
-  type ReactNode,
-} from "react";
+import { useGraphFlowInteraction } from "../Canvas/core/GraphFlowContext";
+import { memo, type CSSProperties, type MouseEventHandler, type ReactNode } from "react";
 
 export interface GraphNodeViewProps {
   nodeId: string;
@@ -16,7 +11,6 @@ export interface GraphNodeViewProps {
   executionBadgeSlot?: ReactNode;
   diagnosticBadgeSlot?: ReactNode;
   contextMenuSlot?: ReactNode;
-  onPointerDown?: PointerEventHandler<HTMLDivElement>;
   onContextMenu: MouseEventHandler<HTMLDivElement>;
 }
 
@@ -30,9 +24,9 @@ export const GraphNodeView = memo(function GraphNodeView({
   executionBadgeSlot,
   diagnosticBadgeSlot,
   contextMenuSlot,
-  onPointerDown,
   onContextMenu,
 }: GraphNodeViewProps) {
+  const dimmed = useGraphFlowInteraction((state) => state.dimmedNodes.has(nodeId));
   return (
     <div
       id={nodeId}
@@ -40,8 +34,7 @@ export const GraphNodeView = memo(function GraphNodeView({
       data-graph-state={executionState}
       data-cache-state={cacheState}
       className={className}
-      style={style}
-      onPointerDown={onPointerDown}
+      style={dimmed ? { ...style, opacity: 0.35 } : style}
       onContextMenu={onContextMenu}
     >
       {contentSlot}

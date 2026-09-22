@@ -34,6 +34,8 @@ vi.mock("@/features/core/graph/read", () => ({
 vi.mock("@xyflow/react", async (original) => ({
   ...(await original<typeof import("@xyflow/react")>()),
   ReactFlowProvider: ({ children }: { children: ReactNode }) => children,
+  useConnection: (select: (connection: { toHandle: null }) => unknown) =>
+    select({ toHandle: null }),
   ReactFlow: (props: FlowProps) => {
     mocks.flows.set(props.id!, props);
     return props.children;

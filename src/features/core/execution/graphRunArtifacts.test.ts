@@ -8,7 +8,6 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     runId: null,
     request: null,
     runFailure: null,
-    pinPreviews: new Map(),
     ...partial,
   };
 }

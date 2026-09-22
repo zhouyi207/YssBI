@@ -4,7 +4,6 @@
  * 为画布上的「每个节点」提供一个**仅订阅自身切片**的视图：
  *   - graph-scoped node bucket: 位置 / 标题 / 类型 / 参数
  *   - graph-scoped pins        输入/输出 Pin
- *   - graph-scoped connections 连接状态（派生 connected / connectionIds）
  */
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -24,23 +23,12 @@ export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
     ),
   );
 
-  const pinConns = useGraphProjectionStore(
-    useShallow((s) =>
-      graphPath
-        ? s
-            .getGraphNodePins(graphPath, nodeId)
-            .map((pid) => s.getGraphPinConnections(graphPath, pid))
-        : [],
-    ),
-  );
-
   return useMemo(() => {
     if (!graphPath || !nodeData) return null;
 
-    const pins = pinObjs.flatMap((pin, index) =>
-      pin ? [{ pin, connectionIds: pinConns[index] ?? [] }] : [],
+    return toUiNode(
+      nodeData,
+      pinObjs.filter((pin) => pin !== undefined),
     );
-
-    return toUiNode(nodeData, { pins });
-  }, [graphPath, nodeData, pinObjs, pinConns]);
+  }, [graphPath, nodeData, pinObjs]);
 }

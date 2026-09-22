@@ -1,3 +1,4 @@
+import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearProjectLifecycle,
@@ -5,7 +6,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { GraphSubgraphService } from "@/services/nodeSystem/graphSubgraphService";
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { exportEditorSubgraph } from "./subgraphExportCoordinator";
 import {
   makeEditorProjectionFixture,
@@ -33,7 +34,11 @@ describe("exportEditorSubgraph", () => {
     vi.restoreAllMocks();
     clearProjectLifecycle();
     startProjectLifecycle("project-a");
-    useGraphEditingStore.getState().install("events/main.yssbi-event", {
+    useGraphProjectionStore.getState().install("events/main.yssbi-event", {
+      resultState: makeGraphEditorSession(
+        makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" }).projection,
+      ).resultState,
+
       editing: makeGraphEditingState(),
       document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
       projection: makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" }).projection,

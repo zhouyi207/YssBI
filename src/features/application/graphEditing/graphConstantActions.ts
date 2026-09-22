@@ -1,4 +1,7 @@
-import { useGraphEditingStore, getGraphDocumentProjection } from "@/features/core/graphEditing";
+import {
+  useGraphProjectionStore,
+  getGraphDocumentProjection,
+} from "@/features/core/dataStore/graphProjectionStore";
 import type { GraphConstantDto } from "@/shared/types/domain/editorMutation";
 import type { ValueType } from "@/shared/types/domain/valueType";
 import { getDefaultValue } from "@/shared/types/domain/valueType";
@@ -13,11 +16,11 @@ import { applyGraphMutation } from "./graphEditCoordinator";
 const EMPTY_CONSTANTS: Record<string, GraphConstantDto> = {};
 
 export function useGraphConstants(graphPath: string) {
-  const constants = useGraphEditingStore(
+  const constants = useGraphProjectionStore(
     (state) => state.sessions[graphPath]?.document.constants ?? EMPTY_CONSTANTS,
   );
-  const loaded = useGraphEditingStore((state) => Boolean(state.sessions[graphPath]));
-  const saving = useGraphEditingStore((state) => state.sessions[graphPath]?.saving === true);
+  const loaded = useGraphProjectionStore((state) => Boolean(state.sessions[graphPath]));
+  const saving = useGraphProjectionStore((state) => state.sessions[graphPath]?.saving === true);
   return { constants, loaded, saving };
 }
 

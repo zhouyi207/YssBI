@@ -19,7 +19,7 @@ import type {
   CanvasGestureLease,
   CanvasInteractionHandlers,
 } from "@/features/core/canvas/canvasMutationContracts";
-import { isGraphSaving } from "@/features/core/graphEditing";
+import { isGraphSaving } from "@/features/core/dataStore/graphProjectionStore";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
 import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "./editorCommandFocus";

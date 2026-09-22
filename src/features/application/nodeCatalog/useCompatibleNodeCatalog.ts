@@ -4,7 +4,8 @@ import {
   captureProjectReadContext,
   useProjectIOStore,
 } from "@/features/application/project/projectIOStore";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource";
 import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
@@ -45,9 +46,13 @@ export function useCompatibleNodeCatalog({
   const [refreshGeneration, setRefreshGeneration] = useState(0);
   const [state, setState] = useState<CompatibleRequestState>(IDLE_STATE);
   const sourcePortKey = sourcePort ? JSON.stringify(sourcePort) : "";
-  const version = useGraphEditingStore((store) =>
+  const version = useGraphProjectionStore((store) =>
     graphPath ? store.sessions[graphPath]?.version : undefined,
   );
+  const semanticInputHash = useGraphProjectionStore((store) =>
+    graphPath ? store.sessions[graphPath]?.semanticInputHash : undefined,
+  );
+  const publicationRevision = useResourceStore((store) => store.indexRevision);
 
   useEffect(() => {
     if (!enabled || !projectInstanceId || !graphPath || !version || !sourcePort) {
@@ -97,7 +102,17 @@ export function useCompatibleNodeCatalog({
     return () => {
       current = false;
     };
-  }, [enabled, version, graphPath, locale, projectInstanceId, refreshGeneration, sourcePortKey]);
+  }, [
+    enabled,
+    version,
+    semanticInputHash,
+    publicationRevision,
+    graphPath,
+    locale,
+    projectInstanceId,
+    refreshGeneration,
+    sourcePortKey,
+  ]);
 
   const refresh = useCallback(() => {
     if (enabled) setRefreshGeneration((generation) => generation + 1);

@@ -6,6 +6,26 @@ import type {
 import type { ValueType } from "@/shared/types/domain/valueType";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "@/features/domain/editorProjection";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
+export function installGraphProjectionFixture(
+  graphPath: string,
+  projection: EditorGraphProjectionDto,
+): void {
+  const store = useGraphProjectionStore.getState();
+  const previous = store.sessions[graphPath];
+  const session = makeGraphEditorSession(projection);
+  if (previous) {
+    session.document = previous.document;
+    session.editing = {
+      version: previous.version,
+      dirty: previous.saveDirty,
+      canUndo: previous.canUndo,
+      canRedo: previous.canRedo,
+    };
+  }
+  store.hydrate(graphPath, session);
+}
 
 export interface EditorProjectionFixtureOptions {
   graphPath: string;
@@ -81,6 +101,21 @@ export function makeGraphEditorSession(
       input_states: [],
     },
     projection,
+    resultState: {
+      revision: "0",
+      executionSessionId: "00000000-0000-0000-0000-000000000091",
+      semanticInputHash: projection.basis.semanticInputHash,
+      outputs: projection.nodes.flatMap((node) =>
+        node.ports
+          .filter((port) => port.direction === "output")
+          .map((port) => ({
+            output: { graphPath: projection.graphPath, port: port.address },
+            state: "missing" as const,
+            resultId: null,
+          })),
+      ),
+      connections: [],
+    },
   };
 }
 

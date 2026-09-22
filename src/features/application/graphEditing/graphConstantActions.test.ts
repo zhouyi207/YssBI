@@ -1,17 +1,17 @@
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, expect, it, vi } from "vitest";
 import { updateGraphConstant } from "./graphConstantActions";
 import { resetGraphEditCoordinator } from "./graphEditCoordinator";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-} from "@/tests/helpers/editorProjectionFixtures";
 
 const graphPath = "events/constants.yssbi-event";
 const id = "00000000-0000-0000-0000-000000000004";
@@ -21,10 +21,8 @@ beforeEach(() => {
   clearProjectLifecycle();
   startProjectLifecycle("constant-project");
   resetGraphEditCoordinator();
-  useGraphEditingStore.getState().clear();
-  useGraphProjectionStore.setState({ graphEntities: {} });
+  useGraphProjectionStore.getState().clear();
   const projection = makeEditorProjectionFixture({ graphPath }).projection;
-  useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
   const session = makeGraphEditorSession(projection);
   session.document.constants = {
     [id]: {
@@ -34,7 +32,7 @@ beforeEach(() => {
       dataValue: { Integer: "0" },
     },
   };
-  useGraphEditingStore.getState().install(graphPath, session);
+  useGraphProjectionStore.getState().install(graphPath, session);
 });
 
 it("merges queued constant edits against the preceding Rust result", async () => {
@@ -48,9 +46,12 @@ it("merges queued constant edits against the preceding Rust result", async () =>
       await pending;
       if (mutation.type !== "setConstant" || !mutation.payload.constant)
         throw new Error("expected constant edit");
-      const next = structuredClone(useGraphEditingStore.getState().sessions[graphPath].document);
+      const next = structuredClone(useGraphProjectionStore.getState().sessions[graphPath].document);
       next.constants![id] = mutation.payload.constant;
       return {
+        resultState: makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection)
+          .resultState,
+
         changed: true,
         editing: {
           version: { ...version, revision: String(BigInt(version.revision) + 1n) },
@@ -68,7 +69,7 @@ it("merges queued constant edits against the preceding Rust result", async () =>
   release();
   const outcomes = await Promise.all([rename, value]);
   expect(outcomes.map((outcome) => outcome.status)).toEqual(["applied", "applied"]);
-  const session = useGraphEditingStore.getState().sessions[graphPath];
+  const session = useGraphProjectionStore.getState().sessions[graphPath];
   expect(session.document.constants![id]).toMatchObject({
     name: "After",
     dataValue: { Decimal: "7" },

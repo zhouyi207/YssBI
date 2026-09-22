@@ -9,7 +9,6 @@ import { useExecutionStore } from "./useExecutionStore";
 import type {
   ExecutionStatus,
   GraphExecutionState,
-  PinPreviewState,
   RunFailureProjection,
 } from "@/features/core/execution/executionTypes";
 
@@ -17,7 +16,6 @@ export interface GraphExecutionProjection {
   readonly status: ExecutionStatus;
   readonly runId: string | null;
   readonly runFailure: DeepReadonly<RunFailureProjection> | null;
-  readonly pinPreviews: ReadonlyMap<string, DeepReadonly<PinPreviewState>>;
 }
 
 export interface ExecutionReadSnapshot {
@@ -32,7 +30,6 @@ function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
     status: graph.status,
     runId: graph.runId,
     runFailure: graph.runFailure,
-    pinPreviews: graph.pinPreviews,
   };
   graphViews.set(graph, projection);
   return projection;
@@ -49,7 +46,6 @@ function buildSnapshot(): DeepReadonly<ExecutionReadSnapshot> {
 }
 
 const projection = createReadProjection(buildSnapshot, [useExecutionStore]);
-export const getExecutionSnapshot = projection.getSnapshot;
 export function useExecutionRead<T>(
   selector: (snapshot: DeepReadonly<ExecutionReadSnapshot>) => T,
 ): T {

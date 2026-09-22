@@ -50,10 +50,6 @@ function parseDiscriminant<T extends string>(
   return value as T;
 }
 
-function isGeneration(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
-}
-
 function isPositiveDecimalId(value: unknown): value is string {
   return typeof value === "string" && POSITIVE_DECIMAL_ID_PATTERN.test(value);
 }
@@ -89,14 +85,6 @@ export function parseExecutionDemandDto(value: unknown): ExecutionDemandDto {
         type: "outputs",
         outputs: value.outputs.map(parseGraphOutputRefDto),
         includeDefaultResults: value.includeDefaultResults,
-      };
-    case "pinPreview":
-      if (!hasExactKeys(value, ["type", "output", "generation"]) || !isGeneration(value.generation))
-        return fail("pin preview execution demand");
-      return {
-        type: "pinPreview",
-        output: parseGraphOutputRefDto(value.output),
-        generation: value.generation,
       };
     default:
       return assertNever(type);
@@ -171,19 +159,6 @@ function parseRunEventKind(value: unknown): RunEventKind {
     case "runCancelled":
       if (!hasExactKeys(value, ["type"])) return fail("runCancelled");
       return { type: "runCancelled" };
-    case "pinPreviewResultReady":
-      if (
-        !hasExactKeys(value, ["type", "output", "generation", "resultId"]) ||
-        !isGeneration(value.generation) ||
-        !isPositiveDecimalId(value.resultId)
-      )
-        return fail("pinPreviewResultReady");
-      return {
-        type: "pinPreviewResultReady",
-        output: parseGraphOutputRefDto(value.output),
-        generation: value.generation,
-        resultId: value.resultId,
-      };
     case "resultInspectionRequested":
       if (
         !hasExactKeys(value, ["type", "resultId", "source"]) ||

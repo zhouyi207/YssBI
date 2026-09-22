@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,7 +32,7 @@ describe("useEditorHistoryAvailability", () => {
 
   beforeEach(() => {
     activeEditor.activeResourceRef = graphPath;
-    useGraphEditingStore.setState({ sessions: {} });
+    useGraphProjectionStore.setState({ sessions: {} });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -44,7 +44,7 @@ describe("useEditorHistoryAvailability", () => {
   });
 
   it("derives undo/redo only from the active Rust graph projection and masks both while saving", () => {
-    useGraphEditingStore.setState({
+    useGraphProjectionStore.setState({
       sessions: {
         [graphPath]: {
           ...version,
@@ -67,7 +67,7 @@ describe("useEditorHistoryAvailability", () => {
       pending: false,
     });
 
-    act(() => useGraphEditingStore.getState().beginSave(graphPath));
+    act(() => useGraphProjectionStore.getState().beginSave(graphPath));
     expect(current).toEqual({
       activeResourceRef: graphPath,
       canUndo: false,

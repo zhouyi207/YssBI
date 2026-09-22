@@ -1,3 +1,4 @@
+import { freezePublishedValue } from "@/shared/types/deepReadonly";
 import { create } from "zustand";
 import type {
   ConnectionData,
@@ -10,14 +11,16 @@ import type {
 } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type {
   EditorGraphProjectionDto,
-  GraphProjectionReplacementDto,
-} from "@/shared/types/domain/editorProjection";
+  GraphDocumentDto,
+  GraphEditorSessionDto,
+  GraphEditVersionDto,
+} from "@/shared/types/domain/editorMutation";
+import type { GraphResultState } from "@/shared/types/domain/result";
 import { portAddressKey, toProjectionEntities } from "@/features/domain/editorProjection";
-import type { EditorProjectionEntities } from "@/features/domain/editorProjection";
+import { shareProjection } from "@/features/core/state/readProjection";
 import {
   type GraphEntityBucket,
   getGraphConnection,
-  getGraphConnections,
   getGraphNode,
   getGraphNodeIds,
   getGraphNodePins,
@@ -28,38 +31,66 @@ import {
 
 export type { GraphEntityBucket } from "./graphEntityAccess";
 
-export type ProjectionApplyResult =
-  | { applied: true }
-  | { applied: false; reason: "invalid"; error: unknown };
-
-export interface PreparedGraphProjectionReplacements {
-  readonly graphPaths: readonly string[];
-  readonly graphEntities: Readonly<Record<GraphPath, GraphEntityBucket>>;
+/** A read mirror of the Rust editing session; the backend owns document/history writes. */
+export interface GraphEditorState {
+  readonly document: GraphDocumentDto;
+  readonly projection: EditorGraphProjectionDto;
+  readonly version: GraphEditVersionDto;
+  readonly sessionId: number;
+  readonly projectionGeneration: number;
+  readonly semanticInputHash: string;
+  readonly saveDirty: boolean;
+  readonly saving: boolean;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
 }
 
-export type ProjectionPreparationResult =
-  | { prepared: true; plan: PreparedGraphProjectionReplacements }
-  | {
-      prepared: false;
-      reason: "duplicate-graph-path" | "invalid";
-      graphPath: string;
-      error?: unknown;
-    };
-
-export type AtomicProjectionApplyResult =
-  | { applied: true; graphPaths: string[] }
-  | {
-      applied: false;
-      reason: "duplicate-graph-path" | "invalid";
-      graphPath: string;
-      error?: unknown;
-    };
-
-function sameIds(left: readonly string[] | undefined, right: readonly string[]): boolean {
-  return !!left && left.length === right.length && left.every((value, index) => value === right[index]);
+export interface GraphProjectionData {
+  graphEntities: Record<GraphPath, GraphEntityBucket>;
+  sessions: Readonly<Record<GraphPath, GraphEditorState>>;
+  resultStates: Readonly<Record<GraphPath, GraphResultState>>;
 }
 
-function buildProjectionBucket(entities: EditorProjectionEntities, previous?: GraphEntityBucket): GraphEntityBucket {
+export function canAcceptGraphSession(
+  previous: GraphEditorState | undefined,
+  input: GraphEditorSessionDto,
+): boolean {
+  return (
+    previous?.version.sessionId !== input.editing.version.sessionId ||
+    BigInt(previous.version.revision) <= BigInt(input.editing.version.revision)
+  );
+}
+
+function sameFields<T extends object>(previous: T | undefined, next: T): previous is T {
+  if (!previous) return false;
+  const keys = Object.keys(next) as Array<keyof T>;
+  return (
+    keys.length === Object.keys(previous).length &&
+    keys.every(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(previous, key) && Object.is(previous[key], next[key]),
+    )
+  );
+}
+
+function shareEntity<T extends object>(previous: T | undefined, next: T): T {
+  return sameFields(previous, next) ? previous : shareProjection(previous, next);
+}
+
+function shareIds(previous: string[] | undefined, next: string[]): string[] {
+  return previous?.length === next.length && next.every((id, i) => id === previous[i])
+    ? previous
+    : next;
+}
+
+function buildProjectionBucket(
+  graphPath: string,
+  projection: EditorGraphProjectionDto,
+  previous?: GraphEntityBucket,
+): GraphEntityBucket {
+  const entities = toProjectionEntities(projection);
+  if (entities.graphPath !== graphPath)
+    throw new Error(`Projection '${entities.graphPath}' does not match '${graphPath}'`);
   const bucket: GraphEntityBucket = {
     basis: entities.basis,
     diagnostics: entities.diagnostics,
@@ -71,38 +102,23 @@ function buildProjectionBucket(entities: EditorProjectionEntities, previous?: Gr
     graphNodes: [],
     pinConnections: {},
   };
-
   for (const node of Object.values(entities.nodes)) {
-    const portIds = entities.portIdsByNodeId[node.nodeId];
-    const existing = previous?.nodes[node.nodeId];
-    const unchanged = existing && existing.nodeType === node.nodeTypeId && existing.position === node.position &&
-      existing.display === node.display && existing.parameterEditors === node.parameterEditors &&
-      existing.portInstanceAdditions === node.portInstanceAdditions && existing.capabilities === node.capabilities &&
-      existing.diagnostics === node.diagnostics && sameIds(existing.pinIds, portIds);
-    bucket.nodes[node.nodeId] = unchanged ? existing : {
+    bucket.nodes[node.nodeId] = shareEntity(previous?.nodes[node.nodeId], {
       id: node.nodeId,
       graphPath: node.graphPath,
       nodeType: node.nodeTypeId,
       position: node.position,
-      pinIds: portIds,
+      pinIds: shareIds(previous?.nodes[node.nodeId]?.pinIds, entities.portIdsByNodeId[node.nodeId]),
       display: node.display,
       parameterEditors: node.parameterEditors,
       portInstanceAdditions: node.portInstanceAdditions,
       capabilities: node.capabilities,
       diagnostics: node.diagnostics,
-    };
+    });
     bucket.graphNodes.push(node.nodeId);
   }
-
   for (const [portId, port] of Object.entries(entities.ports)) {
-    const existing = previous?.pins[portId];
-    const name = port.display.instanceLabel ?? port.display.label;
-    const unchanged = existing && existing.nodeId === port.address.nodeId && existing.name === name &&
-      existing.address === port.address && existing.display === port.display && existing.direction === port.direction &&
-      existing.orphan === port.orphan && existing.canRemove === port.canRemove && existing.connections === port.connections &&
-      existing.input === port.input && existing.acceptedType === port.acceptedType && existing.typeState === port.typeState &&
-      existing.resolvedSchema === port.resolvedSchema && existing.status === port.status;
-    bucket.pins[portId] = unchanged ? existing : {
+    bucket.pins[portId] = shareEntity(previous?.pins[portId], {
       id: portId,
       nodeId: port.address.nodeId,
       name: port.display.instanceLabel ?? port.display.label,
@@ -117,115 +133,159 @@ function buildProjectionBucket(entities: EditorProjectionEntities, previous?: Gr
       typeState: port.typeState,
       resolvedSchema: port.resolvedSchema,
       status: port.status,
-    };
-    const connections = entities.connectionIdsByPortId[portId];
-    bucket.pinConnections[portId] = sameIds(previous?.pinConnections[portId], connections) ? previous!.pinConnections[portId] : connections;
-  }
-
-  for (const connection of Object.values(entities.connections)) {
-    const existing = previous?.connections[connection.connectionId];
-    const from = portAddressKey(connection.output);
-    const to = portAddressKey(connection.input);
-    bucket.connections[connection.connectionId] = existing && existing.from === from && existing.to === to && existing.order === connection.order ? existing : {
-      id: connection.connectionId,
-      from: portAddressKey(connection.output),
-      to: portAddressKey(connection.input),
-      output: connection.output,
-      input: connection.input,
-      order: connection.order,
-    };
-  }
-
-  if (sameIds(previous?.graphNodes, bucket.graphNodes)) bucket.graphNodes = previous!.graphNodes;
-
-  return bucket;
-}
-
-function buildProjectionCandidate(
-  graphPath: string,
-  projection: EditorGraphProjectionDto,
-  previous?: GraphEntityBucket,
-): GraphEntityBucket {
-  const entities = toProjectionEntities(projection);
-  if (entities.graphPath !== graphPath) {
-    throw new Error(
-      `projection graph path '${entities.graphPath}' does not match requested graph path '${graphPath}'`,
+    });
+    bucket.pinConnections[portId] = shareIds(
+      previous?.pinConnections[portId],
+      entities.connectionIdsByPortId[portId],
     );
   }
-  return buildProjectionBucket(entities, previous);
-}
-
-export function prepareGraphProjectionReplacements(
-  replacements: readonly GraphProjectionReplacementDto[],
-  baseGraphEntities: Readonly<
-    Record<GraphPath, GraphEntityBucket>
-  > = useGraphProjectionStore.getState().graphEntities,
-): ProjectionPreparationResult {
-  const graphPaths = replacements.map(({ graphPath }) => graphPath);
-  const seen = new Set<string>();
-  const candidates: Array<[string, GraphEntityBucket]> = [];
-  for (const replacement of replacements) {
-    if (seen.has(replacement.graphPath)) {
-      return { prepared: false, reason: "duplicate-graph-path", graphPath: replacement.graphPath };
-    }
-    seen.add(replacement.graphPath);
-    try {
-      candidates.push([
-        replacement.graphPath,
-        buildProjectionCandidate(replacement.graphPath, replacement.projection, baseGraphEntities[replacement.graphPath]),
-      ]);
-    } catch (error) {
-      return { prepared: false, reason: "invalid", graphPath: replacement.graphPath, error };
-    }
+  for (const connection of Object.values(entities.connections)) {
+    const existing = previous?.connections[connection.connectionId];
+    const from = portAddressKey(connection.output),
+      to = portAddressKey(connection.input);
+    bucket.connections[connection.connectionId] = shareEntity(existing, {
+      id: connection.connectionId,
+      from,
+      to,
+      output: existing?.from === from ? existing.output : connection.output,
+      input: existing?.to === to ? existing.input : connection.input,
+      order: connection.order,
+    });
   }
-  return {
-    prepared: true,
-    plan: {
-      graphPaths,
-      graphEntities: {
-        ...baseGraphEntities,
-        ...Object.fromEntries(candidates),
-      },
-    },
+  bucket.graphNodes = shareIds(previous?.graphNodes, bucket.graphNodes);
+  if (sameFields(previous?.nodes, bucket.nodes)) bucket.nodes = previous.nodes;
+  if (sameFields(previous?.pins, bucket.pins)) bucket.pins = previous.pins;
+  if (sameFields(previous?.connections, bucket.connections))
+    bucket.connections = previous.connections;
+  if (sameFields(previous?.pinConnections, bucket.pinConnections))
+    bucket.pinConnections = previous.pinConnections;
+  return sameFields(previous, bucket) ? previous : bucket;
+}
+
+let nextViewSessionId = 0;
+
+function prepareSession(
+  state: GraphProjectionData,
+  graphPath: string,
+  input: GraphEditorSessionDto,
+  saving?: boolean,
+  renew = false,
+): GraphProjectionData {
+  const previous = state.sessions[graphPath];
+  if (!canAcceptGraphSession(previous, input)) return state;
+  if (input.resultState.semanticInputHash !== input.projection.basis.semanticInputHash) {
+    throw new Error("Graph projection and result state must have the same semantic identity");
+  }
+  const document = shareProjection(previous?.document, input.document);
+  const projection = shareProjection(previous?.projection, input.projection);
+  const currentResults = state.resultStates[graphPath];
+  const resultState =
+    currentResults &&
+    currentResults.executionSessionId === input.resultState.executionSessionId &&
+    currentResults.semanticInputHash === input.resultState.semanticInputHash &&
+    BigInt(currentResults.revision) > BigInt(input.resultState.revision)
+      ? currentResults
+      : shareProjection(currentResults, input.resultState);
+  const sessionUnchanged =
+    !renew &&
+    previous &&
+    previous.document === document &&
+    previous.projection === projection &&
+    previous.version.sessionId === input.editing.version.sessionId &&
+    previous.version.revision === input.editing.version.revision &&
+    previous.saveDirty === input.editing.dirty &&
+    previous.canUndo === input.editing.canUndo &&
+    previous.canRedo === input.editing.canRedo &&
+    (saving === undefined || saving === previous.saving);
+  if (sessionUnchanged && resultState === state.resultStates[graphPath]) return state;
+  const bucket =
+    projection === previous?.projection && state.graphEntities[graphPath]
+      ? state.graphEntities[graphPath]
+      : buildProjectionBucket(graphPath, projection, state.graphEntities[graphPath]);
+  const next: GraphProjectionData = {
+    sessions: sessionUnchanged
+      ? state.sessions
+      : {
+          ...state.sessions,
+          [graphPath]: {
+            document,
+            projection,
+            version: shareProjection(previous?.version, input.editing.version),
+            sessionId:
+              !renew && previous?.version.sessionId === input.editing.version.sessionId
+                ? previous.sessionId
+                : ++nextViewSessionId,
+            projectionGeneration: (previous?.projectionGeneration ?? 0) + 1,
+            semanticInputHash: projection.basis.semanticInputHash,
+            saveDirty: input.editing.dirty,
+            canUndo: input.editing.canUndo,
+            canRedo: input.editing.canRedo,
+            saving: saving ?? previous?.saving ?? false,
+          },
+        },
+    graphEntities:
+      bucket === state.graphEntities[graphPath]
+        ? state.graphEntities
+        : { ...state.graphEntities, [graphPath]: bucket },
+    resultStates:
+      resultState === state.resultStates[graphPath]
+        ? state.resultStates
+        : { ...state.resultStates, [graphPath]: resultState },
   };
+  freezePublishedValue(next);
+  return next;
 }
 
-export function commitPreparedGraphProjectionReplacements(
-  plan: PreparedGraphProjectionReplacements,
-): void {
-  useGraphProjectionStore.setState((state) => ({
-    graphEntities: {
-      ...state.graphEntities,
-      ...Object.fromEntries(
-        plan.graphPaths.map((graphPath) => [graphPath, plan.graphEntities[graphPath]]),
-      ),
-    },
-  }));
+export interface PreparedGraphSessions {
+  readonly graphPaths: readonly string[];
+  readonly state: GraphProjectionData;
 }
 
-interface GraphProjectionStore {
-  graphEntities: Record<GraphPath, GraphEntityBucket>;
+/** Prepare all accepted sessions before a single publication, including project snapshots. */
+export function prepareGraphSessions(
+  replacements: readonly { graphPath: string; session: GraphEditorSessionDto }[],
+  retainedGraphPaths?: ReadonlySet<string>,
+  base: GraphProjectionData = useGraphProjectionStore.getState(),
+): PreparedGraphSessions {
+  const retain = <T>(values: Readonly<Record<string, T>>): Record<string, T> =>
+    !retainedGraphPaths || Object.keys(values).every((path) => retainedGraphPaths.has(path))
+      ? values
+      : Object.fromEntries(Object.entries(values).filter(([path]) => retainedGraphPaths.has(path)));
+  let state: GraphProjectionData = {
+    graphEntities: retain(base.graphEntities),
+    sessions: retain(base.sessions),
+    resultStates: retain(base.resultStates),
+  };
+  const paths = new Set<string>();
+  for (const { graphPath, session } of replacements) {
+    if (paths.has(graphPath)) throw new Error(`Duplicate graph session '${graphPath}'`);
+    paths.add(graphPath);
+    state = prepareSession(state, graphPath, session);
+  }
+  return { graphPaths: [...paths], state };
+}
+
+interface GraphProjectionStore extends GraphProjectionData {
   getGraphNode(graphPath: GraphPath, nodeId: NodeId): NodeData | undefined;
   getGraphPin(graphPath: GraphPath, pinId: PinId): PinData | undefined;
   getGraphNodeIds(graphPath: GraphPath): NodeId[];
   getGraphNodePins(graphPath: GraphPath, nodeId: NodeId): PinId[];
   getGraphPinConnections(graphPath: GraphPath, pinId: PinId): ConnectionId[];
   getGraphConnection(graphPath: GraphPath, connectionId: ConnectionId): ConnectionData | undefined;
-  getGraphConnections(graphPath: GraphPath): ConnectionData[];
   hasGraph(graphPath: GraphPath): boolean;
+  install(graphPath: string, session: GraphEditorSessionDto): void;
+  hydrate(graphPath: string, session: GraphEditorSessionDto, saving?: boolean): void;
+  setResultState(graphPath: string, result: GraphResultState): void;
+  beginSave(graphPath: string): boolean;
+  failSave(graphPath: string): void;
   clearGraph(graphPath: GraphPath): void;
-  replaceProjection(
-    graphPath: GraphPath,
-    projection: EditorGraphProjectionDto,
-  ): ProjectionApplyResult;
-  replaceProjectionsAtomically(
-    replacements: GraphProjectionReplacementDto[],
-  ): AtomicProjectionApplyResult;
+  clear(): void;
 }
 
 export const useGraphProjectionStore = create<GraphProjectionStore>((set, get) => ({
   graphEntities: {},
-
+  sessions: {},
+  resultStates: {},
   getGraphNode: (graphPath, nodeId) => getGraphNode(get(), graphPath, nodeId),
   getGraphPin: (graphPath, pinId) => getGraphPin(get(), graphPath, pinId),
   getGraphNodeIds: (graphPath) => getGraphNodeIds(get(), graphPath),
@@ -233,34 +293,63 @@ export const useGraphProjectionStore = create<GraphProjectionStore>((set, get) =
   getGraphPinConnections: (graphPath, pinId) => getGraphPinConnections(get(), graphPath, pinId),
   getGraphConnection: (graphPath, connectionId) =>
     getGraphConnection(get(), graphPath, connectionId),
-  getGraphConnections: (graphPath) => getGraphConnections(get(), graphPath),
   hasGraph: (graphPath) => hasGraphData(get(), graphPath),
-
-  clearGraph: (graphPath) =>
+  install: (path, input) => set((state) => prepareSession(state, path, input, false, true)),
+  hydrate: (path, input, saving) => set((state) => prepareSession(state, path, input, saving)),
+  setResultState: (path, result) =>
     set((state) => {
-      if (!state.graphEntities[graphPath]) return state;
-      const graphEntities = { ...state.graphEntities };
-      delete graphEntities[graphPath];
-      return { graphEntities };
+      if (
+        !state.sessions[path] ||
+        result.semanticInputHash !== state.sessions[path].semanticInputHash
+      )
+        return state;
+      const current = state.resultStates[path];
+      if (
+        current &&
+        current.executionSessionId === result.executionSessionId &&
+        BigInt(current.revision) > BigInt(result.revision)
+      )
+        return state;
+      const next = shareProjection(current, result);
+      if (next === current) return state;
+      const resultStates = { ...state.resultStates, [path]: next };
+      freezePublishedValue(resultStates);
+      return { resultStates };
     }),
-
-  replaceProjection: (graphPath, projection) => {
-    let candidate: GraphEntityBucket;
-    try {
-      candidate = buildProjectionCandidate(graphPath, projection, get().graphEntities[graphPath]);
-    } catch (error) {
-      return { applied: false, reason: "invalid", error };
-    }
-    set((state) => ({
-      graphEntities: { ...state.graphEntities, [graphPath]: candidate },
-    }));
-    return { applied: true };
+  beginSave: (path) => {
+    const current = get().sessions[path];
+    if (!current || current.saving) return false;
+    set((state) => ({ sessions: { ...state.sessions, [path]: { ...current, saving: true } } }));
+    return true;
   },
-
-  replaceProjectionsAtomically: (replacements) => {
-    const prepared = prepareGraphProjectionReplacements(replacements, get().graphEntities);
-    if (!prepared.prepared) return { applied: false, ...prepared };
-    commitPreparedGraphProjectionReplacements(prepared.plan);
-    return { applied: true, graphPaths: [...prepared.plan.graphPaths] };
-  },
+  failSave: (path) =>
+    set((state) => {
+      const current = state.sessions[path];
+      return current?.saving
+        ? { sessions: { ...state.sessions, [path]: { ...current, saving: false } } }
+        : state;
+    }),
+  clearGraph: (path) =>
+    set((state) => {
+      if (!state.sessions[path] && !state.graphEntities[path] && !state.resultStates[path])
+        return state;
+      const sessions = { ...state.sessions },
+        graphEntities = { ...state.graphEntities },
+        resultStates = { ...state.resultStates };
+      delete sessions[path];
+      delete graphEntities[path];
+      delete resultStates[path];
+      return { sessions, graphEntities, resultStates };
+    }),
+  clear: () => set({ sessions: {}, graphEntities: {}, resultStates: {} }),
 }));
+
+export function getGraphDocumentProjection(graphPath: string): GraphDocumentDto | null {
+  return useGraphProjectionStore.getState().sessions[graphPath]?.document ?? null;
+}
+export function isGraphSaving(graphPath: string): boolean {
+  return useGraphProjectionStore.getState().sessions[graphPath]?.saving === true;
+}
+export function isGraphModified(graphPath: string): boolean {
+  return useGraphProjectionStore.getState().sessions[graphPath]?.saveDirty === true;
+}

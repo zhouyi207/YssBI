@@ -1,10 +1,10 @@
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useActiveGraphContext } from "./editorGroupContext";
 
 /** Rust-owned undo/redo availability for the focused Graph editor. */
 export function useEditorHistoryAvailability() {
   const activeResourceRef = useActiveGraphContext()?.graphPath ?? null;
-  const session = useGraphEditingStore((state) =>
+  const session = useGraphProjectionStore((state) =>
     activeResourceRef ? state.sessions[activeResourceRef] : undefined,
   );
   const pending = session?.saving === true;

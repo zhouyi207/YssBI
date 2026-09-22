@@ -1,4 +1,5 @@
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
+import { reconcileGraphResultQueries } from "@/features/application/results/runtime";
 import { markResourceDirty, markResourceStale, useResourceStore } from "@/features/core/resource";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import type {
@@ -10,15 +11,11 @@ import type {
 } from "@/shared/types/domain/editorMutation";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
 import {
-  prepareGraphProjectionReplacements,
-  commitPreparedGraphProjectionReplacements,
-} from "@/features/core/dataStore/graphProjectionStore";
-import {
   canAcceptGraphSession,
   getGraphDocumentProjection,
   isGraphSaving,
-  useGraphEditingStore,
-} from "@/features/core/graphEditing";
+  useGraphProjectionStore,
+} from "@/features/core/dataStore/graphProjectionStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -78,16 +75,14 @@ export function installGraphSession(
   result: GraphEditorSessionDto,
   mode: "load" | "update" | "save" = "update",
 ): boolean {
-  if (!canAcceptGraphSession(useGraphEditingStore.getState().sessions[graphPath], result))
-    return false;
-  const prepared = prepareGraphProjectionReplacements([
-    { graphPath, projection: result.projection },
-  ]);
-  if (!prepared.prepared) throw new Error(`Graph projection '${graphPath}' could not be installed`);
-  if (mode === "load") useGraphEditingStore.getState().install(graphPath, result);
+  const previous = useGraphProjectionStore.getState().sessions[graphPath];
+  if (!canAcceptGraphSession(previous, result)) return false;
+  if (mode === "load") useGraphProjectionStore.getState().install(graphPath, result);
   else
-    useGraphEditingStore.getState().hydrate(graphPath, result, mode === "save" ? false : undefined);
-  commitPreparedGraphProjectionReplacements(prepared.plan);
+    useGraphProjectionStore
+      .getState()
+      .hydrate(graphPath, result, mode === "save" ? false : undefined);
+  reconcileGraphResultQueries(graphPath, previous);
   publishGraphEditingState(graphPath, result.editing);
   const kind = getGraphResourceKind(graphPath);
   if (kind) markResourceStale({ id: graphPath, kind }, false);
@@ -105,9 +100,9 @@ async function applyDraftMutation(
   const identity = captureProjectIdentity();
   const document = getGraphDocumentProjection(input.graphPath);
   if (!document) throw new Error(`Graph draft '${input.graphPath}' is not loaded`);
-  const session = useGraphEditingStore.getState().sessions[input.graphPath];
+  const session = useGraphProjectionStore.getState().sessions[input.graphPath];
   const isCurrentDraft = () => {
-    const current = useGraphEditingStore.getState().sessions[input.graphPath];
+    const current = useGraphProjectionStore.getState().sessions[input.graphPath];
     return (
       current?.sessionId === session.sessionId &&
       current.projectionGeneration === session.projectionGeneration

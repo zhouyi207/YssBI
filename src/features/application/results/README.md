@@ -9,10 +9,13 @@
 
 结果数据与缓存由 [Execution ResultStore](../../../../src-tauri/crates/yss-graph-execution/README.md#resultstore-and-cache-validity) 拥有；这里维护查询、租约与消费者的交付契约。
 
-`get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；
-查询重验资源依赖，不交付执行计划身份。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
+图会话回执随编辑投影一起携带 `resultState`，包含逐输出、逐连线有效性和执行会话内单调递增的结果 `revision`。编辑、打开、撤销、保存和项目快照通过统一图 store 原子安装这些事实；普通编辑不再先清空整图结果，再异步查询恢复。
+`get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；运行通知和显式结果读取继续使用这一查询。查询重验资源依赖，不交付执行计划身份。协调器按图会话、代次与请求身份拒绝迟到回执，图 store 再按结果 revision 拒绝同一执行会话和语义身份下的旧结果。查询返回没有匹配语义快照时，不用空状态覆盖当前显示的完整图快照。
 项目身份由查询协调器在发布前校验，不在只读结果投影中另存无人读取的副本；图状态请求仅携带参与校验的会话、代次和语义身份。
-图运行展示复用 `createReadProjection`：依据现有结果、图编辑和执行 owner 按图派生，并复用未变化的节点、端口和连线展示引用。`useGraphResultPresentation(graphPath, selector)` 仅订阅消费者所需字段；分页等无关 payload 更新不重新构造图展示，重复终态不发布无变化的 Pin 状态。该投影没有业务写入接口或独立运行事实。
+图运行展示复用 `createReadProjection`：依据统一图快照和执行 owner 按图派生，并复用未变化的节点、端口和连线展示引用。`useGraphResultPresentation(graphPath, selector)` 仅订阅消费者所需字段；分页等无关 payload 更新不重新构造图展示，重复终态不再发布结果投影。该投影没有业务写入接口或独立运行事实。
+图发布入口在安装后显式对账结果查询：撤销旧请求，移除新摘要已判为失效的当前 Pin 绑定，保留仍有效的绑定与已有报告租约。卸载和项目结束显式释放对应状态；不再通过两个图 Store 的订阅互相触发结果清空和重查。
+项目发布完成后保留同批安装的结果摘要。卸载由统一图 store 一次移除图会话、实体和摘要，`resetGraphResultQueries` 仅清理查询、当前 Pin 绑定与运行状态，保留仍被消费者持有的结果 payload。
+运行事件的输出所有权和等待摘要标记保存在同一个不可变查询投影中。RunStarted 明确声明失效的输出在新摘要到达前不显示旧结果为有效；终态只结束运行标记，不撤销这一等待状态。匹配当前请求的结果摘要确认后再移除等待标记，其他分支保留展示引用。
 同一投影还返回当前连线是否已被目标节点实际消费：新绑定、保有旧结果的过期绑定和有效绑定分别表示。
 仅有输入的“查看数据”节点也参与此投影：Execution 将成功运行的查看记录及其输入依据附在共享结果上，
 重验时同时检查当前绑定与源结果有效性。该记录不复制数据，也不增加结果持有者；新连线不能仅凭源 Pin 有缓存显示已执行。
@@ -27,7 +30,7 @@ Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备
 
 Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，descriptor/value/page queries 使用完整结果引用。
 `RunStarted { outputs }` 公告当前输出的失效范围；完成后重查当前输出。Frontend 只撤销这些 pin 查询和未被读取组件持有的缓存，
-不清空已打开报告或中断其分页/分析。Pin 预览与搜索只索引当前输出，按引用读取保留快照不会重写当前 pin 绑定。
+不清空已打开报告或中断其分页/分析。Pin 查看与搜索只索引当前输出，按引用读取保留快照不会重写当前 pin 绑定。
 
 关系和数列页面由 Application 捕获当前 Result，交给句柄在固定快照上执行有界查询；I/O 在计算线程、锁外执行。
 每页最多读取请求行数加一行，通过额外行判断 `hasMore`；不为了预览执行整表 COUNT。`totalCount` 可为 null，
@@ -43,7 +46,7 @@ Application Results 的 `ResultStructure` 统一决定 descriptor 和分页的�
 前端仅渲染分页提供的行和列，不补列、不包装行，不再保留独立的 DataSeries JSON renderer。
 分页只用于数据表格和数列（包括报告内的观测表）；报告概览、图形和分析结果本身不分页。
 
-Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页缓存按完整结果引用、part、offset 和 limit 隔离，不同消费者翻页互不覆盖；Sequence renderer 统一提供表格与数列分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
+Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、请求身份和 Output。分页缓存按完整结果引用、part、offset 和 limit 隔离，不同消费者翻页互不覆盖；Sequence renderer 统一提供表格与数列分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 投影表达。provenance 包含 RunId、输出地址与创建时间。
 
 显式打开的 Result panel 和独立展示窗口绑定打开时的结果引用；节点删除、图语义修改、重跑均不会更换已有报告的数据。
 Application 在创建面板前通过 `retain_result` 原子取得租约和 descriptor。租约 token 由调用方预先生成，

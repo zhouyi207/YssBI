@@ -8,7 +8,10 @@ import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import { isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
+import {
+  isGraphSaving,
+  useGraphProjectionStore,
+} from "@/features/core/dataStore/graphProjectionStore";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
@@ -169,7 +172,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "z") {
         const target = currentEditorCommandTarget(event);
         if (!target) return;
-        const session = useGraphEditingStore.getState().sessions[target.resourceRef];
+        const session = useGraphProjectionStore.getState().sessions[target.resourceRef];
         const canUndo = Boolean(session?.canUndo);
         const canRedo = Boolean(session?.canRedo);
         if (!session?.saving && (event.shiftKey ? canRedo : canUndo)) {
@@ -183,7 +186,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "y") {
         const target = currentEditorCommandTarget(event);
         if (!target) return;
-        const session = useGraphEditingStore.getState().sessions[target.resourceRef];
+        const session = useGraphProjectionStore.getState().sessions[target.resourceRef];
         if (session?.canRedo && !session.saving) {
           event.preventDefault();
           void commands.redo(target);

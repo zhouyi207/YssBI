@@ -18,4 +18,3 @@ export * from "./graphProjectionStore";
 
 export { useNodeView } from "./useNodeView";
 export { REROUTE_NODE_STYLE_ID, isRerouteNodeView, toUiNode } from "./nodeView";
-export type { ToUiNodeOptions, UiNodePinSlice } from "./nodeView";

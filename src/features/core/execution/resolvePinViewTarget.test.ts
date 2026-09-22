@@ -3,11 +3,7 @@ import type {
   EditorConnectionProjectionDto,
   PortAddressDto,
 } from "@/shared/types/dto/editorProjection";
-import {
-  evaluatePinViewState,
-  inspectableRefsFromPinView,
-  resolveUpstreamOutputs,
-} from "./pinViewTarget";
+import { inspectableRefsFromPinView, resolveUpstreamOutputs } from "./pinViewTarget";
 
 const graphPath = "events/Main.yssbi-event";
 const output: PortAddressDto = {
@@ -28,19 +24,18 @@ const connection: EditorConnectionProjectionDto = {
 };
 
 describe("pinViewTarget", () => {
-  it("builds an authoritative output-pin result ref from a structured address", () => {
-    const state = evaluatePinViewState({
+  it("builds an authoritative output-pin result ref before any run", () => {
+    const refs = inspectableRefsFromPinView({
       graphPath,
       address: output,
       direction: "output",
     });
 
-    expect(state).toMatchObject({ showMenu: true, enabled: true, disabledReason: null });
-    expect(state.refs).toEqual([{ kind: "outputPin", graphPath, output }]);
+    expect(refs).toEqual([{ kind: "outputPin", graphPath, output }]);
   });
 
   it("resolves an input only to its connected upstream output address", () => {
-    const state = evaluatePinViewState({
+    const refs = inspectableRefsFromPinView({
       graphPath,
       address: input,
       direction: "input",
@@ -48,7 +43,7 @@ describe("pinViewTarget", () => {
     });
 
     expect(resolveUpstreamOutputs(input, [connection])).toEqual([output]);
-    expect(state.refs).toEqual([{ kind: "outputPin", graphPath, output }]);
+    expect(refs).toEqual([{ kind: "outputPin", graphPath, output }]);
   });
 
   it("never creates input result when the connection does not target that input", () => {
@@ -63,24 +58,14 @@ describe("pinViewTarget", () => {
     ).toEqual([]);
   });
 
-  it("hides view for unconnected input pins", () => {
+  it("has no result reference for unconnected input pins", () => {
     expect(
-      evaluatePinViewState({
+      inspectableRefsFromPinView({
         graphPath,
         address: input,
         direction: "input",
         connections: [],
-      }).showMenu,
-    ).toBe(false);
-  });
-
-  it("keeps output result lookup enabled before any run", () => {
-    expect(
-      evaluatePinViewState({
-        graphPath,
-        address: output,
-        direction: "output",
       }),
-    ).toMatchObject({ showMenu: true, enabled: true, disabledReason: null });
+    ).toEqual([]);
   });
 });

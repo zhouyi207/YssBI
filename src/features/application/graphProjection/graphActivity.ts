@@ -2,7 +2,7 @@ import {
   subscribeGraphActivity,
   readExecutionSnapshot,
 } from "@/services/nodeSystem/graphActivityService";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useExecutionStore } from "@/features/core/execution";
 import {
   isCurrentProjectIdentity,
@@ -90,13 +90,13 @@ export function ensureGraphActivity(
     changed: (path, editing) => {
       request(path, editing);
       if (path.startsWith("functions/")) {
-        for (const graph of Object.keys(useGraphEditingStore.getState().sessions))
+        for (const graph of Object.keys(useGraphProjectionStore.getState().sessions))
           if (graph !== path) request(graph);
       }
     },
     resync: () => {
       if (!current()) return;
-      for (const path of Object.keys(useGraphEditingStore.getState().sessions)) request(path);
+      for (const path of Object.keys(useGraphProjectionStore.getState().sessions)) request(path);
       recover();
     },
     failed: synchronizationFailed,

@@ -1,4 +1,3 @@
-import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { RunPhase, ResultInspectionSource } from "@/shared/types/domain/runEvent";
 
 export type ExecutionStatus = "idle" | "submitting" | "running" | "completed" | "error" | "unknown";
@@ -11,15 +10,6 @@ export interface RunFailureProjection {
   incidentId: string | null;
 }
 
-export interface PinPreviewState {
-  graphPath: string;
-  port: PortAddressDto;
-  generation: number;
-  status: "pending" | "ready" | "error";
-  resultId: string | null;
-  error: string | null;
-}
-
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
@@ -27,9 +17,6 @@ export interface GraphExecutionState {
   /** Identity of the current local run request; edits revoke late callbacks. */
   request: object | null;
   runFailure: RunFailureProjection | null;
-
-  /** Stable `(graphPath, PortAddressDto)` preview projections. */
-  pinPreviews: Map<string, PinPreviewState>;
 }
 
 /** 全局执行状态 */

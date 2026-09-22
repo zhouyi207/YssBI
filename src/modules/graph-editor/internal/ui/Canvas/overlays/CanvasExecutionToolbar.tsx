@@ -4,7 +4,7 @@ import { useExecutionRead } from "@/features/core/execution/read";
 import { graphHasClearableArtifacts } from "@/features/core/execution/graphRunArtifacts";
 import { VscClearAll, VscDebugStop, VscRunAll } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
-import { useGraphEditingUi } from "@/features/core/graphEditing/ui";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 function CanvasToolbarButton({
   tooltip,
@@ -37,7 +37,7 @@ export function CanvasExecutionToolbar({
   onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
-  const { saving } = useGraphEditingUi(graphPath);
+  const saving = useGraphProjectionStore((state) => state.sessions[graphPath]?.saving === true);
   const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
   const graphStatus = graphState?.status ?? "idle";
 

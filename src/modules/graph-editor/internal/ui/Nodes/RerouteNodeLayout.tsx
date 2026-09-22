@@ -13,7 +13,6 @@ export { REROUTE_GRIP_SIZE_PX, REROUTE_NODE_HEIGHT_PX, REROUTE_NODE_WIDTH_PX };
 
 interface RerouteNodeLayoutProps {
   node: UINode;
-  activePinId?: string | null;
   graphPath?: string;
   contextMenuActions?: GraphContextMenuActions | null;
   renderPinHandle?: (pin: PinData) => React.ReactNode;
@@ -21,7 +20,6 @@ interface RerouteNodeLayoutProps {
 
 export function RerouteNodeLayout({
   node,
-  activePinId,
   graphPath,
   contextMenuActions,
   renderPinHandle,
@@ -38,7 +36,6 @@ export function RerouteNodeLayout({
             graphPath={graphPath}
 
             contextMenuActions={contextMenuActions}
-            isActive={activePinId === input.id}
             handleSlot={renderPinHandle?.(input)}
           />
         </div>
@@ -55,7 +52,6 @@ export function RerouteNodeLayout({
             graphPath={graphPath}
 
             contextMenuActions={contextMenuActions}
-            isActive={activePinId === output.id}
             handleSlot={renderPinHandle?.(output)}
           />
         </div>

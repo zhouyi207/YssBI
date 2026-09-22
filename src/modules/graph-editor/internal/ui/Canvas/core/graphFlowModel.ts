@@ -3,6 +3,7 @@ import type { GraphProjectionSnapshot } from "@/features/core/graph/read";
 import type { PinData, ConnectionData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
+import { shareProjection } from "@/features/core/state/readProjection";
 
 export type GraphFlowNode = Node<{ handlesKey: string }, "graph">;
 export type GraphFlowEdge = Edge<{ fromPinId: string; toPinId: string }, "graph">;
@@ -29,6 +30,57 @@ export interface GraphFlowModel {
   connections: DeepReadonly<Record<string, ConnectionData>>;
   pinConnections: Readonly<Record<string, readonly string[]>>;
   draggableNodeIds: ReadonlySet<string>;
+}
+
+export interface FlowPinInteraction {
+  active: boolean;
+  dragState: "highlighted" | "dimmed";
+  feedback: FlowConnectionFeedback;
+}
+
+export interface FlowInteractionProjection {
+  sourceId: string | null;
+  sourceDirection: PinData["direction"] | null;
+  pins: Readonly<Record<string, FlowPinInteraction>>;
+  dimmedNodes: ReadonlySet<string>;
+}
+
+export const EMPTY_FLOW_INTERACTION: FlowInteractionProjection = {
+  sourceId: null,
+  sourceDirection: null,
+  pins: {},
+  dimmedNodes: new Set(),
+};
+
+/** Panel-local decoration facts, separate from committed node content. */
+export function projectFlowInteraction(
+  model: GraphFlowModel,
+  sourceId: string | undefined,
+  intent: FlowConnectionIntent,
+  previous: FlowInteractionProjection = EMPTY_FLOW_INTERACTION,
+): FlowInteractionProjection {
+  const source = sourceId ? model.pins[sourceId] : undefined;
+  if (!source) return EMPTY_FLOW_INTERACTION;
+  const pins: Record<string, FlowPinInteraction> = {};
+  const compatibleNodes = new Set<string>();
+  for (const pin of Object.values(model.pins)) {
+    const feedback = resolveFlowConnection(model, source.id, pin.id, intent);
+    const active = pin.id === source.id;
+    if (feedback.kind !== "invalid") compatibleNodes.add(pin.nodeId);
+    pins[pin.id] = shareProjection(previous.pins[pin.id], {
+      active,
+      feedback,
+      dragState: active || feedback.kind !== "invalid" ? "highlighted" : "dimmed",
+    });
+  }
+  return {
+    sourceId: source.id,
+    sourceDirection: source.direction,
+    pins,
+    dimmedNodes: new Set(
+      [...model.nodeIds].filter((id) => id !== source.nodeId && !compatibleNodes.has(id)),
+    ),
+  };
 }
 
 function reuseArray<T>(previous: T[] | undefined, next: T[]): T[] {

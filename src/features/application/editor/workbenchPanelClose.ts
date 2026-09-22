@@ -32,7 +32,7 @@ import { unloadGraphDocument } from "./graphDocumentUnload";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 import { saveGraph } from "@/features/application/graphEditing/saveGraph";
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 
 type EditorDocument = {
@@ -152,7 +152,7 @@ function documentsThatLoseTheirLastPanel(snapshot: CloseSnapshot): EditorDocumen
       version:
         metadata.resourceKind === "chart"
           ? undefined
-          : useGraphEditingStore.getState().sessions[metadata.resourceRef]?.version,
+          : useGraphProjectionStore.getState().sessions[metadata.resourceRef]?.version,
     });
   }
   return [...documents.values()];

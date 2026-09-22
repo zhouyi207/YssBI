@@ -9,15 +9,13 @@ import type {
 } from "./projectPublicationCoordinator";
 import { useDatabaseStore, useGraphMetaStore } from "@/features/core/dataStore";
 import {
-  prepareGraphProjectionReplacements,
+  prepareGraphSessions,
   useGraphProjectionStore,
-} from "@/features/core/dataStore/graphProjectionStore";
-import {
   canAcceptGraphSession,
   isGraphModified,
   isGraphSaving,
-  useGraphEditingStore,
-} from "@/features/core/graphEditing";
+} from "@/features/core/dataStore/graphProjectionStore";
+
 import {
   assertCurrentProjectIdentity,
   isCurrentProjectIdentity,
@@ -43,6 +41,7 @@ import {
 import { invalidateChartPreviewCacheForMove } from "@/services/chart/chartPreviewCache";
 import { commitEditorLayoutPublication } from "./editorLayoutPublicationCommit";
 import { buildProjectResourceState } from "@/features/application/project/authoritativeProjectLoadPlan";
+import { reconcileGraphResultQueries } from "@/features/application/results/runtime";
 
 export function validateProjectSnapshotIndex(
   index: ProjectIndexRow,
@@ -372,17 +371,18 @@ export function prepareProjectSnapshotCommit(
       return (
         !isGraphModified(previousPath) &&
         !isGraphSaving(previousPath) &&
-        canAcceptGraphSession(useGraphEditingStore.getState().sessions[previousPath], session) &&
-        canAcceptGraphSession(useGraphEditingStore.getState().sessions[path], session)
+        canAcceptGraphSession(useGraphProjectionStore.getState().sessions[previousPath], session) &&
+        canAcceptGraphSession(useGraphProjectionStore.getState().sessions[path], session)
       );
     })
-    .map(([graphPath, session]) => ({ graphPath, projection: session.projection }));
-  const retainedGraphEntities = Object.fromEntries(
-    Object.entries(useGraphProjectionStore.getState().graphEntities).filter(
-      ([path]) => authoritativeGraphPaths.has(path) || isGraphModified(path) || isGraphSaving(path),
+    .map(([graphPath, session]) => ({ graphPath, session }));
+  const retainedGraphPaths = new Set([
+    ...authoritativeGraphPaths,
+    ...Object.keys(useGraphProjectionStore.getState().sessions).filter(
+      (path) => isGraphModified(path) || isGraphSaving(path),
     ),
-  );
-  const preparedGraphs = prepareGraphProjectionReplacements(replacements, retainedGraphEntities);
+  ]);
+  const preparedGraphs = prepareGraphSessions(replacements, retainedGraphPaths);
   const refreshedKeys = [
     ...replacements.map(({ graphPath }) => {
       const kind = plan.index.graphs.find((graph) => graph.path === graphPath)!.type;
@@ -402,10 +402,6 @@ export function prepareProjectSnapshotCommit(
         hasConflictDocument: false,
       };
   }
-  if (!preparedGraphs.prepared) {
-    throw new Error(`snapshot projection preparation failed for '${preparedGraphs.graphPath}'`);
-  }
-
   const focused = useGraphSessionStore.getState().focusedSession;
   const remappedFocusedPath = focused
     ? (plan.pathRemaps.get(focused.graphPath) ?? focused.graphPath)
@@ -422,7 +418,7 @@ export function prepareProjectSnapshotCommit(
 
   return {
     ...plan,
-    graphProjectionPlan: preparedGraphs.plan,
+    graphProjectionPlan: preparedGraphs,
     storeState: {
       resources,
       graphOrder: plan.index.graphs.map((graph) => graph.path),
@@ -467,10 +463,15 @@ export function commitPreparedProjectSnapshot(
       });
       useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
       useSidebarStore.getState().publishPanels(plan.activityPanels);
-      useGraphProjectionStore.setState({ graphEntities: plan.graphProjectionPlan.graphEntities });
-      for (const path of plan.graphProjectionPlan.graphPaths) {
-        const session = plan.graphSessions.get(path);
-        if (session) useGraphEditingStore.getState().hydrate(path, session);
+      const previousGraphs = useGraphProjectionStore.getState().sessions;
+      useGraphProjectionStore.setState(plan.graphProjectionPlan.state);
+      for (const path of new Set([
+        ...plan.graphProjectionPlan.graphPaths,
+        ...Object.keys(previousGraphs).filter(
+          (path) => !plan.graphProjectionPlan.state.sessions[path],
+        ),
+      ])) {
+        reconcileGraphResultQueries(path, previousGraphs[path]);
       }
       useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
       useViewportStore.setState({ viewports: plan.storeState.viewports });

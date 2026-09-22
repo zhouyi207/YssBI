@@ -14,7 +14,12 @@ import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ChartDocument, ChartIndexEntry, ProjectIndexRow } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphProjectionStore";
+import {
+  type PreparedGraphSessions,
+  isGraphModified,
+  isGraphSaving,
+  useGraphProjectionStore,
+} from "@/features/core/dataStore/graphProjectionStore";
 import {
   acceptProjectLifecycleActivation,
   captureProjectIdentity,
@@ -35,17 +40,16 @@ import {
   type ProjectResourceMeta,
   type ResourceKey,
 } from "@/features/core/resource";
-import { isGraphModified, isGraphSaving } from "@/features/core/graphEditing";
+
 import { toProjectionEntities } from "@/features/domain/editorProjection";
 import { ProjectService } from "@/services/project/projectService";
 import { ChartService } from "@/services/chart/chartService";
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphSessionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
-import { invalidateGraphResults } from "@/features/application/results/runtime";
 import {
   collectResourceMutationGraphPaths,
   fingerprintResourceMutationResult,
@@ -107,7 +111,7 @@ export interface PreparedProjectSnapshotStoreState {
   readonly viewports: Readonly<Record<string, EditorViewport>>;
 }
 export interface PreparedProjectSnapshot extends ProjectSnapshotPreparation {
-  readonly graphProjectionPlan: PreparedGraphProjectionReplacements;
+  readonly graphProjectionPlan: PreparedGraphSessions;
   readonly storeState: PreparedProjectSnapshotStoreState;
 }
 export interface ProjectPublicationDependencies {
@@ -500,7 +504,6 @@ export class ProjectPublicationCoordinator {
             this.assertCurrent(identity);
             await this.dependencies.commitSnapshot(plan);
             this.assertCurrent(identity);
-            for (const graphPath of affected) invalidateGraphResults(graphPath);
             this.publishedIndexSignature = signature;
           } else {
             useSidebarStore.getState().publishPanels(activityPanels);

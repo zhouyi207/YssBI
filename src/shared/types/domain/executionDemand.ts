@@ -11,15 +11,9 @@ export type ExecutionDemandDto =
       type: "outputs";
       outputs: GraphOutputRefDto[];
       includeDefaultResults: boolean;
-    }
-  | {
-      type: "pinPreview";
-      output: GraphOutputRefDto;
-      generation: number;
     };
 
 export const EXECUTION_DEMAND_TYPES = {
   default: true,
   outputs: true,
-  pinPreview: true,
 } as const satisfies Record<ExecutionDemandDto["type"], true>;

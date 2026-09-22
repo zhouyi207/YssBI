@@ -13,7 +13,7 @@ describe("graphDocumentActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGraphMetaStore.setState({ graphs: {} });
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
   });
 
   it("delegates signature edits to the revisioned authoritative coordinator", async () => {

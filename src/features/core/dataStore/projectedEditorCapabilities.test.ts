@@ -1,5 +1,9 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it } from "vitest";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+
 import { useGraphProjectionStore } from "./graphProjectionStore";
 import { isUnmanagedNode } from "./graphNodeSelectors";
 
@@ -7,7 +11,7 @@ const graphPath = "functions/projected-capabilities";
 const nodeId = "managed-node";
 
 describe("projected node ownership", () => {
-  beforeEach(() => useGraphProjectionStore.setState({ graphEntities: {} }));
+  beforeEach(() => useGraphProjectionStore.getState().clear());
 
   it("does not authorize operations without a node projection", () => {
     expect(isUnmanagedNode(graphPath, nodeId)).toBe(false);
@@ -18,7 +22,7 @@ describe("projected node ownership", () => {
     (managed) => {
       const fixture = makeEditorProjectionFixture({ graphPath, nodeId });
       fixture.projection.nodes[0].capabilities = { managed };
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
+      installGraphProjectionFixture(graphPath, fixture.projection);
       expect(isUnmanagedNode(graphPath, nodeId)).toBe(!managed);
     },
   );

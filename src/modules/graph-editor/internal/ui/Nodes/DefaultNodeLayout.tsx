@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React from "react";
 import { GraphPinController } from "../Pins/GraphPinController";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { UINode } from "@/features/core/dataStore/nodeView";
@@ -6,12 +6,9 @@ import type { GraphContextMenuActions } from "@/features/application/editor";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
-  activePinId?: string | null;
-  activePin?: PinData | null;
   graphPath?: string;
   contextMenuActions?: GraphContextMenuActions | null;
   renderPinHandle?: (pin: PinData) => React.ReactNode;
-  canConnectPin?: (pin: PinData) => boolean;
 }
 
 const formatInlineSummary = (value: unknown): string => {
@@ -29,24 +26,12 @@ const formatInlineSummary = (value: unknown): string => {
  */
 export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   node,
-  activePinId,
-  activePin,
   graphPath,
   contextMenuActions,
   renderPinHandle,
-  canConnectPin,
 }) => {
   const inlineParameters = node.parameterEditors.filter(
     (parameter) => parameter.presentation === "inlineAndDetail",
-  );
-  const getPinDragState = useCallback(
-    (pin: PinData): "normal" | "highlighted" | "dimmed" => {
-      if (!activePin) return "normal";
-      if (pin.id === activePin.id) return "highlighted";
-      if (canConnectPin?.(pin)) return "highlighted";
-      return "dimmed";
-    },
-    [activePin, canConnectPin],
   );
 
   return (
@@ -54,7 +39,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
       {/* Header */}
       <div className="flex items-center gap-3 rounded-t-[5px] border-b border-[var(--node-border)] bg-[var(--node-header-bg)] px-2.5 py-1.5 font-heading text-[12px] font-semibold text-[var(--node-header-fg)]">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate tracking-[-0.015em]">{node.title}</span>
+          <span className="truncate tracking-[-0.015em]">{node.display.title}</span>
           {node.display.userLabel ? (
             <span className="text-[10px] font-normal opacity-70">{node.display.userLabel}</span>
           ) : null}
@@ -79,7 +64,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
         <div className="flex-1 flex gap-2 px-2 py-2 whitespace-nowrap items-center">
           <div className="flex flex-col gap-1 flex-1">
             {node.inputs.map((pin) => {
-              const ds = getPinDragState(pin);
               return (
                 <GraphPinController
                   key={pin.id}
@@ -87,8 +71,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   graphPath={graphPath}
 
                   contextMenuActions={contextMenuActions}
-                  isActive={activePinId === pin.id}
-                  pinDragState={ds}
                   handleSlot={renderPinHandle?.(pin)}
                 />
               );
@@ -97,7 +79,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
           <div className="flex-1" />
           <div className="flex flex-col gap-1 flex-1 items-end">
             {node.outputs.map((pin) => {
-              const ds = getPinDragState(pin);
               return (
                 <GraphPinController
                   key={pin.id}
@@ -105,8 +86,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   graphPath={graphPath}
 
                   contextMenuActions={contextMenuActions}
-                  isActive={activePinId === pin.id}
-                  pinDragState={ds}
                   handleSlot={renderPinHandle?.(pin)}
                 />
               );

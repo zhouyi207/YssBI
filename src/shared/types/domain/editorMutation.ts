@@ -1,4 +1,5 @@
 import type { ChartDocumentState } from "@/shared/types/domain/chart";
+import type { GraphResultState } from "./result";
 import type { DatabaseDocumentDto } from "@/shared/types/domain/database";
 import type { NodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 import type {
@@ -80,8 +81,6 @@ export type EditorGraphMutationDto =
       payload: { snapshotJson: string; anchor: NodePositionDto };
     };
 
-export type HistoryMutationDto = Record<string, never>;
-
 export type PortPlacementDto =
   | { kind: "append" }
   | { kind: "before" | "after"; instanceId: string };
@@ -152,7 +151,7 @@ export interface InputStateDto {
   literal_override: TypedLiteralDto | null;
 }
 
-/** Raw unsaved Graph document owned by one frontend editor session. */
+/** Constant in the Rust-owned graph document projection. */
 export interface GraphConstantDto {
   id: string;
   name: string;
@@ -263,13 +262,11 @@ export interface GraphEditorSessionDto {
   editing: GraphEditingStateDto;
   document: GraphDocumentDto;
   projection: EditorGraphProjectionDto;
+  resultState: GraphResultState;
 }
 
-export interface GraphEditResultDto {
-  editing: GraphEditingStateDto;
+export interface GraphEditResultDto extends GraphEditorSessionDto {
   changed: boolean;
-  document: GraphDocumentDto;
-  projection: EditorGraphProjectionDto;
 }
 
 export interface GraphSaveResultDto {
@@ -278,6 +275,7 @@ export interface GraphSaveResultDto {
   resourceRevision: number;
   document: GraphDocumentDto;
   projectionReplacement: GraphProjectionReplacementDto;
+  resultState: GraphResultState;
 }
 
 export interface GraphEditVersionDto {

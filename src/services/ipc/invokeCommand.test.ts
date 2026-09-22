@@ -25,10 +25,6 @@ describe("IPC error wire contract", () => {
   it.each([
     ["missing details", { code: "internal_error", incidentId: null }],
     ["missing incidentId", { code: "internal_error", details: null }],
-    [
-      "legacy message",
-      { code: "internal_error", details: null, incidentId: null, message: "legacy" },
-    ],
     ["extra field", { code: "internal_error", details: null, incidentId: null, extra: true }],
     ["uppercase code", { code: "INTERNAL_ERROR", details: null, incidentId: null }],
     ["hyphenated code", { code: "internal-error", details: null, incidentId: null }],
@@ -77,8 +73,7 @@ describe("invokeCommand", () => {
   });
 
   it.each([
-    ["legacy string rejection", "legacy backend error"],
-    ["legacy message object", { code: "internal_error", message: "legacy backend error" }],
+    ["string rejection", "backend failure"],
     [
       "almost structured rejection",
       { code: "internal_error", details: null, incidentId: null, extra: true },

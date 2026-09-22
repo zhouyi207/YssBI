@@ -22,7 +22,7 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { isGraphSaving } from "@/features/core/graphEditing";
+import { isGraphSaving } from "@/features/core/dataStore/graphProjectionStore";
 
 export interface ExecuteFunctionSignatureMutationInput {
   functionPath: string;

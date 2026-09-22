@@ -18,7 +18,6 @@ import { synchronizeProjectPresentation } from "@/features/application/project/p
 import { removeProjectScopedWorkbenchPanels } from "@/features/application/project/projectWorkbenchLifecycle";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
-import { resetHistoryCoordinator } from "@/features/application/graphEditing/historyCoordinator";
 import { resetGraphEditCoordinator } from "@/features/application/graphEditing/graphEditCoordinator";
 import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
@@ -157,7 +156,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
     prepared.index,
   );
   commitProjectLoadStep("graph projection lifecycle", resetGraphProjectionLifecycle);
-  commitProjectLoadStep("graph draft coordinator", resetGraphEditCoordinator);
+  commitProjectLoadStep("graph edit coordinator", resetGraphEditCoordinator);
   resetGraphLoadOwnership();
   commitProjectLoadStep("graph load status", () =>
     useProjectIOStore.setState({
@@ -165,7 +164,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
     }),
   );
   commitProjectLoadStep("function signature coordinator", resetFunctionSignatureCoordinator);
-  commitProjectLoadStep("history coordinator", resetHistoryCoordinator);
+  commitProjectLoadStep("graph data", () => useGraphProjectionStore.getState().clear());
 
   commitProjectLoadStep("detail focus", () =>
     useEditorStore.setState({
@@ -228,9 +227,6 @@ export async function commitPreparedAuthoritativeProjectLoad(
   );
   commitProjectLoadStep("graph session", () =>
     useGraphSessionStore.setState({ focusedSession: null }),
-  );
-  commitProjectLoadStep("graph data", () =>
-    useGraphProjectionStore.setState({ graphEntities: {} }),
   );
   commitProjectLoadStep("project IO", () =>
     useProjectIOStore.setState(prepared.storeState.projectIO),
@@ -326,7 +322,7 @@ export async function clearProjectProjection(owner: ProjectLifecycleStateSnapsho
   expectedProjectInstanceId = null;
   if (
     !commitOwnedClear(() => {
-      useGraphProjectionStore.setState({ graphEntities: {} });
+      useGraphProjectionStore.getState().clear();
     })
   )
     return;

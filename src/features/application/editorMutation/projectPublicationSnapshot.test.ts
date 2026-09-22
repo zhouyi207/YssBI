@@ -1,13 +1,15 @@
-import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
+import {
+  installGraphProjectionFixture,
+  makeGraphEditingState,
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
 import { buildGraphResourceMeta } from "@/features/core/resource";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-} from "@/tests/helpers/editorProjectionFixtures";
+
 import {
   captureProjectIdentity,
   startProjectLifecycle,
@@ -92,22 +94,23 @@ describe("project snapshot projection replacement", () => {
     vi.clearAllMocks();
     flexlayoutMocks.ready = true;
     flexlayoutMocks.panels.splice(0);
-    useGraphProjectionStore.setState({ graphEntities: {} });
-    useGraphEditingStore.getState().clear();
+    useGraphProjectionStore.getState().clear();
     const projection = makeEditorProjectionFixture({
       graphPath: caller,
       nodeId: "call-1",
       nodeTypeId: "yssbi.project.function.call",
       title: "Loaded caller",
     }).projection;
-    useGraphProjectionStore.getState().replaceProjection(caller, projection);
+    installGraphProjectionFixture(caller, projection);
   });
 
   it("does not replace a dirty Graph draft, including edits made after snapshot preparation", async () => {
     const replacement = makeEditorProjectionFixture({ graphPath: caller });
-    useGraphEditingStore.getState().install(caller, makeGraphEditorSession(replacement.projection));
+    useGraphProjectionStore
+      .getState()
+      .install(caller, makeGraphEditorSession(replacement.projection));
     const setDirty = (saveDirty: boolean) =>
-      useGraphEditingStore.setState((state) => ({
+      useGraphProjectionStore.setState((state) => ({
         sessions: { ...state.sessions, [caller]: { ...state.sessions[caller], saveDirty } },
       }));
     setDirty(true);
@@ -129,7 +132,9 @@ describe("project snapshot projection replacement", () => {
         [
           caller,
           {
-            document: useGraphEditingStore.getState().sessions[caller].document,
+            resultState: makeGraphEditorSession(replacement.projection).resultState,
+
+            document: useGraphProjectionStore.getState().sessions[caller].document,
             editing: makeGraphEditingState(),
             projection: replacement.projection,
           },
@@ -142,7 +147,7 @@ describe("project snapshot projection replacement", () => {
 
     expect(plan.graphProjectionPlan.graphPaths).toEqual([]);
     const before = callerSnapshot();
-    expect(plan.graphProjectionPlan.graphEntities[caller]).toEqual(before);
+    expect(plan.graphProjectionPlan.state.graphEntities[caller]).toEqual(before);
     setDirty(false);
     const preparedClean = prepareProjectSnapshotCommit(plan);
     expect(preparedClean.graphProjectionPlan.graphPaths).toEqual([caller]);

@@ -1,12 +1,16 @@
+import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
+import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { bench, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import projectionFixture from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import { invokeGraphSync, clearGraphSyncBaselines } from "@/services/nodeSystem/graphEditorSync";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-const cases = new Map<string, { wire: string; nodeId: string; revision: number }>();
+const cases = new Map<
+  string,
+  { wire: string; nodeId: string; revision: number; snapshotBytes: number }
+>();
 
 vi.mocked(invoke).mockImplementation(async (_command, raw) => {
   const args = raw as {
@@ -16,7 +20,11 @@ vi.mocked(invoke).mockImplementation(async (_command, raw) => {
     cursor: string | null;
   };
   const fixture = cases.get(args.projectInstanceId)!;
-  if (!args.cursor) return JSON.parse(fixture.wire);
+  if (!args.cursor) {
+    const snapshot = JSON.parse(fixture.wire);
+    snapshot.update.data.editing.version.revision = String(fixture.revision);
+    return snapshot;
+  }
   fixture.revision++;
   const x = fixture.revision % 2;
   return JSON.parse(
@@ -31,6 +39,7 @@ vi.mocked(invoke).mockImplementation(async (_command, raw) => {
         kind: "delta",
         baseCursor: args.cursor,
         cursor: String(fixture.revision),
+        snapshotBytes: fixture.snapshotBytes,
         changes: [
           { kind: "set", path: ["document", "nodes", fixture.nodeId, "position", "x"], value: x },
           { kind: "set", path: ["projection", "nodes", "0", "position", "x"], value: x },
@@ -81,7 +90,7 @@ for (const count of [100, 1000, 5000]) {
       user_label: null,
     };
   }
-  const wire = JSON.stringify({
+  const response = {
     ...binding,
     changed: false,
     resourceRevision: null,
@@ -89,7 +98,10 @@ for (const count of [100, 1000, 5000]) {
     update: {
       kind: "snapshot",
       cursor: "initial",
+      snapshotBytes: 0,
       data: {
+        resultState: makeGraphEditorSession(parseEditorGraphProjectionDto(projection)).resultState,
+
         document,
         projection,
         editing: {
@@ -100,20 +112,24 @@ for (const count of [100, 1000, 5000]) {
         },
       },
     },
+  };
+  response.update.snapshotBytes = Buffer.byteLength(JSON.stringify(response.update.data));
+  const wire = JSON.stringify(response);
+  cases.set(binding.projectInstanceId, {
+    wire,
+    nodeId: firstId,
+    revision: 0,
+    snapshotBytes: response.update.snapshotBytes,
   });
-  cases.set(binding.projectInstanceId, { wire, nodeId: firstId, revision: 0 });
   const install = async () => {
     const reply = await invokeGraphSync("hydrate_editor_graph", binding, binding);
-    useGraphEditingStore.getState().hydrate(binding.graphPath, reply.data);
-    const outcome = useGraphProjectionStore
-      .getState()
-      .replaceProjection(binding.graphPath, reply.data.projection);
-    if (!outcome.applied) throw new Error("Benchmark projection is invalid");
+    useGraphProjectionStore.getState().hydrate(binding.graphPath, reply.data);
   };
   bench(
     `${count} nodes: snapshot parse and adoption`,
     async () => {
       clearGraphSyncBaselines();
+      useGraphProjectionStore.getState().clearGraph(binding.graphPath);
       await install();
     },
     { time: 500, iterations: 30, warmupTime: 100 },

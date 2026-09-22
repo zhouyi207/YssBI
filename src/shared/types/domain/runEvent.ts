@@ -48,12 +48,6 @@ export type RunEventKind =
   | ({ type: "runErrored" } & RunErrorOutcome)
   | { type: "runCancelled" }
   | {
-      type: "pinPreviewResultReady";
-      output: GraphOutputRefDto;
-      generation: number;
-      resultId: string;
-    }
-  | {
       type: "resultInspectionRequested";
       resultId: string;
       source: ResultInspectionSource;
@@ -70,7 +64,6 @@ export const RUN_EVENT_KIND_TYPES = {
   runCompleted: true,
   runErrored: true,
   runCancelled: true,
-  pinPreviewResultReady: true,
   resultInspectionRequested: true,
 } as const satisfies Record<RunEventKind["type"], true>;
 

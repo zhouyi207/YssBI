@@ -1,7 +1,11 @@
+import {
+  makeGraphEditorSession,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import * as invalidationChannel from "@/services/result/resultSessionChannel";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResultDescriptor, ResultPage } from "@/shared/types/domain/result";
+import type { GraphResultState, ResultDescriptor, ResultPage } from "@/shared/types/domain/result";
 import type { RunEventKind } from "@/shared/types/domain/runEvent";
 import { ResultService } from "@/services/result/resultService";
 import {
@@ -10,19 +14,35 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useExecutionStore } from "@/features/core/execution";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+
 import {
   observeResultRunEvent,
-  readPinResultStatus,
   resetResultQueryProject,
   resultQueryCoordinator,
   resultQueryRead,
+  reconcileGraphResultQueries,
+  resetGraphResultQueries,
 } from "./runtime";
 
 const graphPath = "events/Main.yssbi-event";
 const fixture = makeEditorProjectionFixture({ graphPath });
 const output = { graphPath, port: fixture.outputAddress };
 const request = { graphPath, output: output.port };
+function resultState(
+  resultId: string | null,
+  executionSessionId = resultSessionFixture,
+): GraphResultState {
+  return {
+    revision: "0",
+
+    executionSessionId,
+    semanticInputHash:
+      useGraphProjectionStore.getState().sessions[graphPath]?.semanticInputHash ??
+      fixture.projection.basis.semanticInputHash,
+    outputs: [{ output, state: resultId ? "valid" : "missing", resultId }],
+    connections: [],
+  };
+}
 const descriptor = (id: string): ResultDescriptor => ({
   resultId: id,
 
@@ -63,19 +83,23 @@ beforeEach(() => {
   vi.restoreAllMocks();
   resetResultQueryProject();
   useExecutionStore.setState({ graphs: {} });
+  useGraphProjectionStore.getState().clear();
   startProjectLifecycle("project-1");
-  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
+  useGraphProjectionStore.getState().install(graphPath, {
+    ...makeGraphEditorSession(fixture.projection),
+    resultState: resultState("1"),
+  });
+  vi.spyOn(ResultService, "getGraphState").mockResolvedValue(null);
 });
 
 describe("current result lifecycle", () => {
-  it("does not publish unchanged pin status when a terminal event is delivered twice", () => {
+  it("does not publish another result update when a terminal event is delivered twice", () => {
     event("1", { type: "runStarted", outputs: [output] });
     event("1", { type: "runCancelled" });
     const listener = vi.fn();
     const unsubscribe = resultQueryRead.subscribe(listener);
     event("1", { type: "runCancelled" });
     expect(listener).not.toHaveBeenCalled();
-    expect(readPinResultStatus(request)).toBe("cancelled");
     unsubscribe();
   });
 
@@ -169,29 +193,35 @@ describe("current result lifecycle", () => {
     expect(resultQueryRead.getValue(resultReferenceFixture("1"))).toBeNull();
     expect(resultQueryRead.getPage(pageRequest)).toBeNull();
     expect(resultQueryRead.getPinResult(request)).toBeNull();
-    expect(readPinResultStatus(request)).toBe("running");
     expect(publishInvalidation).not.toHaveBeenCalled();
     settle(page("1"));
     await expect(pending).resolves.toEqual({ status: "stale" });
     expect(resultQueryRead.getPage(pageRequest)).toBeNull();
     vi.mocked(ResultService.getPinResult).mockResolvedValue(descriptor("2"));
+    vi.mocked(ResultService.getGraphState).mockResolvedValue(resultState("2"));
     event("2", { type: "runCompleted" });
     await vi.waitFor(() => expect(resultQueryRead.getPinResult(request)?.resultId).toBe("2"));
     event("1", { type: "runStarted", outputs: [output] });
     expect(resultQueryRead.getPinResult(request)?.resultId).toBe("2");
+    vi.mocked(ResultService.getGraphState).mockResolvedValue(resultState(null));
     event("3", { type: "runStarted", outputs: [output] });
     event("3", { type: "runCancelled" });
     expect(resultQueryRead.getPinResult(request)).toBeNull();
     expect(resultQueryRead.getDescriptor(resultReferenceFixture("2"))).toBeNull();
-    expect(readPinResultStatus(request)).toBe("cancelled");
-    vi.mocked(ResultService.getPinResult).mockResolvedValue(descriptor("1"));
+    const nextExecutionSessionId = "00000000-0000-0000-0000-000000000002";
+    vi.mocked(ResultService.getPinResult).mockResolvedValue({
+      ...descriptor("1"),
+      executionSessionId: nextExecutionSessionId,
+    });
+    vi.mocked(ResultService.getGraphState).mockResolvedValue(
+      resultState("1", nextExecutionSessionId),
+    );
     observeResultRunEvent({
-      run: { runId: "1", graphPath, executionSessionId: "new-session" },
+      run: { runId: "1", graphPath, executionSessionId: nextExecutionSessionId },
       kind: { type: "runStarted", outputs: [output] },
     });
-    expect(readPinResultStatus(request)).toBe("running");
     observeResultRunEvent({
-      run: { runId: "1", graphPath, executionSessionId: "new-session" },
+      run: { runId: "1", graphPath, executionSessionId: nextExecutionSessionId },
       kind: { type: "runCompleted" },
     });
     await vi.waitFor(() => expect(resultQueryRead.getPinResult(request)?.resultId).toBe("1"));
@@ -210,7 +240,12 @@ describe("current result lifecycle", () => {
     await resultQueryCoordinator.loadValue(reference);
     const changed = structuredClone(fixture.projection);
     changed.basis.semanticInputHash = "1".repeat(64);
-    useGraphProjectionStore.getState().replaceProjection(graphPath, changed);
+    const previous = useGraphProjectionStore.getState().sessions[graphPath];
+    useGraphProjectionStore.getState().hydrate(graphPath, {
+      ...makeGraphEditorSession(changed),
+      resultState: { ...resultState(null), semanticInputHash: changed.basis.semanticInputHash },
+    });
+    reconcileGraphResultQueries(graphPath, previous);
     expect(resultQueryRead.getPinResult(request)).toBeNull();
     expect(resultQueryRead.getDescriptor(reference)?.resultId).toBe("1");
     expect(resultQueryRead.getValue(reference)).toEqual({ kind: "value", value: 42 });
@@ -218,8 +253,10 @@ describe("current result lifecycle", () => {
     expect(resultQueryRead.getPinResult(request)).toBeNull();
     release();
     expect(resultQueryRead.getDescriptor(reference)).toBeNull();
+    useGraphProjectionStore.getState().setResultState(graphPath, resultState("1"));
     await resultQueryCoordinator.loadPinResult(request);
     useGraphProjectionStore.getState().clearGraph(graphPath);
+    resetGraphResultQueries(graphPath);
     expect(resultQueryRead.getDescriptor(resultReferenceFixture("1"))).toBeNull();
     expect(resultQueryRead.getPinResult(request)).toBeNull();
   });

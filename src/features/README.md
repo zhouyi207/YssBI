@@ -11,6 +11,9 @@ Graph、Resource、Execution、Settings、Database 和界面读取能力复用 `
 节点 Details 按当前节点、端口和诊断显示文本选择投影，引用数组使用浅比较；参数编辑器消费只读协议值，不在 selector 或渲染中深拷贝。连接候选只依赖端口、连接和节点标题，编辑草稿在用户修改或提交边界产生新值。
 数值参数编辑遵循当前 `Scalar/Numeric` 语义，允许小数；客户端保留必填、有限值和安全整数检查，不保留旧物理整数类型对应的“必须为整数”错误分支。
 
-连接提示消费后端已解析的类型域；结构类型按名义身份精确匹配，前端不维护继承关系表。Pin 创建目录在当前图编辑版本变化时重新查询 Rust 的兼容目录。
+连接提示消费后端已解析的类型域；结构类型按名义身份精确匹配，前端不维护继承关系表。Pin 创建目录在图编辑版本、语义身份或资源目录发布版本变化时重新查询 Rust 的兼容目录；单纯结果状态更新不会重新查询。
+
+`core/dataStore/graphProjectionStore` 是图会话、实体和结果有效性摘要的统一只读发布入口。打开、编辑、撤销、保存以及项目快照都先验证完整回执，再一次安装 `sessions / graphEntities / resultStates`；原图编辑 Store 已移除。完整快照和增量响应都按实体 ID 复用未变化的内容，发布时冻结对象。编辑版本和结果摘要版本独立接纳，迟到的较旧结果不能覆盖新运行状态。结果查询和持有租约仍由 Results Application 管理。
+节点视图按输入、输出分组并共享原始 Pin 引用；连接数量直接读取 Rust 的 `connections.current`，不再派生第二套 Pin 连接状态。连线记录保留必需的结构化端点和顺序字段，查看结果与诊断直接消费这些字段。
 
 Application 可以依赖 Core、Domain 和 Services；依赖不能从 Core 或 Domain 反向指向 Application 或界面。完整边界由[当前架构](../../docs/architecture/ARCHITECTURE.md#layer-and-dependency-direction)和[架构门禁](../../docs/development/ARCHITECTURE_GATES.md)维护。

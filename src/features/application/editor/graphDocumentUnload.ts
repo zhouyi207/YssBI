@@ -1,5 +1,5 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { resetGraphResultQueries } from "@/features/application/results/runtime";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { invalidateGraphLoadOwnership } from "@/features/application/project/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution";
 import { clearCanvasInteractionGraph } from "@/features/core/canvas/canvasInteractionCleanup";
@@ -72,7 +72,7 @@ export async function unloadGraphDocument(
           return;
         }
         useGraphProjectionStore.getState().clearGraph(graphPath);
-        useGraphEditingStore.getState().clearGraph(graphPath);
+        resetGraphResultQueries(graphPath);
         clearCanvasInteractionGraph(graphPath);
         useExecutionStore.getState().releaseGraphExecutionState(graphPath);
         releaseGraphViewport(graphPath);

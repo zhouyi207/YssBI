@@ -1,3 +1,4 @@
+import { parseGraphResultState } from "./resultParser";
 import type {
   EditorGraphMutationDto,
   GraphDocumentDto,
@@ -308,32 +309,43 @@ export function parseGraphDocumentDto(value: unknown): GraphDocumentDto {
 }
 
 export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDto {
-  if (!isRecord(value) || !hasExactKeys(value, ["document", "projection", "editing"])) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["document", "projection", "editing", "resultState"])
+  ) {
     throw new Error("Graph editor session is malformed");
   }
   const projection = isEditorGraphProjectionDto(value.projection) ? value.projection : null;
   if (!projection) throw new Error("Graph editor session projection is malformed");
+  const resultState = parseGraphResultState(value.resultState);
+  if (resultState.semanticInputHash !== projection.basis.semanticInputHash) {
+    throw new Error("Graph result state does not match its semantic projection");
+  }
   return {
     editing: parseGraphEditingState(value.editing),
     document: parseGraphDocumentDto(value.document),
     projection,
+    resultState,
   };
 }
 
 export function parseGraphEditResultDto(value: unknown): GraphEditResultDto {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["changed", "document", "projection", "editing"]) ||
+    !hasExactKeys(value, ["changed", "document", "projection", "editing", "resultState"]) ||
     typeof value.changed !== "boolean" ||
     !isEditorGraphProjectionDto(value.projection)
   ) {
     throw new Error("Graph draft transform result is malformed");
   }
   return {
+    ...parseGraphEditorSessionDto({
+      document: value.document,
+      projection: value.projection,
+      editing: value.editing,
+      resultState: value.resultState,
+    }),
     changed: value.changed,
-    editing: parseGraphEditingState(value.editing),
-    document: parseGraphDocumentDto(value.document),
-    projection: value.projection,
   };
 }
 
@@ -349,6 +361,7 @@ export function parseGraphSaveResultDto(
       "document",
       "projectionReplacement",
       "editing",
+      "resultState",
     ]) ||
     value.projectInstanceId !== expectedProjectInstanceId ||
     !Number.isSafeInteger(value.resourceRevision) ||
@@ -356,12 +369,20 @@ export function parseGraphSaveResultDto(
   ) {
     throw new Error("Graph draft save result is malformed");
   }
+  const projectionReplacement = parseGraphProjectionReplacementDto(value.projectionReplacement);
+  const session = parseGraphEditorSessionDto({
+    document: value.document,
+    projection: projectionReplacement.projection,
+    editing: value.editing,
+    resultState: value.resultState,
+  });
   return {
     projectInstanceId: expectedProjectInstanceId,
-    editing: parseGraphEditingState(value.editing),
+    editing: session.editing,
     resourceRevision: value.resourceRevision as number,
-    document: parseGraphDocumentDto(value.document),
-    projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),
+    document: session.document,
+    projectionReplacement,
+    resultState: session.resultState,
   };
 }
 

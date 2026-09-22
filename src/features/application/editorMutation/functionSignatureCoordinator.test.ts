@@ -1,3 +1,8 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -7,10 +12,7 @@ import type {
   FunctionSignatureDto,
   ResourceMutationResultDto,
 } from "@/shared/types/domain/editorMutation";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-} from "@/tests/helpers/editorProjectionFixtures";
+
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { ProjectService } from "@/services/project/projectService";
 import {
@@ -58,12 +60,12 @@ vi.mock("@/services/nodeSystem/graphProjectionService", () => ({
 }));
 
 function installState(): void {
-  useGraphProjectionStore.setState({ graphEntities: {} });
+  useGraphProjectionStore.getState().clear();
   useResourceStore.getState().clear();
   useResourceStore
     .getState()
     .upsertResource(buildGraphResourceMeta("function", functionPath, "Compute", { revision: 2 }));
-  useGraphProjectionStore.getState().replaceProjection(
+  installGraphProjectionFixture(
     functionPath,
     makeEditorProjectionFixture({
       graphPath: functionPath,
@@ -417,8 +419,8 @@ describe("executeFunctionSignatureMutation", () => {
     const oldResult = result({ status: "complete", expectedGraphPaths: [functionPath] }, true);
 
     projectPublicationCoordinator.startProject("00000000-0000-0000-0000-000000000602", 0);
-    useGraphProjectionStore.setState({ graphEntities: {} });
-    useGraphProjectionStore.getState().replaceProjection(
+    useGraphProjectionStore.getState().clear();
+    installGraphProjectionFixture(
       functionPath,
       makeEditorProjectionFixture({
         graphPath: functionPath,

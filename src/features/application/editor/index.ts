@@ -33,11 +33,3 @@ export { useCanvasDrop } from "./useCanvasDrop";
 export { useCanvasOverlayHandlers } from "./useCanvasOverlayHandlers";
 export { revealDetails, setDetailContext, setInspectionContext } from "./rightSidebarActions";
 export { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
-export {
-  isPinPreviewActionAvailable,
-  requestAndOpenPinPreview,
-  requestPinPreview,
-  type PinPreviewFailure,
-  type PinPreviewRejectionReason,
-  type PinPreviewRequestResult,
-} from "./requestPinPreview";

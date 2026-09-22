@@ -18,10 +18,6 @@ interface EdgeProps {
   dimmed?: boolean;
   replacementPreview?: boolean;
   selected?: boolean;
-  onPointerDown?: (event: React.PointerEvent<SVGPathElement>) => void;
-  onClick?: (event: React.MouseEvent<SVGPathElement>) => void;
-  onContextMenu?: (event: React.MouseEvent<SVGPathElement>) => void;
-  onDoubleClick?: (event: React.MouseEvent<SVGPathElement>) => void;
 }
 
 export const Edge = React.memo<EdgeProps>(
@@ -41,10 +37,6 @@ export const Edge = React.memo<EdgeProps>(
     dimmed = false,
     replacementPreview = false,
     selected = false,
-    onPointerDown,
-    onClick,
-    onContextMenu,
-    onDoubleClick,
   }) => {
     const [hovered, setHovered] = React.useState(false);
     const pathData = computeEdgePath(x1, y1, x2, y2, startIsInput);
@@ -95,7 +87,7 @@ export const Edge = React.memo<EdgeProps>(
             strokeLinecap="round"
           />
         )}
-        {(interactive || onPointerDown || onClick || onContextMenu || onDoubleClick) && (
+        {interactive && (
           <path
             data-edge-hit-target={edgeId}
             d={pathData}
@@ -105,10 +97,6 @@ export const Edge = React.memo<EdgeProps>(
             pointerEvents="stroke"
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
-            onPointerDown={onPointerDown}
-            onClick={onClick}
-            onContextMenu={onContextMenu}
-            onDoubleClick={onDoubleClick}
           />
         )}
       </g>

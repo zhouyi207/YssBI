@@ -15,8 +15,6 @@ export interface PinContextMenuProps {
   onBreakLinks?: () => void;
   onResetValue?: () => void;
   showView?: boolean;
-  viewEnabled?: boolean;
-  viewDisabledTitle?: string;
   onView?: () => void;
   onClose: () => void;
 }
@@ -28,8 +26,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   onBreakLinks,
   onResetValue,
   showView = false,
-  viewEnabled = false,
-  viewDisabledTitle,
   onView,
   onClose,
 }) => {
@@ -59,24 +55,12 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         id: "view",
         label: p("view"),
         icon: <VscEye size={12} />,
-        disabled: !viewEnabled,
-        title: viewEnabled ? undefined : viewDisabledTitle,
         onClick: onView,
       });
     }
 
     return [{ items: primaryItems }];
-  }, [
-    t,
-    hasLinks,
-    canReset,
-    onBreakLinks,
-    onResetValue,
-    showView,
-    viewEnabled,
-    viewDisabledTitle,
-    onView,
-  ]);
+  }, [t, hasLinks, canReset, onBreakLinks, onResetValue, showView, onView]);
 
   return <ActionMenu position={position} sections={sections} onClose={onClose} />;
 };

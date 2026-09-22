@@ -149,7 +149,7 @@ function chooseSelectItem(item: HTMLElement | undefined): void {
 
 afterEach(() => {
   document.body.replaceChildren();
-  useGraphProjectionStore.setState({ graphEntities: {} });
+  useGraphProjectionStore.getState().clear();
 });
 
 beforeEach(() => {
@@ -277,6 +277,9 @@ describe("NodePinInterfacePanel", () => {
       id: "edge-1",
       from: output.id,
       to: "target-input",
+      output: connectedBucket.pins[output.id].address,
+      input: connectedBucket.pins["target-input"].address,
+      order: null,
     };
     connectedBucket.pinConnections[output.id] = ["edge-1"];
     connectedBucket.pinConnections["target-input"] = ["edge-1"];
@@ -384,6 +387,9 @@ describe("NodePinInterfacePanel", () => {
       id: "edge-2",
       from: "source-output",
       to: input.id,
+      output: connectedBucket.pins["source-output"].address,
+      input: connectedBucket.pins[input.id].address,
+      order: null,
     };
     connectedBucket.pinConnections[input.id] = ["edge-2"];
     connectedBucket.pinConnections["source-output"] = ["edge-2"];

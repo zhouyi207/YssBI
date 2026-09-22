@@ -79,14 +79,6 @@ export function getGraphConnection(
   return state.graphEntities[graphPath]?.connections[connectionId];
 }
 
-export function getGraphConnections(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): ConnectionData[] {
-  const bucket = state.graphEntities[graphPath];
-  return bucket ? Object.values(bucket.connections) : [];
-}
-
 export function isGraphProjectionExecutable(
   projection: Pick<GraphEntityBucket, "outcome" | "hasBlockingDiagnostics"> | undefined,
 ): boolean {

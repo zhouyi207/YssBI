@@ -1,6 +1,10 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 import type { GraphEditInvocation } from "./commandExecutor";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { executeGraphEdit } from "./commandExecutor";
@@ -46,7 +50,7 @@ function installProjection() {
   };
   const inputAddress = fixture.projection.nodes[0].ports[1].address;
   if (inputAddress.kind !== "instance") throw new Error("fixture input must be an instance port");
-  useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
+  installGraphProjectionFixture(graphPath, fixture.projection);
   return {
     outputKey: portAddressKey(fixture.projection.nodes[0].ports[0].address),
     inputKey: portAddressKey(fixture.projection.nodes[0].ports[1].address),
@@ -58,7 +62,7 @@ function installProjection() {
 describe("forward-only editor commands", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
   });
 
   it.each([

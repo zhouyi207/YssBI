@@ -391,8 +391,6 @@ export const enUS = {
       breakLinks: "Break Links",
       resetValue: "Reset to Default",
       view: "View",
-      viewDisabledNoRun: "Run the graph first to generate viewable results",
-      viewDisabledNoUpstream: "No upstream result available",
     },
   },
   projectPicker: {

@@ -5,7 +5,10 @@ import {
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
 import { enqueueGraphTask, installGraphSession } from "./graphEditCoordinator";
-import { isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
+import {
+  isGraphSaving,
+  useGraphProjectionStore,
+} from "@/features/core/dataStore/graphProjectionStore";
 
 export type HistoryDirection = "undo" | "redo";
 
@@ -24,11 +27,11 @@ async function installHistoryProjection(
   direction: HistoryDirection,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  const session = useGraphEditingStore.getState().sessions[graphPath];
+  const session = useGraphProjectionStore.getState().sessions[graphPath];
   if (!session) return false;
   if (!(direction === "undo" ? session.canUndo : session.canRedo)) return false;
   const isCurrent = () => {
-    const current = useGraphEditingStore.getState().sessions[graphPath];
+    const current = useGraphProjectionStore.getState().sessions[graphPath];
     return (
       isCurrentProjectIdentity(identity) &&
       current?.sessionId === session.sessionId &&
@@ -72,8 +75,4 @@ export function undoEditorHistory(graphPath: string): Promise<ExecuteHistoryMuta
 
 export function redoEditorHistory(graphPath: string): Promise<ExecuteHistoryMutationOutcome> {
   return executeHistoryMutation({ direction: "redo", graphPath });
-}
-
-export function resetHistoryCoordinator(): void {
-  useGraphEditingStore.getState().clear();
 }

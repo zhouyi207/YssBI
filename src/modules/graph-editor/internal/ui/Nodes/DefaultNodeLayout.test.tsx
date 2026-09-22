@@ -23,10 +23,7 @@ vi.mock("../Pins/GraphPinController", () => ({
 function projectedNode(): UINode {
   return {
     id: "database-node",
-    nodeType: "yssbi.dataframe.source.get",
-    title: "Sales Database",
-    styleId: "builtin.default",
-    position: { x: 0, y: 0 },
+    capabilities: { managed: false },
     display: {
       title: "Sales Database",
       userLabel: "Prior period",
@@ -37,17 +34,12 @@ function projectedNode(): UINode {
     diagnostics: [],
     inputs: [],
     outputs: [
-      {
-        ...makeProjectedPinData({
-          id: "resource-output",
-          nodeId: "database-node",
-          name: "amount",
-          direction: "output",
-        }),
-        connected: false,
-        linkCount: 0,
-        connectionIds: [],
-      },
+      makeProjectedPinData({
+        id: "resource-output",
+        nodeId: "database-node",
+        name: "amount",
+        direction: "output",
+      }),
     ],
   };
 }

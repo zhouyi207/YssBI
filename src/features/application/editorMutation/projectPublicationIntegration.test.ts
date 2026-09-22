@@ -1,3 +1,8 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -15,12 +20,8 @@ import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore"
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import {
-  makeEditorProjectionFixture,
-  makeGraphEditorSession,
-} from "@/tests/helpers/editorProjectionFixtures";
 
 const eventPath = "events/Event.yssbi-event";
 
@@ -91,11 +92,10 @@ function setup(overrides: Partial<ProjectPublicationDependencies> = {}) {
 beforeEach(() => {
   useResourceStore.getState().clear();
   useDocumentStateStore.setState({ documents: {} });
-  useGraphProjectionStore.setState({ graphEntities: {} });
+  useGraphProjectionStore.getState().clear();
   useGraphMetaStore.setState({ graphs: {} });
   useChartDocumentStore.setState({ index: [], documents: {} });
   useDatabaseStore.setState({ databases: {}, revisions: {} });
-  useGraphEditingStore.getState().clear();
 });
 afterEach(() => coordinator?.cancelProject());
 
@@ -171,9 +171,10 @@ it("includes move receipts delivered while another graph session is being prepar
     prepareGraphSession,
   });
   for (const path of [eventPath, source])
-    useGraphProjectionStore
-      .getState()
-      .replaceProjection(path, makeEditorProjectionFixture({ graphPath: path }).projection);
+    installGraphProjectionFixture(
+      path,
+      makeEditorProjectionFixture({ graphPath: path }).projection,
+    );
   const first = coordinator.submit({ result: receipt(1) });
   await vi.waitFor(() => expect(prepareGraphSession).toHaveBeenCalledOnce());
   const moved = receipt(2, target);
@@ -189,6 +190,13 @@ it("includes move receipts delivered while another graph session is being prepar
   );
   expect(useGraphProjectionStore.getState().graphEntities[target]).toBeDefined();
   expect(useGraphProjectionStore.getState().graphEntities[source]).toBeUndefined();
+  for (const path of [eventPath, target]) {
+    const graph = useGraphProjectionStore.getState();
+    expect(graph.resultStates[path]).toEqual(
+      makeGraphEditorSession(graph.sessions[path].projection).resultState,
+    );
+  }
+  expect(useGraphProjectionStore.getState().resultStates[source]).toBeUndefined();
 });
 
 it("discards a delayed snapshot after project replacement", async () => {

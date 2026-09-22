@@ -111,7 +111,7 @@ export function formatDiagnosticLocationLabel(
     }
     case "connection": {
       const connection = bucket?.connections?.[location.connectionId];
-      if (!connection || !connection.output || !connection.input) return ownerTitle;
+      if (!connection) return ownerTitle;
       const outputLabel = resolveNodePinDisplayLabel(bucket, connection.output);
       const inputLabel = resolveNodePinDisplayLabel(bucket, connection.input);
       if (outputLabel && inputLabel) return `${outputLabel} → ${inputLabel}`;

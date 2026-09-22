@@ -52,6 +52,7 @@ export class GraphEditingService {
         resourceRevision: result.resourceRevision,
         document: result.data.document,
         editing: result.data.editing,
+        resultState: result.data.resultState,
         projectionReplacement: {
           graphPath,
           projection: result.data.projection,

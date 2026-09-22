@@ -1,3 +1,4 @@
+import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { parseEditorGraphProjectionDto } from "../domain/editorProjectionParser";
 import { describe, expect, it } from "vitest";
 import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
@@ -161,6 +162,9 @@ describe("editor mutation wire parser", () => {
 
   it("parses the current graph edit result", () => {
     const transformed = {
+      resultState: makeGraphEditorSession(parseEditorGraphProjectionDto(projection(graphPath)))
+        .resultState,
+
       editing: makeGraphEditingState(),
       changed: true,
       document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },

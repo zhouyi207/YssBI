@@ -25,18 +25,6 @@
         }
       ],
       "type": "outputs"
-    },
-    {
-      "generation": 17,
-      "output": {
-        "graphPath": "events/contract.yssbi-event",
-        "port": {
-          "kind": "declared",
-          "nodeId": "00000000-0000-0000-0000-000000000002",
-          "portKey": "result"
-        }
-      },
-      "type": "pinPreview"
     }
   ],
   "format": "yssbi.execution-wire.v1",
@@ -152,26 +140,6 @@
     },
     {
       "kind": {
-        "generation": 17,
-        "output": {
-          "graphPath": "events/contract.yssbi-event",
-          "port": {
-            "kind": "declared",
-            "nodeId": "00000000-0000-0000-0000-000000000002",
-            "portKey": "result"
-          }
-        },
-        "resultId": "9007199254740993",
-        "type": "pinPreviewResultReady"
-      },
-      "run": {
-        "graphPath": "events/contract.yssbi-event",
-        "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
-    },
-    {
-      "kind": {
         "resultId": "9007199254740993",
         "source": {
           "graphPath": "functions/Inspect.yssbi-function",
@@ -205,6 +173,7 @@
     }
   ],
   "graphResultState": {
+    "revision": "1",
     "executionSessionId": "00000000-0000-0000-0000-000000000001",
     "semanticInputHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "outputs": [

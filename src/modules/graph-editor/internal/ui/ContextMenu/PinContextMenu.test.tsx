@@ -48,7 +48,6 @@ describe("PinContextMenu", () => {
       onBreakLinks,
       onResetValue,
       showView: true,
-      viewEnabled: true,
       onView,
     });
 
@@ -64,7 +63,6 @@ describe("PinContextMenu", () => {
           onBreakLinks,
           onResetValue,
           showView: true,
-          viewEnabled: true,
           onView,
         },
         label,

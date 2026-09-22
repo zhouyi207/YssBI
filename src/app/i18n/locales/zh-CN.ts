@@ -359,8 +359,6 @@ export const zhCN = {
       breakLinks: "断开连接",
       resetValue: "恢复默认值",
       view: "查看",
-      viewDisabledNoRun: "请先运行图以生成可查看结果",
-      viewDisabledNoUpstream: "无可用上游结果",
     },
   },
   projectPicker: {

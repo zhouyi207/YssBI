@@ -1,7 +1,7 @@
 import { shareProjection } from "@/features/core/state/readProjection";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { RunFailureProjection } from "@/features/core/execution/executionTypes";
-import type { GraphResultCacheProjection } from "./runtime";
+import type { GraphResultState } from "@/shared/types/domain/result";
 import type { ConnectionCacheState } from "@/shared/types/domain/result";
 
 export type GraphCacheAppearance = "new" | "stale" | "valid" | "partial";
@@ -9,10 +9,11 @@ export type GraphElementState = "unexecuted" | "running" | "error" | "valid" | "
 
 /** Aggregate read-only facts per graph and retain unchanged element references. */
 export function projectGraphPresentation(
-  cache: GraphResultCacheProjection | undefined,
+  cache: GraphResultState | undefined,
   runningNodeIds: readonly string[],
   failure: RunFailureProjection | null,
   previous?: GraphResultPresentation,
+  pendingOutputs: ReadonlySet<string> = new Set(),
 ): GraphResultPresentation {
   const nodes: Record<
     string,
@@ -21,7 +22,8 @@ export function projectGraphPresentation(
   const outputs: Record<string, GraphCacheAppearance> = {};
   const inputs: Record<string, GraphCacheAppearance> = {};
   const connections: Record<string, Record<string, ConnectionCacheState>> = {};
-  for (const { output, state } of Object.values(cache?.outputs ?? {})) {
+  for (const { output, state: cachedState } of cache?.outputs ?? []) {
+    const state = pendingOutputs.has(portAddressKey(output.port)) ? "missing" : cachedState;
     const node = (nodes[output.port.nodeId] ??= { total: 0, valid: 0, stale: 0, cache: "new" });
     node.total++;
     if (state === "valid") node.valid++;
@@ -29,7 +31,11 @@ export function projectGraphPresentation(
     outputs[portAddressKey(output.port)] = state === "missing" ? "new" : state;
   }
   const outputNodes = new Set(Object.keys(nodes));
-  for (const { output, input, state } of cache?.connections ?? []) {
+  for (const { output, input, state: cachedState } of cache?.connections ?? []) {
+    const state =
+      pendingOutputs.has(portAddressKey(output.port)) && cachedState === "valid"
+        ? "stale"
+        : cachedState;
     const key = portAddressKey(input);
     (connections[portAddressKey(output.port)] ??= {})[key] = state;
     const previous = inputs[key];

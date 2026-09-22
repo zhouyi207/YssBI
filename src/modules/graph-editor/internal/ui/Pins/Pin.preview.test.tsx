@@ -1,3 +1,7 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 // @vitest-environment happy-dom
 import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 
@@ -12,11 +16,10 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { markResourceLoaded, useDocumentStateStore } from "@/features/core/resource";
 import { useExecutionStore } from "@/features/core/execution";
-import { PinPreviewGenerationService } from "@/services/nodeSystem/pinPreviewGenerationService";
 import { ProjectService } from "@/services/project/projectService";
 import { ResultService } from "@/services/result/resultService";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
+
 import { resetResultQueryProject } from "@/features/application/results";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { GraphPinController } from "./GraphPinController";
@@ -45,7 +48,7 @@ vi.mock("react-i18next", async (importOriginal) => ({
 
 const graphPath = "events/Main.yssbi-event";
 
-describe("Pin preview production path", () => {
+describe("Pin result View", () => {
   afterAll(() => katexWarningSpy.mockRestore());
   let container: HTMLDivElement;
   let root: Root;
@@ -56,13 +59,12 @@ describe("Pin preview production path", () => {
     useProjectIOStore.setState({ projectInstanceId: "project-session-1" });
     clearProjectLifecycle();
     startProjectLifecycle("project-session-1");
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
     useGraphSessionStore.getState().reset();
     useDocumentStateStore.getState().clear();
     useExecutionStore.setState({
       graphs: {},
     });
-    vi.spyOn(PinPreviewGenerationService, "allocate").mockResolvedValue(1);
     vi.spyOn(ResultService, "getPinResult").mockResolvedValue(null);
     vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(null);
     container = document.createElement("div");
@@ -81,9 +83,7 @@ describe("Pin preview production path", () => {
 
   it("routes output View through the current Pin result", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    expect(
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
-    ).toBe(true);
+    installGraphProjectionFixture(graphPath, fixture.projection);
     markResourceLoaded({ id: graphPath, kind: "event" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
@@ -127,9 +127,7 @@ describe("Pin preview production path", () => {
 
   it("keeps the Pin context menu limited to actions after viewing a result", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
-    expect(
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
-    ).toBe(true);
+    installGraphProjectionFixture(graphPath, fixture.projection);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
 
@@ -195,10 +193,7 @@ describe("Pin preview production path", () => {
   it("enables current result View for a Function output", async () => {
     const functionPath = "functions/Helper.yssbi-function";
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
-    expect(
-      useGraphProjectionStore.getState().replaceProjection(functionPath, fixture.projection)
-        .applied,
-    ).toBe(true);
+    installGraphProjectionFixture(functionPath, fixture.projection);
     markResourceLoaded({ id: functionPath, kind: "function" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", functionPath);
     const pin = useGraphProjectionStore.getState().getGraphPin(functionPath, fixture.outputKey);

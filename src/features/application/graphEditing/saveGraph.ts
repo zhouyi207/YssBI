@@ -3,7 +3,7 @@ import {
   enqueueGraphTask,
   installGraphSession,
 } from "@/features/application/graphEditing/graphEditCoordinator";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -17,12 +17,12 @@ export async function saveGraph(
   graphKind: Extract<ResourceKind, "event" | "function">,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  const drafts = useGraphEditingStore.getState();
+  const drafts = useGraphProjectionStore.getState();
   if (!drafts.beginSave(graphPath)) return false;
-  const sessionId = useGraphEditingStore.getState().sessions[graphPath].sessionId;
+  const sessionId = useGraphProjectionStore.getState().sessions[graphPath].sessionId;
   const isCurrentSave = () =>
     isCurrentProjectIdentity(identity) &&
-    useGraphEditingStore.getState().sessions[graphPath]?.sessionId === sessionId;
+    useGraphProjectionStore.getState().sessions[graphPath]?.sessionId === sessionId;
 
   let completed = false;
   try {
@@ -31,8 +31,8 @@ export async function saveGraph(
       async () => {
         if (!isCurrentSave()) return false;
         const projectionGeneration =
-          useGraphEditingStore.getState().sessions[graphPath].projectionGeneration;
-        const version = useGraphEditingStore.getState().sessions[graphPath].version;
+          useGraphProjectionStore.getState().sessions[graphPath].projectionGeneration;
+        const version = useGraphProjectionStore.getState().sessions[graphPath].version;
         const saved = await GraphEditingService.save(
           identity.projectInstanceId,
           graphPath,
@@ -42,7 +42,7 @@ export async function saveGraph(
         );
         if (
           !isCurrentSave() ||
-          useGraphEditingStore.getState().sessions[graphPath].projectionGeneration !==
+          useGraphProjectionStore.getState().sessions[graphPath].projectionGeneration !==
             projectionGeneration
         )
           return false;
@@ -57,6 +57,7 @@ export async function saveGraph(
               document: saved.document,
               projection: saved.projectionReplacement.projection,
               editing: saved.editing,
+              resultState: saved.resultState,
             },
             "save",
           )
@@ -76,7 +77,7 @@ export async function saveGraph(
     throw error;
   } finally {
     if (!completed && isCurrentSave()) {
-      useGraphEditingStore.getState().failSave(graphPath);
+      useGraphProjectionStore.getState().failSave(graphPath);
     }
   }
 }

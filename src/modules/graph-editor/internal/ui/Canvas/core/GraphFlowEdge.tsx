@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { useConnection, type EdgeProps } from "@xyflow/react";
+import { type EdgeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
 import { useGraphRead } from "@/features/core/graph/read";
 import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
@@ -23,13 +23,9 @@ export const GraphFlowEdge = memo(function GraphFlowEdge({
   data,
 }: EdgeProps<FlowEdge>) {
   const { interactive, graphPath } = useGraphFlowContext();
-  const { sourcePin, feedbackForPin } = useGraphFlowInteraction();
+  const drawingConnection = useGraphFlowInteraction((state) => state.sourceId !== null);
   const { t } = useTranslation();
-  const replaced = useConnection((connection) => {
-    const target = connection.toHandle?.id;
-    const feedback = target ? feedbackForPin(target) : null;
-    return feedback?.kind === "replace" && feedback.displacedConnectionIds.includes(id);
-  });
+  const replaced = useGraphFlowInteraction((state) => state.replacedConnectionIds.has(id));
   const { tokens } = useTheme();
   const pin = useGraphRead((snapshot) =>
     data ? snapshot.graphEntities[graphPath]?.pins[data.fromPinId] : undefined,
@@ -80,7 +76,7 @@ export const GraphFlowEdge = memo(function GraphFlowEdge({
         cacheState={cache}
         title={t(`canvas.graphState.${state}`)}
         startIsInput={pin?.direction === "input"}
-        dimmed={sourcePin !== null}
+        dimmed={drawingConnection}
         replacementPreview={replaced}
         selected={selected}
         interactive={interactive}

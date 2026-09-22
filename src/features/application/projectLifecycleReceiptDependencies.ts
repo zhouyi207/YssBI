@@ -14,7 +14,7 @@ import {
   captureProjectIdentity,
   isProjectLifecycleStateCurrent,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { revokeAllPinPreviewLeases, useExecutionStore } from "@/features/core/execution";
+import { useExecutionStore } from "@/features/core/execution";
 import { clearCanvasInteractionProject } from "@/features/core/canvas/canvasInteractionCleanup";
 
 export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleReceiptDependencies {
@@ -33,8 +33,6 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
     clearProject: async (owner) => {
       if (!isProjectLifecycleStateCurrent(owner)) return;
       clearCanvasInteractionProject();
-      if (!isProjectLifecycleStateCurrent(owner)) return;
-      revokeAllPinPreviewLeases();
       if (!isProjectLifecycleStateCurrent(owner)) return;
       useExecutionStore.setState({
         graphs: {},

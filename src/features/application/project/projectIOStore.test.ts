@@ -1,3 +1,7 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   clearProjectLifecycle,
@@ -9,7 +13,6 @@ import { useDocumentStateStore } from "@/features/core/resource/documentStateSto
 import { buildGraphResourceMeta } from "@/features/core/resource/resourceTypes";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 
 afterEach(() => {
   clearProjectLifecycle();
@@ -21,7 +24,7 @@ describe("project read context", () => {
     const path = "events/Cached";
     const fixture = makeEditorProjectionFixture({ graphPath: path });
     useResourceStore.getState().setResources([buildGraphResourceMeta("event", path, "Cached")]);
-    useGraphProjectionStore.getState().replaceProjection(path, fixture.projection);
+    installGraphProjectionFixture(path, fixture.projection);
     markResourceLoaded({ id: path, kind: "event" });
     useProjectIOStore.setState({ graphLoadStatus: { [path]: "ready" } });
     const state = useProjectIOStore.getState();
@@ -35,7 +38,7 @@ describe("project read context", () => {
     } finally {
       unsubscribe();
       useProjectIOStore.setState({ graphLoadStatus: {} });
-      useGraphProjectionStore.setState({ graphEntities: {} });
+      useGraphProjectionStore.getState().clear();
       useResourceStore.getState().clear();
       useDocumentStateStore.getState().clear();
     }

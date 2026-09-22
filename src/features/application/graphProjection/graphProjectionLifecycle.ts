@@ -1,6 +1,10 @@
 import { currentProjectionLocale } from "./projectionLocale";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { isGraphModified, isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
+import {
+  useGraphProjectionStore,
+  isGraphModified,
+  isGraphSaving,
+} from "@/features/core/dataStore/graphProjectionStore";
+
 import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { clearGraphSyncBaselines } from "@/services/nodeSystem/graphEditorSync";
@@ -250,7 +254,7 @@ function refreshGraphFromActivity(
       entry.again = false;
       const editing = entry.editing;
       if (!isCurrentProjectIdentity(identity)) return false;
-      const current = useGraphEditingStore.getState().sessions[graphPath];
+      const current = useGraphProjectionStore.getState().sessions[graphPath];
       if (
         editing &&
         current?.version.sessionId === editing.version.sessionId &&

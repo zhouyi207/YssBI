@@ -179,6 +179,8 @@ describe("ResultQueryCoordinator", () => {
       projectionGeneration: 2,
     });
     const state: GraphResultState = {
+      revision: "0",
+
       executionSessionId: resultSessionFixture,
       semanticInputHash: request.semanticInputHash,
       connections: [],

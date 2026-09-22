@@ -1,3 +1,5 @@
+import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
+import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
 import { clearGraphSyncBaselines } from "./graphEditorSync";
 import { invoke } from "@tauri-apps/api/core";
@@ -7,6 +9,8 @@ import { GraphProjectionService } from "./graphProjectionService";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const session = {
+  resultState: makeGraphEditorSession(parseEditorGraphProjectionDto(editorProjection)).resultState,
+
   editing: makeGraphEditingState(),
   document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
   projection: editorProjection,

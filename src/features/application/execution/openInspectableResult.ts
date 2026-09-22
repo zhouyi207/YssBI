@@ -5,7 +5,7 @@ import {
 } from "@/features/application/window";
 import { workbenchLayoutControl } from "@/modules/workbench/public";
 import {
-  evaluatePinViewState,
+  inspectableRefsFromPinView,
   type ResolvePinViewTargetParams,
 } from "@/features/core/execution/pinViewTarget";
 import {
@@ -76,7 +76,7 @@ export async function openInspectableResult(ref: InspectableResultRef): Promise<
 
 /** Open pin/context-menu targets; tries upstream pins in order for input direction. */
 export async function openPinInspectableView(params: ResolvePinViewTargetParams): Promise<boolean> {
-  const { refs } = evaluatePinViewState(params);
+  const refs = inspectableRefsFromPinView(params);
   for (const ref of refs) {
     if (await openInspectableResult(ref)) {
       return true;

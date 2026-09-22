@@ -154,7 +154,7 @@ export const frontendNodes: FrontendArchitectureNode[] = [
         "src/modules/problems/",
         "src/modules/results/",
         "src/modules/output/",
-        "src/features/core/graphEditing/",
+        "src/features/core/dataStore/graphProjectionStore.ts",
         "src/features/application/graphEditing/",
         "src/features/application/graphEditing/",
         "src/features/application/graphProjection/",

@@ -165,7 +165,7 @@ describe("renameResource project ownership", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     useResourceStore.getState().clear();
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
     useResourceStore.getState().setSnapshot({
       resources: [
         {

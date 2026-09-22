@@ -1,7 +1,8 @@
 import { createContext, useContext } from "react";
+import { createStore } from "zustand/vanilla";
+import { useStore } from "zustand";
 import type { GraphContextMenuActions } from "@/features/application/editor";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { FlowConnectionFeedback } from "./graphFlowModel";
+import { EMPTY_FLOW_INTERACTION, type FlowInteractionProjection } from "./graphFlowModel";
 
 export interface GraphFlowContextValue {
   graphPath: string;
@@ -10,9 +11,9 @@ export interface GraphFlowContextValue {
   contextMenuActions: GraphContextMenuActions | null;
 }
 
-export interface GraphFlowInteractionValue {
-  sourcePin: PinData | null;
-  feedbackForPin(pinId: string): FlowConnectionFeedback | null;
+export interface GraphFlowInteractionValue extends FlowInteractionProjection {
+  targetId: string | null;
+  replacedConnectionIds: ReadonlySet<string>;
 }
 
 export const GraphFlowContext = createContext<GraphFlowContextValue | null>(null);
@@ -23,10 +24,19 @@ export function useGraphFlowContext() {
   return context;
 }
 
-export const GraphFlowInteractionContext = createContext<GraphFlowInteractionValue>({
-  sourcePin: null,
-  feedbackForPin: () => null,
-});
-export function useGraphFlowInteraction() {
-  return useContext(GraphFlowInteractionContext);
+export function createGraphFlowInteractionStore() {
+  return createStore<GraphFlowInteractionValue>(() => ({
+    ...EMPTY_FLOW_INTERACTION,
+    targetId: null,
+    replacedConnectionIds: new Set(),
+  }));
+}
+
+const emptyInteraction = createGraphFlowInteractionStore();
+export const GraphFlowInteractionContext = createContext<ReturnType<
+  typeof createGraphFlowInteractionStore
+> | null>(null);
+
+export function useGraphFlowInteraction<T>(selector: (state: GraphFlowInteractionValue) => T): T {
+  return useStore(useContext(GraphFlowInteractionContext) ?? emptyInteraction, selector);
 }

@@ -22,11 +22,8 @@ export {
   resultQueryRead,
   resetResultQuery,
   resetResultQueryProject,
-  invalidateGraphResults,
   observeResultRunEvent,
-  readPinResultStatus,
   useGraphResultPresentation,
-  type GraphResultCacheProjection,
 } from "./runtime";
 export {
   graphElementState,

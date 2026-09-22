@@ -39,7 +39,7 @@ import {
   type EditorCommandTarget,
 } from "./editorCommandFocus";
 import { saveGraph as saveCurrentGraph } from "@/features/application/graphEditing/saveGraph";
-import { useGraphEditingStore } from "@/features/core/graphEditing";
+
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 
@@ -233,7 +233,7 @@ export function useProjectOperations() {
           graphPath,
           async () => {
             if (!isCurrentProjectIdentity(project)) return null;
-            const draft = useGraphEditingStore.getState().sessions[graphPath];
+            const draft = useGraphProjectionStore.getState().sessions[graphPath];
             if (!draft || draft.saving) return null;
             const projection = useGraphProjectionStore.getState().graphEntities[graphPath];
             if (!isGraphProjectionExecutable(projection)) {

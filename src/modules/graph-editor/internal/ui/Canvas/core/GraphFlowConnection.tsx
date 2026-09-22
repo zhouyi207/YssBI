@@ -15,8 +15,10 @@ export function GraphFlowConnection({
   toY,
   toHandle,
 }: ConnectionLineComponentProps) {
-  const { feedbackForPin, sourcePin } = useGraphFlowInteraction();
-  const feedback = toHandle?.id ? feedbackForPin(toHandle.id) : null;
+  const sourceDirection = useGraphFlowInteraction((state) => state.sourceDirection);
+  const feedback = useGraphFlowInteraction((state) =>
+    toHandle?.id ? (state.pins[toHandle.id]?.feedback ?? null) : null,
+  );
   const color =
     feedback?.kind === "invalid"
       ? "var(--status-danger)"
@@ -27,7 +29,7 @@ export function GraphFlowConnection({
           : "var(--accent-color)";
   return (
     <path
-      d={computeEdgePath(fromX, fromY, toX, toY, sourcePin?.direction === "input")}
+      d={computeEdgePath(fromX, fromY, toX, toY, sourceDirection === "input")}
       fill="none"
       stroke={color}
       strokeWidth={2}

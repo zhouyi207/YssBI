@@ -4,7 +4,6 @@ import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDi
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { useNodeView } from "@/features/core/dataStore/useNodeView";
 import { isRerouteNodeView } from "@/features/core/dataStore/nodeView";
-import { useGraphRead } from "@/features/core/graph/read";
 import { useShallow } from "zustand/react/shallow";
 import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
 import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
@@ -25,10 +24,8 @@ export interface GraphNodeControllerProps {
   graphPath?: string;
   groupId?: string;
   selected?: boolean;
-  activePin?: PinData | null;
   contextMenuActions?: GraphContextMenuActions | null;
   renderPinHandle?: (pin: PinData) => ReactNode;
-  canConnectPin: (pin: PinData) => boolean;
 }
 
 export const GraphNodeController = memo(function GraphNodeController({
@@ -36,10 +33,8 @@ export const GraphNodeController = memo(function GraphNodeController({
   graphPath,
   groupId,
   selected,
-  activePin,
   contextMenuActions,
   renderPinHandle,
-  canConnectPin,
 }: GraphNodeControllerProps) {
   const { i18n, t } = useTranslation();
   const node = useNodeView(id, graphPath);
@@ -66,41 +61,26 @@ export const GraphNodeController = memo(function GraphNodeController({
   const cacheState = cached?.cache ?? "new";
   const isCompleted = cacheState === "valid";
   const hasError = executionState === "error";
-  const managed = useGraphRead((snapshot) =>
-    graphPath ? snapshot.graphEntities[graphPath]?.nodes[id]?.capabilities.managed : undefined,
-  );
-  const hasLinks = useGraphRead((snapshot) => {
-    const bucket = graphPath ? snapshot.graphEntities[graphPath] : undefined;
-    return (
-      bucket?.nodes[id]?.pinIds.some((pinId) => (bucket.pinConnections[pinId]?.length ?? 0) > 0) ??
-      false
-    );
-  });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-
-  const nodeDimmed = useMemo(() => {
-    if (!node || !activePin || activePin.nodeId === node.id) return false;
-    return ![...node.inputs, ...node.outputs].some(canConnectPin);
-  }, [activePin, canConnectPin, node]);
 
   const contentSlot = useMemo(() => {
     if (!node) return null;
     const props = {
       node,
-      activePinId: activePin?.id,
-      activePin,
       graphPath,
       contextMenuActions,
       renderPinHandle,
-      canConnectPin,
     };
     return isRerouteNodeView(node) ? (
       <RerouteNodeLayout {...props} />
     ) : (
       <DefaultNodeLayout {...props} />
     );
-  }, [node, activePin, graphPath, contextMenuActions, renderPinHandle, canConnectPin]);
+  }, [node, graphPath, contextMenuActions, renderPinHandle]);
   if (!node) return null;
+  const hasLinks =
+    node.inputs.some((pin) => pin.connections.current > 0) ||
+    node.outputs.some((pin) => pin.connections.current > 0);
   const isReroute = isRerouteNodeView(node);
   const executionLabel = executionState ? t(`canvas.graphState.${executionState}`) : "";
   const failureLabel =
@@ -163,7 +143,7 @@ export const GraphNodeController = memo(function GraphNodeController({
     contextMenu && contextMenuActions ? (
       <NodeContextMenu
         position={contextMenu}
-        managed={managed}
+        managed={node.capabilities.managed}
         hasLinks={hasLinks}
         onCopy={() => contextMenuActions.copyNode(node.id)}
         onCut={() => void contextMenuActions.cutNode(node.id)}
@@ -190,7 +170,6 @@ export const GraphNodeController = memo(function GraphNodeController({
       style={{
         ...minSize,
         background: getNodeBackgroundStyle({ hasError, isCompleted }),
-        opacity: nodeDimmed ? 0.35 : undefined,
         transition: "border-color 200ms, box-shadow 200ms, background 200ms, opacity 150ms",
         WebkitFontSmoothing: "antialiased",
         MozOsxFontSmoothing: "grayscale",

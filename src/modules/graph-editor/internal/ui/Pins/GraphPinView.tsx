@@ -1,31 +1,8 @@
-import type { CSSProperties, MouseEventHandler, PointerEventHandler, ReactNode } from "react";
+import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PinRenderStyle, PinVisualSpec } from "@/shared/types/domain/pinVisual";
-
-export interface GraphPinConnectionFeedbackViewModel {
-  kind: "append" | "replace" | "invalid";
-  invalidReason?: string;
-}
-
-export function pinConnectionFeedbackAttributes(
-  feedback: GraphPinConnectionFeedbackViewModel | null,
-) {
-  if (!feedback) return {};
-  return feedback.kind === "invalid"
-    ? {
-        "data-connection-feedback": feedback.kind,
-        "data-connection-invalid-reason": feedback.invalidReason,
-      }
-    : { "data-connection-feedback": feedback.kind };
-}
-
-export function pinConnectionFeedbackClass(
-  feedback: GraphPinConnectionFeedbackViewModel | null,
-): string {
-  if (!feedback) return "";
-  if (feedback.kind === "invalid") return "ring-2 ring-red-500/90";
-  return feedback.kind === "replace" ? "ring-2 ring-amber-500/90" : "ring-2 ring-emerald-500/90";
-}
+import { resolvePinRenderStyle } from "@/shared/types/domain/pinVisual";
+import { useGraphFlowInteraction } from "../Canvas/core/GraphFlowContext";
 
 export interface GraphPinViewProps {
   id: string;
@@ -35,7 +12,6 @@ export interface GraphPinViewProps {
   contextMenuOpen: boolean;
   diagnosticMessage?: string;
   dragStyle?: CSSProperties;
-  connectionFeedback: GraphPinConnectionFeedbackViewModel | null;
   visualSpec: PinVisualSpec;
   renderStyle: PinRenderStyle;
   baseColor: string;
@@ -47,7 +23,6 @@ export interface GraphPinViewProps {
   handleSlot?: ReactNode;
   contextMenuSlot?: ReactNode;
   onContextMenu: MouseEventHandler<HTMLDivElement>;
-  onPointerDown?: PointerEventHandler<HTMLDivElement>;
   onClick?: MouseEventHandler<HTMLDivElement>;
 }
 
@@ -171,13 +146,12 @@ export function GraphPinView({
   id,
   name,
   direction,
-  isConnected,
+  isConnected: projectedConnected,
   contextMenuOpen,
   diagnosticMessage,
   dragStyle,
-  connectionFeedback,
   visualSpec,
-  renderStyle,
+  renderStyle: projectedRenderStyle,
   baseColor,
   shouldPulse,
   tooltip,
@@ -187,9 +161,20 @@ export function GraphPinView({
   handleSlot,
   contextMenuSlot,
   onContextMenu,
-  onPointerDown,
   onClick,
 }: GraphPinViewProps) {
+  const interaction = useGraphFlowInteraction((state) => state.pins[id] ?? null);
+  const isConnected = projectedConnected || interaction?.active === true;
+  const renderStyle =
+    isConnected === projectedConnected
+      ? projectedRenderStyle
+      : resolvePinRenderStyle(true, baseColor, projectedRenderStyle.stroke);
+  const interactionStyle: CSSProperties | undefined =
+    interaction?.dragState === "dimmed"
+      ? { opacity: 0.25, transition: "opacity 150ms, filter 150ms" }
+      : interaction?.dragState === "highlighted"
+        ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
+        : undefined;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -197,12 +182,13 @@ export function GraphPinView({
           className={`group relative flex h-7 shrink-0 items-center transition-opacity pin-container ${
             direction === "input" ? "flex-row justify-start" : "flex-row-reverse justify-end"
           }`}
-          style={{ ...dragStyle, "--pin-result-color": baseColor } as CSSProperties}
+          style={
+            { ...dragStyle, ...interactionStyle, "--pin-result-color": baseColor } as CSSProperties
+          }
           data-pin-id={id}
           data-graph-state={executionState}
           data-cache-state={cacheState}
           tabIndex={-1}
-          {...pinConnectionFeedbackAttributes(connectionFeedback)}
           data-diagnostic={diagnosticMessage ? "true" : undefined}
           onContextMenu={onContextMenu}
         >
@@ -212,8 +198,7 @@ export function GraphPinView({
               direction === "input" ? "mr-1" : "ml-1"
             } ${contextMenuOpen ? "ring-2 ring-[var(--accent-color)]/60" : ""} ${
               diagnosticMessage ? "ring-2 ring-amber-500/80" : ""
-            } ${pinConnectionFeedbackClass(connectionFeedback)}`}
-            onPointerDown={onPointerDown}
+            }`}
             onClick={onClick}
           >
             <svg
@@ -255,7 +240,7 @@ export function GraphPinView({
             {name}
           </span>
 
-          {inputSlot}
+          {!interaction?.active && inputSlot}
           {contextMenuSlot}
         </div>
       </TooltipTrigger>

@@ -1,3 +1,7 @@
+import {
+  installGraphProjectionFixture,
+  makeEditorProjectionFixture,
+} from "@/tests/helpers/editorProjectionFixtures";
 import { afterEach, expect, it } from "vitest";
 import { getGraphSnapshot } from "@/features/core/graph/read";
 import { getResourceSnapshot } from "@/features/core/resource/read";
@@ -7,10 +11,9 @@ import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
 import { buildGraphResourceMeta, resourceKey } from "@/features/core/resource/resourceTypes";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 
 afterEach(() => {
-  useGraphProjectionStore.setState({ graphEntities: {} });
+  useGraphProjectionStore.getState().clear();
   useGraphMetaStore.getState().clear();
   useResourceStore.getState().clear();
   useDocumentStateStore.getState().clear();
@@ -19,10 +22,9 @@ afterEach(() => {
 it("keeps unrelated graph and resource snapshots stable and freezes published store records without copying", () => {
   const first = makeEditorProjectionFixture({ graphPath: "events/A" });
   const second = makeEditorProjectionFixture({ graphPath: "events/B" });
-  const projections = useGraphProjectionStore.getState();
-  projections.replaceProjection("events/A", first.projection);
+  installGraphProjectionFixture("events/A", first.projection);
   const graphBefore = getGraphSnapshot();
-  projections.replaceProjection("events/B", second.projection);
+  installGraphProjectionFixture("events/B", second.projection);
   expect(getGraphSnapshot().graphEntities["events/A"]).toBe(graphBefore.graphEntities["events/A"]);
   expect(graphBefore.graphEntities["events/A"]).toBe(
     useGraphProjectionStore.getState().graphEntities["events/A"],

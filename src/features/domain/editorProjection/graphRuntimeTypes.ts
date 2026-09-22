@@ -1,7 +1,7 @@
 /**
  * Normalized editor-projection runtime structures.
  *
- * `graphProjectionStore` buckets are editor projections. `replaceProjection` is the
+ * `graphProjectionStore` buckets are editor projections. `install` / `hydrate` is the
  * only bucket creation path and always installs projection basis, revision,
  * request generation, and diagnostics together with normalized entities.
  */
@@ -42,7 +42,7 @@ export interface NodeData {
 }
 
 // ==================== PinData ====================
-/** Pin 实体数据。连接关系不在这里保存；运行时连接状态从 pinConnections 派生。 */
+/** Pin 实体数据。连接数量与能力由 Rust 投影提供；具体连线由 pinConnections 索引读取。 */
 export interface PinData {
   id: string;
   nodeId: string;
@@ -61,13 +61,6 @@ export interface PinData {
   status: ResolvedPortStatusDto;
 }
 
-/** UI 运行时 Pin 视图，连接状态从 pinConnections 派生。 */
-export type PinView = PinData & {
-  connected: boolean;
-  linkCount: number;
-  connectionIds: string[];
-};
-
 // ==================== ConnectionData ====================
 /** Editor projection connection keyed by its backend-authored stable identity. */
 export interface ConnectionData {
@@ -76,7 +69,7 @@ export interface ConnectionData {
   from: string;
   /** Local key derived from the input port's structured address. */
   to: string;
-  output?: PortAddressDto;
-  input?: PortAddressDto;
-  order?: string | null;
+  output: PortAddressDto;
+  input: PortAddressDto;
+  order: string | null;
 }

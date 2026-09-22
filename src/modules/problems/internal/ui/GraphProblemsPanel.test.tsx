@@ -67,7 +67,7 @@ describe("GraphProblemsPanel", () => {
   beforeEach(() => {
     clearProjectLifecycle();
     startProjectLifecycle("project-problems");
-    useGraphProjectionStore.setState({ graphEntities: {} });
+    useGraphProjectionStore.getState().clear();
     useEditorStore.getState().clearDetailFocus();
     vi.spyOn(workbenchLayoutRead, "getActiveEditorPanel").mockReturnValue({
       panelInstanceId: "graph-panel",

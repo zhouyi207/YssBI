@@ -15,6 +15,7 @@ export type ResultCacheState = "missing" | "stale" | "valid";
 export type ConnectionCacheState = "new" | "stale" | "valid";
 
 export interface GraphResultState {
+  readonly revision: string;
   readonly executionSessionId: string;
   readonly semanticInputHash: string;
   readonly outputs: readonly {

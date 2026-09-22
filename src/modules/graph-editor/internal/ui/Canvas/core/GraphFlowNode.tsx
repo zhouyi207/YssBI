@@ -1,29 +1,22 @@
-import { memo, useCallback, useLayoutEffect } from "react";
-import {
-  Handle,
-  Position,
-  useConnection,
-  useUpdateNodeInternals,
-  type NodeProps,
-} from "@xyflow/react";
+import { memo, useLayoutEffect } from "react";
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { GraphNodeController } from "../../Nodes/GraphNodeController";
-import {
-  pinConnectionFeedbackAttributes,
-  pinConnectionFeedbackClass,
-} from "../../Pins/GraphPinView";
 import { useGraphFlowContext, useGraphFlowInteraction } from "./GraphFlowContext";
 import type { GraphFlowNode as FlowNode } from "./graphFlowModel";
 
 function GraphFlowHandle({ pin }: { pin: PinData }) {
   const { interactive } = useGraphFlowContext();
-  const { feedbackForPin } = useGraphFlowInteraction();
-  const targeted = useConnection((connection) => connection.toHandle?.id === pin.id);
-  const feedback = targeted ? feedbackForPin(pin.id) : null;
-  const viewFeedback =
-    feedback?.kind === "invalid"
-      ? { kind: feedback.kind, invalidReason: feedback.reason }
-      : feedback;
+  const feedback = useGraphFlowInteraction((state) =>
+    state.targetId === pin.id ? (state.pins[pin.id]?.feedback ?? null) : null,
+  );
+  const feedbackClass = feedback
+    ? {
+        invalid: "ring-2 ring-red-500/90",
+        replace: "ring-2 ring-amber-500/90",
+        append: "ring-2 ring-emerald-500/90",
+      }[feedback.kind]
+    : "";
   return (
     <Handle
       id={pin.id}
@@ -34,8 +27,9 @@ function GraphFlowHandle({ pin }: { pin: PinData }) {
       isConnectableStart={
         pin.connections.canAppend || pin.connections.canReplace || pin.connections.canMove
       }
-      className={`yss-flow-handle ${pinConnectionFeedbackClass(viewFeedback)}`}
-      {...pinConnectionFeedbackAttributes(viewFeedback)}
+      className={`yss-flow-handle ${feedbackClass}`}
+      data-connection-feedback={feedback?.kind}
+      data-connection-invalid-reason={feedback?.kind === "invalid" ? feedback.reason : undefined}
     />
   );
 }
@@ -48,24 +42,17 @@ export const GraphFlowNode = memo(function GraphFlowNode({
   selected,
 }: NodeProps<FlowNode>) {
   const { graphPath, groupId, contextMenuActions } = useGraphFlowContext();
-  const { sourcePin, feedbackForPin } = useGraphFlowInteraction();
   const updateNodeInternals = useUpdateNodeInternals();
   // Reordering equal-sized dynamic rows does not trigger ResizeObserver.
   useLayoutEffect(() => {
     updateNodeInternals(id);
   }, [id, data.handlesKey, updateNodeInternals]);
-  const canConnectPin = useCallback(
-    (pin: PinData) => feedbackForPin(pin.id)?.kind !== "invalid",
-    [feedbackForPin],
-  );
   return (
     <GraphNodeController
       id={id}
       graphPath={graphPath}
       groupId={groupId}
       selected={selected}
-      activePin={sourcePin}
-      canConnectPin={canConnectPin}
       contextMenuActions={contextMenuActions}
       renderPinHandle={renderHandle}
     />
