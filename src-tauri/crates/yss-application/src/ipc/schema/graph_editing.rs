@@ -31,12 +31,14 @@ pub(crate) fn graph_editor_session_to_transport(
     document: &yss_graph_document::GraphDocument,
     projection: &yss_graph_editor::projection::EditorProjectionModel,
     editing: &yss_project::GraphEditingState,
-) -> GraphEditorSessionDto {
-    GraphEditorSessionDto {
+    result_state: &crate::graph::results::GraphResultState,
+) -> Result<GraphEditorSessionDto, crate::ipc::error::CommandError> {
+    Ok(GraphEditorSessionDto {
         editing: graph_editing_state_to_transport(editing),
         document: document.clone(),
         projection: crate::ipc::schema::editor_projection::map_editor_projection(projection),
-    }
+        result_state: super::result::graph_result_state_to_dto(result_state.clone())?,
+    })
 }
 
 pub(crate) fn graph_editing_state_to_transport(
@@ -96,7 +98,8 @@ pub(crate) fn encode_graph_edit(
         &response.update.document,
         &response.update.projection_replacement.projection,
         &response.editing,
-    );
+        &response.result_state,
+    )?;
     let mut encoded = encode_graph_session(sync, binding, cursor, session)?;
     encoded.changed = response.update.changed;
     encoded.function_editor_projection = response

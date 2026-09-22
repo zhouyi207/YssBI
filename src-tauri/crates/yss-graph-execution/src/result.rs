@@ -73,13 +73,16 @@ pub enum ConnectionCacheState {
     Valid,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConnectionResultState {
     pub output: PlanOutputRef,
     pub input: PlanPortAddress,
     pub state: ConnectionCacheState,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphResultCacheState {
+    pub revision: u64,
     pub outputs: BTreeMap<PlanOutputRef, ResultCacheState>,
     pub connections: Vec<ConnectionResultState>,
 }

@@ -52,7 +52,8 @@ pub async fn hydrate_editor_graph(
                 receipt.document(),
                 receipt.projection(),
                 receipt.editing(),
-            ),
+                receipt.result_state(),
+            )?,
         )?;
         response.function_editor_projection = receipt.function_editor_projection().cloned();
         Ok(response)

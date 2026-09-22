@@ -1,8 +1,6 @@
 use crate::graph::PortAddressDto;
 use serde::{Deserialize, Serialize};
 
-pub const MAX_SAFE_PREVIEW_GENERATION: u64 = 9_007_199_254_740_991;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphOutputRefDto {
@@ -10,16 +8,17 @@ pub struct GraphOutputRefDto {
     pub port: PortAddressDto,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphResultStateDto {
+    pub revision: String,
     pub execution_session_id: String,
     pub semantic_input_hash: String,
     pub outputs: Box<[OutputResultStateDto]>,
     pub connections: Box<[ConnectionResultStateDto]>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionResultStateDto {
     pub output: GraphOutputRefDto,
@@ -27,7 +26,7 @@ pub struct ConnectionResultStateDto {
     pub state: ConnectionCacheStateDto,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ConnectionCacheStateDto {
     New,
@@ -35,7 +34,7 @@ pub enum ConnectionCacheStateDto {
     Valid,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputResultStateDto {
     pub output: GraphOutputRefDto,
@@ -43,7 +42,7 @@ pub struct OutputResultStateDto {
     pub result_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ResultCacheStateDto {
     Missing,
@@ -63,10 +62,6 @@ pub enum ExecutionDemandDto {
     Outputs {
         outputs: Box<[GraphOutputRefDto]>,
         include_default_results: bool,
-    },
-    PinPreview {
-        output: GraphOutputRefDto,
-        generation: u64,
     },
 }
 
@@ -94,11 +89,6 @@ pub enum RunEventKindDto {
         outcome: RunErrorOutcomeDto,
     },
     RunCancelled,
-    PinPreviewResultReady {
-        output: GraphOutputRefDto,
-        generation: u64,
-        result_id: String,
-    },
     ResultInspectionRequested {
         result_id: String,
         source: ResultInspectionSourceDto,

@@ -6,7 +6,6 @@ pub mod editing;
 mod finalization;
 pub(crate) mod inputs;
 pub mod open;
-pub(crate) mod preview_generation;
 pub mod resources;
 pub mod results;
 pub mod run;

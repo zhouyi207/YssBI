@@ -231,6 +231,7 @@ pub fn graph_result_state_to_dto(
         })
         .collect::<Result<_, CommandError>>()?;
     Ok(GraphResultStateDto {
+        revision: projection.revision.to_string(),
         execution_session_id: projection.execution_session_id.as_uuid().to_string(),
         semantic_input_hash: projection
             .semantic_input_hash
@@ -252,6 +253,7 @@ mod tests {
         use yss_graph_execution::result::ResultCacheState;
         use yss_graph_execution::result::{ConnectionCacheState, ConnectionResultState};
         let state = crate::graph::results::GraphResultState {
+            revision: 1,
             execution_session_id: ExecutionSessionId::new(uuid::Uuid::from_u128(1)),
             semantic_input_hash: [0xaa; 32],
             outputs: [

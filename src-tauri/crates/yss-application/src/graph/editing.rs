@@ -215,6 +215,7 @@ pub struct GraphEditRequest {
 pub struct GraphEditResponse {
     pub update: GraphDocumentChange,
     pub editing: GraphEditingState,
+    pub result_state: super::results::GraphResultState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -306,10 +307,13 @@ impl ApplicationState {
         let editor =
             GraphDocumentEditor::new(captured, path, locale, (*snapshot.document).clone())?;
         let update = editor.finish(self)?;
-        captured
-            .execution()
-            .observe_graph_result_inputs(path.as_str(), update.result_inputs.clone());
+        let result_state = super::results::observe_graph_result_inputs(
+            captured,
+            path.as_str(),
+            update.result_inputs.clone(),
+        );
         Ok(GraphEditResponse {
+            result_state,
             update,
             editing: snapshot.state,
         })
@@ -379,14 +383,17 @@ impl ApplicationState {
                 GraphHistoryAction::Edit(update.patch.clone()),
             )
             .map_err(ResourceMutationApplicationError::GraphCommit)?;
-        captured
-            .execution()
-            .observe_graph_result_inputs(request.graph_path.as_str(), update.result_inputs.clone());
+        let result_state = super::results::observe_graph_result_inputs(
+            &captured,
+            request.graph_path.as_str(),
+            update.result_inputs.clone(),
+        );
         captured.publish_graph_activity(GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: receipt.editing.clone(),
         });
         Ok(GraphEditResponse {
+            result_state,
             update,
             editing: receipt.editing,
         })
@@ -416,10 +423,13 @@ impl ApplicationState {
         let editor =
             GraphDocumentEditor::new(&captured, &path, &locale, (*snapshot.document).clone())?;
         let update = editor.finish(self)?;
-        captured
-            .execution()
-            .observe_graph_result_inputs(path.as_str(), update.result_inputs.clone());
+        let result_state = super::results::observe_graph_result_inputs(
+            &captured,
+            path.as_str(),
+            update.result_inputs.clone(),
+        );
         Ok(GraphEditResponse {
+            result_state,
             update,
             editing: snapshot.state,
         })
@@ -476,14 +486,17 @@ impl ApplicationState {
             .project()
             .commit_graph_edit(operation, Arc::new(update.document.clone()), action)
             .map_err(ResourceMutationApplicationError::GraphCommit)?;
-        captured
-            .execution()
-            .observe_graph_result_inputs(request.graph_path.as_str(), update.result_inputs.clone());
+        let result_state = super::results::observe_graph_result_inputs(
+            &captured,
+            request.graph_path.as_str(),
+            update.result_inputs.clone(),
+        );
         captured.publish_graph_activity(GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: receipt.editing.clone(),
         });
         Ok(GraphEditResponse {
+            result_state,
             update,
             editing: receipt.editing,
         })
@@ -537,6 +550,11 @@ impl ApplicationState {
                     ResourceMutationApplicationError::GraphCommit(error)
                 }
             })?;
+        let result_state = super::results::observe_graph_result_inputs(
+            &captured,
+            request.graph_path.as_str(),
+            update.result_inputs.clone(),
+        );
         captured.publish_graph_activity(GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: receipt.editing.clone(),
@@ -545,6 +563,7 @@ impl ApplicationState {
             project_instance_id: request.project_instance_id,
             resource_revision: receipt.to_revision,
             graph: GraphEditResponse {
+                result_state,
                 update,
                 editing: receipt.editing,
             },

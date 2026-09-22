@@ -65,10 +65,6 @@ impl CommittedRunOutcome {
         &self.handoff
     }
 
-    pub fn results(&self) -> &[yss_graph_execution::finalization::ReadyResult] {
-        self.handoff.results()
-    }
-
     pub fn inspection_requests(&self) -> Box<[ResultInspectionRequested]> {
         self.handoff
             .observation_intents()

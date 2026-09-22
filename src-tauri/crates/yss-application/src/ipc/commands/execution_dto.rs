@@ -6,9 +6,7 @@ use serde::Serialize;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::{ResultId, StoredResultSnapshot};
-use yss_ipc_contract::execution::{
-    ExecutionDemandDto, GraphOutputRefDto, MAX_SAFE_PREVIEW_GENERATION,
-};
+use yss_ipc_contract::execution::{ExecutionDemandDto, GraphOutputRefDto};
 use yss_ipc_contract::graph::PortAddressDto;
 
 fn plan_output_ref(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
@@ -34,15 +32,6 @@ pub(crate) fn execution_demand_to_application(demand: ExecutionDemandDto) -> Res
                 outputs: outputs.into_boxed_slice(),
                 include_default_results,
             }),
-        ExecutionDemandDto::PinPreview { output, generation } => {
-            if generation > MAX_SAFE_PREVIEW_GENERATION {
-                return Err(());
-            }
-            Ok(RunDemand::PinPreview {
-                output: plan_output_ref(output)?,
-                generation,
-            })
-        }
     }
 }
 

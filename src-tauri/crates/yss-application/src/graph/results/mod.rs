@@ -49,12 +49,32 @@ pub enum ResultQueryApplicationError {
     Resources(#[from] GraphInputError),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphResultState {
+    pub revision: u64,
     pub execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
     pub semantic_input_hash: [u8; 32],
     pub outputs:
         std::collections::BTreeMap<PlanOutputRef, yss_graph_execution::result::ResultCacheState>,
     pub connections: Vec<yss_graph_execution::result::ConnectionResultState>,
+}
+
+pub(crate) fn observe_graph_result_inputs(
+    captured: &ApplicationSession,
+    graph: &str,
+    inputs: yss_graph_execution::result::GraphResultInputs,
+) -> GraphResultState {
+    let semantic_input_hash = inputs.semantic_input_hash;
+    let cache = captured
+        .execution()
+        .observe_graph_result_inputs(graph, inputs);
+    GraphResultState {
+        revision: cache.revision,
+        execution_session_id: captured.execution_session_id(),
+        semantic_input_hash,
+        outputs: cache.outputs,
+        connections: cache.connections,
+    }
 }
 
 fn with_current_graph_results<T>(
@@ -264,6 +284,7 @@ impl ApplicationState {
                 return Ok(None);
             };
             Ok(Some(GraphResultState {
+                revision: cache.revision,
                 execution_session_id: captured.execution_session_id(),
                 semantic_input_hash,
                 outputs: cache.outputs,

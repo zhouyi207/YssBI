@@ -41,6 +41,7 @@ struct ObservedGraphInputs {
 
 #[derive(Default)]
 struct ResultStoreRegistry {
+    revision: u64,
     values: BTreeMap<ResultId, ResultEntry>,
     graph_inputs: BTreeMap<String, ObservedGraphInputs>,
     outputs: BTreeMap<PlanOutputRef, CachedOutput>,
@@ -50,6 +51,103 @@ struct ResultStoreRegistry {
 }
 
 impl ResultStoreRegistry {
+    fn query_cache_states(
+        &self,
+        graph: &str,
+        semantic_input_hash: &[u8; 32],
+    ) -> Option<GraphResultCacheState> {
+        let current = self.graph_inputs.get(graph)?;
+        if &current.inputs.semantic_input_hash != semantic_input_hash {
+            return None;
+        }
+        let outputs = current
+            .inputs
+            .outputs
+            .keys()
+            .map(|output| {
+                let state = match self.outputs.get(output) {
+                    Some(cached) if cached.valid => ResultCacheState::Valid {
+                        result_id: cached.result.expect("valid result"),
+                    },
+                    Some(cached) if cached.result.is_some() => ResultCacheState::Stale,
+                    _ => ResultCacheState::Missing,
+                };
+                (output.clone(), state)
+            })
+            .collect();
+        let mut connections = BTreeMap::new();
+        for (output, inputs) in &current.inputs.outputs {
+            let cached = self
+                .outputs
+                .get(output)
+                .filter(|cached| cached.result.is_some());
+            for (input, sources) in &inputs.bindings {
+                for source in sources {
+                    let state = match cached {
+                        Some(cached) if cached.valid => ConnectionCacheState::Valid,
+                        Some(cached)
+                            if cached
+                                .inputs
+                                .as_ref()
+                                .and_then(|inputs| inputs.bindings.get(input))
+                                .is_some_and(|consumed| consumed.contains(source)) =>
+                        {
+                            ConnectionCacheState::Stale
+                        }
+                        _ => ConnectionCacheState::New,
+                    };
+                    // Any matching output proves the binding was consumed; node completeness is separate.
+                    connections
+                        .entry((source.clone(), input.clone()))
+                        .and_modify(|current: &mut ConnectionCacheState| {
+                            *current = (*current).max(state)
+                        })
+                        .or_insert(state);
+                }
+            }
+        }
+        for (node, inputs) in &current.inputs.observers {
+            let observed = |source: &PlanOutputRef| {
+                let cached = self.outputs.get(source)?;
+                let entry = self.values.get(&cached.result?)?;
+                Some((cached.valid, entry.observations.get(node)?))
+            };
+            let valid = inputs.available
+                && inputs.sources().all(|source| {
+                    observed(source).is_some_and(|(valid, consumed)| valid && consumed == inputs)
+                });
+            for (input, sources) in &inputs.bindings {
+                for source in sources {
+                    let state = if valid {
+                        ConnectionCacheState::Valid
+                    } else if observed(source).is_some_and(|(_, consumed)| {
+                        consumed
+                            .bindings
+                            .get(input)
+                            .is_some_and(|sources| sources.contains(source))
+                    }) {
+                        ConnectionCacheState::Stale
+                    } else {
+                        ConnectionCacheState::New
+                    };
+                    connections.insert((source.clone(), input.clone()), state);
+                }
+            }
+        }
+        Some(GraphResultCacheState {
+            revision: self.revision,
+            outputs,
+            connections: connections
+                .into_iter()
+                .map(|((output, input), state)| ConnectionResultState {
+                    output,
+                    input,
+                    state,
+                })
+                .collect(),
+        })
+    }
+
     fn collect(&mut self, id: ResultId) {
         if self
             .values
@@ -143,6 +241,10 @@ impl ResultStoreRegistry {
     }
 
     fn refresh_graph(&mut self, graph: &str) {
+        self.revision = self
+            .revision
+            .checked_add(1)
+            .expect("result state revision exhausted");
         let observed = self.graph_inputs.get(graph);
         let mut pending = Vec::new();
         let mut remaining = BTreeMap::new();
@@ -586,12 +688,20 @@ impl ResultStore {
             .map(|entry| entry.snapshot.clone())
     }
 
-    pub(crate) fn observe_graph_inputs(&self, graph: &str, inputs: GraphResultInputs) {
+    pub(crate) fn observe_graph_inputs(
+        &self,
+        graph: &str,
+        inputs: GraphResultInputs,
+    ) -> GraphResultCacheState {
+        let semantic_input_hash = inputs.semantic_input_hash;
         let mut registry = self
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
         registry.observe_graph_inputs(graph, inputs);
+        registry
+            .query_cache_states(graph, &semantic_input_hash)
+            .expect("the result state is captured under the input publication lock")
     }
 
     pub(crate) fn capture_run_basis(
@@ -632,95 +742,7 @@ impl ResultStore {
             .registry
             .read()
             .unwrap_or_else(|error| error.into_inner());
-        let current = registry.graph_inputs.get(graph)?;
-        if &current.inputs.semantic_input_hash != semantic_input_hash {
-            return None;
-        }
-        let outputs = current
-            .inputs
-            .outputs
-            .keys()
-            .map(|output| {
-                let state = match registry.outputs.get(output) {
-                    Some(cached) if cached.valid => ResultCacheState::Valid {
-                        result_id: cached.result.expect("valid result"),
-                    },
-                    Some(cached) if cached.result.is_some() => ResultCacheState::Stale,
-                    _ => ResultCacheState::Missing,
-                };
-                (output.clone(), state)
-            })
-            .collect();
-        let mut connections = BTreeMap::new();
-        for (output, inputs) in &current.inputs.outputs {
-            let cached = registry
-                .outputs
-                .get(output)
-                .filter(|cached| cached.result.is_some());
-            for (input, sources) in &inputs.bindings {
-                for source in sources {
-                    let state = match cached {
-                        Some(cached) if cached.valid => ConnectionCacheState::Valid,
-                        Some(cached)
-                            if cached
-                                .inputs
-                                .as_ref()
-                                .and_then(|inputs| inputs.bindings.get(input))
-                                .is_some_and(|consumed| consumed.contains(source)) =>
-                        {
-                            ConnectionCacheState::Stale
-                        }
-                        _ => ConnectionCacheState::New,
-                    };
-                    // Any matching output proves the binding was consumed; node completeness is separate.
-                    connections
-                        .entry((source.clone(), input.clone()))
-                        .and_modify(|current: &mut ConnectionCacheState| {
-                            *current = (*current).max(state)
-                        })
-                        .or_insert(state);
-                }
-            }
-        }
-        for (node, inputs) in &current.inputs.observers {
-            let observed = |source: &PlanOutputRef| {
-                let cached = registry.outputs.get(source)?;
-                let entry = registry.values.get(&cached.result?)?;
-                Some((cached.valid, entry.observations.get(node)?))
-            };
-            let valid = inputs.available
-                && inputs.sources().all(|source| {
-                    observed(source).is_some_and(|(valid, consumed)| valid && consumed == inputs)
-                });
-            for (input, sources) in &inputs.bindings {
-                for source in sources {
-                    let state = if valid {
-                        ConnectionCacheState::Valid
-                    } else if observed(source).is_some_and(|(_, consumed)| {
-                        consumed
-                            .bindings
-                            .get(input)
-                            .is_some_and(|sources| sources.contains(source))
-                    }) {
-                        ConnectionCacheState::Stale
-                    } else {
-                        ConnectionCacheState::New
-                    };
-                    connections.insert((source.clone(), input.clone()), state);
-                }
-            }
-        }
-        Some(GraphResultCacheState {
-            outputs,
-            connections: connections
-                .into_iter()
-                .map(|((output, input), state)| ConnectionResultState {
-                    output,
-                    input,
-                    state,
-                })
-                .collect(),
-        })
+        registry.query_cache_states(graph, semantic_input_hash)
     }
 
     pub(crate) fn resource_keys(&self, graph: &str) -> BTreeSet<Box<str>> {
@@ -1132,15 +1154,36 @@ mod tests {
         let graph = graph_output.graph().as_str();
         let obsolete = store.capture_run_basis(graph, original.clone()).unwrap();
         let edited = cache_inputs(2, &[("a", 1, &[]), ("b", 3, &[])]);
-        store.observe_graph_inputs(graph, edited.clone());
-        store.observe_graph_inputs(graph, original.clone());
+        let before = store
+            .query_cache_states(graph, &original.semantic_input_hash)
+            .unwrap()
+            .revision;
+        let edited_state = store.observe_graph_inputs(graph, edited.clone());
+        let restored_state = store.observe_graph_inputs(graph, original.clone());
+        assert!(before < edited_state.revision && edited_state.revision < restored_state.revision);
+        assert_eq!(
+            store.observe_graph_inputs(graph, original.clone()).revision,
+            restored_state.revision
+        );
         let outputs = [named_output("a")];
         assert!(!store.begin_run(RunId::from_existing(2), &outputs, Some(&obsolete)));
         let basis = store.capture_run_basis(graph, original.clone()).unwrap();
         let run = RunId::from_existing(3);
         assert!(store.begin_run(run, &outputs, Some(&basis)));
+        let started_revision = store
+            .query_cache_states(graph, &original.semantic_input_hash)
+            .unwrap()
+            .revision;
+        assert!(started_revision > restored_state.revision);
         assert!(store.query_pin_result(&named_output("b")).is_none());
         assert!(store.publish(&[cached_result(3, run, named_output("a"))], &[]));
+        assert!(
+            store
+                .query_cache_states(graph, &original.semantic_input_hash)
+                .unwrap()
+                .revision
+                > started_revision
+        );
         assert!(store.query_pin_result(&named_output("a")).is_some());
         assert!(store.query_pin_result(&named_output("b")).is_none());
         store.observe_graph_inputs(graph, edited.clone());

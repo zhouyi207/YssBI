@@ -1092,8 +1092,12 @@ impl ExecutionRuntimeState {
         }
     }
 
-    pub fn observe_graph_result_inputs(&self, graph: &str, inputs: GraphResultInputs) {
-        self.results.observe_graph_inputs(graph, inputs);
+    pub fn observe_graph_result_inputs(
+        &self,
+        graph: &str,
+        inputs: GraphResultInputs,
+    ) -> GraphResultCacheState {
+        self.results.observe_graph_inputs(graph, inputs)
     }
 
     pub fn capture_result_run_basis(

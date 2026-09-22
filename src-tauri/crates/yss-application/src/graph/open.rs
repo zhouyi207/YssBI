@@ -146,31 +146,10 @@ pub struct OpenGraphApplicationReceipt {
     projection: EditorProjectionModel,
     function_editor_projection: Option<yss_function_editor_projection::FunctionEditorProjection>,
     editing: yss_project::GraphEditingState,
+    result_state: super::results::GraphResultState,
 }
 
 impl OpenGraphApplicationReceipt {
-    fn new(
-        project_instance_id: ProjectInstanceId,
-        graph_path: GraphResourcePath,
-        document: Arc<GraphDocument>,
-        analysis: GraphAnalysis,
-        projection: EditorProjectionModel,
-        function_editor_projection: Option<
-            yss_function_editor_projection::FunctionEditorProjection,
-        >,
-        editing: yss_project::GraphEditingState,
-    ) -> Self {
-        Self {
-            project_instance_id,
-            graph_path,
-            document,
-            analysis,
-            projection,
-            function_editor_projection,
-            editing,
-        }
-    }
-
     pub fn project_instance_id(&self) -> &ProjectInstanceId {
         &self.project_instance_id
     }
@@ -193,6 +172,10 @@ impl OpenGraphApplicationReceipt {
 
     pub fn editing(&self) -> &yss_project::GraphEditingState {
         &self.editing
+    }
+
+    pub fn result_state(&self) -> &super::results::GraphResultState {
+        &self.result_state
     }
 
     pub fn function_editor_projection(
@@ -299,7 +282,8 @@ pub(crate) fn open_graph_in_session(
         analysis: &analysis,
         registry_fingerprint,
     })?;
-    captured.execution().observe_graph_result_inputs(
+    let result_state = super::results::observe_graph_result_inputs(
+        captured,
         request.graph_path().as_str(),
         crate::graph::inputs::graph_result_inputs(
             request.graph_path(),
@@ -308,15 +292,16 @@ pub(crate) fn open_graph_in_session(
             registry_fingerprint,
         ),
     );
-    Ok(OpenGraphApplicationReceipt::new(
-        captured.project_instance_id().clone(),
-        request.graph_path().clone(),
-        candidate_document,
+    Ok(OpenGraphApplicationReceipt {
+        project_instance_id: captured.project_instance_id().clone(),
+        graph_path: request.graph_path().clone(),
+        document: candidate_document,
         analysis,
         projection,
         function_editor_projection,
-        editing.state,
-    ))
+        editing: editing.state,
+        result_state,
+    })
 }
 
 fn revalidate_application_session(

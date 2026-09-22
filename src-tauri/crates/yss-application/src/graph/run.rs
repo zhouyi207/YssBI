@@ -43,10 +43,6 @@ pub enum RunDemand {
         outputs: Box<[PlanOutputRef]>,
         include_default_results: bool,
     },
-    PinPreview {
-        output: PlanOutputRef,
-        generation: u64,
-    },
 }
 
 /// A run request is intentionally owned by the Application seam. It carries
@@ -156,11 +152,6 @@ pub enum RunApplicationEventKind {
     RunCancelled,
     RunErrored {
         failure: yss_graph_execution::error::RunFailure,
-    },
-    PinPreviewResultReady {
-        output: PlanOutputRef,
-        generation: u64,
-        result_id: yss_graph_execution::result::ResultId,
     },
     ResultInspectionRequested {
         result_id: yss_graph_execution::result::ResultId,
@@ -373,10 +364,6 @@ where
             outputs: outputs.clone(),
             include_default_results: *include_default_results,
         },
-        RunDemand::PinPreview { output, .. } => PlanExecutionDemand::Outputs {
-            outputs: vec![output.clone()].into_boxed_slice(),
-            include_default_results: false,
-        },
     };
     let mut started_identity = None;
     let executed = match captured.execution().execute_prepared_handoff(
@@ -506,21 +493,6 @@ where
             RunApplicationEventKind::ResultInspectionRequested {
                 result_id: inspection.result_id(),
                 source: inspection.requester().clone(),
-            },
-        ));
-    }
-    if let RunDemand::PinPreview { output, generation } = &request.demand
-        && let Some(result) = outcome
-            .results()
-            .iter()
-            .find(|result| result.output() == output)
-    {
-        let _ = deliver(RunApplicationEvent::new(
-            identity.clone(),
-            RunApplicationEventKind::PinPreviewResultReady {
-                output: output.clone(),
-                generation: *generation,
-                result_id: result.result_id(),
             },
         ));
     }

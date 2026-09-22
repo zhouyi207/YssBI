@@ -55,6 +55,7 @@ pub struct GraphEditorSessionDto {
     pub editing: GraphEditingStateDto,
     pub document: yss_graph_document::GraphDocument,
     pub projection: crate::editor_projection::EditorGraphProjectionDto,
+    pub result_state: crate::execution::GraphResultStateDto,
 }
 
 #[derive(Debug, Serialize)]

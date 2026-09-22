@@ -7,7 +7,6 @@ use yss_ipc_contract::graph::PortAddressDto;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunEventDtoError {
-    UnsafePreviewGeneration,
     InvalidOutput,
 }
 
@@ -98,20 +97,6 @@ pub fn execution_event_to_transport(
         RunApplicationEventKind::RunErrored { failure } => RunEventKindDto::RunErrored {
             outcome: run_failure_to_transport(failure),
         },
-        RunApplicationEventKind::PinPreviewResultReady {
-            output,
-            generation,
-            result_id,
-        } => {
-            if *generation > MAX_SAFE_PREVIEW_GENERATION {
-                return Err(RunEventDtoError::UnsafePreviewGeneration);
-            }
-            RunEventKindDto::PinPreviewResultReady {
-                output: output_dto(output)?,
-                generation: *generation,
-                result_id: result_id.get().to_string(),
-            }
-        }
         RunApplicationEventKind::ResultInspectionRequested { result_id, source } => {
             RunEventKindDto::ResultInspectionRequested {
                 result_id: result_id.get().to_string(),

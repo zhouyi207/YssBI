@@ -182,6 +182,13 @@ mod tests {
         .unwrap();
         let mut session = GraphEditorSessionDto {
             document: Default::default(),
+            result_state: yss_ipc_contract::execution::GraphResultStateDto {
+                revision: "0".into(),
+                execution_session_id: uuid::Uuid::new_v4().to_string(),
+                semantic_input_hash: "0".repeat(64),
+                outputs: Box::new([]),
+                connections: Box::new([]),
+            },
             projection,
             editing: GraphEditingStateDto {
                 version: GraphEditVersionDto {

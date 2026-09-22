@@ -4,7 +4,6 @@ use crate::graph::run::{
 };
 use crate::ipc::channel::execution::TauriExecutionChannelAdapter;
 use crate::ipc::error::CommandError;
-use serde::Serialize;
 use tauri::{State, ipc::Channel};
 use yss_ipc_contract::execution::ExecutionDemandDto;
 use yss_ipc_contract::execution::RunEventDto;
@@ -168,19 +167,6 @@ fn prepared_execution_command_code(
         ExecutePreparedError::ResultIdentityExhausted
         | ExecutePreparedError::ResultTimestamp(_) => "execution_result_publication_failed",
     }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PinPreviewGenerationDto {
-    pub generation: u64,
-}
-
-#[tauri::command]
-pub fn allocate_pin_preview_generation() -> Result<PinPreviewGenerationDto, CommandError> {
-    crate::graph::preview_generation::allocate_pin_preview_generation()
-        .map(|generation| PinPreviewGenerationDto { generation })
-        .map_err(|_| CommandError::expected("pin_preview_generation_exhausted"))
 }
 
 #[tauri::command]
