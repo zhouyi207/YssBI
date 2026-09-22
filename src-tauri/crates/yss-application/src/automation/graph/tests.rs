@@ -368,7 +368,6 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let mut f = Fixture::new();
     let saved_path = f.directory.join("project").join(&f.path);
     let initial = f.inspect();
-    assert_eq!(initial.source, "current");
     let created = f.edit(vec![
         GraphEditOperation::CreateNode {
             client_id: Some("source".into()),
@@ -393,8 +392,23 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         connect(port("$product", "result"), port("$view", "data")),
     ]);
     assert_eq!(created.created_nodes.len(), 5);
-    let graph = f.inspect();
-    let column = graph
+    assert_eq!(created.from_revision, initial.revision);
+    assert_eq!(
+        created.changes.base_semantic_input_hash,
+        initial.semantic_input_hash
+    );
+    assert_eq!(created.changes.nodes.len(), 5);
+    assert_eq!(created.changes.constants.len(), 1);
+    assert!(!created.changes.ready);
+    assert!(
+        created
+            .changes
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.blocking)
+    );
+    let column = created
+        .changes
         .nodes
         .iter()
         .find(|node| node.node_id == created.created_nodes["columns"])
@@ -409,7 +423,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         .action(AutomationCapabilityRequest::ValidateGraph(
             ValidateGraphRequest {
                 graph_path: f.path.clone(),
-                graph_hash: graph.graph_hash,
+                graph_hash: created.graph_hash.clone(),
             },
         ))
         .unwrap()
@@ -423,10 +437,49 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
             .iter()
             .any(|diagnostic| diagnostic.blocking)
     );
-    f.edit(vec![connect(
-        x.clone(),
-        port(&created.created_nodes["product"], "left"),
-    )]);
+    let AutomationCapabilityResult::GraphEditReceipt(connected) = f
+        .action(AutomationCapabilityRequest::ApplyGraphEdit(
+            ApplyGraphEditRequest {
+                graph_path: created.graph_path.clone(),
+                base_revision: created.to_revision,
+                graph_hash: created.graph_hash.clone(),
+                client_key: "connect-returned-column".into(),
+                locale: "en-US".into(),
+                operations: vec![connect(
+                    x.clone(),
+                    port(&created.created_nodes["product"], "left"),
+                )],
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("edit receipt");
+    };
+    assert!(connected.changes.ready);
+    assert_eq!(connected.changes.connections.len(), 1);
+    assert!(
+        connected
+            .changes
+            .nodes
+            .iter()
+            .any(|node| node.node_id == created.created_nodes["product"])
+    );
+    let inspected = f.inspect();
+    assert_eq!(connected.to_revision, inspected.revision);
+    assert_eq!(
+        connected.changes.semantic_input_hash,
+        inspected.semantic_input_hash
+    );
+    assert_eq!(connected.changes.diagnostics, inspected.diagnostics);
+    for node in &connected.changes.nodes {
+        assert_eq!(
+            Some(node),
+            inspected
+                .nodes
+                .iter()
+                .find(|current| current.node_id == node.node_id)
+        );
+    }
     let saved_document = std::fs::read_to_string(&saved_path).unwrap();
     assert!(saved_document.contains(&created.created_nodes["product"]));
     let AutomationCapabilityResult::GraphValidation(validated) = f
@@ -503,6 +556,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         "validation and execution must not write the file after the assistant edit was saved"
     );
     let hash = graph_hash(&f.document).unwrap();
+    let before_save_revision = f.revision;
     let AutomationCapabilityResult::GraphSaved(saved) = f
         .action(AutomationCapabilityRequest::SaveGraph(SaveGraphRequest {
             graph_path: f.path.clone(),
@@ -513,6 +567,9 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         panic!("save")
     };
     assert_eq!(saved.graph_hash, hash);
+    assert_eq!(saved.from_revision, before_save_revision);
+    assert_eq!(saved.resource_revision, f.revision);
+    assert!(!saved.dirty && !saved.can_undo && !saved.can_redo);
     let serialized = std::fs::read_to_string(f.directory.join("project").join(&f.path)).unwrap();
     assert!(serialized.contains(&created.created_nodes["product"]));
     let fit = f.edit(vec![
@@ -538,7 +595,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         ),
     ]);
     assert_eq!(fit.created_ports.len(), 2);
-    f.edit(vec![
+    let removed_port = f.edit(vec![
         GraphEditOperation::DisconnectPort {
             address: fit.created_ports["first"].clone(),
         },
@@ -546,13 +603,379 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
             address: fit.created_ports["first"].clone(),
         },
     ]);
+    let fit_node = removed_port
+        .changes
+        .nodes
+        .iter()
+        .find(|node| node.node_id == fit.created_nodes["fit"])
+        .unwrap();
+    assert!(
+        !fit_node
+            .ports
+            .iter()
+            .any(|port| port.address == fit.created_ports["first"])
+    );
+    assert!(
+        fit_node
+            .ports
+            .iter()
+            .any(|port| port.address == fit.created_ports["second"])
+    );
+    assert_eq!(removed_port.changes.removed_connection_ids.len(), 1);
     let fit_id = parse_node_id(&fit.created_nodes["fit"]).unwrap();
-    f.edit(vec![GraphEditOperation::DeleteNodes {
+    let deleted = f.edit(vec![GraphEditOperation::DeleteNodes {
         node_ids: vec![fit_id.to_string()],
     }]);
+    assert_eq!(deleted.changes.removed_node_ids, [fit_id.to_string()]);
+    assert_eq!(deleted.changes.removed_connection_ids.len(), 1);
     assert!(f.document.connections.values().all(
         |connection| connection.input.node_id != fit_id && connection.output.node_id != fit_id
     ));
+}
+
+#[test]
+fn graph_edit_receipts_include_downstream_columns_and_only_changed_entities() {
+    let mut f = Fixture::new();
+    f.inspect();
+    let created = f.edit(vec![
+        GraphEditOperation::CreateNode {
+            client_id: Some("source".into()),
+            node_type_id: "yssbi.dataframe.source.get".into(),
+            resource_path: Some(format!("databases/{}", f.dataset)),
+            x: 0.,
+            y: 0.,
+            user_label: None,
+        },
+        node("yssbi.dataframe.decompose", "columns"),
+        node("yssbi.numeric.multiply", "unrelated"),
+    ]);
+    let initial_columns = created
+        .changes
+        .nodes
+        .iter()
+        .find(|node| node.node_id == created.created_nodes["columns"])
+        .unwrap();
+    assert!(
+        !initial_columns
+            .ports
+            .iter()
+            .any(|port| port.schema.contains_key("x"))
+    );
+    let connected = f.edit(vec![connect(
+        port(&created.created_nodes["source"], "dataframe"),
+        port(&created.created_nodes["columns"], "dataframe"),
+    )]);
+    let columns = connected
+        .changes
+        .nodes
+        .iter()
+        .find(|node| node.node_id == created.created_nodes["columns"])
+        .unwrap();
+    for name in ["x", "label"] {
+        assert!(
+            columns
+                .ports
+                .iter()
+                .any(|port| port.direction == "output" && port.schema.contains_key(name))
+        );
+    }
+    assert!(
+        !connected
+            .changes
+            .nodes
+            .iter()
+            .any(|node| node.node_id == created.created_nodes["unrelated"])
+    );
+    assert_eq!(connected.changes.connections.len(), 1);
+    assert_eq!(
+        connected.changes.base_semantic_input_hash,
+        created.changes.semantic_input_hash
+    );
+    assert_ne!(
+        connected.changes.semantic_input_hash,
+        created.changes.semantic_input_hash
+    );
+    let moved = f.edit(vec![GraphEditOperation::MoveNodes {
+        positions: vec![GraphEditPosition {
+            node_id: columns.node_id.clone(),
+            x: 400.,
+            y: 500.,
+        }],
+    }]);
+    assert_eq!(moved.changes.nodes.len(), 1);
+    assert_eq!(
+        (moved.changes.nodes[0].x, moved.changes.nodes[0].y),
+        (400., 500.)
+    );
+    assert_eq!(
+        moved.changes.semantic_input_hash,
+        connected.changes.semantic_input_hash
+    );
+    let duplicated = f.edit(vec![GraphEditOperation::DuplicateNodes {
+        node_ids: vec![
+            created.created_nodes["source"].clone(),
+            created.created_nodes["columns"].clone(),
+        ],
+        offset_x: 50.,
+        offset_y: 50.,
+    }]);
+    assert_eq!(
+        duplicated
+            .changes
+            .nodes
+            .iter()
+            .filter(|node| !created.created_nodes.values().any(|id| id == &node.node_id))
+            .count(),
+        2
+    );
+    let connection_id = connected.changes.connections[0].connection_id.clone();
+    let disconnected = f.edit(vec![GraphEditOperation::DisconnectConnections {
+        connection_ids: vec![connection_id.clone()],
+    }]);
+    assert_eq!(disconnected.changes.removed_connection_ids, [connection_id]);
+    let columns = disconnected
+        .changes
+        .nodes
+        .iter()
+        .find(|node| node.node_id == created.created_nodes["columns"])
+        .unwrap();
+    assert!(
+        !columns
+            .ports
+            .iter()
+            .any(|port| port.schema.contains_key("x"))
+    );
+    let wire = serde_json::to_value(AutomationCapabilityResult::GraphEditReceipt(
+        connected.clone(),
+    ))
+    .unwrap();
+    let decoded: AutomationCapabilityResult = serde_json::from_value(wire.clone()).unwrap();
+    assert_eq!(
+        decoded,
+        AutomationCapabilityResult::GraphEditReceipt(connected)
+    );
+    assert_eq!(
+        wire["payload"]["changes"]["nodes"][0]["ports"][0]["address"]["nodeId"],
+        wire["payload"]["changes"]["nodes"][0]["nodeId"]
+    );
+}
+
+#[test]
+fn graph_edit_receipts_detect_changes_to_omitted_constant_values() {
+    let mut f = Fixture::new();
+    f.inspect();
+    let created = f.edit(vec![GraphEditOperation::CreateConstant {
+        name: "long-text".into(),
+        value: GraphConstantLiteral::String("a".repeat(5_000)),
+        x: 0.,
+        y: 0.,
+        client_id: Some("constant".into()),
+    }]);
+    let (id, mut constant) = f
+        .document
+        .constants
+        .iter()
+        .next()
+        .map(|(id, constant)| (*id, constant.clone()))
+        .unwrap();
+    assert_eq!(
+        created.changes.constants[&id.to_string()]["valueIncluded"],
+        false
+    );
+    constant.data_value = yss_data_contract::DataValue::String("b".repeat(5_000).into());
+    let changed = f.edit(vec![GraphEditOperation::SetConstant {
+        id: id.to_string(),
+        constant: Some(serde_json::to_value(constant).unwrap()),
+    }]);
+    let facts = changed
+        .changes
+        .constants
+        .get(&id.to_string())
+        .expect("changing an omitted value must still report the changed constant");
+    assert_eq!(facts["valueIncluded"], false);
+    assert!(facts.get("dataValue").is_none());
+    assert_ne!(
+        facts["contentHash"],
+        created.changes.constants[&id.to_string()]["contentHash"]
+    );
+    assert_eq!(facts, &f.inspect().constants[&id.to_string()]);
+}
+
+#[test]
+fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    let mut f = Fixture::new();
+    f.inspect();
+    let created = f.edit(vec![
+        node("yssbi.numeric.multiply", "product"),
+        node("yssbi.debug.view", "view"),
+        GraphEditOperation::SetLiteral {
+            address: port("$product", "left"),
+            literal: Some(serde_json::json!(2)),
+        },
+        GraphEditOperation::SetLiteral {
+            address: port("$product", "right"),
+            literal: Some(serde_json::json!(3)),
+        },
+        connect(port("$product", "result"), port("$view", "data")),
+    ]);
+    let application = f.application.as_ref().unwrap().clone();
+    let captured = application.capture_session().unwrap();
+    let project = captured.project_instance_id().clone();
+    let path = GraphResourcePath::new(&f.path).unwrap();
+    let product = parse_node_id(&created.created_nodes["product"]).unwrap();
+    let edited = Arc::new(AtomicBool::new(false));
+    let observed_result = Arc::new(AtomicU64::new(0));
+    let _subscription = application
+        .subscribe_graph_activity(&project, {
+            let application = application.clone();
+            let project = project.clone();
+            let edited = Arc::clone(&edited);
+            let observed_result = Arc::clone(&observed_result);
+            Arc::new(move |activity| {
+                let GraphActivity::Execution(event) = activity else {
+                    return;
+                };
+                match event.kind() {
+                    RunApplicationEventKind::ResultInspectionRequested { result_id, .. } => {
+                        observed_result.store(result_id.get(), Ordering::SeqCst);
+                    }
+                    RunApplicationEventKind::RunCompleted
+                        if !edited.swap(true, Ordering::SeqCst) =>
+                    {
+                        let version = captured
+                            .project()
+                            .read_graph_editing(&project, &path)
+                            .unwrap()
+                            .state
+                            .version;
+                        application
+                            .edit_graph(
+                                GraphEditRequest {
+                                    project_instance_id: project.clone(),
+                                    graph_path: path.clone(),
+                                    version,
+                                    operation_id: OperationId::new(),
+                                    locale: "en-US".into(),
+                                },
+                                EditorGraphMutation::SetLiteral {
+                                    address: PortAddress::declared(
+                                        product,
+                                        "left".parse().unwrap(),
+                                    ),
+                                    literal: Some(serde_json::json!(5)),
+                                },
+                            )
+                            .unwrap();
+                    }
+                    _ => {}
+                }
+            })
+        })
+        .unwrap();
+    let AutomationCapabilityResult::GraphExecution(run) = f
+        .action(AutomationCapabilityRequest::ExecuteGraph(
+            ExecuteGraphRequest {
+                graph_path: f.path.clone(),
+                graph_hash: created.graph_hash,
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("execution receipt");
+    };
+    assert!(edited.load(Ordering::SeqCst));
+    assert_eq!(run.status, "succeeded");
+    assert!(run.results_complete);
+    assert_eq!(run.result_count, Some(run.results.len()));
+    assert!(run.results.iter().any(|result| result.result_id
+        == observed_result.load(Ordering::SeqCst)
+        && Some(result.run_id) == run.run_id));
+    assert_ne!(run.graph_hash, graph_hash(&f.document).unwrap());
+}
+
+#[test]
+fn execute_graph_reports_when_its_result_references_are_bounded() {
+    let mut f = Fixture::new();
+    f.inspect();
+    let limit = usize::from(CapabilityId::ExecuteGraph.descriptor().maximum_results);
+    let producers = (0..=limit).collect::<Vec<_>>();
+    for batch in producers.chunks(10) {
+        let mut operations = Vec::new();
+        for index in batch {
+            let product = format!("product-{index}");
+            let view = format!("view-{index}");
+            let product_alias = format!("${product}");
+            let view_alias = format!("${view}");
+            operations.extend([
+                node("yssbi.numeric.multiply", &product),
+                node("yssbi.debug.view", &view),
+                GraphEditOperation::SetLiteral {
+                    address: port(&product_alias, "left"),
+                    literal: Some(serde_json::json!(2)),
+                },
+                GraphEditOperation::SetLiteral {
+                    address: port(&product_alias, "right"),
+                    literal: Some(serde_json::json!(3)),
+                },
+                connect(port(&product_alias, "result"), port(&view_alias, "data")),
+            ]);
+        }
+        f.edit(operations);
+    }
+    let AutomationCapabilityResult::GraphExecution(run) = f
+        .action(AutomationCapabilityRequest::ExecuteGraph(
+            ExecuteGraphRequest {
+                graph_path: f.path.clone(),
+                graph_hash: graph_hash(&f.document).unwrap(),
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("execution receipt");
+    };
+    assert_eq!(run.status, "succeeded", "{:?}", run.failure_code);
+    assert_eq!(run.result_count, Some(limit + 1));
+    assert_eq!(run.results.len(), limit);
+    assert!(!run.results_complete);
+    let encoded =
+        serde_json::to_value(AutomationCapabilityResult::GraphExecution(run.clone())).unwrap();
+    assert_eq!(encoded["payload"]["resultCount"], limit + 1);
+    assert_eq!(encoded["payload"]["resultsComplete"], false);
+    assert_eq!(
+        serde_json::from_value::<AutomationCapabilityResult>(encoded).unwrap(),
+        AutomationCapabilityResult::GraphExecution(run)
+    );
+}
+
+#[test]
+fn oversized_graph_edit_facts_are_rejected_before_committing() {
+    let mut f = Fixture::new();
+    let before = f.inspect();
+    let saved_path = f.directory.join("project").join(&f.path);
+    let before_file = std::fs::read(&saved_path).unwrap();
+    let request = f.edit_request(
+        (0..100)
+            .map(|index| node("yssbi.numeric.multiply", &format!("node-{index}")))
+            .collect(),
+    );
+    assert_eq!(
+        f.action(request.clone()).unwrap_err().code,
+        CapabilityFailureCode::ResultTooLarge
+    );
+    assert_eq!(f.inspect(), before);
+    assert_eq!(std::fs::read(&saved_path).unwrap(), before_file);
+    let AutomationCapabilityRequest::ApplyGraphEdit(request) = request else {
+        unreachable!()
+    };
+    assert!(
+        f.application
+            .as_ref()
+            .unwrap()
+            .recover_automation_graph_edit(f.context.clone(), request)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -591,10 +1014,27 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             .unwrap();
         f.revision = receipt.to_revision.get();
     }
-    f.edit(vec![GraphEditOperation::SetParameters {
+    let configured = f.edit(vec![GraphEditOperation::SetParameters {
         node_id: id.clone(),
         parameters: [("to".into(), serde_json::json!("second"))].into(),
     }]);
+    let parameters = &configured.changes.nodes[0].parameters;
+    assert_eq!(
+        parameters
+            .iter()
+            .find(|parameter| parameter.key == "from")
+            .unwrap()
+            .value,
+        Some(serde_json::json!("x"))
+    );
+    assert_eq!(
+        parameters
+            .iter()
+            .find(|parameter| parameter.key == "to")
+            .unwrap()
+            .value,
+        Some(serde_json::json!("second"))
+    );
     assert_eq!(
         f.document.nodes[&node_id].parameters[&"from".parse().unwrap()],
         "x"

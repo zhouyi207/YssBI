@@ -13,6 +13,8 @@ use yss_ui_contract::*;
 
 use crate::session::{ApplicationSession, ApplicationState};
 
+mod templates;
+
 #[derive(Debug, thiserror::Error)]
 pub enum UiError {
     #[error("ui_spec_invalid")]
@@ -143,12 +145,12 @@ impl PresentationSession {
         self.workbenches.fetch_sub(1, Ordering::SeqCst);
     }
 
-    fn page(&self, source: &UiSource) -> Result<UiPage, UiError> {
+    fn page(&self, source: &UiSource, spec: UiSpec) -> Result<UiPage, UiError> {
         let state = self.state.lock().map_err(|_| UiError::Unavailable)?;
         Ok(state.pages.get(source).cloned().unwrap_or_else(|| UiPage {
             source: source.clone(),
             revision: 1,
-            spec: UiSpec::regression_report(),
+            spec,
         }))
     }
 
@@ -161,12 +163,12 @@ impl PresentationSession {
         Ok(())
     }
 
-    fn update(&self, request: UpdateUiRequest) -> Result<UiUpdate, UiError> {
+    fn update(&self, request: UpdateUiRequest, spec: UiSpec) -> Result<UiUpdate, UiError> {
         let mut state = self.state.lock().map_err(|_| UiError::Unavailable)?;
         let default = UiPage {
             source: request.source.clone(),
             revision: 1,
-            spec: UiSpec::regression_report(),
+            spec,
         };
         let previous = state.pages.get(&request.source).unwrap_or(&default);
         if previous.revision != request.base_revision {
@@ -175,7 +177,7 @@ impl PresentationSession {
         let mut next = previous.clone();
         match request.action {
             UiAction::Replace { spec } => next.spec = spec,
-            UiAction::Reset => next.spec = UiSpec::regression_report(),
+            UiAction::Reset => next.spec = default.spec.clone(),
             UiAction::Visibility { id, visible } => {
                 next.spec
                     .elements
@@ -222,6 +224,8 @@ impl PresentationSession {
             }
         }
         next.spec.validate().map_err(|_| UiError::Invalid)?;
+        templates::regression::validate_bindings(&next.spec, &default.spec)
+            .map_err(|_| UiError::Invalid)?;
         if next.spec != previous.spec {
             next.revision = previous
                 .revision
@@ -379,7 +383,9 @@ impl ApplicationState {
             InspectUiRequest::Page { source } => {
                 validate_source(&session, &source, true)?;
                 UiInspection::Page {
-                    page: session.presentation.page(&source)?,
+                    page: session
+                        .presentation
+                        .page(&source, report_spec(&session, &source)?)?,
                 }
             }
             InspectUiRequest::Intent { id } => UiInspection::Intent {
@@ -401,7 +407,8 @@ impl ApplicationState {
         validate_source(&session, &request.source, true)?;
         self.revalidate_captured_session(&session)
             .map_err(|_| UiError::Session)?;
-        session.presentation.update(request)
+        let spec = report_spec(&session, &request.source)?;
+        session.presentation.update(request, spec)
     }
 
     pub fn request_ui_intent(
@@ -447,7 +454,9 @@ impl ApplicationState {
     ) -> Result<UiIntentReceipt, UiError> {
         let session = self.ui_session(project)?;
         validate_source(&session, &request.source, true)?;
-        let page = session.presentation.page(&request.source)?;
+        let page = session
+            .presentation
+            .page(&request.source, report_spec(&session, &request.source)?)?;
         if page.revision != request.base_revision {
             return Err(UiError::Conflict);
         }
@@ -471,6 +480,21 @@ impl ApplicationState {
     }
 }
 
+fn report_spec(session: &ApplicationSession, source: &UiSource) -> Result<UiSpec, UiError> {
+    validate_source(session, source, true)?;
+    let result = session
+        .execution()
+        .query_result(ResultId::from_existing(
+            source.result_id.parse().map_err(|_| UiError::Invalid)?,
+        ))
+        .ok_or(UiError::Unavailable)?;
+    let RuntimeValue::LinearRegression(model) = result.value().value().unannotated() else {
+        return Err(UiError::Unavailable);
+    };
+    let summary = model.summary.as_ref().ok_or(UiError::Unavailable)?;
+    Ok(templates::regression::spec_for(&summary.options))
+}
+
 fn validate_source(
     session: &ApplicationSession,
     source: &UiSource,
@@ -491,7 +515,7 @@ fn validate_source(
     if report
         && !matches!(
             result.value().value().unannotated(),
-            RuntimeValue::LinearRegression(_)
+            RuntimeValue::LinearRegression(model) if model.summary.is_some()
         )
     {
         return Err(UiError::Unavailable);
@@ -515,10 +539,13 @@ mod tests {
         for id in 1..100 {
             session
                 .presentation
-                .page(&UiSource {
-                    result_id: id.to_string(),
-                    ..source.clone()
-                })
+                .page(
+                    &UiSource {
+                        result_id: id.to_string(),
+                        ..source.clone()
+                    },
+                    templates::regression::spec_for(&Default::default()),
+                )
                 .unwrap();
         }
         assert!(session.presentation.state.lock().unwrap().pages.is_empty());
@@ -554,7 +581,14 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(session.presentation.page(&source).unwrap().revision, 2);
+        assert_eq!(
+            session
+                .presentation
+                .page(&source, report_spec(&session, &source).unwrap())
+                .unwrap()
+                .revision,
+            2
+        );
         application.release_result_lease(second, "second").unwrap();
         application
             .inspect_ui(project, InspectUiRequest::Catalog)
@@ -689,17 +723,25 @@ mod tests {
             execution_session_id: "test".into(),
             result_id: "1".into(),
         };
-        session.page(&source).unwrap();
+        session
+            .page(
+                &source,
+                templates::regression::spec_for(&Default::default()),
+            )
+            .unwrap();
         let (_subscription, events) = observe(&session);
         session
-            .update(UpdateUiRequest {
-                source: source.clone(),
-                base_revision: 1,
-                action: UiAction::Visibility {
-                    id: "anova".into(),
-                    visible: false,
+            .update(
+                UpdateUiRequest {
+                    source: source.clone(),
+                    base_revision: 1,
+                    action: UiAction::Visibility {
+                        id: "anova".into(),
+                        visible: false,
+                    },
                 },
-            })
+                templates::regression::spec_for(&Default::default()),
+            )
             .unwrap();
         assert!(matches!(
             events.try_recv().unwrap(),
@@ -712,24 +754,57 @@ mod tests {
             }
         ));
         assert!(matches!(
-            session.update(UpdateUiRequest {
-                source: source.clone(),
-                base_revision: 1,
-                action: UiAction::Reset
-            }),
+            session.update(
+                UpdateUiRequest {
+                    source: source.clone(),
+                    base_revision: 1,
+                    action: UiAction::Reset
+                },
+                templates::regression::spec_for(&Default::default())
+            ),
             Err(UiError::Conflict)
         ));
         assert!(matches!(
-            session.update(UpdateUiRequest {
-                source: source.clone(),
-                base_revision: 2,
-                action: UiAction::Patch {
-                    operations: vec![UiPatch::Remove { id: "anova".into() }]
-                }
-            }),
+            session.update(
+                UpdateUiRequest {
+                    source: source.clone(),
+                    base_revision: 2,
+                    action: UiAction::Patch {
+                        operations: vec![UiPatch::Remove { id: "anova".into() }]
+                    }
+                },
+                templates::regression::spec_for(&Default::default())
+            ),
             Err(UiError::Invalid)
         ));
-        let page = session.page(&source).unwrap();
+        assert!(matches!(
+            session.update(
+                UpdateUiRequest {
+                    source: source.clone(),
+                    base_revision: 2,
+                    action: UiAction::Patch {
+                        operations: vec![UiPatch::Set {
+                            id: "anova-content".into(),
+                            element: UiElement {
+                                component: UiComponent::Chart {
+                                    binding: "anova".into()
+                                },
+                                visible: true,
+                                children: vec![]
+                            },
+                        }]
+                    },
+                },
+                templates::regression::spec_for(&Default::default())
+            ),
+            Err(UiError::Invalid)
+        ));
+        let page = session
+            .page(
+                &source,
+                templates::regression::spec_for(&Default::default()),
+            )
+            .unwrap();
         assert_eq!(page.revision, 2);
         assert!(!page.spec.elements["anova"].visible);
         assert!(events.try_recv().is_err());

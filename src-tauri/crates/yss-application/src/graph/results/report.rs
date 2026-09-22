@@ -1,18 +1,18 @@
 use thiserror::Error;
 use yss_data_contract::TabularScalar;
 use yss_graph_execution::result::ResultReference;
-use yss_node_kernel::RuntimeValue;
+use yss_node_kernel::{LinearSummary, RuntimeValue};
 use yss_relational_contract::RelationColumn;
 use yss_sci_contract::regression::report::LinearModelSummary;
-use yss_sci_contract::scientific::{
-    AcfPacfResult, LinearRegressionResult, ScientificComputationError,
-};
+use yss_sci_contract::regression::summary::LinearSummaryOptions;
+use yss_sci_contract::scientific::{AcfPacfResult, LinearRegressionResult};
 
 use super::{MAX_RESULT_PAGE_ROWS, ResultPageKind, ResultPageProjection};
 use crate::session::{ApplicationState, SessionCaptureError};
-use yss_sci_contract::SciError;
-use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestOutput};
+use yss_sci_contract::hypothesis::HypothesisTestOutput;
 use yss_sci_contract::serial_tests::SerialTestsOutput;
+
+pub(crate) mod presentation;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResultTablePart {
@@ -21,6 +21,7 @@ pub enum ResultTablePart {
 }
 
 pub struct LinearRegressionReportProjection {
+    pub summary: LinearSummaryOptions,
     pub reference: ResultReference,
     pub title: String,
     pub endog_name: String,
@@ -36,16 +37,9 @@ pub enum ResultAnalysisRequest {
         max_points: usize,
         x_range: Option<[f64; 2]>,
     },
-    AcfPacf {
-        max_lag: usize,
-    },
-    SerialTests {
-        lags: usize,
-        bg_nomiss0: bool,
-    },
-    Hypothesis {
-        hypothesis: String,
-    },
+    AcfPacf,
+    SerialTests,
+    Hypothesis,
 }
 
 pub struct ResidualPlotPoint {
@@ -82,24 +76,9 @@ pub enum ReportQueryError {
     WrongKind,
     #[error("report query is invalid")]
     InvalidRequest,
-    #[error(transparent)]
-    Scientific(#[from] ScientificComputationError),
-    #[error(transparent)]
-    Hypothesis(#[from] HypothesisError),
-    #[error("serial test failed")]
-    Serial(SciError),
 }
 
 impl ApplicationState {
-    pub fn query_linear_regression_report(
-        &self,
-        reference: ResultReference,
-    ) -> Result<LinearRegressionReportProjection, ReportQueryError> {
-        self.with_linear_regression_result(reference, |result| {
-            Ok(report_projection(reference, result))
-        })
-    }
-
     pub fn query_result_table(
         &self,
         reference: ResultReference,
@@ -107,7 +86,18 @@ impl ApplicationState {
         offset: usize,
         limit: usize,
     ) -> Result<ResultPageProjection, ReportQueryError> {
-        self.with_linear_regression_result(reference, |result| {
+        self.with_linear_regression_summary(reference, |result, summary| {
+            let allowed = match part {
+                ResultTablePart::Coefficients => {
+                    summary.options.coefficient_table
+                        || summary.options.coefficient_chart
+                        || summary.options.equation
+                }
+                ResultTablePart::Observations => summary.options.observations,
+            };
+            if !allowed {
+                return Err(ReportQueryError::InvalidRequest);
+            }
             table_page(result, part, offset, limit)
         })
     }
@@ -117,43 +107,39 @@ impl ApplicationState {
         reference: ResultReference,
         request: ResultAnalysisRequest,
     ) -> Result<ResultAnalysisProjection, ReportQueryError> {
-        self.with_linear_regression_result(reference, |result| {
-            Ok(match request {
-                ResultAnalysisRequest::ResidualPlot {
-                    max_points,
-                    x_range,
-                } => ResultAnalysisProjection::ResidualPlot(residual_plot(
-                    result, max_points, x_range,
-                )?),
-                ResultAnalysisRequest::AcfPacf { max_lag } => {
-                    validate_lags(max_lag)?;
-                    let value = yss_graph_execution::result::analysis::acf_pacf(result, max_lag)?;
-                    ResultAnalysisProjection::AcfPacf(value)
-                }
-                ResultAnalysisRequest::SerialTests { lags, bg_nomiss0 } => {
-                    validate_lags(lags)?;
-                    let value = yss_graph_execution::result::analysis::serial_tests(
-                        result, lags, bg_nomiss0,
-                    )
-                    .map_err(ReportQueryError::Serial)?;
-                    ResultAnalysisProjection::SerialTests(value)
-                }
-                ResultAnalysisRequest::Hypothesis { hypothesis } => {
-                    if hypothesis.trim().is_empty() || hypothesis.len() > 4096 {
-                        return Err(ReportQueryError::InvalidRequest);
-                    }
-                    let value =
-                        yss_graph_execution::result::analysis::hypothesis(result, hypothesis)?;
-                    ResultAnalysisProjection::Hypothesis(value)
-                }
-            })
+        self.with_linear_regression_summary(reference, |result, summary| match request {
+            ResultAnalysisRequest::ResidualPlot {
+                max_points,
+                x_range,
+            } if summary.options.residual_plot => Ok(ResultAnalysisProjection::ResidualPlot(
+                residual_plot(result, max_points, x_range)?,
+            )),
+            ResultAnalysisRequest::AcfPacf => summary
+                .acf
+                .as_deref()
+                .cloned()
+                .map(ResultAnalysisProjection::AcfPacf)
+                .ok_or(ReportQueryError::InvalidRequest),
+            ResultAnalysisRequest::SerialTests => summary
+                .serial
+                .as_deref()
+                .cloned()
+                .map(ResultAnalysisProjection::SerialTests)
+                .ok_or(ReportQueryError::InvalidRequest),
+            ResultAnalysisRequest::Hypothesis => summary
+                .hypothesis
+                .as_deref()
+                .cloned()
+                .map(ResultAnalysisProjection::Hypothesis)
+                .ok_or(ReportQueryError::InvalidRequest),
+            _ => Err(ReportQueryError::InvalidRequest),
         })
     }
 
-    fn with_linear_regression_result<T>(
+    fn with_linear_regression_summary<T>(
         &self,
         reference: ResultReference,
-        read: impl FnOnce(&LinearRegressionResult) -> Result<T, ReportQueryError>,
+        read: impl FnOnce(&LinearRegressionResult, &LinearSummary) -> Result<T, ReportQueryError>,
     ) -> Result<T, ReportQueryError> {
         let captured = self.capture_session()?;
         if captured.execution_session_id() != reference.execution_session_id {
@@ -166,8 +152,12 @@ impl ApplicationState {
         let RuntimeValue::LinearRegression(result) = snapshot.value().value() else {
             return Err(ReportQueryError::WrongKind);
         };
-        // The snapshot retains shared native buffers. No store lock is held during analysis.
-        let outcome = read(result);
+        // Only an executed Summary grants report reads; Fit remains a model input.
+        let summary = result
+            .summary
+            .as_deref()
+            .ok_or(ReportQueryError::WrongKind)?;
+        let outcome = read(result, summary);
         self.revalidate_captured_session(&captured)
             .map_err(|_| ReportQueryError::Stale)?;
         if captured
@@ -184,8 +174,10 @@ impl ApplicationState {
 pub(super) fn report_projection(
     reference: ResultReference,
     result: &LinearRegressionResult,
+    options: &LinearSummaryOptions,
 ) -> LinearRegressionReportProjection {
     LinearRegressionReportProjection {
+        summary: options.clone(),
         reference,
         title: result.report.title.clone(),
         endog_name: result.report.endog_name.clone(),
@@ -200,13 +192,6 @@ pub(super) fn report_projection(
         coefficient_count: result.report.coefficients.len(),
         observation_count: result.residuals.len(),
     }
-}
-
-fn validate_lags(lags: usize) -> Result<(), ReportQueryError> {
-    if !(1..=40).contains(&lags) {
-        return Err(ReportQueryError::InvalidRequest);
-    }
-    Ok(())
 }
 
 fn table_page(

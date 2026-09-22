@@ -149,10 +149,6 @@ pub(super) fn database_command_error(error: DatabaseOperationError) -> CommandEr
             CommandError::expected("unsupported_sql_engine")
                 .with_details(EngineDetails { engine: &engine })
         }
-        DatabaseOperationError::ImportUnsupported { engine } => {
-            CommandError::expected("unsupported_database_import")
-                .with_details(EngineDetails { engine })
-        }
         DatabaseOperationError::InvalidName {
             database_id,
             requested_name,
@@ -183,19 +179,6 @@ pub(super) fn database_command_error(error: DatabaseOperationError) -> CommandEr
             operation: operation_name(operation),
             field,
         }),
-        DatabaseOperationError::OperationUnsupported {
-            database_id,
-            operation,
-        } => {
-            let error = CommandError::expected("database_operation_unsupported");
-            match database_id.as_deref() {
-                Some(database_id) => error.with_details(DatabaseOperationDetails {
-                    database_id,
-                    operation: operation_name(operation),
-                }),
-                None => error,
-            }
-        }
         DatabaseOperationError::InvalidExportDestination => {
             CommandError::expected("database_export_temp_reservation_failed")
         }

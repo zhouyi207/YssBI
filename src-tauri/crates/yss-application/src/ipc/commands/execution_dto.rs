@@ -23,6 +23,7 @@ pub(crate) fn execution_demand_to_application(demand: ExecutionDemandDto) -> Res
         ExecutionDemandDto::Outputs {
             outputs,
             include_default_results,
+            reuse_inputs,
         } => outputs
             .into_vec()
             .into_iter()
@@ -31,6 +32,7 @@ pub(crate) fn execution_demand_to_application(demand: ExecutionDemandDto) -> Res
             .map(|outputs| RunDemand::Outputs {
                 outputs: outputs.into_boxed_slice(),
                 include_default_results,
+                reuse_inputs,
             }),
     }
 }
@@ -397,7 +399,7 @@ mod tests {
             ),
             (
                 "yssbi.distribution.normal.sample",
-                serde_json::json!({"mean":"0", "standard_deviation":"1", "sample_count":3}),
+                serde_json::json!({"mean":0, "standard_deviation":1, "sample_count":3}),
             ),
         ] {
             let id = NodeId::new();
@@ -407,7 +409,7 @@ mod tests {
                     id,
                     node_type: kind.parse().unwrap(),
                     position: NodePosition { x: 0., y: 0. },
-                    parameters: ParameterValues::from([("configuration".parse().unwrap(), config)]),
+                    parameters: serde_json::from_value::<ParameterValues>(config).unwrap(),
                     user_label: None,
                 },
             );

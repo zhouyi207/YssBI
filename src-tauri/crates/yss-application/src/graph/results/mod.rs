@@ -115,6 +115,7 @@ pub(crate) fn query_graph_results(
 
 pub enum ResultValueProjection {
     Value(RuntimeValue),
+    LinearModel(Box<yss_sci_contract::regression::report::LinearModelSummary>),
     LinearReport(Box<report::LinearRegressionReportProjection>),
 }
 
@@ -167,14 +168,20 @@ impl ApplicationState {
                         .checked_sub(text.len())
                         .ok_or(ResultQueryApplicationError::PageTooLarge)?;
                 }
-                for coefficient in &result.report.coefficients {
-                    remaining = remaining
-                        .checked_sub(coefficient.variable.len().saturating_add(16))
-                        .ok_or(ResultQueryApplicationError::PageTooLarge)?;
+                if let Some(summary) = &result.summary {
+                    for coefficient in &result.report.coefficients {
+                        remaining = remaining
+                            .checked_sub(coefficient.variable.len().saturating_add(16))
+                            .ok_or(ResultQueryApplicationError::PageTooLarge)?;
+                    }
+                    Ok(ResultValueProjection::LinearReport(Box::new(
+                        report::report_projection(reference, result, &summary.options),
+                    )))
+                } else {
+                    Ok(ResultValueProjection::LinearModel(Box::new(
+                        result.report.model_basic_info.clone(),
+                    )))
                 }
-                Ok(ResultValueProjection::LinearReport(Box::new(
-                    report::report_projection(reference, result),
-                )))
             }
             RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_) => {
                 Err(ResultQueryApplicationError::InvalidPageRequest)

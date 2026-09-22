@@ -78,7 +78,18 @@ fn map_node(
                 can_add: addition.can_add,
             })
             .collect(),
-        parameter_editors: node.parameters.iter().map(map_parameter).collect(),
+        parameter_groups: node
+            .parameter_groups
+            .iter()
+            .map(|group| ParameterGroupDto {
+                key: group.key.as_str().into(),
+                display: ParameterDisplayDto {
+                    title: group.display.title.clone(),
+                    description: group.display.description.clone(),
+                },
+                parameters: group.parameters.iter().map(map_parameter).collect(),
+            })
+            .collect(),
         capabilities: NodeCapabilitiesDto {
             managed: node.capabilities.managed,
         },
@@ -194,7 +205,6 @@ fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
             ParameterEditorKind::Text => ParameterEditorKindDto::Text,
             ParameterEditorKind::Number => ParameterEditorKindDto::Number,
             ParameterEditorKind::Toggle => ParameterEditorKindDto::Toggle,
-            ParameterEditorKind::Configuration => ParameterEditorKindDto::Configuration,
             ParameterEditorKind::Select => ParameterEditorKindDto::Select,
             ParameterEditorKind::Resource => ParameterEditorKindDto::Resource,
         },
@@ -234,11 +244,6 @@ fn map_parameter_configuration(
     configuration: &EditorParameterConfiguration,
 ) -> SchemaAwareParameterEditorDto {
     match configuration {
-        EditorParameterConfiguration::Configuration { fields } => {
-            SchemaAwareParameterEditorDto::Configuration {
-                fields: fields.iter().map(map_parameter).collect(),
-            }
-        }
         EditorParameterConfiguration::SelectOptions { options } => {
             SchemaAwareParameterEditorDto::SelectOptions {
                 options: options.to_vec(),
@@ -478,32 +483,41 @@ mod tests {
                     status: EditorPortStatus::Resolved,
                 }]),
                 port_instance_additions: Box::new([]),
-                parameters: Box::new([EditorParameterModel {
-                    key: ParameterKey::new("columns").expect("test parameter key is valid"),
-                    display: EditorParameterDisplay {
-                        title: "Columns".into(),
-                        description: None,
-                    },
-                    editor: ParameterEditorKind::Select,
-                    presentation: ParameterPresentation::DetailPanel,
-                    value_type: Some(yss_data_contract::ValueType::Scalar(
-                        yss_data_contract::SemanticType::Text,
-                    )),
-                    multiline: false,
-                    value: Some(json!(["sales"])),
-                    configuration: Some(EditorParameterConfiguration::ProjectColumns {
-                        allow_empty: false,
-                        available: true,
-                        unavailable_reason: None,
-                        options: Box::new([EditorColumnOption {
-                            name: "sales".into(),
-                            data_type: RelationalScalarType::Known(
-                                yss_node_protocol::SemanticType::Numeric,
-                            ),
+                parameter_groups: Box::new([
+                    yss_graph_editor::projection::EditorParameterGroupModel {
+                        key: "parameters".parse().unwrap(),
+                        display: EditorParameterDisplay {
+                            title: "Parameters".into(),
+                            description: None,
+                        },
+                        parameters: Box::new([EditorParameterModel {
+                            key: ParameterKey::new("columns").expect("test parameter key is valid"),
+                            display: EditorParameterDisplay {
+                                title: "Columns".into(),
+                                description: None,
+                            },
+                            editor: ParameterEditorKind::Select,
+                            presentation: ParameterPresentation::DetailPanel,
+                            value_type: Some(yss_data_contract::ValueType::Scalar(
+                                yss_data_contract::SemanticType::Text,
+                            )),
+                            multiline: false,
+                            value: Some(json!(["sales"])),
+                            configuration: Some(EditorParameterConfiguration::ProjectColumns {
+                                allow_empty: false,
+                                available: true,
+                                unavailable_reason: None,
+                                options: Box::new([EditorColumnOption {
+                                    name: "sales".into(),
+                                    data_type: RelationalScalarType::Known(
+                                        yss_node_protocol::SemanticType::Numeric,
+                                    ),
+                                }]),
+                                value: Box::new(["sales".into()]),
+                            }),
                         }]),
-                        value: Box::new(["sales".into()]),
-                    }),
-                }]),
+                    },
+                ]),
                 capabilities: EditorNodeCapabilities { managed: false },
                 diagnostics: Box::new([diagnostic.clone()]),
             }]),
@@ -541,7 +555,7 @@ mod tests {
         );
         assert_eq!(wire["nodes"][0]["portInstanceAdditions"], json!([]));
         assert_eq!(
-            wire["nodes"][0]["parameterEditors"][0]["configuration"],
+            wire["nodes"][0]["parameterGroups"][0]["parameters"][0]["configuration"],
             json!({
                 "kind": "projectColumns",
                 "allowEmpty": false,
@@ -561,23 +575,17 @@ mod tests {
         assert!(wire["nodes"][0].get("node_id").is_none());
 
         let mut model = model;
-        let mut field = model.nodes[0].parameters[0].clone();
+        let mut field = model.nodes[0].parameter_groups[0].parameters[0].clone();
         field.key = ParameterKey::new("covariance").unwrap();
         field.value = Some(json!("HC1"));
         field.configuration = Some(EditorParameterConfiguration::SelectOptions {
             options: Box::new(["nonrobust".into(), "HC1".into()]),
         });
-        model.nodes[0].parameters[0].key = ParameterKey::new("configuration").unwrap();
-        model.nodes[0].parameters[0].editor = ParameterEditorKind::Configuration;
-        model.nodes[0].parameters[0].configuration =
-            Some(EditorParameterConfiguration::Configuration {
-                fields: Box::new([field]),
-            });
+        model.nodes[0].parameter_groups[0].parameters[0] = field;
         let wire = serde_json::to_value(map_editor_projection(&model)).unwrap();
-        let parameter = &wire["nodes"][0]["parameterEditors"][0];
-        assert_eq!(parameter["editor"], "configuration");
-        assert_eq!(parameter["configuration"]["kind"], "configuration");
-        let field = &parameter["configuration"]["fields"][0];
+        let group = &wire["nodes"][0]["parameterGroups"][0];
+        assert_eq!(group["key"], "parameters");
+        let field = &group["parameters"][0];
         assert_eq!(
             field["configuration"],
             json!({"kind": "selectOptions", "options": ["nonrobust", "HC1"]})

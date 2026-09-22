@@ -90,11 +90,6 @@ pub enum EditorGraphMutationDto {
         address: PortAddressDto,
         literal: Option<JsonValue>,
     },
-    SetConfiguration {
-        node_id: NodeId,
-        key: yss_node_protocol::ParameterKey,
-        values: yss_graph_document::ParameterValues,
-    },
     AddPortInstance {
         node_id: NodeId,
         template_key: PortKey,
@@ -221,15 +216,6 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
             } => yss_graph_editor::EditorGraphMutation::SetLiteral {
                 address: address(value)?,
                 literal,
-            },
-            EditorGraphMutationDto::SetConfiguration {
-                node_id,
-                key,
-                values,
-            } => yss_graph_editor::EditorGraphMutation::SetConfiguration {
-                node_id,
-                key,
-                values,
             },
             EditorGraphMutationDto::AddPortInstance {
                 node_id,

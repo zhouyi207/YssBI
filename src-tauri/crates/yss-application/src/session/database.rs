@@ -1,5 +1,4 @@
 use std::num::NonZeroU64;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -11,7 +10,6 @@ use yss_database_contract::{
 };
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
-use yss_filesystem::NormalizedRoot;
 use yss_project_identity::ProjectSessionId;
 
 /// Owned Project facts used to open one Database runtime session. The Database
@@ -20,7 +18,6 @@ use yss_project_identity::ProjectSessionId;
 pub(crate) struct ProjectDatabaseSessionFacts {
     project_session_id: ProjectSessionId,
     generation: NonZeroU64,
-    root: Option<NormalizedRoot>,
     declarations: Arc<[DatabaseDecl]>,
     observations: DatabaseDeclarationObservationSet,
 }
@@ -29,14 +26,12 @@ impl ProjectDatabaseSessionFacts {
     pub(crate) fn new(
         project_session_id: ProjectSessionId,
         generation: NonZeroU64,
-        root: Option<NormalizedRoot>,
         declarations: Arc<[DatabaseDecl]>,
         observations: DatabaseDeclarationObservationSet,
     ) -> Self {
         Self {
             project_session_id,
             generation,
-            root,
             declarations,
             observations,
         }
@@ -63,10 +58,6 @@ pub(crate) fn prepare_database_session_with_instances(
     let request = DatabaseSessionOpenRequest::new(
         DatabaseSessionIdentity::from_existing(facts.project_session_id.as_str().into()),
         facts.generation,
-        facts
-            .root
-            .as_ref()
-            .map(|root| PathBuf::from(root.as_path())),
         Arc::clone(&facts.declarations),
         facts.observations.clone(),
     );

@@ -65,7 +65,7 @@ fn probability_distribution_catalog_executes_all_defaults_and_rejects_invalid_or
                 position: NodePosition { x: 0.0, y: 0.0 },
                 user_label: None,
                 parameters: configuration
-                    .map(|value| ParameterValues::from([("configuration".parse().unwrap(), value)]))
+                    .map(|value| serde_json::from_value::<ParameterValues>(value).unwrap())
                     .unwrap_or_default(),
             },
         );
@@ -128,15 +128,27 @@ fn probability_distribution_catalog_executes_all_defaults_and_rejects_invalid_or
             }
         }
     }
-    // Configuration decimal strings are the same values emitted by the editor protocol.
     let invalid = graph(
         "normal",
-        Some(serde_json::json!({"mean":"0","standard_deviation":"-1","sample_count":5})),
+        Some(serde_json::json!({"mean":0,"standard_deviation":-1,"sample_count":5})),
     );
-    assert!(execute(&invalid, "yssbi.distribution.normal.sample").is_err());
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::new(),
+        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    );
+    let analysis = analyze_document(
+        &invalid,
+        &GraphResourcePath::new("events/invalid.yssbi-event").unwrap(),
+        &resources,
+    );
+    assert!(analysis.semantic_snapshot().ready().is_none());
+    assert!(analysis.semantic_snapshot().diagnostics().iter().any(|diagnostic| {
+        matches!(&diagnostic.primary, yss_graph_analysis::GraphDiagnosticLocation::Parameter { key, .. } if key.as_str() == "standard_deviation")
+    }));
     let bounded = graph(
         "normal",
-        Some(serde_json::json!({"mean":"0","standard_deviation":"1","sample_count":i64::MAX})),
+        Some(serde_json::json!({"mean":0,"standard_deviation":1,"sample_count":i64::MAX})),
     );
     assert!(execute(&bounded, "yssbi.distribution.normal.sample").is_err());
 }
@@ -148,10 +160,11 @@ fn series_catalog_nodes_execute_through_graph_planning_and_standardization_round
     for (suffix, parameters) in [
         (
             "series.int_range",
-            vec![(
-                "configuration",
-                serde_json::json!({"start":1,"end":5,"step":1}),
-            )],
+            vec![
+                ("start", serde_json::json!(1)),
+                ("end", serde_json::json!(5)),
+                ("step", serde_json::json!(1)),
+            ],
         ),
         ("series.standardize", vec![]),
         ("series.inverse_standardize", vec![]),
@@ -349,11 +362,8 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         let mut parameters = parameters;
         if suffix.starts_with("logic.") && parameters.is_empty() {
             parameters.push((
-                "configuration",
-                RuntimeValue::Record(Arc::new(std::collections::BTreeMap::from([(
-                    "mode".into(),
-                    RuntimeValue::Scalar(TabularScalar::String("exact".into())),
-                )]))),
+                "mode",
+                RuntimeValue::Scalar(TabularScalar::String("exact".into())),
             ));
         }
         let keys = match suffix {
@@ -577,23 +587,14 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
     assert!(matches!(restored[0], RuntimeValue::Series(_)));
     let binary_series = || V::DataSeries(Box::new(V::Scalar(S::Binary)));
     let tolerances = || {
-        vec![(
-            "configuration",
-            RuntimeValue::Record(Arc::new(std::collections::BTreeMap::from([
-                (
-                    "mode".into(),
-                    RuntimeValue::Scalar(TabularScalar::String("tolerance".into())),
-                ),
-                (
-                    "absolute_tolerance".into(),
-                    RuntimeValue::float64(1e-12).unwrap(),
-                ),
-                (
-                    "relative_tolerance".into(),
-                    RuntimeValue::float64(1e-9).unwrap(),
-                ),
-            ]))),
-        )]
+        vec![
+            (
+                "mode",
+                RuntimeValue::Scalar(TabularScalar::String("tolerance".into())),
+            ),
+            ("absolute_tolerance", RuntimeValue::float64(1e-12).unwrap()),
+            ("relative_tolerance", RuntimeValue::float64(1e-9).unwrap()),
+        ]
     };
     let approximate = run(
         "logic.equal",
@@ -695,14 +696,11 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         RuntimeValue::Scalar(TabularScalar::Null)
     );
     let range = |start, end, step| {
-        vec![(
-            "configuration",
-            RuntimeValue::Record(Arc::new(BTreeMap::from([
-                ("start".into(), number(start)),
-                ("end".into(), number(end)),
-                ("step".into(), number(step)),
-            ]))),
-        )]
+        vec![
+            ("start", number(start)),
+            ("end", number(end)),
+            ("step", number(step)),
+        ]
     };
     assert_eq!(
         as_json(
@@ -881,10 +879,7 @@ fn equality_modes_use_catalog_defaults_and_validate_tolerances() {
         execute(&document, "yssbi.logic.equal").unwrap(),
         RuntimeValue::Scalar(TabularScalar::Bool(false))
     );
-    document.nodes.get_mut(&equal).unwrap().parameters = ParameterValues::from([(
-        "configuration".parse().unwrap(),
-        serde_json::json!({"mode":"tolerance","absolute_tolerance":1e-12,"relative_tolerance":1e-9}),
-    )]);
+    document.nodes.get_mut(&equal).unwrap().parameters = serde_json::from_value::<ParameterValues>(serde_json::json!({"mode":"tolerance","absolute_tolerance":1e-12,"relative_tolerance":1e-9})).unwrap();
     assert_eq!(
         execute(&document, "yssbi.logic.equal").unwrap(),
         RuntimeValue::Scalar(TabularScalar::Bool(true))
@@ -905,12 +900,9 @@ fn equality_modes_use_catalog_defaults_and_validate_tolerances() {
             } else {
                 serde_json::json!({"mode":mode,"absolute_tolerance":1e-12,"relative_tolerance":1e-9})
             };
-            document
-                .nodes
-                .get_mut(&equal)
-                .unwrap()
-                .parameters
-                .insert("configuration".parse().unwrap(), configuration);
+            document.nodes.get_mut(&equal).unwrap().parameters =
+                serde_json::from_value::<yss_node_protocol::ParameterValues>(configuration)
+                    .unwrap();
             assert_eq!(
                 execute(&document, &kind).unwrap(),
                 RuntimeValue::Scalar(TabularScalar::Bool(expected)),
@@ -936,18 +928,19 @@ fn equality_modes_use_catalog_defaults_and_validate_tolerances() {
             RuntimeValue::Scalar(TabularScalar::Null)
         ]))
     );
-    document.nodes.get_mut(&equal).unwrap().parameters = ParameterValues::from([(
-        "configuration".parse().unwrap(),
-        serde_json::json!({"mode":"tolerance","absolute_tolerance":"0","relative_tolerance":"0"}),
-    )]);
+    document.nodes.get_mut(&equal).unwrap().parameters = serde_json::from_value::<ParameterValues>(
+        serde_json::json!({"mode":"tolerance","absolute_tolerance":0,"relative_tolerance":0}),
+    )
+    .unwrap();
     let RuntimeValue::List(values) = execute(&document, "yssbi.logic.equal").unwrap() else {
         panic!()
     };
     assert_eq!(values[0], RuntimeValue::Scalar(TabularScalar::Bool(false)));
-    document.nodes.get_mut(&equal).unwrap().parameters.insert(
-        "configuration".parse().unwrap(),
-        serde_json::json!({"mode":"tolerance","absolute_tolerance":"-1","relative_tolerance":"0"}),
-    );
+    document.nodes.get_mut(&equal).unwrap().parameters =
+        serde_json::from_value::<yss_node_protocol::ParameterValues>(
+            serde_json::json!({"mode":"tolerance","absolute_tolerance":-1,"relative_tolerance":0}),
+        )
+        .unwrap();
     assert!(execute(&document, "yssbi.logic.equal").is_err());
 }
 
@@ -2430,6 +2423,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                         .map(|output| output.output().clone())
                         .collect(),
                     include_default_results: false,
+                    reuse_inputs: false,
                 },
                 basis: None,
             },
@@ -3029,7 +3023,9 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         ),
         |_| false,
     )
-    .unwrap();
+    .unwrap()
+    .identity
+    .run_id();
     assert!(receiver.try_iter().any(|event| matches!(event,
         yss_application::graph::editing::GraphActivity::Execution(event)
             if matches!(event.kind(), RunApplicationEventKind::RunCompleted))));

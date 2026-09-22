@@ -94,7 +94,6 @@ fn staged_session(
             .open_session(DatabaseSessionOpenRequest::new(
                 DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
                 NonZeroU64::new(1).unwrap(),
-                None,
                 declarations,
                 observations,
             ))

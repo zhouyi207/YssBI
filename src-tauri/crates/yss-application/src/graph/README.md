@@ -41,7 +41,7 @@ GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，编
 完整清单见 [Module Map](../../../../../docs/reference/MODULE_MAP.md)。
 
 Node 描述一种节点的端口、参数、类型约束及执行语义，不拥有某张图的节点实例或解析结果。
-节点编辑投影的 `capabilities` 仅携带 `managed`；复制、创建副本、删除和剪切在前端统一要求存在明确的非受管理节点投影。Rust 继续按节点协议拒绝受管理节点的非法修改与子图导出。参数编辑、配置和内联字面量直接消费各自投影，不另传节点级汇总开关。
+节点编辑投影的 `capabilities` 仅携带 `managed`；复制、创建副本、删除和剪切在前端统一要求存在明确的非受管理节点投影。Rust 继续按节点协议拒绝受管理节点的非法修改与子图导出。参数和内联字面量编辑直接消费各自投影，不另传节点级汇总开关。
 三个 `yss-node-*` crate 均不依赖 Graph；`DocumentNode`、位置与连线属于图文档，连接后的类型、
 Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph-type-mapping` 留在 Graph。
 节点目录接收调用方提供的资源创建描述，不读取项目状态，也不解析图中连接。
@@ -104,6 +104,7 @@ GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操�
 两端基线均限制为 32 条、32 MiB 序列化预算，单条超过 16 MiB 时只读而不缓存。交付中的 `snapshotBytes` 由 Rust 在编码时计算，前端据此计量，避免主线程为了缓存预算重新编码完整图。增量最多 512 个操作；字节预算与条目限制不代替真实桌面的安装耗时、长任务及帧率验收。
 
 公共运行路径在提交执行状态后统一发布图活动，GUI、Harness 与内部调用遵循同一规则；调用者的专属 sink 不负责公共发布。GUI 仍保留 RunEvent Channel 和终态排空。
+`run_graph_with_sink` 成功时返回 `RunGraphReceipt`，包含运行身份和本次 handoff 实际发布的结果引用、输出与类别。回执在交付结果查看意图和终态之前捕获，不通过随后可能已变化的当前结果索引重建，也不复制结果 payload。Harness 对这些引用执行响应条目预算并明确报告总数和完整性；只需要 RunId 的内部调用继续使用 `run_graph`。
 Application 保存运行事实的恢复投影：每个活动运行的开始身份与输出，以及每张图最新运行的终态和失败详情；不保存操作事件历史。`get_execution_snapshot` 按项目会话返回这些当前投影，初始订阅和 Resync 不再依赖前端曾收到的 RunId。按 RunId 的状态查询仍可使用。
 通知与命令回执在既有 Graph FIFO 中协调。前端恢复期间有界暂存后续事件，先安装快照再处理通知；公共订阅、专属 Channel 和恢复共享按执行会话、RunId 与终态去重的安装规则。结果打开意图只由公共观察路径处理，不在恢复时重放。
 执行提交中、后端运行状态与同步中断分别处理。只有 RunErrored 或权威恢复中的失败事实才写入 Output；Command 拒绝不等于计算失败。Channel 失败先查询当前执行投影，无法确认时保留“运行状态未知”，不自动重跑。成功结果始终先提交再通知。

@@ -37,6 +37,18 @@ fn fixture_with_method(
     ResultReference,
     Arc<LinearRegressionResult>,
 ) {
+    fixture_with_options(n, method, LinearSummaryOptions::default())
+}
+
+fn fixture_with_options(
+    n: usize,
+    method: &str,
+    summary_options: LinearSummaryOptions,
+) -> (
+    ApplicationState,
+    ResultReference,
+    Arc<LinearRegressionResult>,
+) {
     let candidate = crate::session::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         Arc::new(yss_project::ProjectState::new()),
@@ -72,6 +84,24 @@ fn fixture_with_method(
                 user_label: None,
             },
         );
+    }
+    {
+        let options = &summary_options;
+        let schema = &builtins
+            .registry
+            .protocol(&"yssbi.statistics.linear.summary".parse().unwrap())
+            .unwrap()
+            .parameters;
+        let values = serde_json::to_value(options)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(key, value)| (key.parse().unwrap(), value.clone()))
+            .collect();
+        document.nodes.get_mut(&summary).unwrap().parameters = schema
+            .merge_values(&ParameterValues::new(), values)
+            .unwrap();
     }
     for (node, values) in [
         (
@@ -150,10 +180,11 @@ fn fixture_with_method(
             order: None,
         },
     );
-    document.nodes.get_mut(&fit).unwrap().parameters.insert(
-        "configuration".parse().unwrap(),
-        serde_json::json!({"method": method, "constant": true, "covariance": "nonrobust"}),
-    );
+    document.nodes.get_mut(&fit).unwrap().parameters =
+        serde_json::from_value::<yss_node_protocol::ParameterValues>(
+            serde_json::json!({"method": method, "constant": true, "covariance": "nonrobust"}),
+        )
+        .unwrap();
     let auxiliary = match method {
         "WLS" => vec![(0..n).map(|i| (i + 1) as f64).collect::<Vec<_>>()],
         "GLS" => (0..n)
@@ -280,13 +311,144 @@ fn fixture_with_method(
         })
         .collect::<Vec<_>>();
     assert_eq!(reports.len(), 3);
-    assert!(Arc::ptr_eq(&reports[0].1, &reports[2].1));
-    assert!(Arc::ptr_eq(&reports[0].1, &reports[1].1));
+    assert!(Arc::ptr_eq(&reports[0].1.model, &reports[2].1.model));
+    assert!(Arc::ptr_eq(&reports[0].1.model, &reports[1].1.model));
+    let fit = reports
+        .iter()
+        .find(|(_, value)| value.summary.is_none())
+        .unwrap();
     let reference = ResultReference {
         execution_session_id: captured.execution_session_id(),
-        result_id: reports[0].0,
+        result_id: reports
+            .iter()
+            .find(|(_, value)| value.summary.is_some())
+            .unwrap()
+            .0,
     };
-    (app, reference, reports[0].1.clone())
+    (app, reference, fit.1.model.clone())
+}
+
+fn overview(
+    app: &ApplicationState,
+    reference: ResultReference,
+) -> Box<LinearRegressionReportProjection> {
+    let super::super::ResultValueProjection::LinearReport(report) =
+        app.query_result_projection(reference).unwrap().unwrap()
+    else {
+        panic!("expected an executed Summary");
+    };
+    report
+}
+
+#[test]
+fn summary_selection_limits_pages_analyses_and_layout_bindings() {
+    let options = LinearSummaryOptions {
+        equation: false,
+        coefficient_table: false,
+        acf_pacf: true,
+        acf_max_lag: 3,
+        ..Default::default()
+    };
+    let (app, reference, _) = fixture_with_options(40, "OLS", options.clone());
+    let projection = overview(&app, reference);
+    assert_eq!(projection.summary, options);
+    assert!(matches!(
+        app.query_result_table(reference, ResultTablePart::Coefficients, 0, 10),
+        Err(ReportQueryError::InvalidRequest)
+    ));
+    assert!(matches!(
+        app.query_result_table(reference, ResultTablePart::Observations, 0, 10),
+        Err(ReportQueryError::InvalidRequest)
+    ));
+    assert!(matches!(
+        app.analyze_result(reference, ResultAnalysisRequest::AcfPacf),
+        Ok(ResultAnalysisProjection::AcfPacf(_))
+    ));
+    assert!(matches!(
+        app.analyze_result(reference, ResultAnalysisRequest::SerialTests),
+        Err(ReportQueryError::InvalidRequest)
+    ));
+    assert!(matches!(
+        app.analyze_result(reference, ResultAnalysisRequest::Hypothesis),
+        Err(ReportQueryError::InvalidRequest)
+    ));
+    use yss_ui_contract::*;
+    let session = app.capture_session().unwrap();
+    let fit = session.execution().query_graph_results("events/report.yssbi-event", 10)
+        .into_iter().find(|result| matches!(result.value().value(), RuntimeValue::LinearRegression(model) if model.summary.is_none())).unwrap();
+    let fit_reference = fit.provenance().reference();
+    let model = crate::result_encoding::query_result_json(&app, fit_reference)
+        .unwrap()
+        .unwrap();
+    assert_eq!(model["num_observation"], 40);
+    assert!(model.get("summary").is_none());
+    assert!(model.get("coefficients").is_none());
+    assert!(matches!(
+        app.query_result_table(fit_reference, ResultTablePart::Coefficients, 0, 10),
+        Err(ReportQueryError::WrongKind)
+    ));
+    assert!(matches!(
+        app.analyze_result(fit_reference, ResultAnalysisRequest::AcfPacf),
+        Err(ReportQueryError::WrongKind)
+    ));
+    assert!(matches!(
+        app.inspect_ui(
+            session.project_instance_id(),
+            InspectUiRequest::Page {
+                source: UiSource {
+                    execution_session_id: fit_reference.execution_session_id.as_uuid().to_string(),
+                    result_id: fit_reference.result_id.get().to_string()
+                }
+            }
+        ),
+        Err(crate::presentation::UiError::Unavailable)
+    ));
+    let source = UiSource {
+        execution_session_id: reference.execution_session_id.as_uuid().to_string(),
+        result_id: reference.result_id.get().to_string(),
+    };
+    let UiInspection::Page { page } = app
+        .inspect_ui(
+            session.project_instance_id(),
+            InspectUiRequest::Page {
+                source: source.clone(),
+            },
+        )
+        .unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(
+        page.spec.elements["report"].children,
+        ["modelSummary", "anova", "acfPacf"]
+    );
+    let mut spec = page.spec;
+    spec.elements
+        .get_mut("report")
+        .unwrap()
+        .children
+        .push("extra".into());
+    spec.elements.insert(
+        "extra".into(),
+        UiElement {
+            component: UiComponent::Analysis {
+                binding: "serialTests".into(),
+            },
+            visible: true,
+            children: vec![],
+        },
+    );
+    assert!(matches!(
+        app.update_ui(
+            session.project_instance_id(),
+            UpdateUiRequest {
+                source,
+                base_revision: 1,
+                action: UiAction::Replace { spec }
+            }
+        ),
+        Err(crate::presentation::UiError::Invalid)
+    ));
 }
 
 #[test]
@@ -300,7 +462,11 @@ fn parameter_catalog_is_independent_of_coefficient_pages() {
             coefficient
         })
         .collect();
-    let overview = crate::result_encoding::report_to_json(report_projection(reference, &model));
+    let overview = crate::result_encoding::report_to_json(report_projection(
+        reference,
+        &model,
+        &LinearSummaryOptions::default(),
+    ));
     assert_eq!(overview["paramNames"].as_array().unwrap().len(), 201);
     assert_eq!(overview["paramNames"][200], "x200");
     assert_eq!(overview["coefficients"]["rowCount"], 201);
@@ -308,14 +474,37 @@ fn parameter_catalog_is_independent_of_coefficient_pages() {
 
 #[test]
 fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
-    let (app, reference, fit) = fixture(53_940);
+    let (app, reference, fit) = fixture_with_options(
+        53_940,
+        "OLS",
+        LinearSummaryOptions {
+            observations: true,
+            residual_plot: true,
+            acf_pacf: true,
+            acf_max_lag: 8,
+            serial_tests: true,
+            serial_lags: 4,
+            hypothesis_test: true,
+            ..Default::default()
+        },
+    );
+    let stored = app
+        .capture_session()
+        .unwrap()
+        .execution()
+        .query_result(reference.result_id)
+        .unwrap();
+    let RuntimeValue::LinearRegression(native) = stored.value().value() else {
+        panic!()
+    };
+    let analyses = native.summary.as_ref().unwrap();
     let lease = uuid::Uuid::new_v4();
     app.retain_result(reference, lease, "report", None).unwrap();
     app.capture_session()
         .unwrap()
         .execution()
         .invalidate_graph_results("events/report.yssbi-event");
-    let overview = app.query_linear_regression_report(reference).unwrap();
+    let overview = overview(&app, reference);
     assert_eq!(overview.observation_count, 53_940);
     assert_eq!(overview.coefficient_count, 2);
     let page = app
@@ -352,37 +541,26 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
         assert_eq!(point.y, fit.residuals[point.observation - 1]);
     }
     let ResultAnalysisProjection::AcfPacf(acf) = app
-        .analyze_result(reference, ResultAnalysisRequest::AcfPacf { max_lag: 8 })
+        .analyze_result(reference, ResultAnalysisRequest::AcfPacf)
         .unwrap()
     else {
         panic!()
     };
-    let expected = yss_graph_execution::result::analysis::acf_pacf(&fit, 8).unwrap();
-    assert_eq!(acf, expected);
+    let expected = analyses.acf.as_ref().unwrap();
+    assert_eq!(&acf, expected.as_ref());
     assert_eq!(acf.n, 53_940);
     let ResultAnalysisProjection::SerialTests(serial) = app
-        .analyze_result(
-            reference,
-            ResultAnalysisRequest::SerialTests {
-                lags: 4,
-                bg_nomiss0: true,
-            },
-        )
+        .analyze_result(reference, ResultAnalysisRequest::SerialTests)
         .unwrap()
     else {
         panic!()
     };
-    let expected = yss_graph_execution::result::analysis::serial_tests(&fit, 4, true).unwrap();
+    let expected = analyses.serial.as_ref().unwrap();
     assert_eq!(serial.dw.d, expected.dw.d);
-    assert_eq!(serial.q.unwrap().stat, expected.q.unwrap().stat);
-    assert_eq!(serial.bg.unwrap().stat, expected.bg.unwrap().stat);
+    assert_eq!(serial.q.unwrap().stat, expected.q.as_ref().unwrap().stat);
+    assert_eq!(serial.bg.unwrap().stat, expected.bg.as_ref().unwrap().stat);
     let ResultAnalysisProjection::Hypothesis(test) = app
-        .analyze_result(
-            reference,
-            ResultAnalysisRequest::Hypothesis {
-                hypothesis: "x1 = 0".into(),
-            },
-        )
+        .analyze_result(reference, ResultAnalysisRequest::Hypothesis)
         .unwrap()
     else {
         panic!()
@@ -390,10 +568,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     assert!((test.stat - fit.report.coefficients[1].t_value).abs() < 1e-8);
     assert_eq!(test.df2, 53_938);
     app.release_result_lease(lease, "report").unwrap();
-    assert!(matches!(
-        app.query_linear_regression_report(reference),
-        Err(ReportQueryError::Unavailable)
-    ));
+    assert!(matches!(app.query_result_projection(reference), Ok(None)));
 }
 
 #[test]
@@ -408,7 +583,7 @@ fn references_reject_other_sessions_and_in_flight_results_after_invalidation() {
             app.query_result_table(foreign, ResultTablePart::Coefficients, 0, 1),
             Err(ReportQueryError::Stale)
         ));
-        let outcome = app.with_linear_regression_result(reference, |_| {
+        let outcome = app.with_linear_regression_summary(reference, |_, _| {
             app.capture_session()
                 .unwrap()
                 .execution()
@@ -435,7 +610,7 @@ fn weighted_graph_inputs_reach_the_shared_report_query() {
         (&wls_app, wls_reference, &wls, "WLS"),
         (&gls_app, gls_reference, &gls, "GLS"),
     ] {
-        let overview = app.query_linear_regression_report(reference).unwrap();
+        let overview = overview(app, reference);
         assert_eq!(overview.model.model_type, method);
         assert_eq!(overview.observation_count, 8);
         assert!(model.constant);

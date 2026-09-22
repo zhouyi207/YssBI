@@ -42,6 +42,7 @@ pub enum RunDemand {
     Outputs {
         outputs: Box<[PlanOutputRef]>,
         include_default_results: bool,
+        reuse_inputs: bool,
     },
 }
 
@@ -141,6 +142,20 @@ impl RunIdentity {
     pub const fn run_id(&self) -> RunId {
         self.run_id
     }
+}
+
+/// References captured from this run's committed handoff, before delivering terminal events.
+#[derive(Clone, Debug)]
+pub struct RunGraphReceipt {
+    pub identity: RunIdentity,
+    pub results: Box<[RunResultReference]>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RunResultReference {
+    pub result_id: yss_graph_execution::result::ResultId,
+    pub output: PlanOutputRef,
+    pub category: yss_graph_execution::plan::ResultCategory,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -262,14 +277,14 @@ pub fn run_graph(
     state: &ApplicationState,
     request: RunGraphRequest,
 ) -> Result<RunId, ExecutionApplicationError> {
-    run_graph_with_sink(state, request, |_| true)
+    run_graph_with_sink(state, request, |_| true).map(|receipt| receipt.identity.run_id())
 }
 
 pub fn run_graph_with_sink<D>(
     state: &ApplicationState,
     request: RunGraphRequest,
     mut deliver: D,
-) -> Result<RunId, ExecutionApplicationError>
+) -> Result<RunGraphReceipt, ExecutionApplicationError>
 where
     D: FnMut(RunApplicationEvent) -> bool + Send,
 {
@@ -360,9 +375,11 @@ where
         RunDemand::Outputs {
             outputs,
             include_default_results,
+            reuse_inputs,
         } => PlanExecutionDemand::Outputs {
             outputs: outputs.clone(),
             include_default_results: *include_default_results,
+            reuse_inputs: *reuse_inputs,
         },
     };
     let mut started_identity = None;
@@ -487,6 +504,19 @@ where
         return Err(ExecutionApplicationError::RunFinalization(error));
     }
 
+    let receipt = RunGraphReceipt {
+        identity: identity.clone(),
+        results: outcome
+            .handoff()
+            .results()
+            .iter()
+            .map(|result| RunResultReference {
+                result_id: result.result_id(),
+                output: result.output().clone(),
+                category: result.category(),
+            })
+            .collect(),
+    };
     for inspection in outcome.inspection_requests() {
         let _ = deliver(RunApplicationEvent::new(
             identity.clone(),
@@ -501,7 +531,7 @@ where
         RunApplicationEventKind::RunCompleted,
     ));
     drop(committed_effects);
-    Ok(run_id)
+    Ok(receipt)
 }
 
 pub fn cancel_run(
@@ -809,7 +839,6 @@ mod tests {
                 .open_session(DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
                     NonZeroU64::new(1).expect("non-zero test generation"),
-                    None,
                     Vec::<DatabaseDecl>::new().into(),
                     observations,
                 ))

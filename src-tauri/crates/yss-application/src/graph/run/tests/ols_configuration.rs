@@ -22,7 +22,7 @@ use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeS
 use yss_node_kernel::RuntimeValue;
 
 #[test]
-fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
+fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
     let system = yss_node_catalog::build_builtin_node_system().unwrap();
     let runtime = GraphRuntimeState::from_components(
         GraphRuntimeEpoch::from_existing(1),
@@ -173,17 +173,11 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
                 .iter()
                 .all(|input| input.address != port(fit, "configuration"))
         );
-        let parameter = node
-            .parameters
+        let fields: Vec<_> = node
+            .parameter_groups
             .iter()
-            .find(|parameter| parameter.key.as_str() == "configuration")
-            .unwrap();
-        let Some(yss_graph_editor::projection::EditorParameterConfiguration::Configuration {
-            fields,
-        }) = &parameter.configuration
-        else {
-            panic!("configuration must be projected as a node parameter");
-        };
+            .flat_map(|group| group.parameters.iter())
+            .collect();
         let selected = fields
             .iter()
             .find(|field| field.key.as_str() == "covariance")
@@ -267,10 +261,9 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         let target = fit;
         apply(
             &mut document,
-            EditorGraphMutation::SetConfiguration {
+            EditorGraphMutation::SetParameters {
                 node_id: target,
-                key: "configuration".parse().unwrap(),
-                values: [
+                parameters: [
                     ("constant".parse().unwrap(), false.into()),
                     ("covariance".parse().unwrap(), "HC1".into()),
                 ]
@@ -290,7 +283,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
     let RuntimeValue::LinearRegression(report) = &local[&report_key] else {
         panic!("report model");
     };
-    assert!(Arc::ptr_eq(model, report));
+    assert!(Arc::ptr_eq(&model.model, &report.model));
     assert_ne!(default_results[&model_key], local[&model_key]);
     assert_ne!(default_results[&report_key], local[&report_key]);
     let saved = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
@@ -301,10 +294,9 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         let target = fit;
         apply(
             &mut document,
-            EditorGraphMutation::SetConfiguration {
+            EditorGraphMutation::SetParameters {
                 node_id: target,
-                key: "configuration".parse().unwrap(),
-                values: [
+                parameters: [
                     ("constant".parse().unwrap(), false.into()),
                     ("covariance".parse().unwrap(), "fixed scale".into()),
                     ("scale".parse().unwrap(), 2.into()),
@@ -323,30 +315,33 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         coefficients(&local[&model_key])
     );
     assert_ne!(fixed_scale[&report_key], local[&report_key]);
-    {
-        let target = fit;
-        document
-            .nodes
-            .get_mut(&target)
-            .unwrap()
-            .parameters
-            .get_mut(
-                &"configuration"
-                    .parse::<yss_node_protocol::ParameterKey>()
-                    .unwrap(),
-            )
-            .unwrap()["scale"] = "2".into();
-    }
-    assert_eq!(execute(&document)[&report_key], fixed_scale[&report_key]);
+    document
+        .nodes
+        .get_mut(&fit)
+        .unwrap()
+        .parameters
+        .insert("scale".parse().unwrap(), "2".into());
+    assert!(
+        runtime
+            .resolve_graph_document(&graph, &document, &basis, &catalog, &[], "en-US")
+            .semantic_snapshot()
+            .ready()
+            .is_none()
+    );
+    document
+        .nodes
+        .get_mut(&fit)
+        .unwrap()
+        .parameters
+        .insert("scale".parse().unwrap(), 2.into());
     for covariance in ["HAC", "newey"] {
         {
             let target = fit;
             apply(
                 &mut document,
-                EditorGraphMutation::SetConfiguration {
+                EditorGraphMutation::SetParameters {
                     node_id: target,
-                    key: "configuration".parse().unwrap(),
-                    values: [("covariance".parse().unwrap(), covariance.into())].into(),
+                    parameters: [("covariance".parse().unwrap(), covariance.into())].into(),
                 },
             );
         }
@@ -360,7 +355,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         .get_mut(&fit)
         .unwrap()
         .parameters
-        .insert("configuration".parse().unwrap(), serde_json::json!({}));
+        .insert("covariance".parse().unwrap(), serde_json::json!("invalid"));
     let analysis =
         runtime.resolve_graph_document(&graph, &document, &basis, &catalog, &[], "en-US");
     assert!(analysis.semantic_snapshot().ready().is_none());

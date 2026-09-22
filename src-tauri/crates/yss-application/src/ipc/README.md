@@ -24,6 +24,8 @@ Result JSON encoding is shared by the desktop and Harness adapters in [result_en
 
 Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initialize(app)`. The desktop entry connects these two functions directly to Tauri. Commands, schemas, response caches and diagnosed errors remain private to the IPC module.
 
+`get_project_path` and `get_project_databases` take no wire arguments and query the active Application session. Frontend hydration rechecks its captured project lifecycle identity before publishing either response; these queries do not accept a caller-supplied project identity.
+
 Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, Application startup plugin or binding registry. Platform plugins own their namespaced command registries.
 
 `tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Structured runtime observations are submitted through Rust tracing or the frontend LogService. Application has no separate operational-diagnostic command registry or stream. See [Runtime Signals](../../../../../src/features/application/observability/README.md).
@@ -105,7 +107,7 @@ Project queries use `get_project_databases` for database declarations. Variable 
 
 Node parameter editors carry one effective `value`, display/editor metadata, and optional schema-aware `configuration`. Rust resolves that value from the node document or its protocol default. The wire has no project-setting inheritance source or override options; parameter edits update the Graph draft document directly.
 
-Node parameters with `editor: "configuration"` carry `configuration: { kind: "configuration", fields }` containing the active `ParameterEditorDto` fields for a Detail form. Select fields use `configuration: { kind: "selectOptions", options }`. The `setConfiguration` mutation carries `{ nodeId, key, values }`, with partial field values merged, normalized, and validated against the current node parameters by Graph Editor. Configuration objects persist in the node's parameter map and use the existing draft undo/redo and Save path. Static configurations have no input binding, source selector, or connection mutation.
+Node projections carry ordered `parameterGroups: [{ key, display, parameters }]`, with active `ParameterEditorDto` fields inside each group. Select fields use `configuration: { kind: "selectOptions", options }` for editor options. The `setParameters` mutation carries `{ nodeId, parameters }` as a partial update to the node's flat parameter map. Graph Editor merges against current committed values, treats null as removal, clears inactive conditional fields and validates the candidate atomically. Protocol defaults are resolved for display and execution without materializing them in the document. Groups do not create object values or execution inputs; edits use the existing graph undo/redo and Save path.
 
 ## Commands, events, and channels
 
@@ -278,7 +280,7 @@ These ownership commands delegate to Application/Execution; they never retain pa
 OLS report values contain an overview and typed table references, with no observation arrays or coefficient covariance matrix.
 `get_result_table_page(reference, part, offset, limit)` accepts an execution-session-bound result reference and a fixed table part.
 `analyze_result(reference, analysis)` accepts a tagged residual-plot, ACF/PACF, serial-test or hypothesis request;
-clients supply query parameters only. Both commands dispatch Application work on a blocking worker and preserve its
+ACF/PACF, serial tests and hypothesis requests contain only `kind` and read the selected Summary result. Plot requests additionally carry display range and point limits. Fit model references cannot grant report queries or UI pages; their Inspector value contains model overview statistics. Both commands dispatch Application work on a blocking worker and preserve its
 session/result revalidation. Plot responses explicitly identify systematic sampling and population counts.
 The result reference wire and report projections are owned by `schema/result.rs`; the computational model remains Rust-owned.
 

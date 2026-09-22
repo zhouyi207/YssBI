@@ -54,7 +54,6 @@ impl DatabaseMutationRequest {
                 expected: self.expected_observation,
                 next: self.next_observation,
             },
-            self.operation,
         )
     }
 
@@ -285,24 +284,11 @@ fn coordinate_database_handoff(
         )
         .map_err(HandoffError::DatabasePrepare)?;
     let edit_state = physical.edit_state();
-    let mut prepared_database =
-        match prepare_database_runtime_change(database, request.into_runtime()) {
-            Ok(prepared) => prepared,
-            Err(error) => {
-                let _ = physical.rollback();
-                return Err(HandoffError::DatabasePrepare(error));
-            }
-        };
-    prepared_database
-        .track_physical(&physical)
-        .map_err(HandoffError::DatabasePrepare)?;
-    let committed_database = match commit_database_runtime_change(database, prepared_database) {
-        Ok(committed) => committed,
-        Err(error) => {
-            let _ = physical.rollback();
-            return Err(HandoffError::DatabaseCommit(error));
-        }
-    };
+    let prepared_database =
+        prepare_database_runtime_change(database, request.into_runtime(), &physical)
+            .map_err(HandoffError::DatabasePrepare)?;
+    let committed_database = commit_database_runtime_change(database, prepared_database)
+        .map_err(HandoffError::DatabaseCommit)?;
     let database_outcome = committed_database.outcome();
     if let Err(source) = final_session_gate() {
         return Err(HandoffError::StaleSession {
@@ -312,7 +298,7 @@ fn coordinate_database_handoff(
     }
 
     if let Err(error) = physical.commit() {
-        if physical.rollback().is_ok() {
+        if !physical.requires_recovery() {
             let _ = committed_database.compensate();
         }
         return Err(HandoffError::DatabaseCommit(error));
@@ -348,7 +334,7 @@ fn compensate_committed_change(
     physical: yss_database_runtime::runtime::PreparedDatabasePhysicalMutation,
 ) -> DatabaseMutationRecovery {
     let database = committed.outcome().database().clone();
-    if physical.rollback().is_err() {
+    if physical.requires_recovery() {
         return DatabaseMutationRecovery::RecoveryRequired {
             owner: Box::new(UnresolvedDatabaseCompensation {
                 database,
@@ -359,12 +345,12 @@ fn compensate_committed_change(
         };
     }
     match committed.compensate() {
-        DatabaseCompensationAttempt::Restored(_) => DatabaseMutationRecovery::Restored { database },
+        DatabaseCompensationAttempt::Restored => DatabaseMutationRecovery::Restored { database },
         DatabaseCompensationAttempt::Retryable { owner, failure } => {
             DatabaseMutationRecovery::RecoveryRequired {
                 owner: Box::new(UnresolvedDatabaseCompensation {
                     database,
-                    failure: failure.code(),
+                    failure,
                     _owner: owner,
                     _physical: None,
                 }),
@@ -444,7 +430,6 @@ mod tests {
                 DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing("session".into()),
                     NonZeroU64::new(1).expect("generation is non-zero"),
-                    None,
                     vec![declaration].into(),
                     observations,
                 ),
@@ -503,7 +488,7 @@ mod tests {
         assert_eq!(store.pending_publications().unwrap().len(), 1);
         database.close_admission();
         assert_eq!(database.resolve_storage_recoveries().unwrap(), 1);
-        assert!(database.recovery_requirements().is_empty());
+        assert_eq!(database.resolve_storage_recoveries().unwrap(), 0);
         let snapshot = store.snapshot(&id).unwrap();
         let control = yss_relational_contract::RelationControl {
             cancellation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -532,9 +517,8 @@ mod tests {
         let physical = database
             .prepare_physical_mutation(&id, &request.operation, &request.operation_id.to_string())
             .unwrap();
-        let mut prepared =
-            prepare_database_runtime_change(&database, request.into_runtime()).unwrap();
-        prepared.track_physical(&physical).unwrap();
+        let prepared =
+            prepare_database_runtime_change(&database, request.into_runtime(), &physical).unwrap();
         let committed = commit_database_runtime_change(&database, prepared).unwrap();
         assert_eq!(
             database.capture_query_basis(&id).unwrap_err().code(),

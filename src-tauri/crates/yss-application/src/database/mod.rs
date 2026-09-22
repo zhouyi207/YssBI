@@ -803,8 +803,7 @@ fn map_database_runtime_error(
         },
         DatabaseErrorCode::AdmissionClosed
         | DatabaseErrorCode::Conflict
-        | DatabaseErrorCode::Schema
-        | DatabaseErrorCode::Unsupported => DatabaseOperationError::InvalidAccess {
+        | DatabaseErrorCode::Schema => DatabaseOperationError::InvalidAccess {
             database_id: resource,
             operation,
         },

@@ -363,7 +363,6 @@ mod tests {
                 .open_session(DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
                     NonZeroU64::new(1).unwrap(),
-                    None,
                     Vec::<DatabaseDecl>::new().into(),
                     observations,
                 ))

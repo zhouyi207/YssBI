@@ -8,6 +8,7 @@ pub(crate) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 
 pub(crate) fn report_to_json(projection: LinearRegressionReportProjection) -> serde_json::Value {
     serde_json::json!({
+        "summary": projection.summary,
         "title": projection.title,
         "endog_name": projection.endog_name,
         "paramNames": projection.param_names,
@@ -15,8 +16,7 @@ pub(crate) fn report_to_json(projection: LinearRegressionReportProjection) -> se
             "executionSessionId": projection.reference.execution_session_id.as_uuid().to_string(),
             "resultId": projection.reference.result_id.get().to_string(),
         },
-        "model_basic_info": projection.model,
-        "diagnostic_info": { "cond_no": projection.condition_number },
+        "presentation": crate::graph::results::report::presentation::data(&projection.model, projection.condition_number),
         "coefficients": { "kind": "tableRef", "part": "coefficients", "rowCount": projection.coefficient_count },
         "observations": { "kind": "tableRef", "part": "observations", "rowCount": projection.observation_count },
     })
@@ -41,6 +41,8 @@ fn encode_inline_projection(
 ) -> Result<serde_json::Value, ResultQueryApplicationError> {
     let value = match projection {
         ResultValueProjection::Value(value) => runtime_value_to_json(&value)?,
+        ResultValueProjection::LinearModel(model) => serde_json::to_value(model)
+            .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
         ResultValueProjection::LinearReport(report) => report_to_json(*report),
     };
     // Count encoded bytes without allocating a second, potentially large byte buffer.

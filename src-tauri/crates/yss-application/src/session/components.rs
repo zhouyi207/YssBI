@@ -47,13 +47,12 @@ impl NodeComponents {
             };
             let protocol = node.protocol();
             let parameters = if matches!(protocol.typing, NodeTypingSpec::ConstantOutput { .. }) {
-                vec!["value"]
+                vec![("value", false)]
             } else {
                 protocol
                     .parameters
-                    .parameters
                     .iter()
-                    .map(|parameter| parameter.key.as_str())
+                    .map(|parameter| (parameter.key.as_str(), parameter.visible_when.is_some()))
                     .collect()
             };
             let arity = |cardinality: &PortCardinality| match cardinality {

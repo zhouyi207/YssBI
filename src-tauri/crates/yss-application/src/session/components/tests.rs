@@ -81,19 +81,24 @@ fn definition() -> NodeProtocol {
             hidden: false,
         },
         interface: NodeInterfaceProtocol::new(ports, vec![]).unwrap(),
-        parameters: ParameterSchema::new(vec![ParameterSpec {
-            key: "step".parse().unwrap(),
-            title_key: "example.increment.step.title".parse().unwrap(),
-            description_key: None,
-            value_type: integer.clone(),
-            default_value: Some(TypedValue {
-                value_type: integer,
-                value: yss_data_contract::DataValue::Integer(1),
-            }),
-            constraints: vec![ParameterConstraint::Required],
-            editor: ParameterEditorSpec::Number,
-            presentation: ParameterPresentation::DetailPanel,
-        }])
+        parameters: Parameters::new([ParameterGroup::new(
+            "parameters",
+            [Parameter {
+                key: "step".parse().unwrap(),
+                title_key: "example.increment.step.title".parse().unwrap(),
+                description_key: None,
+                value_type: integer.clone(),
+                default_value: Some(TypedValue {
+                    value_type: integer,
+                    value: yss_data_contract::DataValue::Integer(1),
+                }),
+                constraints: vec![ParameterConstraint::Required],
+                editor: ParameterEditorSpec::Number,
+                presentation: ParameterPresentation::DetailPanel,
+                visible_when: None,
+            }],
+        )
+        .title("example.increment.step.title".parse().unwrap())])
         .unwrap(),
         instance_display: Default::default(),
         execution: ExecutionSemantics {

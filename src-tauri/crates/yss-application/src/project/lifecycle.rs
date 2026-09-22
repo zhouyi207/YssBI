@@ -197,7 +197,6 @@ impl ApplicationState {
         }
         Ok(result)
     }
-
 }
 
 fn begin_replacement(

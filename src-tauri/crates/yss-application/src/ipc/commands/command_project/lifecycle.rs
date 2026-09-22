@@ -16,8 +16,6 @@ use yss_ipc_contract::project::LifecycleMutationResultDto;
 use yss_ipc_contract::project::ProjectActivationResultDto;
 use yss_ipc_event::emit_project_event;
 use yss_ipc_event::emit_project_event_result;
-#[cfg(test)]
-use yss_project::ProjectState;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 
@@ -418,5 +416,4 @@ mod tests {
         assert_eq!(diagnosed.code(), "load_project_failed");
         assert!(diagnosed.incident_id().is_some());
     }
-
 }

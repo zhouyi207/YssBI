@@ -76,16 +76,10 @@ pub enum ResultAnalysisRequestDto {
         max_points: usize,
         x_range: Option<[f64; 2]>,
     },
-    AcfPacf {
-        max_lag: usize,
-    },
-    SerialTests {
-        lags: usize,
-        bg_nomiss0: bool,
-    },
-    Hypothesis {
-        hypothesis: String,
-    },
+    // Struct variants enforce deny_unknown_fields for these parameter-free reads.
+    AcfPacf {},
+    SerialTests {},
+    Hypothesis {},
 }
 
 impl From<ResultAnalysisRequestDto> for ResultAnalysisRequest {
@@ -98,11 +92,9 @@ impl From<ResultAnalysisRequestDto> for ResultAnalysisRequest {
                 max_points,
                 x_range,
             },
-            ResultAnalysisRequestDto::AcfPacf { max_lag } => Self::AcfPacf { max_lag },
-            ResultAnalysisRequestDto::SerialTests { lags, bg_nomiss0 } => {
-                Self::SerialTests { lags, bg_nomiss0 }
-            }
-            ResultAnalysisRequestDto::Hypothesis { hypothesis } => Self::Hypothesis { hypothesis },
+            ResultAnalysisRequestDto::AcfPacf {} => Self::AcfPacf,
+            ResultAnalysisRequestDto::SerialTests {} => Self::SerialTests,
+            ResultAnalysisRequestDto::Hypothesis {} => Self::Hypothesis,
         }
     }
 }
@@ -248,6 +240,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn summary_analysis_requests_only_select_a_computed_result() {
+        assert!(matches!(
+            serde_json::from_value::<ResultAnalysisRequestDto>(
+                serde_json::json!({ "kind": "acfPacf" })
+            )
+            .unwrap(),
+            ResultAnalysisRequestDto::AcfPacf {}
+        ));
+        assert!(
+            serde_json::from_value::<ResultAnalysisRequestDto>(
+                serde_json::json!({ "kind": "acfPacf", "maxLag": 3 })
+            )
+            .is_err()
+        );
+        assert!(matches!(
+            serde_json::from_value::<ResultAnalysisRequestDto>(
+                serde_json::json!({ "kind": "residualPlot", "maxPoints": 100, "xRange": [0, 1] })
+            )
+            .unwrap(),
+            ResultAnalysisRequestDto::ResidualPlot {
+                max_points: 100,
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn graph_cache_wire_distinguishes_valid_identities_from_stale_and_missing_outputs() {
         use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
         use yss_graph_execution::result::ResultCacheState;
@@ -312,6 +331,7 @@ mod tests {
     #[test]
     fn ols_overview_wire_matches_the_frontend_contract_and_stays_bounded() {
         let projection = |n| LinearRegressionReportProjection {
+            summary: Default::default(),
             reference: ResultReference {
                 execution_session_id: ExecutionSessionId::new(uuid::Uuid::from_u128(1)),
                 result_id: ResultId::from_existing(17),

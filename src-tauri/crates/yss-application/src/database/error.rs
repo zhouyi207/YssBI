@@ -105,8 +105,6 @@ pub enum DatabaseOperationError {
     ExportUnsupported { format: String },
     #[error("SQL engine is unsupported")]
     SqlEngineUnsupported { engine: String },
-    #[error("database import source is unsupported")]
-    ImportUnsupported { engine: &'static str },
     #[error("database name is invalid")]
     InvalidName {
         database_id: String,
@@ -124,11 +122,6 @@ pub enum DatabaseOperationError {
         database_id: String,
         operation: DatabaseApplicationOperation,
         field: &'static str,
-    },
-    #[error("database operation is unsupported")]
-    OperationUnsupported {
-        database_id: Option<String>,
-        operation: DatabaseApplicationOperation,
     },
     #[error("database export destination is invalid")]
     InvalidExportDestination,

@@ -35,7 +35,6 @@ fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {
             DatabaseSessionOpenRequest::new(
                 DatabaseSessionIdentity::from_existing("session".into()),
                 NonZeroU64::new(1).unwrap(),
-                None,
                 vec![database.clone()].into(),
                 observations,
             ),

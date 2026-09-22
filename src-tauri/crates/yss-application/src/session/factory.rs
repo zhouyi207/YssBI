@@ -323,7 +323,6 @@ pub fn build_current_project_candidate(
     let database_facts = super::database::ProjectDatabaseSessionFacts::new(
         project_session_id.clone(),
         generation,
-        root,
         declarations.into(),
         observations,
     );
@@ -397,7 +396,6 @@ mod tests {
                 .open_session(DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing("candidate-session".into()),
                     NonZeroU64::new(1).expect("test generation is non-zero"),
-                    None,
                     Vec::<DatabaseDecl>::new().into(),
                     observations,
                 ))

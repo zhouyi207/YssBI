@@ -29,7 +29,6 @@ flowchart TD
     APP --> TAURI["Tauri：runtime 与 IPC 模块使用"]
     APP --> IPC["Event / 中立 Channel / Contract"]
     APP -->|IPC commands| SCI["yss-sci-runtime"]
-    EXEC --> SCI
 ```
 
 Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Channel 和 Contract crates。Channel 不反向依赖 Application；依赖应用事件和图动作的通道适配器已归入 `ipc/channel`。普通用例模块保持原有分层约束，Application 不依赖桌面根包。
@@ -90,7 +89,7 @@ Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子�
 
 ### 桌面 IPC
 
-[ipc](src/ipc/README.md) 拥有唯一命令注册表、私有 handler/schema/error 和活动面板响应缓存。其 `channel` 子模块编码执行事件与图活动，编辑器响应使用有界 snapshot/delta 缓存；中立的 Harness 订阅、项目进度和诊断交付复用 `yss-ipc-channel`。Standalone SCI 命令可以调用 `yss-sci-runtime`，普通 Application 用例仍通过 Graph Execution 访问已保留结果的分析能力。
+[ipc](src/ipc/README.md) 拥有唯一命令注册表、私有 handler/schema/error 和活动面板响应缓存。其 `channel` 子模块编码执行事件与图活动，编辑器响应使用有界 snapshot/delta 缓存；中立的 Harness 订阅、项目进度和诊断交付复用 `yss-ipc-channel`。Standalone SCI 命令可以调用 `yss-sci-runtime`，普通 Application 用例只读取 Graph Execution 已保留的模型与分析结果。
 
 ### 项目管理服务
 
@@ -127,7 +126,7 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 
 数据导入与导出分别由 [database/import.rs](src/database/import.rs) 和 [database/export.rs](src/database/export.rs) 组织。查询与报告用例捕获当前快照，在完成读取或计算后检查结果是否仍有效，再交付应用投影。
 
-[结果报告查询](src/graph/results/report.rs) 使用 `yss-sci-contract` 的类型，读取由 Graph Execution 持有的结果。已有 OLS 结果的 ACF/PACF、序列检验和假设检验通过 `yss_graph_execution::result::analysis` 调用 SCI runtime；Application 保留请求范围、会话与结果有效性检查。
+[结果报告查询](src/graph/results/report.rs) 使用 `yss-sci-contract` 的类型，读取由 Graph Execution 持有的结果。ACF/PACF、序列检验和假设检验只在 Node Kernel 执行 Summary 时计算；查询只选择已计算的分析，不接收估计参数，也不对 Fit 模型补出 Summary。Fit 的 Inspector 只投影已拟合的模型概览。Application 保留请求范围、会话与结果有效性检查。
 
 ### Assistant 与插件
 
@@ -139,14 +138,14 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 
 ## 职责边界
 
-| 内容                     | Owner                                          | Application 的参与方式                                     |
-| ------------------------ | ---------------------------------------------- | ---------------------------------------------------------- |
-| 图语义与编辑器投影       | Graph Analysis、`yss-graph-editor::projection` | 捕获输入、调用并重验身份                                   |
-| 图解析与语义缓存         | `yss-graph-runtime`                            | 组织跨 Project、Database 的资源事实与请求                  |
-| 计划准备、图运行与结果   | `yss-graph-execution`                          | 准备资源、协调提交、组织有界查询与应用投影                 |
-| 科学计算                 | `yss-sci-runtime`、`yss-sci`                   | 已有图结果的分析交由 Graph Execution；直接使用中性契约类型 |
-| 已提交项目与持久化数据   | Project、Database 与各存储 owner               | 协调会话、跨系统提交及补偿                                 |
-| IPC wire、事件和通道发送 | IPC crates                                     | 返回类型化应用事实，提供应用事件                           |
+| 内容                     | Owner                                          | Application 的参与方式                                           |
+| ------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
+| 图语义与编辑器投影       | Graph Analysis、`yss-graph-editor::projection` | 捕获输入、调用并重验身份                                         |
+| 图解析与语义缓存         | `yss-graph-runtime`                            | 组织跨 Project、Database 的资源事实与请求                        |
+| 计划准备、图运行与结果   | `yss-graph-execution`                          | 准备资源、协调提交、组织有界查询与应用投影                       |
+| 科学计算                 | `yss-sci-runtime`、`yss-sci`                   | Node Kernel 执行所选分析；Application 查询已存结果与中性契约类型 |
+| 已提交项目与持久化数据   | Project、Database 与各存储 owner               | 协调会话、跨系统提交及补偿                                       |
+| IPC wire、事件和通道发送 | IPC crates                                     | 返回类型化应用事实，提供应用事件                                 |
 
 Application 保留跨系统业务流程，依赖数量同时反映其使用的类型契约和运行时能力。判断一段逻辑的归属时，重点检查它是否仅涉及单个子系统、是否重复实现该子系统的规则；独立的领域规则应由已有 owner 承接。
 

@@ -96,7 +96,6 @@ fn staged_session(project: TestProject, control: GraphRuntimeTestControl) -> Sta
             .open_session(DatabaseSessionOpenRequest::new(
                 DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
                 NonZeroU64::new(1).unwrap(),
-                None,
                 declarations,
                 observations,
             ))
