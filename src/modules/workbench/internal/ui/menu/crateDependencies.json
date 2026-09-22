@@ -141,12 +141,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-type-mapping",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
@@ -184,12 +178,6 @@
       },
       {
         "name": "yss-ipc-event",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-math-expr",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -944,12 +932,6 @@
     "manifest": "src-tauri/crates/yss-graph-execution/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-canonical-hash",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-data-contract",
         "kind": "normal",
         "optional": false,
@@ -1322,12 +1304,6 @@
         "target": null
       },
       {
-        "name": "yss-julia-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-julia-worker",
         "kind": "normal",
         "optional": false,
@@ -1547,12 +1523,6 @@
         "target": null
       },
       {
-        "name": "yss-display-naming",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-filesystem",
         "kind": "normal",
         "optional": false,
@@ -1659,14 +1629,7 @@
   {
     "name": "yss-project-identity",
     "manifest": "src-tauri/crates/yss-project-identity/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-graph-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
+    "dependencies": []
   },
   {
     "name": "yss-project-layout",

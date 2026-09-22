@@ -81,11 +81,3 @@ export function remapEditorViewStateGraphPath(projectPath: string, from: string,
   next[to] = viewport;
   saveEditorViewStateMemento(projectPath, next);
 }
-
-export function removeEditorViewStateGraphPath(projectPath: string, graphPath: string): void {
-  const memento = loadEditorViewStateMemento(projectPath);
-  if (!(graphPath in memento)) return;
-  const next = { ...memento };
-  delete next[graphPath];
-  saveEditorViewStateMemento(projectPath, next);
-}

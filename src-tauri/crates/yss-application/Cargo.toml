@@ -20,7 +20,6 @@ yss-node-kernel = { path = "../yss-node-kernel" }
 yss-ipc-contract = { path = "../yss-ipc-contract" }
 yss-ipc-event = { path = "../yss-ipc-event" }
 yss-ipc-channel = { path = "../yss-ipc-channel" }
-yss-math-expr = { path = "../yss-math-expr" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 tokio = { workspace = true, features = ["sync", "time"] }
 tauri.workspace = true
@@ -58,7 +57,6 @@ yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 yss-graph-runtime = { path = "../yss-graph-runtime" }
-yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 dunce.workspace = true
 yss-project = { path = "../yss-project" }
 yss-filesystem = { path = "../yss-filesystem" }
@@ -81,7 +79,6 @@ yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }
 yss-database-engine = { path = "../yss-database-engine" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }
-sqlx.workspace = true
 tracing-subscriber.workspace = true
 yss-graph-execution = { path = "../yss-graph-execution", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }

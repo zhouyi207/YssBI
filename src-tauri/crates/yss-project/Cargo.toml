@@ -19,7 +19,6 @@ trash = "5.2"
 uuid.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
-yss-display-naming = { path = "../yss-display-naming" }
 yss-database-store = { path = "../yss-database-store" }
 yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-document = { path = "../yss-graph-document" }

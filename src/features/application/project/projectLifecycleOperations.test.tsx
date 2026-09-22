@@ -50,11 +50,6 @@ vi.mock("react-i18next", async (importOriginal) => ({
 vi.mock("@/features/application/editor/saveAllDirtyGraphs", () => ({
   saveAllDirtyGraphs: vi.fn(async () => true),
 }));
-vi.mock("@/features/core/execution", () => ({
-  revokeAllPinPreviewLeases: vi.fn(),
-  useExecutionStore: { getState: vi.fn(), setState: vi.fn() },
-  graphHasClearableArtifacts: vi.fn(),
-}));
 vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =

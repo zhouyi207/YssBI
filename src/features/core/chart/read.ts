@@ -9,11 +9,6 @@ export interface ChartReadSnapshot {
 
 export type ReadonlyChartSnapshot = DeepReadonly<ChartReadSnapshot>;
 
-export function getChartSnapshot(): ReadonlyChartSnapshot {
-  const state = useChartDocumentStore.getState();
-  return { index: state.index, documents: state.documents };
-}
-
 export function useChartRead<T>(selector: (state: ReadonlyChartSnapshot) => T): T {
   return useChartDocumentStore((state) =>
     selector({ index: state.index, documents: state.documents }),

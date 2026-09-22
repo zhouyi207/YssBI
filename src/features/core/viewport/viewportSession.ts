@@ -92,11 +92,3 @@ export function scheduleViewportPersist(
     persist();
   }, delayMs);
 }
-
-export function clearViewportTimers(timers: {
-  commit?: number | null;
-  persist?: number | null;
-}): void {
-  if (timers.commit != null) window.clearTimeout(timers.commit);
-  if (timers.persist != null) window.clearTimeout(timers.persist);
-}

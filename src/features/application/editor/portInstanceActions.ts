@@ -23,17 +23,6 @@ export function addPortInstance(
   });
 }
 
-export function movePortInstance(
-  graphPath: string,
-  address: Extract<PortAddressDto, { kind: "instance" }>,
-  placement: PortPlacementDto,
-): Promise<GraphEditOutcome> {
-  return executeGraphEdit(graphPath, "MovePortInstance", {
-    address,
-    placement,
-  });
-}
-
 export function removePortInstance(
   graphPath: string,
   address: Extract<PortAddressDto, { kind: "instance" }>,

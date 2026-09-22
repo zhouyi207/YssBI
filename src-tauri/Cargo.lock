@@ -9230,7 +9230,6 @@ dependencies = [
  "dunce",
  "serde",
  "serde_json",
- "sqlx",
  "tauri",
  "thiserror 2.0.20",
  "tokio",
@@ -9260,7 +9259,6 @@ dependencies = [
  "yss-graph-execution",
  "yss-graph-resource-contract",
  "yss-graph-runtime",
- "yss-graph-type-mapping",
  "yss-harness-contract",
  "yss-harness-core",
  "yss-harness-rig",
@@ -9268,7 +9266,6 @@ dependencies = [
  "yss-ipc-channel",
  "yss-ipc-contract",
  "yss-ipc-event",
- "yss-math-expr",
  "yss-node-catalog",
  "yss-node-kernel",
  "yss-node-protocol",
@@ -9578,9 +9575,6 @@ name = "yss-graph-analysis-contract"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde_json",
- "uuid",
- "yss-canonical-hash",
  "yss-node-protocol",
  "yss-node-registry",
 ]
@@ -9611,7 +9605,6 @@ dependencies = [
 name = "yss-graph-document-edit"
 version = "0.1.0"
 dependencies = [
- "serde",
  "yss-graph-document",
  "yss-node-protocol",
 ]
@@ -9645,7 +9638,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "uuid",
- "yss-canonical-hash",
  "yss-data-contract",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
@@ -9797,7 +9789,6 @@ name = "yss-julia-extension"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "serde",
  "serde_json",
  "uuid",
  "yss-bayes-artifact-datafusion",
@@ -9806,7 +9797,6 @@ dependencies = [
  "yss-bayes-runtime",
  "yss-bayes-worker",
  "yss-bayes-worker-julia",
- "yss-julia-runtime",
  "yss-julia-worker",
  "yss-math-expr",
  "yss-plugin-protocol",
@@ -9945,7 +9935,6 @@ dependencies = [
  "yss-data-contract",
  "yss-database-contract",
  "yss-database-store",
- "yss-display-naming",
  "yss-filesystem",
  "yss-function-editor-projection",
  "yss-graph-document",
@@ -9981,7 +9970,6 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
- "yss-graph-document",
 ]
 
 [[package]]

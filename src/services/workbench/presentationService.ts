@@ -9,12 +9,7 @@ import {
   parseUiIntentReceipt,
 } from "@/shared/types/dto/uiPresentation";
 import type { ResultReference } from "@/shared/types/domain/result";
-import type {
-  UiAction,
-  UiEvent,
-  UiIntent,
-  UiIntentStatus,
-} from "@/shared/types/domain/uiPresentation";
+import type { UiAction, UiEvent, UiIntentStatus } from "@/shared/types/domain/uiPresentation";
 import { isRecord } from "@/shared/types/report/guards";
 
 export async function readUiPage(projectInstanceId: string, source: ResultReference) {
@@ -49,14 +44,6 @@ export async function activateUiElement(
     await invokeCommand("activate_ui_element", {
       projectInstanceId,
       request: { source, baseRevision, id, clientKey: crypto.randomUUID() },
-    }),
-  );
-}
-export async function requestUiIntent(projectInstanceId: string, intent: UiIntent) {
-  return parseUiIntentReceipt(
-    await invokeCommand("request_ui_intent", {
-      projectInstanceId,
-      request: { intent, clientKey: crypto.randomUUID() },
     }),
   );
 }

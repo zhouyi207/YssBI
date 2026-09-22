@@ -61,10 +61,6 @@ export function getCanvasDropZoneId(panelInstanceId: string) {
   return `${CANVAS_DROP_ZONE_ID_PREFIX}${panelInstanceId}`;
 }
 
-export function isCanvasDrop(data: unknown): data is CanvasDropData {
-  return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.CANVAS;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -111,14 +107,6 @@ export function isGraphResourceDragState(state: SidebarDragState): state is Grap
   return state.type === DRAG_TYPES.GRAPH_RESOURCE;
 }
 
-export function getSidebarResourceFromDrag(
-  data: CanvasDragPayload | null | undefined,
-): GraphResourceDragData | undefined {
-  if (isGraphResourceDragPayload(data)) return data.sidebarResource;
-  if (isNodeTemplateDragData(data)) return data.sidebarResource;
-  return undefined;
-}
-
 /** Sidebar 拖拽进行中写入 store 的 node-template 态（落画布 spawn） */
 export type NodeTemplateDragState = {
   type: typeof DRAG_TYPES.NODE_TEMPLATE;
@@ -140,14 +128,6 @@ export type SidebarDragState = NodeTemplateDragState | GraphResourceDragState;
 
 export function isNodeTemplateDragState(state: SidebarDragState): state is NodeTemplateDragState {
   return state.type === DRAG_TYPES.NODE_TEMPLATE;
-}
-
-export function getSidebarResourceFromDragState(
-  state: SidebarDragState | null | undefined,
-): GraphResourceDragData | undefined {
-  if (!state) return undefined;
-  if (state.type === DRAG_TYPES.GRAPH_RESOURCE) return state.sidebarResource;
-  return state.sidebarResource;
 }
 
 export function getSidebarDragOverlayLabel(state: DeepReadonly<SidebarDragState>): string {

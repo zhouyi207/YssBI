@@ -16,9 +16,7 @@ yss-bayes-result = { path = "../yss-bayes-result" }
 yss-bayes-worker = { path = "../yss-bayes-worker" }
 yss-bayes-worker-julia = { path = "../yss-bayes-worker-julia" }
 yss-bayes-artifact-datafusion = { path = "../yss-bayes-artifact-datafusion" }
-yss-julia-runtime = { path = "../yss-julia-runtime" }
 yss-julia-worker = { path = "../yss-julia-worker" }
 arrow.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

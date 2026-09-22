@@ -363,10 +363,6 @@ export function claimProjectLifecycleInitiatorSettlement(
   return entry.settled;
 }
 
-export function claimProjectLifecycleNotification(operationId: string): boolean {
-  return claimProjectLifecycleInitiatorSettlement(operationId) !== undefined;
-}
-
 export async function recoverProjectLifecycleDirectFailure(
   operationId: string,
 ): Promise<ProjectLifecycleReceiptSettlement | undefined> {

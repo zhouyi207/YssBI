@@ -9,8 +9,3 @@ publish = false
 serde.workspace = true
 yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }
-
-[dev-dependencies]
-serde_json.workspace = true
-uuid.workspace = true
-yss-canonical-hash = { path = "../yss-canonical-hash" }

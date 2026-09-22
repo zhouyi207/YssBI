@@ -1,6 +1,5 @@
 import type { TFunction } from "i18next";
 import {
-  normalizeBayesActionError,
   type BayesArtifactsModel,
   type BayesApplicationError,
   type BayesInferenceError,
@@ -31,15 +30,6 @@ export function bayesErrorReferenceMessage(error: BayesErrorReference, t: TFunct
     t,
   );
   return error.incidentId ? `${message} · ${t("common.incidentId")}: ${error.incidentId}` : message;
-}
-
-export function bayesActionErrorMessage(error: unknown, t: TFunction): string {
-  const normalized = normalizeBayesActionError(error, "bayes_request_failed");
-  if (!normalized) return t("bayes.errors.unexpected");
-  const message = bayesErrorMessage(normalized, t);
-  return normalized.incidentId
-    ? `${message} · ${t("common.incidentId")}: ${normalized.incidentId}`
-    : message;
 }
 
 export function bayesValidationIssueMessage(issue: ValidationIssueDTO, t: TFunction): string {

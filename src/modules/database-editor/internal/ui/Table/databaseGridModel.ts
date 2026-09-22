@@ -22,8 +22,6 @@ export interface DatabaseGridSelectionModifiers {
   extend: boolean;
 }
 
-export type DatabaseColumnKind = "number" | "boolean" | "string";
-
 const DATA_COLUMN_PREFIX = "data_";
 
 export function dataColumnId(columnIndex: number): string {
@@ -34,21 +32,6 @@ export function dataColumnIndexFromId(columnId: string): number | null {
   if (!columnId.startsWith(DATA_COLUMN_PREFIX)) return null;
   const columnIndex = Number(columnId.slice(DATA_COLUMN_PREFIX.length));
   return Number.isInteger(columnIndex) && columnIndex >= 0 ? columnIndex : null;
-}
-
-export function databaseColumnKind(dtype?: string): DatabaseColumnKind {
-  const normalized = (dtype ?? "").toLowerCase();
-  if (
-    normalized.includes("int") ||
-    normalized.includes("float") ||
-    normalized.includes("double") ||
-    normalized.includes("number") ||
-    normalized.includes("decimal")
-  ) {
-    return "number";
-  }
-  if (normalized.includes("bool")) return "boolean";
-  return "string";
 }
 
 export function createCellRange(

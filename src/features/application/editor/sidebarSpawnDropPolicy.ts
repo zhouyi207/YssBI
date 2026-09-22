@@ -21,10 +21,6 @@ export function isSidebarSpawnDropAllowed(
   );
 }
 
-export function isSidebarSpawnDropAllowedAtPointer(clientX: number, clientY: number): boolean {
-  return findEditorCanvasAtPointer(clientX, clientY) !== null;
-}
-
 export function findSidebarDropCanvasAtPointer(
   clientX: number,
   clientY: number,

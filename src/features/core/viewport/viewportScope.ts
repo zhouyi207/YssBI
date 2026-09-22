@@ -22,7 +22,3 @@ export function parseViewportScopeKey(key: string): ViewportScope | null {
     graphPath: key.slice(sep + 1),
   };
 }
-
-export function scopeMatchesGraphPath(scope: ViewportScope, graphPath: string): boolean {
-  return scope.graphPath === graphPath;
-}

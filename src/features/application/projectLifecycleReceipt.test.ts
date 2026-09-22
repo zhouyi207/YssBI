@@ -7,7 +7,7 @@ import {
   ProjectLifecycleProtocolError,
   PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS,
   applyProjectLifecycleReceipt,
-  claimProjectLifecycleNotification,
+  claimProjectLifecycleInitiatorSettlement,
   getProjectLifecycleRegistrySizeForTests,
   recoverProjectLifecycleDirectFailure,
   registerPendingProjectLifecycleOperation,
@@ -108,8 +108,8 @@ describe("project lifecycle pending receipt registry", () => {
 
       expect(deps.prepareProjectTransition).toHaveBeenCalledOnce();
       expect(deps.refreshRegistry).toHaveBeenCalledOnce();
-      expect(claimProjectLifecycleNotification(pending.operationId)).toBe(true);
-      expect(claimProjectLifecycleNotification(pending.operationId)).toBe(false);
+      expect(claimProjectLifecycleInitiatorSettlement(pending.operationId)).toBeDefined();
+      expect(claimProjectLifecycleInitiatorSettlement(pending.operationId)).toBeUndefined();
     },
   );
 
@@ -147,8 +147,8 @@ describe("project lifecycle pending receipt registry", () => {
     expect(Object.isFrozen(clearOwner)).toBe(true);
     expect(deps.clearProject).toHaveBeenCalledOnce();
     expect(deps.refreshRegistry).toHaveBeenCalledOnce();
-    expect(claimProjectLifecycleNotification(pending.operationId)).toBe(true);
-    expect(claimProjectLifecycleNotification(pending.operationId)).toBe(false);
+    expect(claimProjectLifecycleInitiatorSettlement(pending.operationId)).toBeDefined();
+    expect(claimProjectLifecycleInitiatorSettlement(pending.operationId)).toBeUndefined();
   });
 
   it("allows direct delivery to retry when event-first processing fails", async () => {
@@ -338,7 +338,7 @@ describe("project lifecycle pending receipt registry", () => {
       expect(deps.prepareProjectTransition).not.toHaveBeenCalled();
       expect(deps.markProjectStale).not.toHaveBeenCalled();
       expect(useProjectIOStore.getState().projectInstanceId).toBe("project-a");
-      expect(claimProjectLifecycleNotification(pending.operationId)).toBe(true);
+      expect(claimProjectLifecycleInitiatorSettlement(pending.operationId)).toBeDefined();
 
       const late = dependencies();
       await expect(applyProjectLifecycleReceipt(result, "event", late)).resolves.toMatchObject({
@@ -387,7 +387,7 @@ describe("project lifecycle pending receipt registry", () => {
       "direct",
       dependencies(),
     );
-    expect(claimProjectLifecycleNotification(completed.operationId)).toBe(true);
+    expect(claimProjectLifecycleInitiatorSettlement(completed.operationId)).toBeDefined();
     for (let index = 0; index < 127; index += 1) {
       registerPendingProjectLifecycleOperation({
         kind: "create",
@@ -433,7 +433,7 @@ describe("project lifecycle pending receipt registry", () => {
         operationId: "must-not-evict-notification",
       }),
     ).toThrow(ProjectLifecycleProtocolError);
-    expect(claimProjectLifecycleNotification(unnotified.operationId)).toBe(true);
+    expect(claimProjectLifecycleInitiatorSettlement(unnotified.operationId)).toBeDefined();
   });
 
   it("sweeps 128 stale generation entries and admits a new operation", () => {
