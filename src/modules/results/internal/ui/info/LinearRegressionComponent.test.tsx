@@ -10,6 +10,44 @@ import { ResultService } from "@/services/result/resultService";
 import { loadPresentationWindow } from "@/features/application/presentation/loadPresentationWindow";
 import { resetResultQueryProject } from "@/features/application/results/runtime";
 import { ReportView } from "./ReportView";
+import type { ResultReference } from "@/shared/types/domain/result";
+
+vi.mock("@/features/application/presentation/useUiPage", async () => {
+  const { REPORT_SECTIONS } = await import("@/shared/types/domain/uiPresentation");
+  return {
+    useUiPage: (source: ResultReference) => ({
+      page: {
+        source,
+        revision: 1,
+        spec: {
+          root: "report",
+          elements: {
+            report: {
+              component: { type: "column", props: { gap: 4 } },
+              visible: true,
+              children: REPORT_SECTIONS,
+            },
+            ...Object.fromEntries(
+              REPORT_SECTIONS.map((section) => [
+                section,
+                {
+                  component: { type: "reportSection", props: { section } },
+                  visible: true,
+                  children: [],
+                },
+              ]),
+            ),
+          },
+        },
+      },
+      error: null,
+      busy: false,
+      reload: vi.fn(),
+      act: vi.fn(),
+      activate: vi.fn(),
+    }),
+  };
+});
 
 vi.mock("@/services/result/resultSessionChannel", () => ({
   publishResultSessionEnd: vi.fn(),
@@ -136,7 +174,9 @@ it("loads an OLS overview and requests report data and tests by reference on dem
     );
     expect(ResultService.analyze).not.toHaveBeenCalled();
 
-    const plot = host.querySelector("details")!;
+    const plot = [...host.querySelectorAll("details")].find(
+      (element) => element.querySelector("summary")?.textContent === "Residuals vs Fitted",
+    )!;
     await act(async () => {
       plot.open = true;
       plot.dispatchEvent(new Event("toggle"));

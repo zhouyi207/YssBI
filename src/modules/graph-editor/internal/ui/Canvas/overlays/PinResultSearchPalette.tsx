@@ -115,7 +115,7 @@ export function PinResultSearch({ graphPath }: PinResultSearchProps) {
   };
 
   const handleSelect = (entry: PinResultSearchEntry) => {
-    void openInspectableResult(entry.ref, t).then((opened) => {
+    void openInspectableResult(entry.ref).then((opened) => {
       if (opened) {
         setShellMotion("collapse");
         setOpen(false);

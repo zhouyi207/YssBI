@@ -44,9 +44,11 @@ export function revokeAllPinPreviewLeases(): void {
 interface ExecutionStore extends ExecutionState {
   getGraph: (graphPath: string) => GraphExecutionState;
   startExecution: (graphPath: string) => () => boolean;
+  submitExecution: (graphPath: string) => () => boolean;
   setActiveRunId: (graphPath: string, runId: string) => void;
   completeExecution: (graphPath: string) => void;
   failExecution: (graphPath: string) => void;
+  markExecutionUnknown: (graphPath: string) => void;
   interruptExecution: (graphPath: string) => void;
   clearGraphRunProjections: (graphPath: string) => void;
   recordRunFailure: (graphPath: string, failure: RunFailureProjection) => void;
@@ -84,6 +86,11 @@ function updateGraph(
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   graphs: {},
   getGraph: (graphPath) => get().graphs[graphPath] ?? emptyGraphState(),
+  submitExecution: (graphPath) => {
+    const request = {};
+    set((state) => updateGraph(state, graphPath, { request, runId: null, status: "submitting" }));
+    return () => get().graphs[graphPath]?.request === request;
+  },
   startExecution: (graphPath) => {
     const request = {};
     set((state) =>
@@ -93,14 +100,16 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   },
   setActiveRunId: (graphPath, runId) =>
     set((state) =>
-      state.graphs[graphPath]?.status === "running"
-        ? updateGraph(state, graphPath, { runId })
+      ["running", "unknown", "submitting"].includes(state.graphs[graphPath]?.status)
+        ? updateGraph(state, graphPath, { runId, status: "running", runFailure: null })
         : state,
     ),
   completeExecution: (graphPath) =>
     set((state) =>
       updateGraph(state, graphPath, { status: "completed", runId: null, request: null }),
     ),
+  markExecutionUnknown: (graphPath) =>
+    set((state) => updateGraph(state, graphPath, { status: "unknown" })),
   failExecution: (graphPath) =>
     set((state) => updateGraph(state, graphPath, { status: "error", runId: null, request: null })),
   interruptExecution: (graphPath) => get().clearGraphRunProjections(graphPath),

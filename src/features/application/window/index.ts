@@ -12,7 +12,6 @@ export {
 export { useWindowDecorationEffect, useCustomTitleBar } from "./useWindowDecorations";
 export {
   openPresentationWindow,
-  presentationWindowPayload,
   presentationWindowPayloadFromDescriptor,
 } from "./openPresentationWindow";
 export type { PresentationWindowPayload } from "./openPresentationWindow";
@@ -22,4 +21,3 @@ export { openExternalUrlWithDialog } from "./openExternalUrlWithDialog";
 export { createEphemeralWindowLabel } from "./windowLabels";
 export { useResultSession } from "./useResultSession";
 export { PresentationWindowShell } from "./PresentationWindowShell";
-export { windowKindForRoute } from "./windowRoute";

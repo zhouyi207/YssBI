@@ -32,7 +32,6 @@ const katexWarningSpy = vi.hoisted(() => {
 
 vi.mock("@/features/application/window", () => ({
   openPresentationWindow: vi.fn(),
-  presentationWindowPayload: vi.fn(() => ({})),
   presentationWindowPayloadFromDescriptor: vi.fn(() => ({})),
 }));
 

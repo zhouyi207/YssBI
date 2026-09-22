@@ -51,7 +51,7 @@ export function useChartManagement(openChart: (chartPath: string, name: string) 
       } catch (error) {
         if (context && !context.isCurrent()) return;
         if (isEditorOpenRejectionHandled(error)) return;
-        showBlockingIpcError(error, "create_chart", (code) =>
+        showBlockingIpcError(error, (code) =>
           t("notifications.chart.createFailed", { error: code }),
         );
       }
@@ -83,7 +83,7 @@ export function useChartManagement(openChart: (chartPath: string, name: string) 
       } catch (error) {
         if (context && !context.isCurrent()) return;
         if (isEditorOpenRejectionHandled(error)) return;
-        showBlockingIpcError(error, "duplicate_chart", (code) =>
+        showBlockingIpcError(error, (code) =>
           t("notifications.chart.duplicateFailed", { error: code }),
         );
       }

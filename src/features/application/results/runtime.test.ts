@@ -68,6 +68,66 @@ beforeEach(() => {
 });
 
 describe("current result lifecycle", () => {
+  it("keeps concurrent pages and page sizes independent until the last consumer releases", async () => {
+    const reference = resultReferenceFixture("1");
+    const releaseFirst = resultQueryCoordinator.retainPayload(reference);
+    const releaseSecond = resultQueryCoordinator.retainPayload(reference);
+    const requests = [
+      { ...reference, offset: 0, limit: 200 },
+      { ...reference, offset: 200, limit: 200 },
+      { ...reference, offset: 0, limit: 100 },
+    ];
+    const settle: Array<() => void> = [];
+    vi.spyOn(ResultService, "getPage").mockImplementation(
+      (_reference, offset, limit) =>
+        new Promise((resolve) => {
+          settle.push(() => resolve({ ...page("1"), offset, requestedLimit: limit }));
+        }),
+    );
+    const pending = requests.map((query) => resultQueryCoordinator.loadPage(query));
+    settle.reverse().forEach((resolve) => resolve());
+    expect(await Promise.all(pending)).toEqual(requests.map(() => ({ status: "published" })));
+    releaseFirst();
+    for (const query of requests) {
+      expect(resultQueryRead.getPage(query)).toMatchObject({
+        offset: query.offset,
+        requestedLimit: query.limit,
+      });
+    }
+    releaseSecond();
+    for (const query of requests) expect(resultQueryRead.getPage(query)).toBeNull();
+  });
+
+  it("isolates analysis parameters, failures and recovery for independent consumers", async () => {
+    const reference = resultReferenceFixture("1");
+    const release = resultQueryCoordinator.retainPayload(reference);
+    const first = { reference, analysis: { kind: "acfPacf" as const, maxLag: 1 } };
+    const second = { reference, analysis: { kind: "acfPacf" as const, maxLag: 2 } };
+    const service = vi
+      .spyOn(ResultService, "analyze")
+      .mockImplementation(async (_ref, analysis) => ({
+        kind: "acfPacf",
+        value: { acf: [analysis.kind === "acfPacf" ? analysis.maxLag : 0], pacf: [], n: 10 },
+      }));
+    expect(
+      await Promise.all([
+        resultQueryCoordinator.loadAnalysis(first),
+        resultQueryCoordinator.loadAnalysis(second),
+      ]),
+    ).toEqual([{ status: "published" }, { status: "published" }]);
+    expect(resultQueryRead.getAnalysis(first)).toMatchObject({ value: { acf: [1] } });
+    expect(resultQueryRead.getAnalysis(second)).toMatchObject({ value: { acf: [2] } });
+    service.mockRejectedValueOnce(new Error("read failed"));
+    await resultQueryCoordinator.loadAnalysis(first);
+    expect(resultQueryRead.getFailure({ kind: "analysis", ...first })).not.toBeNull();
+    expect(resultQueryRead.getFailure({ kind: "analysis", ...second })).toBeNull();
+    await resultQueryCoordinator.loadAnalysis(first);
+    expect(resultQueryRead.getFailure({ kind: "analysis", ...first })).toBeNull();
+    release();
+    expect(resultQueryRead.getAnalysis(first)).toBeNull();
+    expect(resultQueryRead.getAnalysis(second)).toBeNull();
+  });
+
   it("evicts values and pages on rerun, rejects late requests, and publishes only the current result", async () => {
     const publishInvalidation = vi.spyOn(invalidationChannel, "publishResultSessionEnd");
     vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
@@ -152,7 +212,7 @@ describe("current result lifecycle", () => {
     expect(resultQueryRead.getDescriptor(resultReferenceFixture("1"))).toBeNull();
     expect(resultQueryRead.getPinResult(request)).toBeNull();
   });
-  it("keeps one page, releases closed-view payloads, and supports detached result reads", async () => {
+  it("keeps independent pages, releases closed-view payloads, and supports detached result reads", async () => {
     clearProjectLifecycle();
     const releasePayload = resultQueryCoordinator.retainPayload(resultReferenceFixture("1"));
     vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(descriptor("1"));
@@ -174,7 +234,7 @@ describe("current result lifecycle", () => {
     const second = { ...first, offset: 200 };
     await resultQueryCoordinator.loadPage(first);
     await resultQueryCoordinator.loadPage(second);
-    expect(resultQueryRead.getPage(first)).toBeNull();
+    expect(resultQueryRead.getPage(first)?.offset).toBe(0);
     expect(resultQueryRead.getPage(second)?.offset).toBe(200);
     let settle!: (value: ResultPage) => void;
     vi.mocked(ResultService.getPage).mockImplementationOnce(

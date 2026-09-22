@@ -11,7 +11,7 @@ import {
 } from "@/shared/types/dto/localizedCatalog";
 import { isNodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
-import { parseEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionParser";
+import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
 import { isParameterEditor } from "@/shared/types/domain/editorProjectionGuards";
 import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
 import { parseProjectEvent } from "@/services/project/projectEventParser";
@@ -371,6 +371,7 @@ describe("Rust-generated node-system golden contracts", () => {
       {
         value: {
           kind: "projectColumns",
+          allowEmpty: false,
           available: true,
           unavailableReason: null,
           options: [{ name: "value", dataType: "Binary" }],

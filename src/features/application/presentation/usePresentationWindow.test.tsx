@@ -17,11 +17,13 @@ const mocks = vi.hoisted(() => ({
   actions: { setTitle: vi.fn(), show: vi.fn(), close: vi.fn() },
 }));
 vi.mock("./loadPresentationWindow", () => ({ loadPresentationWindow: mocks.load }));
+vi.mock("@/features/application/project/projectRuntime", () => ({
+  initializeProjectForCurrentWindow: vi.fn(async () => {}),
+}));
 vi.mock("./parsePresentationWindowQuery", () => ({
   parsePresentationWindowQuery: () => ({
     reference: resultReferenceFixture("17"),
     leaseId: resultLeaseIdFixture(100),
-    plotType: "scatter",
   }),
 }));
 vi.mock("@/features/application/window/useCurrentWindowActions", () => ({
@@ -37,6 +39,7 @@ vi.mock("@/services/result/resultSessionChannel", () => ({
 }));
 vi.mock("@/features/application/results/runtime", () => ({
   resetResultQuery: mocks.resetResult,
+  resultQueryCoordinator: { retainPayload: () => () => {} },
 }));
 vi.mock("@/services/result/resultService", () => ({ ResultService: { claim: mocks.claim } }));
 import { usePresentationWindow } from "./usePresentationWindow";

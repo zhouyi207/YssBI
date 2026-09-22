@@ -20,7 +20,7 @@ export function pluginViewFailure(
   phase: PluginViewFailurePhase,
 ): PluginViewFailure {
   if (error instanceof SessionFailure) return error.failure;
-  const reference = normalizeApplicationIpcError("plugin_view", error);
+  const reference = normalizeApplicationIpcError(error);
   const pluginCode = (reference.details as { pluginCode?: unknown } | null)?.pluginCode;
   const code =
     typeof pluginCode === "string" && /^[a-z][a-z0-9_]{0,95}$/.test(pluginCode)

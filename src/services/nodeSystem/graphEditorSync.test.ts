@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, expect, it, vi } from "vitest";
 import projectionWire from "@/tests/fixtures/node-system-contracts/editor-projection.json";
-import { parseEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionParser";
+import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
 import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { clearGraphSyncBaselines, invokeGraphSync } from "./graphEditorSync";
 

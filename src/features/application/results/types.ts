@@ -1,5 +1,3 @@
-import type { ErrorReference } from "@/shared/types/domain/errorReference";
-
 export type {
   ResultPlotKind as PlotChart,
   ResultPresentation as Presentation,
@@ -10,13 +8,3 @@ export type {
 } from "@/shared/types/domain/result";
 
 export type ResultRendererKind = "sequence" | "scalar" | "json" | "plot" | "info";
-
-export interface ResultPageState {
-  offset: number;
-  limit: number;
-  totalCount: number | null;
-  rows: unknown[][];
-  values: unknown[];
-  loading: boolean;
-  error: ErrorReference | null;
-}

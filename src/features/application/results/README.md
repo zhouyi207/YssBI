@@ -11,6 +11,7 @@
 
 `get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；
 查询重验资源依赖，不交付执行计划身份。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
+项目身份由查询协调器在发布前校验，不在只读结果投影中另存无人读取的副本；图状态请求仅携带参与校验的会话、代次和语义身份。
 同一投影还返回当前连线是否已被目标节点实际消费：新绑定、保有旧结果的过期绑定和有效绑定分别表示。
 仅有输入的“查看数据”节点也参与此投影：Execution 将成功运行的查看记录及其输入依据附在共享结果上，
 重验时同时检查当前绑定与源结果有效性。该记录不复制数据，也不增加结果持有者；新连线不能仅凭源 Pin 有缓存显示已执行。
@@ -41,7 +42,7 @@ Application Results 的 `ResultStructure` 统一决定 descriptor 和分页的�
 前端仅渲染分页提供的行和列，不补列、不包装行，不再保留独立的 DataSeries JSON renderer。
 分页只用于数据表格和数列（包括报告内的观测表）；报告概览、图形和分析结果本身不分页。
 
-Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence renderer 统一提供表格与数列分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
+Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页缓存按完整结果引用、part、offset 和 limit 隔离，不同消费者翻页互不覆盖；Sequence renderer 统一提供表格与数列分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
 
 显式打开的 Result panel 和独立展示窗口绑定打开时的结果引用；节点删除、图语义修改、重跑均不会更换已有报告的数据。
 Application 在创建面板前通过 `retain_result` 原子取得租约和 descriptor。租约 token 由调用方预先生成，
@@ -71,7 +72,7 @@ WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通�
 执行计划保留端口实例分组身份和模板名，内核只接收中立模板名来区分 predictors/weights/sigma，不解析图地址。
 
 Fit 的 `model` 与 Summary 的 `result`、`report` 共享不可变的原生 `LinearRegressionResult`，仍由当前 `ResultStore` 拥有。报告类别统一为 `linearRegressionSummary`，标题为 Linear Regression Summary，模型概览保留实际 OLS/WLS/GLS 方法。WLS/GLS 的平方和与 R² 使用变换尺度，拟合值与残差保留原始尺度。
-拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 只包含模型概览、条件数、
+拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 包含模型概览、条件数、完整参数名目录 `paramNames`、
 `{ executionSessionId, resultId }` 引用，以及 coefficients/observations 表引用与行数。
 引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。
 `get_result_table_page` 复用有界页面投影；`analyze_result` 按类型执行残差图投影、ACF/PACF、
@@ -80,11 +81,14 @@ Fit 的 `model` 与 Summary 的 `result`、`report` 共享不可变的原生 `Li
 结果回收或会话结束后的迟到成功和失败均被丢弃；仅当前输出失效不撤销有租约的快照读取。
 数据仍由原 ResultStore 拥有，不另建报告存储或复制完整数据。
 
-Application 的 `query_result_json` 拥有界面和 AI 共用的完整结果 JSON 投影。普通 JSON 对象递归保留字段、数组和文本；原生线性回归结果通过同一报告投影转成概览与表引用，不序列化完整设计矩阵、拟合值或残差。通用数值编码也由 Application 共用，保持宽整数的精确文本表示。DataFrame、DataSeries 和顶层内存数列走现有分页入口；AI 不另维护统计字段白名单。AI 的 JSON 与表引用读取语义见 [Harness capability 契约](../../../../src-tauri/crates/yss-harness-core/README.md#4-registered-capabilities)。
+Application 的 `query_result_projection` 返回有界强类型投影；普通对象在克隆或编码前检查展开深度和空间预算，原生报告仅展开概览、参数目录与表引用。共享协议映射 `result_encoding` 供 IPC 与 Harness 调用，统一字段、宽整数文本与内联 JSON 字节上限；计数写入器不分配完整编码缓冲区。DataFrame、DataSeries 和顶层内存数列走现有分页入口；AI 不另维护统计字段白名单。AI 的 JSON 与表引用读取语义见 [Harness capability 契约](../../../../src-tauri/crates/yss-harness-core/README.md#4-registered-capabilities)。
 
 线性回归报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
-前端复用 Result query coordinator，以执行会话、结果和 part/analysis kind 隔离请求；每张表和每类分析仅保留当前投影，
-分析参数参与读取匹配。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
+前端复用 Result query coordinator，以执行会话、结果和完整查询语义隔离请求与缓存：分页包含 part/offset/limit，分析包含 kind 与规范化参数。
+相同不可变结果查询共用在途请求；不同查询参数独立发布。独立窗口及面板的 descriptor/value 同样经协调器读取与安装，并由挂载方持有 payload lease。Plot/report 仅接受完整 scalar payload；数列仍可在 Inspector 中分页，不能把第一页伪装成完整绘图数据。
+消费者用自己的请求代次控制迟到回执和 loading；value/page/analysis 分别订阅数据和错误。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
+假设检验的参数提示读取 Rust 提供的完整 `paramNames`，与系数表当前页无关。独立窗口的图类型直接读取 descriptor，不通过 URL 传递副本。
+展示窗口从 presentation kind 一次映射到 inspect/plot/info 窗口类型，并据此生成路由，不接受任意路由字符串或未知路由回退。
 报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。
 
 报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。

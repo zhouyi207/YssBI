@@ -62,7 +62,7 @@ describe("window opening helpers", () => {
 
     await expect(
       openPresentationWindow(resultReferenceFixture("result-1"), {
-        route: "/plot",
+        kind: "plot",
         windowTitle: "Plot",
       }),
     ).rejects.toBe(failure);

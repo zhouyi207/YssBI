@@ -24,7 +24,7 @@ export async function revealProjectResourceInExplorer(
     if (!context.isCurrent()) return;
   } catch (error) {
     if (!context.isCurrent()) return;
-    const ipcError = normalizeApplicationIpcError("reveal_project_resource", error);
+    const ipcError = normalizeApplicationIpcError(error);
     logger.app.error(
       `Failed to reveal project resource code=${ipcError.code} incidentId=${ipcError.incidentId ?? "none"}`,
       "SidebarResourceActions",

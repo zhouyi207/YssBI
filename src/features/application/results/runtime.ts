@@ -18,7 +18,6 @@ import {
   createResultQueryCoordinator,
   resultPageKey,
   resultAnalysisKey,
-  resultAnalysisParameters,
   type ResultAnalysisQuery,
   type ResultPageRequest,
   type ResultPinRequest,
@@ -39,14 +38,10 @@ export interface GraphResultCacheProjection {
 
 interface ResultProjectionState {
   readonly graphCaches: Readonly<Record<string, GraphResultCacheProjection>>;
-  readonly projectInstanceId: string | null;
   readonly descriptors: Record<string, DeepReadonly<ResultDescriptor | null>>;
   readonly values: Record<string, DeepReadonly<ResultValue | null>>;
   readonly pages: Record<string, DeepReadonly<ResultPage | null>>;
-  readonly analyses: Record<
-    string,
-    { readonly parameters: string; readonly value: DeepReadonly<ResultAnalysis | null> }
-  >;
+  readonly analyses: Record<string, DeepReadonly<ResultAnalysis | null>>;
   readonly pinResults: Record<string, DeepReadonly<ResultDescriptor | null>>;
   readonly pinStatuses: Record<string, "running" | "unavailable" | "failed" | "cancelled">;
   readonly failures: Record<string, DeepReadonly<ErrorReference>>;
@@ -54,7 +49,6 @@ interface ResultProjectionState {
 
 const emptyState: ResultProjectionState = {
   graphCaches: {},
-  projectInstanceId: null,
   descriptors: {},
   values: {},
   pages: {},
@@ -143,11 +137,7 @@ const resultQueryPublication = {
       };
     });
   },
-  publishDescriptor(
-    projectInstanceId: string | null,
-    reference: ResultReference,
-    descriptor: DeepReadonly<ResultDescriptor | null>,
-  ) {
+  publishDescriptor(reference: ResultReference, descriptor: DeepReadonly<ResultDescriptor | null>) {
     if (!descriptor) {
       resetResultQuery(reference);
       return;
@@ -155,18 +145,12 @@ const resultQueryPublication = {
     // Reading a retained snapshot must never replace the pin's current result.
     resultProjection.setState((state) => ({
       ...state,
-      projectInstanceId,
       descriptors: { ...state.descriptors, [resultReferenceKey(reference)]: descriptor },
     }));
   },
-  publishValue(
-    projectInstanceId: string | null,
-    reference: ResultReference,
-    value: DeepReadonly<ResultValue | null>,
-  ) {
+  publishValue(reference: ResultReference, value: DeepReadonly<ResultValue | null>) {
     resultProjection.setState((state) => ({
       ...state,
-      projectInstanceId,
       values: { ...state.values, [resultReferenceKey(reference)]: value },
       failures: Object.fromEntries(
         Object.entries(state.failures).filter(
@@ -175,31 +159,21 @@ const resultQueryPublication = {
       ),
     }));
   },
-  publishPage(
-    projectInstanceId: string | null,
-    request: ResultPageRequest,
-    page: DeepReadonly<ResultPage | null>,
-  ) {
+  publishPage(request: ResultPageRequest, page: DeepReadonly<ResultPage | null>) {
     resultProjection.setState((state) => ({
       ...state,
-      projectInstanceId,
       pages: { ...state.pages, [resultPageKey(request)]: page },
       failures: Object.fromEntries(
         Object.entries(state.failures).filter(([key]) => key !== `page:${resultPageKey(request)}`),
       ),
     }));
   },
-  publishAnalysis(
-    projectInstanceId: string | null,
-    request: ResultAnalysisQuery,
-    value: DeepReadonly<ResultAnalysis | null>,
-  ) {
+  publishAnalysis(request: ResultAnalysisQuery, value: DeepReadonly<ResultAnalysis | null>) {
     resultProjection.setState((state) => ({
       ...state,
-      projectInstanceId,
       analyses: {
         ...state.analyses,
-        [resultAnalysisKey(request)]: { parameters: resultAnalysisParameters(request), value },
+        [resultAnalysisKey(request)]: value,
       },
       failures: Object.fromEntries(
         Object.entries(state.failures).filter(
@@ -208,19 +182,14 @@ const resultQueryPublication = {
       ),
     }));
   },
-  publishPinResult(
-    projectInstanceId: string | null,
-    request: ResultPinRequest,
-    result: DeepReadonly<ResultDescriptor | null>,
-  ) {
-    publishCurrentResult(projectInstanceId, request, result);
+  publishPinResult(request: ResultPinRequest, result: DeepReadonly<ResultDescriptor | null>) {
+    publishCurrentResult(request, result);
     if (!result) scheduleGraphStateRefresh(request.graphPath);
   },
-  publishFailure(projectInstanceId: string | null, scope: ResultQueryScope, issue: ErrorReference) {
+  publishFailure(scope: ResultQueryScope, issue: ErrorReference) {
     if (scope.kind === "graphState" && !currentGraphStateRequest(scope)) return;
     resultProjection.setState((state) => ({
       ...state,
-      projectInstanceId,
       failures: { ...state.failures, [scopeKey(scope)]: issue },
     }));
   },
@@ -239,10 +208,8 @@ export const resultQueryRead: ResultQueryReadCapability = {
     const page = resultProjection.getState().pages[resultPageKey(request)];
     return page?.offset === request.offset && page.requestedLimit === request.limit ? page : null;
   },
-  getAnalysis: (request) => {
-    const entry = resultProjection.getState().analyses[resultAnalysisKey(request)];
-    return entry?.parameters === resultAnalysisParameters(request) ? entry.value : null;
-  },
+  getAnalysis: (request) =>
+    resultProjection.getState().analyses[resultAnalysisKey(request)] ?? null,
   getPinResult: (request) => resultProjection.getState().pinResults[pinResultKey(request)] ?? null,
   getFailure: (scope) => resultProjection.getState().failures[scopeKey(scope)] ?? null,
 };
@@ -334,14 +301,12 @@ function scheduleGraphStateRefresh(graphPath: string): void {
         semanticInputHash: session.semanticInputHash,
         sessionId: session.sessionId,
         projectionGeneration: session.projectionGeneration,
-        editorState: session,
       });
     }
   });
 }
 
 function publishGraphState(
-  projectInstanceId: string | null,
   request: ResultGraphStateRequest,
   projection: DeepReadonly<GraphResultState | null>,
 ): void {
@@ -373,7 +338,6 @@ function publishGraphState(
   );
   resultProjection.setState((state) => ({
     ...state,
-    projectInstanceId,
     graphCaches: projection
       ? {
           ...state.graphCaches,
@@ -397,7 +361,6 @@ function publishGraphState(
 }
 
 function publishCurrentResult(
-  projectInstanceId: string | null,
   request: ResultPinRequest,
   result: DeepReadonly<ResultDescriptor | null>,
 ): void {
@@ -426,7 +389,6 @@ function publishCurrentResult(
     resetResultQuery(previous);
   resultProjection.setState((state) => ({
     ...state,
-    projectInstanceId,
     pinResults: result
       ? { ...state.pinResults, [key]: result }
       : Object.fromEntries(
@@ -443,7 +405,7 @@ function invalidateOutputs(requests: readonly ResultPinRequest[]): void {
   if (!projectInstanceId) return;
   for (const request of requests) {
     resultQueryCoordinator.resetPinResult(request);
-    publishCurrentResult(projectInstanceId, request, null);
+    publishCurrentResult(request, null);
     const execution = useExecutionStore.getState();
     const preview = execution.graphs[request.graphPath]?.pinPreviews.get(
       pinPreviewCacheKey(request.graphPath, request.output),

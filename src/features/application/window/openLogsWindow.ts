@@ -14,7 +14,7 @@ export async function openLogsWindow(): Promise<void> {
       title: i18n.t("log.title"),
     });
   } catch (error) {
-    const ipcError = normalizeApplicationIpcError("open_logs_window", error);
+    const ipcError = normalizeApplicationIpcError(error);
     logger.app.error(
       `Failed to open logs window code=${ipcError.code} incidentId=${ipcError.incidentId ?? "none"}`,
       "Window",

@@ -28,10 +28,7 @@ export function isApplicationIpcError(error: unknown): error is ApplicationIpcEr
 }
 
 /** Normalizes a Service boundary failure for Application presentation and recovery decisions. */
-export function normalizeApplicationIpcError(
-  _command: string,
-  error: unknown,
-): ApplicationIpcError {
+export function normalizeApplicationIpcError(error: unknown): ApplicationIpcError {
   if (isApplicationIpcError(error)) return error;
   if (error instanceof Error) {
     return {

@@ -48,7 +48,7 @@ export async function deleteChartWithConfirm(chartPath: string): Promise<boolean
     return await performChartDelete(chartPath, context);
   } catch (error) {
     if (!context.isCurrent()) return false;
-    showBlockingIpcError(error, "remove_chart", (code) =>
+    showBlockingIpcError(error, (code) =>
       i18n.t("notifications.editor.chartDeleteFailed", { error: code }),
     );
     return false;

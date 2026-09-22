@@ -10,7 +10,6 @@ export type {
   ResolvedInspectableResultRef,
 } from "./inspectableResult";
 export type {
-  ResultPageState,
   ResultRendererKind,
   PlotChart,
   Presentation,
@@ -39,11 +38,6 @@ export {
 } from "./graphPresentation";
 export { useResultValue } from "./useResultValue";
 export { usePagedResultRows } from "./usePagedResultRows";
-export {
-  plotTypeFromPresentation,
-  presentationRoute,
-  presentationRouteForDescriptor,
-} from "./presentation";
 export { resolveResultRenderer } from "./resolveRenderer";
 export { reportResultValuePayload } from "./resultValuePayload";
 export {

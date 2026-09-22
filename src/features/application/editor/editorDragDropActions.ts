@@ -26,7 +26,7 @@ import {
   readDragModifiers,
   buildSidebarDragState,
 } from "@/features/core/dnd";
-import { keyboardUi } from "@/features/core/keyboard/ui";
+import { useModifierKeyStore } from "@/features/core/keyboard";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 
@@ -47,7 +47,7 @@ export function beginActivityEditorDrag(event: DragStartEvent): boolean {
 
 export function updateActivityEditorDragPointer(event: PointerEvent): void {
   sidebarDragUi.updatePosition(event.clientX, event.clientY);
-  keyboardUi.setModifierKeys(event);
+  useModifierKeyStore.getState().setModifierKeys(event);
 }
 
 export function finishActivityEditorDrag(): void {

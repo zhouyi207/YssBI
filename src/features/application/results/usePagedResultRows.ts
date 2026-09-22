@@ -82,8 +82,9 @@ export function usePagedResultRows(
       : Math.max(1, Math.ceil(effectiveTotalCount / safePageSize));
   const boundedPageIndex = totalPages === null ? pageIndex : Math.min(pageIndex, totalPages - 1);
   const hasMore = page?.hasMore ?? (totalPages !== null && boundedPageIndex < totalPages - 1);
-  const error =
+  const readError = () =>
     reference === null ? null : dependencies.read.getFailure({ kind: "page", ...request });
+  const error = useSyncExternalStore(dependencies.read.subscribe, readError, readError);
 
   useEffect(() => {
     setPageIndex(0);

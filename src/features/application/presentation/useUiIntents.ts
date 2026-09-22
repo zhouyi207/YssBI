@@ -1,6 +1,5 @@
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useEffect, useState } from "react";
-import { getI18n } from "react-i18next";
 import {
   pendingUiIntents,
   settleUiIntent,
@@ -28,7 +27,7 @@ async function execute(intent: UiIntent, current: () => boolean): Promise<boolea
     case "showPanel":
       return (await revealWorkbenchView(intent.panel)) !== null && current();
     case "openResult":
-      return openInspectableResult(resultRef(intent.source), getI18n().t.bind(getI18n()));
+      return openInspectableResult(resultRef(intent.source));
     case "openGraph": {
       const meta = resolveGraphResourceMeta(intent.graphPath);
       if (!meta) return false;

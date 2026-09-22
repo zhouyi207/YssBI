@@ -1,3 +1,4 @@
+import { resultQueryCoordinator } from "@/features/application/results/runtime";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VscPreview } from "react-icons/vsc";
@@ -32,6 +33,7 @@ export function ResultContent({ reference }: { reference: ResultReference }) {
   const expandRequestGeneration = useRef(0);
 
   useEffect(() => {
+    const release = resultQueryCoordinator.retainPayload(reference);
     let cancelled = false;
     expandRequestGeneration.current += 1;
     setExpandFailed(false);
@@ -41,6 +43,7 @@ export function ResultContent({ reference }: { reference: ResultReference }) {
     });
     return () => {
       cancelled = true;
+      release();
       expandRequestGeneration.current += 1;
     };
   }, [reference.executionSessionId, reference.resultId, reload]);

@@ -1,7 +1,6 @@
 export {
   parsePresentationWindowQuery,
   parsePresentationWindowQueryFromParts,
-  parsePlotChartFromLocation,
 } from "./parsePresentationWindowQuery";
 export type { PresentationWindowQuery } from "./parsePresentationWindowQuery";
 export { loadPresentationWindow } from "./loadPresentationWindow";

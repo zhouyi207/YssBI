@@ -68,14 +68,11 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         `Failed to save graph '${document.title}' (${document.resourceRef}): ${message}`,
         "saveAllDirtyGraphs",
       );
-      showBlockingIpcError(
-        error,
-        document.resourceKind === "chart" ? "save_chart" : "save_project_graph",
-        (code) =>
-          i18n.t("notifications.editor.documentSaveFailed", {
-            title: document.title,
-            error: code,
-          }),
+      showBlockingIpcError(error, (code) =>
+        i18n.t("notifications.editor.documentSaveFailed", {
+          title: document.title,
+          error: code,
+        }),
       );
       return false;
     }

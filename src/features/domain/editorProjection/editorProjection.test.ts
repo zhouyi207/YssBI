@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import editorProjectionContract from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
-import { validateEditorGraphProjection } from "@/shared/types/dto/editorProjectionParser";
+import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
 import { portAddressKey } from "./index";
 
 const declaredOutput: PortAddressDto = {

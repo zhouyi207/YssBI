@@ -23,10 +23,6 @@ export function isChartLifecycleCurrent(
   return lifecycleTokensByProject.get(projectInstanceId)?.get(chartPath) === lifecycleToken;
 }
 
-export function clearChartLifecycleProject(projectInstanceId: string): void {
-  lifecycleTokensByProject.delete(projectInstanceId);
-}
-
 export function clearChartLifecycleProjects(): void {
   lifecycleTokensByProject.clear();
 }

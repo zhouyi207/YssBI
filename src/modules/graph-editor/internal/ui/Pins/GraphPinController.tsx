@@ -172,13 +172,13 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const handleView = useCallback(() => {
     if (!viewParams || !graphPath) return;
     if (viewState?.enabled) {
-      void openPinInspectableView(viewParams, t);
+      void openPinInspectableView(viewParams);
       return;
     }
     if (previewActionAvailable) {
-      void requestAndOpenPinPreview(graphPath, id, t);
+      void requestAndOpenPinPreview(graphPath, id);
     }
-  }, [graphPath, id, previewActionAvailable, t, viewParams, viewState?.enabled]);
+  }, [graphPath, id, previewActionAvailable, viewParams, viewState?.enabled]);
 
   const hasLinks = linkCount > 0 || connectionIds.length > 0;
   const scalarInputKey = scalarPinInputKey(dataType);

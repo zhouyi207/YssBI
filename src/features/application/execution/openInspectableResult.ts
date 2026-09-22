@@ -1,4 +1,3 @@
-import type { TFunction } from "i18next";
 import { showWorkbenchLayoutError } from "@/modules/workbench/public";
 import {
   openPresentationWindow,
@@ -32,10 +31,7 @@ export async function launchInspectablePresentation(
   );
 }
 
-export async function openInspectableResult(
-  ref: InspectableResultRef,
-  _t: TFunction,
-): Promise<boolean> {
+export async function openInspectableResult(ref: InspectableResultRef): Promise<boolean> {
   let project: ReturnType<typeof captureProjectIdentity>;
   let descriptor: ResultDescriptor | null;
   try {
@@ -79,13 +75,10 @@ export async function openInspectableResult(
 }
 
 /** Open pin/context-menu targets; tries upstream pins in order for input direction. */
-export async function openPinInspectableView(
-  params: ResolvePinViewTargetParams,
-  t: TFunction,
-): Promise<boolean> {
+export async function openPinInspectableView(params: ResolvePinViewTargetParams): Promise<boolean> {
   const { refs } = evaluatePinViewState(params);
   for (const ref of refs) {
-    if (await openInspectableResult(ref, t)) {
+    if (await openInspectableResult(ref)) {
       return true;
     }
   }

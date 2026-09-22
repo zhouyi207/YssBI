@@ -30,11 +30,11 @@ export interface ResultAnalysisQuery {
 }
 
 export function resultPageKey(request: ResultPageRequest): string {
-  return `${resultReferenceKey(request)}:${request.part ?? "value"}`;
+  return `${resultReferenceKey(request)}:${request.part ?? "value"}:${request.offset}:${request.limit}`;
 }
 
 export function resultAnalysisKey(request: ResultAnalysisQuery): string {
-  return `${resultReferenceKey(request.reference)}:${request.analysis.kind}`;
+  return `${resultReferenceKey(request.reference)}:${request.analysis.kind}:${resultAnalysisParameters(request)}`;
 }
 
 export function resultAnalysisParameters(request: ResultAnalysisQuery): string {
@@ -61,8 +61,6 @@ export interface ResultGraphStateRequest {
   readonly semanticInputHash: string;
   readonly sessionId: number;
   readonly projectionGeneration: number;
-  /** Local publication identity; never sent to Rust. */
-  readonly editorState: object;
 }
 
 export type ResultQueryScope =
@@ -118,41 +116,28 @@ export interface ResultQueryServicePort {
 
 export interface ResultQueryPublication {
   readonly publishGraphState: (
-    projectInstanceId: string | null,
     request: ResultGraphStateRequest,
     projection: DeepReadonly<GraphResultState | null>,
   ) => void;
   readonly releasePayload: (reference: ResultReference) => void;
   readonly publishDescriptor: (
-    projectInstanceId: string | null,
     reference: ResultReference,
     descriptor: DeepReadonly<ResultDescriptor | null>,
   ) => void;
   readonly publishValue: (
-    projectInstanceId: string | null,
     reference: ResultReference,
     value: DeepReadonly<ResultValue | null>,
   ) => void;
-  readonly publishPage: (
-    projectInstanceId: string | null,
-    request: ResultPageRequest,
-    page: DeepReadonly<ResultPage | null>,
-  ) => void;
+  readonly publishPage: (request: ResultPageRequest, page: DeepReadonly<ResultPage | null>) => void;
   readonly publishAnalysis: (
-    projectInstanceId: string | null,
     request: ResultAnalysisQuery,
     value: DeepReadonly<ResultAnalysis | null>,
   ) => void;
   readonly publishPinResult: (
-    projectInstanceId: string | null,
     request: ResultPinRequest,
     result: DeepReadonly<ResultDescriptor | null>,
   ) => void;
-  readonly publishFailure: (
-    projectInstanceId: string | null,
-    scope: ResultQueryScope,
-    issue: ErrorReference,
-  ) => void;
+  readonly publishFailure: (scope: ResultQueryScope, issue: ErrorReference) => void;
 }
 
 /** Read side of the Application-owned result projection used by staged hooks. */
@@ -176,6 +161,7 @@ export interface ResultQueryDependencies {
 }
 
 interface RequestOwner {
+  promise?: Promise<ResultQueryOutcome>;
   readonly projectInstanceId: string | null;
   readonly projectEpoch: number;
   readonly queryKey: string;
@@ -288,15 +274,23 @@ export function createResultQueryCoordinator(
     return fallbackIssue(fallbackCode);
   };
 
-  const load = async <T extends ResultQueryValue>(
+  const load = <T extends ResultQueryValue>(
     scope: ResultQueryScope,
     read: () => Promise<T | null>,
-    publish: (projectInstanceId: string | null, value: DeepReadonly<T | null>) => void,
+    publish: (value: DeepReadonly<T | null>) => void,
     fallbackCode: string,
   ): Promise<ResultQueryOutcome> => {
     const projectInstanceId = captureProject();
 
     const key = queryKey(scope);
+    const existing = requests.get(key);
+    if (
+      scope.kind !== "graphState" &&
+      scope.kind !== "pinResult" &&
+      existing?.promise &&
+      isCurrent(existing)
+    )
+      return existing.promise;
     const owner: RequestOwner = {
       projectInstanceId,
       projectEpoch,
@@ -305,29 +299,28 @@ export function createResultQueryCoordinator(
     };
     requests.set(key, owner);
 
-    try {
-      const value = await read();
-      if (!isCurrent(owner)) return { status: "stale" };
-
-      const snapshot = freezeProjectionSnapshot(value);
-      if (!isCurrent(owner)) return { status: "stale" };
-      publish(owner.projectInstanceId, snapshot);
-      return { status: value === null ? "notReady" : "published" };
-    } catch (error) {
-      if (!isCurrent(owner)) return { status: "stale" };
+    owner.promise = (async (): Promise<ResultQueryOutcome> => {
       try {
-        dependencies.publication.publishFailure(
-          owner.projectInstanceId,
-          owner.scope,
-          issueFor(error, fallbackCode),
-        );
-      } catch {
-        // A failure publication cannot reopen the rejected query.
+        const value = await read();
+        if (!isCurrent(owner)) return { status: "stale" };
+
+        const snapshot = freezeProjectionSnapshot(value);
+        if (!isCurrent(owner)) return { status: "stale" };
+        publish(snapshot);
+        return { status: value === null ? "notReady" : "published" };
+      } catch (error) {
+        if (!isCurrent(owner)) return { status: "stale" };
+        try {
+          dependencies.publication.publishFailure(owner.scope, issueFor(error, fallbackCode));
+        } catch {
+          // A failure publication cannot reopen the rejected query.
+        }
+        return { status: "failed" };
+      } finally {
+        if (requests.get(key) === owner) requests.delete(key);
       }
-      return { status: "failed" };
-    } finally {
-      if (requests.get(key) === owner) requests.delete(key);
-    }
+    })();
+    return owner.promise;
   };
 
   const loadDescriptor = (request: ResultIdentityRequest): Promise<ResultQueryOutcome> => {
@@ -336,8 +329,7 @@ export function createResultQueryCoordinator(
     return load(
       scope,
       () => dependencies.service.getDescriptor(resultReference(request)),
-      (projectInstanceId, value) =>
-        dependencies.publication.publishDescriptor(projectInstanceId, request, value),
+      (value) => dependencies.publication.publishDescriptor(request, value),
       "result_descriptor_read_failed",
     );
   };
@@ -348,8 +340,7 @@ export function createResultQueryCoordinator(
     return load(
       scope,
       () => dependencies.service.getValue(resultReference(request)),
-      (projectInstanceId, value) =>
-        dependencies.publication.publishValue(projectInstanceId, request, value),
+      (value) => dependencies.publication.publishValue(request, value),
       "result_value_read_failed",
     );
   };
@@ -374,8 +365,7 @@ export function createResultQueryCoordinator(
               request.part,
             )
           : dependencies.service.getPage(resultReference(request), request.offset, request.limit),
-      (projectInstanceId, value) =>
-        dependencies.publication.publishPage(projectInstanceId, request, value),
+      (value) => dependencies.publication.publishPage(request, value),
       "result_page_read_failed",
     );
   };
@@ -385,8 +375,7 @@ export function createResultQueryCoordinator(
     return load(
       scope,
       () => dependencies.service.analyze(request.reference, request.analysis),
-      (projectInstanceId, value) =>
-        dependencies.publication.publishAnalysis(projectInstanceId, request, value),
+      (value) => dependencies.publication.publishAnalysis(request, value),
       "result_analysis_failed",
     );
   };
@@ -401,8 +390,7 @@ export function createResultQueryCoordinator(
     return load(
       scope,
       async () => dependencies.service.getPinResult(request.graphPath, request.output),
-      (projectInstanceId, value) =>
-        dependencies.publication.publishPinResult(projectInstanceId, request, value),
+      (value) => dependencies.publication.publishPinResult(request, value),
       "result_pin_read_failed",
     );
   };
@@ -412,8 +400,7 @@ export function createResultQueryCoordinator(
       load(
         { kind: "graphState", ...request },
         () => dependencies.service.getGraphState(request.graphPath, request.semanticInputHash),
-        (projectInstanceId, value) =>
-          dependencies.publication.publishGraphState(projectInstanceId, request, value),
+        (value) => dependencies.publication.publishGraphState(request, value),
         "result_source_read_failed",
       ),
     resetGraphState: (graphPath) => {

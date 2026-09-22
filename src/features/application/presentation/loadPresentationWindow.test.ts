@@ -61,10 +61,13 @@ describe("loadPresentationWindow", () => {
     expect(ResultService.getPage).not.toHaveBeenCalled();
   });
 
-  it("requires report descriptors to use the scalar value kind", async () => {
+  it.each([
+    { kind: "report", report: "linearRegressionSummary" },
+    { kind: "plot", chart: "scatter" },
+  ] as const)("requires complete scalar payloads for $kind presentations", async (presentation) => {
     vi.mocked(ResultService.getDescriptor).mockResolvedValue(
       descriptor("21", {
-        presentation: { kind: "report", report: "linearRegressionSummary" },
+        presentation,
         valueKind: "sequence",
       }),
     );
@@ -84,6 +87,7 @@ describe("loadPresentationWindow", () => {
     await expect(loadPresentationWindow(resultReferenceFixture("21"))).resolves.toEqual({
       status: "load_failed",
     });
+    expect(ResultService.getPage).not.toHaveBeenCalled();
   });
 
   it("leaves inspector payload loading to its mounted renderer", async () => {

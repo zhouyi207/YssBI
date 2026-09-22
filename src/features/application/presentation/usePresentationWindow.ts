@@ -1,11 +1,10 @@
+import { resultQueryCoordinator } from "@/features/application/results/runtime";
+import { initializeProjectForCurrentWindow } from "@/features/application/project/projectRuntime";
 import { useEffect, useMemo, useState } from "react";
 import { useResultSession } from "@/features/application/window/useResultSession";
 import { ResultService } from "@/services/result/resultService";
 import { resultReferenceKey } from "@/shared/types/domain/result";
-import {
-  useCurrentWindowActions,
-  type CurrentWindowActions,
-} from "@/features/application/window/useCurrentWindowActions";
+import { useCurrentWindowActions } from "@/features/application/window/useCurrentWindowActions";
 import { loadPresentationWindow, type PresentationWindowState } from "./loadPresentationWindow";
 import { parsePresentationWindowQuery } from "./parsePresentationWindowQuery";
 
@@ -21,6 +20,7 @@ export function usePresentationWindow() {
 
   useEffect(() => {
     let cancelled = false;
+    let releasePayload: (() => void) | undefined;
 
     const revealWindow = async (title?: string) => {
       if (title) await windowActions.setTitle(title);
@@ -41,6 +41,9 @@ export function usePresentationWindow() {
     void (async () => {
       let next: PresentationWindowState;
       try {
+        await initializeProjectForCurrentWindow();
+        if (cancelled) return;
+        releasePayload = resultQueryCoordinator.retainPayload(reference);
         const held = await ResultService.claim(query.leaseId!);
         if (resultReferenceKey(held.descriptor) !== resultReferenceKey(reference))
           throw new Error("Mismatched result lease");
@@ -59,12 +62,13 @@ export function usePresentationWindow() {
 
     return () => {
       cancelled = true;
+      releasePayload?.();
     };
   }, [reference, query.leaseId, windowActions, sessionActive]);
 
   return {
     reference,
     state,
-    windowActions: windowActions as CurrentWindowActions,
+    windowActions,
   };
 }

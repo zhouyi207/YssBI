@@ -66,6 +66,29 @@ describe("ProjectService execution contract", () => {
     vi.clearAllMocks();
   });
 
+  it("recovers committed success after the invocation channel loses its terminal event", async () => {
+    const started = runEvent({ type: "runStarted", outputs: [] });
+    const completed = runEvent({ type: "runCompleted" });
+    vi.mocked(invoke).mockImplementation(async (command, raw) => {
+      if (command === "get_execution_snapshot") return [started, completed];
+      const args = raw as { onEvent: Channel<RunEvent> };
+      args.onEvent.onmessage?.(started);
+      throw {
+        code: "execution_channel_failed",
+        details: { executionAccepted: true },
+        incidentId: null,
+      };
+    });
+    const received: RunEvent[] = [];
+    await expect(
+      executeGraph({ type: "default" }, (event) => received.push(event)),
+    ).resolves.toBeUndefined();
+    expect(received).toEqual([started, completed]);
+    expect(
+      vi.mocked(invoke).mock.calls.filter(([command]) => command === "execute_graph"),
+    ).toHaveLength(1);
+  });
+
   it("invokes cancel_graph_run with an opaque decimal run ID", async () => {
     vi.mocked(invoke).mockResolvedValue(true);
 

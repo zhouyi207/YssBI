@@ -6,7 +6,7 @@ export function graphHasClearableArtifacts(
 ): boolean {
   return Boolean(
     graph &&
-    graph.status !== "running" &&
+    !["running", "submitting", "unknown"].includes(graph.status) &&
     (graph.status === "completed" || graph.status === "error" || graph.runFailure),
   );
 }

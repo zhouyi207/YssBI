@@ -1,7 +1,7 @@
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { RunPhase, ResultInspectionSource } from "@/shared/types/domain/runEvent";
 
-export type ExecutionStatus = "idle" | "running" | "completed" | "error";
+export type ExecutionStatus = "idle" | "submitting" | "running" | "completed" | "error" | "unknown";
 
 export interface RunFailureProjection {
   runId: string | null;

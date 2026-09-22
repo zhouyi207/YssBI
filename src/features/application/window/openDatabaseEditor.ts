@@ -17,7 +17,7 @@ export async function openDatabaseEditorWindow(databaseId?: string): Promise<voi
       title: i18n.t("databaseEditor.title"),
     });
   } catch (error) {
-    const ipcError = normalizeApplicationIpcError("open_database_editor_window", error);
+    const ipcError = normalizeApplicationIpcError(error);
     logger.app.error(
       `Failed to open data view code=${ipcError.code} incidentId=${ipcError.incidentId ?? "none"}`,
       "Window",

@@ -28,7 +28,7 @@ vi.mock("@/features/application/results/resultLeases", () => ({
 
 vi.mock("@/features/application/window", () => ({
   openPresentationWindow: vi.fn(),
-  presentationWindowPayloadFromDescriptor: vi.fn(() => ({ route: "/plot", windowTitle: "Plot" })),
+  presentationWindowPayloadFromDescriptor: vi.fn(() => ({ kind: "plot", windowTitle: "Plot" })),
 }));
 
 vi.mock("@/modules/workbench/internal/layout/workbenchControl", () => ({
@@ -80,8 +80,6 @@ const plotDescriptor: ResultDescriptor = {
   title: "Scatter result",
 };
 
-const t = ((key: string) => key) as never;
-
 beforeEach(() => {
   vi.restoreAllMocks();
   mocks.upsertResult.mockReset();
@@ -113,10 +111,11 @@ beforeEach(() => {
 describe("openInspectableResult", () => {
   it("atomically upserts the logical Result panel", async () => {
     await expect(
-      openInspectableResult(
-        { kind: "result", executionSessionId: resultSessionFixture, resultId: "17" },
-        t,
-      ),
+      openInspectableResult({
+        kind: "result",
+        executionSessionId: resultSessionFixture,
+        resultId: "17",
+      }),
     ).resolves.toBe(true);
 
     expect(mocks.upsertResult).toHaveBeenCalledOnce();
@@ -144,14 +143,11 @@ describe("openInspectableResult", () => {
       });
     });
 
-    const pending = openInspectableResult(
-      {
-        kind: "outputPin",
-        graphPath: "events/Main.yssbi-event",
-        output: { kind: "declared", nodeId: "node-1", portKey: "result" },
-      },
-      t,
-    );
+    const pending = openInspectableResult({
+      kind: "outputPin",
+      graphPath: "events/Main.yssbi-event",
+      output: { kind: "declared", nodeId: "node-1", portKey: "result" },
+    });
     await queryStarted;
     clearProjectLifecycle();
     startProjectLifecycle("project-2");
@@ -175,10 +171,11 @@ describe("openInspectableResult", () => {
       });
     });
 
-    const pending = openInspectableResult(
-      { kind: "result", executionSessionId: resultSessionFixture, resultId: "17" },
-      t,
-    );
+    const pending = openInspectableResult({
+      kind: "result",
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+    });
     await descriptorStarted;
     clearProjectLifecycle();
     startProjectLifecycle("project-2");
@@ -194,10 +191,11 @@ describe("openInspectableResult", () => {
     mocks.upsertResult.mockRejectedValueOnce(failure);
 
     await expect(
-      openInspectableResult(
-        { kind: "result", executionSessionId: resultSessionFixture, resultId: "17" },
-        t,
-      ),
+      openInspectableResult({
+        kind: "result",
+        executionSessionId: resultSessionFixture,
+        resultId: "17",
+      }),
     ).resolves.toBe(false);
 
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledOnce();

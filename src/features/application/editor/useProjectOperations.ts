@@ -8,13 +8,12 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { ProjectService, isExecutionCancelledError } from "@/services/project/projectService";
+import { ProjectService } from "@/services/project/projectService";
 import { openPathDialog } from "@/services/platform/pathDialog";
 import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 import { cancelActiveGraphRun } from "./cancelActiveGraphRun";
-import { observeGraphRunEvent, type GraphRunOutcomeState } from "./observeGraphRunEvent";
-import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
-import { resultRef } from "@/features/application/results";
+import { installGraphRunEvent } from "./observeGraphRunEvent";
+import { recoverGraphExecution } from "@/features/application/graphProjection/graphActivity";
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
 import { isGraphProjectionExecutable } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -43,7 +42,6 @@ import { saveGraph as saveCurrentGraph } from "@/features/application/graphEditi
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
-import { revealWorkbenchView } from "@/modules/workbench/public";
 
 function projectParentDirectory(metadataOrRootPath: string): string {
   const normalized = metadataOrRootPath.replace(/\\/g, "/");
@@ -137,9 +135,7 @@ export function useProjectOperations() {
         if (!pending.isCurrent()) return;
       }
       logger.app.error(String(e), "ProjectOperations");
-      showBlockingIpcError(e, "save_project_as", (code) =>
-        t("notifications.project.saveAsFailed", { error: code }),
-      );
+      showBlockingIpcError(e, (code) => t("notifications.project.saveAsFailed", { error: code }));
     }
   }, [t]);
 
@@ -183,9 +179,7 @@ export function useProjectOperations() {
       } catch (e) {
         if (!isEditorCommandTargetCurrent(target)) return;
         logger.app.error(String(e), "ProjectOperations");
-        showBlockingIpcError(e, "save_project_graph", (code) =>
-          t("notifications.project.saveFailed", { error: code }),
-        );
+        showBlockingIpcError(e, (code) => t("notifications.project.saveFailed", { error: code }));
       }
     },
     [t],
@@ -214,29 +208,9 @@ export function useProjectOperations() {
       }
     } catch (e) {
       logger.app.error(String(e), "ProjectOperations");
-      showBlockingIpcError(
-        e,
-        "load_project_to_state",
-        (code) => `${t("notifications.project.loadFailed")} (${code})`,
-      );
+      showBlockingIpcError(e, (code) => `${t("notifications.project.loadFailed")} (${code})`);
     }
   }, [t]);
-
-  const finalizeExecutionRun = useCallback(
-    (graphPath: string, outcome: "success" | "cancelled" | "error") => {
-      const store = useExecutionStore.getState();
-
-      if (outcome === "cancelled") {
-        store.interruptExecution(graphPath);
-        return;
-      }
-
-      if (store.graphs[graphPath]?.status !== "running") return;
-      if (outcome === "error") store.failExecution(graphPath);
-      else store.completeExecution(graphPath);
-    },
-    [],
-  );
 
   const executeGraph = useCallback(
     async (targetGraphPath?: string) => {
@@ -255,7 +229,6 @@ export function useProjectOperations() {
 
       let isCurrentRun: (() => boolean) | undefined;
       try {
-        const runState: GraphRunOutcomeState = { outcome: "success" };
         const started = await enqueueGraphTask(
           graphPath,
           async () => {
@@ -269,7 +242,7 @@ export function useProjectOperations() {
             }
             logger.exec.info(`执行当前 Analysis Graph: ${target.name} (${graphPath})`);
 
-            isCurrentRun = useExecutionStore.getState().startExecution(graphPath);
+            isCurrentRun = useExecutionStore.getState().submitExecution(graphPath);
 
             const completion = ProjectService.executeGraph({
               projectInstanceId: project.projectInstanceId,
@@ -279,16 +252,7 @@ export function useProjectOperations() {
               demand: { type: "default" },
               onEvent: (event) => {
                 if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
-                observeGraphRunEvent(graphPath, event, runState);
-                if (event.kind.type === "resultInspectionRequested") {
-                  void openInspectableResult(
-                    resultRef({
-                      resultId: event.kind.resultId,
-                      executionSessionId: event.run.executionSessionId,
-                    }),
-                    t,
-                  );
-                }
+                if (event.kind.type !== "resultInspectionRequested") installGraphRunEvent(event);
               },
             });
             // Release the edit queue after dispatch; the run owns its captured draft.
@@ -300,36 +264,36 @@ export function useProjectOperations() {
         await started.completion;
 
         if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
-        finalizeExecutionRun(graphPath, runState.outcome);
-        if (runState.outcome === "error") void revealWorkbenchView("output");
+        await recoverGraphExecution(project);
       } catch (e) {
         if (!isCurrentProjectIdentity(project) || (isCurrentRun && !isCurrentRun())) return;
-        if (isExecutionCancelledError(e)) {
-          logger.exec.info(`执行已中断: ${target.name} (${graphPath})`);
-          finalizeExecutionRun(graphPath, "cancelled");
+        const error = normalizeApplicationIpcError(e);
+        const execution = useExecutionStore.getState();
+        if (
+          error.details &&
+          typeof error.details === "object" &&
+          "executionAccepted" in error.details &&
+          error.details.executionAccepted === false
+        ) {
+          execution.interruptExecution(graphPath);
+          showBlockingIpcError(
+            error,
+            (code) => `${t("notifications.project.executionRejected")} (${code})`,
+          );
           return;
         }
-
-        const error = normalizeApplicationIpcError("execute_graph", e);
-        const execution = useExecutionStore.getState();
-        const graph = execution.getGraph(graphPath);
-        execution.recordRunFailure(graphPath, {
-          ...(graph.runFailure ?? {
-            runId: graph.runId,
-            code: error.code,
-            phase: null,
-            source: null,
-          }),
-          incidentId: error.incidentId,
-        });
-        logger.exec.error(
-          `执行失败: ${error.code}${error.incidentId ? ` (incident: ${error.incidentId})` : ""}`,
-        );
-        finalizeExecutionRun(graphPath, "error");
-        void revealWorkbenchView("output");
+        execution.markExecutionUnknown(graphPath);
+        logger.exec.error(`Execution synchronization interrupted: ${error.code}`);
+        try {
+          await recoverGraphExecution(project);
+        } catch {
+          /* Keep the explicitly unknown state. */
+        }
+        if (isCurrentProjectIdentity(project) && execution.getGraph(graphPath).status === "unknown")
+          showBlockingIpcError(error, () => t("notifications.project.executionStateUnknown"));
       }
     },
-    [finalizeExecutionRun, t],
+    [t],
   );
 
   const cancelGraphExecution = useCallback(async (targetGraphPath?: string) => {

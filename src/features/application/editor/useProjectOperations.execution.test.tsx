@@ -40,6 +40,8 @@ const executionState = {
     executionState.graphs[graphPath] = { status: "running" };
     return () => true;
   }),
+  submitExecution: vi.fn(() => () => true),
+  markExecutionUnknown: vi.fn(),
   setActiveRunId: vi.fn(),
   completeExecution: vi.fn(),
   failExecution: vi.fn(),
@@ -48,6 +50,10 @@ const executionState = {
   getGraph: vi.fn(() => ({ status: "completed" })),
   clearGraphRunProjections: vi.fn(),
 };
+
+vi.mock("@/features/application/graphProjection/graphActivity", () => ({
+  recoverGraphExecution: vi.fn(async () => {}),
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -164,7 +170,7 @@ describe("useProjectOperations execution demand", () => {
     expect(ProjectService.executeGraph).not.toHaveBeenCalled();
   });
 
-  it("opens only the backend-requested result window", async () => {
+  it("leaves inspection opening to the public activity observer", async () => {
     vi.mocked(ProjectService.executeGraph).mockImplementation(async ({ onEvent }) => {
       onEvent?.({
         ...runStartedEvent(),
@@ -202,11 +208,7 @@ describe("useProjectOperations execution demand", () => {
       await operations.executeGraph();
     });
 
-    expect(openInspectableResult).toHaveBeenCalledOnce();
-    expect(openInspectableResult).toHaveBeenCalledWith(
-      { kind: "result", executionSessionId: "backend-session-1", resultId: "17" },
-      expect.any(Function),
-    );
+    expect(openInspectableResult).not.toHaveBeenCalled();
   });
 
   it("clears only frontend run projections", async () => {
@@ -218,7 +220,7 @@ describe("useProjectOperations execution demand", () => {
     expect("clearGraphExecutionArtifacts" in ProjectService).toBe(false);
   });
 
-  it("shows command failures in Output when no run event was delivered", async () => {
+  it("does not turn an unconfirmed command failure into a computation failure", async () => {
     executionState.getGraph.mockReturnValueOnce({ status: "running", runId: null } as never);
     vi.mocked(ProjectService.executeGraph).mockRejectedValueOnce(
       normalizeIpcError("execute_graph", {
@@ -228,15 +230,10 @@ describe("useProjectOperations execution demand", () => {
       }),
     );
     await act(async () => operations.executeGraph());
-    expect(executionState.recordRunFailure).toHaveBeenCalledWith(graphPath, {
-      runId: null,
-      code: "graph_draft_changed",
-      phase: null,
-      source: null,
-      incidentId: null,
-    });
-    expect(executionState.failExecution).toHaveBeenCalledWith(graphPath);
-    expect(revealWorkbenchView).toHaveBeenCalledWith("output");
+    expect(executionState.recordRunFailure).not.toHaveBeenCalled();
+    expect(executionState.failExecution).not.toHaveBeenCalled();
+    expect(executionState.markExecutionUnknown).toHaveBeenCalledWith(graphPath);
+    expect(revealWorkbenchView).not.toHaveBeenCalledWith("output");
   });
 
   it("ignores delayed events and completion after project lifecycle replacement", async () => {

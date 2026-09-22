@@ -1,4 +1,3 @@
-import type { TFunction } from "i18next";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   isGraphProjectionExecutable,
@@ -24,11 +23,7 @@ import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTyp
 import type { ResultReference } from "@/shared/types/domain/result";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 
-import {
-  observeGraphRunEvent,
-  type GraphRunOutcomeState,
-  type PinPreviewObservation,
-} from "./observeGraphRunEvent";
+import { observePinPreviewEvent, type PinPreviewObservation } from "./observeGraphRunEvent";
 
 export type PinPreviewRejectionReason =
   | "nested-function"
@@ -170,7 +165,6 @@ export async function requestPinPreview(
 
   const store = useExecutionStore.getState();
   const lease = store.beginPinPreview(graphPath, captured.output.port, generation);
-  const outcome: GraphRunOutcomeState = { outcome: "success" };
   const observation: PinPreviewObservation = {
     executionSessionId: null,
     output: captured.output,
@@ -195,7 +189,7 @@ export async function requestPinPreview(
       onEvent: (event) => {
         if (!lease.isCurrent()) return;
         if (!isPreviewAuthorityCurrent(graphPath, captured.authority)) return;
-        observeGraphRunEvent(graphPath, event, outcome, observation);
+        observePinPreviewEvent(graphPath, event, observation);
       },
     });
   } catch (error) {
@@ -213,7 +207,7 @@ export async function requestPinPreview(
       captured.output.port,
     );
     if (current?.generation !== generation) return staleSettlement();
-    const ipcError = normalizeApplicationIpcError("execute_graph", error);
+    const ipcError = normalizeApplicationIpcError(error);
     const failure = { code: ipcError.code, incidentId: ipcError.incidentId };
     lease.fail(failure.code);
     return { status: "failed", generation, error: failure };
@@ -255,12 +249,8 @@ export async function requestPinPreview(
   return { status: "failed", generation, error: failure };
 }
 
-export async function requestAndOpenPinPreview(
-  graphPath: string,
-  pinId: string,
-  t: TFunction,
-): Promise<boolean> {
+export async function requestAndOpenPinPreview(graphPath: string, pinId: string): Promise<boolean> {
   const result = await requestPinPreview(graphPath, pinId);
   if (result.status !== "completed") return false;
-  return openInspectableResult(resultRef(result.reference), t);
+  return openInspectableResult(resultRef(result.reference));
 }

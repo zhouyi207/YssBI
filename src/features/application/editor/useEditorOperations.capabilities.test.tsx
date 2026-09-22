@@ -7,7 +7,6 @@ import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph"
 import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { useEditorOperations } from "./useEditorOperations";
-import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -196,10 +195,6 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
 
   afterEach(() => {
     act(() => root.unmount());
-  });
-
-  it("enables paste and duplicate capabilities", () => {
-    expect(EDITOR_MUTATION_CAPABILITIES).toMatchObject({ pasteNodes: true, duplicateNodes: true });
   });
 
   it("denies direct canvas operations while a Result is physically active", async () => {

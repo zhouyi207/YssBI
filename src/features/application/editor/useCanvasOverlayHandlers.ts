@@ -12,7 +12,6 @@ import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";
-import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 
 function readPendingConnectionAddress(pendingConnection: PinData | null): PortAddressDto | null {
   return pendingConnection?.address ?? null;
@@ -93,8 +92,6 @@ export function useCanvasOverlayHandlers({
     ) => {
       const canvasElement = canvasElementRef.current;
       if (!canvasElement || !activeResourceRef) return;
-
-      if (!EDITOR_MUTATION_CAPABILITIES.catalogDescriptors) return;
 
       const position = clientToWorldInCanvas(
         canvasElement,

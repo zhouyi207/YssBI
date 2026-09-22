@@ -3,7 +3,6 @@ import { isResultReference, type ResultReference } from "@/shared/types/domain/r
 export interface PresentationWindowQuery {
   reference: ResultReference | null;
   leaseId: string | null;
-  plotType: string | null;
 }
 
 function readLocationQueryString(hash: string, search: string): string {
@@ -24,14 +23,9 @@ export function parsePresentationWindowQueryFromParts(
   return {
     reference: isResultReference(reference) ? reference : null,
     leaseId: params.get("leaseId"),
-    plotType: params.get("plotType"),
   };
 }
 
 export function parsePresentationWindowQuery(): PresentationWindowQuery {
   return parsePresentationWindowQueryFromParts(window.location.hash, window.location.search);
-}
-
-export function parsePlotChartFromLocation(): string | null {
-  return parsePresentationWindowQuery().plotType;
 }

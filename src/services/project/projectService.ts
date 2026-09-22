@@ -39,6 +39,7 @@ import type {
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
 import { IpcError, invokeCommand, isIpcErrorCode } from "@/services/ipc";
 import { bindExecutionEventChannel } from "./executionChannelDrain";
+import { readExecutionSnapshot } from "@/services/nodeSystem/graphActivityService";
 
 export type ProjectScanProgressEvent =
   | { kind: "scanning" }
@@ -481,7 +482,21 @@ export class ProjectService {
     onEvent,
   }: ExecuteGraphDocumentRequest): Promise<void> {
     const parsedDemand = parseExecutionDemandDto(demand);
-    const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
+    let observed: RunEvent["run"] | null = null;
+    let terminal: RunEvent["kind"]["type"] | null = null;
+    let consumerFailure: { error: unknown } | null = null;
+    const deliver = (event: RunEvent) => {
+      observed = event.run;
+      if (["runCompleted", "runErrored", "runCancelled"].includes(event.kind.type))
+        terminal = event.kind.type;
+      try {
+        onEvent?.(event);
+      } catch (error) {
+        consumerFailure = { error };
+        throw error;
+      }
+    };
+    const { channel, waitForStreamEnd } = bindExecutionEventChannel(deliver);
     try {
       try {
         await invokeCommand<void>("execute_graph", {
@@ -503,6 +518,26 @@ export class ProjectService {
         throw error;
       }
       await waitForStreamEnd();
+    } catch (error) {
+      if (consumerFailure && !commandSentTerminalRunEvent(error))
+        throw (consumerFailure as { error: unknown }).error;
+      const run = observed as RunEvent["run"] | null;
+      if (run && !terminal) {
+        try {
+          const snapshot = await readExecutionSnapshot(projectInstanceId);
+          const ended = snapshot.find(
+            (event) =>
+              event.run.executionSessionId === run.executionSessionId &&
+              event.run.runId === run.runId &&
+              ["runCompleted", "runErrored", "runCancelled"].includes(event.kind.type),
+          );
+          if (ended) deliver(ended);
+        } catch {
+          /* The caller keeps synchronization failure separate from run failure. */
+        }
+      }
+      if (terminal === "runCompleted") return;
+      throw error;
     } finally {
       untrackChannel(channel);
     }

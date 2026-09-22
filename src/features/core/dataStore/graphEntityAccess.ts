@@ -31,13 +31,6 @@ export interface GraphEntitiesState {
   graphEntities: Record<GraphPath, GraphEntityBucket>;
 }
 
-export function getGraphBucket(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): GraphEntityBucket | undefined {
-  return state.graphEntities[graphPath];
-}
-
 export function hasGraphData(state: GraphEntitiesState, graphPath: GraphPath): boolean {
   return graphPath in state.graphEntities;
 }
@@ -92,27 +85,6 @@ export function getGraphConnections(
 ): ConnectionData[] {
   const bucket = state.graphEntities[graphPath];
   return bucket ? Object.values(bucket.connections) : [];
-}
-
-export function getGraphProjectionBasis(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): ProjectionBasisDto | undefined {
-  return state.graphEntities[graphPath]?.basis;
-}
-
-export function getGraphDiagnostics(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): DiagnosticDto[] | undefined {
-  return state.graphEntities[graphPath]?.diagnostics;
-}
-
-export function hasGraphBlockingDiagnostics(
-  state: GraphEntitiesState,
-  graphPath: GraphPath,
-): boolean | undefined {
-  return state.graphEntities[graphPath]?.hasBlockingDiagnostics;
 }
 
 export function isGraphProjectionExecutable(

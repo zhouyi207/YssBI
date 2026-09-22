@@ -43,10 +43,19 @@ export function CanvasExecutionToolbar({
 
   const isLiveRunning = graphStatus === "running";
   const canClear = !isLiveRunning && graphHasClearableArtifacts(graphState);
-  const canRun = canExecute && !saving && !isLiveRunning;
+  const canRun = canExecute && !saving && !isLiveRunning && graphStatus !== "submitting";
 
   return (
     <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
+      {graphStatus === "unknown" && (
+        <span
+          role="status"
+          title={t("notifications.project.executionStateUnknown")}
+          className="px-2 text-xs text-muted-foreground"
+        >
+          {t("notifications.project.executionStatusUnknown")}
+        </span>
+      )}
       <CanvasToolbarButton
         type="button"
         variant="ghost"

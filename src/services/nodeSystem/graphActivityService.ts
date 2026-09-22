@@ -15,26 +15,6 @@ export interface GraphActivityObserver {
   failed(error: unknown): void;
 }
 
-export async function readExecutionRunState(
-  projectInstanceId: string,
-  executionSessionId: string,
-  runId: string,
-): Promise<string | null> {
-  const value = await invokeCommand("get_execution_run_state", {
-    projectInstanceId,
-    executionSessionId,
-    runId,
-  });
-  if (
-    value !== null &&
-    !["admitted", "running", "finalizing", "succeeded", "failed", "cancelled"].includes(
-      value as string,
-    )
-  )
-    throw new Error("Invalid execution run state");
-  return value as string | null;
-}
-
 export async function subscribeGraphActivity(
   projectInstanceId: string,
   observer: GraphActivityObserver,
@@ -103,4 +83,10 @@ export async function subscribeGraphActivity(
       if (id) await invokeCommand("unsubscribe_graph_activity", { subscriptionId: id });
     },
   };
+}
+
+export async function readExecutionSnapshot(projectInstanceId: string): Promise<RunEvent[]> {
+  const value = await invokeCommand<unknown>("get_execution_snapshot", { projectInstanceId });
+  if (!Array.isArray(value)) throw new Error("Invalid execution snapshot");
+  return value.map(parseRunEvent);
 }

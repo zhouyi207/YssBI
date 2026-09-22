@@ -1,7 +1,6 @@
-import { getI18n } from "react-i18next";
 import {
   subscribeGraphActivity,
-  readExecutionRunState,
+  readExecutionSnapshot,
 } from "@/services/nodeSystem/graphActivityService";
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useExecutionStore } from "@/features/core/execution";
@@ -9,13 +8,11 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import {
-  observeGraphRunEvent,
-  type GraphRunOutcomeState,
-} from "@/features/application/editor/observeGraphRunEvent";
+import { installGraphRunEvent } from "@/features/application/editor/observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
 import { logger } from "@/features/application/observability/appLogger";
+import type { RunEvent } from "@/shared/types/domain/runEvent";
 import type { GraphEditingStateDto } from "@/shared/types/domain/editorMutation";
 
 type Refresh = (path: string, editing?: GraphEditingStateDto) => Promise<unknown>;
@@ -39,10 +36,50 @@ export function ensureGraphActivity(
   const request = (path: string, editing?: GraphEditingStateDto) => {
     if (current()) void refresh(path, editing).catch(failed);
   };
-  const runs = new Map<
-    string,
-    { state: GraphRunOutcomeState; graphPath: string; executionSessionId: string; runId: string }
-  >();
+  const synchronizationFailed = (error: unknown) => {
+    if (!current()) return;
+    const execution = useExecutionStore.getState();
+    for (const [path, graph] of Object.entries(execution.graphs))
+      if (graph.status === "running") execution.markExecutionUnknown(path);
+    failed(error);
+  };
+  let recovery: Promise<void> | null = null;
+  let recoverAgain = false;
+  const queued: RunEvent[] = [];
+  const install = (event: RunEvent) => {
+    if (!current()) return;
+    if (!installGraphRunEvent(event)) return;
+    if (event.kind.type === "resultInspectionRequested") {
+      void openInspectableResult(
+        resultRef({
+          executionSessionId: event.run.executionSessionId,
+          resultId: event.kind.resultId,
+        }),
+      ).catch(failed);
+    }
+  };
+  const recover = () => {
+    if (!current()) return;
+    if (recovery) {
+      recoverAgain = true;
+      return;
+    }
+    recovery = recoverGraphExecution(identity)
+      .catch(synchronizationFailed)
+      .finally(() => {
+        recovery = null;
+        if (!current()) {
+          queued.length = 0;
+          return;
+        }
+        if (recoverAgain) {
+          recoverAgain = false;
+          recover();
+          return;
+        }
+        for (const event of queued.splice(0)) install(event);
+      });
+  };
   const entry = {
     project: identity.projectInstanceId,
     ready: Promise.resolve(),
@@ -60,60 +97,17 @@ export function ensureGraphActivity(
     resync: () => {
       if (!current()) return;
       for (const path of Object.keys(useGraphEditingStore.getState().sessions)) request(path);
-      for (const [key, run] of runs)
-        void readExecutionRunState(identity.projectInstanceId, run.executionSessionId, run.runId)
-          .then((status) => {
-            const execution = useExecutionStore.getState();
-            if (!current() || execution.getGraph(run.graphPath).runId !== run.runId) return;
-            if (status === "succeeded") execution.completeExecution(run.graphPath);
-            else if (status === "failed") execution.failExecution(run.graphPath);
-            else if (status === "cancelled") execution.interruptExecution(run.graphPath);
-            else return;
-            runs.delete(key);
-          })
-          .catch(failed);
+      recover();
     },
-    failed,
+    failed: synchronizationFailed,
     execution: (event) => {
-      if (!current()) return;
-      const path = event.run.graphPath;
-      const key = `${event.run.executionSessionId}:${event.run.runId}`;
-      const execution = useExecutionStore.getState();
-      if (event.kind.type === "runStarted") {
-        execution.startExecution(path);
-        runs.set(key, {
-          state: { outcome: "success" },
-          graphPath: path,
-          executionSessionId: event.run.executionSessionId,
-          runId: event.run.runId,
-        });
-      }
-      const run = runs.get(key)?.state ?? { outcome: "success" as const };
-      observeGraphRunEvent(path, event, run);
-      if (event.kind.type === "resultInspectionRequested") {
-        void openInspectableResult(
-          resultRef({
-            executionSessionId: event.run.executionSessionId,
-            resultId: event.kind.resultId,
-          }),
-          getI18n().t.bind(getI18n()),
-        ).catch(failed);
-      }
-      if (execution.getGraph(path).runId !== event.run.runId) return;
-      switch (event.kind.type) {
-        case "runCompleted":
-          execution.completeExecution(path);
-          runs.delete(key);
-          break;
-        case "runErrored":
-          execution.failExecution(path);
-          runs.delete(key);
-          break;
-        case "runCancelled":
-          execution.interruptExecution(path);
-          runs.delete(key);
-          break;
-      }
+      if (recovery) {
+        if (queued.length >= 128) {
+          queued.shift();
+          recoverAgain = true;
+        }
+        queued.push(event);
+      } else install(event);
     },
   })
     .then(async (subscription) => {
@@ -135,4 +129,10 @@ export function resetGraphActivity(): void {
   const previous = binding;
   binding = null;
   if (previous?.close) void previous.close().catch(() => {});
+}
+
+export async function recoverGraphExecution(identity: ProjectIdentitySnapshot): Promise<void> {
+  const snapshot = await readExecutionSnapshot(identity.projectInstanceId);
+  if (!isCurrentProjectIdentity(identity)) return;
+  for (const event of snapshot) installGraphRunEvent(event);
 }

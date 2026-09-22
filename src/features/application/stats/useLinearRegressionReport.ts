@@ -33,7 +33,7 @@ export function useLinearRegressionReport(data: LinearRegressionReportData) {
   }, [page.rows, page.columns]);
 
   const hypothesisSource: HypothesisTestSource = {
-    paramNames: parsed.coefficients.map((coefficient) => coefficient.variable),
+    paramNames: data.paramNames,
     available: data.coefficients.rowCount > 0,
     test: async (hypothesis) => {
       const response = await analyze({ kind: "hypothesis", hypothesis });

@@ -104,19 +104,19 @@ function setup(): {
     failures,
     releasePayload: () => undefined,
     publishAnalysis: () => undefined,
-    publishDescriptor: (_projectId, _resultId, value) => {
+    publishDescriptor: (_resultId, value) => {
       if (value) descriptors.push(value as ResultDescriptor);
     },
-    publishValue: (_projectId, _resultId, value) => {
+    publishValue: (_resultId, value) => {
       if (value) values.push(value as ResultValue);
     },
-    publishPage: (_projectId, _request, value) => {
+    publishPage: (_request, value) => {
       if (value) pages.push(value as ResultPage);
     },
-    publishPinResult: (_projectId, _request, entries) => {
+    publishPinResult: (_request, entries) => {
       pinResults.push(entries as ResultDescriptor | null);
     },
-    publishFailure: (_projectId, scope, issue) => {
+    publishFailure: (scope, issue) => {
       failures.push({ scopeKind: scope.kind, issueCode: issue.code });
     },
   };
@@ -157,7 +157,7 @@ describe("ResultQueryCoordinator", () => {
       ...fixture.dependencies,
       publication: {
         ...fixture.publication,
-        publishGraphState: (_project, _request, value) => {
+        publishGraphState: (_request, value) => {
           published.push(value as GraphResultState | null);
         },
       },
@@ -167,19 +167,16 @@ describe("ResultQueryCoordinator", () => {
       semanticInputHash: "a".repeat(64),
       sessionId: 1,
       projectionGeneration: 0,
-      editorState: {},
     };
     const first = coordinator.loadGraphState(request);
     const second = coordinator.loadGraphState({
       ...request,
       semanticInputHash: "b".repeat(64),
       projectionGeneration: 1,
-      editorState: {},
     });
     const third = coordinator.loadGraphState({
       ...request,
       projectionGeneration: 2,
-      editorState: {},
     });
     const state: GraphResultState = {
       executionSessionId: resultSessionFixture,
@@ -268,13 +265,12 @@ describe("ResultQueryCoordinator", () => {
     expect(fixture.publication.failures).toEqual([]);
   });
 
-  it("publishes only the latest requested page for a result", async () => {
+  it("isolates different pages and shares identical in-flight queries", async () => {
     const fixture = setup();
     const oldPage = deferred<ResultPage | null>();
-    const newPage = deferred<ResultPage | null>();
     const otherPage = deferred<ResultPage | null>();
     const requests = new Map<number, Deferred<ResultPage | null>[]>([
-      [0, [oldPage, newPage]],
+      [0, [oldPage]],
       [2, [otherPage]],
     ]);
     fixture.service.getPage = async (_resultId, offset) =>
@@ -299,14 +295,16 @@ describe("ResultQueryCoordinator", () => {
       limit: 2,
     });
 
-    newPage.resolve(page("17", 0, 2));
     otherPage.resolve(page("17", 2, 3));
     oldPage.resolve(page("17", 0, 1));
 
-    await expect(second).resolves.toEqual({ status: "stale" });
+    await expect(second).resolves.toEqual({ status: "published" });
     await expect(independent).resolves.toEqual({ status: "published" });
-    await expect(first).resolves.toEqual({ status: "stale" });
-    expect(fixture.publication.pages.map((value) => value.values[0])).toEqual([[3]]);
+    await expect(first).resolves.toEqual({ status: "published" });
+    expect(fixture.publication.pages).toHaveLength(2);
+    expect(fixture.publication.pages.map((value) => value.values[0])).toEqual(
+      expect.arrayContaining([[1], [3]]),
+    );
   });
 
   it("publishes every typed query through the matching publication and safely maps failures", async () => {

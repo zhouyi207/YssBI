@@ -1,4 +1,4 @@
-import { parseEditorGraphProjectionDto } from "./editorProjectionParser";
+import { parseEditorGraphProjectionDto } from "../domain/editorProjectionParser";
 import { describe, expect, it } from "vitest";
 import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
 import {

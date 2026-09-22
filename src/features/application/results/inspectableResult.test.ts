@@ -56,11 +56,10 @@ function createFixture() {
     publishGraphState: vi.fn(),
     publishAnalysis: vi.fn(),
     releasePayload: vi.fn(),
-    publishDescriptor: (_projectId, resultId, value) =>
-      descriptors.set(resultReferenceKey(resultId), value),
-    publishValue: (_projectId, resultId, value) => values.set(resultReferenceKey(resultId), value),
-    publishPage: (_projectId, request, value) => pages.set(key(request), value),
-    publishPinResult: (_projectId, request, value) => pinResults.set(key(request), value),
+    publishDescriptor: (resultId, value) => descriptors.set(resultReferenceKey(resultId), value),
+    publishValue: (resultId, value) => values.set(resultReferenceKey(resultId), value),
+    publishPage: (request, value) => pages.set(key(request), value),
+    publishPinResult: (request, value) => pinResults.set(key(request), value),
     publishFailure: () => undefined,
   };
   const read: ResultQueryReadCapability = {

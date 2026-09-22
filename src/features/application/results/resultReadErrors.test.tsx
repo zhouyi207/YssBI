@@ -108,16 +108,16 @@ function createTestRuntime(): TestRuntime {
         notify();
       },
       publishDescriptor: () => undefined,
-      publishValue: (_project, resultId, value) => {
+      publishValue: (resultId, value) => {
         values.set(resultReferenceKey(resultId), value);
         notify();
       },
-      publishPage: (_project, request, page) => {
+      publishPage: (request, page) => {
         pages.set(pageKey(request), page);
         notify();
       },
       publishPinResult: () => undefined,
-      publishFailure: (_project, scope, issue) => {
+      publishFailure: (scope, issue) => {
         failures.set(scopeKey(scope), issue);
         notify();
       },

@@ -52,7 +52,7 @@ async function closeCurrentProject(): Promise<boolean> {
       store.currentPath === null
     );
   } catch (error) {
-    showBlockingIpcError(error, "close_project", (code) =>
+    showBlockingIpcError(error, (code) =>
       i18n.t("notifications.project.closeFailed", { error: code }),
     );
     return false;
