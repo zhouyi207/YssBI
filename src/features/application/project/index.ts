@@ -28,7 +28,7 @@ export type {
 export { createProjectEventConsumer } from "./projectEventConsumer";
 export { initializeProjectForCurrentWindow } from "./projectRuntime";
 export { getDefaultProjectParentDirectory, openProjectPathDialog } from "./projectPlatformActions";
-export { getProjectProjection, useProjectProjection } from "./projectProjection";
+export { useProjectProjection } from "./projectProjection";
 export type { ProjectProjection } from "./projectProjection";
 export type {
   ProjectEvent,
@@ -38,6 +38,5 @@ export type {
   ProjectLifecycleCommittedPayload,
   ProjectLoadedPayload,
   ProjectEventConsumptionOutcome,
-  ProjectSavedPayload,
   ResourceMutationCommittedPayload,
 } from "./projectEventConsumer";

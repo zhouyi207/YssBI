@@ -2,7 +2,6 @@ import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { isResourceDocumentDirty } from "@/features/core/resource";
 
-import { splitEditorPanel } from "./editorGroupCommands";
 import { requestCloseWorkbenchPanels } from "./workbenchPanelClose";
 import { detailFocusForEditorResource, setDetailContext } from "./rightSidebarActions";
 
@@ -65,18 +64,4 @@ export function requestCloseSavedEditorPanelsInGroup(groupId: string): Promise<b
       )
       .map((panel) => panel.panelInstanceId),
   );
-}
-
-/** Physical Close Group owns every canonical panel currently in that FlexLayout group. */
-export function closeEditorGroup(groupId: string): Promise<boolean> {
-  return requestClosePanelsAndApplyFallback(
-    workbenchLayoutRead.listGroupPanels(groupId).map((panel) => panel.panelInstanceId),
-  );
-}
-
-export async function splitEditorGroup(
-  groupId: string,
-  direction: "row" | "col" = "row",
-): Promise<void> {
-  await splitEditorPanel(groupId, direction === "row" ? "right" : "bottom");
 }

@@ -1,11 +1,6 @@
 import { invokeCommand } from "@/services/ipc";
 import type { ColumnSemantic } from "@/shared/types/domain/database";
-import type {
-  ColumnDistribution,
-  ColumnStats,
-  DatasetOverview,
-  EditState,
-} from "@/shared/types/domain/dataframe";
+import type { ColumnDistribution, EditState } from "@/shared/types/domain/dataframe";
 import type {
   DatabaseImportSourceDTO,
   DatabaseRow,
@@ -189,13 +184,6 @@ export class DatabaseService {
   }
 
   /**
-   * 获取数据库所有列的统计信息
-   */
-  static async getColumnStats(projectInstanceId: string, id: string): Promise<ColumnStats[]> {
-    return await invokeCommand("get_column_stats", { projectInstanceId, id });
-  }
-
-  /**
    * 获取数据库所有列的分布数据（直方图/频次）
    */
   static async getColumnDistribution(
@@ -203,100 +191,6 @@ export class DatabaseService {
     id: string,
   ): Promise<ColumnDistribution[]> {
     return await invokeCommand("get_column_distribution", { projectInstanceId, id });
-  }
-
-  static async getDatasetOverview(projectInstanceId: string, id: string): Promise<DatasetOverview> {
-    return await invokeCommand("get_dataset_overview", { projectInstanceId, id });
-  }
-
-  static async editCell(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-    row: number,
-    colName: string,
-    value: unknown,
-    rowId?: number | null,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("edit_cell", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      row,
-      colName,
-      value,
-      rowId: rowId ?? null,
-    });
-  }
-
-  static async addRow(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-    index?: number,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("add_row", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      index: index ?? null,
-    });
-  }
-
-  static async deleteRows(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-    indices: number[],
-    rowIds?: number[],
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("delete_rows", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      indices,
-      rowIds: rowIds && rowIds.length > 0 ? rowIds : null,
-    });
-  }
-
-  static async addColumn(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-    name: string,
-    dtype: string,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("add_column", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      name,
-      dtype,
-    });
-  }
-
-  static async deleteColumn(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-    name: string,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("delete_column", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      name,
-    });
   }
 
   static async castColumn(
@@ -319,24 +213,6 @@ export class DatabaseService {
     });
   }
 
-  static async renameColumn(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-    oldName: string,
-    newName: string,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("rename_column", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      oldName,
-      newName,
-    });
-  }
-
   static async setColumnSemantic(
     projectInstanceId: string,
     operationId: string,
@@ -355,48 +231,6 @@ export class DatabaseService {
     });
   }
 
-  static async undoEdit(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("undo_edit", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-    });
-  }
-
-  static async redoEdit(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("redo_edit", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-    });
-  }
-
-  static async saveDatabaseChanges(
-    projectInstanceId: string,
-    operationId: string,
-    expectedRevision: number,
-    id: string,
-  ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("save_database_changes", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-    });
-  }
-
   static async exportDatabase(
     projectInstanceId: string,
     id: string,
@@ -406,7 +240,4 @@ export class DatabaseService {
     await invokeCommand("export_database", { projectInstanceId, id, path, format });
   }
 
-  static async getEditState(projectInstanceId: string, id: string): Promise<EditState> {
-    return await invokeCommand("get_edit_state", { projectInstanceId, id });
-  }
 }

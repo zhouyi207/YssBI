@@ -66,29 +66,3 @@ export function subscribeToViewport(
     unsubStore();
   };
 }
-
-export function scheduleViewportCommit(
-  scope: ViewportScope,
-  timers: { commit?: number | null },
-  delayMs = 80,
-): void {
-  if (timers.commit != null) window.clearTimeout(timers.commit);
-  timers.commit = window.setTimeout(() => {
-    timers.commit = null;
-    commitViewport(scope);
-  }, delayMs);
-}
-
-export function scheduleViewportPersist(
-  scope: ViewportScope,
-  persist: () => void,
-  timers: { persist?: number | null },
-  delayMs = 300,
-): void {
-  if (timers.persist != null) window.clearTimeout(timers.persist);
-  timers.persist = window.setTimeout(() => {
-    timers.persist = null;
-    commitViewport(scope);
-    persist();
-  }, delayMs);
-}

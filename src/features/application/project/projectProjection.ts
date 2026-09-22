@@ -24,14 +24,3 @@ export function useProjectProjection(): ProjectProjection {
     })),
   );
 }
-
-export function getProjectProjection(): ProjectProjection {
-  const state = useProjectIOStore.getState();
-  return {
-    status: state.status,
-    error: state.error,
-    graphLoadStatus: state.graphLoadStatus,
-    currentPath: state.currentPath,
-    projectInstanceId: state.projectInstanceId,
-  };
-}

@@ -32,5 +32,3 @@ export interface CommandHandlerMap {
   MovePortInstance: CommandHandler<MovePortInstanceArgs, GraphEditOutcome>;
   RemovePortInstance: CommandHandler<RemovePortInstanceArgs, GraphEditOutcome>;
 }
-
-export type AvailableCommandType = keyof CommandHandlerMap;

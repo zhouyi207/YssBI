@@ -11,7 +11,6 @@ export {
   attachMarkTooltip,
   PlotTooltipController,
   tooltipMutedLine,
-  tooltipRichBlock,
   tooltipStrongLine,
   tooltipTickLine,
   tooltipTwoLine,

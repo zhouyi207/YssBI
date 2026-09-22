@@ -43,24 +43,6 @@ export const useViewportStore = create<ViewportStore>((set) => ({
   },
 }));
 
-export function remapGraphViewport(from: string, to: string): void {
-  if (from === to) return;
-  useViewportStore.setState((state) => {
-    const viewports = { ...state.viewports };
-    let changed = false;
-    for (const key of Object.keys(viewports)) {
-      const scope = parseViewportScopeKey(key);
-      if (!scope || scope.graphPath !== from) continue;
-      const nextKey = viewportScopeKey({ ...scope, graphPath: to });
-      viewports[nextKey] = viewports[key];
-      delete viewports[key];
-      resetLiveViewports(scope);
-      changed = true;
-    }
-    return changed ? { viewports } : state;
-  });
-}
-
 /** Seed pane viewport on first open in a group; project memento seeds per graph path. */
 export function ensureEditorViewport(scope: ViewportScope): void {
   const key = viewportScopeKey(scope);

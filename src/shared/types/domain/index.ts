@@ -20,7 +20,6 @@ export * from "./node";
 export * from "./pin";
 export * from "./pinSemantics";
 export * from "./pinVisual";
-export * from "./connection";
 export * from "./functionSignaturePin";
 
 export * from "./graph";

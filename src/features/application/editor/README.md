@@ -69,6 +69,8 @@ do not implicitly auto-pan.
 `useCanvasViewport` connects the controlled React Flow viewport to the existing viewport
 session. Navigation commands, sidebar drops, and view-state persistence use that same
 coordinate system. React Flow does not own draft history, save/execute, or FlexLayout layout.
+React Flow handles wheel zoom and the canvas content transform. Core viewport helpers own
+the shared session and grid alignment; they do not attach a second wheel listener or transform.
 
 `CanvasOverlays` receives a discriminated `graph` / `palette` / `execution` model from
 the controller and must not assemble application commands.

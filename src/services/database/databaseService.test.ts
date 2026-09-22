@@ -64,9 +64,7 @@ describe("DatabaseService project lifecycle contract", () => {
       [projectInstanceId, "sales", 0, 50],
       { offset: 0, limit: 50 },
     ],
-    ["getColumnStats", "get_column_stats", [projectInstanceId, "sales"], {}],
     ["getColumnDistribution", "get_column_distribution", [projectInstanceId, "sales"], {}],
-    ["getDatasetOverview", "get_dataset_overview", [projectInstanceId, "sales"], {}],
     [
       "exportDatabase",
       "export_database",

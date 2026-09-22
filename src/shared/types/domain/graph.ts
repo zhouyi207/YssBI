@@ -1,7 +1,5 @@
 import type { ValueType } from "./valueType";
 
-export type GraphType = "event" | "function";
-
 /** Rust 函数签名在编辑器中的投影。 */
 export interface FunctionSignaturePin {
   id: string;

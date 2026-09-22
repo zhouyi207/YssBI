@@ -72,10 +72,6 @@ export function escapeTooltipHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function tooltipRichBlock(html: string, theme: ChartThemeColors): string {
-  return `<div style="font-size:11px;line-height:1.6;color:${theme.tooltipFg}">${html}</div>`;
-}
-
 export function tooltipMutedLine(text: string, theme: ChartThemeColors, size = 10): string {
   return `<div style="font-size:${size}px;color:${theme.tooltipMuted}">${escapeTooltipHtml(text)}</div>`;
 }

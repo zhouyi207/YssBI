@@ -1,4 +1,3 @@
-export { useWindowMaximized } from "./useWindowMaximized";
 export { useCurrentWindowActions } from "./useCurrentWindowActions";
 export type { CurrentWindowActions, WindowActionOutcome } from "./useCurrentWindowActions";
 export { createPersistedWindow } from "./createPersistedWindow";

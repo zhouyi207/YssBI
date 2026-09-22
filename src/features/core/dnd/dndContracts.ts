@@ -33,9 +33,6 @@ export type NodeTemplateDragData = {
   sidebarResource?: GraphResourceDragData;
 };
 
-/** palette → canvas 的 node-template payload（与 `NodeTemplateDragData` 同义，端到端类型链别名） */
-export type NodeTemplateDragPayload = NodeTemplateDragData;
-
 export type GraphResourceDragPayload = {
   type: typeof DRAG_TYPES.GRAPH_RESOURCE;
   sidebarResource: GraphResourceDragData;
@@ -46,14 +43,6 @@ export type CanvasDragPayload = NodeTemplateDragData | GraphResourceDragPayload;
 
 /** Sidebar / palette 产生的可落画布 payload */
 export type SidebarDragPayload = NodeTemplateDragData | GraphResourceDragPayload;
-
-export type CanvasDropData = {
-  dropType: typeof DROP_TYPES.CANVAS;
-  panelInstanceId: string;
-  groupId: string;
-  graphPath: string;
-  graphKind: "event" | "function";
-};
 
 export const CANVAS_DROP_ZONE_ID_PREFIX = "canvas-drop-zone-";
 

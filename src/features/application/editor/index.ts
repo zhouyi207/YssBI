@@ -16,8 +16,6 @@ export {
 export {
   requestCloseEditorPanel,
   requestCloseEditorPanels,
-  closeEditorGroup,
-  splitEditorGroup,
   requestCloseOtherEditorPanels,
   requestCloseAllEditorPanelsInGroup,
   requestCloseSavedEditorPanelsInGroup,

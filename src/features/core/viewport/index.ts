@@ -4,7 +4,6 @@ export type { ViewportScope } from "./viewportScope";
 export { editorViewportScope, viewportScopeKey, parseViewportScopeKey } from "./viewportScope";
 export {
   useViewportStore,
-  remapGraphViewport,
   ensureEditorViewport,
   releaseEditorViewport,
   releaseGraphViewport,
@@ -23,12 +22,6 @@ export {
 } from "./editorViewStateMemento";
 export { resolveInitialGraphViewport } from "./resolveInitialGraphViewport";
 export { projectPathForViewport, setProjectPathForViewport } from "./projectPath";
-export {
-  applyViewportTransform,
-  applyViewportGrid,
-  viewportTransformStyle,
-  viewportGridStyle,
-} from "./viewportTransform";
-export { applyWheelZoomToViewport, attachCanvasWheelZoom } from "./canvasWheelZoom";
+export { applyViewportGrid, viewportGridStyle } from "./viewportTransform";
 export { normalizeEditorViewport } from "./editorViewport";
 export { resetLiveViewports } from "./liveViewportState";

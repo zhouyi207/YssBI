@@ -2,7 +2,6 @@ import type {
   ResolutionOutcomeDto,
   DiagnosticDto,
   EditorConnectionProjectionDto,
-  EditorGraphProjectionDto,
   EditorNodeProjectionDto,
   ProjectionBasisDto,
   EditorPortDto,
@@ -24,7 +23,5 @@ export interface EditorProjectionEntities {
   outcome: ResolutionOutcomeDto;
   hasBlockingDiagnostics: boolean;
 }
-
-export type ValidatedEditorGraphProjection = EditorGraphProjectionDto;
 
 export type * from "@/shared/types/domain/editorProjection";
