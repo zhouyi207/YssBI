@@ -33,6 +33,21 @@ pub fn openai_agent_driver(
     model: impl Into<String>,
     config: RigAgentDriverConfig,
 ) -> Result<Arc<dyn AgentDriverPort>, RigProviderConfigurationError> {
+    let http_client = rig_core::http_client::ReqwestClient::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|_| RigProviderConfigurationError::Invalid)?;
+    openai_agent_driver_with_client(api_key, base_url, model, config, http_client)
+}
+
+fn openai_agent_driver_with_client(
+    api_key: SecretCredential,
+    base_url: impl Into<String>,
+    model: impl Into<String>,
+    config: RigAgentDriverConfig,
+    http_client: rig_core::http_client::ReqwestClient,
+) -> Result<Arc<dyn AgentDriverPort>, RigProviderConfigurationError> {
     let base_url = base_url.into();
     let model = model.into();
     if !is_valid_base_url(&base_url) || model.trim().is_empty() || model.len() > 256 {
@@ -41,15 +56,11 @@ pub fn openai_agent_driver(
     let client = openai::Client::builder()
         .api_key(api_key.expose())
         .base_url(base_url)
-        .http_client(
-            rig_core::http_client::ReqwestClient::builder()
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(60))
-                .build()
-                .map_err(|_| RigProviderConfigurationError::Invalid)?,
-        )
+        .http_client(http_client)
         .build()
-        .map_err(|_| RigProviderConfigurationError::Invalid)?;
+        .map_err(|_| RigProviderConfigurationError::Invalid)?
+        // Rig defaults to Responses; configured compatible services use Chat Completions.
+        .completions_api();
     let driver = RigAgentDriver::new(client.completion_model(model), config)
         .map_err(|_| RigProviderConfigurationError::Invalid)?;
     Ok(Arc::new(driver))
@@ -1586,6 +1597,124 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn configured_provider_uses_chat_completions_and_streams_text() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let driver = openai_agent_driver_with_client(
+            SecretCredential::new("test-credential").unwrap(),
+            format!("http://{}/v1", listener.local_addr().unwrap()),
+            "test-model",
+            RigAgentDriverConfig::default(),
+            rig_core::http_client::ReqwestClient::builder()
+                .no_proxy()
+                .build()
+                .unwrap(),
+        )
+        .unwrap();
+        let output = Arc::new(CollectingOutput::default());
+        let server = async {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut received = Vec::new();
+            let mut buffer = [0; 4096];
+            let (header_end, content_length) = loop {
+                let count = stream.read(&mut buffer).await.unwrap();
+                assert!(count > 0, "request ended before headers");
+                received.extend_from_slice(&buffer[..count]);
+                if let Some(end) = received.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                    let headers = std::str::from_utf8(&received[..end]).unwrap();
+                    assert!(headers.starts_with("POST /v1/chat/completions HTTP/1.1\r\n"));
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap();
+                    break (end + 4, length);
+                }
+            };
+            while received.len() < header_end + content_length {
+                let count = stream.read(&mut buffer).await.unwrap();
+                assert!(count > 0, "request ended before body");
+                received.extend_from_slice(&buffer[..count]);
+            }
+            let body: serde_json::Value =
+                serde_json::from_slice(&received[header_end..header_end + content_length]).unwrap();
+            assert_eq!(body["model"], "test-model");
+            assert_eq!(body["stream"], true);
+            assert!(body["messages"].as_array().unwrap().iter().any(|message| {
+                message["role"] == "user"
+                    && message["content"]
+                        .to_string()
+                        .contains("Inspect the schema.")
+            }));
+            let tools = body["tools"].as_array().unwrap();
+            assert_eq!(
+                tools.len(),
+                yss_harness_contract::CAPABILITY_DESCRIPTORS.len() + 1
+            );
+            for tool in tools {
+                assert_eq!(tool["type"], "function");
+                assert_eq!(
+                    tool["function"]["parameters"]["type"], "object",
+                    "{}",
+                    tool["function"]["name"]
+                );
+            }
+            let inspect_ui = tools
+                .iter()
+                .find(|tool| tool["function"]["name"] == "inspect_ui")
+                .unwrap();
+            let original = serde_json::to_value(yss_harness_contract::capability_input_schema(
+                CapabilityId::InspectUi,
+            ))
+            .unwrap();
+            assert_eq!(inspect_ui["function"]["parameters"], original);
+            assert!(body.get("input").is_none());
+
+            let events = concat!(
+                "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n",
+                "data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+                "data: [DONE]\n\n",
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                events.len(),
+                events,
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        };
+        let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(
+                driver.run_turn(
+                    request(
+                        yss_harness_contract::CAPABILITY_DESCRIPTORS
+                            .iter()
+                            .map(|descriptor| {
+                                ToolDescriptor::for_capability(descriptor.id).unwrap()
+                            })
+                            .collect()
+                    ),
+                    Arc::new(StaticExecutor),
+                    output.clone(),
+                    CancellationToken::default(),
+                ),
+                server,
+            )
+        })
+        .await
+        .expect("local provider request must complete");
+        assert_eq!(result.unwrap().final_text, "Hello");
+        assert!(
+            output.events.lock().unwrap().iter().any(|event| {
+                matches!(event, AgentEvent::TextDelta { delta } if delta == "Hello")
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn configured_https_provider_attempts_a_tls_handshake() {
         use tokio::io::AsyncReadExt;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1600,7 +1729,8 @@ mod tests {
                     .unwrap(),
             )
             .build()
-            .unwrap();
+            .unwrap()
+            .completions_api();
         let driver = RigAgentDriver::new(
             client.completion_model("test-model"),
             RigAgentDriverConfig::default(),

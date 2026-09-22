@@ -1176,7 +1176,7 @@ pub trait CapabilityGatewayPort: Send + Sync {
 }
 
 pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema {
-    match capability_id {
+    let mut schema = match capability_id {
         CapabilityId::InspectUi => schemars::schema_for!(yss_ui_contract::InspectUiRequest),
         CapabilityId::UpdateUi => schemars::schema_for!(yss_ui_contract::UpdateUiRequest),
         CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::RequestUiIntent),
@@ -1195,7 +1195,11 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
         CapabilityId::ExecuteGraph => schemars::schema_for!(ExecuteGraphRequest),
         CapabilityId::SaveGraph => schemars::schema_for!(SaveGraphRequest),
         CapabilityId::ListGraphResults => schemars::schema_for!(ListGraphResultsRequest),
-    }
+    };
+    // All capability arguments are objects, including tagged enums whose schemas
+    // otherwise express this constraint only inside oneOf branches.
+    schema.insert("type".into(), serde_json::json!("object"));
+    schema
 }
 
 pub fn capability_output_schema(capability_id: CapabilityId) -> schemars::Schema {
@@ -1317,5 +1321,10 @@ mod tests {
         );
         let _request_schema = schemars::schema_for!(AutomationCapabilityRequest);
         let _result_schema = schemars::schema_for!(AutomationCapabilityResult);
+        for capability in CAPABILITY_DESCRIPTORS {
+            let descriptor = ToolDescriptor::for_capability(capability.id).unwrap();
+            let schema = serde_json::to_value(&descriptor.input_schema).unwrap();
+            assert_eq!(schema["type"], "object", "{}", capability.id.as_str());
+        }
     }
 }
