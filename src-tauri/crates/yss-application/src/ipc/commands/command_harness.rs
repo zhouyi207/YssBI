@@ -363,6 +363,7 @@ fn map_harness_error(error: HarnessError) -> CommandError {
                 ProviderRateLimited => "assistant_rate_limited",
                 ProviderRequestRejected => "assistant_provider_request_rejected",
                 ContextWindowExceeded => "assistant_context_window_exceeded",
+                ModelTurnLimitExceeded => "assistant_model_turn_limit_exceeded",
                 ProviderTransportFailed => "assistant_provider_connection_failed",
                 DeadlineElapsed => "assistant_turn_timed_out",
                 InvalidProviderResponse => "assistant_invalid_provider_response",

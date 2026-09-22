@@ -108,59 +108,65 @@ export const AssistantToolCall: ToolCallMessagePartComponent = ({
   const running = state === "assistantToolRunning";
   const failed = !running && state !== "assistantToolCompleted";
   const hasArgs = Object.keys(args).length > 0;
-  const parameters = hasArgs
-    ? JSON.stringify(args, null, 2)
-    : argsText && argsText.trim() !== "{}"
-      ? argsText
-      : "";
-  const preview = parameters.replace(/\s+/g, " ").slice(0, 160);
+  const parameters = hasArgs ? JSON.stringify(args, null, 2) : argsText?.trim() ? argsText : "{}";
+  const hasParameters = hasArgs || parameters.replace(/\s+/g, "") !== "{}";
   const label = t(`panel.assistantToolNames.${toolName}`, { defaultValue: toolName });
   const copyLabel = t(
     `panel.${copyState === "copied" ? "assistantCopied" : copyState === "failed" ? "assistantCopyFailed" : "assistantCopy"}`,
   );
   return (
-    <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-0">
-      <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded px-2 py-2 text-left hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
+    <Collapsible
+      open={hasParameters && expanded}
+      onOpenChange={setExpanded}
+      disabled={!hasParameters}
+      className="min-w-0"
+    >
+      <CollapsibleTrigger className="group flex w-full min-w-0 items-baseline gap-2 rounded px-2 py-2 text-left enabled:hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
         {running ? (
           <VscLoading
             aria-hidden
-            className="shrink-0 text-muted-foreground motion-safe:animate-spin"
+            className="shrink-0 self-center text-muted-foreground motion-safe:animate-spin"
           />
         ) : failed ? (
-          <VscError aria-hidden className="shrink-0 text-destructive" />
+          <VscError aria-hidden className="shrink-0 self-center text-destructive" />
         ) : (
-          <VscCheck aria-hidden className="shrink-0 text-muted-foreground" />
+          <VscCheck aria-hidden className="shrink-0 self-center text-muted-foreground" />
         )}
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium" title={toolName}>
-            {label}
-          </span>
-          {parameters && (
-            <span className="block truncate font-mono text-[11px] text-muted-foreground">
-              {preview}
-              {parameters.replace(/\s+/g, " ").length > 160 ? "…" : ""}
-            </span>
-          )}
+        <span className="min-w-0 max-w-[45%] truncate font-medium" title={toolName}>
+          {label}
+        </span>
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
+          title={toolName}
+        >
+          {toolName}
         </span>
         <span
           className={`shrink-0 text-[11px] ${failed ? "text-destructive" : "text-muted-foreground"}`}
         >
           {t(`panel.${state}`)}
         </span>
-        <VscChevronRight
-          aria-hidden
-          className="shrink-0 text-muted-foreground group-data-[state=open]:rotate-90"
-        />
+        {hasParameters && (
+          <VscChevronRight
+            aria-hidden
+            className="shrink-0 self-center text-muted-foreground group-data-[state=open]:rotate-90"
+          />
+        )}
       </CollapsibleTrigger>
-      <CollapsibleContent className="mx-2 mb-2 min-w-0 rounded border border-border/60 bg-background/50 p-2">
-        <div className="break-all font-mono text-[11px] text-muted-foreground">{toolName}</div>
-        <div className="mt-2 flex items-center justify-between gap-2 text-muted-foreground">
-          <span>{t("panel.assistantToolArguments")}</span>
-          {parameters && (
+      <CollapsibleContent className="mx-2 mb-2 min-w-0 rounded border border-border/60 bg-background/50">
+        <div className="min-w-0 p-2">
+          <div className="flex items-start gap-2">
+            <pre
+              aria-label={t("panel.assistantToolArguments")}
+              className="max-h-60 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-5"
+            >
+              {parameters}
+            </pre>
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
+              className="shrink-0"
               aria-label={copyLabel}
               title={copyLabel}
               onBlur={() => setCopyState("idle")}
@@ -175,23 +181,13 @@ export const AssistantToolCall: ToolCallMessagePartComponent = ({
             >
               {copyState === "copied" ? <VscCheck aria-hidden /> : <VscCopy aria-hidden />}
             </Button>
+          </div>
+          {copyState !== "idle" && (
+            <span role="status" className="text-muted-foreground">
+              {copyLabel}
+            </span>
           )}
         </div>
-        {copyState !== "idle" && (
-          <span role="status" className="text-muted-foreground">
-            {copyLabel}
-          </span>
-        )}
-        {parameters ? (
-          <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] leading-5">
-            {parameters}
-          </pre>
-        ) : (
-          <p className="mt-1 text-muted-foreground">
-            {t("panel.assistantToolArgumentsUnavailable")}
-          </p>
-        )}
-        {failed && <p className="mt-2 text-destructive">{t(`panel.${state}`)}</p>}
       </CollapsibleContent>
     </Collapsible>
   );

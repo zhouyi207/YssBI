@@ -35,7 +35,6 @@ pub fn openai_agent_driver(
 ) -> Result<Arc<dyn AgentDriverPort>, RigProviderConfigurationError> {
     let http_client = rig_core::http_client::ReqwestClient::builder()
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(60))
         .build()
         .map_err(|_| RigProviderConfigurationError::Invalid)?;
     openai_agent_driver_with_client(api_key, base_url, model, config, http_client)
@@ -178,21 +177,11 @@ fn is_valid_base_url(base_url: &str) -> bool {
         && !trimmed.chars().any(char::is_whitespace)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RigAgentDriverConfig {
-    pub maximum_model_turns: usize,
-    pub maximum_output_tokens: u64,
-    pub maximum_turn_duration: Duration,
-}
-
-impl Default for RigAgentDriverConfig {
-    fn default() -> Self {
-        Self {
-            maximum_model_turns: 16,
-            maximum_output_tokens: 4_096,
-            maximum_turn_duration: Duration::from_secs(180),
-        }
-    }
+    pub maximum_model_turns: Option<usize>,
+    pub maximum_output_tokens: Option<u64>,
+    pub maximum_turn_duration: Option<Duration>,
 }
 
 pub struct RigAgentDriver<M> {
@@ -205,12 +194,11 @@ where
     M: CompletionModel + Clone + Send + Sync + 'static,
 {
     pub fn new(model: M, config: RigAgentDriverConfig) -> Result<Self, RigAgentDriverConfigError> {
-        if config.maximum_model_turns == 0
-            || config.maximum_model_turns > 32
-            || config.maximum_output_tokens == 0
-            || config.maximum_output_tokens > 65_536
-            || config.maximum_turn_duration.is_zero()
-            || config.maximum_turn_duration > Duration::from_secs(600)
+        if config.maximum_model_turns == Some(0)
+            || config.maximum_output_tokens == Some(0)
+            || config
+                .maximum_turn_duration
+                .is_some_and(|duration| duration.is_zero())
         {
             return Err(RigAgentDriverConfigError::Invalid);
         }
@@ -249,29 +237,32 @@ where
         let builder = AgentBuilder::new(self.model.clone())
             .name("yssbi-statistical-assistant")
             .preamble(&prepared.preamble)
-            .default_max_turns(self.config.maximum_model_turns)
-            .max_tokens(self.config.maximum_output_tokens)
+            // Rig requires a finite usize budget; MAX leaves completion and user
+            // cancellation in control when the caller has not requested a limit.
+            .default_max_turns(self.config.maximum_model_turns.unwrap_or(usize::MAX))
             .record_content_telemetry(false);
+        let builder = match self.config.maximum_output_tokens {
+            Some(limit) => builder.max_tokens(limit),
+            None => builder,
+        };
         let agent = if tools.is_empty() {
             builder.build()
         } else {
             builder.dynamic_tools(tools).build()
         };
-        let maximum_model_turns = self.config.maximum_model_turns;
         let stream_output = Arc::clone(&output);
         let stream_cancellation = cancellation.clone();
         let duration = self.config.maximum_turn_duration;
         let prompt = tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + duration;
+            let deadline = duration.map(|duration| tokio::time::Instant::now() + duration);
             let stream = tokio::select! {
                 stream = agent
                 .stream_prompt(prepared.prompt)
                 .history(prepared.history)
                 .tool_concurrency(1)
-                .max_turns(maximum_model_turns)
                 => stream,
                 _ = stream_cancellation.cancelled() => return Err(cancelled()),
-                _ = tokio::time::sleep_until(deadline) => {
+                _ = wait_deadline(deadline) => {
                     stream_cancellation.cancel(CancellationReason::DeadlineElapsed);
                     return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
                 }
@@ -326,11 +317,18 @@ async fn flush_text(
         .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::OutputUnavailable))
 }
 
+async fn wait_deadline(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
+}
+
 async fn consume_text_stream(
     mut stream: StreamingResult,
     output: Arc<dyn AgentEventOutput>,
     cancellation: CancellationToken,
-    deadline: tokio::time::Instant,
+    deadline: Option<tokio::time::Instant>,
     mut tool_failures: Option<tokio::sync::watch::Receiver<Option<AgentDriverFailure>>>,
 ) -> Result<String, AgentDriverFailure> {
     let mut pending = String::new();
@@ -343,7 +341,7 @@ async fn consume_text_stream(
         tokio::select! {
             biased;
             _ = cancellation.cancelled() => break Err(cancelled()),
-            _ = tokio::time::sleep_until(deadline) => {
+            _ = wait_deadline(deadline) => {
                 cancellation.cancel(CancellationReason::DeadlineElapsed);
                 break Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
             }
@@ -351,7 +349,14 @@ async fn consume_text_stream(
             _ = timer.tick() => flush_text(output.as_ref(), &mut pending).await?,
             item = stream.next() => {
                 let Some(item) = item else {
-                    break if final_seen { Ok(()) } else { Err(invalid_response()) };
+                    break if final_seen { Ok(()) } else {
+                        tracing::warn!(
+                            domain = "Application", event = "harness_stream_failure",
+                            reason = "missing_final_response", received_text_bytes = transcript.len(),
+                            "Harness response stream ended without a final response"
+                        );
+                        Err(invalid_response())
+                    };
                 };
                 let item = match item {
                     Ok(item) => item,
@@ -367,9 +372,6 @@ async fn consume_text_stream(
                             transcript.push_str("\n\n");
                         }
                         separate_turn = false;
-                        if transcript.len().saturating_add(text.text.len()) > 1024 * 1024 {
-                            break Err(invalid_response());
-                        }
                         pending.push_str(&text.text);
                         transcript.push_str(&text.text);
                         if first || pending.len() >= 4096 { flush_text(output.as_ref(), &mut pending).await?; }
@@ -380,7 +382,14 @@ async fn consume_text_stream(
                     }
                     MultiTurnStreamItem::FinalResponse(_) => { final_seen = true; }
                     // No retry hooks are installed: silently retaining rejected text would corrupt the transcript.
-                    MultiTurnStreamItem::ModelTurnRetried { .. } => break Err(invalid_response()),
+                    MultiTurnStreamItem::ModelTurnRetried { .. } => {
+                        tracing::warn!(
+                            domain = "Application", event = "harness_stream_failure",
+                            reason = "unexpected_model_retry",
+                            "Harness received an unexpected model retry"
+                        );
+                        break Err(invalid_response());
+                    }
                     _ => {
                         // Rig yields tool calls before executing them on the next poll. Publish
                         // preceding text now so Gateway tool events cannot overtake it.
@@ -616,17 +625,20 @@ fn statistical_plan_tool(
             let output = Arc::clone(&output);
             let tool_failure = tool_failure.clone();
             Box::pin(async move {
-                let plan = serde_json::from_value::<StatisticalPlan>(arguments).map_err(|_| {
-                    ToolExecutionError::invalid_args("statistical plan did not match the schema")
-                })?;
+                let plan =
+                    serde_json::from_value::<StatisticalPlan>(arguments).map_err(|error| {
+                        ToolExecutionError::invalid_args(format!(
+                            "statistical plan did not match the schema: {error}"
+                        ))
+                    })?;
                 let receipt = serde_json::json!({ "accepted": true, "plan": &plan });
                 output
                     .emit(AgentEvent::PlanProposed { plan })
                     .await
                     .map_err(|failure| match failure {
-                        yss_harness_contract::AgentOutputFailure::PolicyRejected => {
+                        yss_harness_contract::AgentOutputFailure::PolicyRejected { reason, available_methods } => {
                             ToolExecutionError::invalid_args(
-                                "statistical plan failed Harness policy validation",
+                                serde_json::json!({"accepted": false, "reason": reason, "availableMethods": available_methods}).to_string(),
                             )
                         }
                         yss_harness_contract::AgentOutputFailure::Closed
@@ -746,6 +758,39 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
 
 fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
     use AgentDriverFailureCode::*;
+    // Provider errors can contain credentials, model output or tool arguments.
+    // Only record structural categories and positions, never their Display/Debug text.
+    let category = match &error {
+        PromptError::CompletionError(completion) => match completion {
+            CompletionError::HttpError(_) => "http",
+            CompletionError::UrlError(_) => "url",
+            CompletionError::RequestError(_) => "request",
+            CompletionError::JsonError(json) => {
+                tracing::warn!(
+                    domain = "Application", event = "harness_response_json_failure",
+                    json_category = ?json.classify(), line = json.line(), column = json.column(),
+                    "Harness could not decode provider JSON"
+                );
+                "json"
+            }
+            CompletionError::ResponseError(_) => "response",
+            CompletionError::ProviderResponse(_) => "provider_response",
+            CompletionError::ProviderError(_) => "provider",
+        },
+        PromptError::UnknownToolCall { .. } => "unknown_tool_call",
+        PromptError::PromptCancelled { .. } => "cancelled",
+        PromptError::MemoryError(_) => "memory",
+        PromptError::MaxTurnsError { .. } => "max_turns",
+    };
+    tracing::warn!(
+        domain = "Application",
+        event = "harness_provider_failure",
+        category,
+        http_status = error
+            .provider_response_status()
+            .map(|status| status.as_u16()),
+        "Harness provider turn failed"
+    );
     if error
         .provider_response_json()
         .ok()
@@ -781,7 +826,8 @@ fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
             | PromptError::UnknownToolCall { .. } => InvalidProviderResponse,
             PromptError::CompletionError(CompletionError::ProviderError(_)) => ProviderUnavailable,
             PromptError::PromptCancelled { .. } => Cancelled,
-            PromptError::MemoryError(_) | PromptError::MaxTurnsError { .. } => InternalFailure,
+            PromptError::MaxTurnsError { .. } => ModelTurnLimitExceeded,
+            PromptError::MemoryError(_) => InternalFailure,
         },
     };
     AgentDriverFailure::new(code)
@@ -1068,9 +1114,8 @@ mod tests {
         assert!(value["payload"]["value"]["value"] == payload);
     }
 
-    #[tokio::test]
-    async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
-        let plan = serde_json::json!({
+    fn sample_plan() -> serde_json::Value {
+        serde_json::json!({
             "researchQuestion": "How does x relate to y?",
             "analysisMode": "exploratory",
             "studyDesign": { "kind": "cross_sectional", "description": "Observed data" },
@@ -1087,7 +1132,112 @@ mod tests {
                 "requireEffectSizes": true, "requireUncertainty": true,
                 "requireDiagnostics": true, "requireLimitations": true, "confidenceLevel": 0.95
             }
-        });
+        })
+    }
+
+    #[tokio::test]
+    async fn plan_rejection_reaches_the_next_model_call_with_actionable_feedback() {
+        struct RejectPlan;
+        impl AgentEventOutput for RejectPlan {
+            fn emit<'a>(
+                &'a self,
+                event: AgentEvent,
+            ) -> AgentFuture<'a, Result<(), AgentOutputFailure>> {
+                Box::pin(async move {
+                    if matches!(event, AgentEvent::PlanProposed { .. }) {
+                        Err(AgentOutputFailure::PolicyRejected {
+                            reason: "requiredDiagnostics is missing multiple_testing".into(),
+                            available_methods: Vec::new(),
+                        })
+                    } else {
+                        Ok(())
+                    }
+                })
+            }
+        }
+        let model = ScriptedCompletionModel::new([
+            vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                "plan-call",
+                ToolFunction::new("propose_statistical_plan".into(), sample_plan()),
+            ))],
+            vec![AssistantContent::text("I will correct the diagnostics.")],
+        ]);
+        let driver = RigAgentDriver::new(model.clone(), RigAgentDriverConfig::default()).unwrap();
+        driver
+            .run_turn(
+                request(Vec::new()),
+                Arc::new(StaticExecutor),
+                Arc::new(RejectPlan),
+                CancellationToken::default(),
+            )
+            .await
+            .unwrap();
+        let requests = model.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        let history = serde_json::to_string(&requests[1].chat_history).unwrap();
+        assert!(history.contains("requiredDiagnostics is missing multiple_testing"));
+        assert!(history.contains("availableMethods"));
+    }
+
+    #[tokio::test]
+    async fn default_driver_continues_past_sixteen_calls_without_an_output_budget() {
+        let mut turns = (0..20)
+            .map(|index| {
+                vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                    format!("plan-{index}"),
+                    ToolFunction::new("propose_statistical_plan".into(), sample_plan()),
+                ))]
+            })
+            .collect::<Vec<_>>();
+        turns.push(vec![AssistantContent::text("Analysis complete.")]);
+        let model = ScriptedCompletionModel::new(turns);
+        let driver = RigAgentDriver::new(model.clone(), RigAgentDriverConfig::default()).unwrap();
+        let result = driver
+            .run_turn(
+                request(Vec::new()),
+                Arc::new(StaticExecutor),
+                Arc::new(CollectingOutput::default()),
+                CancellationToken::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.final_text, "Analysis complete.");
+        let requests = model.requests.lock().unwrap();
+        assert_eq!(requests.len(), 21);
+        assert!(requests.iter().all(|request| request.max_tokens.is_none()));
+    }
+
+    #[tokio::test]
+    async fn model_call_budget_exhaustion_has_a_distinct_failure_code() {
+        let model =
+            ScriptedCompletionModel::new([vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                "plan-call",
+                ToolFunction::new("propose_statistical_plan".into(), sample_plan()),
+            ))]]);
+        let driver = RigAgentDriver::new(
+            model.clone(),
+            RigAgentDriverConfig {
+                maximum_model_turns: Some(1),
+                ..RigAgentDriverConfig::default()
+            },
+        )
+        .unwrap();
+        let error = driver
+            .run_turn(
+                request(Vec::new()),
+                Arc::new(StaticExecutor),
+                Arc::new(CollectingOutput::default()),
+                CancellationToken::default(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, AgentDriverFailureCode::ModelTurnLimitExceeded);
+        assert_eq!(model.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
+        let plan = sample_plan();
         serde_json::from_value::<StatisticalPlan>(plan.clone())
             .unwrap()
             .validate()
@@ -1390,7 +1540,7 @@ mod tests {
                 Box::pin(initial.chain(ending)),
                 output.clone(),
                 token.clone(),
-                tokio::time::Instant::now() + Duration::from_secs(2),
+                Some(tokio::time::Instant::now() + Duration::from_secs(2)),
                 None,
             ));
             tokio::time::timeout(Duration::from_secs(1), async {
@@ -1444,7 +1594,7 @@ mod tests {
             Box::pin(stream),
             output.clone(),
             cancellation,
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            Some(tokio::time::Instant::now() + Duration::from_secs(1)),
             None,
         )
         .await;
@@ -1560,7 +1710,7 @@ mod tests {
             let driver = RigAgentDriver::new(
                 BrokenModel { panic },
                 RigAgentDriverConfig {
-                    maximum_turn_duration: Duration::from_millis(20),
+                    maximum_turn_duration: Some(Duration::from_millis(20)),
                     ..RigAgentDriverConfig::default()
                 },
             )

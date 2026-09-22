@@ -22,6 +22,10 @@ impl MethodRegistry {
     pub fn card(&self, id: &StatisticalMethodId) -> Option<&StatisticalMethodCard> {
         self.cards.get(id)
     }
+
+    pub fn cards(&self) -> Vec<StatisticalMethodCard> {
+        self.cards.values().cloned().collect()
+    }
 }
 
 pub struct StatisticalPlanner;
@@ -145,7 +149,7 @@ fn descriptive_card() -> Result<StatisticalMethodCard, StatisticalPlannerError> 
 
 #[derive(Debug, thiserror::Error)]
 pub enum StatisticalPlannerError {
-    #[error("statistical plan failed quality validation")]
+    #[error("statistical plan failed quality validation: {0}")]
     InvalidPlan(#[from] StatisticalPlanError),
     #[error("statistical method identity is invalid")]
     Identity(#[from] yss_harness_contract::AutomationIdentityError),

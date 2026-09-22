@@ -226,6 +226,10 @@ export const enUS = {
     assistantStatusInitializing: "Connecting to the Harness…",
     assistantStatusProviderUnavailable: "Configure OpenAI in Settings → AI",
     assistantStatusReady: "Press Ctrl+Enter to send",
+    assistantReplyInterrupted:
+      "This response was interrupted. Completed operations are preserved. You can ask me to check the current progress and continue.",
+    assistantReplyStopped:
+      "Stopped this response. Completed operations are preserved, and we can continue when you are ready.",
     assistantStatusRunning: "Analyzing…",
     assistantStatusError: "Assistant is temporarily unavailable",
     assistantConversations: "Conversations",
@@ -249,6 +253,8 @@ export const enUS = {
       assistant_provider_configuration_invalid:
         "Invalid model configuration. Check the model name and API URL.",
       assistant_turn_failed: "This analysis failed. You can send another message.",
+      assistant_model_turn_limit_exceeded:
+        "This task reached the model turn limit. Completed operations are preserved; send another message to continue.",
       assistant_turn_timed_out: "This analysis timed out. You can send another message.",
       assistant_stream_failed:
         "Assistant message synchronization failed. Reopen the assistant panel.",
@@ -271,6 +277,9 @@ export const enUS = {
     assistantToolArguments: "Arguments",
     assistantToolArgumentsUnavailable: "Arguments were not provided for this call",
     assistantToolNames: {
+      inspect_ui: "Inspect UI",
+      update_ui: "Update UI",
+      request_ui_intent: "Request UI action",
       inspect_project: "Inspect project",
       inspect_graph: "Inspect graph",
       search_node_catalog: "Search nodes",

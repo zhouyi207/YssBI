@@ -1285,10 +1285,13 @@ impl AgentEventOutput for PersistingAgentOutput {
     ) -> yss_harness_contract::AgentFuture<'a, Result<(), AgentOutputFailure>> {
         Box::pin(async move {
             if let AgentEvent::PlanProposed { plan } = &event {
-                let methods =
-                    MethodRegistry::builtins().map_err(|_| AgentOutputFailure::PolicyRejected)?;
-                StatisticalPlanner::validate(plan, &methods)
-                    .map_err(|_| AgentOutputFailure::PolicyRejected)?;
+                let methods = MethodRegistry::builtins().map_err(|_| AgentOutputFailure::Closed)?;
+                StatisticalPlanner::validate(plan, &methods).map_err(|error| {
+                    AgentOutputFailure::PolicyRejected {
+                        reason: error.to_string(),
+                        available_methods: methods.cards(),
+                    }
+                })?;
             }
             self.writer
                 .append(

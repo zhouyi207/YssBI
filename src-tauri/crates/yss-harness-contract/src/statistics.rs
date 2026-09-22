@@ -206,7 +206,9 @@ pub enum StatisticalPlanError {
     InvalidField,
     #[error("statistical plan contains a duplicate entry")]
     DuplicateEntry,
-    #[error("statistical plan omits a required quality gate")]
+    #[error(
+        "requiredDiagnostics must include measurement_scale, missingness, outliers, model_assumptions and multiple_testing; reportingContract must enable requireEffectSizes, requireUncertainty, requireDiagnostics and requireLimitations"
+    )]
     QualityGateMissing,
 }
 

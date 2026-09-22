@@ -218,6 +218,9 @@ export const zhCN = {
     assistantStatusInitializing: "正在连接 Harness…",
     assistantStatusProviderUnavailable: "请在设置 → AI 中配置 OpenAI",
     assistantStatusReady: "Ctrl+Enter 发送",
+    assistantReplyInterrupted:
+      "这次处理暂时中断了，前面已完成的操作仍然保留。你可以让我检查当前进度并继续。",
+    assistantReplyStopped: "已停止本次处理，前面已完成的操作仍然保留。需要时可以继续。",
     assistantStatusRunning: "正在分析…",
     assistantStatusError: "Assistant 暂时不可用",
     assistantConversations: "对话列表",
@@ -234,6 +237,8 @@ export const zhCN = {
       assistant_invalid_provider_response: "模型服务返回了无法解析的响应，请检查接口兼容性后重试。",
       assistant_provider_configuration_invalid: "模型配置无效，请检查模型名称和 API 地址。",
       assistant_turn_failed: "本次分析失败，可以重新发送消息。",
+      assistant_model_turn_limit_exceeded:
+        "本次任务已达到模型调用轮次上限。已完成的操作仍然保留，可以发送消息继续。",
       assistant_turn_timed_out: "本次分析超时，可以重新发送消息。",
       assistant_stream_failed: "助手消息同步失败，请重新打开助手面板。",
       assistant_session_failed: "无法建立助手会话，请重新打开助手面板。",
@@ -254,6 +259,9 @@ export const zhCN = {
     assistantToolArguments: "调用参数",
     assistantToolArgumentsUnavailable: "此调用记录未提供参数",
     assistantToolNames: {
+      inspect_ui: "检查界面",
+      update_ui: "更新界面",
+      request_ui_intent: "请求界面操作",
       inspect_project: "检查项目",
       inspect_graph: "检查图",
       search_node_catalog: "搜索节点",

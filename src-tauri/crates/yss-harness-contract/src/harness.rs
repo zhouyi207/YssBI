@@ -357,6 +357,8 @@ pub enum AgentDriverFailureCode {
     ProviderRequestRejected,
     #[error("context_window_exceeded")]
     ContextWindowExceeded,
+    #[error("model_turn_limit_exceeded")]
+    ModelTurnLimitExceeded,
     #[error("provider_transport_failed")]
     ProviderTransportFailed,
     #[error("deadline_elapsed")]
@@ -382,7 +384,7 @@ impl AgentDriverFailure {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentOutputFailure {
     #[error("output_closed")]
@@ -390,7 +392,10 @@ pub enum AgentOutputFailure {
     #[error("output_persistence_failed")]
     PersistenceFailed,
     #[error("output_policy_rejected")]
-    PolicyRejected,
+    PolicyRejected {
+        reason: String,
+        available_methods: Vec<crate::StatisticalMethodCard>,
+    },
 }
 
 pub type AgentFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

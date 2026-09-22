@@ -178,6 +178,8 @@ Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事
 
 当前 production workflow 是 versioned `dataset_quality_review`：先读取 dataset schema，再读取 dataset profile。Workflow compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request；runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作。
 
+统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败也返回具体字段或枚举错误。桌面对话默认不设模型调用轮次、整轮时长、输出 tokens 或累计文本长度上限，持续到模型完成或用户停止；HTTP 保留连接超时，不设请求总时长。Rig 调用方可显式传入可选预算，模型服务自身的容量约束仍然生效。
+
 Workflow run 绑定 exact definition ID/version 和 Project session。恢复或继续前必须重验 binding/currentness；step output 仍是 typed capability result，不允许 model 自行制造 estimate、p-value、standard error 或 confidence interval。
 
 ## 7. Skills, knowledge, and memory
@@ -233,11 +235,11 @@ AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和�
 转换为 assistant-ui 消息时，只有 assistant 角色携带 `status`；user 消息不携带该字段。运行时集成回归使用真实的 ExternalStore 消息转换器校验这一边界。
 消息投影按事件顺序维护 text/source/data/tool parts，相邻文本片段合并，工具终态更新原位置。完成事件只收尾已有流式内容；仅在没有文本片段时使用 `finalText` 恢复正文。取消、失败和按 sequence 重放不覆盖中间说明或重排工具。
 
-Assistant 面板使用 assistant-ui 的 Thread Viewport 管理流式滚动和回到底部，Composer 管理发送/停止，ActionBar 提供回复复制。文本通过配套 MarkdownTextPrimitive 渲染 GFM 表格、列表、代码块和数学公式，代码块提供复制；排版适配工作台主题与窄面板。引用 source part 显示来源标题；连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先。摘要显示调用进度和异常数，每项显示本地化名称与原位更新的状态，详情保留原始工具标识。参数展示支持截断预览、展开与复制；当前 Harness 事件不提供参数，生产记录明确显示未提供参数，不将占位空对象解释为真实参数。统计计划和记忆仍由业务组件展示，不新增会话 authority。
+Assistant 面板使用 assistant-ui 的 Thread Viewport 管理流式滚动和回到底部，Composer 管理发送/停止，ActionBar 提供回复复制。文本通过配套 MarkdownTextPrimitive 渲染 GFM 表格、列表、代码块和数学公式，代码块提供复制；排版适配工作台主题与窄面板。引用 source part 显示来源标题；连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先。摘要显示调用进度和异常数，每项显示本地化名称与原位更新的状态。工具摘要在本地化名称右侧显示原始函数名；有参数时显示展开箭头，下方展示可复制的 JSON 参数，无参数时不允许展开。当前 Harness 事件不提供参数，生产记录的空对象占位不作为可展开参数。调用状态保留在折叠栏右侧，详情不重复展示失败状态。统计计划和记忆仍由业务组件展示，不新增会话 authority。
 
 事件 `type` 使用 snake_case，envelope 和 payload 的字段使用 camelCase。Rust 序列化和 TypeScript 解析共用代表性事件夹具，避免两端各自使用不同的手工样本。
 Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片从携带真实 invocation ID 的 `ToolInvocationStarted` 创建，并按同一 ID 更新完成、失败、取消、超时或中断状态；不生成待替换的工具占位身份。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载使旧回调失效并释放订阅；已创建的对话继续持久化，供重新打开。
-订阅建立后才开放发送。已终止的模型轮次失败保留安全错误引用并允许再次发送，下一次发送清除该错误；会话或传输故障仍阻止发送。提交请求尚未结束时不能再次提交，关闭后的迟到回调不能更新新会话。
+订阅建立后才开放发送。已终止的模型轮次在对应助手回复中展示自然语言中断或停止说明，保留已完成操作并允许继续发送，不再在输入框下重复展示红色错误；该说明根据持久化终态重放。安全错误引用继续保留在投影中，下一次发送清除；会话或订阅传输故障仍阻止发送并提示修复。提交请求尚未结束时不能再次提交，关闭后的迟到回调不能更新新会话。
 
 React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gateway，也不在 Zustand 建立 conversation authority。Project/session replacement 或 provider unavailable 只改变 projection/action availability，不能保留旧 backend handle 继续提交。
 
@@ -252,6 +254,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - Assistant text 只进入 Harness event stream，不进入 Graph 执行事件或 Output 失败摘要；
 - capability result、knowledge hit 和 model text都有明确 size/depth budget；
 - external/provider payload 在 adapter 边界完成 schema、size、time 和 failure validation；
+- Rig 失败日志仅记录错误分类、HTTP 状态、JSON 错误类别与位置，以及缺少最终响应等流状态；不记录原始异常、响应正文或工具参数；
 - operational ledger 是 durable业务记录，不等同于 lossy diagnostics log。
 
 通用 transport contract 见 [`yss-application::ipc` README](../yss-application/src/ipc/README.md)，技术信号边界见 [Runtime Signals](../../../src/features/application/observability/README.md)。

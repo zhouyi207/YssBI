@@ -134,6 +134,25 @@ function AssistantMessage() {
           }}
         />
         <MessageActions />
+        <AuiIf
+          condition={(state) =>
+            state.message.status?.type === "incomplete" && state.message.status.reason === "error"
+          }
+        >
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            {t("panel.assistantReplyInterrupted")}
+          </p>
+        </AuiIf>
+        <AuiIf
+          condition={(state) =>
+            state.message.status?.type === "incomplete" &&
+            state.message.status.reason === "cancelled"
+          }
+        >
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            {t("panel.assistantReplyStopped")}
+          </p>
+        </AuiIf>
       </div>
     </MessagePrimitive.Root>
   );
@@ -144,8 +163,13 @@ export function AssistantThread() {
   const snapshot = useAssistantHarnessSnapshot();
   const { deleteMemory, newConversation, selectConversation, reloadConversations } =
     useAssistantHarnessActions();
-  const statusText = snapshot.error
-    ? t(`panel.assistantErrors.${snapshot.error.code}`, {
+  const statusError =
+    snapshot.status === "ready" &&
+    snapshot.messages[snapshot.messages.length - 1]?.status.type === "incomplete"
+      ? null
+      : snapshot.error;
+  const statusText = statusError
+    ? t(`panel.assistantErrors.${statusError.code}`, {
         defaultValue: t("panel.assistantStatusError"),
       })
     : snapshot.status === "initializing"
@@ -292,8 +316,8 @@ export function AssistantThread() {
                 </Popover>
               ) : null}
               <span
-                role={snapshot.error ? "alert" : undefined}
-                className={`min-w-0 flex-1 text-[0.6875rem] leading-4 ${snapshot.error ? "text-destructive" : "text-muted-foreground"}`}
+                role={statusError ? "alert" : undefined}
+                className={`min-w-0 flex-1 text-[0.6875rem] leading-4 ${statusError ? "text-destructive" : "text-muted-foreground"}`}
               >
                 {snapshot.activity
                   ? t("panel.assistantActivity", { activity: snapshot.activity })
