@@ -14,7 +14,6 @@ use yss_ipc_contract::event::EventResource;
 use yss_ipc_contract::project::LifecycleMutationOutcomeDto;
 use yss_ipc_contract::project::LifecycleMutationResultDto;
 use yss_ipc_contract::project::ProjectActivationResultDto;
-use yss_ipc_contract::project::ProjectSaveResultDto;
 use yss_ipc_event::emit_project_event;
 use yss_ipc_event::emit_project_event_result;
 #[cfg(test)]
@@ -316,49 +315,6 @@ pub(crate) fn publish_lifecycle_result(app: &AppHandle, result: &LifecycleMutati
     })
 }
 
-#[cfg(test)]
-pub(crate) fn flush_project_with_emitter(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    operation_id: OperationId,
-    mut emit: impl FnMut(Event),
-) -> Result<ProjectSaveResultDto, CommandError> {
-    let result = state
-        .flush_project_documents(&project_instance_id, operation_id)
-        .map_err(crate::ipc::commands::project_failure::application_project_command_error)?;
-    let result = crate::ipc::schema::project::project_save_to_transport(result);
-    emit(Event::Project(Box::new(EventProject::ProjectSaved {
-        result: result.clone(),
-    })));
-    Ok(result)
-}
-
-#[tauri::command]
-pub fn flush_project(
-    app: AppHandle,
-    application: State<ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    operation_id: OperationId,
-) -> Result<ProjectSaveResultDto, CommandError> {
-    tracing::info!(
-        target: "yssbi::commands::project",
-        log_domain = "application",
-        log_event = "flushProject",
-        "Flushing project"
-    );
-    let result = application
-        .flush_project_for_application(project_instance_id, operation_id)
-        .map_err(map_application_project_lifecycle_error)?;
-    let result = crate::ipc::schema::project::project_save_to_transport(result);
-    emit_project_event(
-        &app,
-        Event::Project(Box::new(EventProject::ProjectSaved {
-            result: result.clone(),
-        })),
-    );
-    Ok(result)
-}
-
 /// 关闭指定项目并释放其应用会话。
 #[tauri::command]
 pub async fn close_project(
@@ -396,7 +352,6 @@ mod tests {
     use yss_ipc_contract::project::LifecycleRecoveryDto;
     use yss_project::ProjectOperationError;
     use yss_project_identity::OperationId;
-    use yss_project_model::ProjectData;
 
     fn lifecycle_result(
         outcome: LifecycleMutationOutcomeDto,
@@ -464,46 +419,4 @@ mod tests {
         assert!(diagnosed.incident_id().is_some());
     }
 
-    #[test]
-    fn flush_command_returns_correlated_result_emits_once_and_stale_emits_nothing() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-flush-command-contract-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
-        let project_instance_id = state.capture_project_session().unwrap().instance_id;
-        let operation_id = OperationId::new();
-        let mut events = Vec::new();
-
-        let result = flush_project_with_emitter(
-            &state,
-            project_instance_id.clone(),
-            operation_id,
-            |event| events.push(event),
-        )
-        .unwrap();
-
-        assert_eq!(result.project_instance_id, project_instance_id.as_str());
-        assert_eq!(result.operation_id, operation_id);
-        assert_eq!(events.len(), 1);
-        assert!(matches!(
-            &events[0],
-            Event::Project(event) if matches!(event.as_ref(), EventProject::ProjectSaved { result: emitted } if emitted == &result)
-        ));
-
-        state.activate_project_fixture(
-            root.to_string_lossy().into_owned(),
-            state.get_data().unwrap(),
-        );
-        let error =
-            flush_project_with_emitter(&state, project_instance_id, OperationId::new(), |event| {
-                events.push(event)
-            })
-            .unwrap_err();
-        assert_eq!(error.code(), "stale_project_lifecycle");
-        assert_eq!(events.len(), 1);
-        let _ = std::fs::remove_dir_all(root);
-    }
 }

@@ -65,10 +65,6 @@ export function isPickerTaskCancelledError(error: unknown): boolean {
   return isIpcErrorCode(error, PICKER_TASK_CANCELLED);
 }
 
-export function isExecutionCancelledError(error: unknown): boolean {
-  return isIpcErrorCode(error, "run_cancelled");
-}
-
 function commandSentTerminalRunEvent(error: unknown): boolean {
   return error instanceof IpcError && error.details?.terminalRunEventSent === true;
 }
@@ -444,16 +440,6 @@ export class ProjectService {
    */
   static async loadProjectToState(path: string): Promise<ProjectActivationResult> {
     return await invokeCommand("load_project", { path });
-  }
-
-  /**
-   * Flush the current file-backed project to disk.
-   */
-  static async flushProject(
-    projectInstanceId: string,
-    operationId: string,
-  ): Promise<import("@/shared/types/dto").ProjectSaveResultDto> {
-    return await invokeCommand("flush_project", { projectInstanceId, operationId });
   }
 
   /**

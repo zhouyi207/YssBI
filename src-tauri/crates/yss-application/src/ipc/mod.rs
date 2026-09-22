@@ -78,7 +78,6 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         create_project,
         close_project,
         load_project,
-        flush_project,
         save_project_as,
         load_database,
         list_sample_datasets,

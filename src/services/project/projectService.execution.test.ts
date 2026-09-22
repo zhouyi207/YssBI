@@ -7,7 +7,6 @@ import { IpcError } from "@/services/ipc";
 import {
   PICKER_TASK_CANCELLED,
   ProjectService,
-  isExecutionCancelledError,
   isPickerTaskCancelledError,
 } from "./projectService";
 
@@ -98,18 +97,6 @@ describe("ProjectService execution contract", () => {
     expect(invoke).toHaveBeenCalledWith("cancel_graph_run", {
       runId: "9007199254740993",
     });
-  });
-
-  it("classifies only the normalized canonical run cancellation error", () => {
-    expect(isExecutionCancelledError(backendIpcError("run_cancelled"))).toBe(true);
-    expect(
-      isExecutionCancelledError({
-        code: "run_cancelled",
-        details: null,
-        incidentId: null,
-      }),
-    ).toBe(false);
-    expect(isExecutionCancelledError("EXECUTION_CANCELLED")).toBe(false);
   });
 
   it("classifies picker cancellation by normalized code instead of a message string", () => {

@@ -132,36 +132,4 @@ pub mod fixtures {
         std::fs::write(target, contents)?;
         Ok(())
     }
-
-    pub fn flush_state(
-        state: &super::ProjectState,
-    ) -> Result<crate::project_writers::ProjectSaveResult, crate::ProjectOperationError> {
-        let session = state.capture_project_session()?;
-        state.flush_project_documents(
-            &session.instance_id,
-            yss_project_identity::OperationId::new(),
-        )
-    }
-
-    pub fn write_state_graph(
-        state: &super::ProjectState,
-        graph_path: &GraphResourcePath,
-    ) -> Result<crate::project_writers::ProjectSaveResult, crate::ProjectOperationError> {
-        let session = state.capture_project_session()?;
-        let revision = state
-            .graph_resource_revisions
-            .read()
-            .unwrap()
-            .get(graph_path)
-            .copied()
-            .ok_or_else(|| crate::ProjectOperationError::TransactionPrepareFailed {
-                message: format!("graph '{}' has no resource revision", graph_path),
-            })?;
-        state.save_graph_document(
-            &session.instance_id,
-            graph_path,
-            revision,
-            yss_project_identity::OperationId::new(),
-        )
-    }
 }

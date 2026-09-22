@@ -274,20 +274,6 @@ impl ProjectState {
             cleared_project_instance_id,
         }
     }
-
-    pub fn delete_project_transaction(
-        &self,
-        root: &Path,
-        expected_root_identity: Option<&ProjectRootIdentity>,
-        expected_active_instance_id: Option<&ProjectInstanceId>,
-    ) -> Result<ProjectDeletionResult, ProjectOperationError> {
-        let prepared = self.prepare_project_deletion(
-            root,
-            expected_root_identity,
-            expected_active_instance_id,
-        )?;
-        Ok(self.commit_project_deletion(prepared))
-    }
 }
 
 fn current_export_time() -> String {

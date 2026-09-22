@@ -23,6 +23,8 @@
 
 Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEditingMetadata 管理。普通编辑只提交内存数据，显式 Save 才写入图正文；前端不持有独立图草稿或历史。数据库编辑历史由 Database runtime 管理。Project 提交发布资源版本和 delta，不维护项目级撤销栈。`yss-project-history` 保留共享的资源身份、变更请求、函数文档、delta、错误及图驻留状态契约；文件事务回滚与失败恢复继续由 Project 和 filesystem owner 负责。
 
+Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑身份提交并更新 saved-content identity；Chart 使用自己的文档保存用例。工作台保存全部逐资源调用这些入口，Project 不再提供绕过编辑会话回执的整项目 flush 或独立 graph writer。
+
 驻留查询通过 `ProjectState::has_resident_graph` 和 `read_resident_graph` 读取存在性或单个资源，避免图编辑和运行准备为此复制整份 `ProjectData`。这些查询保留操作准入检查，不从磁盘加载未驻留图；需要读取已声明资源的用例仍使用 `read_graph_resource_snapshot`，提交与返回前的身份/版本重验仍由对应操作完成。
 
 ## Filesystem boundary

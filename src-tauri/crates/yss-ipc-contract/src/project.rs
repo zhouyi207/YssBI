@@ -120,13 +120,3 @@ pub struct ResourceMutationResultDto {
     pub projection_replacements: Vec<GraphProjectionReplacementDto>,
     pub projection_status: ProjectionStatusDto,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectSaveResultDto {
-    pub project_instance_id: String,
-    pub operation_id: yss_project_identity::OperationId,
-    pub publication_revision: u64,
-    pub affected_resources: Vec<yss_project_history::ResourceKey>,
-    pub index_invalidated: bool,
-}

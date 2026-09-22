@@ -70,14 +70,6 @@ impl GraphResourcePath {
             .map(|(stem, _)| stem)
             .unwrap_or(self.as_str())
     }
-
-    pub fn encode_for_resource_key(&self) -> String {
-        self.0.replace('/', "::")
-    }
-
-    pub fn decode_from_resource_key(encoded: &str) -> Result<Self, GraphResourcePathError> {
-        Self::new(encoded.replace("::", "/"))
-    }
 }
 
 impl fmt::Display for GraphResourcePath {

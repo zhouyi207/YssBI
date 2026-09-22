@@ -14,8 +14,4 @@ pub enum EventProject {
     ProjectLifecycleCommitted { result: LifecycleMutationResultDto },
     #[serde(rename_all = "camelCase")]
     ResourceMutationCommitted { result: ResourceMutationResultDto },
-    #[serde(rename_all = "camelCase")]
-    ProjectSaved {
-        result: crate::project::ProjectSaveResultDto,
-    },
 }

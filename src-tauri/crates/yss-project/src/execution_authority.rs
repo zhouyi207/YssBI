@@ -275,10 +275,6 @@ impl ProjectExecutionAuthority {
     pub const fn authority_generation(&self) -> u64 {
         self.authority_generation
     }
-
-    pub fn required_resource_grant_basis(&self) -> &[ProjectResourceGrant] {
-        &self.resource_grants
-    }
 }
 
 pub struct PreparedProjectExecution {

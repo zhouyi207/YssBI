@@ -198,21 +198,6 @@ impl ApplicationState {
         Ok(result)
     }
 
-    pub fn flush_project_for_application(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        operation_id: OperationId,
-    ) -> Result<yss_project::project_writers::ProjectSaveResult, ApplicationProjectLifecycleError>
-    {
-        let captured = self.capture_session()?;
-        let result = captured
-            .project()
-            .flush_project_documents(&project_instance_id, operation_id)
-            .map_err(ProjectLifecycleError::AuthorityFailed)?;
-        self.revalidate_captured_session(&captured)
-            .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
-        Ok(result)
-    }
 }
 
 fn begin_replacement(

@@ -15,37 +15,6 @@ use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 #[path = "project_writers/charts.rs"]
 mod charts;
-#[path = "project_writers/graph.rs"]
-mod graph;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProjectSaveResult {
-    pub(crate) project_instance_id: ProjectInstanceId,
-    pub(crate) operation_id: OperationId,
-    pub(crate) publication_revision: u64,
-    pub(crate) affected_resources: Box<[ResourceKey]>,
-    pub(crate) index_invalidated: bool,
-}
-
-impl ProjectSaveResult {
-    pub fn into_parts(
-        self,
-    ) -> (
-        ProjectInstanceId,
-        OperationId,
-        u64,
-        Box<[ResourceKey]>,
-        bool,
-    ) {
-        (
-            self.project_instance_id,
-            self.operation_id,
-            self.publication_revision,
-            self.affected_resources,
-            self.index_invalidated,
-        )
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct ProjectResourceMutationFacts {
@@ -124,25 +93,6 @@ pub(crate) struct WriterSnapshot {
         std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     pub(crate) chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_generation: u64,
-}
-
-struct CommittedProjectSave {
-    project_instance_id: ProjectInstanceId,
-    operation_id: OperationId,
-    publication_revision: u64,
-    affected_resources: Vec<ResourceKey>,
-}
-
-impl CommittedProjectSave {
-    fn complete(self) -> ProjectSaveResult {
-        ProjectSaveResult {
-            project_instance_id: self.project_instance_id,
-            operation_id: self.operation_id,
-            publication_revision: self.publication_revision,
-            affected_resources: self.affected_resources.into_boxed_slice(),
-            index_invalidated: true,
-        }
-    }
 }
 
 fn graph_key(path: &GraphResourcePath) -> ResourceKey {
@@ -291,64 +241,4 @@ impl ProjectState {
         Ok(())
     }
 
-    fn publish_project_save(
-        &self,
-        context: &ProjectTransactionContext,
-        authority_generation: u64,
-    ) -> Result<CommittedProjectSave, ProjectOperationError> {
-        self.validate_writer_context(context, authority_generation)?;
-        let publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != context.session.instance_id.as_str()
-            || publication.authority_generation() != authority_generation
-        {
-            return Err(ProjectOperationError::StaleProjectLifecycle {
-                message: "project changed before save publication".into(),
-            });
-        }
-        let mut editing = self.graph_editing.lock().unwrap();
-        for resource in &context.affected_resources {
-            if let ResourceKey::Graph(path) = resource
-                && let Some(metadata) = editing.get_mut(path)
-            {
-                metadata.mark_saved();
-            }
-        }
-        Ok(CommittedProjectSave {
-            project_instance_id: ProjectInstanceId::from_existing(
-                publication.project_instance_id.clone(),
-            ),
-            operation_id: context.operation_id,
-            publication_revision: publication.resource_revision,
-            affected_resources: context.affected_resources.clone(),
-        })
-    }
-
-    fn execute_save(
-        &self,
-        snapshot: &WriterSnapshot,
-        context: ProjectTransactionContext,
-        mutations: Vec<StagedFilesystemMutation>,
-    ) -> Result<ProjectSaveResult, ProjectOperationError> {
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let prepared = FilesystemTransaction::prepare_with_validator(
-            context.filesystem_context(),
-            lease,
-            mutations,
-            validate_document,
-        )?;
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let committed = prepared.commit()?;
-        let receipt = match self.publish_project_save(&context, snapshot.authority_generation) {
-            Ok(receipt) => receipt,
-            Err(error) => {
-                return match committed.rollback() {
-                    Ok(()) => Err(error),
-                    Err(rollback_error) => Err(rollback_error.into()),
-                };
-            }
-        };
-        committed.finalize();
-        Ok(receipt.complete())
-    }
 }

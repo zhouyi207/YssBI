@@ -204,18 +204,4 @@ impl ProjectState {
             self.chart_revisions.read().unwrap().clone(),
         )
     }
-
-    pub fn chart_creation_snapshot(
-        &self,
-    ) -> Result<(Vec<String>, Option<String>), ProjectOperationError> {
-        self.ensure_project_operational()?;
-        let data = self.project_data.read().unwrap();
-        Ok((
-            data.charts
-                .keys()
-                .map(|path| path.display_name().as_str().to_string())
-                .collect(),
-            data.databases.keys().next().cloned(),
-        ))
-    }
 }

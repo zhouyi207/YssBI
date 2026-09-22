@@ -1,7 +1,7 @@
 import type { ActivityPanelSnapshot, ProjectActivityPanelId } from "./activityPanel";
 import type { DatabaseEngineDTO } from "./database";
 import type { FunctionEditorProjectionDto } from "./editorProjection";
-import type { FunctionSignatureDto, ResourceKeyDto } from "./editorMutation";
+import type { FunctionSignatureDto } from "./editorMutation";
 import type { ChartType } from "./chart";
 
 export interface ProjectRecordRow {
@@ -106,14 +106,6 @@ export interface ProjectIndexRow {
   graphs: ProjectGraphIndexRow[];
   charts: ProjectChartIndexRow[];
   databases: ProjectDatabaseIndexRow[];
-}
-
-export interface ProjectSaveResultDto {
-  projectInstanceId: string;
-  operationId: string;
-  publicationRevision: number;
-  affectedResources: ResourceKeyDto[];
-  indexInvalidated: boolean;
 }
 
 export interface ProjectIndexSnapshot {
