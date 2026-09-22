@@ -1,5 +1,4 @@
 import { invokeCommand } from "@/services/ipc";
-import { revealPath } from "@/services/platform/opener";
 import {
   parseBayesInferenceTaskDTO,
   parseInferenceResultDTO,
@@ -37,11 +36,6 @@ export async function readBayesInferenceResult(taskId: string): Promise<Inferenc
   return parseInferenceResultDTO(
     await invokeCommand<unknown>("read_bayes_inference_result", { taskId }),
   );
-}
-
-export async function revealBayesResultFolder(artifactPath: string): Promise<void> {
-  const result = await revealPath(artifactPath);
-  if (!result.ok) throw new Error(result.failure.code);
 }
 
 export async function exportBayesArtifactCsv(

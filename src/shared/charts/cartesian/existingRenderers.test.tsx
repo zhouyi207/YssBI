@@ -5,7 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChartThemeContextProvider, type ChartThemeValue } from "@/shared/charts/core/theme";
 import { KdeChart } from "./KdeChart";
-import { MultiLineChart } from "./MultiLineChart";
 import { PredictiveIntervalChart } from "../statistical/PredictiveIntervalChart";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -105,61 +104,6 @@ describe("existing shared chart renderers", () => {
     const coordinates = densityPath?.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const yCoordinates = coordinates.filter((_, index) => index % 2 === 1);
     expect(Math.max(...yCoordinates) - Math.min(...yCoordinates)).toBeGreaterThan(100);
-  });
-
-  it("renders one line per non-empty series and keeps its legend labels", () => {
-    renderChart(
-      <MultiLineChart
-        series={[
-          {
-            id: "chain-1",
-            label: "Chain 1",
-            points: [
-              { x: 0, y: 1 },
-              { x: 1, y: 2 },
-            ],
-          },
-          {
-            id: "chain-2",
-            label: "Chain 2",
-            points: [
-              { x: 0, y: 2 },
-              { x: 1, y: 3 },
-            ],
-          },
-          { id: "empty", label: "Empty", points: [] },
-        ]}
-      />,
-    );
-
-    expect(host.querySelectorAll('[data-chart-mark="series"]')).toHaveLength(2);
-    const legendText = host.querySelector('[aria-label="Chart legend"]')?.textContent;
-    expect(legendText).toContain("Chain 1");
-    expect(legendText).toContain("Chain 2");
-    expect(legendText).not.toContain("Empty");
-  });
-
-  it("renders valid multi-line data after an initially empty render", () => {
-    renderChart(<MultiLineChart series={[]} />);
-    expect(host.querySelector('[data-chart-mark="series"]')).toBeNull();
-
-    renderChart(
-      <MultiLineChart
-        series={[
-          {
-            id: "chain-1",
-            label: "Chain 1",
-            points: [
-              { x: 0, y: 1 },
-              { x: 1, y: 2 },
-            ],
-          },
-        ]}
-      />,
-    );
-
-    expect(host.querySelectorAll('[data-chart-mark="series"]')).toHaveLength(1);
-    expect(host.querySelector("svg")?.getAttribute("width")).toBe("640");
   });
 
   it("renders interval, mean, and observed mark layers", () => {

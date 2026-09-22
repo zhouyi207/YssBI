@@ -30,8 +30,6 @@ pub use graph_editing::{
 mod lifecycle;
 mod resource_patch;
 mod resource_publication;
-#[allow(unused_imports)]
-pub(super) use activation::PublishedProjectActivation;
 pub(super) use authority::{
     ActivationGenerationTransition, MutationPublication, PreparedPublicationAdvance,
     ProjectAuthorityExpectation,

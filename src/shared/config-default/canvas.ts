@@ -1,1 +1,0 @@
-export const CONTEXT_MENU_MOVE_THRESHOLD_PX = 5;
