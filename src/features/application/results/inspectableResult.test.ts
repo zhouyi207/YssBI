@@ -1,21 +1,12 @@
-import { resultReferenceKey } from "@/shared/types/domain/result";
-import type { ResultReference } from "@/shared/types/domain/result";
 import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { describe, expect, it, vi } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
-import {
-  createResultQueryCoordinator,
-  type ResultQueryDependencies,
-  type ResultQueryReadCapability,
-  type ResultQueryPublication,
-} from "./resultQueryCoordinator";
-import type { ResultDescriptor, ResultPage, ResultValue } from "./types";
+import type { ResultDescriptor } from "./types";
 import {
   outputPinRef,
-  resolveInspectableResult,
   resolveInspectableResultRef,
   resultRef,
+  type InspectableResultQueryDependencies,
 } from "./inspectableResult";
 
 const graphPath = "events/Main.yssbi-event";
@@ -27,82 +18,33 @@ const output: PortAddressDto = {
 };
 
 function createFixture() {
-  const descriptors = new Map<string, DeepReadonly<ResultDescriptor | null>>();
-  const values = new Map<string, DeepReadonly<ResultValue | null>>();
-  const pages = new Map<string, DeepReadonly<ResultPage | null>>();
-  const pinResults = new Map<string, DeepReadonly<ResultDescriptor | null>>();
-  const service = {
-    getGraphState: vi.fn(async () => null),
-    analyze: vi.fn(async () => {
-      throw new Error("unexpected analysis");
-    }),
-    getDescriptor: vi.fn(
-      async (_reference: ResultReference): Promise<ResultDescriptor | null> => null,
-    ),
-    getValue: vi.fn(async (_reference: ResultReference): Promise<ResultValue | null> => null),
-    getPage: vi.fn(
-      async (
-        _reference: ResultReference,
-        _offset: number,
-        _limit: number,
-      ): Promise<ResultPage | null> => null,
-    ),
-    getPinResult: vi.fn(
-      async (_graphPath: string, _output: PortAddressDto): Promise<ResultDescriptor | null> => null,
-    ),
-  } satisfies ResultQueryDependencies["service"];
-  const key = (value: object): string => JSON.stringify(value);
-  const publication: ResultQueryPublication = {
-    publishGraphState: vi.fn(),
-    publishAnalysis: vi.fn(),
-    releasePayload: vi.fn(),
-    publishDescriptor: (resultId, value) => descriptors.set(resultReferenceKey(resultId), value),
-    publishValue: (resultId, value) => values.set(resultReferenceKey(resultId), value),
-    publishPage: (request, value) => pages.set(key(request), value),
-    publishPinResult: (request, value) => pinResults.set(key(request), value),
-    publishFailure: () => undefined,
-  };
-  const read: ResultQueryReadCapability = {
-    getAnalysis: () => null,
-    subscribe: () => () => undefined,
-    getDescriptor: (resultId) => descriptors.get(resultReferenceKey(resultId)) ?? null,
-    getValue: (resultId) => values.get(resultReferenceKey(resultId)) ?? null,
-    getPage: (request) => pages.get(key(request)) ?? null,
-    getPinResult: (request) => pinResults.get(key(request)) ?? null,
-    getFailure: () => null,
-  };
-  const dependencies: ResultQueryDependencies = {
-    readCurrentProjectInstanceId: () => "project-a",
-    service,
-    publication,
-  };
-  return { dependencies, read, service };
-}
-
-function queryDependencies(fixture: ReturnType<typeof createFixture>) {
   return {
-    coordinator: createResultQueryCoordinator(fixture.dependencies),
-    read: fixture.read,
+    coordinator: {
+      loadPinResult: vi
+        .fn<InspectableResultQueryDependencies["coordinator"]["loadPinResult"]>()
+        .mockResolvedValue({ status: "published" }),
+    },
+    read: {
+      getPinResult: vi
+        .fn<InspectableResultQueryDependencies["read"]["getPinResult"]>()
+        .mockReturnValue(null),
+    },
   };
 }
 
-describe("resolveInspectableResult", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("resolves an exact result ID", async () => {
+describe("resolveInspectableResultRef", () => {
+  it("keeps an exact result reference without querying the current output", async () => {
     const fixture = createFixture();
-    fixture.service.getDescriptor.mockResolvedValue(null);
     await expect(
-      resolveInspectableResult(resultRef(resultReferenceFixture("17")), queryDependencies(fixture)),
-    ).resolves.toBeNull();
-    expect(fixture.service.getDescriptor).toHaveBeenCalledWith(resultReferenceFixture("17"));
+      resolveInspectableResultRef(resultRef(resultReferenceFixture("17")), fixture),
+    ).resolves.toEqual(resultReferenceFixture("17"));
+    expect(fixture.coordinator.loadPinResult).not.toHaveBeenCalled();
   });
 
-  it("resolves the current output result and clears it when the backend has no result", async () => {
+  it("resolves the current output reference and returns null when no result is published", async () => {
     const fixture = createFixture();
     const descriptor: ResultDescriptor = {
       resultId: "18",
-
       executionSessionId: resultSessionFixture,
       provenance: {
         runId: "2",
@@ -117,17 +59,13 @@ describe("resolveInspectableResult", () => {
       totalCount: 1,
       title: "Result",
     };
-    fixture.service.getPinResult.mockResolvedValueOnce(descriptor).mockResolvedValueOnce(null);
-    const dependencies = queryDependencies(fixture);
+    fixture.read.getPinResult.mockReturnValueOnce(descriptor).mockReturnValueOnce(null);
     const ref = outputPinRef(graphPath, output);
-    await expect(resolveInspectableResultRef(ref, dependencies)).resolves.toEqual({
-      ref: resultRef(resultReferenceFixture("18")),
-      status: "published",
-    });
-    await expect(resolveInspectableResultRef(ref, dependencies)).resolves.toEqual({
-      ref: null,
-      status: "notReady",
-    });
-    expect(fixture.read.getPinResult({ graphPath, output })).toBeNull();
+    await expect(resolveInspectableResultRef(ref, fixture)).resolves.toEqual(
+      resultReferenceFixture("18"),
+    );
+    await expect(resolveInspectableResultRef(ref, fixture)).resolves.toBeNull();
+    expect(fixture.coordinator.loadPinResult).toHaveBeenNthCalledWith(1, { graphPath, output });
+    expect(fixture.coordinator.loadPinResult).toHaveBeenNthCalledWith(2, { graphPath, output });
   });
 });

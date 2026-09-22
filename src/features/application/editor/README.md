@@ -59,6 +59,11 @@ position previews local and submits one existing mutation at gesture end. Escape
 hiding, save locking, graph close, and project replacement invalidate the gesture.
 Late mutation completion only clears that mutation's preview, never a newer drag.
 
+Pending node creation retains only the structured source port address and panel ownership.
+Connection feedback and its preview read the current graph projection; palette position comes
+from the owned context menu. No Pin projection or second coordinate snapshot is kept in the
+interaction store.
+
 Cancellation also ends the visible selection preview and restores the pre-pointer node/edge
 selection. Pan updates require a live gesture; viewport synchronization is not a gesture.
 The cancelled pointer release cannot clear the restored selection, and the next press starts
@@ -81,7 +86,7 @@ the controller and must not assemble application commands.
 
 Node selection synchronizes the existing Details context without opening another panel. Details owns node parameters, configuration, ports, diagnostics and documentation; explicit node-details commands reveal that same fixed panel. History availability subscribes to the active Graph. Node creation validates its captured target when invoked, without subscribing every mounted canvas to global tab selection; an unavailable canvas target cannot fall back to another panel.
 
-Activating a cached graph reuses its ready loading status and loaded document state instead of publishing duplicate updates. Graph panels subscribe to their own loading status; the broader project projection retains a stable selection when none of its fields changed.
+Activating a cached graph reuses its ready loading status and loaded document state instead of publishing duplicate updates. Graph panels subscribe to their own loading status; UI intent delivery subscribes only to project identity, without a broader project-state aggregate.
 
 Focus synchronization is synchronous and never loads, retries or unloads graphs. Canvas gestures call the same focus coordinator directly. Visible panels and explicit data-dependent use cases call the same `ProjectIOStore.loadGraph` entry, which deduplicates in-flight loads and reuses cached graphs. Project restoration first ensures visible graphs, then synchronizes the active editor's focus. Cache cleanup follows successful loads and panel closure instead of every focus switch; the old activation/suspension queue and bootstrap retries are removed.
 

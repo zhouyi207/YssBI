@@ -9,7 +9,6 @@ import {
   type ResourceKey,
 } from "@/features/core/resource";
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
-import type { ChartIndexEntry } from "@/shared/types/domain/chart";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { LoadStatus } from "@/shared/types/ui/common";
 
@@ -24,7 +23,6 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
     readonly databases: Record<string, DatabaseRecord>;
     readonly databaseRevisions: Record<string, number>;
     readonly graphMeta: Record<string, GraphMeta>;
-    readonly chartIndex: ChartIndexEntry[];
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
     readonly graphOrder: string[];
     readonly detailFocus: DetailFocus | null;
@@ -50,7 +48,7 @@ export interface AuthoritativeProjectLoadPlanDependencies {
   prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta>;
   prepareResourceState(input: {
     graphs: ProjectGraphIndexRow[];
-    charts: ChartIndexEntry[];
+    charts: ProjectIndexRow["charts"];
     databases: Record<string, DatabaseRecord>;
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
 
@@ -81,7 +79,7 @@ function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, Gr
 
 export function buildProjectResourceState(input: {
   graphs: ProjectGraphIndexRow[];
-  charts: ChartIndexEntry[];
+  charts: ProjectIndexRow["charts"];
   databases: Record<string, DatabaseRecord>;
   loadedChartPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
@@ -150,20 +148,13 @@ export function buildAuthoritativeProjectLoadPlan(
       { ...database, resourcePath: databaseResourcePaths[id] },
     ]),
   );
-  const chartIndex = source.index.charts.map((chart) => ({
-    chartPath: chart.chartPath,
-    name: chart.name,
-    databaseId: chart.databaseId,
-    chartType: chart.chartType as ChartIndexEntry["chartType"],
-    revision: chart.revision,
-  }));
   const graphMeta = dependencies.prepareFunctionState(source.index.graphs);
   const resourceState = dependencies.prepareResourceState({
     graphs: source.index.graphs,
-    charts: chartIndex,
+    charts: source.index.charts,
     databases,
   });
-  const authoritativeChartPaths = new Set(chartIndex.map((chart) => chart.chartPath));
+  const authoritativeChartPaths = new Set(source.index.charts.map((chart) => chart.chartPath));
 
   const detailFocus =
     context.detailFocus?.kind === "chart" &&
@@ -180,7 +171,6 @@ export function buildAuthoritativeProjectLoadPlan(
       databases,
       databaseRevisions,
       graphMeta,
-      chartIndex,
       resources: resourceState.resources,
       graphOrder: resourceState.graphOrder,
       detailFocus,

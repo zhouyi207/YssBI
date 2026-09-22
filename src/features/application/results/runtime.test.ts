@@ -136,13 +136,22 @@ describe("current result lifecycle", () => {
   it("isolates analysis parameters, failures and recovery for independent consumers", async () => {
     const reference = resultReferenceFixture("1");
     const release = resultQueryCoordinator.retainPayload(reference);
-    const first = { reference, analysis: { kind: "acfPacf" as const, maxLag: 1 } };
-    const second = { reference, analysis: { kind: "acfPacf" as const, maxLag: 2 } };
+    const first = { reference, analysis: { kind: "residualPlot" as const, maxPoints: 2 } };
+    const second = { reference, analysis: { kind: "residualPlot" as const, maxPoints: 3 } };
     const service = vi
       .spyOn(ResultService, "analyze")
       .mockImplementation(async (_ref, analysis) => ({
-        kind: "acfPacf",
-        value: { acf: [analysis.kind === "acfPacf" ? analysis.maxLag : 0], pacf: [], n: 10 },
+        kind: "residualPlot",
+        value: {
+          points: Array.from(
+            { length: analysis.kind === "residualPlot" ? analysis.maxPoints : 0 },
+            (_, index) => ({ observation: index + 1, x: index, y: index }),
+          ),
+          sampled: true,
+          totalCount: 10,
+          matchedCount: 10,
+          sampling: "systematic",
+        },
       }));
     expect(
       await Promise.all([
@@ -150,8 +159,8 @@ describe("current result lifecycle", () => {
         resultQueryCoordinator.loadAnalysis(second),
       ]),
     ).toEqual([{ status: "published" }, { status: "published" }]);
-    expect(resultQueryRead.getAnalysis(first)).toMatchObject({ value: { acf: [1] } });
-    expect(resultQueryRead.getAnalysis(second)).toMatchObject({ value: { acf: [2] } });
+    expect(resultQueryRead.getAnalysis(first)?.value).toHaveProperty("points.length", 2);
+    expect(resultQueryRead.getAnalysis(second)?.value).toHaveProperty("points.length", 3);
     service.mockRejectedValueOnce(new Error("read failed"));
     await resultQueryCoordinator.loadAnalysis(first);
     expect(resultQueryRead.getFailure({ kind: "analysis", ...first })).not.toBeNull();

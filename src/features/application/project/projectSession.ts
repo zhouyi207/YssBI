@@ -34,7 +34,7 @@ export async function hydrateProjectPath(): Promise<string | null> {
   }
 
   const promise = (async () => {
-    const path = await ProjectService.getProjectPath(identity.projectInstanceId);
+    const path = await ProjectService.getProjectPath();
     if (!isCurrentProjectIdentity(identity)) return null;
     if (path) {
       useProjectIOStore.getState().setCurrentPath(path);
@@ -52,11 +52,6 @@ export async function hydrateProjectPath(): Promise<string | null> {
       pathHydrationInFlight = null;
     }
   }
-}
-
-/** Resolve the active project path; hydrates from Rust when needed. */
-export async function resolveActiveProjectPath(): Promise<string | null> {
-  return hydrateProjectPath();
 }
 
 /** Subscribe to the active project path projection (refresh through explicit hydration or save). */

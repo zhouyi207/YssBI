@@ -13,11 +13,15 @@ import {
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
-  resolveInspectableResult,
   resolveInspectableResultRef,
   type InspectableResultRef,
 } from "@/features/application/results";
-import { resultReference, type ResultDescriptor } from "@/shared/types/domain/result";
+import {
+  resultReference,
+  type ResultDescriptor,
+  type ResultReference,
+} from "@/shared/types/domain/result";
+import { isApplicationIpcErrorCode } from "@/features/application/errorReference";
 import { resultLeases } from "@/features/application/results/resultLeases";
 import { resultQueryCoordinator, resultQueryRead } from "@/features/application/results";
 
@@ -33,21 +37,15 @@ export async function launchInspectablePresentation(
 
 export async function openInspectableResult(ref: InspectableResultRef): Promise<boolean> {
   let project: ReturnType<typeof captureProjectIdentity>;
-  let descriptor: ResultDescriptor | null;
+  let reference: ResultReference | null;
   try {
     project = captureProjectIdentity();
     const dependencies = {
       coordinator: resultQueryCoordinator,
       read: resultQueryRead,
     };
-    const resolved = await resolveInspectableResultRef(ref, dependencies);
-    if (!isCurrentProjectIdentity(project)) return false;
-    descriptor = resolved.ref
-      ? (structuredClone(
-          await resolveInspectableResult(resolved.ref, dependencies),
-        ) as ResultDescriptor | null)
-      : null;
-    if (!isCurrentProjectIdentity(project) || !descriptor) return false;
+    reference = await resolveInspectableResultRef(ref, dependencies);
+    if (!isCurrentProjectIdentity(project) || !reference) return false;
   } catch {
     return false;
   }
@@ -55,7 +53,7 @@ export async function openInspectableResult(ref: InspectableResultRef): Promise<
   let leaseId: string | undefined;
   let installed = false;
   try {
-    const held = await resultLeases.acquire(descriptor);
+    const held = await resultLeases.acquire(reference);
     leaseId = held.leaseId;
     if (!isCurrentProjectIdentity(project)) return false;
     const panel = await workbenchLayoutControl.upsertResult({
@@ -67,6 +65,12 @@ export async function openInspectableResult(ref: InspectableResultRef): Promise<
     installed = panel.metadata.role === "result" && panel.metadata.leaseId === leaseId;
     return true;
   } catch (error) {
+    if (
+      !isCurrentProjectIdentity(project) ||
+      isApplicationIpcErrorCode(error, "result_not_found") ||
+      isApplicationIpcErrorCode(error, "stale_result_reference")
+    )
+      return false;
     showWorkbenchLayoutError(error);
     return false;
   } finally {

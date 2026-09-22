@@ -12,13 +12,11 @@ import {
   parseHarnessSessions,
   parseHarnessSubscription,
   parseHarnessTurnResult,
-  parseHarnessWorkflowRun,
   type HarnessEvent,
   type HarnessMemoryRecord,
   type HarnessRuntimeStatus,
   type HarnessSession,
   type HarnessTurnResult,
-  type HarnessWorkflowRun,
 } from "./harnessContract";
 
 export type {
@@ -28,7 +26,6 @@ export type {
   HarnessRuntimeStatus,
   HarnessSession,
   HarnessTurnResult,
-  HarnessWorkflowRun,
 } from "./harnessContract";
 
 export interface HarnessEventSubscription {
@@ -128,10 +125,6 @@ export class HarnessService {
     await invokeCommand("cancel_harness_turn", { sessionId });
   }
 
-  static async closeSession(sessionId: string): Promise<void> {
-    await invokeCommand("close_harness_session", { sessionId });
-  }
-
   static async listMemory(sessionId: string): Promise<readonly HarnessMemoryRecord[]> {
     return parseHarnessMemoryRecords(await invokeCommand("list_harness_memory", { sessionId }));
   }
@@ -142,31 +135,5 @@ export class HarnessService {
 
   static async unsubscribeEvents(subscriptionId: string): Promise<void> {
     await invokeCommand("unsubscribe_harness_events", { subscriptionId });
-  }
-
-  static async planDatasetQualityReview(
-    sessionId: string,
-    turnId: string,
-    databaseId: string,
-  ): Promise<HarnessWorkflowRun> {
-    return parseHarnessWorkflowRun(
-      await invokeCommand("plan_dataset_quality_review", { sessionId, turnId, databaseId }),
-    );
-  }
-
-  static async advanceWorkflow(runId: string): Promise<HarnessWorkflowRun> {
-    return parseHarnessWorkflowRun(await invokeCommand("advance_harness_workflow", { runId }));
-  }
-
-  static async pauseWorkflow(runId: string): Promise<HarnessWorkflowRun> {
-    return parseHarnessWorkflowRun(await invokeCommand("pause_harness_workflow", { runId }));
-  }
-
-  static async resumeWorkflow(runId: string): Promise<HarnessWorkflowRun> {
-    return parseHarnessWorkflowRun(await invokeCommand("resume_harness_workflow", { runId }));
-  }
-
-  static async cancelWorkflow(runId: string): Promise<HarnessWorkflowRun> {
-    return parseHarnessWorkflowRun(await invokeCommand("cancel_harness_workflow", { runId }));
   }
 }

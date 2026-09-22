@@ -4,7 +4,7 @@ import {
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { logger } from "@/features/application/observability/appLogger";
-import { databasePublication } from "@/features/core/database/publication";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { isColumnSemantic } from "@/shared/types/domain/database";
 import type {
   ColumnInfo as DatabaseColumn,
@@ -100,7 +100,7 @@ export async function hydrateDatabaseEditorMetadata(
   try {
     const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, id);
     if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
-    databasePublication.updateDatabase(id, {
+    useDatabaseStore.getState().updateDatabase(id, {
       name: meta.name,
       columns: meta.columns,
       rowCount: meta.rowCount,

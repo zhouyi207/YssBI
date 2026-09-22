@@ -12,7 +12,7 @@ import {
 import { toErrorReference } from "@/features/application/errorReference";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
-import type { ChartDocument, ChartIndexEntry, ProjectIndexRow } from "@/shared/types";
+import type { ChartDocument, ProjectIndexRow } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import {
   type PreparedGraphSessions,
@@ -105,7 +105,6 @@ export interface PreparedProjectSnapshotStoreState {
   readonly graphMeta: Readonly<Record<string, GraphMeta>>;
   readonly databases: Readonly<Record<string, DatabaseRecord>>;
   readonly databaseRevisions: Readonly<Record<string, number>>;
-  readonly chartIndex: ChartIndexEntry[];
   readonly chartDocuments: Readonly<Record<string, ChartDocument>>;
   readonly focusedSession: FocusedGraphSession | null;
   readonly viewports: Readonly<Record<string, EditorViewport>>;

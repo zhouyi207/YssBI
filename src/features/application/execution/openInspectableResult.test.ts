@@ -9,15 +9,14 @@ import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import type { ResultDescriptor, ResultReference } from "@/shared/types/domain/result";
+import type { ResultDescriptor, ResultLease } from "@/shared/types/domain/result";
+import { IPC_ERROR_BRAND } from "@/shared/constants/ipcError";
 
 const mocks = vi.hoisted(() => ({
   upsertResult: vi.fn(),
   showWorkbenchLayoutError: vi.fn(),
   loadPinResult: vi.fn(),
-  loadDescriptor: vi.fn(),
   getPinResult: vi.fn(),
-  getDescriptor: vi.fn(),
   acquire: vi.fn(),
   finish: vi.fn(),
 }));
@@ -42,11 +41,9 @@ vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback",
 vi.mock("@/features/application/results/runtime", () => ({
   resultQueryCoordinator: {
     loadPinResult: mocks.loadPinResult,
-    loadDescriptor: mocks.loadDescriptor,
   },
   resultQueryRead: {
     getPinResult: mocks.getPinResult,
-    getDescriptor: mocks.getDescriptor,
   },
 }));
 
@@ -73,13 +70,6 @@ const descriptor: ResultDescriptor = {
   title: "Node result",
 };
 
-const plotDescriptor: ResultDescriptor = {
-  ...descriptor,
-  resultId: "18",
-  presentation: { kind: "plot", chart: "scatter" },
-  title: "Scatter result",
-};
-
 beforeEach(() => {
   vi.restoreAllMocks();
   mocks.upsertResult.mockReset();
@@ -88,22 +78,16 @@ beforeEach(() => {
     metadata: { role: "result", ...metadata },
   }));
   mocks.acquire.mockReset();
-  mocks.acquire.mockImplementation(async (descriptor) => ({
+  mocks.acquire.mockResolvedValue({
     descriptor,
     leaseId: resultLeaseIdFixture(100),
-  }));
+  });
   mocks.finish.mockReset();
   mocks.showWorkbenchLayoutError.mockReset();
   mocks.loadPinResult.mockReset();
   mocks.loadPinResult.mockResolvedValue({ status: "published" });
-  mocks.loadDescriptor.mockReset();
-  mocks.loadDescriptor.mockResolvedValue({ status: "published" });
   mocks.getPinResult.mockReset();
   mocks.getPinResult.mockReturnValue(null);
-  mocks.getDescriptor.mockReset();
-  mocks.getDescriptor.mockImplementation((reference: ResultReference) =>
-    reference.resultId === plotDescriptor.resultId ? plotDescriptor : descriptor,
-  );
   clearProjectLifecycle();
   startProjectLifecycle("project-1");
 });
@@ -118,6 +102,7 @@ describe("openInspectableResult", () => {
       }),
     ).resolves.toBe(true);
 
+    expect(mocks.acquire).toHaveBeenCalledExactlyOnceWith(resultReferenceFixture("17"));
     expect(mocks.upsertResult).toHaveBeenCalledOnce();
     expect(mocks.upsertResult).toHaveBeenCalledWith({
       reference: resultReferenceFixture("17"),
@@ -154,20 +139,20 @@ describe("openInspectableResult", () => {
     settlePinResult(descriptor);
 
     await expect(pending).resolves.toBe(false);
-    expect(mocks.loadDescriptor).not.toHaveBeenCalled();
+    expect(mocks.acquire).not.toHaveBeenCalled();
     expect(mocks.upsertResult).not.toHaveBeenCalled();
   });
 
-  it("drops a descriptor that settles after the project identity changes", async () => {
-    let settleDescriptor!: (value: { status: "published" }) => void;
-    let markDescriptorStarted!: () => void;
-    const descriptorStarted = new Promise<void>((resolve) => {
-      markDescriptorStarted = resolve;
+  it("releases a lease that settles after the project identity changes", async () => {
+    let settleLease!: (value: ResultLease) => void;
+    let markLeaseStarted!: () => void;
+    const leaseStarted = new Promise<void>((resolve) => {
+      markLeaseStarted = resolve;
     });
-    mocks.loadDescriptor.mockImplementationOnce(() => {
-      markDescriptorStarted();
-      return new Promise<{ status: "published" }>((resolve) => {
-        settleDescriptor = resolve;
+    mocks.acquire.mockImplementationOnce(() => {
+      markLeaseStarted();
+      return new Promise<ResultLease>((resolve) => {
+        settleLease = resolve;
       });
     });
 
@@ -176,14 +161,29 @@ describe("openInspectableResult", () => {
       executionSessionId: resultSessionFixture,
       resultId: "17",
     });
-    await descriptorStarted;
+    await leaseStarted;
     clearProjectLifecycle();
     startProjectLifecycle("project-2");
-    mocks.getDescriptor.mockReturnValue(descriptor);
-    settleDescriptor({ status: "published" });
+    settleLease({ descriptor, leaseId: resultLeaseIdFixture(100) });
 
     await expect(pending).resolves.toBe(false);
+    expect(mocks.finish).toHaveBeenCalledWith(resultLeaseIdFixture(100), false);
     expect(mocks.upsertResult).not.toHaveBeenCalled();
+  });
+
+  it("leaves an unavailable result closed without reporting a layout failure", async () => {
+    mocks.acquire.mockRejectedValueOnce({
+      [IPC_ERROR_BRAND]: true,
+      code: "result_not_found",
+      details: null,
+      incidentId: null,
+    });
+    await expect(
+      openInspectableResult({ kind: "result", ...resultReferenceFixture("17") }),
+    ).resolves.toBe(false);
+    expect(mocks.upsertResult).not.toHaveBeenCalled();
+    expect(mocks.showWorkbenchLayoutError).not.toHaveBeenCalled();
+    expect(mocks.finish).not.toHaveBeenCalled();
   });
 
   it("maps root Result upsert failures through typed layout feedback", async () => {
@@ -200,5 +200,6 @@ describe("openInspectableResult", () => {
 
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledOnce();
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledWith(failure);
+    expect(mocks.finish).toHaveBeenCalledWith(resultLeaseIdFixture(100), false);
   });
 });

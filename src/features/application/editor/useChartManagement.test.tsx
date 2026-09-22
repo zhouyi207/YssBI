@@ -96,7 +96,7 @@ describe("useOpenChart", () => {
     mocks.handledRejection = handled;
     mocks.openEditorPanel.mockRejectedValueOnce(handled);
 
-    await expect(openChart("charts/Summary.yssbi-chart", "Summary")).resolves.toBeUndefined();
+    await expect(openChart("charts/Summary.yssbi-chart")).resolves.toBeUndefined();
 
     expect(mocks.activateEditorPanelAndSyncSession).not.toHaveBeenCalled();
     expect(mocks.setCategoryExpanded).not.toHaveBeenCalled();

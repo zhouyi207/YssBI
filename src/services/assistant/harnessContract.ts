@@ -14,17 +14,6 @@ export type HarnessCapabilityId =
   | "save_graph"
   | "list_graph_results";
 
-export type WorkflowRunState =
-  | "planned"
-  | "waiting_for_approval"
-  | "ready"
-  | "running"
-  | "paused"
-  | "waiting_for_external_input"
-  | "completed"
-  | "failed"
-  | "cancelled";
-
 export interface HarnessKnowledgeCitation {
   readonly sourceId: string;
   readonly documentId: string;
@@ -116,11 +105,6 @@ export interface HarnessSubscriptionSnapshot {
   readonly subscriptionId: string;
 }
 
-export interface HarnessWorkflowRun {
-  readonly runId: string;
-  readonly state: WorkflowRunState;
-}
-
 export class InvalidHarnessPayloadError extends Error {
   constructor(readonly payloadName: string) {
     super(`Invalid ${payloadName} payload`);
@@ -143,18 +127,6 @@ const CAPABILITY_IDS = new Set<HarnessCapabilityId>([
   "execute_graph",
   "save_graph",
   "list_graph_results",
-]);
-
-const WORKFLOW_STATES = new Set<WorkflowRunState>([
-  "planned",
-  "waiting_for_approval",
-  "ready",
-  "running",
-  "paused",
-  "waiting_for_external_input",
-  "completed",
-  "failed",
-  "cancelled",
 ]);
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -305,16 +277,6 @@ export function parseHarnessSubscription(value: unknown): HarnessSubscriptionSna
   const subscriptionId = source && stringField(source, "subscriptionId");
   if (!subscriptionId) throw new InvalidHarnessPayloadError("HarnessSubscription");
   return { subscriptionId };
-}
-
-export function parseHarnessWorkflowRun(value: unknown): HarnessWorkflowRun {
-  const source = record(value);
-  const runId = source && stringField(source, "runId");
-  const state = source?.state;
-  if (!runId || typeof state !== "string" || !WORKFLOW_STATES.has(state as WorkflowRunState)) {
-    throw new InvalidHarnessPayloadError("HarnessWorkflowRun");
-  }
-  return { runId, state: state as WorkflowRunState };
 }
 
 export function parseHarnessEvent(value: unknown): HarnessEvent {

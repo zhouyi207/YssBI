@@ -33,17 +33,11 @@ describe("setNodeParameters", () => {
     expect(applyGraphMutation).toHaveBeenCalledWith({
       graphPath: "events/Main.yssbi-event",
       locale: "en-US",
-      mutation: expect.any(Function),
-    });
-    const { mutation } = vi.mocked(applyGraphMutation).mock.calls[0][0];
-    if (typeof mutation !== "function") throw new Error("Expected a queued mutation factory");
-    expect(mutation({ nodes: {} } as never)).toEqual({
-      type: "setParameters",
-      payload: { nodeId: "node-1", parameters },
+      mutation: { type: "setParameters", payload: { nodeId: "node-1", parameters } },
     });
   });
 
-  it("preserves draft parameters outside the edited field", async () => {
+  it("forwards partial values and resets for authoritative merging", async () => {
     const outcome = { status: "applied" as const, result: {} as never, insertedNodeIds: [] };
     vi.mocked(applyGraphMutation).mockResolvedValue(outcome);
 
@@ -51,24 +45,15 @@ describe("setNodeParameters", () => {
       graphPath: "events/Main.yssbi-event",
       nodeId: "node-1",
       locale: "en-US",
-      parameters: { tolerance: 1e-6 },
+      parameters: { tolerance: 1e-6, max_iterations: null },
     });
 
     const { mutation } = vi.mocked(applyGraphMutation).mock.calls[0][0];
-    if (typeof mutation !== "function") throw new Error("Expected a queued mutation factory");
-    expect(
-      mutation({
-        nodes: {
-          "node-1": {
-            parameters: { constant: true, tolerance: 1e-7, max_iterations: 100 },
-          },
-        },
-      } as never),
-    ).toEqual({
+    expect(mutation).toEqual({
       type: "setParameters",
       payload: {
         nodeId: "node-1",
-        parameters: { constant: true, tolerance: 1e-6, max_iterations: 100 },
+        parameters: { tolerance: 1e-6, max_iterations: null },
       },
     });
   });

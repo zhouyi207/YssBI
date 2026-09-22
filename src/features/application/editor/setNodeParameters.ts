@@ -16,17 +16,9 @@ export function setNodeParameters(
   return applyGraphMutation({
     graphPath: input.graphPath,
     locale: input.locale,
-    mutation: (document) => ({
+    mutation: {
       type: "setParameters",
-      payload: {
-        nodeId: input.nodeId,
-        parameters: Object.fromEntries(
-          Object.entries({
-            ...document.nodes[input.nodeId]?.parameters,
-            ...input.parameters,
-          }).filter(([, value]) => value !== null && value !== undefined),
-        ),
-      },
-    }),
+      payload: { nodeId: input.nodeId, parameters: input.parameters },
+    },
   });
 }

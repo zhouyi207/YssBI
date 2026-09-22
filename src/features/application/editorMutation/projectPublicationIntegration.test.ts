@@ -94,7 +94,7 @@ beforeEach(() => {
   useDocumentStateStore.setState({ documents: {} });
   useGraphProjectionStore.getState().clear();
   useGraphMetaStore.setState({ graphs: {} });
-  useChartDocumentStore.setState({ index: [], documents: {} });
+  useChartDocumentStore.getState().clear();
   useDatabaseStore.setState({ databases: {}, revisions: {} });
 });
 afterEach(() => coordinator?.cancelProject());

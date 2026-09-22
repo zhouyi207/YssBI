@@ -231,7 +231,7 @@ describe("ResultQueryCoordinator", () => {
     fixture.service.analyze = () => analysis.promise;
     const pending = fixture.coordinator.loadAnalysis({
       reference,
-      analysis: { kind: "acfPacf", maxLag: 1 },
+      analysis: { kind: "acfPacf" },
     });
     fixture.coordinator.resetResult(resultReferenceFixture("17"));
     analysis.resolve({ kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } });

@@ -7,7 +7,7 @@ import type {
 import type { CanvasGestureType } from "@/features/core/graphInteraction/graphInteractionStore";
 import type { EditorContextMenuState } from "@/features/core/editor";
 import type { GraphSelection } from "@/modules/workbench/public";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { EditorCommandTarget } from "./editorCommandFocus";
 import type { useEditorOperations } from "./useEditorOperations";
 import type { useProjectOperations } from "./useProjectOperations";
@@ -62,8 +62,8 @@ export interface EditorCanvasWorkspaceSlice {
 export interface EditorCanvasInteractionSlice {
   contextMenu: EditorContextMenuState | null;
   setContextMenu: (menu: EditorContextMenuState | null) => void;
-  pendingConnection: PinData | null;
-  setPendingConnection: (pin: PinData | null) => void;
+  pendingConnection: PortAddressDto | null;
+  setPendingConnection: (port: PortAddressDto | null) => void;
   beginGesture(type: CanvasGestureType, onCancel: () => void): CanvasGestureLease | null;
   isInteractive(): boolean;
   mutations: CanvasInteractionHandlers;

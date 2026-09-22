@@ -295,14 +295,7 @@ export function prepareProjectSnapshotCommit(
   const databaseRevisions = Object.fromEntries(databaseRows.map((row) => [row.id, row.revision]));
   const remappedDocuments = remapDocuments(useDocumentStateStore.getState().documents, plan);
   const chartState = useChartDocumentStore.getState();
-  const chartIndex = plan.index.charts.map((chart) => ({
-    chartPath: chart.chartPath,
-    name: chart.name,
-    databaseId: chart.databaseId,
-    chartType: chart.chartType as import("@/shared/types/domain/chart").ChartType,
-    revision: chart.revision,
-  }));
-  const authoritativeChartPaths = new Set(chartIndex.map((chart) => chart.chartPath));
+  const authoritativeChartPaths = new Set(plan.index.charts.map((chart) => chart.chartPath));
   const remappedChartDocuments = structuredClone(chartState.documents);
   for (const [from, to] of plan.chartPathRemaps) {
     const source = remappedChartDocuments[from];
@@ -426,7 +419,6 @@ export function prepareProjectSnapshotCommit(
       graphMeta,
       databases,
       databaseRevisions,
-      chartIndex,
       chartDocuments,
       focusedSession,
       viewports,
@@ -452,7 +444,6 @@ export function commitPreparedProjectSnapshot(
         revisions: plan.storeState.databaseRevisions,
       });
       useChartDocumentStore.setState({
-        index: plan.storeState.chartIndex,
         documents: plan.storeState.chartDocuments,
       });
       useDocumentStateStore.setState({ documents: plan.storeState.documents });

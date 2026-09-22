@@ -10,7 +10,6 @@ import {
   captureProjectLifecycleState,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useProjectProjection } from "@/features/application/project/projectProjection";
 import { openGraphInEditor } from "@/features/application/editor/openGraphInEditor";
 import { resolveGraphResourceMeta } from "@/features/application/editor/openGraphResource";
 import { revealGraphProblem } from "@/features/application/editor/revealGraphProblem";
@@ -54,7 +53,7 @@ async function execute(intent: UiIntent, current: () => boolean): Promise<boolea
 }
 
 export function useUiIntents() {
-  const { projectInstanceId } = useProjectProjection();
+  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const [connection, setConnection] = useState(0);
   useEffect(() => {
     if (!projectInstanceId) return;

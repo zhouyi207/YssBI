@@ -51,6 +51,7 @@ Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话�
 显式打开的 Result panel 和独立展示窗口绑定打开时的结果引用；节点删除、图语义修改、重跑均不会更换已有报告的数据。
 Application 在创建面板前通过 `retain_result` 原子取得租约和 descriptor。租约 token 由调用方预先生成，
 便于丢失响应后清理；Rust 确认结果和窗口身份，同 token 的重复申请/释放不会重复计数。
+打开面板先解析结果引用，再使用租约回执中的 descriptor；不在申请租约前另行预读取或复制 descriptor。项目切换或面板打开失败时释放本次租约，已失效的结果引用不报告为布局故障。
 FlexLayout 的真实面板集合驱动窗口内租约对账，移动、隐藏和 React 重新挂载不代表面板关闭；打开失败会释放申请的租约。
 
 独立窗口使用指定接收窗口的租约交接：父窗口先保留结果，新窗口通过 `claim_result_lease` 原子接管，
@@ -76,19 +77,22 @@ WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通�
 执行计划保留端口实例分组身份和模板名，内核只接收中立模板名来区分 predictors/weights/sigma，不解析图地址。
 
 Fit 的 `model` 与 Summary 的 `result`、`report` 共享不可变的原生 `LinearRegressionResult`，仍由当前 `ResultStore` 拥有。报告类别统一为 `linearRegressionSummary`，标题为 Linear Regression Summary，模型概览保留实际 OLS/WLS/GLS 方法。WLS/GLS 的平方和与 R² 使用变换尺度，拟合值与残差保留原始尺度。
-拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 包含模型概览、条件数、完整参数名目录 `paramNames`、
+拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 的 `presentation` 提供带格式标记的模型概览条目、ANOVA 列和行、条件数指标，由 [报告展示投影](../../../../src-tauri/crates/yss-application/src/graph/results/report/presentation.rs) 从统计结果构造，数字不会预先转换为展示字符串。报告还包含完整参数名目录 `paramNames`、
 `{ executionSessionId, resultId }` 引用，以及 coefficients/observations 表引用与行数。
 引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。
-`get_result_table_page` 复用有界页面投影；`analyze_result` 按类型执行残差图投影、ACF/PACF、
-序列相关与假设检验。图形投影可按拟合值范围筛选、跨整个匹配总体进行系统抽样，并标明总体/匹配数和抽样状态；
-统计检验使用完整拟合数据。Application 捕获共享结果后在锁外读取/计算，返回前重验 session 与结果可用性，
+`get_result_table_page` 复用有界页面投影；`analyze_result` 读取已选的 ACF/PACF、序列相关与假设检验结果，仅需分析 kind。计算参数只由 Summary 节点配置，不在读取请求中重复传递。
+残差图请求保留显示范围与点数，按拟合值范围筛选、跨整个匹配总体进行系统抽样，并标明总体/匹配数和抽样状态。
+统计检验使用完整拟合数据。Application 捕获共享结果后在锁外读取/投影，返回前重验 session 与结果可用性，
 结果回收或会话结束后的迟到成功和失败均被丢弃；仅当前输出失效不撤销有租约的快照读取。
 数据仍由原 ResultStore 拥有，不另建报告存储或复制完整数据。
 
 Application 的 `query_result_projection` 返回有界强类型投影；普通对象在克隆或编码前检查展开深度和空间预算，原生报告仅展开概览、参数目录与表引用。共享协议映射 `result_encoding` 供 IPC 与 Harness 调用，统一字段、宽整数文本与内联 JSON 字节上限；计数写入器不分配完整编码缓冲区。DataFrame、DataSeries 和顶层内存数列走现有分页入口；AI 不另维护统计字段白名单。AI 的 JSON 与表引用读取语义见 [Harness capability 契约](../../../../src-tauri/crates/yss-harness-core/README.md#4-registered-capabilities)。
 
-线性回归报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
-前端复用 Result query coordinator，以执行会话、结果和完整查询语义隔离请求与缓存：分页包含 part/offset/limit，分析包含 kind 与规范化参数。
+线性回归报告的 `summary` 携带本次执行的内容选择和检验参数。Summary 执行阶段只计算选中的附加检验；报告查询返回已计算的检验，拒绝未选项和 Fit 模型。Fit 的普通 Inspector 保留模型概览，不伪造默认 Summary、分析能力或报告表引用。概览与报告共用 `query_result_projection`，不另设线性报告查询入口。系数读取只在选择系数表、系数图或方程时挂载；选择图形/观测表后仍在展开时读取有界投影。
+
+`addLinearSummaryContents` 将 Report 的补选提交为来源节点的普通 `setParameters`，保留当前其他参数，再定向执行该 Summary 输出。上游模型有效时由既有缓存复用；模型输入变化时从当前图执行，最终以完整新结果替换报告。节点删除、项目切换、并发编辑或计算失败保留旧报告，不把新增分析装入旧结果。配置已提交但计算失败时仍可在节点修正或从报告重试；编辑不隐式保存图。
+显式补选成功后，工作台通过 `replaceResult` 原子更新原面板的结果引用和租约，移动/重新挂载继续显示新结果；普通重跑仍不会替换已打开报告。独立窗口在当前视图内持有新快照租约。查询和租约继续由既有 Results owner 管理，失败和迟到结果释放临时持有关系。
+前端复用 Result query coordinator，以执行会话、结果和完整查询语义隔离请求与缓存：分页包含 part/offset/limit，已计算的分析按 kind 区分，残差图还包含显示范围和点数。
 相同不可变结果查询共用在途请求；不同查询参数独立发布。独立窗口及面板的 descriptor/value 同样经协调器读取与安装，并由挂载方持有 payload lease。Plot/report 仅接受完整 scalar payload；数列仍可在 Inspector 中分页，不能把第一页伪装成完整绘图数据。
 展示加载器统一完成 Inspector、plot 和 report 分流。`UnifiedResultView` 只呈现已分流的 Inspector 标量或数列；报告组件必须接收加载器交付的数据，不保留报告回调、JSON 树回退或组件内的第二次结果读取。
 消费者用自己的请求代次控制迟到回执和 loading；value/page/analysis 分别订阅数据和错误。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
@@ -98,5 +102,7 @@ Application 的 `query_result_projection` 返回有界强类型投影；普通�
 报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。
 
 报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。
+
+内联回归报告校验拟合值与残差、滞后残差对、设计矩阵与系数的维度；IV 过度识别检验按 `test_type` 要求对应统计量和 P 值。缺失的可选指标显示为空缺，绘图与检验不会用零补齐不完整数据。
 
 报告组件与 JSON 布局见 [Results views](../../../modules/results/README.md)。

@@ -26,9 +26,6 @@ import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionS
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
-import { useColumnStatsStore } from "@/features/core/dataStore/columnStatsStore";
-import { useColumnDistributionStore } from "@/features/core/dataStore/columnDistributionStore";
-import { useDatasetOverviewStore } from "@/features/core/dataStore/datasetOverviewStore";
 import {
   buildAuthoritativeProjectLoadPlan,
   defaultAuthoritativeProjectLoadPlanDependencies,
@@ -93,9 +90,9 @@ export async function prepareAuthoritativeProjectLoad(
   identity: ProjectIdentitySnapshot,
   dependencyOverrides: Partial<AuthoritativeProjectLoadPlanDependencies> = {},
 ): Promise<PreparedAuthoritativeProjectLoad> {
-  const path = await ProjectService.getProjectPath(identity.projectInstanceId);
+  const path = await ProjectService.getProjectPath();
   assertCurrentProjectIdentity(identity);
-  const { databases } = await ProjectService.getDatabases(identity.projectInstanceId);
+  const { databases } = await ProjectService.getDatabases();
   assertCurrentProjectIdentity(identity);
   const locale = currentProjectionLocale();
   const { index, activityPanels } = await ProjectService.getProjectIndex(
@@ -177,31 +174,13 @@ export async function commitPreparedAuthoritativeProjectLoad(
       interactions: {},
     }),
   );
-  commitProjectLoadStep("column stats", () =>
-    useColumnStatsStore.setState({ statsByDatabase: {} }),
-  );
-  commitProjectLoadStep("column distribution", () =>
-    useColumnDistributionStore.setState({
-      distByDatabase: {},
-    }),
-  );
-  commitProjectLoadStep("dataset overview", () =>
-    useDatasetOverviewStore.setState({
-      overviewByDatabase: {},
-    }),
-  );
   commitProjectLoadStep("database", () =>
     useDatabaseStore.setState({
       databases: prepared.storeState.databases,
       revisions: prepared.storeState.databaseRevisions,
     }),
   );
-  commitProjectLoadStep("chart", () =>
-    useChartDocumentStore.setState({
-      index: prepared.storeState.chartIndex,
-      documents: {},
-    }),
-  );
+  commitProjectLoadStep("chart", () => useChartDocumentStore.getState().clear());
   commitProjectLoadStep("documents", () => useDocumentStateStore.setState({ documents: {} }));
   commitProjectLoadStep("resources", () =>
     useResourceStore.getState().setSnapshot({
@@ -327,7 +306,7 @@ export async function clearProjectProjection(owner: ProjectLifecycleStateSnapsho
   )
     return;
 
-  if (!commitOwnedClear(() => useDatabaseStore.getState().setDatabaseSnapshot({}, {}))) return;
+  if (!commitOwnedClear(() => useDatabaseStore.getState().clear())) return;
   if (
     !commitOwnedClear(() =>
       useResourceStore.getState().setSnapshot({ resources: [], graphOrder: [] }),

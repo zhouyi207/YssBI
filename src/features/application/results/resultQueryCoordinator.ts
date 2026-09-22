@@ -43,11 +43,9 @@ export function resultAnalysisParameters(request: ResultAnalysisQuery): string {
     case "residualPlot":
       return JSON.stringify([analysis.maxPoints, analysis.xRange ?? null]);
     case "acfPacf":
-      return String(analysis.maxLag);
     case "serialTests":
-      return JSON.stringify([analysis.lags, analysis.bgNomiss0]);
     case "hypothesis":
-      return analysis.hypothesis;
+      return "";
   }
 }
 

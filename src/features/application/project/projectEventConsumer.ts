@@ -1,6 +1,4 @@
-import type {
-  ResourceMutationResultDto,
-} from "@/shared/types/domain/editorMutation";
+import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
 
 type Awaitable<T> = T | PromiseLike<T>;

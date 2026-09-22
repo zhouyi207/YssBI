@@ -1,7 +1,7 @@
 import { useCallback, type RefObject } from "react";
 import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { portAddressKey } from "@/features/domain/editorProjection";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { useEditorStore } from "@/features/core/editor";
 import {
@@ -12,28 +12,6 @@ import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";
-
-function readPendingConnectionAddress(pendingConnection: PinData | null): PortAddressDto | null {
-  return pendingConnection?.address ?? null;
-}
-
-function getPendingConnectionAddress(pendingConnection: PinData | null): PortAddressDto | null {
-  const address = readPendingConnectionAddress(pendingConnection);
-  if (pendingConnection && !address) {
-    throw new Error("Pending connection is missing its structured port address");
-  }
-  return address;
-}
-
-function samePortAddress(left: PortAddressDto, right: PortAddressDto): boolean {
-  if (left.kind !== right.kind || left.nodeId !== right.nodeId) return false;
-  return left.kind === "declared" && right.kind === "declared"
-    ? left.portKey === right.portKey
-    : left.kind === "instance" &&
-        right.kind === "instance" &&
-        left.templateKey === right.templateKey &&
-        left.instanceId === right.instanceId;
-}
 
 function interactionStillMatches(
   panelInstanceId: string,
@@ -60,11 +38,11 @@ function interactionStillMatches(
   )
     return false;
   const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
-  if (interaction?.type !== "pendingNodeCreation") return sourceAddress === null;
-  const currentSource = readPendingConnectionAddress(interaction.session.source);
-  return sourceAddress === null
-    ? interaction.session.source === null
-    : currentSource !== null && samePortAddress(currentSource, sourceAddress);
+  if (interaction.type !== "pendingNodeCreation") return sourceAddress === null;
+  return (
+    sourceAddress !== null &&
+    portAddressKey(interaction.session.source) === portAddressKey(sourceAddress)
+  );
 }
 
 export function useCanvasOverlayHandlers({
@@ -80,9 +58,9 @@ export function useCanvasOverlayHandlers({
   panelInstanceId: string;
   groupId: string;
   activeResourceRef: string | null;
-  pendingConnection: PinData | null;
+  pendingConnection: PortAddressDto | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: PinData | null) => void;
+  setPendingConnection: (port: PortAddressDto | null) => void;
 }) {
   const handleNodePaletteSelect = useCallback(
     async (
@@ -101,7 +79,7 @@ export function useCanvasOverlayHandlers({
         contextMenu.y,
       );
       try {
-        const sourceAddress = getPendingConnectionAddress(pendingConnection);
+        const sourceAddress = pendingConnection;
         const outcome = await createNodeFromDescriptor({
           graphPath: activeResourceRef,
           locale,

@@ -33,7 +33,6 @@ vi.mock("@/services/assistant/harnessService", () => ({
     listMemory: vi.fn(),
     subscribeEvents: vi.fn(),
     submitTurn: vi.fn(),
-    closeSession: vi.fn(),
   },
 }));
 
@@ -60,7 +59,6 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
     title: "",
     lastOpenedAt: 0,
   });
-  vi.mocked(HarnessService.closeSession).mockResolvedValue();
   vi.mocked(HarnessService.subscribeEvents).mockImplementation(
     async (_session, _sequence, onEvent) => {
       emit = onEvent;
@@ -216,7 +214,6 @@ it("replays a missing tool failure and ignores callbacks from the replaced subsc
     title: "",
     lastOpenedAt: 0,
   });
-  vi.mocked(HarnessService.closeSession).mockResolvedValue();
   vi.mocked(HarnessService.subscribeEvents).mockImplementation(
     async (_session, afterSequence, onEvent, onError) => {
       callbacks.push({ event: onEvent, error: onError });
@@ -278,7 +275,6 @@ it("ignores a session response arriving after the panel unmounts", async () => {
         resolve = done;
       }),
   );
-  vi.mocked(HarnessService.closeSession).mockResolvedValue();
   function Harness() {
     useAssistantHarnessRuntime();
     return null;

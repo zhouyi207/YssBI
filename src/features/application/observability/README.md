@@ -63,6 +63,8 @@ Rust 使用普通 tracing 宏；显式 `log_domain`、`log_event`、`log_source`
 
 前端通过已有 logger 或 `LogService.submitFrontendLogs` 提交记录，经同一有界批次链进入日志插件。显式结构化记录可包含 event 和 fields；客户端不指定 origin、timestamp 或 sequence。Logs 的订阅、历史查询和统计统一使用 `plugin:tracing|` 命令。Application 不注册另一套运行诊断命令、runtime 或 buffer。
 
+前端批量发送的条数、队列、延迟和消息字节限制统一由 `src/utils/logConfig.ts` 定义，日志传输和测试共用这一入口；Logs 面板的 recent buffer 与行高配置由 `src/shared/config-default/log.ts` 拥有。
+
 运行观测遵循日志级别过滤、SQLite 持久化及存储故障语义。字段仅保留排障所需的 ID、计数、阶段和安全错误代码。业务校验结果、Graph Problems、模型诊断、运行状态与 Results 仍从业务接口获取；用户反馈由 typed outcome 驱动。
 
 ## User feedback

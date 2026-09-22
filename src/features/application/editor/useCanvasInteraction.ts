@@ -20,8 +20,7 @@ import type {
   CanvasInteractionHandlers,
 } from "@/features/core/canvas/canvasMutationContracts";
 import { isGraphSaving } from "@/features/core/dataStore/graphProjectionStore";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "./editorCommandFocus";
 import { activateCurrentEditorPanel } from "./activateEditorPanelAndSyncSession";
 import type { EditorCanvasScope } from "./editorCanvasTypes";
@@ -121,8 +120,8 @@ export function useCanvasInteraction({
   );
 
   const setPendingConnection = useCallback(
-    (pin: PinData | null) => {
-      if (!pin) {
+    (port: PortAddressDto | null) => {
+      if (!port) {
         const current = getCanvasInteraction(
           useGraphInteractionStore.getState(),
           graphPath,
@@ -132,16 +131,12 @@ export function useCanvasInteraction({
         return;
       }
       if (!captureTarget()) return;
-      const menu = useEditorStore.getState().contextMenu;
       startCanvasInteraction(graphPath, {
         type: "pendingNodeCreation",
         session: {
           groupId,
           panelInstanceId,
-          graphPath,
-          source: toInteractionPinData(pin),
-          screenX: menu?.x ?? 0,
-          screenY: menu?.y ?? 0,
+          source: port,
         },
       });
     },

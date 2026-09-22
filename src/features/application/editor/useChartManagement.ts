@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_CHART_NAME } from "@/shared/constants/defaultResourceNames";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
+import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
@@ -26,7 +27,7 @@ function createdChartState(
   return lifecycle?.payload.kind === "resource_lifecycle" ? lifecycle.payload.patch.after : null;
 }
 
-export function useChartManagement(openChart: (chartPath: string, name: string) => Promise<void>) {
+export function useChartManagement(openChart: (chartPath: string) => Promise<void>) {
   const { t } = useTranslation();
 
   const addChart = useCallback(
@@ -46,7 +47,7 @@ export function useChartManagement(openChart: (chartPath: string, name: string) 
         await projectPublicationCoordinator.submit({ result: created });
         if (!context.isCurrent()) return;
 
-        await openChart(createdState.path, createdState.name);
+        await openChart(createdState.path);
         if (!context.isCurrent()) return;
       } catch (error) {
         if (context && !context.isCurrent()) return;
@@ -64,22 +65,22 @@ export function useChartManagement(openChart: (chartPath: string, name: string) 
       let context: ReturnType<typeof captureProjectCommandContext> | undefined;
       try {
         context = captureProjectCommandContext();
-        const indexEntry = useChartDocumentStore
-          .getState()
-          .index.find((chart) => chart.chartPath === chartPath);
-        if (!indexEntry) throw new Error("chart has no authoritative index revision");
+        const revision =
+          useResourceStore.getState().resources[resourceKey({ kind: "chart", id: chartPath })]
+            ?.revision;
+        if (revision == null) throw new Error("chart has no authoritative resource revision");
         const duplicated = await ChartService.duplicateChart(
           context.projectInstanceId,
           context.operationId,
           chartPath,
-          indexEntry.revision,
+          revision,
         );
         if (!context.isCurrent()) return;
         const duplicatedState = createdChartState(duplicated, context.operationId);
         if (!duplicatedState) throw new Error("chart duplicate result has no lifecycle insert");
         await projectPublicationCoordinator.submit({ result: duplicated });
         if (!context.isCurrent()) return;
-        await openChart(duplicatedState.path, duplicatedState.name);
+        await openChart(duplicatedState.path);
       } catch (error) {
         if (context && !context.isCurrent()) return;
         if (isEditorOpenRejectionHandled(error)) return;
@@ -95,7 +96,7 @@ export function useChartManagement(openChart: (chartPath: string, name: string) 
 }
 
 export function useOpenChart() {
-  return useCallback(async (chartPath: string, _name: string) => {
+  return useCallback(async (chartPath: string) => {
     if (!useChartDocumentStore.getState().documents[chartPath]) {
       const context = captureProjectCommandContext();
       try {

@@ -28,8 +28,6 @@ export type {
 export { createProjectEventConsumer } from "./projectEventConsumer";
 export { initializeProjectForCurrentWindow } from "./projectRuntime";
 export { getDefaultProjectParentDirectory, openProjectPathDialog } from "./projectPlatformActions";
-export { useProjectProjection } from "./projectProjection";
-export type { ProjectProjection } from "./projectProjection";
 export type {
   ProjectEvent,
   ProjectEventConsumer,

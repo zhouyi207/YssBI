@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { parseIpcErrorDto } from "@/shared/types/dto/ipcError";
+import { isIpcErrorDto } from "@/shared/types/dto/ipcError";
 import {
   IPC_MALFORMED_ERROR_CODE,
   IPC_TRANSPORT_FAILURE_CODE,
@@ -18,8 +18,8 @@ const backendError = {
 };
 
 describe("IPC error wire contract", () => {
-  it("parses the exact backend error shape", () => {
-    expect(parseIpcErrorDto(backendError)).toEqual(backendError);
+  it("accepts the exact backend error shape", () => {
+    expect(isIpcErrorDto(backendError)).toBe(true);
   });
 
   it.each([
@@ -32,7 +32,7 @@ describe("IPC error wire contract", () => {
     ["array details", { code: "internal_error", details: [], incidentId: null }],
     ["numeric incidentId", { code: "internal_error", details: null, incidentId: 42 }],
   ])("rejects %s", (_label, value) => {
-    expect(() => parseIpcErrorDto(value)).toThrow("Invalid IPC error response");
+    expect(isIpcErrorDto(value)).toBe(false);
   });
 });
 

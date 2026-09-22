@@ -62,32 +62,6 @@ beforeEach(() => {
 });
 
 describe("LogService plugin contract", () => {
-  it("validates paged history and statistics from the plugin", async () => {
-    core.invoke.mockResolvedValue({ entries: [record(3)], nextBeforeSequence: 3 });
-    expect(await LogService.queryLogs({ beforeSequence: 4, limit: 1 })).toEqual({
-      entries: [record(3)],
-      nextBeforeSequence: 3,
-    });
-    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|query_logs", {
-      query: { beforeSequence: 4, limit: 1 },
-    });
-    core.invoke.mockResolvedValue({
-      total: 3,
-      latestSequence: 3,
-      byLevel: { info: 3 },
-      byOrigin: { rust: 3 },
-    });
-    expect((await LogService.logStatistics()).total).toBe(3);
-    core.invoke.mockResolvedValue({ entries: [], next_before_sequence: null });
-    await expect(LogService.queryLogs()).rejects.toThrow("Invalid log page");
-    core.invoke.mockResolvedValue({
-      total: 3,
-      latestSequence: 3,
-      byLevel: { fatal: 3 },
-      byOrigin: {},
-    });
-    await expect(LogService.logStatistics()).rejects.toThrow("Invalid log counts");
-  });
   it("submits a frontend batch with the fixed command payload", async () => {
     core.invoke.mockResolvedValue(undefined);
     const entries: FrontendLogEntryDto[] = [

@@ -8,7 +8,7 @@ vi.mock("@/services/log", () => ({
   LogService: { submitFrontendLogs: mocks.submit },
 }));
 
-import { FRONTEND_LOG_BATCH_MAX_DELAY_MS } from "@/shared/config-default";
+import { FRONTEND_LOG_BATCH_MAX_DELAY_MS } from "./logConfig";
 import { logger } from "@/features/application/observability/appLogger";
 import { installFrontendLogging } from "@/features/application/observability/frontendLogTransport";
 

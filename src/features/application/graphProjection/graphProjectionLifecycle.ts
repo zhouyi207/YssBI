@@ -92,12 +92,8 @@ export function beginGraphLoadLifecycle(graphPath: string): number {
   return startGraphLifecycle(graphPath);
 }
 
-export function invalidateGraphLifecycle(graphPath: string): number {
-  return startGraphLifecycle(graphPath);
-}
-
 export function beginGraphUnloadLifecycle(graphPath: string): number {
-  return invalidateGraphLifecycle(graphPath);
+  return startGraphLifecycle(graphPath);
 }
 
 export function beginGraphRenameLifecycle(graphPath: string): number {

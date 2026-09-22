@@ -239,5 +239,4 @@ export class DatabaseService {
   ): Promise<void> {
     await invokeCommand("export_database", { projectInstanceId, id, path, format });
   }
-
 }

@@ -1,6 +1,6 @@
 export { executeGraphEdit } from "./commandExecutor";
 
-export type { CommandType, CommandHandler } from "./types";
+export type { CommandHandler } from "./types";
 export type {
   MoveNodesArgs,
   SetPinValueArgs,

@@ -82,22 +82,6 @@ vi.mock("./blockingErrorDialog", () => ({
   showBlockingIpcError: vi.fn(),
   showBlockingMessage: vi.fn(),
 }));
-vi.mock("@/features/core/dataStore", () => ({
-  loadActivatedProject: vi.fn(),
-  resolveActiveProjectPath: vi.fn(),
-  useGraphProjectionStore: {
-    getState: () => ({
-      graphEntities: {
-        [graphPath]: {
-          nodes: {
-            "view-node": { nodeType: "yssbi.debug.view" },
-            "other-node": { nodeType: "yssbi.statistics.linear.summary" },
-          },
-        },
-      },
-    }),
-  },
-}));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 

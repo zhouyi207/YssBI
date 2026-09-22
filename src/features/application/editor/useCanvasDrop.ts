@@ -3,7 +3,7 @@ import { useGestureStore } from "@/features/core/gesture";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import {
   isGraphResourceDragState,
   isNodeTemplateDragState,
@@ -23,7 +23,7 @@ interface UseCanvasDropParams {
   groupId: string;
   graphPath: string | null;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
-  setPendingConnection: (pin: PinData | null) => void;
+  setPendingConnection: (port: PortAddressDto | null) => void;
   createNode: CreateNodeFn;
   /** Preview canvases skip pointer-only listeners but keep their activatable drop route. */
   enabled?: boolean;

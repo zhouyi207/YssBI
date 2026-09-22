@@ -1,14 +1,5 @@
-export {
-  outputPinRef,
-  resultRef,
-  resolveInspectableResult,
-  resolveInspectableResultRef,
-} from "./inspectableResult";
-export type {
-  InspectableResultRef,
-  InspectableResultQueryDependencies,
-  ResolvedInspectableResultRef,
-} from "./inspectableResult";
+export { outputPinRef, resultRef, resolveInspectableResultRef } from "./inspectableResult";
+export type { InspectableResultRef, InspectableResultQueryDependencies } from "./inspectableResult";
 export type {
   PlotChart,
   Presentation,

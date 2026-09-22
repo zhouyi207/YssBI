@@ -150,18 +150,16 @@ describe("ResultService", () => {
     await ResultService.getPage(resultReferenceFixture("17"), 200, 200, "observations");
     const response = { kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } };
     vi.mocked(invoke).mockResolvedValueOnce(response);
-    await expect(ResultService.analyze(reference, { kind: "acfPacf", maxLag: 1 })).resolves.toEqual(
-      response,
-    );
+    await expect(ResultService.analyze(reference, { kind: "acfPacf" })).resolves.toEqual(response);
     expect(vi.mocked(invoke).mock.calls).toEqual([
       ["get_result_table_page", { reference, part: "observations", offset: 200, limit: 200 }],
-      ["analyze_result", { reference, analysis: { kind: "acfPacf", maxLag: 1 } }],
+      ["analyze_result", { reference, analysis: { kind: "acfPacf" } }],
     ]);
     vi.mocked(invoke).mockResolvedValueOnce({
       ...response,
       value: { ...response.value, acf: ["invalid"] },
     });
-    await expect(ResultService.analyze(reference, { kind: "acfPacf", maxLag: 1 })).rejects.toThrow(
+    await expect(ResultService.analyze(reference, { kind: "acfPacf" })).rejects.toThrow(
       "Invalid result analysis",
     );
   });

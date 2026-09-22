@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import { loadActivatedProject } from "@/features/application/project/projectHydration";
-import { resolveActiveProjectPath } from "@/features/application/project/projectSession";
+import { hydrateProjectPath } from "@/features/application/project/projectSession";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -61,7 +61,7 @@ export function useProjectOperations() {
     let pending: PendingProjectLifecycleOperation | undefined;
     try {
       pending = registerPendingProjectLifecycleOperation({ kind: "saveAs" });
-      const projectPath = await resolveActiveProjectPath();
+      const projectPath = await hydrateProjectPath();
       if (!pending.isCurrent()) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
         return;
@@ -81,7 +81,7 @@ export function useProjectOperations() {
         return;
       }
 
-      const currentPath = await ProjectService.getProjectPath(pending.projectInstanceId!);
+      const currentPath = await ProjectService.getProjectPath();
       if (!pending.isCurrent()) return;
       if (!currentPath) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
@@ -149,7 +149,7 @@ export function useProjectOperations() {
       if (!isEditorCommandTargetCurrent(target)) return;
 
       try {
-        const projectPath = await resolveActiveProjectPath();
+        const projectPath = await hydrateProjectPath();
         if (!isEditorCommandTargetCurrent(target)) return;
         if (!projectPath) {
           showBlockingMessage(t("notifications.project.notLoaded"));

@@ -6,16 +6,6 @@ import {
 import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
 import { ProjectLifecycleProtocolError } from "@/features/application/projectLifecycleReceipt";
 
-export type ProjectPickerPageOperation =
-  | "refresh"
-  | "scan"
-  | "cleanup"
-  | "open"
-  | "import"
-  | "remove"
-  | "favorite"
-  | "reveal";
-
 export interface ProjectPickerErrorPresentation {
   code: string;
   incidentId: string | null;

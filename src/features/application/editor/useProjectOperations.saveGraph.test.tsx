@@ -15,7 +15,7 @@ const target: EditorCommandTarget = Object.freeze({
 
 const mocks = vi.hoisted(() => ({
   targetCurrent: true,
-  resolveActiveProjectPath: vi.fn(async () => "D:/projects/demo"),
+  hydrateProjectPath: vi.fn(async () => "D:/projects/demo"),
   saveGraph: vi.fn(async () => true),
   saveChart: vi.fn(async () => true),
   showBlockingMessage: vi.fn(),
@@ -27,27 +27,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/features/core/dataStore", () => ({
-  loadActivatedProject: vi.fn(),
-  resolveActiveProjectPath: mocks.resolveActiveProjectPath,
-}));
-
 vi.mock("@/features/application/project/projectSession", () => ({
-  resolveActiveProjectPath: mocks.resolveActiveProjectPath,
+  hydrateProjectPath: mocks.hydrateProjectPath,
 }));
 
 vi.mock("@/features/application/chart/saveChartDocument", () => ({
   saveChartDocument: mocks.saveChart,
-}));
-
-vi.mock("@/features/core/chart/chartDocumentStore", () => ({
-  useChartDocumentStore: {
-    getState: () => ({ saveDocument: mocks.saveChart }),
-  },
-}));
-
-vi.mock("@/features/core/resource", () => ({
-  isResourceDocumentDirty: vi.fn(() => false),
 }));
 
 vi.mock("@/features/application/graphEditing/saveGraph", () => ({
@@ -66,11 +51,6 @@ vi.mock("./editorCommandFocus", () => ({
 vi.mock("./blockingErrorDialog", () => ({
   showBlockingMessage: mocks.showBlockingMessage,
   showBlockingIpcError: mocks.showBlockingIpcError,
-}));
-
-vi.mock("@/features/core/execution", () => ({
-  useExecutionStore: { getState: () => ({}) },
-  graphHasClearableArtifacts: vi.fn(),
 }));
 
 vi.mock("@/features/application/observability/appLogger", () => ({
@@ -92,7 +72,7 @@ describe("useProjectOperations saveGraph target authority", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.targetCurrent = true;
-    mocks.resolveActiveProjectPath.mockResolvedValue("D:/projects/demo");
+    mocks.hydrateProjectPath.mockResolvedValue("D:/projects/demo");
     mocks.saveGraph.mockResolvedValue(true);
     mocks.saveChart.mockResolvedValue(true);
 
@@ -122,7 +102,7 @@ describe("useProjectOperations saveGraph target authority", () => {
   });
 
   it("stops before save when the target changes while project authority resolves", async () => {
-    mocks.resolveActiveProjectPath.mockImplementationOnce(async () => {
+    mocks.hydrateProjectPath.mockImplementationOnce(async () => {
       mocks.targetCurrent = false;
       return "D:/projects/demo";
     });

@@ -1,19 +1,7 @@
 import { invokeCommand } from "@/services/ipc";
 import { subscribeRecords, type RecordSubscription } from "@/services/ipc/recordSubscription";
-import type {
-  FrontendLogEntryDto,
-  LogBatchDto,
-  LogPage,
-  LogQuery,
-  LogStatistics,
-  LogSubscriptionDto,
-} from "@/shared/types/dto/log";
-import {
-  parseLogBatchDto,
-  parseLogPage,
-  parseLogStatistics,
-  parseLogSubscriptionDto,
-} from "@/shared/types/dto/logParser";
+import type { FrontendLogEntryDto, LogBatchDto, LogSubscriptionDto } from "@/shared/types/dto/log";
+import { parseLogBatchDto, parseLogSubscriptionDto } from "@/shared/types/dto/logParser";
 
 export type LogSubscription = RecordSubscription<LogSubscriptionDto>;
 export type FrontendLogEntry = FrontendLogEntryDto;
@@ -39,17 +27,5 @@ export class LogService {
       onRecords,
       onDiscontinuity,
     );
-  }
-
-  static async unsubscribeLogs(subscriptionId: string): Promise<void> {
-    await invokeCommand("plugin:tracing|unsubscribe_logs", { subscriptionId });
-  }
-
-  static async queryLogs(query: LogQuery = {}): Promise<LogPage> {
-    return parseLogPage(await invokeCommand("plugin:tracing|query_logs", { query }));
-  }
-
-  static async logStatistics(): Promise<LogStatistics> {
-    return parseLogStatistics(await invokeCommand("plugin:tracing|log_statistics"));
   }
 }
