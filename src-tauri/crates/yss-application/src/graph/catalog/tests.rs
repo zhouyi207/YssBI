@@ -342,12 +342,12 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     assert_eq!(catalog.resource_publication_revision, 0);
     for id in ["length", "count", "sum", "mean"] {
         assert!(
-            !catalog
+            catalog
                 .catalog
                 .items
                 .iter()
                 .find(|item| item.node_type_id.as_ref() == format!("yssbi.dataframe.series.{id}"))
-                .expect("unavailable definitions remain visible")
+                .expect("registered series kernels remain discoverable")
                 .available
         );
     }
@@ -465,6 +465,191 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
 
     assert!(ids.contains("yssbi.numeric.add"));
     assert!(!ids.contains("yssbi.logic.not"));
+}
+
+#[test]
+fn compatible_catalog_excludes_disjoint_numeric_and_model_result_types_in_both_directions() {
+    let graph = GraphResourcePath::new("events/Types.yssbi-event").unwrap();
+    let session = staged_session(
+        compatible_project(&graph),
+        "compatible-model-result",
+        GraphRuntimeTestControl::default(),
+    );
+    let mut document = GraphDocument::default();
+    let summary = NodeId::new();
+    let multiply = NodeId::new();
+    for (id, kind) in [
+        (summary, "yssbi.statistics.linear.summary"),
+        (multiply, "yssbi.numeric.multiply"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    for (source, excluded, included) in [
+        (
+            PortAddress::declared(summary, "result".parse().unwrap()),
+            "yssbi.numeric.multiply",
+            "yssbi.debug.view",
+        ),
+        (
+            PortAddress::declared(multiply, "left".parse().unwrap()),
+            "yssbi.statistics.linear.summary",
+            "yssbi.constant.pi",
+        ),
+    ] {
+        let catalog = session
+            .application
+            .compatible_node_catalog(CompatibleCatalogRequest::new(
+                session.session.project_instance_id().clone(),
+                graph.clone(),
+                document.clone(),
+                source,
+                "en-US",
+            ))
+            .unwrap();
+        let contains = |id: &str| {
+            catalog
+                .catalog
+                .items
+                .iter()
+                .any(|item| item.node_type_id.as_ref() == id)
+        };
+        assert!(
+            !contains(excluded),
+            "incompatible node {excluded} must be filtered out"
+        );
+        assert!(
+            contains(included),
+            "compatible node {included} must remain discoverable"
+        );
+    }
+}
+
+#[test]
+fn connection_mutations_reject_model_results_even_through_resolved_generic_outputs() {
+    use crate::graph::resources::ResourceMutationApplicationError;
+    use yss_graph_document::{ConnectionId, DocumentConnection};
+    use yss_graph_editor::{EditorGraphMutation, EditorMutationErrorCode, MutationConflict};
+
+    let graph = GraphResourcePath::new("events/Types.yssbi-event").unwrap();
+    let session = staged_session(
+        compatible_project(&graph),
+        "connect-model-result",
+        GraphRuntimeTestControl::default(),
+    );
+    let builtin = build_builtin_node_system().unwrap();
+    let mut document = GraphDocument::default();
+    let summary = NodeId::new();
+    let multiply = NodeId::new();
+    let reroute = NodeId::new();
+    let numeric = NodeId::new();
+    for (id, kind) in [
+        (summary, "yssbi.statistics.linear.summary"),
+        (multiply, "yssbi.numeric.multiply"),
+        (reroute, "yssbi.core.reroute"),
+        (numeric, "yssbi.constant.pi"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    let result = PortAddress::declared(summary, "result".parse().unwrap());
+    let input = PortAddress::declared(multiply, "left".parse().unwrap());
+    let routed = PortAddress::declared(reroute, "output".parse().unwrap());
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: result.clone(),
+            input: PortAddress::declared(reroute, "input".parse().unwrap()),
+            order: None,
+        },
+    );
+    let create = |kind: &str, source: PortAddress| EditorGraphMutation::CreateNode {
+        descriptor: yss_node_catalog::authoritative_static_descriptor(
+            &builtin.registry,
+            builtin.registry.protocol(&kind.parse().unwrap()).unwrap(),
+        )
+        .unwrap(),
+        position: NodePosition { x: 200., y: 0. },
+        user_label: None,
+        connect_from: Some(source),
+    };
+    let transform = |mutation| {
+        session.application.transform_graph_document(
+            session.session.project_instance_id().clone(),
+            graph.clone(),
+            "en-US".into(),
+            document.clone(),
+            mutation,
+        )
+    };
+    for mutation in [
+        EditorGraphMutation::Connect {
+            output: result.clone(),
+            input: input.clone(),
+            order: None,
+        },
+        create("yssbi.numeric.multiply", result.clone()),
+        create("yssbi.statistics.linear.summary", input.clone()),
+        EditorGraphMutation::Connect {
+            output: routed.clone(),
+            input,
+            order: None,
+        },
+        create("yssbi.numeric.multiply", routed),
+    ] {
+        let error = transform(mutation)
+            .expect_err("incompatible connections must reject the entire mutation");
+        assert!(
+            matches!(error,
+                ResourceMutationApplicationError::Mutation(MutationConflict::Editor(ref failure))
+                    if failure.code == EditorMutationErrorCode::GraphConnectionTypeMismatch
+            ),
+            "unexpected rejection: {error:?}"
+        );
+    }
+    for mutation in [
+        create("yssbi.debug.view", result),
+        create(
+            "yssbi.numeric.multiply",
+            PortAddress::declared(numeric, "value".parse().unwrap()),
+        ),
+    ] {
+        let updated = transform(mutation)
+            .expect("valid generic and numeric connections must remain possible");
+        assert_eq!(updated.document.nodes.len(), document.nodes.len() + 1);
+        assert_eq!(
+            updated.document.connections.len(),
+            document.connections.len() + 1
+        );
+        let mut restored = updated.document;
+        yss_graph_document_edit::apply_graph_document_patch(
+            &mut restored,
+            &updated.patch.inverse(),
+        )
+        .unwrap();
+        assert_eq!(
+            restored, document,
+            "creation and connection must undo together"
+        );
+    }
 }
 
 #[test]
@@ -905,9 +1090,8 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     assert!(!port.connections.can_replace);
     let mut stale = updated.document;
     let constant = stale.constants.values_mut().next().unwrap();
-    let yss_data_contract::DataValue::String(_) = constant.data_value else {
-        panic!("dataframe literal");
-    };
+    assert_eq!(constant.data_value, DataValue::Null);
+    assert!(constant.tabular.is_some());
     constant.tabular = None;
     constant.data_value = DataValue::String(r#"{"label":["a","b"]}"#.into());
     yss_graph_document::normalize_constant_value(constant).unwrap();

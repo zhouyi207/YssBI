@@ -1,6 +1,7 @@
 use crate::mutation::{EditorMutationError, EditorMutationErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::ValueType;
+use yss_graph_analysis::GraphSemanticSnapshot;
 use yss_graph_document::{
     DocumentNode, DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
     GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
@@ -12,7 +13,7 @@ use yss_node_catalog::{
 };
 use yss_node_protocol::{
     ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortCardinality,
-    PortDirection, PortKey, PortSpec, ResourceDisplayKind, TypeExpr, TypeParameterId,
+    PortDirection, PortKey, PortSpec, ResourceDisplayKind, TypeExpr,
 };
 use yss_node_registry::NodeRegistry;
 
@@ -24,6 +25,14 @@ use yss_node_registry::NodeRegistry;
 /// currentness remains enforced by the caller's graph-operation commit authority.
 pub struct CatalogMutationValidationSnapshot {
     pub resources: BTreeMap<CatalogResourcePath, CatalogMutationResource>,
+}
+
+#[derive(Clone, Copy, Default)]
+/// Borrowed authorities for the document before this mutation. Ports introduced
+/// by the same atomic patch are validated from their registry/catalog declarations.
+pub struct EditorMutationContext<'a> {
+    pub catalog: Option<&'a CatalogMutationValidationSnapshot>,
+    pub semantics: Option<&'a GraphSemanticSnapshot>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -129,7 +138,6 @@ pub struct SourcePort {
     pub address: PortAddress,
     pub direction: PortDirection,
     pub value_type: TypeExpr,
-    pub type_parameters: Box<[TypeParameterId]>,
 }
 
 #[derive(Debug)]
@@ -215,61 +223,26 @@ pub(crate) fn resolve_editor_port<'a>(
 pub(crate) fn source_port(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    resources: &CatalogMutationValidationSnapshot,
-    address: PortAddress,
-) -> Result<SourcePort, EditorMutationError> {
-    source_port_with_optional_catalog(document, registry, Some(resources), address)
-}
-
-pub(crate) fn validate_connection_types(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    resources: Option<&CatalogMutationValidationSnapshot>,
-    output: &PortAddress,
-    input: &PortAddress,
-) -> Result<(), EditorMutationError> {
-    let output = source_port_with_optional_catalog(document, registry, resources, output.clone())?;
-    let input = source_port_with_optional_catalog(document, registry, resources, input.clone())?;
-    if output.direction != PortDirection::Output || input.direction != PortDirection::Input {
-        return Err(mutation_validation_error(
-            EditorMutationErrorCode::GraphConnectionDirectionMismatch,
-            "connection endpoints have invalid directions",
-        ));
-    }
-    if !type_pattern_is_exact(&output.value_type) {
-        return Ok(());
-    }
-    if yss_node_protocol::type_exprs_compatibility(
-        &output.value_type,
-        &input.value_type,
-        &output.type_parameters,
-        &input.type_parameters,
-    ) != yss_node_protocol::TypeCompatibility::Incompatible
-    {
-        Ok(())
-    } else {
-        Err(mutation_validation_error(
-            EditorMutationErrorCode::GraphConnectionTypeMismatch,
-            "connection endpoint types are not assignable",
-        ))
-    }
-}
-
-fn type_pattern_is_exact(value: &TypeExpr) -> bool {
-    match value {
-        TypeExpr::Concrete(_) => true,
-        TypeExpr::Applied { arguments, .. } => arguments.iter().all(type_pattern_is_exact),
-        TypeExpr::Class(_) | TypeExpr::Generic(_) | TypeExpr::Union(_) | TypeExpr::Unknown => false,
-    }
-}
-
-fn source_port_with_optional_catalog(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    resources: Option<&CatalogMutationValidationSnapshot>,
+    context: EditorMutationContext<'_>,
     address: PortAddress,
 ) -> Result<SourcePort, EditorMutationError> {
     let resolved = resolve_editor_port(document, registry, &address)?;
+    if let Some(port) = context
+        .semantics
+        .and_then(|snapshot| snapshot.concrete_interface().port(&address))
+    {
+        if port.orphan {
+            return Err(mutation_validation_error(
+                EditorMutationErrorCode::GraphPortOrphan,
+                "orphan ports cannot be connected",
+            ));
+        }
+        return Ok(SourcePort {
+            address,
+            direction: port.direction,
+            value_type: port.connection_type(),
+        });
+    }
     let ResolvedEditorPort {
         spec,
         binding,
@@ -285,13 +258,41 @@ fn source_port_with_optional_catalog(
         address,
         direction: spec.direction,
         value_type: spec.value_type.clone(),
-        type_parameters: protocol.interface.type_parameters.clone(),
     };
     refine_constant_type(&mut source.value_type, &source.address, document, protocol);
-    if let Some(resources) = resources {
+    if let Some(resources) = context.catalog {
         refine_source_type(&mut source, document, protocol, resources)?;
     }
     Ok(source)
+}
+
+pub(crate) fn validate_connection_types(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    context: EditorMutationContext<'_>,
+    output: &PortAddress,
+    input: &PortAddress,
+) -> Result<(), EditorMutationError> {
+    let output = source_port(document, registry, context, output.clone())?;
+    let input = source_port(document, registry, context, input.clone())?;
+    if output.direction != PortDirection::Output || input.direction != PortDirection::Input {
+        return Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionDirectionMismatch,
+            "connection endpoints have invalid directions",
+        ));
+    }
+    if yss_graph_analysis::type_patterns_can_connect(
+        &output.value_type,
+        &input.value_type,
+        registry.types(),
+    ) {
+        Ok(())
+    } else {
+        Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionTypeMismatch,
+            "connection endpoint types are not assignable",
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -300,7 +301,6 @@ pub(crate) struct CandidatePort {
     pub direction: PortDirection,
     pub connections: ConnectionsPerPort,
     pub value_type: TypeExpr,
-    pub type_parameters: Box<[TypeParameterId]>,
     pub dynamic: Option<DynamicCandidate>,
 }
 
@@ -456,7 +456,7 @@ pub fn filter_compatible_catalog(
             .is_some_and(|candidates| {
                 candidates
                     .iter()
-                    .any(|candidate| ports_are_compatible(source, candidate))
+                    .any(|candidate| ports_are_compatible(source, candidate, registry))
             })
     });
     let categories = localized
@@ -520,7 +520,6 @@ fn catalog_query_candidate_ports(
             direction: port.direction,
             connections: port.connections,
             value_type: port.value_type.clone(),
-            type_parameters: protocol.interface.type_parameters.clone(),
             dynamic: None,
         })
         .collect::<Vec<_>>();
@@ -557,7 +556,6 @@ fn catalog_query_candidate_ports(
                             parameter.data_type(),
                         )
                         .ok()?,
-                        type_parameters: Box::new([]),
                         dynamic: Some(DynamicCandidate {
                             origin: DynamicMemberLocator::FunctionParameter {
                                 function: function_path.clone(),
@@ -590,7 +588,6 @@ fn catalog_query_candidate_ports(
                     direction: results.direction,
                     connections: results.connections,
                     value_type: yss_graph_type_mapping::type_expr_from_data_type(data_type).ok()?,
-                    type_parameters: Box::new([]),
                     dynamic: Some(DynamicCandidate {
                         origin: DynamicMemberLocator::FunctionParameter {
                             function: function_path,
@@ -617,22 +614,28 @@ fn override_data_candidate_types(candidates: &mut [CandidatePort], value_type: T
     }
 }
 
-pub(crate) fn connection_candidates(
+pub(crate) fn connection_candidate(
     graph_path: &GraphResourcePath,
     descriptor: &NodeCreation,
     registry: &NodeRegistry,
     resources: &CatalogMutationValidationSnapshot,
     source: &SourcePort,
-) -> Result<Vec<CandidatePort>, String> {
-    let candidates = candidate_ports(graph_path, descriptor, registry, resources)?
+) -> Result<CandidatePort, EditorMutationError> {
+    candidate_ports(graph_path, descriptor, registry, resources)
+        .map_err(|detail| {
+            mutation_validation_error(
+                EditorMutationErrorCode::GraphConnectionTypeUnavailable,
+                detail,
+            )
+        })?
         .into_iter()
-        .filter(|candidate| ports_are_compatible(source, candidate))
-        .collect::<Vec<_>>();
-    if candidates.is_empty() {
-        Err("created node has no compatible opposite-direction port".into())
-    } else {
-        Ok(candidates)
-    }
+        .find(|candidate| ports_are_compatible(source, candidate, registry))
+        .ok_or_else(|| {
+            mutation_validation_error(
+                EditorMutationErrorCode::GraphConnectionTypeMismatch,
+                "created node has no compatible opposite-direction port",
+            )
+        })
 }
 
 fn candidate_ports(
@@ -663,7 +666,6 @@ fn candidate_ports(
                 connections: spec.connections,
                 value_type: resource_type_override(resource)?
                     .unwrap_or_else(|| spec.value_type.clone()),
-                type_parameters: protocol.interface.type_parameters.clone(),
                 dynamic: None,
             })
         })
@@ -688,7 +690,6 @@ fn candidate_ports(
                     direction: spec.direction,
                     connections: spec.connections,
                     value_type: function_type_expr(&parameter.type_name)?,
-                    type_parameters: Box::new([]),
                     dynamic: Some(DynamicCandidate {
                         origin: DynamicMemberLocator::FunctionParameter {
                             function: function.clone(),
@@ -716,7 +717,6 @@ fn candidate_ports(
                 direction: spec.direction,
                 connections: spec.connections,
                 value_type: function_type_expr(return_type)?,
-                type_parameters: Box::new([]),
                 dynamic: Some(DynamicCandidate {
                     origin: DynamicMemberLocator::FunctionParameter {
                         function,
@@ -804,27 +804,17 @@ fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Re
     }
 }
 
-fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool {
+fn ports_are_compatible(
+    source: &SourcePort,
+    candidate: &CandidatePort,
+    registry: &NodeRegistry,
+) -> bool {
     if source.direction == candidate.direction {
         return false;
     }
-    let compatibility = match source.direction {
-        PortDirection::Output => yss_node_protocol::type_exprs_compatibility(
-            &source.value_type,
-            &candidate.value_type,
-            &source.type_parameters,
-            &candidate.type_parameters,
-        ),
-        PortDirection::Input => yss_node_protocol::type_exprs_compatibility(
-            &candidate.value_type,
-            &source.value_type,
-            &candidate.type_parameters,
-            &source.type_parameters,
-        ),
+    let (output, input) = match source.direction {
+        PortDirection::Output => (&source.value_type, &candidate.value_type),
+        PortDirection::Input => (&candidate.value_type, &source.value_type),
     };
-    compatibility != yss_node_protocol::TypeCompatibility::Incompatible
-        || match source.direction {
-            PortDirection::Output => !type_pattern_is_exact(&source.value_type),
-            PortDirection::Input => !type_pattern_is_exact(&candidate.value_type),
-        }
+    yss_graph_analysis::type_patterns_can_connect(output, input, registry.types())
 }

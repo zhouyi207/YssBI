@@ -40,11 +40,6 @@ pub struct EditorNodeDisplay {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditorNodeCapabilities {
     pub managed: bool,
-    pub can_copy: bool,
-    pub can_delete: bool,
-    pub can_edit_label: bool,
-    pub can_edit_parameters: bool,
-    pub supports_inline_literals: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

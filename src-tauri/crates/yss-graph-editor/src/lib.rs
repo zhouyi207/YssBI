@@ -13,7 +13,8 @@ mod tests;
 
 pub use compatibility::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
-    CatalogMutationValidationSnapshot, SourcePort, filter_compatible_catalog,
+    CatalogMutationValidationSnapshot, EditorMutationContext, SourcePort,
+    filter_compatible_catalog,
 };
 pub use mutation::{
     EditorGraphMutation, EditorMutationError, EditorMutationErrorCode, MutationConflict,

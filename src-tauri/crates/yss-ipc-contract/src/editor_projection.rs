@@ -138,14 +138,28 @@ pub struct NodeDisplayDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NodeCapabilitiesDto {
     pub managed: bool,
-    pub can_copy: bool,
-    pub can_delete: bool,
-    pub can_edit_label: bool,
-    pub can_edit_parameters: bool,
-    pub supports_inline_literals: bool,
+}
+
+#[cfg(test)]
+mod node_capabilities_tests {
+    use super::NodeCapabilitiesDto;
+
+    #[test]
+    fn node_ownership_wire_is_exact_and_requires_managed() {
+        let value = serde_json::json!({ "managed": false });
+        let parsed: NodeCapabilitiesDto = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), value);
+        for invalid in [
+            serde_json::json!({}),
+            serde_json::json!({ "managed": "false" }),
+            serde_json::json!({ "managed": false, "extra": true }),
+        ] {
+            assert!(serde_json::from_value::<NodeCapabilitiesDto>(invalid).is_err());
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

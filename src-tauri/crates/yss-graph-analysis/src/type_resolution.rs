@@ -17,6 +17,79 @@ const MAX_DOMAIN_SIZE: usize = 128;
 
 mod constraints;
 
+impl GraphPortSemanticFact {
+    /// Outputs use the resolved domain; inputs use the accepted domain instead
+    /// of the narrower type of their currently connected value.
+    pub fn connection_type(&self) -> TypeExpr {
+        let domain = match self.direction {
+            PortDirection::Output => self.type_state.domain(),
+            PortDirection::Input => self.accepted_domain.as_ref().map(TypeDomain::types),
+        };
+        match domain {
+            Some([value]) => resolved_type_expr(value),
+            Some(values) => TypeExpr::Union(values.iter().map(resolved_type_expr).collect()),
+            None => self.accepted_type.clone(),
+        }
+    }
+}
+
+fn resolved_type_expr(value: &ResolvedType) -> TypeExpr {
+    match value {
+        ResolvedType::Nominal(id) => TypeExpr::Concrete(id.clone()),
+        ResolvedType::Applied {
+            constructor,
+            arguments,
+        } => TypeExpr::Applied {
+            constructor: constructor.clone(),
+            arguments: arguments.iter().map(resolved_type_expr).collect(),
+        },
+    }
+}
+
+/// Reject disjoint domains using the same class expansion and assignability as
+/// resolution. Unresolved generics remain connectable, but do not erase known
+/// container shapes or turn a disjoint constrained domain into a wildcard.
+pub fn type_patterns_can_connect(
+    source: &TypeExpr,
+    target: &TypeExpr,
+    types: &TypeRegistry,
+) -> bool {
+    if let (Some(sources), Some(targets)) = (
+        expand_pattern(source, types, &BTreeMap::new()),
+        expand_pattern(target, types, &BTreeMap::new()),
+    ) {
+        return sources.iter().any(|source| targets.contains(source));
+    }
+    match (source, target) {
+        (TypeExpr::Union(sources), target) => sources
+            .iter()
+            .any(|source| type_patterns_can_connect(source, target, types)),
+        (source, TypeExpr::Union(targets)) => targets
+            .iter()
+            .any(|target| type_patterns_can_connect(source, target, types)),
+        (TypeExpr::Unknown | TypeExpr::Generic(_), _)
+        | (_, TypeExpr::Unknown | TypeExpr::Generic(_)) => true,
+        (
+            TypeExpr::Applied {
+                constructor: source_constructor,
+                arguments: source_arguments,
+            },
+            TypeExpr::Applied {
+                constructor: target_constructor,
+                arguments: target_arguments,
+            },
+        ) => {
+            source_constructor == target_constructor
+                && source_arguments.len() == target_arguments.len()
+                && source_arguments
+                    .iter()
+                    .zip(target_arguments)
+                    .all(|(source, target)| type_patterns_can_connect(source, target, types))
+        }
+        _ => false,
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct GraphSemanticCache {
     pub(crate) schemas: super::schema_resolution::SchemaCache,
@@ -369,46 +442,13 @@ fn restrict_to_pattern(source: &TypeState, accepted: &TypeExpr, types: &TypeRegi
     };
     let candidates = source_domain
         .iter()
-        .filter(|source| {
-            accepted_domain
-                .iter()
-                .any(|target| is_assignable(source, target))
-        })
+        .filter(|source| accepted_domain.contains(source))
         .cloned()
         .collect::<Vec<_>>();
     if candidates.is_empty() {
         TypeState::Conflict(TypeConflict::InputNotAccepted)
     } else {
         state_from_candidates(candidates)
-    }
-}
-
-fn is_assignable(source: &ResolvedType, target: &ResolvedType) -> bool {
-    if source == target {
-        return true;
-    }
-    match (source, target) {
-        (ResolvedType::Nominal(source), ResolvedType::Nominal(target)) => {
-            source.as_str() == "core.numeric" && target.as_str() == "core.numeric"
-        }
-        (
-            ResolvedType::Applied {
-                constructor: source_constructor,
-                arguments: source_arguments,
-            },
-            ResolvedType::Applied {
-                constructor: target_constructor,
-                arguments: target_arguments,
-            },
-        ) => {
-            source_constructor == target_constructor
-                && source_arguments.len() == target_arguments.len()
-                && source_arguments
-                    .iter()
-                    .zip(target_arguments)
-                    .all(|(source, target)| is_assignable(source, target))
-        }
-        _ => false,
     }
 }
 

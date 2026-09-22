@@ -14,27 +14,9 @@ pub(super) fn resolve_mutation_port<'a>(
 pub(crate) fn move_connection_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
+    context: EditorMutationContext<'_>,
     source: PortAddress,
     target: PortAddress,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    move_connection_operations_with_id_allocator(
-        document,
-        registry,
-        catalog,
-        source,
-        target,
-        &ConnectionId::new,
-    )
-}
-
-pub(crate) fn move_connection_operations_with_id_allocator(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
-    source: PortAddress,
-    target: PortAddress,
-    allocate: &dyn Fn() -> ConnectionId,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     let source_port = resolve_mutation_port(document, registry, &source)?;
     let target_port = resolve_mutation_port(document, registry, &target)?;
@@ -73,7 +55,7 @@ pub(crate) fn move_connection_operations_with_id_allocator(
             crate::compatibility::validate_connection_types(
                 document,
                 registry,
-                catalog,
+                context,
                 &connection.output,
                 &connection.input,
             )
@@ -141,7 +123,7 @@ pub(crate) fn move_connection_operations_with_id_allocator(
 
     let mut operations = removal_operations;
     operations.extend(proposals.into_iter().map(|mut connection| {
-        connection.id = allocate();
+        connection.id = ConnectionId::new();
         GraphDocumentOperation::InsertConnection { connection }
     }));
     Ok(operations)
@@ -311,8 +293,14 @@ pub(crate) fn validate_subgraph_connection(
     let input_port = resolve_mutation_port(document, registry, input)?;
     validate_document_connection_endpoints(&output_port, &input_port)?;
     validate_connection_does_not_exist(document, output, input)?;
-    crate::compatibility::validate_connection_types(document, registry, None, output, input)
-        .map_err(MutationConflict::Editor)?;
+    crate::compatibility::validate_connection_types(
+        document,
+        registry,
+        EditorMutationContext::default(),
+        output,
+        input,
+    )
+    .map_err(MutationConflict::Editor)?;
     validate_connection_order(input_port.spec.connections, order)?;
     validate_connection_capacity(document, output, output_port.spec.connections)?;
     validate_connection_capacity(document, input, input_port.spec.connections)
@@ -321,36 +309,16 @@ pub(crate) fn validate_subgraph_connection(
 pub(super) fn connect_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
+    context: EditorMutationContext<'_>,
     output: PortAddress,
     input: PortAddress,
     order: Option<OrderKey>,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    connect_operations_with_id_allocator(
-        document,
-        registry,
-        catalog,
-        output,
-        input,
-        order,
-        ConnectionId::new,
-    )
-}
-
-pub(crate) fn connect_operations_with_id_allocator(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    catalog: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
-    output: PortAddress,
-    input: PortAddress,
-    order: Option<OrderKey>,
-    allocate: impl FnOnce() -> ConnectionId,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     let output_port = resolve_mutation_port(document, registry, &output)?;
     let input_port = resolve_mutation_port(document, registry, &input)?;
     validate_document_connection_endpoints(&output_port, &input_port)?;
     validate_connection_does_not_exist(document, &output, &input)?;
-    crate::compatibility::validate_connection_types(document, registry, catalog, &output, &input)
+    crate::compatibility::validate_connection_types(document, registry, context, &output, &input)
         .map_err(MutationConflict::Editor)?;
     plan_connection_operations_after_type_validation(
         document,
@@ -359,7 +327,6 @@ pub(crate) fn connect_operations_with_id_allocator(
         output,
         input,
         order,
-        allocate,
     )
 }
 
@@ -389,7 +356,6 @@ fn plan_connection_operations_after_type_validation(
     output: PortAddress,
     input: PortAddress,
     order: Option<OrderKey>,
-    allocate: impl FnOnce() -> ConnectionId,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     validate_connection_order(input_connections, order.as_ref())?;
     let output_capacity = endpoint_capacity(document, &output, output_connections)?;
@@ -412,7 +378,7 @@ fn plan_connection_operations_after_type_validation(
     validate_connection_capacity(&staged, &input, input_connections)?;
     operations.push(GraphDocumentOperation::InsertConnection {
         connection: DocumentConnection {
-            id: allocate(),
+            id: ConnectionId::new(),
             output,
             input,
             order,

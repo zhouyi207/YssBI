@@ -41,6 +41,7 @@ GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，编
 完整清单见 [Module Map](../../../../../docs/reference/MODULE_MAP.md)。
 
 Node 描述一种节点的端口、参数、类型约束及执行语义，不拥有某张图的节点实例或解析结果。
+节点编辑投影的 `capabilities` 仅携带 `managed`；复制、创建副本、删除和剪切在前端统一要求存在明确的非受管理节点投影。Rust 继续按节点协议拒绝受管理节点的非法修改与子图导出。参数编辑、配置和内联字面量直接消费各自投影，不另传节点级汇总开关。
 三个 `yss-node-*` crate 均不依赖 Graph；`DocumentNode`、位置与连线属于图文档，连接后的类型、
 Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph-type-mapping` 留在 Graph。
 节点目录接收调用方提供的资源创建描述，不读取项目状态，也不解析图中连接。
@@ -115,6 +116,8 @@ Project watcher 保留未保存的当前文档。资源重命名和函数签名�
 Graph 重命名在文件系统 lease 内枚举持久化图及驻留图，对当前文档、磁盘正文和可逆历史分别重写引用，再通过同一文件事务与版本校验提交；未加载的调用图保持未加载。Project 的 `graph_references` 共用实现只改写函数 call 的 target、entry/return 的 function 参数及动态端口 FunctionParameter 来源，保留普通文本、字面量和端口实例身份。复制复用此引用规则，但仍单独重新分配节点、连接与动态端口实例身份。
 
 从 Pin 查询兼容节点时读取匹配版本的当前文档，使用同一次 Resolve 的端口类型、Schema 和约束。查询不 claim 端口，真正连接时才原子登记。Canvas、Details、Problems 和运行准入共享同一语义投影，没有面板自有的图事实源。
+
+兼容目录仅保留具有可连接反向端口的节点。提交创建并连接、直接连接或迁移连线时，Graph Runtime 将当前语义快照交给 Editor，再次按相同规则校验；不能通过直接提交目录描述绕过类型检查。连接不兼容时拒绝整个补丁，不残留新节点或端口绑定。
 
 ## 编辑、保存与运行
 

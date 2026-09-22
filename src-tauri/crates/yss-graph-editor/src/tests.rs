@@ -1,4 +1,7 @@
-use crate::{CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode};
+use crate::{
+    CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationContext,
+    EditorMutationErrorCode,
+};
 use std::collections::BTreeMap;
 use yss_data_contract::ValueType;
 use yss_graph_document::{
@@ -108,7 +111,7 @@ fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone(
 }
 
 #[test]
-fn connect_preserves_a_structurally_valid_draft_for_semantic_analysis() {
+fn connect_rejects_a_known_type_outside_the_input_class() {
     let registry = build_builtin_node_system()
         .expect("built-in registry must assemble")
         .registry;
@@ -125,16 +128,17 @@ fn connect_preserves_a_structurally_valid_draft_for_semantic_analysis() {
         document_node("yssbi.numeric.subtract", 100.0),
     );
 
-    let patch = EditorGraphMutation::Connect {
+    let error = EditorGraphMutation::Connect {
         output: declared(source, "value"),
         input: declared(target, "left"),
         order: None,
     }
     .into_patch(&graph_path(), &document, registry.as_ref())
-    .expect("structural editing must leave authoritative type diagnostics to graph analysis");
-    apply_graph_document_patch(&mut document, &patch).expect("planned connection must be valid");
+    .expect_err("a known text value cannot connect to a numeric input");
 
-    assert_eq!(document.connections.len(), 1);
+    assert!(matches!(error, crate::MutationConflict::Editor(error)
+        if error.code == EditorMutationErrorCode::GraphConnectionTypeMismatch));
+    assert!(document.connections.is_empty());
 }
 
 #[test]
@@ -236,7 +240,15 @@ fn create_and_connect_plans_one_atomic_patch() {
         user_label: Some("sum".into()),
         connect_from: Some(source_output.clone()),
     }
-    .into_patch_with_catalog_snapshot(&graph_path(), &document, registry.as_ref(), Some(&catalog))
+    .into_patch_with_context(
+        &graph_path(),
+        &document,
+        registry.as_ref(),
+        EditorMutationContext {
+            catalog: Some(&catalog),
+            semantics: None,
+        },
+    )
     .expect("creation must derive a compatible target port from catalog authority");
     apply_graph_document_patch(&mut document, &patch).expect("atomic creation patch must apply");
 
@@ -451,7 +463,15 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
         snapshot,
         anchor: NodePosition { x: 200.0, y: 0.0 },
     }
-    .into_patch_with_catalog_snapshot(&graph_path(), &target, &registry, Some(&catalog))
+    .into_patch_with_context(
+        &graph_path(),
+        &target,
+        &registry,
+        EditorMutationContext {
+            catalog: Some(&catalog),
+            semantics: None,
+        },
+    )
     .unwrap();
     apply_graph_document_patch(&mut target, &patch).unwrap();
     assert_eq!(target.constants.len(), 2);
@@ -480,7 +500,15 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
         node_ids: vec![node],
         offset: NodePosition { x: 200.0, y: 0.0 },
     }
-    .into_patch_with_catalog_snapshot(&graph_path(), &source, &registry, Some(&catalog))
+    .into_patch_with_context(
+        &graph_path(),
+        &source,
+        &registry,
+        EditorMutationContext {
+            catalog: Some(&catalog),
+            semantics: None,
+        },
+    )
     .unwrap();
     apply_graph_document_patch(&mut source, &patch).unwrap();
     assert_eq!(source.constants.len(), 1);

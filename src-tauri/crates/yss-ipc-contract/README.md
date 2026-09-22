@@ -7,6 +7,8 @@
 
 `yss-ipc-contract` defines project receipts, graph projections, Harness messages, execution stream values, project progress and `CommandErrorDto`. Command, Event and Channel consume these same types.
 
+Node editor capabilities contain only the required `managed` boolean. Copy, duplicate, delete and cut availability derive from this ownership flag; the node capability payload rejects missing or unknown fields. Parameter and inline-literal editors consume their own existing projections.
+
 The crate has no Tauri, Application, database or execution runtime dependency. It reuses neutral identity/document contracts and existing projection value types, including their value conversions. It creates no subscriptions, tasks, caches, incident records or business state. Application mappings and incident recording remain in their adapters.
 
 Command-only request/response schemas may stay beside their handler. Shared types have one definition here, with no compatibility re-export from the former schema modules.

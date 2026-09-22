@@ -165,19 +165,6 @@ fn project_node(
         .into_boxed_slice();
     let capabilities = EditorNodeCapabilities {
         managed: facts.managed,
-        can_copy: !facts.managed,
-        can_delete: !facts.managed,
-        can_edit_label: true,
-        can_edit_parameters: facts
-            .parameters
-            .iter()
-            .any(|parameter| !matches!(parameter.editor, ParameterEditorSpec::Hidden)),
-        supports_inline_literals: facts.ports.iter().any(|port| {
-            matches!(
-                port.editor,
-                yss_graph_analysis::GraphPortEditorFact::InlineLiteral
-            )
-        }),
     };
     Ok(EditorNodeModel {
         node_id: node.id,

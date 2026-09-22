@@ -37,9 +37,8 @@ pub use parameter::{
 };
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
-    SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, SchemaFieldLineage,
-    TypeCompatibility, TypeExpr, TypeNormalizationError, normalize_type_expr,
-    type_exprs_compatibility,
+    SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, SchemaFieldLineage, TypeExpr,
+    TypeNormalizationError, normalize_type_expr,
 };
 pub use typing::{
     InputCoercionKind, NodeTypingSpec, PortSelector, ResolvedType, ShapeRule, TypeConflict,

@@ -24,12 +24,13 @@ use yss_graph_document::{
 use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
 use yss_graph_editor::{
-    CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
-    SourcePort, export_subgraph, filter_compatible_catalog,
+    CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation,
+    EditorMutationContext, MutationConflict, SourcePort, export_subgraph,
+    filter_compatible_catalog,
 };
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
-use yss_node_protocol::{PortDirection, ResolvedType, TypeExpr};
+use yss_node_protocol::PortDirection;
 use yss_node_registry::{NodeRegistry, RegistryFingerprint};
 
 mod semantic_cache;
@@ -278,11 +279,14 @@ impl GraphRuntimeState {
                 binding,
             });
         }
-        let mutation_patch = mutation.into_patch_with_catalog_snapshot(
+        let mutation_patch = mutation.into_patch_with_context(
             graph_path,
             &candidate,
             self.registry(),
-            Some(catalog),
+            EditorMutationContext {
+                catalog: Some(catalog),
+                semantics: analysis.as_ref().map(GraphAnalysis::semantic_snapshot),
+            },
         )?;
         apply_graph_document_patch(&mut candidate, &mutation_patch)?;
         operations.extend(mutation_patch.operations);
@@ -527,25 +531,10 @@ impl GraphRuntimeState {
         {
             return Err(GraphRuntimeCatalogError::SourceInvalid);
         }
-        let domain = match port.direction {
-            PortDirection::Output => port.type_state.domain(),
-            PortDirection::Input => port.accepted_domain.as_ref().map(|domain| domain.types()),
-        };
-        let value_type = match domain {
-            Some([value]) => resolved_type_expr(value),
-            Some(values) => TypeExpr::Union(values.iter().map(resolved_type_expr).collect()),
-            None => port.accepted_type.clone(),
-        };
-        let protocol = self
-            .components
-            .registry
-            .protocol(&node.node_type)
-            .ok_or(GraphRuntimeCatalogError::SourceInvalid)?;
         let source = SourcePort {
             address: source.clone(),
             direction: port.direction,
-            value_type,
-            type_parameters: protocol.interface.type_parameters.clone(),
+            value_type: port.connection_type(),
         };
         let localized = self.components.catalog.localize_with_resources(
             self.components.registry.as_ref(),
@@ -565,19 +554,6 @@ impl GraphRuntimeState {
             control.after_catalog_compute();
         }
         Ok(localized)
-    }
-}
-
-fn resolved_type_expr(value: &ResolvedType) -> TypeExpr {
-    match value {
-        ResolvedType::Nominal(id) => TypeExpr::Concrete(id.clone()),
-        ResolvedType::Applied {
-            constructor,
-            arguments,
-        } => TypeExpr::Applied {
-            constructor: constructor.clone(),
-            arguments: arguments.iter().map(resolved_type_expr).collect(),
-        },
     }
 }
 

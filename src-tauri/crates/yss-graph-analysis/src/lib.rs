@@ -62,7 +62,7 @@ use schema_resolution::resolve_graph_schemas;
 pub use result_category::{
     GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind, result_category_for_node,
 };
-pub use type_resolution::GraphSemanticCache;
+pub use type_resolution::{GraphSemanticCache, type_patterns_can_connect};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphSemanticSnapshot {
@@ -997,6 +997,28 @@ mod tests {
     use yss_node_protocol::{NodeTypeId, ParameterConstraint};
     use yss_node_registry::RegistryFingerprint;
 
+    #[test]
+    fn connection_compatibility_preserves_union_choices_and_generic_container_shapes() {
+        let builtin = build_builtin_node_system().unwrap();
+        let numeric = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
+        let binary = TypeExpr::Concrete(TypeId::new("core.binary").unwrap());
+        let generic = TypeExpr::Generic(yss_node_protocol::TypeParameterId::new("t").unwrap());
+        let series = yss_node_protocol::data_series_type;
+        let numeric_output = TypeExpr::Union(vec![numeric.clone(), series(numeric.clone())]);
+        for (source, target, expected) in [
+            (numeric_output.clone(), binary, false),
+            (numeric_output, numeric.clone(), true),
+            (generic.clone(), numeric.clone(), true),
+            (series(generic.clone()), numeric.clone(), false),
+            (series(generic), series(numeric), true),
+        ] {
+            assert_eq!(
+                type_patterns_can_connect(&source, &target, builtin.registry.types()),
+                expected,
+                "{source:?} -> {target:?}",
+            );
+        }
+    }
     fn empty_resources() -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(
             BTreeMap::new(),

@@ -81,11 +81,6 @@ fn map_node(
         parameter_editors: node.parameters.iter().map(map_parameter).collect(),
         capabilities: NodeCapabilitiesDto {
             managed: node.capabilities.managed,
-            can_copy: node.capabilities.can_copy,
-            can_delete: node.capabilities.can_delete,
-            can_edit_label: node.capabilities.can_edit_label,
-            can_edit_parameters: node.capabilities.can_edit_parameters,
-            supports_inline_literals: node.capabilities.supports_inline_literals,
         },
         diagnostics: node.diagnostics.iter().map(map_diagnostic).collect(),
     }
@@ -509,14 +504,7 @@ mod tests {
                         value: Box::new(["sales".into()]),
                     }),
                 }]),
-                capabilities: EditorNodeCapabilities {
-                    managed: false,
-                    can_copy: true,
-                    can_delete: true,
-                    can_edit_label: true,
-                    can_edit_parameters: true,
-                    supports_inline_literals: false,
-                },
+                capabilities: EditorNodeCapabilities { managed: false },
                 diagnostics: Box::new([diagnostic.clone()]),
             }]),
             connections: Box::new([EditorConnectionModel {

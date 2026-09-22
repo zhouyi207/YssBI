@@ -1,3 +1,4 @@
+use crate::compatibility::EditorMutationContext;
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     GraphDocument, GraphResourceKind, GraphResourcePath, InputState, JsonValue, NodeId,
@@ -245,16 +246,22 @@ impl EditorGraphMutation {
         document: &GraphDocument,
         registry: &NodeRegistry,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_catalog_snapshot(graph_path, document, registry, None)
+        self.into_patch_with_context(
+            graph_path,
+            document,
+            registry,
+            EditorMutationContext::default(),
+        )
     }
 
-    pub fn into_patch_with_catalog_snapshot(
+    pub fn into_patch_with_context(
         self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
         registry: &NodeRegistry,
-        catalog_validation: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
+        context: EditorMutationContext<'_>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
+        let catalog_validation = context.catalog;
         let operations = match self {
             Self::InsertConstantReference { id, position } => {
                 validate_position(position)?;
@@ -396,25 +403,22 @@ impl EditorGraphMutation {
                     let source = crate::compatibility::source_port(
                         document,
                         registry,
-                        resources,
+                        context,
                         source_address,
                     )
                     .map_err(MutationConflict::Editor)?;
-                    let candidate = crate::compatibility::connection_candidates(
+                    let candidate = crate::compatibility::connection_candidate(
                         graph_path,
                         &connection_descriptor,
                         registry,
                         resources,
                         &source,
                     )
-                    .map_err(invalid_editor_mutation)?
-                    .into_iter()
-                    .next()
-                    .expect("compatible candidate lookup returns a non-empty result");
+                    .map_err(MutationConflict::Editor)?;
                     append_atomic_connection(
                         document,
                         registry,
-                        resources,
+                        context,
                         &mut operations,
                         &source,
                         candidate,
@@ -453,9 +457,9 @@ impl EditorGraphMutation {
                 output,
                 input,
                 order,
-            } => connect_operations(document, registry, catalog_validation, output, input, order)?,
+            } => connect_operations(document, registry, context, output, input, order)?,
             Self::MoveConnections { source, target } => {
-                move_connection_operations(document, registry, catalog_validation, source, target)?
+                move_connection_operations(document, registry, context, source, target)?
             }
             Self::DisconnectConnections { connection_ids } => {
                 validate_direct_targets(&connection_ids)?;
@@ -932,7 +936,7 @@ pub(super) fn validate_node_scope(
 fn append_atomic_connection(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    catalog: &crate::compatibility::CatalogMutationValidationSnapshot,
+    context: EditorMutationContext<'_>,
     operations: &mut Vec<GraphDocumentOperation>,
     source: &crate::compatibility::SourcePort,
     candidate: crate::compatibility::CandidatePort,
@@ -996,12 +1000,7 @@ fn append_atomic_connection(
     let mut staged = document.clone();
     apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
     operations.extend(connect_operations(
-        &staged,
-        registry,
-        Some(catalog),
-        output,
-        input,
-        order,
+        &staged, registry, context, output, input, order,
     )?);
     Ok(())
 }
