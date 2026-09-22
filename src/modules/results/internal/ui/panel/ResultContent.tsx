@@ -86,24 +86,16 @@ export function ResultContent({ reference }: { reference: ResultReference }) {
   if (state.payload.mode === "inspector") {
     return (
       <ResultViewPresentationProvider presentation="embedded">
-        <UnifiedResultView
-          payload={state.payload.descriptor}
-          renderInfo={(descriptor) =>
-            descriptor.presentation.kind === "report" ? (
-              <ReportView descriptor={descriptor} report={descriptor.presentation.report} />
-            ) : null
-          }
-        />
+        <UnifiedResultView payload={state.payload.descriptor} />
       </ResultViewPresentationProvider>
     );
   }
   if (state.payload.mode === "report") {
-    if (state.descriptor.presentation.kind !== "report") return null;
     return (
       <ResultViewPresentationProvider presentation="embedded">
         <ReportView
           descriptor={state.descriptor}
-          report={state.descriptor.presentation.report}
+          report={state.payload.report}
           data={state.payload.data}
         />
       </ResultViewPresentationProvider>

@@ -29,18 +29,6 @@ export function RSquaredBadge({ value }: { value: unknown }) {
   );
 }
 
-export function StatValue({
-  value,
-  decimals = 4,
-  fallback = "—",
-}: {
-  value: unknown;
-  decimals?: number;
-  fallback?: string;
-}) {
-  return <>{formatNullableNum(value, decimals, fallback)}</>;
-}
-
 export function StatCard({
   label,
   value,

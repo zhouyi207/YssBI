@@ -68,6 +68,17 @@ beforeEach(() => {
 });
 
 describe("current result lifecycle", () => {
+  it("does not publish unchanged pin status when a terminal event is delivered twice", () => {
+    event("1", { type: "runStarted", outputs: [output] });
+    event("1", { type: "runCancelled" });
+    const listener = vi.fn();
+    const unsubscribe = resultQueryRead.subscribe(listener);
+    event("1", { type: "runCancelled" });
+    expect(listener).not.toHaveBeenCalled();
+    expect(readPinResultStatus(request)).toBe("cancelled");
+    unsubscribe();
+  });
+
   it("keeps concurrent pages and page sizes independent until the last consumer releases", async () => {
     const reference = resultReferenceFixture("1");
     const releaseFirst = resultQueryCoordinator.retainPayload(reference);

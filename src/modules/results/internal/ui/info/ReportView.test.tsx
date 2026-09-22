@@ -42,6 +42,7 @@ const descriptor: ResultDescriptor = {
 const malformedLinearRegressionReport = {
   title: "Linear Regression Summary",
   endog_name: "response",
+  paramNames: ["const", "x"],
   resultRef: { executionSessionId: "00000000-0000-0000-0000-000000000001", resultId: "42" },
   observations: { kind: "tableRef", part: "observations", rowCount: 3 },
   model_basic_info: {
@@ -118,7 +119,7 @@ describe("ReportView", () => {
     });
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Unable to render OLS report: coefficients.rowCount missing required field.",
+      "Unable to render linear regression report: coefficients.rowCount missing required field.",
     );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(logError).toHaveBeenCalledTimes(1);
@@ -154,7 +155,7 @@ describe("ReportView", () => {
     });
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Unable to render OLS report: model_basic_info.covariance_type missing required field.",
+      "Unable to render linear regression report: model_basic_info.covariance_type missing required field.",
     );
     expect(logError).toHaveBeenCalledTimes(1);
     expect(JSON.parse(logError.mock.calls[0][0])).toMatchObject({

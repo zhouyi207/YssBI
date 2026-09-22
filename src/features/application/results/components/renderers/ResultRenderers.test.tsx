@@ -14,7 +14,6 @@ const paging = vi.hoisted(() => ({
   hasMore: true,
   pageSize: 200,
   loading: false,
-  values: [[1], [2]],
   rows: [[1], [2]],
   columns: [{ name: "value", type: "Numeric" }],
   offset: 0,
@@ -25,7 +24,6 @@ const paging = vi.hoisted(() => ({
 vi.mock("../../usePagedResultRows", () => ({ usePagedResultRows: () => paging }));
 vi.mock("../../runtime", () => ({ resultQueryCoordinator: {}, resultQueryRead: {} }));
 vi.mock("../ReadOnlyDataGrid", () => ({ ReadOnlyDataGrid: () => null }));
-vi.mock("../JsonTreeView", () => ({ JsonTreeView: () => null }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 it("makes later DataSeries pages accessible through the existing paging actions", () => {

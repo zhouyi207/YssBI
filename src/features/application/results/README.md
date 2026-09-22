@@ -12,6 +12,7 @@
 `get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；
 查询重验资源依赖，不交付执行计划身份。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
 项目身份由查询协调器在发布前校验，不在只读结果投影中另存无人读取的副本；图状态请求仅携带参与校验的会话、代次和语义身份。
+图运行展示复用 `createReadProjection`：依据现有结果、图编辑和执行 owner 按图派生，并复用未变化的节点、端口和连线展示引用。`useGraphResultPresentation(graphPath, selector)` 仅订阅消费者所需字段；分页等无关 payload 更新不重新构造图展示，重复终态不发布无变化的 Pin 状态。该投影没有业务写入接口或独立运行事实。
 同一投影还返回当前连线是否已被目标节点实际消费：新绑定、保有旧结果的过期绑定和有效绑定分别表示。
 仅有输入的“查看数据”节点也参与此投影：Execution 将成功运行的查看记录及其输入依据附在共享结果上，
 重验时同时检查当前绑定与源结果有效性。该记录不复制数据，也不增加结果持有者；新连线不能仅凭源 Pin 有缓存显示已执行。
@@ -86,7 +87,9 @@ Application 的 `query_result_projection` 返回有界强类型投影；普通�
 线性回归报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
 前端复用 Result query coordinator，以执行会话、结果和完整查询语义隔离请求与缓存：分页包含 part/offset/limit，分析包含 kind 与规范化参数。
 相同不可变结果查询共用在途请求；不同查询参数独立发布。独立窗口及面板的 descriptor/value 同样经协调器读取与安装，并由挂载方持有 payload lease。Plot/report 仅接受完整 scalar payload；数列仍可在 Inspector 中分页，不能把第一页伪装成完整绘图数据。
+展示加载器统一完成 Inspector、plot 和 report 分流。`UnifiedResultView` 只呈现已分流的 Inspector 标量或数列；报告组件必须接收加载器交付的数据，不保留报告回调、JSON 树回退或组件内的第二次结果读取。
 消费者用自己的请求代次控制迟到回执和 loading；value/page/analysis 分别订阅数据和错误。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
+分页 Hook 统一交付 `rows` 和 `pageSize`，不再并列暴露无消费者的原始 `values` 与 `limit`；底层分页请求和 wire 字段仍由查询协议拥有。
 假设检验的参数提示读取 Rust 提供的完整 `paramNames`，与系数表当前页无关。独立窗口的图类型直接读取 descriptor，不通过 URL 传递副本。
 展示窗口从 presentation kind 一次映射到 inspect/plot/info 窗口类型，并据此生成路由，不接受任意路由字符串或未知路由回退。
 报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。

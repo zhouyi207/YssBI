@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 import type { Coefficient } from "@/shared/types/report/regression";
 import { linearCoefficientField } from "@/shared/types/report/parseLinearRegression";
@@ -6,15 +6,16 @@ import { usePagedResultRows } from "@/features/application/results/usePagedResul
 import { useResultAnalysis } from "@/features/application/results/useResultAnalysis";
 import type { HypothesisTestSource } from "./useHypothesisTestBlock";
 
-export function useLinearRegressionReport(data: LinearRegressionReportData) {
+export const LINEAR_COEFFICIENT_PAGE_SIZE = 200;
+
+export function useLinearRegressionCoefficients(data: LinearRegressionReportData) {
   const page = usePagedResultRows(
     data.resultRef,
     data.coefficients.rowCount,
-    200,
+    LINEAR_COEFFICIENT_PAGE_SIZE,
     undefined,
     data.coefficients.part,
   );
-  const analyze = useResultAnalysis(data.resultRef);
   const parsed = useMemo(() => {
     const coefficients: Coefficient[] = [];
     for (const row of page.rows) {
@@ -32,29 +33,40 @@ export function useLinearRegressionReport(data: LinearRegressionReportData) {
     return { coefficients, error: null };
   }, [page.rows, page.columns]);
 
-  const hypothesisSource: HypothesisTestSource = {
-    paramNames: data.paramNames,
-    available: data.coefficients.rowCount > 0,
-    test: async (hypothesis) => {
-      const response = await analyze({ kind: "hypothesis", hypothesis });
-      return response?.kind === "hypothesis" ? response.value : null;
-    },
-  };
+  return useMemo(
+    () => ({ page, coefficients: parsed.coefficients, coefficientError: parsed.error }),
+    [page, parsed],
+  );
+}
 
-  return {
-    page,
-    coefficients: parsed.coefficients,
-    coefficientError: parsed.error,
-    hypothesisSource,
-    computeAcf: async (maxLag: number) => {
+export function useLinearRegressionAnalysis(data: LinearRegressionReportData) {
+  const analyze = useResultAnalysis(data.resultRef);
+  const hypothesisSource = useMemo<HypothesisTestSource>(
+    () => ({
+      paramNames: data.paramNames,
+      available: data.coefficients.rowCount > 0,
+      test: async (hypothesis) => {
+        const response = await analyze({ kind: "hypothesis", hypothesis });
+        return response?.kind === "hypothesis" ? response.value : null;
+      },
+    }),
+    [analyze, data.paramNames, data.coefficients.rowCount],
+  );
+  const computeAcf = useCallback(
+    async (maxLag: number) => {
       const response = await analyze({ kind: "acfPacf", maxLag });
       return response?.kind === "acfPacf"
         ? { acf: [...response.value.acf], pacf: [...response.value.pacf], n: response.value.n }
         : null;
     },
-    computeSerialTests: async (lags: number, bgNomiss0: boolean) => {
+    [analyze],
+  );
+  const computeSerialTests = useCallback(
+    async (lags: number, bgNomiss0: boolean) => {
       const response = await analyze({ kind: "serialTests", lags, bgNomiss0 });
       return response?.kind === "serialTests" ? response.value : null;
     },
-  };
+    [analyze],
+  );
+  return { hypothesisSource, computeAcf, computeSerialTests };
 }

@@ -13,7 +13,7 @@ import {
   captureProjectLifecycleState,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useProjectProjection } from "@/features/application/project/projectProjection";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { toErrorReference } from "@/features/application/errorReference";
 import { initializeProjectForCurrentWindow } from "@/features/application/project/projectRuntime";
 
@@ -22,7 +22,7 @@ function errorReference(error: unknown): ErrorReference {
 }
 
 export function useUiPage(source: ResultReference) {
-  const { projectInstanceId } = useProjectProjection();
+  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const [page, setPage] = useState<UiPage | null>(null);
   const [error, setError] = useState<ErrorReference | null>(null);
   const [busy, setBusy] = useState(false);

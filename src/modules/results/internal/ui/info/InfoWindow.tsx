@@ -39,12 +39,10 @@ export const InfoWindow: FC = () => {
       }}
       contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {state.status === "ready" &&
-      state.payload.mode === "report" &&
-      state.descriptor.presentation.kind === "report" ? (
+      {state.status === "ready" && state.payload.mode === "report" ? (
         <ReportView
           descriptor={state.descriptor}
-          report={state.descriptor.presentation.report}
+          report={state.payload.report}
           data={state.payload.data}
         />
       ) : null}

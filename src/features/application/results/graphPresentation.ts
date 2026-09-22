@@ -1,3 +1,4 @@
+import { shareProjection } from "@/features/core/state/readProjection";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { RunFailureProjection } from "@/features/core/execution/executionTypes";
 import type { GraphResultCacheProjection } from "./runtime";
@@ -6,12 +7,13 @@ import type { ConnectionCacheState } from "@/shared/types/domain/result";
 export type GraphCacheAppearance = "new" | "stale" | "valid" | "partial";
 export type GraphElementState = "unexecuted" | "running" | "error" | "valid" | "stale" | "partial";
 
-/** Aggregate read-only cache facts once per canvas, without inventing execution progress. */
+/** Aggregate read-only facts per graph and retain unchanged element references. */
 export function projectGraphPresentation(
   cache: GraphResultCacheProjection | undefined,
   runningNodeIds: readonly string[],
   failure: RunFailureProjection | null,
-) {
+  previous?: GraphResultPresentation,
+): GraphResultPresentation {
   const nodes: Record<
     string,
     { total: number; valid: number; stale: number; cache: GraphCacheAppearance }
@@ -54,17 +56,32 @@ export function projectGraphPresentation(
             ? "stale"
             : "new";
   }
-  return {
+  const runningNodes = new Set(runningNodeIds);
+  return shareProjection(previous, {
     nodes,
     inputs,
     outputs,
     connections,
-    runningNodes: new Set(runningNodeIds),
+    runningNodes:
+      previous &&
+      previous.runningNodes.size === runningNodes.size &&
+      [...runningNodes].every((id) => previous.runningNodes.has(id))
+        ? previous.runningNodes
+        : runningNodes,
     failure,
-  };
+  });
 }
 
-export type GraphResultPresentation = ReturnType<typeof projectGraphPresentation>;
+export interface GraphResultPresentation {
+  nodes: Readonly<
+    Record<string, { total: number; valid: number; stale: number; cache: GraphCacheAppearance }>
+  >;
+  inputs: Readonly<Record<string, GraphCacheAppearance>>;
+  outputs: Readonly<Record<string, GraphCacheAppearance>>;
+  connections: Readonly<Record<string, Readonly<Record<string, ConnectionCacheState>>>>;
+  runningNodes: ReadonlySet<string>;
+  failure: RunFailureProjection | null;
+}
 
 export function graphElementState(
   presentation: GraphResultPresentation,

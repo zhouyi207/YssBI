@@ -10,7 +10,6 @@ export type {
   ResolvedInspectableResultRef,
 } from "./inspectableResult";
 export type {
-  ResultRendererKind,
   PlotChart,
   Presentation,
   ReportKind,
@@ -26,7 +25,6 @@ export {
   invalidateGraphResults,
   observeResultRunEvent,
   readPinResultStatus,
-  useGraphResultCache,
   useGraphResultPresentation,
   type GraphResultCacheProjection,
 } from "./runtime";
@@ -38,8 +36,6 @@ export {
 } from "./graphPresentation";
 export { useResultValue } from "./useResultValue";
 export { usePagedResultRows } from "./usePagedResultRows";
-export { resolveResultRenderer } from "./resolveRenderer";
-export { reportResultValuePayload } from "./resultValuePayload";
 export {
   ResultViewPresentationProvider,
   useResultViewPresentation,
@@ -47,7 +43,6 @@ export {
 export {
   UnifiedResultView,
   ResultViewShell,
-  JsonTreeView,
   ReadOnlyDataGrid,
   ResultReadError,
 } from "./components";

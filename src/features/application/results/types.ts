@@ -6,5 +6,3 @@ export type {
   ResultPage,
   ResultValue,
 } from "@/shared/types/domain/result";
-
-export type ResultRendererKind = "sequence" | "scalar" | "json" | "plot" | "info";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, useSyncExternalStore } from "react";
 
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
@@ -14,7 +14,7 @@ import { resultQueryCoordinator, resultQueryRead } from "./runtime";
 
 const DEFAULT_PAGE_SIZE = 200;
 const EMPTY_ROWS: readonly unknown[][] = [];
-const EMPTY_VALUES: readonly unknown[] = [];
+const EMPTY_COLUMNS: readonly { readonly name: string; readonly type: string }[] = [];
 
 export interface PagedResultRowsHookDependencies {
   readonly coordinator: ResultQueryCoordinator;
@@ -23,13 +23,11 @@ export interface PagedResultRowsHookDependencies {
 
 export interface PagedResultRowsState {
   readonly offset: number;
-  readonly limit: number;
   readonly totalCount: number | null;
   readonly actualCount: number;
   readonly hasMore: boolean;
   readonly columns: readonly { readonly name: string; readonly type: string }[];
   readonly rows: readonly (readonly unknown[])[];
-  readonly values: readonly unknown[];
   readonly loading: boolean;
   readonly error: DeepReadonly<ErrorReference> | null;
   readonly pageIndex: number;
@@ -148,23 +146,36 @@ export function usePagedResultRows(
     [boundedPageIndex, loadPage],
   );
 
-  return {
-    offset: page?.offset ?? requestedOffset,
-    limit: page?.requestedLimit ?? safePageSize,
-    totalCount: effectiveTotalCount,
-    actualCount: page?.actualCount ?? 0,
-    hasMore,
-    columns: page?.metadata && "columns" in page.metadata ? page.metadata.columns : [],
-    rows: rowsFromPage(page),
-    values: page?.values ?? EMPTY_VALUES,
-    loading,
-    error,
-    pageIndex: boundedPageIndex,
-    pageSize: safePageSize,
-    totalPages,
-    goToPage,
-    goToPreviousPage: () => goToPage(boundedPageIndex - 1),
-    goToNextPage: () => goToPage(boundedPageIndex + 1),
-    reload,
-  };
+  return useMemo(
+    () => ({
+      offset: page?.offset ?? requestedOffset,
+      totalCount: effectiveTotalCount,
+      actualCount: page?.actualCount ?? 0,
+      hasMore,
+      columns: page?.metadata && "columns" in page.metadata ? page.metadata.columns : EMPTY_COLUMNS,
+      rows: rowsFromPage(page),
+      loading,
+      error,
+      pageIndex: boundedPageIndex,
+      pageSize: safePageSize,
+      totalPages,
+      goToPage,
+      goToPreviousPage: () => goToPage(boundedPageIndex - 1),
+      goToNextPage: () => goToPage(boundedPageIndex + 1),
+      reload,
+    }),
+    [
+      page,
+      requestedOffset,
+      safePageSize,
+      effectiveTotalCount,
+      hasMore,
+      loading,
+      error,
+      boundedPageIndex,
+      totalPages,
+      goToPage,
+      reload,
+    ],
+  );
 }

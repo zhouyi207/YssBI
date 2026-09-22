@@ -1,8 +1,21 @@
-import { useState, type FC, type ReactNode } from "react";
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useLinearRegressionReport } from "@/features/application/stats/useLinearRegressionReport";
+import {
+  useLinearRegressionCoefficients,
+  useLinearRegressionAnalysis,
+  LINEAR_COEFFICIENT_PAGE_SIZE,
+} from "@/features/application/stats/useLinearRegressionReport";
 import { useResultAnalysisQuery } from "@/features/application/results/useResultAnalysis";
 import {
   usePagedResultRows,
@@ -59,14 +72,16 @@ function LinearObservations({ data }: { data: LinearRegressionReportData }) {
     undefined,
     data.observations.part,
   );
+  const columns = useMemo(() => [...page.columns], [page.columns]);
+  const rows = useMemo(() => page.rows.map((row) => [...row]), [page.rows]);
   return (
     <div className="space-y-3">
       {page.error ? (
         <ResultReadError error={page.error} onRetry={() => void page.reload()} />
       ) : null}
       <ReadOnlyDataGrid
-        columns={[...page.columns]}
-        rows={page.rows.map((row) => [...row])}
+        columns={columns}
+        rows={rows}
         loading={page.loading}
         pageStartIndex={page.offset}
         height={320}
@@ -75,6 +90,10 @@ function LinearObservations({ data }: { data: LinearRegressionReportData }) {
     </div>
   );
 }
+
+const MemoScatterChart = memo(ScatterChart);
+const FITTED_AXIS = { label: "Fitted Values", valueType: "number" } as const;
+const RESIDUAL_AXIS = { label: "Residuals", valueType: "number" } as const;
 
 function LinearResidualPlot({ reference }: { reference: ResultReference }) {
   const [min, setMin] = useState("");
@@ -86,6 +105,10 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
     xRange,
   });
   const plot = query.value?.kind === "residualPlot" ? query.value.value : null;
+  const points = useMemo(
+    () => plot?.points.map((point) => ({ x: point.x, y: point.y })) ?? [],
+    [plot?.points],
+  );
   const validRange =
     min.trim() !== "" &&
     max.trim() !== "" &&
@@ -145,10 +168,10 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
                 : `${plot.matchedCount} observations`}
               {plot.matchedCount !== plot.totalCount ? ` (${plot.totalCount} total)` : ""}
             </p>
-            <ScatterChart
-              data={plot.points.map((point) => ({ x: point.x, y: point.y }))}
-              xAxis={{ label: "Fitted Values", valueType: "number" }}
-              yAxis={{ label: "Residuals", valueType: "number" }}
+            <MemoScatterChart
+              data={points}
+              xAxis={FITTED_AXIS}
+              yAxis={RESIDUAL_AXIS}
               height={280}
               symmetricY
               zeroLine
@@ -160,91 +183,146 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
   );
 }
 
+const CoefficientsContext = createContext<ReturnType<
+  typeof useLinearRegressionCoefficients
+> | null>(null);
+
+function CoefficientsProvider({
+  data,
+  children,
+}: {
+  data: LinearRegressionReportData;
+  children: ReactNode;
+}) {
+  const coefficients = useLinearRegressionCoefficients(data);
+  return (
+    <CoefficientsContext.Provider value={coefficients}>{children}</CoefficientsContext.Provider>
+  );
+}
+
 export const LinearRegressionComponent: FC<{ data: LinearRegressionReportData }> = ({ data }) => (
-  <LinearRegressionReport
+  <CoefficientsProvider
     key={`${data.resultRef.executionSessionId}:${data.resultRef.resultId}`}
     data={data}
-  />
+  >
+    <LinearRegressionReport data={data} />
+  </CoefficientsProvider>
 );
+
+function LinearCoefficientsSection({
+  data,
+  equation = false,
+}: {
+  data: LinearRegressionReportData;
+  equation?: boolean;
+}) {
+  const value = useContext(CoefficientsContext);
+  if (!value) throw new Error("Coefficient sections require their report context");
+  const { page, coefficients, coefficientError } = value;
+  if (equation)
+    return coefficients.length === data.coefficients.rowCount && coefficients.length > 0 ? (
+      <ReportSection title="Equation" icon="equation">
+        <ReportLazyBoundary variant="formula">
+          <LazyFormulaBlock endogName={data.endog_name} coefficients={coefficients} />
+        </ReportLazyBoundary>
+      </ReportSection>
+    ) : null;
+  return (
+    <>
+      {page.error || coefficientError ? (
+        <ResultReadError
+          error={(page.error ?? coefficientError)!}
+          onRetry={() => void page.reload()}
+        />
+      ) : null}
+      {page.loading ? (
+        <p className="text-sm text-muted-foreground">Loading coefficients…</p>
+      ) : (
+        <CoefficientsBlock coefficients={coefficients} hasCategorical={false} />
+      )}
+      <PageToolbar page={page} />
+    </>
+  );
+}
+
+function LinearAnalysisSection({
+  data,
+  kind,
+}: {
+  data: LinearRegressionReportData;
+  kind: "hypothesisTest" | "acfPacf" | "serialTests";
+}) {
+  const { hypothesisSource, computeAcf, computeSerialTests } = useLinearRegressionAnalysis(data);
+  if (kind === "hypothesisTest") return <HypothesisTestBlock source={hypothesisSource} />;
+  if (kind === "acfPacf")
+    return <ACFPACFBlock observationCount={data.observations.rowCount} compute={computeAcf} />;
+  return (
+    <SerialTestsBlock observationCount={data.observations.rowCount} compute={computeSerialTests} />
+  );
+}
+
+const LinearReportSection = memo(function LinearReportSection({
+  data,
+  kind,
+}: {
+  data: LinearRegressionReportData;
+  kind: ReportSectionKind;
+}) {
+  switch (kind) {
+    case "equation":
+      return data.coefficients.rowCount > 0 &&
+        data.coefficients.rowCount <= LINEAR_COEFFICIENT_PAGE_SIZE ? (
+        <LinearCoefficientsSection data={data} equation />
+      ) : null;
+    case "coefficientTable":
+      return <LinearCoefficientsSection data={data} />;
+    case "modelSummary":
+      return (
+        <ReportSection title="Model Summary" icon="modelSummary">
+          <ModelSummaryGrid info={data.model_basic_info} />
+        </ReportSection>
+      );
+    case "anova":
+      return (
+        <ReportSection title="ANOVA" icon="anova">
+          <AnovaTable info={data.model_basic_info} />
+        </ReportSection>
+      );
+    case "diagnostics":
+      return (
+        <ReportSection title="Diagnostics" icon="test">
+          <p className="text-sm text-muted-foreground">
+            Condition number: {data.diagnostic_info.cond_no}
+          </p>
+        </ReportSection>
+      );
+    case "residualPlot":
+      return (
+        <ExpandableReportSection title="Residuals vs Fitted">
+          <LinearResidualPlot reference={data.resultRef} />
+        </ExpandableReportSection>
+      );
+    case "observations":
+      return (
+        <ExpandableReportSection title="Fitted values and residuals">
+          <LinearObservations data={data} />
+        </ExpandableReportSection>
+      );
+    case "hypothesisTest":
+    case "acfPacf":
+    case "serialTests":
+      return <LinearAnalysisSection data={data} kind={kind} />;
+  }
+});
 
 function LinearRegressionReport({ data }: { data: LinearRegressionReportData }) {
   const { t } = useTranslation();
   const presentation = useUiPage(data.resultRef);
-  const { page, coefficients, coefficientError, hypothesisSource, computeAcf, computeSerialTests } =
-    useLinearRegressionReport(data);
   const info = data.model_basic_info;
-  const renderSection = (kind: ReportSectionKind): ReactNode => {
-    switch (kind) {
-      case "equation":
-        return coefficients.length === data.coefficients.rowCount && coefficients.length > 0 ? (
-          <ReportSection title="Equation" icon="equation">
-            <ReportLazyBoundary variant="formula">
-              <LazyFormulaBlock endogName={data.endog_name} coefficients={coefficients} />
-            </ReportLazyBoundary>
-          </ReportSection>
-        ) : null;
-      case "modelSummary":
-        return (
-          <ReportSection title="Model Summary" icon="modelSummary">
-            <ModelSummaryGrid info={info} />
-          </ReportSection>
-        );
-      case "anova":
-        return (
-          <ReportSection title="ANOVA" icon="anova">
-            <AnovaTable info={info} />
-          </ReportSection>
-        );
-      case "coefficientTable":
-        return (
-          <>
-            {page.error || coefficientError ? (
-              <ResultReadError
-                error={(page.error ?? coefficientError)!}
-                onRetry={() => void page.reload()}
-              />
-            ) : null}
-            {page.loading ? (
-              <p className="text-sm text-muted-foreground">Loading coefficients…</p>
-            ) : (
-              <CoefficientsBlock coefficients={coefficients} hasCategorical={false} />
-            )}
-            <PageToolbar page={page} />
-          </>
-        );
-      case "hypothesisTest":
-        return <HypothesisTestBlock source={hypothesisSource} />;
-      case "diagnostics":
-        return (
-          <ReportSection title="Diagnostics" icon="test">
-            <p className="text-sm text-muted-foreground">
-              Condition number: {data.diagnostic_info.cond_no}
-            </p>
-          </ReportSection>
-        );
-      case "residualPlot":
-        return (
-          <ExpandableReportSection title="Residuals vs Fitted">
-            <LinearResidualPlot reference={data.resultRef} />
-          </ExpandableReportSection>
-        );
-      case "observations":
-        return (
-          <ExpandableReportSection title="Fitted values and residuals">
-            <LinearObservations data={data} />
-          </ExpandableReportSection>
-        );
-      case "acfPacf":
-        return <ACFPACFBlock observationCount={data.observations.rowCount} compute={computeAcf} />;
-      case "serialTests":
-        return (
-          <SerialTestsBlock
-            observationCount={data.observations.rowCount}
-            compute={computeSerialTests}
-          />
-        );
-    }
-  };
+  const renderSection = useCallback(
+    (kind: ReportSectionKind) => <LinearReportSection data={data} kind={kind} />,
+    [data],
+  );
   return (
     <ReportLayout
       title={data.title}
