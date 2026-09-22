@@ -1,0 +1,225 @@
+{
+  "root": "report",
+  "elements": {
+    "equation": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Equation",
+          "collapsible": false
+        }
+      },
+      "visible": true,
+      "children": ["equation-content"]
+    },
+    "equation-content": {
+      "component": {
+        "type": "equation",
+        "props": {
+          "binding": "equation"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "modelSummary": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Model Summary",
+          "collapsible": false
+        }
+      },
+      "visible": true,
+      "children": ["modelSummary-content"]
+    },
+    "modelSummary-content": {
+      "component": {
+        "type": "keyValue",
+        "props": {
+          "binding": "summary"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "anova": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "ANOVA",
+          "collapsible": false
+        }
+      },
+      "visible": true,
+      "children": ["anova-content"]
+    },
+    "anova-content": {
+      "component": {
+        "type": "table",
+        "props": {
+          "binding": "anova"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "coefficientTable": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Coefficients",
+          "collapsible": false
+        }
+      },
+      "visible": true,
+      "children": ["coefficientTable-content"]
+    },
+    "coefficientTable-content": {
+      "component": {
+        "type": "coefficientTable",
+        "props": {
+          "binding": "coefficients"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "coefficientMagnitude": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Coefficient Magnitude",
+          "collapsible": false
+        }
+      },
+      "visible": true,
+      "children": ["coefficientMagnitude-content"]
+    },
+    "coefficientMagnitude-content": {
+      "component": {
+        "type": "chart",
+        "props": {
+          "binding": "coefficientMagnitude"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "hypothesisTest": {
+      "component": {
+        "type": "analysis",
+        "props": {
+          "binding": "hypothesis"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "diagnostics": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Diagnostics",
+          "collapsible": false
+        }
+      },
+      "visible": true,
+      "children": ["diagnostics-content"]
+    },
+    "diagnostics-content": {
+      "component": {
+        "type": "statCard",
+        "props": {
+          "binding": "conditionNumber"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "residualPlot": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Residuals vs Fitted",
+          "collapsible": true
+        }
+      },
+      "visible": true,
+      "children": ["residualPlot-content"]
+    },
+    "residualPlot-content": {
+      "component": {
+        "type": "chart",
+        "props": {
+          "binding": "residualPlot"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "observations": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Fitted values and residuals",
+          "collapsible": true
+        }
+      },
+      "visible": true,
+      "children": ["observations-content"]
+    },
+    "observations-content": {
+      "component": {
+        "type": "table",
+        "props": {
+          "binding": "observations"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "acfPacf": {
+      "component": {
+        "type": "analysis",
+        "props": {
+          "binding": "acfPacf"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "serialTests": {
+      "component": {
+        "type": "analysis",
+        "props": {
+          "binding": "serialTests"
+        }
+      },
+      "visible": true,
+      "children": []
+    },
+    "report": {
+      "component": {
+        "type": "column",
+        "props": {
+          "gap": 4
+        }
+      },
+      "visible": true,
+      "children": [
+        "equation",
+        "modelSummary",
+        "anova",
+        "coefficientTable",
+        "coefficientMagnitude",
+        "hypothesisTest",
+        "diagnostics",
+        "residualPlot",
+        "observations",
+        "acfPacf",
+        "serialTests"
+      ]
+    }
+  }
+}
