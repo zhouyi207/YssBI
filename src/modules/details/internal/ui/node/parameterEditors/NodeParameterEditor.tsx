@@ -60,7 +60,7 @@ function optionLabel(key: string, option: string, t: TFunction): string {
   return option;
 }
 
-type NumberDraftError = "required" | "notFinite" | "notInteger" | "outOfRange" | "unsupportedType";
+type NumberDraftError = "required" | "notFinite" | "outOfRange" | "unsupportedType";
 
 function parseNumberDraft(
   draft: string,
@@ -82,7 +82,6 @@ function numberDraftErrorMessage(error: NumberDraftError, t: TFunction): string 
   const keys = {
     required: "notifications.parameter.enterNumber",
     notFinite: "notifications.parameter.enterFiniteNumber",
-    notInteger: "notifications.parameter.enterInteger",
     outOfRange: "notifications.parameter.enterSupportedInteger",
     unsupportedType: "notifications.parameter.unsupportedNumericType",
   } as const;

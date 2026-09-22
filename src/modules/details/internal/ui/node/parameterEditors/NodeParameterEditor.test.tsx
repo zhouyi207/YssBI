@@ -134,17 +134,17 @@ describe("NodeParameterEditor ordinary controls", () => {
   it("describes an invalid numeric draft with a field-level error", () => {
     renderEditor(parameter("number", 1, { kind: "Scalar", inner: "Numeric" }));
 
-    setControlValue(input(), "1.5");
+    setControlValue(input(), "Infinity");
     act(() => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
 
     const error = container.querySelector<HTMLElement>('[role="alert"]');
-    expect(error?.textContent).toContain(i18n.t("notifications.parameter.enterInteger"));
+    expect(error?.textContent).toContain(i18n.t("notifications.parameter.enterFiniteNumber"));
     expect(input().getAttribute("aria-describedby")).toBe(error?.id);
     expect(setNodeParameters).not.toHaveBeenCalled();
   });
 
   it.each([
-    [{ kind: "Scalar", inner: "Numeric" }, "1.5", false],
+    [{ kind: "Scalar", inner: "Text" }, "1.5", false],
     [{ kind: "Scalar", inner: "Numeric" }, "1.5", true],
   ] as const)(
     "uses projected %s semantics for numeric commits",
@@ -221,7 +221,7 @@ describe("NodeParameterEditor ordinary controls", () => {
     const initial = parameter("number", 1, { kind: "Scalar", inner: "Numeric" });
     renderEditor(initial);
 
-    setControlValue(input(), "1.5");
+    setControlValue(input(), "Infinity");
     act(() => input().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
     expect(input().value).toBe("1");
     expect(setNodeParameters).not.toHaveBeenCalled();
@@ -278,7 +278,7 @@ describe("NodeParameterEditor ordinary controls", () => {
 
   it("does not submit an invalid numeric draft on blur", () => {
     renderEditor(parameter("number", 1, { kind: "Scalar", inner: "Numeric" }));
-    setControlValue(input(), "1.5");
+    setControlValue(input(), "Infinity");
 
     act(() => input().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
 

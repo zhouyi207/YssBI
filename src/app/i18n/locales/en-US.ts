@@ -129,7 +129,6 @@ export const enUS = {
       rejected: "The edit was rejected ({{code}}); the latest value was restored",
       enterNumber: "Enter a number",
       enterFiniteNumber: "Enter a finite number",
-      enterInteger: "Enter an integer",
       enterSupportedInteger: "Enter an integer within the supported range",
       unsupportedNumericType: "Unsupported numeric value type",
     },

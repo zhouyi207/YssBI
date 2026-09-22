@@ -124,7 +124,6 @@ export const zhCN = {
       rejected: "编辑被拒绝（{{code}}），已恢复最新值",
       enterNumber: "请输入数字",
       enterFiniteNumber: "请输入有限数值",
-      enterInteger: "请输入整数",
       enterSupportedInteger: "请输入支持范围内的整数",
       unsupportedNumericType: "不支持的数值类型",
     },
