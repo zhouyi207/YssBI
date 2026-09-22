@@ -6,6 +6,7 @@ use crate::DatasetSnapshot;
 
 #[derive(Default)]
 pub(crate) struct SnapshotLeases {
+    pub edits_since_collection: usize,
     snapshots: BTreeMap<Box<str>, Vec<Weak<DatasetSnapshot>>>,
     preparations: BTreeMap<PathBuf, Weak<()>>,
 }

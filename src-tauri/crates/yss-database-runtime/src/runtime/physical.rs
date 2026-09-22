@@ -4,20 +4,15 @@ use std::sync::{Arc, Mutex, PoisonError};
 use crate::database_instance::{PreparedInstanceMutation, query_control};
 use arrow::array::Int64Array;
 use std::path::Path;
-use yss_database_store::{DatasetPublication, DatasetStoreError};
+use yss_database_store::{DatasetPublication, DatasetStore, DatasetStoreError};
 
 use crate::DatabaseInstance;
-use crate::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
+use crate::error::{DatabaseError, DatabaseOperation};
 use crate::session_api::DatabaseMutationOperation;
-use yss_data_contract::{TabularColumn, TabularColumnName, TabularSnapshot};
+use yss_data_contract::{TabularColumn, TabularSnapshot};
 use yss_database_contract::EditState;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat, DatabaseId};
 use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
-
-pub(crate) struct DatabaseRuntimeDataSnapshot {
-    pub(crate) columns: Box<[DatabaseColumnFact]>,
-    pub(crate) rows: TabularSnapshot,
-}
 
 pub(crate) struct DatabaseRuntimePageSnapshot {
     pub(crate) rows: TabularSnapshot,
@@ -29,12 +24,6 @@ pub(crate) struct DatabaseRuntimePhysicalState {
 }
 
 impl DatabaseRuntimePhysicalState {
-    pub(crate) fn empty() -> Arc<Self> {
-        Arc::new(Self {
-            instances: Mutex::new(BTreeMap::new()),
-        })
-    }
-
     pub(crate) fn from_instances(
         declarations: &[DatabaseDecl],
         instances: impl IntoIterator<Item = DatabaseInstance>,
@@ -67,51 +56,11 @@ impl DatabaseRuntimePhysicalState {
         }))
     }
 
-    pub(crate) fn read_columns(
-        &self,
-        database: &DatabaseId,
-        requested: Option<&[TabularColumnName]>,
-        offset: usize,
-        limit: usize,
-    ) -> Result<DatabaseRuntimeDataSnapshot, DatabaseError> {
-        let instance = self.required_instance(database)?;
-        let schema = instance
-            .data_schema()
-            .map_err(|error| failure(database, DatabaseOperation::DataSnapshot, error))?;
-        let selected = select_columns(&schema, requested, database)?;
-        let names = selected
-            .iter()
-            .map(|column| column.name().as_str().into())
-            .collect::<Vec<Box<str>>>();
-        let relation = instance
-            .query()
-            .and_then(|query| query.relation().map_err(Into::into))
-            .and_then(|relation| relation.project(&names).map_err(Into::into))
-            .map_err(|error| failure(database, DatabaseOperation::DataSnapshot, error))?;
-        let count = limit.min(
-            instance
-                .row_count()
-                .map_err(|error| failure(database, DatabaseOperation::DataSnapshot, error))?
-                .saturating_sub(offset),
-        );
-        let rows = if count == 0 {
-            empty_snapshot(&selected, database)?
-        } else {
-            relation
-                .page(offset, count, &query_control(128 * 1024 * 1024))
-                .map_err(|error| failure(database, DatabaseOperation::DataSnapshot, error.into()))?
-                .data
-        };
-        Ok(DatabaseRuntimeDataSnapshot {
-            columns: selected.into_boxed_slice(),
-            rows,
-        })
-    }
     pub(crate) fn read_schema(
         &self,
         database: &DatabaseId,
     ) -> Result<Option<DatabaseSchemaFact>, DatabaseError> {
-        self.instance_snapshot(database)?
+        self.instance_snapshot(database)
             .map(|instance| {
                 instance
                     .data_schema()
@@ -266,13 +215,7 @@ impl DatabaseRuntimePhysicalState {
     ) -> Result<(), DatabaseError> {
         self.required_instance(database)?
             .export_to_path(path, format)
-            .map_err(|error| {
-                DatabaseError::driver(
-                    DatabaseOperation::Query,
-                    Some(database.clone()),
-                    DatabaseDriverError::Export(error),
-                )
-            })
+            .map_err(|_| DatabaseError::driver(DatabaseOperation::Query, Some(database.clone())))
     }
     pub(crate) fn prepare_mutation(
         self: &Arc<Self>,
@@ -284,23 +227,27 @@ impl DatabaseRuntimePhysicalState {
         let pending = before
             .prepare_mutation(operation, operation_id)
             .map_err(|error| failure(database, DatabaseOperation::PrepareMutation, error))?;
+        let (store, _) = pending.recovery();
+        let edit_state = before.edit_state();
         Ok(PreparedDatabasePhysicalMutation {
             physical: self.clone(),
             database: database.clone(),
-            before,
+            store,
+            edit_state,
             pending: Some(pending),
-            after: None,
             publication: None,
             commit_uncertain: false,
+            collect_garbage: matches!(
+                operation,
+                DatabaseMutationOperation::Save | DatabaseMutationOperation::DeleteDatabase
+            ),
         })
     }
-    pub(crate) fn install_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
-        if let Some(after) = &mutation.after {
-            self.instances
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .insert(mutation.database.clone(), after.clone());
-        }
+    fn install_instance(&self, instance: DatabaseInstance) {
+        self.instances
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(instance.decl.id.clone(), instance);
     }
     pub(crate) fn instances_for_replacement(&self) -> Vec<DatabaseInstance> {
         self.instances
@@ -314,20 +261,16 @@ impl DatabaseRuntimePhysicalState {
         &self,
         database: &DatabaseId,
     ) -> Result<DatabaseInstance, DatabaseError> {
-        self.instance_snapshot(database)?.ok_or_else(|| {
+        self.instance_snapshot(database).ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })
     }
-    fn instance_snapshot(
-        &self,
-        database: &DatabaseId,
-    ) -> Result<Option<DatabaseInstance>, DatabaseError> {
-        Ok(self
-            .instances
+    fn instance_snapshot(&self, database: &DatabaseId) -> Option<DatabaseInstance> {
+        self.instances
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .get(database)
-            .cloned())
+            .cloned()
     }
 }
 
@@ -340,11 +283,12 @@ pub(crate) struct DatabaseRuntimeMetadata {
 pub struct PreparedDatabasePhysicalMutation {
     physical: Arc<DatabaseRuntimePhysicalState>,
     database: DatabaseId,
-    before: DatabaseInstance,
+    store: Arc<DatasetStore>,
+    edit_state: EditState,
     pending: Option<PreparedInstanceMutation>,
-    after: Option<DatabaseInstance>,
     publication: Option<DatasetPublication>,
     commit_uncertain: bool,
+    collect_garbage: bool,
 }
 impl PreparedDatabasePhysicalMutation {
     pub(crate) fn schema_changed(&self) -> Result<bool, DatabaseError> {
@@ -355,9 +299,8 @@ impl PreparedDatabasePhysicalMutation {
                     DatabaseOperation::PrepareMutation,
                     Some(self.database.clone()),
                 )
-            })?
-            .schema_changed()
-            .map_err(|error| failure(&self.database, DatabaseOperation::PrepareMutation, error))
+            })
+            .map(PreparedInstanceMutation::schema_changed)
     }
     pub(crate) fn storage_recovery(
         &self,
@@ -368,14 +311,12 @@ impl PreparedDatabasePhysicalMutation {
                 Some(self.database.clone()),
             )
         })?;
-        let (store, publication) = pending
-            .recovery()
-            .map_err(|error| failure(&self.database, DatabaseOperation::PrepareMutation, error))?;
+        let (store, publication) = pending.recovery();
         Ok(super::registry::DatasetStorageRecovery { store, publication })
     }
     pub fn edit_state(&self) -> EditState {
         self.pending.as_ref().map_or_else(
-            || self.after.as_ref().unwrap_or(&self.before).edit_state(),
+            || self.edit_state.clone(),
             PreparedInstanceMutation::edit_state,
         )
     }
@@ -397,49 +338,39 @@ impl PreparedDatabasePhysicalMutation {
                 ));
             }
         };
-        self.after = Some(after);
+        self.edit_state = after.edit_state();
         self.publication = Some(publication);
-        self.physical.install_mutation(self);
+        self.physical.install_instance(after);
         Ok(())
     }
-    pub fn acknowledge(&self) -> Result<(), DatabaseError> {
+    fn acknowledge(&self) -> Result<(), DatabaseError> {
         let publication = self.publication.as_ref().ok_or_else(|| {
             DatabaseError::conflict(
                 DatabaseOperation::CommitMutation,
                 Some(self.database.clone()),
             )
         })?;
-        self.before
-            .snapshot()
-            .and_then(|snapshot| snapshot.store().acknowledge_publication(publication))
+        self.store
+            .acknowledge_publication(publication)
             .map_err(|error| failure(&self.database, DatabaseOperation::CommitMutation, error))
     }
     pub fn confirm(self) -> Result<(), DatabaseError> {
         self.acknowledge()?;
-        let store = self
-            .before
-            .snapshot()
-            .map_err(|error| failure(&self.database, DatabaseOperation::Recovery, error))?
-            .store()
-            .clone();
+        let store = self.store.clone();
         let database = self.database.clone();
+        let collect_garbage = self.collect_garbage;
         drop(self);
-        store
-            .collect_garbage()
-            .map_err(|error| failure(&database, DatabaseOperation::Recovery, error))?;
-        Ok(())
-    }
-    pub fn is_committed(&self) -> bool {
-        self.publication.is_some()
-    }
-    pub fn rollback(&self) -> Result<(), DatabaseError> {
-        if self.publication.is_some() || self.commit_uncertain {
-            return Err(DatabaseError::conflict(
-                DatabaseOperation::Recovery,
-                Some(self.database.clone()),
-            ));
+        if collect_garbage {
+            store.collect_garbage()
+        } else {
+            store.collect_garbage_if_due()
         }
+        .map_err(|error| failure(&database, DatabaseOperation::Recovery, error))?;
         Ok(())
+    }
+    /// A durable or uncertain commit must be resolved from the catalog before runtime compensation.
+    pub fn requires_recovery(&self) -> bool {
+        self.publication.is_some() || self.commit_uncertain
     }
 }
 fn failure(
@@ -460,44 +391,4 @@ fn empty_snapshot(
             .collect(),
     )
     .map_err(|_| DatabaseError::schema(DatabaseOperation::Query, Some(database.clone())))
-}
-
-fn select_columns(
-    schema: &DatabaseSchemaFact,
-    requested: Option<&[TabularColumnName]>,
-    database: &DatabaseId,
-) -> Result<Vec<DatabaseColumnFact>, DatabaseError> {
-    let Some(requested) = requested else {
-        return Ok(schema.columns().to_vec());
-    };
-    if requested.is_empty() {
-        return Err(DatabaseError::invalid_request(
-            DatabaseOperation::DataSnapshot,
-            Some(database.clone()),
-        ));
-    }
-
-    let mut seen = std::collections::BTreeSet::new();
-    requested
-        .iter()
-        .map(|column| {
-            if !seen.insert(column.clone()) {
-                return Err(DatabaseError::invalid_request(
-                    DatabaseOperation::DataSnapshot,
-                    Some(database.clone()),
-                ));
-            }
-            schema
-                .columns()
-                .iter()
-                .find(|fact| fact.name() == column)
-                .cloned()
-                .ok_or_else(|| {
-                    DatabaseError::not_found(
-                        DatabaseOperation::DataSnapshot,
-                        Some(database.clone()),
-                    )
-                })
-        })
-        .collect()
 }

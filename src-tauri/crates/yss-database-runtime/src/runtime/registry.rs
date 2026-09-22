@@ -4,8 +4,7 @@ use crate::error::{DatabaseError, DatabaseOperation};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use yss_database_contract::{
-    DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-    DatabaseDeclarationObservationSet, DatabaseId,
+    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -58,7 +57,7 @@ pub(crate) struct DatabaseRuntimeChangeRecord {
     expected_observation: DatabaseDeclarationObservation,
     next_observation: DatabaseDeclarationObservation,
     state: DatabaseCommittedRecordState,
-    pub(crate) storage: Option<DatasetStorageRecovery>,
+    pub(crate) storage: DatasetStorageRecovery,
 }
 
 impl DatabaseRuntimeChangeRecord {
@@ -69,34 +68,17 @@ impl DatabaseRuntimeChangeRecord {
     pub(crate) fn database(&self) -> &DatabaseId {
         &self.database
     }
-
-    pub(crate) fn after_runtime_revision(&self) -> u64 {
-        self.after.runtime
-    }
-
-    pub(crate) fn expected_observation(&self) -> &DatabaseDeclarationObservation {
-        &self.expected_observation
-    }
-
-    pub(crate) fn next_observation(&self) -> &DatabaseDeclarationObservation {
-        &self.next_observation
-    }
 }
 
 pub(crate) struct DatabaseRuntimeCommittedChange {
     pub(crate) registration: DatabaseCommittedRegistration,
-    pub(crate) record: DatabaseRuntimeChangeRecord,
+    pub(crate) database: DatabaseId,
+    pub(crate) runtime_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DatabaseRuntimeCompensationFailureCode {
     StaleRuntimeRevision,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DatabaseRuntimeRecoveryResolutionKind {
-    Confirm,
-    Compensate,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -107,45 +89,32 @@ pub(crate) enum DatabaseRuntimeRecoveryClaimError {
     AlreadyClaimed,
     #[error("database session admission is still open")]
     SessionStillOpen,
-    #[error("database authority matches neither recovery branch")]
-    AuthorityNeither,
 }
 
 pub(crate) struct DatabaseRuntimeRecoveryClaim {
     runtime: Arc<DatabaseSessionRuntime>,
-    record: DatabaseRuntimeChangeRecord,
-    kind: DatabaseRuntimeRecoveryResolutionKind,
+    recovery_id: u64,
     active: bool,
 }
 
 impl DatabaseRuntimeRecoveryClaim {
-    pub(crate) fn record(&self) -> &DatabaseRuntimeChangeRecord {
-        &self.record
-    }
-
-    pub(crate) fn kind(&self) -> DatabaseRuntimeRecoveryResolutionKind {
-        self.kind
-    }
-
     pub(crate) fn confirm(mut self) {
         self.active = false;
-        self.runtime.resolve_recovery(self.record.recovery_id);
+        self.runtime.resolve_recovery(self.recovery_id);
     }
 
-    pub(crate) fn compensate(&mut self) -> Result<u64, DatabaseRuntimeCompensationFailureCode> {
-        let restored = self.runtime.restore_change(
-            self.record.recovery_id,
-            DatabaseCommittedRecordState::Claimed,
-        )?;
+    pub(crate) fn compensate(&mut self) -> Result<(), DatabaseRuntimeCompensationFailureCode> {
+        self.runtime
+            .restore_change(self.recovery_id, DatabaseCommittedRecordState::Claimed)?;
         self.active = false;
-        Ok(restored.runtime)
+        Ok(())
     }
 }
 
 impl Drop for DatabaseRuntimeRecoveryClaim {
     fn drop(&mut self) {
         if self.active {
-            self.runtime.release_recovery_claim(self.record.recovery_id);
+            self.runtime.release_recovery_claim(self.recovery_id);
         }
     }
 }
@@ -162,12 +131,11 @@ impl DatabaseCommittedRegistration {
         self.runtime.resolve_committed(self.recovery_id);
     }
 
-    pub(crate) fn compensate(&mut self) -> Result<u64, DatabaseRuntimeCompensationFailureCode> {
-        let restored = self
-            .runtime
+    pub(crate) fn compensate(&mut self) -> Result<(), DatabaseRuntimeCompensationFailureCode> {
+        self.runtime
             .restore_change(self.recovery_id, DatabaseCommittedRecordState::Committed)?;
         self.active = false;
-        Ok(restored.runtime)
+        Ok(())
     }
 }
 
@@ -182,7 +150,7 @@ impl Drop for DatabaseCommittedRegistration {
 pub(crate) struct DatabasePreparedRegistration {
     runtime: Arc<DatabaseSessionRuntime>,
     active: bool,
-    storage: Option<DatasetStorageRecovery>,
+    storage: DatasetStorageRecovery,
 }
 
 impl std::fmt::Debug for DatabasePreparedRegistration {
@@ -195,9 +163,6 @@ impl std::fmt::Debug for DatabasePreparedRegistration {
 }
 
 impl DatabasePreparedRegistration {
-    pub(crate) fn track_storage(&mut self, storage: DatasetStorageRecovery) {
-        self.storage = Some(storage);
-    }
     fn disarm(&mut self) {
         self.active = false;
     }
@@ -218,7 +183,6 @@ pub(crate) struct DatabaseSessionRuntime {
 
 struct DatabaseRuntimeState {
     lifecycle: DatabaseRuntimeLifecycle,
-    declarations: BTreeMap<DatabaseId, DatabaseDeclarationFingerprint>,
     observations: DatabaseDeclarationObservationSet,
     revisions: BTreeMap<DatabaseId, DatabaseRuntimeRevisions>,
     next_recovery_id: u64,
@@ -231,15 +195,6 @@ impl DatabaseSessionRuntime {
         declarations: &[DatabaseDecl],
         observations: DatabaseDeclarationObservationSet,
     ) -> Arc<Self> {
-        let declaration_fingerprints = declarations
-            .iter()
-            .map(|declaration| {
-                (
-                    declaration.id.clone(),
-                    DatabaseDeclarationFingerprint::from_decl(declaration),
-                )
-            })
-            .collect();
         let revisions = declarations
             .iter()
             .map(|declaration| (declaration.id.clone(), DatabaseRuntimeRevisions::default()))
@@ -247,7 +202,6 @@ impl DatabaseSessionRuntime {
         Arc::new(Self {
             state: Mutex::new(DatabaseRuntimeState {
                 lifecycle: DatabaseRuntimeLifecycle::Open,
-                declarations: declaration_fingerprints,
                 observations,
                 revisions,
                 next_recovery_id: 0,
@@ -283,11 +237,7 @@ impl DatabaseSessionRuntime {
     ) -> Result<(DatabaseOperationLease, DatabaseRuntimeSnapshot), DatabaseError> {
         let mut state = lock_or_recover(&self.state);
         admit(&mut state, operation)?;
-        if state
-            .changes
-            .values()
-            .any(|change| change.storage.is_some())
-        {
+        if !state.changes.is_empty() {
             return Err(DatabaseError::conflict(operation, None));
         }
         state.outstanding.increment_operation_lease();
@@ -322,14 +272,11 @@ impl DatabaseSessionRuntime {
     pub(crate) fn begin_prepare(
         self: &Arc<Self>,
         operation: DatabaseOperation,
+        storage: DatasetStorageRecovery,
     ) -> Result<DatabasePreparedRegistration, DatabaseError> {
         let mut state = lock_or_recover(&self.state);
         admit(&mut state, operation)?;
-        if state
-            .changes
-            .values()
-            .any(|change| change.storage.is_some())
-        {
+        if !state.changes.is_empty() {
             return Err(DatabaseError::conflict(operation, None));
         }
         state.outstanding.increment_pending_prepare();
@@ -337,7 +284,7 @@ impl DatabaseSessionRuntime {
         Ok(DatabasePreparedRegistration {
             runtime: Arc::clone(self),
             active: true,
-            storage: None,
+            storage,
         })
     }
 
@@ -379,15 +326,7 @@ impl DatabaseSessionRuntime {
                 Some(database),
             ));
         }
-        let Some(declaration_fingerprint) = state.declarations.get(&database) else {
-            return Err(DatabaseError::not_found(
-                DatabaseOperation::CommitMutation,
-                Some(database),
-            ));
-        };
-        if expected_observation.fingerprint() != declaration_fingerprint
-            || next_observation.revision().get() < current_observation.revision().get()
-        {
+        if next_observation.revision().get() < current_observation.revision().get() {
             return Err(DatabaseError::conflict(
                 DatabaseOperation::CommitMutation,
                 Some(database),
@@ -420,20 +359,17 @@ impl DatabaseSessionRuntime {
         state.next_recovery_id = recovery_id;
         state.revisions.insert(database.clone(), after);
         state.observations = next_observations;
-        state
-            .declarations
-            .insert(database.clone(), next_observation.fingerprint().clone());
         let record = DatabaseRuntimeChangeRecord {
             recovery_id,
-            database,
+            database: database.clone(),
             before: current_revisions,
             after,
             expected_observation,
             next_observation,
             state: DatabaseCommittedRecordState::Committed,
-            storage: registration.storage.take(),
+            storage: registration.storage.clone(),
         };
-        state.changes.insert(recovery_id, record.clone());
+        state.changes.insert(recovery_id, record);
         drop(state);
         Ok(DatabaseRuntimeCommittedChange {
             registration: DatabaseCommittedRegistration {
@@ -441,7 +377,8 @@ impl DatabaseSessionRuntime {
                 recovery_id,
                 active: true,
             },
-            record,
+            database,
+            runtime_revision: after.runtime,
         })
     }
 
@@ -520,7 +457,6 @@ impl DatabaseSessionRuntime {
     pub(crate) fn claim_recovery(
         self: &Arc<Self>,
         recovery_id: u64,
-        current_authority: &DatabaseDeclarationObservation,
     ) -> Result<DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError> {
         let mut state = lock_or_recover(&self.state);
         if state.lifecycle == DatabaseRuntimeLifecycle::Open {
@@ -532,18 +468,10 @@ impl DatabaseSessionRuntime {
         if record.state != DatabaseCommittedRecordState::Available {
             return Err(DatabaseRuntimeRecoveryClaimError::AlreadyClaimed);
         }
-        let kind = if current_authority == &record.next_observation {
-            DatabaseRuntimeRecoveryResolutionKind::Confirm
-        } else if current_authority == &record.expected_observation {
-            DatabaseRuntimeRecoveryResolutionKind::Compensate
-        } else {
-            return Err(DatabaseRuntimeRecoveryClaimError::AuthorityNeither);
-        };
         record.state = DatabaseCommittedRecordState::Claimed;
         Ok(DatabaseRuntimeRecoveryClaim {
             runtime: Arc::clone(self),
-            record: record.clone(),
-            kind,
+            recovery_id,
             active: true,
         })
     }
@@ -618,7 +546,7 @@ impl DatabaseSessionRuntime {
         &self,
         recovery_id: u64,
         expected_state: DatabaseCommittedRecordState,
-    ) -> Result<DatabaseRuntimeRevisions, DatabaseRuntimeCompensationFailureCode> {
+    ) -> Result<(), DatabaseRuntimeCompensationFailureCode> {
         let mut state = lock_or_recover(&self.state);
         let Some(record) = state.changes.get(&recovery_id).cloned() else {
             return Err(DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision);
@@ -647,10 +575,6 @@ impl DatabaseSessionRuntime {
             .revisions
             .insert(record.database.clone(), record.before);
         state.observations = restored_observations;
-        state.declarations.insert(
-            record.database.clone(),
-            record.expected_observation.fingerprint().clone(),
-        );
         state.changes.remove(&recovery_id);
         match expected_state {
             DatabaseCommittedRecordState::Committed => state.outstanding.release_committed(),
@@ -661,7 +585,7 @@ impl DatabaseSessionRuntime {
         }
         drop(state);
         self.changed.notify_all();
-        Ok(record.before)
+        Ok(())
     }
 }
 

@@ -27,6 +27,10 @@ its declaration/index publication, and Application coordinates the existing owne
 
 ## Storage and activation
 
+Application opens the Dataset Store at the Project root and supplies bound dataset instances.
+Session-open requests carry session identity, generation, declarations and their observations;
+empty and populated sessions share the same validation and initialization path.
+
 Project format 5 stores `database/catalog.sqlite` and
 `database/datasets/<dataset-id>/<generation-id>/part-000000.parquet`. Activation validates the
 manifest before opening the catalog and rebuilds declarations only from committed entries.
@@ -36,11 +40,11 @@ CSV, Parquet, Excel, and external SQL remain separate `DatabaseImportSource` var
 A runtime instance contains `Dataset { snapshot, engine, history }` or `Failed`. Snapshots keep
 exact Arrow types, column identities, category metadata, stable RowId and independent
 DisplayOrder. All host queries share a DataFusion RuntimeEnv. There is no mutable resident
-DataFrame or host Polars conversion path in this runtime.
+DataFrame in this runtime.
 
 ## Queries and display
 
-Column reads apply projection and bounds before materialization. DataView pages include stable
+Column snapshots use Arrow and apply projection and bounds before materialization. DataView pages include stable
 row IDs; relation reads hide internal identity/order fields. Display DTOs convert unsafe
 JavaScript integers to decimal strings. `DatabaseColumnFact` carries a semantic Graph type and
 an independent display label, exact Physical label and the field's Semantic configuration;
@@ -78,21 +82,34 @@ and use the same history/publication path. Casts retain Semantic and reject prec
 
 The handoff prepares Project authority and storage work, registers the runtime transition,
 revalidates the captured session, commits the catalog using the expected head, installs the
-snapshot/history, and publishes Project facts. A tracked storage handoff blocks reads while
+snapshot/history, and publishes Project facts. Runtime preparation requires the physical
+proposal and its storage recovery record. Schema invalidation compares the proposal's Arrow
+schema with its captured snapshot; the operation name does not infer a second schema effect.
+Declaration observations own the current fingerprints. A storage handoff blocks reads while
 its snapshot and runtime revision are being reconciled. A schema-changing undo also advances
 the schema revision.
+Physical handoffs retain the prepared edit and store handle, then move the committed instance
+into runtime state. They do not retain extra copies of the before/after instances or histories.
 
 Before catalog commit, dropping preparation removes only its uncommitted files. After commit,
 Project publication failure retains the committed data and durable handoff. Runtime recovery
 consults the exact SQLite operation record to distinguish committed data from an abandoned
 preparation; it does not undo a durable edit. Project activation publishes the rebuilt index
 and acknowledges recovered handoffs.
+`resolve_storage_recoveries` owns recovery after session admission closes. Physical mutations
+report whether a commit requires recovery; dropping an uncommitted preparation cleans its files.
+Runtime compensation is allowed only when storage has neither committed nor reported an uncertain
+commit. Runtime errors retain only their classification, operation and resource identity;
+query, export and storage failures use the existing Dataset Store error contract internally.
 
-Save checkpoints the current snapshot and clears history without rewriting the table. A sparse
+Save checkpoints the current snapshot, shares its persisted patch blobs and clears history
+without rewriting the table. A sparse
 delta that exceeds its budget is compacted into a new generation as part of the same edit.
 Dataset deletion uses the same handoff and publishes a tombstone. Existing relation/result
 snapshots retain their original contents. Garbage collection protects active heads, queries,
 history and pending handoffs, then uses a durable retry queue for physical file removal.
+Ordinary confirmed mutations batch the collection sweep at the store's 64-mutation interval;
+Save and dataset deletion collect immediately after releasing the mutation's temporary snapshot references.
 SQLite connections are released between catalog operations so idle runtime handles do not
 prevent a drained project from being moved or deleted on Windows.
 
@@ -110,7 +127,7 @@ Save As captures a standalone SQLite image and streams large files through the e
 transaction staging area. Source roots require leases; copied files must have absent destinations,
 and source metadata is checked during staging. Project documents retain their typed validation.
 
-The DuckDB and Polars adapter crates have been removed. Julia plugins also use DataFusion and
-Arrow within their process boundary. Current storage and graph integration contracts are described in
+Julia plugins also use DataFusion and Arrow within their process boundary. Storage and graph
+integration contracts are described in
 [Dataset store](../yss-database-store/README.md) and
 [Graph and Execution](../yss-application/src/graph/README.md).

@@ -4,13 +4,11 @@ mod registry;
 use crate::error::{DatabaseError, DatabaseOperation};
 pub use physical::PreparedDatabasePhysicalMutation;
 use physical::{
-    DatabaseRuntimeDataSnapshot, DatabaseRuntimeMetadata, DatabaseRuntimePageSnapshot,
-    DatabaseRuntimePhysicalState,
+    DatabaseRuntimeMetadata, DatabaseRuntimePageSnapshot, DatabaseRuntimePhysicalState,
 };
 use registry::DatabaseSessionRuntime;
 use std::fmt;
 use std::num::NonZeroU64;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use yss_database_contract::EditState;
@@ -23,8 +21,8 @@ use yss_database_schema::DatabaseSchemaFact;
 pub(crate) use registry::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
     DatabaseRuntimeCommittedChange, DatabaseRuntimeCompensationFailureCode,
-    DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError,
-    DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeRevisions, DatabaseRuntimeSnapshot,
+    DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError, DatabaseRuntimeRevisions,
+    DatabaseRuntimeSnapshot,
 };
 
 #[derive(Clone, Default)]
@@ -39,7 +37,6 @@ pub struct DatabaseRuntimeSession {
 struct DatabaseSessionBasis {
     identity: DatabaseSessionIdentity,
     generation: NonZeroU64,
-    _root: Option<PathBuf>,
     declarations: Arc<[DatabaseDecl]>,
 }
 
@@ -182,7 +179,7 @@ impl DatabaseRuntimeRegistry {
         &self,
         request: DatabaseSessionOpenRequest,
     ) -> Result<DatabaseRuntimeSession, DatabaseError> {
-        self.open_session_with_physical(request, DatabaseRuntimePhysicalState::empty())
+        self.open_session_with_instances(request, [])
     }
 
     pub fn open_session_with_instances(
@@ -193,7 +190,6 @@ impl DatabaseRuntimeRegistry {
         let DatabaseSessionOpenRequestParts {
             identity,
             generation,
-            root,
             declarations,
             observations,
             ..
@@ -207,34 +203,6 @@ impl DatabaseRuntimeRegistry {
             basis: DatabaseSessionBasis {
                 identity,
                 generation,
-                _root: root,
-                declarations,
-            },
-        })
-    }
-
-    fn open_session_with_physical(
-        &self,
-        request: DatabaseSessionOpenRequest,
-        physical: Arc<DatabaseRuntimePhysicalState>,
-    ) -> Result<DatabaseRuntimeSession, DatabaseError> {
-        let DatabaseSessionOpenRequestParts {
-            identity,
-            generation,
-            root,
-            declarations,
-            observations,
-            ..
-        } = request
-            .into_validated_parts()
-            .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
-        Ok(DatabaseRuntimeSession {
-            runtime: DatabaseSessionRuntime::new(&declarations, observations),
-            physical,
-            basis: DatabaseSessionBasis {
-                identity,
-                generation,
-                _root: root,
                 declarations,
             },
         })
@@ -311,8 +279,9 @@ impl DatabaseRuntimeSession {
     pub(crate) fn begin_prepare(
         &self,
         operation: DatabaseOperation,
+        storage: registry::DatasetStorageRecovery,
     ) -> Result<DatabasePreparedRegistration, DatabaseError> {
-        self.runtime.begin_prepare(operation)
+        self.runtime.begin_prepare(operation, storage)
     }
 
     pub(crate) fn commit_prepared(
@@ -336,17 +305,6 @@ impl DatabaseRuntimeSession {
 
     pub(crate) fn runtime_snapshot(&self) -> DatabaseRuntimeSnapshot {
         self.runtime.snapshot()
-    }
-
-    pub(crate) fn read_physical_snapshot(
-        &self,
-        database: &DatabaseId,
-        requested: Option<&[yss_data_contract::TabularColumnName]>,
-        offset: usize,
-        limit: usize,
-    ) -> Result<DatabaseRuntimeDataSnapshot, DatabaseError> {
-        self.physical
-            .read_columns(database, requested, offset, limit)
     }
 
     pub(crate) fn read_physical_schema(
@@ -420,10 +378,6 @@ impl DatabaseRuntimeSession {
             .prepare_mutation(database, operation, operation_id)
     }
 
-    pub fn install_physical_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {
-        self.physical.install_mutation(mutation);
-    }
-
     pub fn instances_for_replacement(&self) -> Vec<crate::DatabaseInstance> {
         self.physical.instances_for_replacement()
     }
@@ -448,8 +402,7 @@ impl DatabaseRuntimeSession {
     pub(crate) fn claim_runtime_recovery(
         &self,
         recovery_id: u64,
-        current_authority: &yss_database_contract::DatabaseDeclarationObservation,
     ) -> Result<DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError> {
-        self.runtime.claim_recovery(recovery_id, current_authority)
+        self.runtime.claim_recovery(recovery_id)
     }
 }

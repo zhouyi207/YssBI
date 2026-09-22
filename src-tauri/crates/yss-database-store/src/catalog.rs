@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{DatasetFile, DatasetMetadata, DatasetPublication, DatasetStoreError, PreparedDataset};
 use yss_database_contract::DatabaseId;
 
-pub(crate) const CATALOG_VERSION: i64 = 1;
+pub(crate) const CATALOG_VERSION: i64 = 2;
 const APPLICATION_ID: i64 = 0x5953_5344;
 
 pub(crate) async fn validate_existing(path: &std::path::Path) -> Result<(), DatasetStoreError> {
@@ -35,12 +35,16 @@ pub(crate) async fn initialize(pool: &SqlitePool) -> Result<(), DatasetStoreErro
         CREATE TABLE generations(id TEXT PRIMARY KEY NOT NULL, dataset_id TEXT NOT NULL REFERENCES datasets(id), schema_json TEXT NOT NULL, row_count INTEGER NOT NULL);
         CREATE TABLE dataset_files(generation_id TEXT NOT NULL REFERENCES generations(id), ordinal INTEGER NOT NULL, path TEXT NOT NULL UNIQUE, row_count INTEGER NOT NULL, size_bytes INTEGER NOT NULL, PRIMARY KEY(generation_id,ordinal));
         CREATE TABLE snapshots(id TEXT PRIMARY KEY NOT NULL, dataset_id TEXT NOT NULL REFERENCES datasets(id), generation_id TEXT NOT NULL REFERENCES generations(id), schema_json TEXT NOT NULL, data_revision INTEGER NOT NULL, schema_revision INTEGER NOT NULL, row_count INTEGER NOT NULL);
-        CREATE TABLE column_edits(snapshot_id TEXT NOT NULL REFERENCES snapshots(id), column_id TEXT NOT NULL, data_ipc BLOB NOT NULL, PRIMARY KEY(snapshot_id,column_id));
-        CREATE TABLE inserted_rows(snapshot_id TEXT PRIMARY KEY NOT NULL REFERENCES snapshots(id), data_ipc BLOB NOT NULL);
-        CREATE TABLE deleted_rows(snapshot_id TEXT NOT NULL REFERENCES snapshots(id), row_id INTEGER NOT NULL, PRIMARY KEY(snapshot_id,row_id));
+        CREATE TABLE overlay_blobs(id TEXT PRIMARY KEY NOT NULL, data_ipc BLOB NOT NULL);
+        CREATE TABLE column_edits(snapshot_id TEXT NOT NULL REFERENCES snapshots(id), column_id TEXT NOT NULL, blob_id TEXT NOT NULL REFERENCES overlay_blobs(id), PRIMARY KEY(snapshot_id,column_id));
+        CREATE TABLE inserted_rows(snapshot_id TEXT PRIMARY KEY NOT NULL REFERENCES snapshots(id), blob_id TEXT NOT NULL REFERENCES overlay_blobs(id));
+        CREATE TABLE deleted_rows(snapshot_id TEXT PRIMARY KEY NOT NULL REFERENCES snapshots(id), blob_id TEXT NOT NULL REFERENCES overlay_blobs(id));
+        CREATE INDEX column_edit_blobs ON column_edits(blob_id);
+        CREATE INDEX inserted_row_blobs ON inserted_rows(blob_id);
+        CREATE INDEX deleted_row_blobs ON deleted_rows(blob_id);
         CREATE TABLE garbage_files(path TEXT PRIMARY KEY NOT NULL);
         CREATE TABLE dataset_operations(sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, dataset_id TEXT NOT NULL, before_snapshot TEXT, after_snapshot TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 0);
-        PRAGMA user_version=1;
+        PRAGMA user_version=2;
         PRAGMA application_id=0x59535344;
     "#).execute(&mut *transaction).await?;
     transaction.commit().await?;
@@ -101,7 +105,8 @@ pub(crate) async fn load_current(
         .await?;
     let base_schema =
         Arc::new(serde_json::from_str(&base_json).map_err(|_| DatasetStoreError::CorruptCatalog)?);
-    let overlay = crate::codec::load_overlay(&mut transaction, &metadata.snapshot_id).await?;
+    let (overlay, encoded_overlay) =
+        crate::codec::load_overlay(&mut transaction, &metadata.snapshot_id).await?;
     let next_row_id = sqlx::query_scalar("SELECT next_row_id FROM datasets WHERE id=?")
         .bind(database.as_str())
         .fetch_one(&mut *transaction)
@@ -112,6 +117,7 @@ pub(crate) async fn load_current(
         files: files.into_boxed_slice(),
         base_schema,
         overlay,
+        encoded_overlay,
         next_row_id,
     })
 }
@@ -121,6 +127,7 @@ pub(crate) struct LoadedSnapshot {
     pub files: Box<[DatasetFile]>,
     pub base_schema: arrow::datatypes::SchemaRef,
     pub overlay: yss_relational_contract::DatasetOverlay,
+    pub encoded_overlay: crate::codec::EncodedOverlay,
     pub next_row_id: i64,
 }
 
@@ -211,25 +218,34 @@ pub(crate) async fn commit(
         }
     }
     sqlx::query("INSERT INTO snapshots(id,dataset_id,generation_id,schema_json,data_revision,schema_revision,row_count) VALUES(?,?,?,?,?,?,?)").bind(meta.snapshot_id.as_ref()).bind(meta.id.as_str()).bind(meta.generation_id.as_ref()).bind(schema).bind(i64::try_from(meta.data_revision).map_err(|_| DatasetStoreError::InvalidSchema)?).bind(i64::try_from(meta.schema_revision).map_err(|_| DatasetStoreError::InvalidSchema)?).bind(i64::try_from(meta.row_count).map_err(|_| DatasetStoreError::InvalidSchema)?).execute(&mut *transaction).await?;
-    for (column_id, bytes) in &overlay.columns {
-        sqlx::query("INSERT INTO column_edits(snapshot_id,column_id,data_ipc) VALUES(?,?,?)")
+    for blob in overlay.blobs() {
+        if let Some(bytes) = &blob.data {
+            sqlx::query("INSERT INTO overlay_blobs(id,data_ipc) VALUES(?,?)")
+                .bind(blob.id.as_ref())
+                .bind(bytes)
+                .execute(&mut *transaction)
+                .await?;
+        }
+    }
+    for (column_id, blob) in &overlay.columns {
+        sqlx::query("INSERT INTO column_edits(snapshot_id,column_id,blob_id) VALUES(?,?,?)")
             .bind(meta.snapshot_id.as_ref())
             .bind(column_id.as_ref())
-            .bind(bytes)
+            .bind(blob.id.as_ref())
             .execute(&mut *transaction)
             .await?;
     }
-    if let Some(bytes) = &overlay.inserted {
-        sqlx::query("INSERT INTO inserted_rows(snapshot_id,data_ipc) VALUES(?,?)")
+    if let Some(blob) = &overlay.inserted {
+        sqlx::query("INSERT INTO inserted_rows(snapshot_id,blob_id) VALUES(?,?)")
             .bind(meta.snapshot_id.as_ref())
-            .bind(bytes)
+            .bind(blob.id.as_ref())
             .execute(&mut *transaction)
             .await?;
     }
-    for row_id in &overlay.deleted {
-        sqlx::query("INSERT INTO deleted_rows(snapshot_id,row_id) VALUES(?,?)")
+    if let Some(blob) = &overlay.deleted {
+        sqlx::query("INSERT INTO deleted_rows(snapshot_id,blob_id) VALUES(?,?)")
             .bind(meta.snapshot_id.as_ref())
-            .bind(row_id)
+            .bind(blob.id.as_ref())
             .execute(&mut *transaction)
             .await?;
     }
@@ -329,6 +345,9 @@ pub(crate) async fn collect_garbage(
             .execute(&mut *transaction)
             .await?;
     }
+    sqlx::query("DELETE FROM overlay_blobs WHERE NOT EXISTS(SELECT 1 FROM column_edits WHERE blob_id=overlay_blobs.id) AND NOT EXISTS(SELECT 1 FROM inserted_rows WHERE blob_id=overlay_blobs.id) AND NOT EXISTS(SELECT 1 FROM deleted_rows WHERE blob_id=overlay_blobs.id)")
+        .execute(&mut *transaction)
+        .await?;
     let generations = sqlx::query_scalar::<_, String>("SELECT id FROM generations WHERE NOT EXISTS(SELECT 1 FROM snapshots WHERE generation_id=generations.id)").fetch_all(&mut *transaction).await?;
     for generation in generations {
         sqlx::query("INSERT OR IGNORE INTO garbage_files(path) SELECT path FROM dataset_files WHERE generation_id=?").bind(&generation).execute(&mut *transaction).await?;

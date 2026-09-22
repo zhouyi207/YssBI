@@ -4,7 +4,22 @@ use std::sync::PoisonError;
 
 use crate::{DatasetStore, DatasetStoreError, catalog};
 
+pub(crate) const GC_EDIT_INTERVAL: usize = 64;
+
 impl DatasetStore {
+    /// Amortize directory/catalog scans across confirmed edits in this project.
+    /// Explicit save/deletion and activation use `collect_garbage` directly.
+    pub fn collect_garbage_if_due(&self) -> Result<usize, DatasetStoreError> {
+        {
+            let mut leases = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
+            leases.edits_since_collection = leases.edits_since_collection.saturating_add(1);
+            if leases.edits_since_collection < GC_EDIT_INTERVAL {
+                return Ok(0);
+            }
+        }
+        self.collect_garbage()
+    }
+
     /// Reclaim only generations absent from the catalog, queries, preparations, and handoffs.
     /// The durable queue makes an interrupted or failed physical removal retryable.
     pub fn collect_garbage(&self) -> Result<usize, DatasetStoreError> {
@@ -20,6 +35,7 @@ impl DatasetStore {
             &leases.protected(),
             &orphans,
         ))?;
+        leases.edits_since_collection = 0;
         drop(leases);
         let mut removed = 0;
         for relative in paths {

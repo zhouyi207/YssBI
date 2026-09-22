@@ -25,11 +25,6 @@ impl RecoveryMarker {
         self.state.clear_poison();
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn boundary_is_available(&self) -> bool {
-        self.state.try_lock().is_ok()
-    }
-
     pub fn clear(&self) {
         self.state
             .lock()

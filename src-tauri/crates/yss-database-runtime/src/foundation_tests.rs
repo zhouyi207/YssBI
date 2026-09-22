@@ -4,7 +4,6 @@ use crate::runtime::{
     DatabaseOutstandingWork, DatabaseRuntimeRegistry, DatabaseSessionDrainControl,
 };
 use std::num::NonZeroU64;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
@@ -42,7 +41,6 @@ fn request(
     DatabaseSessionOpenRequest::new(
         DatabaseSessionIdentity::from_existing("session-1".into()),
         NonZeroU64::new(7).unwrap(),
-        Some(PathBuf::from("project")),
         declarations.into(),
         observations,
     )

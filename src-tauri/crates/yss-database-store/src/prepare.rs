@@ -32,6 +32,7 @@ pub struct PreparedDataset {
     pub(crate) retain_files: bool,
     pub(crate) base_schema: SchemaRef,
     pub(crate) overlay: DatasetOverlay,
+    pub(crate) encoded_overlay: Option<crate::codec::EncodedOverlay>,
     pub(crate) new_generation: bool,
     pub(crate) directory: Option<PathBuf>,
     pub(crate) snapshot_leases: Box<[Arc<DatasetSnapshot>]>,
@@ -39,6 +40,14 @@ pub struct PreparedDataset {
 }
 
 impl PreparedDataset {
+    pub(crate) fn encode_overlay(&self) -> Result<crate::codec::EncodedOverlay, DatasetStoreError> {
+        crate::codec::encode_overlay(
+            &self.metadata.schema,
+            &self.overlay,
+            self.snapshot_leases.last().map(Arc::as_ref),
+        )
+    }
+
     pub fn publication(&self) -> crate::DatasetPublication {
         crate::DatasetPublication {
             operation_id: self.operation_id.clone(),
@@ -107,6 +116,7 @@ impl DatasetStore {
             next_row_id: 0,
             retain_files: false,
             overlay: DatasetOverlay::default(),
+            encoded_overlay: None,
             new_generation: true,
             directory: Some(directory),
             snapshot_leases: Box::new([]),

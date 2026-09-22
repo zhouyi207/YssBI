@@ -488,6 +488,206 @@ fn editable_fixture() -> (
 }
 
 #[test]
+fn snapshots_share_unchanged_overlay_blobs_across_checkpoint_restore_and_collection() {
+    let (directory, store, original, engine) = editable_fixture();
+    let blob_count = || {
+        store
+            .catalog(async {
+                Ok(
+                    sqlx::query_scalar::<_, i64>("SELECT count(*) FROM overlay_blobs")
+                        .fetch_one(&store.pool)
+                        .await?,
+                )
+            })
+            .unwrap()
+    };
+    let commit = |prepared| {
+        let committed = store.commit(prepared).unwrap();
+        store
+            .acknowledge_publication(&committed.publication)
+            .unwrap();
+        committed.snapshot
+    };
+    let mut current = commit(
+        store
+            .prepare_add_row(&original, &engine, "insert", 1, &control())
+            .unwrap(),
+    );
+    current = commit(
+        store
+            .prepare_delete_rows(&current, &engine, "delete", &[2], &control())
+            .unwrap(),
+    );
+    current = commit(
+        store
+            .prepare_cell_edit(
+                &current,
+                &engine,
+                "income",
+                DatasetCellEdit {
+                    row_id: 0,
+                    column: "income",
+                    value: serde_json::json!(12),
+                },
+                &control(),
+            )
+            .unwrap(),
+    );
+    assert_eq!(blob_count(), 3);
+    current = commit(
+        store
+            .prepare_cell_edit(
+                &current,
+                &engine,
+                "marker",
+                DatasetCellEdit {
+                    row_id: 1,
+                    column: "marker",
+                    value: serde_json::json!(42),
+                },
+                &control(),
+            )
+            .unwrap(),
+    );
+    let target = current.clone();
+    assert_eq!(blob_count(), 4);
+    current = commit(
+        store
+            .prepare_cell_edit(
+                &current,
+                &engine,
+                "marker-again",
+                DatasetCellEdit {
+                    row_id: 1,
+                    column: "marker",
+                    value: serde_json::json!(43),
+                },
+                &control(),
+            )
+            .unwrap(),
+    );
+    assert_eq!(blob_count(), 5);
+    for index in 0..8 {
+        current = commit(
+            store
+                .prepare_rename(&current, &format!("checkpoint-{index}"), "Edits")
+                .unwrap(),
+        );
+    }
+    assert_eq!(
+        blob_count(),
+        5,
+        "checkpoints must not duplicate accumulated patches"
+    );
+
+    let reopened = DatasetStore::open(directory.path()).unwrap();
+    current = reopened.snapshot(&current.metadata().id).unwrap();
+    let committed = reopened
+        .commit(
+            reopened
+                .prepare_rename(&current, "reopened-checkpoint", "Edits")
+                .unwrap(),
+        )
+        .unwrap();
+    reopened
+        .acknowledge_publication(&committed.publication)
+        .unwrap();
+    current = committed.snapshot;
+    assert_eq!(
+        blob_count(),
+        5,
+        "loaded snapshots must retain shared blob references"
+    );
+    // Restores require the same store owner, while GC shares leases between store handles.
+    current = store.snapshot(&current.metadata().id).unwrap();
+    let prepared = store.prepare_restore(&current, &target, "restore").unwrap();
+    drop(target);
+    drop(current);
+    drop(original);
+    for publication in store.pending_publications().unwrap() {
+        store.acknowledge_publication(&publication).unwrap();
+    }
+    reopened.collect_garbage().unwrap();
+    assert_eq!(
+        blob_count(),
+        5,
+        "prepared restore must retain both snapshots' patches"
+    );
+    let restored = commit(prepared);
+    reopened.collect_garbage().unwrap();
+    assert_eq!(
+        blob_count(),
+        4,
+        "only the superseded marker patch should be reclaimed"
+    );
+
+    let loaded = reopened.snapshot(&restored.metadata().id).unwrap();
+    let page = loaded
+        .query(&engine, "restored")
+        .unwrap()
+        .relation()
+        .unwrap()
+        .page(0, 3, &control())
+        .unwrap();
+    assert_eq!(page.row_count, 3);
+    assert_eq!(
+        serde_json::to_value(page.data.columns()[0].values()).unwrap(),
+        serde_json::json!([12.0, null, 9000.0])
+    );
+    assert_eq!(
+        serde_json::to_value(&page.data.columns()[1].values()[2]).unwrap(),
+        serde_json::json!(42.0)
+    );
+}
+
+#[test]
+fn missing_shared_patch_blob_rejects_snapshot_instead_of_exposing_base_values() {
+    use sqlx::Connection;
+    let (_directory, store, original, engine) = editable_fixture();
+    let edited = store
+        .commit(
+            store
+                .prepare_cell_edit(
+                    &original,
+                    &engine,
+                    "edit",
+                    DatasetCellEdit {
+                        row_id: 0,
+                        column: "income",
+                        value: serde_json::json!(12),
+                    },
+                    &control(),
+                )
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    // Model an externally damaged catalog: normal commits enforce this foreign key.
+    store
+        .catalog(async {
+            let options = sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(
+                    store
+                        .root
+                        .join(yss_project_layout::PROJECT_DATASET_CATALOG_FILE),
+                )
+                .foreign_keys(false);
+            let mut connection = sqlx::SqliteConnection::connect_with(&options).await?;
+            sqlx::query("UPDATE column_edits SET blob_id='missing' WHERE snapshot_id=?")
+                .bind(edited.metadata().snapshot_id.as_ref())
+                .execute(&mut connection)
+                .await?;
+            connection.close().await?;
+            Ok(())
+        })
+        .unwrap();
+    assert!(matches!(
+        store.snapshot(&edited.metadata().id),
+        Err(DatasetStoreError::CorruptCatalog)
+    ));
+}
+
+#[test]
 fn garbage_collection_respects_queries_preparations_and_pending_publications_after_reopen() {
     let (directory, store, original, engine) = editable_fixture();
     let old_files = original.file_paths();

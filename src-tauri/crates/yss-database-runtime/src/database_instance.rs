@@ -13,7 +13,6 @@ use yss_database_store::{
 };
 use yss_relational_contract::{RelationBinding, RelationControl, RelationError, RelationHandle};
 
-use crate::error::DatabaseExportError;
 use crate::session_api::DatabaseMutationOperation;
 use crate::{DatabaseState, DatasetEdit};
 
@@ -114,7 +113,7 @@ impl DatabaseInstance {
         &self,
         path: &Path,
         format: DatabaseExportFormat,
-    ) -> Result<(), DatabaseExportError> {
+    ) -> Result<(), DatasetStoreError> {
         let relation = self.query()?.relation()?;
         let engine = self.engine()?;
         let control = query_control(128 * 1024 * 1024);
@@ -184,6 +183,9 @@ impl DatabaseInstance {
         else {
             return Err(DatasetStoreError::NotFound);
         };
+        if snapshot.metadata().deleted {
+            return Err(DatasetStoreError::NotFound);
+        }
         let store = snapshot.store();
         let control = query_control(128 * 1024 * 1024);
         let mut next_history = history.clone();
@@ -304,7 +306,9 @@ impl DatabaseInstance {
             }
         };
         Ok(PreparedInstanceMutation {
-            before: self.clone(),
+            decl: self.decl.clone(),
+            before: snapshot.clone(),
+            engine: engine.clone(),
             prepared,
             history: next_history,
             push_history,
@@ -325,23 +329,19 @@ impl DatabaseInstance {
 }
 
 pub(crate) struct PreparedInstanceMutation {
-    before: DatabaseInstance,
+    decl: DatabaseDecl,
+    before: Arc<DatasetSnapshot>,
+    engine: Arc<yss_database_engine::DataFusionRuntime>,
     prepared: PreparedDataset,
     history: crate::edit_history::EditHistory<DatasetEdit>,
     push_history: bool,
 }
 impl PreparedInstanceMutation {
-    pub fn schema_changed(&self) -> Result<bool, DatasetStoreError> {
-        Ok(self.prepared.metadata().schema != self.before.snapshot()?.metadata().schema)
+    pub fn schema_changed(&self) -> bool {
+        self.prepared.metadata().schema != self.before.metadata().schema
     }
-    pub fn recovery(
-        &self,
-    ) -> Result<(Arc<yss_database_store::DatasetStore>, DatasetPublication), DatasetStoreError>
-    {
-        Ok((
-            self.before.snapshot()?.store().clone(),
-            self.prepared.publication(),
-        ))
+    pub fn recovery(&self) -> (Arc<yss_database_store::DatasetStore>, DatasetPublication) {
+        (self.before.store().clone(), self.prepared.publication())
     }
     pub fn edit_state(&self) -> EditState {
         let mut state = self.history.state();
@@ -355,22 +355,20 @@ impl PreparedInstanceMutation {
         state
     }
     pub fn commit(mut self) -> Result<(DatabaseInstance, DatasetPublication), DatasetStoreError> {
-        let snapshot = self.before.snapshot()?.clone();
-        let engine = self.before.engine()?.clone();
-        let committed = snapshot.store().commit(self.prepared)?;
+        let committed = self.before.store().commit(self.prepared)?;
         if self.push_history {
             self.history.push(DatasetEdit {
-                before: snapshot,
+                before: self.before,
                 after: committed.snapshot.clone(),
             });
         }
-        let mut decl = self.before.decl;
+        let mut decl = self.decl;
         decl.name = committed.snapshot.metadata().name.clone();
         let instance = DatabaseInstance {
             decl,
             state: DatabaseState::Dataset {
                 snapshot: committed.snapshot,
-                engine,
+                engine: self.engine,
                 history: self.history,
             },
         };

@@ -4,10 +4,8 @@ use std::num::NonZeroU64;
 use crate::declaration_observation_for;
 use crate::error::{DatabaseError, DatabaseOperation};
 use crate::runtime::{
-    DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
-    DatabaseRuntimeCommittedChange, DatabaseRuntimeCompensationFailureCode,
-    DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError,
-    DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
+    DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeCommittedChange,
+    DatabaseRuntimeCompensationFailureCode, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
 };
 use arrow::datatypes::DataType;
 use yss_data_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
@@ -16,9 +14,7 @@ use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
-use yss_database_schema::{
-    DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
-};
+use yss_database_schema::{DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DatabaseColumnSelection {
@@ -32,14 +28,6 @@ pub struct DatabaseDataSnapshotRequest {
     pub columns: DatabaseColumnSelection,
     pub offset: usize,
     pub limit: usize,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct DatabaseDataSnapshot {
-    database: DatabaseId,
-    runtime_revision: DatabaseRuntimeRevision,
-    columns: Box<[DatabaseColumnFact]>,
-    rows: TabularSnapshot,
 }
 
 pub struct DatabaseArrowSnapshot {
@@ -56,17 +44,12 @@ impl DatabaseArrowSnapshot {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DatabaseMetaSnapshot {
-    database: DatabaseId,
     name: Box<str>,
     schema: DatabaseSchemaFact,
     row_count: usize,
 }
 
 impl DatabaseMetaSnapshot {
-    pub fn database(&self) -> &DatabaseId {
-        &self.database
-    }
-
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -82,40 +65,17 @@ impl DatabaseMetaSnapshot {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DatabasePageSnapshot {
-    database: DatabaseId,
     rows: TabularSnapshot,
     row_ids: Vec<i64>,
 }
 
 impl DatabasePageSnapshot {
-    pub fn database(&self) -> &DatabaseId {
-        &self.database
-    }
-
     pub fn rows(&self) -> &TabularSnapshot {
         &self.rows
     }
 
     pub fn row_ids(&self) -> &[i64] {
         &self.row_ids
-    }
-}
-
-impl DatabaseDataSnapshot {
-    pub fn database(&self) -> &DatabaseId {
-        &self.database
-    }
-
-    pub fn columns(&self) -> &[DatabaseColumnFact] {
-        &self.columns
-    }
-
-    pub const fn runtime_revision(&self) -> DatabaseRuntimeRevision {
-        self.runtime_revision
-    }
-
-    pub fn rows(&self) -> &TabularSnapshot {
-        &self.rows
     }
 }
 
@@ -202,7 +162,6 @@ pub struct DatabaseMutationRequest {
     database: DatabaseId,
     expected_runtime_revision: DatabaseRuntimeRevision,
     declaration_transition: DatabaseDeclarationTransition,
-    operation: DatabaseMutationOperation,
 }
 
 impl DatabaseMutationRequest {
@@ -210,13 +169,11 @@ impl DatabaseMutationRequest {
         database: DatabaseId,
         expected_runtime_revision: DatabaseRuntimeRevision,
         declaration_transition: DatabaseDeclarationTransition,
-        operation: DatabaseMutationOperation,
     ) -> Self {
         Self {
             database,
             expected_runtime_revision,
             declaration_transition,
-            operation,
         }
     }
 }
@@ -250,27 +207,7 @@ pub struct PreparedDatabaseRuntimeChange {
 
 pub struct CommittedDatabaseRuntimeChange {
     outcome: DatabaseRuntimeChangeOutcome,
-    expected_observation: DatabaseDeclarationObservation,
-    next_observation: DatabaseDeclarationObservation,
     registration: DatabaseCommittedRegistration,
-}
-
-impl PreparedDatabaseRuntimeChange {
-    pub fn track_physical(
-        &mut self,
-        physical: &crate::runtime::PreparedDatabasePhysicalMutation,
-    ) -> Result<(), DatabaseError> {
-        let storage = physical.storage_recovery()?;
-        if storage.publication.dataset != self.database {
-            return Err(DatabaseError::invalid_request(
-                DatabaseOperation::PrepareMutation,
-                Some(self.database.clone()),
-            ));
-        }
-        self.registration.track_storage(storage);
-        self.schema_changed |= physical.schema_changed()?;
-        Ok(())
-    }
 }
 
 impl CommittedDatabaseRuntimeChange {
@@ -278,39 +215,19 @@ impl CommittedDatabaseRuntimeChange {
         &self.outcome
     }
 
-    pub fn confirm(self) -> DatabaseRuntimeChangeOutcome {
+    pub fn confirm(self) {
         self.registration.confirm();
-        self.outcome
     }
 
-    pub fn compensate(mut self) -> DatabaseCompensationAttempt<Self> {
+    pub fn compensate(mut self) -> DatabaseCompensationAttempt {
         match self.registration.compensate() {
-            Ok(runtime_revision) => {
-                DatabaseCompensationAttempt::Restored(DatabaseCompensationOutcome::Restored {
-                    runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision),
-                })
-            }
+            Ok(()) => DatabaseCompensationAttempt::Restored,
             Err(code) => DatabaseCompensationAttempt::Retryable {
                 owner: self,
                 failure: compensation_failure(code),
             },
         }
     }
-
-    pub fn expected_observation(&self) -> &DatabaseDeclarationObservation {
-        &self.expected_observation
-    }
-
-    pub fn next_observation(&self) -> &DatabaseDeclarationObservation {
-        &self.next_observation
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DatabaseCompensationOutcome {
-    Restored {
-        runtime_revision: DatabaseRuntimeRevision,
-    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -319,124 +236,12 @@ pub enum DatabaseCompensationFailureCode {
     Driver,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("database compensation failed")]
-pub struct DatabaseCompensationFailure {
-    code: DatabaseCompensationFailureCode,
-}
-
-impl DatabaseCompensationFailure {
-    pub const fn code(&self) -> DatabaseCompensationFailureCode {
-        self.code
-    }
-}
-
-pub enum DatabaseCompensationAttempt<T> {
-    Restored(DatabaseCompensationOutcome),
+pub enum DatabaseCompensationAttempt {
+    Restored,
     Retryable {
-        owner: T,
-        failure: DatabaseCompensationFailure,
+        owner: CommittedDatabaseRuntimeChange,
+        failure: DatabaseCompensationFailureCode,
     },
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct DatabaseRecoveryId(u64);
-
-impl DatabaseRecoveryId {
-    pub(crate) const fn from_existing(value: u64) -> Self {
-        Self(value)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DatabaseRecoveryRequirement {
-    recovery: DatabaseRecoveryId,
-    database: DatabaseId,
-    outcome: DatabaseRuntimeChangeOutcome,
-    expected_observation: DatabaseDeclarationObservation,
-    next_observation: DatabaseDeclarationObservation,
-}
-
-impl DatabaseRecoveryRequirement {
-    pub fn recovery(&self) -> DatabaseRecoveryId {
-        self.recovery
-    }
-
-    pub fn database(&self) -> &DatabaseId {
-        &self.database
-    }
-
-    pub fn outcome(&self) -> &DatabaseRuntimeChangeOutcome {
-        &self.outcome
-    }
-
-    pub fn expected_observation(&self) -> &DatabaseDeclarationObservation {
-        &self.expected_observation
-    }
-
-    pub fn next_observation(&self) -> &DatabaseDeclarationObservation {
-        &self.next_observation
-    }
-}
-
-pub struct DatabaseRecoveryConfirmation {
-    claim: DatabaseRuntimeRecoveryClaim,
-    outcome: DatabaseRuntimeChangeOutcome,
-}
-
-impl DatabaseRecoveryConfirmation {
-    pub fn confirm(self) -> DatabaseRuntimeChangeOutcome {
-        self.claim.confirm();
-        self.outcome
-    }
-}
-
-pub struct DatabaseRecoveryCompensation {
-    claim: DatabaseRuntimeRecoveryClaim,
-    outcome: DatabaseRuntimeChangeOutcome,
-}
-
-impl DatabaseRecoveryCompensation {
-    pub fn outcome(&self) -> &DatabaseRuntimeChangeOutcome {
-        &self.outcome
-    }
-
-    pub fn compensate(mut self) -> DatabaseCompensationAttempt<Self> {
-        match self.claim.compensate() {
-            Ok(runtime_revision) => {
-                DatabaseCompensationAttempt::Restored(DatabaseCompensationOutcome::Restored {
-                    runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision),
-                })
-            }
-            Err(code) => DatabaseCompensationAttempt::Retryable {
-                owner: self,
-                failure: compensation_failure(code),
-            },
-        }
-    }
-}
-
-pub enum DatabaseRecoveryResolution {
-    Confirm(DatabaseRecoveryConfirmation),
-    Compensate(DatabaseRecoveryCompensation),
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum DatabaseRecoveryClaimError {
-    #[error("database recovery record was not found")]
-    NotFound,
-    #[error("database recovery record is already claimed")]
-    AlreadyClaimed,
-    #[error("database session admission is still open")]
-    SessionStillOpen,
-    #[error("database authority matches neither recovery branch")]
-    AuthorityNeither,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DatabaseMutationSchemaEffect {
-    DataOnly,
-    Schema,
 }
 
 fn basis_for(
@@ -447,24 +252,6 @@ fn basis_for(
         session: session.identity().clone(),
         generation: session.generation(),
         observations: snapshot.observations.clone(),
-    }
-}
-
-fn schema_effect(operation: &DatabaseMutationOperation) -> DatabaseMutationSchemaEffect {
-    match operation {
-        DatabaseMutationOperation::AddColumn { .. }
-        | DatabaseMutationOperation::DeleteColumn { .. }
-        | DatabaseMutationOperation::CastColumn { .. }
-        | DatabaseMutationOperation::SetColumnSemantic { .. }
-        | DatabaseMutationOperation::RenameColumn { .. } => DatabaseMutationSchemaEffect::Schema,
-        DatabaseMutationOperation::EditCell { .. }
-        | DatabaseMutationOperation::DeleteDatabase
-        | DatabaseMutationOperation::AddRow { .. }
-        | DatabaseMutationOperation::DeleteRows { .. }
-        | DatabaseMutationOperation::RenameDatabase { .. }
-        | DatabaseMutationOperation::Undo
-        | DatabaseMutationOperation::Redo
-        | DatabaseMutationOperation::Save => DatabaseMutationSchemaEffect::DataOnly,
     }
 }
 
@@ -655,47 +442,6 @@ pub fn arrow_snapshot(
     })
 }
 
-pub fn data_snapshot(
-    session: &DatabaseRuntimeSession,
-    request: DatabaseDataSnapshotRequest,
-) -> Result<DatabaseDataSnapshot, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::DataSnapshot)?;
-    let runtime_revision = runtime_snapshot
-        .revisions
-        .get(&request.database)
-        .copied()
-        .ok_or_else(|| {
-            DatabaseError::not_found(
-                DatabaseOperation::DataSnapshot,
-                Some(request.database.clone()),
-            )
-        })?;
-    let basis = DatabaseQueryBasis {
-        session: session.identity().clone(),
-        generation: session.generation(),
-        database: request.database.clone(),
-        runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision.runtime),
-        schema_revision: DatabaseSchemaRevision::from_existing(runtime_revision.schema),
-    };
-    let requested = match &request.columns {
-        DatabaseColumnSelection::All => None,
-        DatabaseColumnSelection::Selected(columns) => Some(columns.as_ref()),
-    };
-    let physical = session.read_physical_snapshot(
-        &request.database,
-        requested,
-        request.offset,
-        request.limit,
-    )?;
-    revalidate_query_basis(session, &basis)?;
-    Ok(DatabaseDataSnapshot {
-        database: request.database,
-        runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision.runtime),
-        columns: physical.columns,
-        rows: physical.rows,
-    })
-}
-
 pub fn metadata_snapshot(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
@@ -716,7 +462,6 @@ pub fn metadata_snapshot(
         })?;
     let physical = session.read_physical_metadata(&database)?;
     Ok(DatabaseMetaSnapshot {
-        database,
         name: physical.name,
         schema: physical.schema,
         row_count: physical.row_count,
@@ -738,7 +483,6 @@ pub fn page_snapshot(
     }
     let page = session.read_physical_page(&database, offset, limit)?;
     Ok(DatabasePageSnapshot {
-        database,
         rows: page.rows,
         row_ids: page.row_ids,
     })
@@ -815,6 +559,7 @@ pub fn edit_state(
 pub fn prepare_database_runtime_change(
     session: &DatabaseRuntimeSession,
     request: DatabaseMutationRequest,
+    physical: &crate::runtime::PreparedDatabasePhysicalMutation,
 ) -> Result<PreparedDatabaseRuntimeChange, DatabaseError> {
     let current_observations = session.observations();
     let current = declaration_observation_for(&current_observations, &request.database)
@@ -838,7 +583,15 @@ pub fn prepare_database_runtime_change(
             Some(request.database),
         ));
     }
-    let registration = session.begin_prepare(DatabaseOperation::PrepareMutation)?;
+    let storage = physical.storage_recovery()?;
+    if storage.publication.dataset != request.database {
+        return Err(DatabaseError::invalid_request(
+            DatabaseOperation::PrepareMutation,
+            Some(request.database),
+        ));
+    }
+    let schema_changed = physical.schema_changed()?;
+    let registration = session.begin_prepare(DatabaseOperation::PrepareMutation, storage)?;
     Ok(PreparedDatabaseRuntimeChange {
         session: session.identity().clone(),
         generation: session.generation(),
@@ -846,7 +599,7 @@ pub fn prepare_database_runtime_change(
         expected_runtime_revision: request.expected_runtime_revision,
         expected_observation: request.declaration_transition.expected,
         next_observation: request.declaration_transition.next,
-        schema_changed: schema_effect(&request.operation) == DatabaseMutationSchemaEffect::Schema,
+        schema_changed,
         registration,
     })
 }
@@ -863,24 +616,21 @@ pub fn commit_database_runtime_change(
     }
     let DatabaseRuntimeCommittedChange {
         registration,
-        record,
+        database,
+        runtime_revision,
     } = session.commit_prepared(
         prepared.registration,
         prepared.database,
         prepared.expected_runtime_revision.get(),
-        prepared.expected_observation.clone(),
-        prepared.next_observation.clone(),
+        prepared.expected_observation,
+        prepared.next_observation,
         prepared.schema_changed,
     )?;
     Ok(CommittedDatabaseRuntimeChange {
         outcome: DatabaseRuntimeChangeOutcome {
-            database: record.database().clone(),
-            runtime_revision: DatabaseRuntimeRevision::from_existing(
-                record.after_runtime_revision(),
-            ),
+            database,
+            runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision),
         },
-        expected_observation: prepared.expected_observation,
-        next_observation: prepared.next_observation,
         registration,
     })
 }
@@ -923,9 +673,7 @@ impl DatabaseRuntimeSession {
     pub fn resolve_storage_recoveries(&self) -> Result<usize, DatabaseError> {
         let mut resolved = 0;
         for record in self.runtime_recovery_requirements().into_iter().rev() {
-            let Some(storage) = &record.storage else {
-                continue;
-            };
+            let storage = &record.storage;
             let committed = storage
                 .store
                 .publication_committed(&storage.publication)
@@ -936,13 +684,8 @@ impl DatabaseRuntimeSession {
                         error,
                     )
                 })?;
-            let authority = if committed {
-                record.next_observation()
-            } else {
-                record.expected_observation()
-            };
             let mut claim = self
-                .claim_runtime_recovery(record.recovery_id(), authority)
+                .claim_runtime_recovery(record.recovery_id())
                 .map_err(|_| {
                     DatabaseError::conflict(
                         DatabaseOperation::Recovery,
@@ -983,42 +726,6 @@ impl DatabaseRuntimeSession {
             schema_revision: DatabaseSchemaRevision::from_existing(revisions.schema),
         })
     }
-
-    pub fn claim_recovery(
-        &self,
-        recovery: DatabaseRecoveryId,
-        current_authority: &DatabaseDeclarationObservation,
-    ) -> Result<DatabaseRecoveryResolution, DatabaseRecoveryClaimError> {
-        let claim = self
-            .claim_runtime_recovery(recovery.0, current_authority)
-            .map_err(map_recovery_claim_error)?;
-        let record = claim.record().clone();
-        let outcome = DatabaseRuntimeChangeOutcome {
-            database: record.database().clone(),
-            runtime_revision: DatabaseRuntimeRevision::from_existing(
-                record.after_runtime_revision(),
-            ),
-        };
-        match claim.kind() {
-            DatabaseRuntimeRecoveryResolutionKind::Confirm => {
-                Ok(DatabaseRecoveryResolution::Confirm(
-                    DatabaseRecoveryConfirmation { claim, outcome },
-                ))
-            }
-            DatabaseRuntimeRecoveryResolutionKind::Compensate => {
-                Ok(DatabaseRecoveryResolution::Compensate(
-                    DatabaseRecoveryCompensation { claim, outcome },
-                ))
-            }
-        }
-    }
-
-    pub fn recovery_requirements(&self) -> Vec<DatabaseRecoveryRequirement> {
-        self.runtime_recovery_requirements()
-            .iter()
-            .map(recovery_requirement)
-            .collect()
-    }
 }
 
 fn declaration_observations_match(
@@ -1030,44 +737,10 @@ fn declaration_observations_match(
 
 fn compensation_failure(
     code: DatabaseRuntimeCompensationFailureCode,
-) -> DatabaseCompensationFailure {
-    DatabaseCompensationFailure {
-        code: match code {
-            DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision => {
-                DatabaseCompensationFailureCode::StaleRuntimeRevision
-            }
-        },
-    }
-}
-
-fn recovery_requirement(record: &DatabaseRuntimeChangeRecord) -> DatabaseRecoveryRequirement {
-    DatabaseRecoveryRequirement {
-        recovery: DatabaseRecoveryId::from_existing(record.recovery_id()),
-        database: record.database().clone(),
-        outcome: DatabaseRuntimeChangeOutcome {
-            database: record.database().clone(),
-            runtime_revision: DatabaseRuntimeRevision::from_existing(
-                record.after_runtime_revision(),
-            ),
-        },
-        expected_observation: record.expected_observation().clone(),
-        next_observation: record.next_observation().clone(),
-    }
-}
-
-fn map_recovery_claim_error(
-    error: DatabaseRuntimeRecoveryClaimError,
-) -> DatabaseRecoveryClaimError {
-    match error {
-        DatabaseRuntimeRecoveryClaimError::NotFound => DatabaseRecoveryClaimError::NotFound,
-        DatabaseRuntimeRecoveryClaimError::AlreadyClaimed => {
-            DatabaseRecoveryClaimError::AlreadyClaimed
-        }
-        DatabaseRuntimeRecoveryClaimError::SessionStillOpen => {
-            DatabaseRecoveryClaimError::SessionStillOpen
-        }
-        DatabaseRuntimeRecoveryClaimError::AuthorityNeither => {
-            DatabaseRecoveryClaimError::AuthorityNeither
+) -> DatabaseCompensationFailureCode {
+    match code {
+        DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision => {
+            DatabaseCompensationFailureCode::StaleRuntimeRevision
         }
     }
 }
@@ -1093,10 +766,6 @@ mod tests {
         }
     }
 
-    fn session() -> DatabaseRuntimeSession {
-        session_with("session")
-    }
-
     fn session_with(identity: &str) -> DatabaseRuntimeSession {
         let declaration = declaration(SALES_ID);
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
@@ -1111,7 +780,6 @@ mod tests {
             .open_session(DatabaseSessionOpenRequest::new(
                 DatabaseSessionIdentity::from_existing(identity.into()),
                 NonZeroU64::new(1).unwrap(),
-                None,
                 vec![declaration].into(),
                 observations,
             ))
@@ -1134,7 +802,6 @@ mod tests {
                 DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing(identity.into()),
                     NonZeroU64::new(1).unwrap(),
-                    None,
                     vec![declaration].into(),
                     observations,
                 ),
@@ -1144,9 +811,101 @@ mod tests {
         (fixture, session)
     }
 
+    fn prepare_change(
+        session: &DatabaseRuntimeSession,
+        operation: DatabaseMutationOperation,
+        operation_id: &str,
+    ) -> (
+        PreparedDatabaseRuntimeChange,
+        crate::runtime::PreparedDatabasePhysicalMutation,
+    ) {
+        let database = DatabaseId::from_existing(SALES_ID.into());
+        let observation = declaration_observation_for(&session.observations(), &database)
+            .unwrap()
+            .clone();
+        let physical = session
+            .prepare_physical_mutation(&database, &operation, operation_id)
+            .unwrap();
+        let request = DatabaseMutationRequest::new(
+            database.clone(),
+            session.runtime_revision(&database).unwrap(),
+            DatabaseDeclarationTransition {
+                expected: observation.clone(),
+                next: observation,
+            },
+        );
+        let prepared = prepare_database_runtime_change(session, request, &physical).unwrap();
+        (prepared, physical)
+    }
+
+    #[test]
+    fn confirmed_edits_batch_garbage_collection_and_save_collects_immediately() {
+        let (fixture, session) = session_with_table("batched-gc");
+        let id = fixture.instance.decl.id.clone();
+        let files = fixture.instance.snapshot().unwrap().file_paths();
+        let dataset_directory = files[0].parent().unwrap().parent().unwrap();
+        let orphan = || {
+            let directory = dataset_directory.join(uuid::Uuid::new_v4().to_string());
+            std::fs::create_dir(&directory).unwrap();
+            let file = directory.join("part-000000.parquet");
+            std::fs::write(&file, b"abandoned preparation").unwrap();
+            file
+        };
+        let apply = |operation, operation_id: &str| {
+            let mut prepared = session
+                .prepare_physical_mutation(&id, &operation, operation_id)
+                .unwrap();
+            prepared.commit().unwrap();
+            prepared.confirm().unwrap();
+        };
+        let abandoned = orphan();
+        for index in 0..63 {
+            apply(
+                DatabaseMutationOperation::RenameDatabase {
+                    name: "Sales".into(),
+                },
+                &format!("edit-{index}"),
+            );
+        }
+        assert!(
+            abandoned.exists(),
+            "ordinary edits must not sweep the directory each time"
+        );
+        apply(
+            DatabaseMutationOperation::RenameDatabase {
+                name: "Sales".into(),
+            },
+            "edit-63",
+        );
+        assert!(
+            !abandoned.exists(),
+            "periodic collection must eventually reclaim garbage"
+        );
+
+        let abandoned = orphan();
+        apply(
+            DatabaseMutationOperation::EditCell {
+                row: 0,
+                column: "value".into(),
+                value: yss_data_contract::TabularScalar::Null,
+                row_id: Some(0),
+            },
+            "cell-edit",
+        );
+        assert!(session.read_physical_edit_state(&id).unwrap().can_undo);
+        assert!(abandoned.exists());
+        apply(DatabaseMutationOperation::Save, "save");
+        assert!(
+            !abandoned.exists(),
+            "save must collect without waiting for the edit interval"
+        );
+        assert!(!session.read_physical_edit_state(&id).unwrap().can_undo);
+        assert!(files.iter().all(|file| file.is_file()));
+    }
+
     #[test]
     fn catalog_snapshot_revalidation_is_session_and_revision_exact() {
-        let first_session = session();
+        let (_fixture, first_session) = session_with_table("session");
         let snapshot = catalog_snapshot(&first_session).unwrap();
         revalidate_catalog_snapshot(&first_session, &snapshot).unwrap();
         let other = session_with("other-session");
@@ -1156,35 +915,22 @@ mod tests {
                 .code(),
             crate::error::DatabaseErrorCode::Conflict
         );
-
-        let request = DatabaseMutationRequest {
-            database: DatabaseId::from_existing(SALES_ID.into()),
-            expected_runtime_revision: DatabaseRuntimeRevision::INITIAL,
-            declaration_transition: DatabaseDeclarationTransition {
-                expected: first_session
-                    .observations()
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .1
-                    .clone(),
-                next: first_session
-                    .observations()
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .1
-                    .clone(),
-            },
-            operation: DatabaseMutationOperation::EditCell {
+        let apply = |operation, operation_id: &str| {
+            let (prepared, mut physical) = prepare_change(&first_session, operation, operation_id);
+            let committed = commit_database_runtime_change(&first_session, prepared).unwrap();
+            physical.commit().unwrap();
+            committed.confirm();
+            physical.confirm().unwrap();
+        };
+        apply(
+            DatabaseMutationOperation::EditCell {
                 row: 0,
                 column: "value".into(),
                 value: TabularScalar::Null,
-                row_id: None,
+                row_id: Some(0),
             },
-        };
-        let prepared = prepare_database_runtime_change(&first_session, request).unwrap();
-        let _ = commit_database_runtime_change(&first_session, prepared).unwrap();
+            "edit",
+        );
         assert_eq!(
             revalidate_catalog_snapshot(&first_session, &snapshot)
                 .unwrap_err()
@@ -1193,32 +939,28 @@ mod tests {
         );
 
         let fresh = catalog_snapshot(&first_session).unwrap();
-        let schema_request = DatabaseMutationRequest {
-            database: DatabaseId::from_existing(SALES_ID.into()),
-            expected_runtime_revision: DatabaseRuntimeRevision::from_existing(1),
-            declaration_transition: DatabaseDeclarationTransition {
-                expected: first_session
-                    .observations()
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .1
-                    .clone(),
-                next: first_session
-                    .observations()
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .1
-                    .clone(),
+        apply(
+            DatabaseMutationOperation::RenameColumn {
+                old_name: "value".into(),
+                new_name: "value".into(),
             },
-            operation: DatabaseMutationOperation::AddColumn {
+            "unchanged-schema",
+        );
+        assert_eq!(
+            revalidate_catalog_snapshot(&first_session, &fresh)
+                .unwrap_err()
+                .code(),
+            crate::error::DatabaseErrorCode::Conflict,
+            "an unchanged physical schema must not advance the schema revision"
+        );
+        let fresh = catalog_snapshot(&first_session).unwrap();
+        apply(
+            DatabaseMutationOperation::AddColumn {
                 name: "new_column".into(),
                 data_type: DataType::Utf8,
             },
-        };
-        let prepared = prepare_database_runtime_change(&first_session, schema_request).unwrap();
-        let _ = commit_database_runtime_change(&first_session, prepared).unwrap();
+            "add-column",
+        );
         assert_eq!(
             revalidate_catalog_snapshot(&first_session, &fresh)
                 .unwrap_err()
@@ -1228,28 +970,46 @@ mod tests {
     }
 
     #[test]
-    fn selected_columns_reject_empty_and_duplicate_requests_before_access() {
+    fn arrow_snapshots_reject_empty_and_duplicate_column_selections() {
         let (_fixture, session) = session_with_table("session");
-        let empty = data_snapshot(
-            &session,
-            DatabaseDataSnapshotRequest {
-                database: DatabaseId::from_existing(SALES_ID.into()),
-                columns: DatabaseColumnSelection::Selected(Box::new([])),
-                offset: 0,
-                limit: 1,
-            },
-        )
-        .unwrap_err();
-        assert_eq!(
-            empty.code(),
-            crate::error::DatabaseErrorCode::InvalidRequest
-        );
+        let column = TabularColumnName::try_from("value").unwrap();
+        for columns in [Vec::new(), vec![column.clone(), column]] {
+            let error = arrow_snapshot(
+                &session,
+                DatabaseDataSnapshotRequest {
+                    database: DatabaseId::from_existing(SALES_ID.into()),
+                    columns: DatabaseColumnSelection::Selected(columns.into_boxed_slice()),
+                    offset: 0,
+                    limit: 1,
+                },
+            )
+            .err()
+            .expect("invalid column selection must fail");
+            assert_eq!(
+                error.code(),
+                crate::error::DatabaseErrorCode::InvalidRequest
+            );
+        }
     }
 
     #[test]
     fn mutation_registration_and_abandoned_recovery_are_explicitly_drained() {
-        let session = session();
+        let (_fixture, session) = session_with_table("recovery");
         let observation = session.observations().iter().next().unwrap().1.clone();
+        let operation = DatabaseMutationOperation::EditCell {
+            row: 0,
+            column: "value".into(),
+            value: TabularScalar::Null,
+            row_id: Some(0),
+        };
+        let mut physical = session
+            .prepare_physical_mutation(
+                &DatabaseId::from_existing(SALES_ID.into()),
+                &operation,
+                "abandoned-edit",
+            )
+            .unwrap();
+        assert!(!physical.requires_recovery());
         let prepared = prepare_database_runtime_change(
             &session,
             DatabaseMutationRequest {
@@ -1259,13 +1019,8 @@ mod tests {
                     expected: observation.clone(),
                     next: observation,
                 },
-                operation: DatabaseMutationOperation::EditCell {
-                    row: 0,
-                    column: "value".into(),
-                    value: TabularScalar::Null,
-                    row_id: None,
-                },
             },
+            &physical,
         )
         .unwrap();
         assert_eq!(session.outstanding_work().pending_prepares(), 1);
@@ -1273,6 +1028,9 @@ mod tests {
         let committed = commit_database_runtime_change(&session, prepared).unwrap();
         assert_eq!(session.outstanding_work().pending_prepares(), 0);
         assert_eq!(session.outstanding_work().committed_changes(), 1);
+        physical.commit().unwrap();
+        assert!(physical.requires_recovery());
+        drop(physical);
 
         assert_eq!(
             session.close_admission(),
@@ -1297,19 +1055,8 @@ mod tests {
                 if outstanding.recoveries() == 1
         ));
 
-        let requirement = session.recovery_requirements().into_iter().next().unwrap();
-        let current = session.observations().iter().next().unwrap().1.clone();
-        let resolution = session
-            .claim_recovery(requirement.recovery(), &current)
-            .unwrap();
-        match resolution {
-            DatabaseRecoveryResolution::Confirm(confirmation) => {
-                confirmation.confirm();
-            }
-            DatabaseRecoveryResolution::Compensate(_) => {
-                panic!("same next observation must choose confirmation")
-            }
-        }
+        assert_eq!(session.resolve_storage_recoveries().unwrap(), 1);
+        assert_eq!(session.resolve_storage_recoveries().unwrap(), 0);
         assert_eq!(session.outstanding_work(), Default::default());
         assert_eq!(
             session.drain(&crate::runtime::DatabaseSessionDrainControl::new(
@@ -1324,86 +1071,56 @@ mod tests {
     }
 
     #[test]
-    fn compensation_keeps_a_stale_owner_retryable_until_the_newer_change_is_restored() {
-        let session = session();
-        let expected = session.observations().iter().next().unwrap().1.clone();
-        let next = DatabaseDeclarationObservation::new(
-            yss_database_contract::DatabaseDeclarationRevision::from_existing(2),
-            expected.fingerprint().clone(),
-        );
-        let first = commit_database_runtime_change(
-            &session,
-            prepare_database_runtime_change(
-                &session,
-                DatabaseMutationRequest {
-                    database: DatabaseId::from_existing(SALES_ID.into()),
-                    expected_runtime_revision: DatabaseRuntimeRevision::INITIAL,
-                    declaration_transition: DatabaseDeclarationTransition {
-                        expected: expected.clone(),
-                        next: next.clone(),
-                    },
-                    operation: DatabaseMutationOperation::EditCell {
-                        row: 0,
-                        column: "value".into(),
-                        value: TabularScalar::Null,
-                        row_id: None,
-                    },
-                },
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        let newest_expected = session.observations().iter().next().unwrap().1.clone();
-        let newest = DatabaseDeclarationObservation::new(
-            yss_database_contract::DatabaseDeclarationRevision::from_existing(3),
-            newest_expected.fingerprint().clone(),
-        );
-        let second = commit_database_runtime_change(
-            &session,
-            prepare_database_runtime_change(
-                &session,
-                DatabaseMutationRequest {
-                    database: DatabaseId::from_existing(SALES_ID.into()),
-                    expected_runtime_revision: DatabaseRuntimeRevision::from_existing(1),
-                    declaration_transition: DatabaseDeclarationTransition {
-                        expected: newest_expected,
-                        next: newest,
-                    },
-                    operation: DatabaseMutationOperation::EditCell {
-                        row: 1,
-                        column: "value".into(),
-                        value: TabularScalar::Null,
-                        row_id: None,
-                    },
-                },
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        let first = match first.compensate() {
-            DatabaseCompensationAttempt::Retryable { owner, failure } => {
-                assert_eq!(
-                    failure.code(),
-                    DatabaseCompensationFailureCode::StaleRuntimeRevision
-                );
-                owner
-            }
-            DatabaseCompensationAttempt::Restored(_) => {
-                panic!("an older committed owner must observe the newer runtime revision")
-            }
+    fn concurrent_preparations_reject_stale_commit_and_retry_after_compensation() {
+        let (_fixture, session) = session_with_table("concurrent-prepares");
+        let database = DatabaseId::from_existing(SALES_ID.into());
+        let original = page_snapshot(&session, database.clone(), 0, 1).unwrap();
+        let edit = || DatabaseMutationOperation::EditCell {
+            row: 0,
+            column: "value".into(),
+            value: TabularScalar::Null,
+            row_id: Some(0),
         };
-        assert_eq!(session.outstanding_work().committed_changes(), 2);
-
-        assert!(matches!(
-            second.compensate(),
-            DatabaseCompensationAttempt::Restored(_)
-        ));
+        let (first, first_physical) = prepare_change(&session, edit(), "first");
+        let (second, second_physical) = prepare_change(&session, edit(), "second");
+        assert_eq!(session.outstanding_work().pending_prepares(), 2);
+        let first = commit_database_runtime_change(&session, first).unwrap();
+        let error = commit_database_runtime_change(&session, second)
+            .err()
+            .expect("a proposal captured before the first registration must be stale");
+        assert_eq!(error.code(), crate::error::DatabaseErrorCode::Conflict);
+        assert_eq!(session.outstanding_work().pending_prepares(), 0);
+        assert_eq!(session.outstanding_work().committed_changes(), 1);
+        assert_eq!(
+            session.capture_query_basis(&database).unwrap_err().code(),
+            crate::error::DatabaseErrorCode::Conflict
+        );
         assert!(matches!(
             first.compensate(),
-            DatabaseCompensationAttempt::Restored(_)
+            DatabaseCompensationAttempt::Restored
         ));
+        drop(first_physical);
+        drop(second_physical);
         assert_eq!(session.outstanding_work(), Default::default());
+        assert_eq!(session.runtime_revision(&database).unwrap().get(), 0);
+        assert_eq!(
+            page_snapshot(&session, database.clone(), 0, 1).unwrap(),
+            original
+        );
+
+        let (retry, mut physical) = prepare_change(&session, edit(), "retry");
+        let committed = commit_database_runtime_change(&session, retry).unwrap();
+        physical.commit().unwrap();
+        committed.confirm();
+        physical.confirm().unwrap();
+        assert_eq!(session.outstanding_work(), Default::default());
+        assert_eq!(
+            page_snapshot(&session, database, 0, 1)
+                .unwrap()
+                .rows()
+                .columns()[0]
+                .values(),
+            &[TabularScalar::Null]
+        );
     }
 }

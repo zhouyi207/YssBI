@@ -9,7 +9,11 @@ The project layout is `database/catalog.sqlite` plus
 dataset index, active snapshot, exact Arrow schema, file membership, data/schema revisions,
 monotonic row allocation, and pending publication records. Sparse cell edits use bounded typed
 Arrow batches keyed by column identity and RowId; inserted rows and tombstones are committed
-with the same snapshot.
+with the same snapshot. The catalog stores each column patch, inserted-row batch and deletion
+set in an immutable Arrow IPC blob. Snapshots reference those blobs instead of duplicating
+unchanged payloads. Preparing an edit reuses the prior snapshot's unchanged blobs and encodes
+only changed payloads; the size check and commit share that encoding. Committed handles retain
+blob identities and sizes, without keeping another serialized copy of their Arrow data.
 Graph/Chart documents, Project registry and Graph history keep their existing owners.
 
 `prepare_import` reserves a new generation directory, assigns stable column/row identities,
@@ -115,14 +119,22 @@ publication remains discoverable after reopening. Project must acknowledge it on
 runtime/index publication succeeds.
 
 `open` verifies the catalog application ID and version through a read-only connection before
-opening it for normal use. It reads only committed catalog entries, never discovers datasets by
-scanning Parquet directories, and never imports an old DuckDB project implicitly. Snapshot handles
+opening it for normal use. The current catalog version is 2; earlier layouts are rejected without
+rewriting or migrating them. Missing shared patch blobs also reject the snapshot instead of
+silently falling back to base values. It reads only committed catalog entries, never discovers
+datasets by scanning Parquet directories, and never imports an old DuckDB project implicitly. Snapshot handles
 retain the immutable generation while queries and Results use it. `collect_garbage` protects
 active heads, pending publication handoffs, live snapshot handles and prepared restores.
+Shared patch blobs are reclaimed only after all retained snapshot references are removed.
 Store handles for the same canonical root share the host's lease registry. The collector queues
 unreferenced files durably before physical removal and retries interrupted removals. It also
 cleans abandoned generated parts while retaining live preparations. Directory scanning never
 enrolls a dataset; only the catalog determines visibility.
+Runtime confirms ordinary edits through `collect_garbage_if_due`, which amortizes the catalog
+and directory sweep over 64 confirmed mutations across handles for the same root. Explicit
+Save, dataset deletion and activation still call `collect_garbage` immediately. Collection
+remains synchronous within its admitted operation, so no detached worker can outlive project
+draining or hold files open during a Windows project move.
 
 The adapter uses the repository's SQLx/SQLite and tabular I/O implementations. Public synchronous
 methods use the existing blocking workers. Calls made inside a Tokio lifecycle task use a scoped

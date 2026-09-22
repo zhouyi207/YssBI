@@ -246,12 +246,15 @@ impl DatasetStore {
 
     fn finish_delta(
         self: &Arc<Self>,
-        prepared: PreparedDataset,
+        mut prepared: PreparedDataset,
         engine: &Arc<DataFusionRuntime>,
         control: &RelationControl,
     ) -> Result<PreparedDataset, DatasetStoreError> {
-        match crate::codec::encode_overlay(&prepared.metadata.schema, &prepared.overlay) {
-            Ok(_) => return Ok(prepared),
+        match prepared.encode_overlay() {
+            Ok(encoded) => {
+                prepared.encoded_overlay = Some(encoded);
+                return Ok(prepared);
+            }
             Err(DatasetStoreError::DeltaLimit) => {}
             Err(error) => return Err(error),
         }
@@ -316,6 +319,7 @@ impl DatasetStore {
             retain_files: false,
             base_schema: before.base_schema.clone(),
             overlay: before.overlay.clone(),
+            encoded_overlay: None,
             new_generation: false,
             directory: None,
             snapshot_leases: Box::new([before.clone()]),

@@ -261,7 +261,6 @@ fn map_database_error(
         DatabaseErrorCode::Schema => DatabasePlotQueryErrorKind::SchemaRevisionMismatch,
         DatabaseErrorCode::InvalidRequest
         | DatabaseErrorCode::Constraint
-        | DatabaseErrorCode::Unsupported
         | DatabaseErrorCode::Driver
         | DatabaseErrorCode::Cancelled
         | DatabaseErrorCode::Deadline => DatabasePlotQueryErrorKind::ColumnMaterializationFailed,
@@ -344,7 +343,6 @@ mod tests {
                 DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing(identity.into()),
                     NonZeroU64::new(1).expect("test generation is non-zero"),
-                    None,
                     vec![declaration].into(),
                     observations,
                 ),

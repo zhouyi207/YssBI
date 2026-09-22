@@ -7,13 +7,6 @@ struct RootLeaseState {
     reserved: BTreeSet<NormalizedRoot>,
     lifecycle_closed: BTreeSet<NormalizedRoot>,
     admitted: BTreeMap<NormalizedRoot, usize>,
-
-    #[cfg(any(test, feature = "test-support"))]
-    next_wait_observer: Option<std::sync::mpsc::Sender<()>>,
-    #[cfg(any(test, feature = "test-support"))]
-    next_lifecycle_drain_observer: Option<std::sync::mpsc::Sender<()>>,
-    #[cfg(any(test, feature = "test-support"))]
-    acquire_many_observer: Option<std::sync::mpsc::Sender<Vec<NormalizedRoot>>>,
 }
 
 #[derive(Default)]
@@ -50,10 +43,6 @@ impl FilesystemCoordinator {
     {
         let roots = roots.into_iter().collect::<BTreeSet<_>>();
         let mut state = self.lock_state();
-        #[cfg(any(test, feature = "test-support"))]
-        if let Some(observer) = state.acquire_many_observer.as_ref() {
-            let _ = observer.send(roots.iter().cloned().collect());
-        }
         if let Some(root) = roots
             .iter()
             .find(|root| state.lifecycle_closed.contains(*root))
@@ -124,10 +113,6 @@ impl FilesystemCoordinator {
         roots: &BTreeSet<NormalizedRoot>,
     ) -> std::sync::MutexGuard<'a, RootLeaseState> {
         while roots.iter().any(|root| state.reserved.contains(root)) {
-            #[cfg(any(test, feature = "test-support"))]
-            if let Some(observer) = state.next_wait_observer.take() {
-                let _ = observer.send(());
-            }
             state = self
                 .registry
                 .available
@@ -212,27 +197,6 @@ impl FilesystemCoordinator {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn observe_acquire_many_attempts(&self) -> std::sync::mpsc::Receiver<Vec<NormalizedRoot>> {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        self.lock_state().acquire_many_observer = Some(sender);
-        receiver
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn observe_next_wait(&self) -> std::sync::mpsc::Receiver<()> {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        self.lock_state().next_wait_observer = Some(sender);
-        receiver
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn observe_next_lifecycle_drain(&self) -> std::sync::mpsc::Receiver<()> {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        self.lock_state().next_lifecycle_drain_observer = Some(sender);
-        receiver
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
     pub fn lifecycle_state_for_test(&self, root: &NormalizedRoot) -> (bool, bool, usize) {
         let state = self.lock_state();
         (
@@ -240,11 +204,6 @@ impl FilesystemCoordinator {
             state.reserved.contains(root),
             state.admitted.get(root).copied().unwrap_or(0),
         )
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn is_reserved_for_test(&self, root: &NormalizedRoot) -> bool {
-        self.lock_state().reserved.contains(root)
     }
 }
 
@@ -318,10 +277,6 @@ impl RootLifecycleGuard {
     pub fn release_initial_and_drain(&mut self) {
         self.lease.take();
         let mut state = self.coordinator.lock_state();
-        #[cfg(any(test, feature = "test-support"))]
-        if let Some(observer) = state.next_lifecycle_drain_observer.take() {
-            let _ = observer.send(());
-        }
         while state.admitted.get(&self.root).copied().unwrap_or(0) != 0 {
             state = self
                 .coordinator

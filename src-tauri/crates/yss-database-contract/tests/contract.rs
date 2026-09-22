@@ -1,5 +1,4 @@
 use std::num::NonZeroU64;
-use std::path::PathBuf;
 
 use serde_json::json;
 use yss_database_contract::{
@@ -47,7 +46,6 @@ fn request(
     DatabaseSessionOpenRequest::new(
         DatabaseSessionIdentity::from_existing(identity.into()),
         NonZeroU64::new(7).unwrap(),
-        Some(PathBuf::from("project")),
         declarations.into(),
         observations,
     )
@@ -138,7 +136,6 @@ fn validated_parts_preserve_complete_session_facts() {
 
     assert_eq!(parts.identity.as_str(), "session-1");
     assert_eq!(parts.generation.get(), 7);
-    assert_eq!(parts.root, Some(PathBuf::from("project")));
     assert_eq!(parts.declarations.as_ref(), declarations);
     assert_eq!(parts.observations.iter().count(), 1);
 }

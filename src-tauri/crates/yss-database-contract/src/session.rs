@@ -3,7 +3,6 @@ use super::identity::{DatabaseDeclarationFingerprint, DatabaseId};
 use super::observation::DatabaseDeclarationObservationSet;
 use std::collections::BTreeSet;
 use std::num::NonZeroU64;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Opaque identity for one database runtime session.
@@ -25,7 +24,6 @@ impl DatabaseSessionIdentity {
 pub struct DatabaseSessionOpenRequest {
     identity: DatabaseSessionIdentity,
     generation: NonZeroU64,
-    root: Option<PathBuf>,
     declarations: Arc<[DatabaseDecl]>,
     observations: DatabaseDeclarationObservationSet,
 }
@@ -36,7 +34,6 @@ pub struct DatabaseSessionOpenRequest {
 pub struct DatabaseSessionOpenRequestParts {
     pub identity: DatabaseSessionIdentity,
     pub generation: NonZeroU64,
-    pub root: Option<PathBuf>,
     pub declarations: Arc<[DatabaseDecl]>,
     pub observations: DatabaseDeclarationObservationSet,
 }
@@ -45,14 +42,12 @@ impl DatabaseSessionOpenRequest {
     pub fn new(
         identity: DatabaseSessionIdentity,
         generation: NonZeroU64,
-        root: Option<PathBuf>,
         declarations: Arc<[DatabaseDecl]>,
         observations: DatabaseDeclarationObservationSet,
     ) -> Self {
         Self {
             identity,
             generation,
-            root,
             declarations,
             observations,
         }
@@ -103,7 +98,6 @@ impl DatabaseSessionOpenRequest {
         Ok(DatabaseSessionOpenRequestParts {
             identity: self.identity,
             generation: self.generation,
-            root: self.root,
             declarations: self.declarations,
             observations: self.observations,
         })

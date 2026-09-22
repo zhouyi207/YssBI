@@ -9448,7 +9448,6 @@ dependencies = [
  "parquet",
  "serde_json",
  "thiserror 2.0.20",
- "yss-data-contract",
  "yss-database-arrow",
 ]
 

@@ -89,6 +89,7 @@ pub struct DatasetSnapshot {
     files: Box<[DatasetFile]>,
     base_schema: SchemaRef,
     overlay: DatasetOverlay,
+    encoded_overlay: codec::EncodedOverlay,
     next_row_id: i64,
     store: Arc<DatasetStore>,
 }
@@ -286,6 +287,7 @@ impl DatasetStore {
             files,
             base_schema,
             overlay,
+            encoded_overlay,
             next_row_id,
         } = self.catalog(catalog::load_current(&self.pool, database))?;
         for file in &files {
@@ -296,6 +298,7 @@ impl DatasetStore {
             files,
             base_schema,
             overlay,
+            encoded_overlay,
             next_row_id,
             store: self.clone(),
         });
@@ -314,13 +317,17 @@ impl DatasetStore {
             paths::validate(&self.root, &self.root.join(&file.relative_path))?;
         }
         let publication = prepared.publication();
-        let encoded = codec::encode_overlay(&prepared.metadata.schema, &prepared.overlay)?;
+        let encoded = match prepared.encoded_overlay.take() {
+            Some(encoded) => encoded,
+            None => prepared.encode_overlay()?,
+        };
         self.catalog(catalog::commit(&self.pool, &mut prepared, &encoded))?;
         let snapshot = Arc::new(DatasetSnapshot {
             metadata: prepared.metadata.clone(),
             files: prepared.files.clone(),
             base_schema: prepared.base_schema.clone(),
             overlay: prepared.overlay.clone(),
+            encoded_overlay: encoded.into_persisted(),
             next_row_id: prepared.next_row_id,
             store: self.clone(),
         });
