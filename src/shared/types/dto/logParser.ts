@@ -10,8 +10,6 @@ import {
   type LogOrigin,
   type LogRecordDto,
   type LogSubscriptionDto,
-  type LogPage,
-  type LogStatistics,
 } from "./log";
 
 type UnknownRecord = Record<string, unknown>;
@@ -179,50 +177,5 @@ export function parseLogBatchDto(value: unknown): LogBatchDto {
     streamId: value.streamId,
     entries,
     ...(value.failure === "storage_unavailable" ? ({ failure: value.failure } as const) : {}),
-  };
-}
-
-export function parseLogPage(value: unknown): LogPage {
-  if (
-    !isRecord(value) ||
-    !hasExactContractKeys(value, ["entries", "nextBeforeSequence"]) ||
-    !Array.isArray(value.entries) ||
-    (value.nextBeforeSequence !== null && !isSequence(value.nextBeforeSequence))
-  ) {
-    return fail("log page");
-  }
-  return {
-    entries: value.entries.map(parseLogRecordDto),
-    nextBeforeSequence: value.nextBeforeSequence as number | null,
-  };
-}
-
-function parseCounts<Key extends string>(
-  value: unknown,
-  keys: readonly Key[],
-): Partial<Record<Key, number>> {
-  if (
-    !isRecord(value) ||
-    Object.entries(value).some(([key, count]) => !keys.includes(key as Key) || !isSequence(count))
-  ) {
-    return fail("log counts");
-  }
-  return value as Partial<Record<Key, number>>;
-}
-
-export function parseLogStatistics(value: unknown): LogStatistics {
-  if (
-    !isRecord(value) ||
-    !hasExactContractKeys(value, ["total", "latestSequence", "byLevel", "byOrigin"]) ||
-    !isSequence(value.total) ||
-    !isSequence(value.latestSequence)
-  ) {
-    return fail("log statistics");
-  }
-  return {
-    total: value.total as number,
-    latestSequence: value.latestSequence as number,
-    byLevel: parseCounts(value.byLevel, LOG_LEVELS),
-    byOrigin: parseCounts(value.byOrigin, LOG_ORIGINS),
   };
 }

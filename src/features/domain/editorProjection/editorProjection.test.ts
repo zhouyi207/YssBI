@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import editorProjectionContract from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
-import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
+import {
+  parseEditorGraphProjectionDto,
+  validateEditorGraphProjection,
+} from "@/shared/types/domain/editorProjectionParser";
 import { portAddressKey } from "./index";
 
 const declaredOutput: PortAddressDto = {
@@ -107,16 +110,22 @@ function validProjection(): EditorGraphProjectionDto {
             canAdd: true,
           },
         ],
-        parameterEditors: [
+        parameterGroups: [
           {
-            key: "formula",
-            display: { title: "公式", description: "模型公式" },
-            editor: "text",
-            presentation: "inlineAndDetail",
-            valueType: { kind: "Scalar", inner: "Numeric" },
-            multiline: true,
-            value: "y ~ x",
-            configuration: null,
+            key: "parameters",
+            display: { title: "Parameters", description: null },
+            parameters: [
+              {
+                key: "formula",
+                display: { title: "公式", description: "模型公式" },
+                editor: "text",
+                presentation: "inlineAndDetail",
+                valueType: { kind: "Scalar", inner: "Numeric" },
+                multiline: true,
+                value: "y ~ x",
+                configuration: null,
+              },
+            ],
           },
         ],
         capabilities: {
@@ -182,15 +191,29 @@ describe("portAddressKey", () => {
 });
 
 describe("validateEditorGraphProjection", () => {
+  it("rejects duplicate group keys and parameter keys shared across groups", () => {
+    const projection = parseEditorGraphProjectionDto(structuredClone(editorProjectionContract));
+    const group = structuredClone(projection.nodes[0].parameterGroups[0]);
+    projection.nodes[0].parameterGroups.push(group);
+    expect(isEditorGraphProjectionDto(projection)).toBe(false);
+    expect(() => validateEditorGraphProjection(projection)).toThrow("duplicate parameter group");
+    group.key = "sampling";
+    expect(isEditorGraphProjectionDto(projection)).toBe(false);
+    expect(() => validateEditorGraphProjection(projection)).toThrow("invalid or duplicated");
+    group.parameters[0].key = "sample_count";
+    expect(isEditorGraphProjectionDto(projection)).toBe(true);
+    expect(validateEditorGraphProjection(projection)).toBe(projection);
+  });
+
   it("requires strict parameter editor presentation metadata", () => {
     expect(isEditorGraphProjectionDto(editorProjectionContract)).toBe(true);
 
     const missing = structuredClone(editorProjectionContract) as any;
-    delete missing.nodes[0].parameterEditors[0].presentation;
+    delete missing.nodes[0].parameterGroups[0].parameters[0].presentation;
     expect(isEditorGraphProjectionDto(missing)).toBe(false);
 
     const invalid = structuredClone(editorProjectionContract) as any;
-    invalid.nodes[0].parameterEditors[0].presentation = "inlineOnly";
+    invalid.nodes[0].parameterGroups[0].parameters[0].presentation = "inlineOnly";
     expect(isEditorGraphProjectionDto(invalid)).toBe(false);
   });
 
@@ -231,7 +254,9 @@ describe("validateEditorGraphProjection", () => {
       unknown
     >;
     const node = (projection.nodes as Array<Record<string, unknown>>)[0];
-    const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
+    const editor = (
+      node.parameterGroups as Array<{ parameters: Array<Record<string, unknown>> }>
+    )[0].parameters[0];
     mutate(editor);
     expect(isEditorGraphProjectionDto(projection)).toBe(false);
   });
@@ -293,7 +318,7 @@ describe("validateEditorGraphProjection", () => {
 
   it("strictly validates Rust-issued schema-aware editor wire data", () => {
     const projection = validProjection();
-    projection.nodes[0].parameterEditors[0].configuration = {
+    projection.nodes[0].parameterGroups[0].parameters[0].configuration = {
       kind: "filterPredicate",
       available: true,
       unavailableReason: null,
@@ -314,11 +339,13 @@ describe("validateEditorGraphProjection", () => {
     expect(validateEditorGraphProjection(projection)).toBe(projection);
 
     const extra = structuredClone(projection);
-    Object.assign(extra.nodes[0].parameterEditors[0].configuration!, { compatibility: true });
+    Object.assign(extra.nodes[0].parameterGroups[0].parameters[0].configuration!, {
+      compatibility: true,
+    });
     expect(() => validateEditorGraphProjection(extra)).toThrow(/parameter editor/);
 
     const lossy = structuredClone(projection);
-    const configuration = lossy.nodes[0].parameterEditors[0].configuration;
+    const configuration = lossy.nodes[0].parameterGroups[0].parameters[0].configuration;
     if (configuration?.kind !== "filterPredicate" || !configuration.value?.value) {
       throw new Error("test fixture mismatch");
     }

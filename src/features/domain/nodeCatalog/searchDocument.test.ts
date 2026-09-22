@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LocalizedCatalogItem } from "./catalogItem";
-import { isLocalizedCatalogItem } from "./catalogItem";
+import { isLocalizedCatalogItemDto } from "@/shared/types/domain/localizedCatalog";
 import { buildCatalogSearchDocument, matchesCatalogSearchDocument } from "./searchDocument";
 
 function item(overrides: Partial<LocalizedCatalogItem> = {}): LocalizedCatalogItem {
@@ -165,7 +165,7 @@ describe("catalog search documents", () => {
       },
     };
 
-    expect(isLocalizedCatalogItem(catalogItem)).toBe(true);
-    expect(isLocalizedCatalogItem(unsupported)).toBe(false);
+    expect(isLocalizedCatalogItemDto(catalogItem)).toBe(true);
+    expect(isLocalizedCatalogItemDto(unsupported)).toBe(false);
   });
 });

@@ -1,33 +1,28 @@
 {
+  "summary": {
+    "equation": true,
+    "model_summary": true,
+    "anova": true,
+    "coefficient_table": true,
+    "coefficient_chart": false,
+    "diagnostics": false,
+    "residual_plot": false,
+    "observations": false,
+    "acf_pacf": false,
+    "acf_max_lag": 1,
+    "serial_tests": false,
+    "serial_lags": 1,
+    "bg_nomiss0": true,
+    "hypothesis_test": false,
+    "hypothesis": "x1 = 0"
+  },
   "coefficients": {
     "kind": "tableRef",
     "part": "coefficients",
     "rowCount": 2
   },
-  "diagnostic_info": {
-    "cond_no": 2.0
-  },
   "endog_name": "response",
   "paramNames": ["const", "x"],
-  "model_basic_info": {
-    "adj_r_squared": 0.75,
-    "covariance_type": "nonrobust",
-    "df_model": 1,
-    "df_residual": 1,
-    "df_total": 2,
-    "f_statistic": 7.0,
-    "method": "Least Squares",
-    "model_type": "OLS",
-    "ms_model": 1.125,
-    "ms_residual": 0.125,
-    "ms_total": 0.625,
-    "num_observation": 3,
-    "prob_f_statistic": 0.1,
-    "r_squared": 0.875,
-    "ss_model": 1.125,
-    "ss_residual": 0.125,
-    "ss_total": 1.25
-  },
   "title": "Linear Regression Summary",
   "resultRef": {
     "executionSessionId": "00000000-0000-0000-0000-000000000001",
@@ -37,5 +32,117 @@
     "kind": "tableRef",
     "part": "observations",
     "rowCount": 3
+  },
+  "presentation": {
+    "summary": {
+      "kind": "keyValue",
+      "items": [
+        {
+          "id": "modelType",
+          "label": "Model",
+          "value": "OLS",
+          "format": "text"
+        },
+        {
+          "id": "method",
+          "label": "Method",
+          "value": "Least Squares",
+          "format": "text"
+        },
+        {
+          "id": "rSquared",
+          "label": "R-squared",
+          "value": 0.875,
+          "format": "number"
+        },
+        {
+          "id": "adjRSquared",
+          "label": "Adj. R-squared",
+          "value": 0.75,
+          "format": "number"
+        },
+        {
+          "id": "fStatistic",
+          "label": "F-statistic",
+          "value": 7.0,
+          "format": "number"
+        },
+        {
+          "id": "probFStatistic",
+          "label": "Prob (F-statistic)",
+          "value": 0.1,
+          "format": "pValue"
+        },
+        {
+          "id": "numObservations",
+          "label": "No. Observations",
+          "value": 3,
+          "format": "integer"
+        },
+        {
+          "id": "covarianceType",
+          "label": "Covariance Type",
+          "value": "nonrobust",
+          "format": "text"
+        },
+        {
+          "id": "dfModel",
+          "label": "Df Model",
+          "value": 1,
+          "format": "integer"
+        },
+        {
+          "id": "dfResidual",
+          "label": "Df Residual",
+          "value": 1,
+          "format": "integer"
+        },
+        {
+          "id": "dfTotal",
+          "label": "Df Total",
+          "value": 2,
+          "format": "integer"
+        }
+      ]
+    },
+    "anova": {
+      "kind": "table",
+      "columns": [
+        {
+          "id": "source",
+          "label": "Source",
+          "format": "text"
+        },
+        {
+          "id": "ss",
+          "label": "SS",
+          "format": "number"
+        },
+        {
+          "id": "df",
+          "label": "df",
+          "format": "integer"
+        },
+        {
+          "id": "ms",
+          "label": "MS",
+          "format": "number"
+        }
+      ],
+      "rows": [
+        ["Model", 1.125, 1, 1.125],
+        ["Residual", 0.125, 1, 0.125],
+        ["Total", 1.25, 2, 0.625]
+      ]
+    },
+    "conditionNumber": {
+      "kind": "statCard",
+      "stat": {
+        "id": "conditionNumber",
+        "label": "Condition Number",
+        "value": 2.0,
+        "format": "number"
+      }
+    }
   }
 }

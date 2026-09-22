@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectService } from "@/services/project/projectService";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import {
-  hydrateProjectPath,
-  resolveActiveProjectPath,
-} from "@/features/application/project/projectSession";
+import { hydrateProjectPath } from "@/features/application/project/projectSession";
 
 vi.mock("@/services/project/projectService", () => ({
   ProjectService: {
@@ -23,7 +20,7 @@ describe("projectSession", () => {
   it("hydrates currentPath from backend when projection is missing", async () => {
     vi.mocked(ProjectService.getProjectPath).mockResolvedValue("D:/demo/metadata.yssbi");
 
-    const path = await resolveActiveProjectPath();
+    const path = await hydrateProjectPath();
 
     expect(path).toBe("D:/demo/metadata.yssbi");
     expect(useProjectIOStore.getState().currentPath).toBe("D:/demo/metadata.yssbi");
@@ -32,7 +29,7 @@ describe("projectSession", () => {
   it("returns null when backend has no active project", async () => {
     vi.mocked(ProjectService.getProjectPath).mockResolvedValue(null);
 
-    const path = await resolveActiveProjectPath();
+    const path = await hydrateProjectPath();
 
     expect(path).toBeNull();
     expect(useProjectIOStore.getState().currentPath).toBeNull();
@@ -47,17 +44,16 @@ describe("projectSession", () => {
     const projectBPath = new Promise<string | null>((resolve) => {
       resolveProjectB = resolve;
     });
-    vi.mocked(ProjectService.getProjectPath).mockImplementation((projectInstanceId) =>
-      projectInstanceId === "project-instance-1" ? projectAPath : projectBPath,
-    );
+    vi.mocked(ProjectService.getProjectPath)
+      .mockReturnValueOnce(projectAPath)
+      .mockReturnValueOnce(projectBPath);
 
     const projectAHydration = hydrateProjectPath();
     startProjectLifecycle("project-instance-2");
     useProjectIOStore.setState({ currentPath: null });
     const projectBHydration = hydrateProjectPath();
 
-    expect(ProjectService.getProjectPath).toHaveBeenNthCalledWith(1, "project-instance-1");
-    expect(ProjectService.getProjectPath).toHaveBeenNthCalledWith(2, "project-instance-2");
+    expect(ProjectService.getProjectPath).toHaveBeenCalledTimes(2);
 
     resolveProjectA("D:/project-a/metadata.yssbi");
     await expect(projectAHydration).resolves.toBeNull();

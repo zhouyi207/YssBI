@@ -1,6 +1,6 @@
 /**
- * 回归报告 DTO（OLS / Prais / WLS / GLS / Logit / Probit 等共用）
- * 对齐 Rust `info_nodes.rs` 中 `RegressionResult` / `DiagnosticInfo` 等结构。
+ * 内联回归报告 DTO，供 Prais、Logit、Probit 和面板内的回归结果使用。
+ * 原生线性回归的分页报告契约见 domain/resultReport。
  */
 
 import type { PlotPointDTO } from "@/shared/types/domain/plotPayload";

@@ -137,9 +137,15 @@ describe("collectGraphProblems", () => {
         "node-a": {
           display: { title: "Node A" },
           diagnostics: [],
-          parameterEditors: [{ key: "threshold", display: { title: "Threshold" } }],
+          parameterGroups: [
+            {
+              key: "parameters",
+              display: { title: "Parameters" },
+              parameters: [{ key: "threshold", display: { title: "Threshold" } }],
+            },
+          ],
         },
-        "node-b": { display: { title: "Node B" }, diagnostics: [], parameterEditors: [] },
+        "node-b": { display: { title: "Node B" }, diagnostics: [], parameterGroups: [] },
       },
       pins: {
         [portAddressKey(output)]: { name: "value", display: { label: "Value" } },

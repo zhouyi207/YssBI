@@ -1,8 +1,5 @@
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
-import type {
-  LifecycleMutationResultDto,
-  ProjectRecordRow,
-} from "@/shared/types/dto/project";
+import type { LifecycleMutationResultDto, ProjectRecordRow } from "@/shared/types/dto/project";
 import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 
 type UnknownRecord = Record<string, unknown>;

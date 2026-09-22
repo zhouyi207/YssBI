@@ -2,19 +2,6 @@ import { isResultReference, resultReferenceKey, type ResultReference } from "./r
 import { isRecord } from "@/shared/types/report/guards";
 import { isUuid } from "./editorProjectionGuards";
 
-export const REPORT_SECTIONS = [
-  "equation",
-  "modelSummary",
-  "anova",
-  "coefficientTable",
-  "hypothesisTest",
-  "diagnostics",
-  "residualPlot",
-  "observations",
-  "acfPacf",
-  "serialTests",
-] as const;
-export type ReportSectionKind = (typeof REPORT_SECTIONS)[number];
 export const UI_PANELS = [
   "project",
   "nodes",
@@ -32,11 +19,27 @@ export type UiIntent =
 export type UiComponent =
   | { readonly type: "column" | "row"; readonly props: { readonly gap: number } }
   | { readonly type: "text"; readonly props: { readonly text: string } }
-  | { readonly type: "reportSection"; readonly props: { readonly section: ReportSectionKind } }
+  | {
+      readonly type: "section";
+      readonly props: { readonly title: string; readonly collapsible: boolean };
+    }
+  | UiBoundComponent
   | {
       readonly type: "button";
       readonly props: { readonly label: string; readonly intent: UiIntent };
     };
+export type UiBindingKind =
+  | "equation"
+  | "keyValue"
+  | "table"
+  | "statCard"
+  | "coefficientTable"
+  | "chart"
+  | "analysis";
+export interface UiBoundComponent {
+  readonly type: UiBindingKind;
+  readonly props: { readonly binding: string };
+}
 export interface UiElement {
   readonly component: UiComponent;
   readonly visible: boolean;
@@ -164,8 +167,20 @@ export function validateUiElement(value: unknown): asserts value is UiElement {
     case "text":
       text(record(component.props, ["text"]).text, 8192);
       break;
-    case "reportSection":
-      if (!REPORT_SECTIONS.includes(record(component.props, ["section"]).section as never)) fail();
+    case "section": {
+      const props = record(component.props, ["title", "collapsible"]);
+      text(props.title, 256);
+      if (!props.title.trim() || typeof props.collapsible !== "boolean") fail();
+      return;
+    }
+    case "equation":
+    case "keyValue":
+    case "table":
+    case "statCard":
+    case "coefficientTable":
+    case "chart":
+    case "analysis":
+      id(record(component.props, ["binding"]).binding);
       break;
     case "button": {
       const props = record(component.props, ["label", "intent"]);

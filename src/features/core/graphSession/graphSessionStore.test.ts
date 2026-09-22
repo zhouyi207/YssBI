@@ -8,10 +8,8 @@ describe("graphSessionStore", () => {
 
   it("tracks a single focused graph session", () => {
     const store = useGraphSessionStore.getState();
-    expect(store.setFocusedSession("editor-a", "events/A.yssbi-event")).toBeNull();
-    expect(store.setFocusedSession("editor-a", "events/B.yssbi-event")).toBe(
-      "events/A.yssbi-event",
-    );
+    store.setFocusedSession("editor-a", "events/A.yssbi-event");
+    store.setFocusedSession("editor-a", "events/B.yssbi-event");
     expect(useGraphSessionStore.getState().focusedSession?.graphPath ?? null).toBe(
       "events/B.yssbi-event",
     );

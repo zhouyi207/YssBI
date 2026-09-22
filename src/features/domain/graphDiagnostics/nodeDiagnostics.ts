@@ -20,7 +20,7 @@ import {
 export interface GraphNodeDiagnosticsBucket {
   readonly graphNodes: readonly string[];
   readonly nodes: Readonly<
-    Record<string, Pick<DeepReadonly<NodeData>, "display" | "diagnostics" | "parameterEditors">>
+    Record<string, Pick<DeepReadonly<NodeData>, "display" | "diagnostics" | "parameterGroups">>
   >;
   readonly pins?: Readonly<Record<string, Pick<PinData, "name" | "display">>>;
   readonly connections?: Readonly<Record<string, Pick<ConnectionData, "output" | "input">>>;
@@ -104,9 +104,9 @@ export function formatDiagnosticLocationLabel(
       return resolveNodePinDisplayLabel(bucket, location.address) ?? ownerTitle;
     case "parameter": {
       const nodeTitle = nodeDisplayTitle(bucket?.nodes[location.nodeId]) ?? ownerTitle;
-      const parameterTitle = bucket?.nodes[location.nodeId]?.parameterEditors?.find(
-        (parameter) => parameter.key === location.key,
-      )?.display.title;
+      const parameterTitle = bucket?.nodes[location.nodeId]?.parameterGroups
+        ?.flatMap((group) => group.parameters)
+        .find((parameter) => parameter.key === location.key)?.display.title;
       return formatNodePinDisplayLabel(nodeTitle, parameterTitle) ?? ownerTitle;
     }
     case "connection": {

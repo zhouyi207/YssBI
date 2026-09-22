@@ -14,7 +14,7 @@ import type {
   EditorInputBindingDto,
   NodeCapabilitiesDto,
   NodeDisplayDto,
-  ParameterEditorDto,
+  ParameterGroupDto,
   PortInstanceAdditionDto,
   PortAddressDto,
   PortConnectionCapabilityDto,
@@ -34,7 +34,7 @@ export interface NodeData {
   pinIds: string[];
   position: { x: number; y: number };
   display: NodeDisplayDto;
-  parameterEditors: ParameterEditorDto[];
+  parameterGroups: ParameterGroupDto[];
   portInstanceAdditions: PortInstanceAdditionDto[];
   capabilities: NodeCapabilitiesDto;
   /** Node-local diagnostic index; the graph bucket owns the canonical problem set. */

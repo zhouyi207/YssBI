@@ -38,10 +38,27 @@ export const zhCN = {
     integer: "整数",
     real: "实数",
   },
+  reportSummary: {
+    add: "添加内容",
+    help: "选择要补充的内容。添加并计算会同步更新 Summary 节点配置，并使用当前模型和数据更新整份报告。内容选择和检验参数也可在节点的 Parameters → Configure 中修改。",
+    compute: "添加并计算",
+    computing: "正在计算…",
+    pending: "正在更新报告，原报告保持可读。",
+    allIncluded: "本次报告已包含全部可选内容。",
+    acfLag: "自相关滞后阶数",
+    serialLag: "BG / Q 滞后阶数",
+    nomiss0: "BG：初始滞后残差补零",
+    hypothesis: "检验假设",
+    paramNames: "可用参数：{{names}}",
+    changed: "节点、数据或执行状态已变化，原报告已保留。请重试以使用当前配置计算。",
+    unavailable: "无法更新此报告对应的 Summary 节点，请检查原图和节点是否仍然存在。",
+    failed: "报告更新未完成，原报告已保留。请检查节点配置后重试。",
+    empty: "本次执行未选择报告内容，可在此添加内容或修改 Summary 节点配置。",
+  },
   reportLayout: {
     title: "报告布局",
     sessionOnly:
-      "调整页面顺序和显示内容。同一项目运行会话内重新打开可保留布局，重启或切换项目后恢复默认。",
+      "调整已计算内容的页面布局。同一项目运行会话内重新打开可保留布局，重启或切换项目后恢复默认。",
     moveUp: "上移{{section}}",
     moveDown: "下移{{section}}",
     json: "导入或导出布局",
@@ -54,6 +71,7 @@ export const zhCN = {
       modelSummary: "模型概览",
       anova: "方差分析",
       coefficientTable: "系数表",
+      coefficientMagnitude: "系数大小图",
       hypothesisTest: "假设检验",
       diagnostics: "诊断概览",
       residualPlot: "残差图",
@@ -62,14 +80,7 @@ export const zhCN = {
       serialTests: "序列相关检验",
     },
     errors: {
-      invalidJson: "JSON 格式有误，报告保留原布局。",
-      tooLarge: "布局过大或章节过多（{{path}}），报告保留原布局。",
-      invalidShape: "布局包含无效字段或结构（{{path}}），报告保留原布局。",
-      unsupportedVersion: "不支持此布局版本，报告保留原布局。",
-      sourceMismatch: "布局引用的结果与当前报告不符，报告保留原布局。",
-      unknownSection: "不支持此章节类型（{{path}}），报告保留原布局。",
-      invalidId: "章节标识须为字母开头的字母、数字、下划线或连字符，最长 64 字符（{{path}}）。",
-      duplicateSection: "章节类型或标识重复（{{path}}），报告保留原布局。",
+      invalidShape: "????????????{{path}}??????????",
     },
   },
   common: {
@@ -1950,7 +1961,6 @@ export const zhCN = {
     noSelection: "未选择",
     noSelectionHint: "从侧栏或画布中选择一项",
     nodeNotFound: "图中未找到该节点。",
-    parameters: "参数",
     sections: {
       diagnostics: "问题",
     },
@@ -2067,9 +2077,6 @@ export const zhCN = {
         ui: "UI",
       },
     },
-    configuration: {
-      updateFailed: "无法更新配置，请检查字段值。",
-    },
     nodeDoc: {
       inputs: "输入",
       outputs: "输出",
@@ -2085,7 +2092,6 @@ export const zhCN = {
       portInstanceFailed: "Pin 更新失败",
       documentation: "文档",
       unnamed: "（未命名）",
-      view: "查看",
     },
   },
 };

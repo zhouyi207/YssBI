@@ -241,7 +241,7 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
             },
           ],
           portInstanceAdditions: [],
-          parameterEditors: [],
+          parameterGroups: [],
           capabilities: {
             managed: false,
           },

@@ -26,7 +26,7 @@ export function makeGraphFlowFixture(): GraphEntityBucket {
           pinIds: id === "source" ? ["out"] : id === "target" ? ["left", "right"] : [],
           position: { x: index * 250, y: 0 },
           display: { ...base.nodes[0].display, title: id },
-          parameterEditors: [],
+          parameterGroups: [],
           portInstanceAdditions: [],
           diagnostics: [],
           capabilities: { ...base.nodes[0].capabilities, managed: id === "managed" },

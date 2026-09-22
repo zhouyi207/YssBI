@@ -269,20 +269,19 @@ export class ProjectService {
   /**
    * 分阶段加载第一步：获取 databases（含 schema）
    */
-  static async getDatabases(projectInstanceId: string): Promise<{
+  static async getDatabases(): Promise<{
     databases: Record<string, unknown>;
   }> {
-    const data = await invokeCommand<{
+    return await invokeCommand<{
       databases: Record<string, unknown>;
-    }>("get_project_databases", { projectInstanceId });
-    return { databases: data.databases || {} };
+    }>("get_project_databases");
   }
 
   /**
    * 获取当前项目路径
    */
-  static async getProjectPath(projectInstanceId: string): Promise<string | null> {
-    return await invokeCommand("get_project_path", { projectInstanceId });
+  static async getProjectPath(): Promise<string | null> {
+    return await invokeCommand("get_project_path");
   }
 
   static async getProjectIndex(

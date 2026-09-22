@@ -19,7 +19,7 @@ import type {
   DidFakeGroupEnginePayload,
   ExogLabelEntry,
 } from "./did";
-import { linearRegressionReportField } from "./parseRegression";
+import { inlineRegressionReportField } from "./parseRegression";
 import { parseDidPlaceboFakeGroupBlock } from "./did";
 
 const panelSelectionTestField = objectField<PanelSelectionTest>({
@@ -40,22 +40,22 @@ const panelSelectionTestField = objectField<PanelSelectionTest>({
 const panelSummaryResultField = objectField<PanelSummaryResult>({
   title: stringField,
   endog_name: stringField,
-  mixed_ols: optionalField(linearRegressionReportField),
-  fe: optionalField(linearRegressionReportField),
-  fe_time: optionalField(linearRegressionReportField),
-  fe_twoway: optionalField(linearRegressionReportField),
-  lsdv: optionalField(linearRegressionReportField),
-  lsdv_time: optionalField(linearRegressionReportField),
-  lsdv_twoway: optionalField(linearRegressionReportField),
-  fd: optionalField(linearRegressionReportField),
-  re_fgls: optionalField(linearRegressionReportField),
-  re_mle: optionalField(linearRegressionReportField),
-  re_be: optionalField(linearRegressionReportField),
-  re_fgls_time: optionalField(linearRegressionReportField),
-  re_mle_time: optionalField(linearRegressionReportField),
-  re_be_time: optionalField(linearRegressionReportField),
-  re_fgls_twoway: optionalField(linearRegressionReportField),
-  re_mle_twoway: optionalField(linearRegressionReportField),
+  mixed_ols: optionalField(inlineRegressionReportField),
+  fe: optionalField(inlineRegressionReportField),
+  fe_time: optionalField(inlineRegressionReportField),
+  fe_twoway: optionalField(inlineRegressionReportField),
+  lsdv: optionalField(inlineRegressionReportField),
+  lsdv_time: optionalField(inlineRegressionReportField),
+  lsdv_twoway: optionalField(inlineRegressionReportField),
+  fd: optionalField(inlineRegressionReportField),
+  re_fgls: optionalField(inlineRegressionReportField),
+  re_mle: optionalField(inlineRegressionReportField),
+  re_be: optionalField(inlineRegressionReportField),
+  re_fgls_time: optionalField(inlineRegressionReportField),
+  re_mle_time: optionalField(inlineRegressionReportField),
+  re_be_time: optionalField(inlineRegressionReportField),
+  re_fgls_twoway: optionalField(inlineRegressionReportField),
+  re_mle_twoway: optionalField(inlineRegressionReportField),
   selection_tests: optionalField(arrayField(panelSelectionTestField)),
   errors: optionalField(
     objectField({
@@ -135,7 +135,7 @@ export const panelDidResultDataField = objectField<PanelDidResultData>({
   endog_name: stringField,
   treat_name: stringField,
   post_name: stringField,
-  fe_twoway: optionalField(linearRegressionReportField),
+  fe_twoway: optionalField(inlineRegressionReportField),
   error: optionalField(stringField),
   parallel_trends: optionalField(didParallelTrendsBlockField),
   placebo: optionalField(didPlaceboTimingBlockField),

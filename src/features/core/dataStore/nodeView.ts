@@ -6,7 +6,7 @@ import type { NodeData, PinData } from "@/features/domain/editorProjection/graph
 
 export interface UINode extends Pick<
   NodeData,
-  "id" | "display" | "parameterEditors" | "diagnostics" | "capabilities"
+  "id" | "display" | "parameterGroups" | "diagnostics" | "capabilities"
 > {
   inputs: PinData[];
   outputs: PinData[];
@@ -31,7 +31,7 @@ export function toUiNode(nodeData: NodeData, pins: readonly PinData[]): UINode {
   return {
     id: nodeData.id,
     display: nodeData.display,
-    parameterEditors: nodeData.parameterEditors,
+    parameterGroups: nodeData.parameterGroups,
     diagnostics: nodeData.diagnostics,
     capabilities: nodeData.capabilities,
     inputs,

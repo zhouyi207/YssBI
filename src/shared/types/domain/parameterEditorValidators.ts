@@ -71,17 +71,9 @@ function isFilterPredicate(value: unknown): value is FilterPredicateDto {
 
 export function isSchemaAwareParameterEditorDto(
   value: unknown,
-  isParameterEditor: (value: unknown) => boolean,
 ): value is SchemaAwareParameterEditorDto {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
-  if (candidate.kind === "configuration") {
-    return (
-      hasExactKeys(candidate, ["kind", "fields"]) &&
-      Array.isArray(candidate.fields) &&
-      candidate.fields.every(isParameterEditor)
-    );
-  }
   if (candidate.kind === "selectOptions") {
     return (
       hasExactKeys(candidate, ["kind", "options"]) &&

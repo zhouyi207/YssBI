@@ -76,9 +76,16 @@ function validateNode(
       `projection node '${node.nodeId}' graph path '${node.graphPath}' does not match projection graph path '${projection.graphPath}'`,
     );
   }
-  for (const parameter of node.parameterEditors) {
-    if (!isParameterEditor(parameter)) {
-      throw new Error(`projection parameter editor '${parameter.key}' is invalid`);
+  const groupKeys = new Set<string>();
+  const parameterKeys = new Set<string>();
+  for (const group of node.parameterGroups) {
+    if (groupKeys.has(group.key)) throw new Error(`duplicate parameter group '${group.key}'`);
+    groupKeys.add(group.key);
+    for (const parameter of group.parameters) {
+      if (!isParameterEditor(parameter) || parameterKeys.has(parameter.key)) {
+        throw new Error(`projection parameter editor '${parameter.key}' is invalid or duplicated`);
+      }
+      parameterKeys.add(parameter.key);
     }
   }
 

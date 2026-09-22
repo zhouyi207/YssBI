@@ -3,7 +3,6 @@ export type {
   ColumnInfo,
   CsvEngineConfig,
   DatabaseCellValue,
-  DatabaseDecl,
   DatabaseDeclDTO,
   DatabaseDocumentDto,
   DatabaseEngineDTO,

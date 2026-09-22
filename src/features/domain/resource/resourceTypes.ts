@@ -17,21 +17,7 @@ export interface ProjectResourceMeta {
   uri: string;
   /** Opaque backend path for database creation descriptors. */
   resourcePath?: string;
-  parentId?: string;
-  scope?: { type: "global" | "event" | "function"; graphPath?: string };
   revision?: number;
-  exists: boolean;
-  loaded: boolean;
-  hasDirtyDocument: boolean;
-  hasStaleDocument: boolean;
-  hasConflictDocument: boolean;
-}
-
-export interface BackendProjectResourceMeta {
-  id: string;
-  kind: ResourceKind;
-  name: string;
-  uri: string;
   exists: boolean;
   loaded: boolean;
   hasDirtyDocument: boolean;

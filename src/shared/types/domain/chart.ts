@@ -15,14 +15,6 @@ export interface ChartDocument extends ChartDocumentState {
   schemaVersion: number;
 }
 
-export interface ChartIndexEntry {
-  chartPath: string;
-  name: string;
-  databaseId: string;
-  chartType: ChartType;
-  revision: number;
-}
-
 export interface PlotColumnPairPayload {
   data: Array<{ x: number; y: number }>;
   xLabel?: string;

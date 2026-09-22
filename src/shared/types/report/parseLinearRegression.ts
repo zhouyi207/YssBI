@@ -1,10 +1,11 @@
 import type {
   LinearRegressionReportData,
+  LinearSummaryOptions,
   ResultAnalysis,
 } from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
 import type { Coefficient } from "@/shared/types/report/regression";
-import { linearModelInfoField } from "@/shared/types/report/parseCommon";
+import { keyValueDataField, tableDataField, statCardDataField } from "./parseUiData";
 import {
   arrayField,
   booleanField,
@@ -32,12 +33,44 @@ export const resultReferenceField = refineField(
 
 export const linearRegressionReportField = refineField(
   objectField<LinearRegressionReportData>({
+    summary: refineField(
+      objectField<LinearSummaryOptions>({
+        equation: booleanField,
+        model_summary: booleanField,
+        anova: booleanField,
+        coefficient_table: booleanField,
+        coefficient_chart: booleanField,
+        diagnostics: booleanField,
+        residual_plot: booleanField,
+        observations: booleanField,
+        acf_pacf: booleanField,
+        acf_max_lag: integerField,
+        serial_tests: booleanField,
+        serial_lags: integerField,
+        bg_nomiss0: booleanField,
+        hypothesis_test: booleanField,
+        hypothesis: stringField,
+      }),
+      (value) =>
+        value.acf_max_lag >= 1 &&
+        value.acf_max_lag <= 40 &&
+        value.serial_lags >= 1 &&
+        value.serial_lags <= 40 &&
+        (!value.hypothesis_test ||
+          (value.hypothesis.trim().length > 0 &&
+            new TextEncoder().encode(value.hypothesis).length <= 4096))
+          ? null
+          : { fieldPath: "summary", reason: "invalid summary parameters" },
+    ),
     title: literalField("Linear Regression Summary"),
     endog_name: stringField,
     resultRef: resultReferenceField,
     paramNames: arrayField(stringField),
-    model_basic_info: linearModelInfoField,
-    diagnostic_info: objectField({ cond_no: numberField }),
+    presentation: objectField({
+      summary: keyValueDataField,
+      anova: tableDataField,
+      conditionNumber: statCardDataField,
+    }),
     coefficients: objectField({
       kind: literalField("tableRef"),
       part: literalField("coefficients"),
@@ -50,7 +83,8 @@ export const linearRegressionReportField = refineField(
     }),
   }),
   (value) =>
-    value.observations.rowCount === value.model_basic_info.num_observation
+    value.observations.rowCount ===
+    value.presentation.summary.items.find((item) => item.id === "numObservations")?.value
       ? null
       : { fieldPath: "observations.rowCount", reason: "inconsistent observation count" },
 );

@@ -37,7 +37,6 @@ export const CONSTANT_SELECTABLE_DATA_TYPE_KINDS = [
   "DataSeries",
 ] as const;
 export const DATA_SERIES_ELEMENT_TYPE_KINDS = SEMANTIC_TYPES;
-export type DataSeriesElementTypeKind = SemanticType;
 export const DEFAULT_ARRAY_VALUE: readonly number[] = [];
 export const DEFAULT_OBJECT_VALUE: Readonly<Record<string, number>> = {};
 

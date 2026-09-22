@@ -110,6 +110,76 @@ const MINIMAL_REGRESSION = {
 };
 
 describe("regression report parsing", () => {
+  it("rejects diagnostic arrays that cannot be paired with observations or coefficients", () => {
+    const parse = (diagnostics: object) =>
+      parseReportPayloadResult("praisSummary", {
+        ...MINIMAL_REGRESSION,
+        diagnostic_info: { cond_no: 10, ...diagnostics },
+      });
+    const valid = {
+      fitted_values: [1, 2],
+      residuals: [0, 0.1],
+      residual_scatter: { e: [0.1], e_lag1: [0] },
+      exog: [[1], [1]],
+      exog_means: [1],
+    };
+    expect(parse(valid).ok).toBe(true);
+    expect(parse({ ...valid, residuals: [0] })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.residuals" },
+    });
+    expect(parse({ ...valid, residual_scatter: { e: [0.1], e_lag1: [] } })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.residual_scatter" },
+    });
+    expect(parse({ ...valid, exog_means: [] })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.exog_means" },
+    });
+    expect(parse({ ...valid, exog: [[1, 2]] })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.exog" },
+    });
+  });
+
+  it("requires the statistics for the selected IV test and preserves genuine zero values", () => {
+    const parse = (overid: object) =>
+      parseReportPayloadResult("iv2slsSummary", {
+        ...MINIMAL_REGRESSION,
+        diagnostic_info: { cond_no: 10, iv2sls_overid: overid },
+      });
+    const wooldridge = {
+      test_type: "wooldridge",
+      wooldridge_stat: 0,
+      wooldridge_p_value: 0,
+      df: 1,
+    };
+    expect(parse(wooldridge)).toMatchObject({
+      ok: true,
+      value: { diagnostic_info: { iv2sls_overid: wooldridge } },
+    });
+    expect(parse({ ...wooldridge, wooldridge_p_value: undefined })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.iv2sls_overid.wooldridge_p_value" },
+    });
+    const classical = {
+      test_type: "sargan_basmann",
+      sargan_stat: 0,
+      sargan_p_value: 1,
+      basmann_stat: 0,
+      basmann_p_value: 1,
+      df: 1,
+    };
+    expect(parse(classical)).toMatchObject({
+      ok: true,
+      value: { diagnostic_info: { iv2sls_overid: classical } },
+    });
+    expect(parse({ ...classical, basmann_stat: undefined })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.iv2sls_overid.basmann_stat" },
+    });
+  });
+
   it("preserves binary model statistics and hypothesis inputs", () => {
     const parsed = parseReportPayloadResult("binarySummary", {
       ...MINIMAL_REGRESSION,
@@ -286,6 +356,28 @@ describe("parseReportPayloadResult", () => {
     expect(parseReportPayloadResult("linearRegressionSummary", payload)).toEqual({
       ok: true,
       value: payload,
+    });
+  });
+
+  it("rejects display values and table rows that contradict their declared formats", () => {
+    const read = () =>
+      JSON.parse(
+        readFileSync(
+          resolve("src/tests/fixtures/node-system-contracts/ols-summary-report.json"),
+          "utf8",
+        ),
+      );
+    const metric = read();
+    metric.presentation.summary.items[2].value = "0.875";
+    expect(parseReportPayloadResult("linearRegressionSummary", metric)).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "presentation.summary.items[2].value" },
+    });
+    const table = read();
+    table.presentation.anova.rows[0].pop();
+    expect(parseReportPayloadResult("linearRegressionSummary", table)).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "presentation.anova.rows[0]" },
     });
   });
 });

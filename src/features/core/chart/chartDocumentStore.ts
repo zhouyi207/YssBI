@@ -1,28 +1,17 @@
 import { create } from "zustand";
-import type { ChartDocument, ChartIndexEntry } from "@/shared/types/domain/chart";
+import type { ChartDocument } from "@/shared/types/domain/chart";
 
-import {
-  clearResourceDocumentState,
-  markResourceDirty,
-  markResourceLoaded,
-} from "@/features/core/resource";
+import { markResourceDirty, markResourceLoaded } from "@/features/core/resource";
 
 interface ChartDocumentStore {
-  index: ChartIndexEntry[];
   documents: Record<string, ChartDocument>;
-  setIndex(entries: ChartIndexEntry[]): void;
   upsertDocument(chartPath: string, document: ChartDocument): void;
-  removeDocument(chartPath: string): void;
   clear(): void;
   updateDocument(chartPath: string, patch: Partial<ChartDocument>): ChartDocument | null;
-  markDirty(chartPath: string): void;
 }
 
 export const useChartDocumentStore = create<ChartDocumentStore>((set, get) => ({
-  index: [],
   documents: {},
-
-  setIndex: (entries) => set({ index: entries }),
 
   upsertDocument: (chartPath, document) =>
     set((state) => {
@@ -30,18 +19,7 @@ export const useChartDocumentStore = create<ChartDocumentStore>((set, get) => ({
       return { documents: { ...state.documents, [chartPath]: document } };
     }),
 
-  removeDocument: (chartPath) =>
-    set((state) => {
-      clearResourceDocumentState({ id: chartPath, kind: "chart" });
-      const documents = { ...state.documents };
-      delete documents[chartPath];
-      return {
-        index: state.index.filter((entry) => entry.chartPath !== chartPath),
-        documents,
-      };
-    }),
-
-  clear: () => set({ index: [], documents: {} }),
+  clear: () => set({ documents: {} }),
 
   updateDocument: (chartPath, patch) => {
     const current = get().documents[chartPath];
@@ -52,11 +30,7 @@ export const useChartDocumentStore = create<ChartDocumentStore>((set, get) => ({
       encodings: { ...current.encodings, ...patch.encodings },
     };
     get().upsertDocument(chartPath, next);
-    get().markDirty(chartPath);
-    return next;
-  },
-
-  markDirty: (chartPath) => {
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
+    return next;
   },
 }));

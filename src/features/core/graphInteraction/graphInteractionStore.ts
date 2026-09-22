@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { GraphPath } from "@/shared/types";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 
 export type CanvasGestureType =
   | "panning"
@@ -21,10 +21,7 @@ export type CanvasInteraction =
   | {
       type: "pendingNodeCreation";
       session: CanvasGestureScope & {
-        graphPath: GraphPath;
-        source: PinData | null;
-        screenX: number;
-        screenY: number;
+        source: PortAddressDto;
       };
     };
 

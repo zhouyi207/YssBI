@@ -14,7 +14,7 @@ const baseNode: NodeData = {
     iconId: null,
     styleId: "builtin.default",
   },
-  parameterEditors: [],
+  parameterGroups: [],
   portInstanceAdditions: [],
   capabilities: {
     managed: false,
@@ -69,7 +69,7 @@ describe("toUiNode", () => {
     expect(view).toMatchObject({
       id: "node-1",
       display: baseNode.display,
-      parameterEditors: [],
+      parameterGroups: [],
       diagnostics: [],
       capabilities: baseNode.capabilities,
     });

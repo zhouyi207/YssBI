@@ -39,10 +39,31 @@ export const enUS = {
     integer: "Integer",
     real: "Real",
   },
+  reportSummary: {
+    add: "Add contents",
+    help: "Choose additional contents. Add and compute updates the Summary node configuration and refreshes the report using the current model and data. Contents and analysis parameters can also be changed in Parameters → Configure on the node.",
+    compute: "Add and compute",
+    computing: "Computing…",
+    pending: "Updating the report. The previous report remains available.",
+    allIncluded: "This report already includes all available contents.",
+    acfLag: "ACF / PACF lags",
+    serialLag: "BG / Q lags",
+    nomiss0: "BG: fill initial residual lags with zero",
+    hypothesis: "Hypothesis",
+    paramNames: "Available parameters: {{names}}",
+    changed:
+      "The node, data or execution state changed. The previous report is preserved. Retry to compute with the current configuration.",
+    unavailable:
+      "The source Summary node is unavailable. Check that its graph and node still exist.",
+    failed:
+      "The report update did not complete. The previous report is preserved. Check the node configuration and retry.",
+    empty:
+      "No report contents were selected for this execution. Add contents here or configure the Summary node.",
+  },
   reportLayout: {
     title: "Report layout",
     sessionOnly:
-      "Arrange this page's content. Reopening keeps the layout during the same project runtime session; restarting or switching projects restores defaults.",
+      "Arrange the computed contents. Reopening keeps the layout during the same project runtime session; restarting or switching projects restores defaults.",
     moveUp: "Move {{section}} up",
     moveDown: "Move {{section}} down",
     json: "Import or export layout",
@@ -55,6 +76,7 @@ export const enUS = {
       modelSummary: "Model summary",
       anova: "ANOVA",
       coefficientTable: "Coefficients",
+      coefficientMagnitude: "Coefficient magnitude",
       hypothesisTest: "Hypothesis tests",
       diagnostics: "Diagnostics overview",
       residualPlot: "Residual plot",
@@ -63,18 +85,8 @@ export const enUS = {
       serialTests: "Serial correlation tests",
     },
     errors: {
-      invalidJson: "Invalid JSON. The previous layout is preserved.",
-      tooLarge:
-        "The layout or section count exceeds the limit ({{path}}). The previous layout is preserved.",
       invalidShape:
         "Invalid layout field or structure ({{path}}). The previous layout is preserved.",
-      unsupportedVersion: "Unsupported layout version. The previous layout is preserved.",
-      sourceMismatch: "The layout references a different result. The previous layout is preserved.",
-      unknownSection: "Unsupported section kind ({{path}}). The previous layout is preserved.",
-      invalidId:
-        "Section IDs must start with a letter and use up to 64 letters, digits, underscores or hyphens ({{path}}).",
-      duplicateSection:
-        "Duplicate section kind or ID ({{path}}). The previous layout is preserved.",
     },
   },
   common: {
@@ -2125,7 +2137,6 @@ export const enUS = {
     noSelection: "No selection",
     noSelectionHint: "Select an item from the sidebar or canvas",
     nodeNotFound: "Node not found in graph.",
-    parameters: "Parameters",
     sections: {
       diagnostics: "Problems",
     },
@@ -2243,9 +2254,6 @@ export const enUS = {
         ui: "UI",
       },
     },
-    configuration: {
-      updateFailed: "Could not update the configuration. Check the field values.",
-    },
     nodeDoc: {
       inputs: "Inputs",
       outputs: "Outputs",
@@ -2261,7 +2269,6 @@ export const enUS = {
       portInstanceFailed: "Could not update the pin",
       documentation: "Documentation",
       unnamed: "(unnamed)",
-      view: "View",
     },
   },
 };

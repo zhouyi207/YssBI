@@ -110,7 +110,7 @@ function buildProjectionBucket(
       position: node.position,
       pinIds: shareIds(previous?.nodes[node.nodeId]?.pinIds, entities.portIdsByNodeId[node.nodeId]),
       display: node.display,
-      parameterEditors: node.parameterEditors,
+      parameterGroups: node.parameterGroups,
       portInstanceAdditions: node.portInstanceAdditions,
       capabilities: node.capabilities,
       diagnostics: node.diagnostics,

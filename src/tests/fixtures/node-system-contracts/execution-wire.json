@@ -5,6 +5,7 @@
     },
     {
       "includeDefaultResults": false,
+      "reuseInputs": false,
       "outputs": [
         {
           "graphPath": "events/contract.yssbi-event",

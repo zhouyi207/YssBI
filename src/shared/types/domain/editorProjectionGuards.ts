@@ -4,6 +4,7 @@ import type {
   DiagnosticLocationDto,
   EditorGraphProjectionDto,
   FunctionEditorProjectionDto,
+  ParameterGroupDto,
   PortAddressDto,
 } from "@/shared/types/domain/editorProjection";
 import { isBackendDataType } from "@/shared/types/domain/valueType";
@@ -23,7 +24,6 @@ const parameterEditorKinds = new Set([
   "number",
   "toggle",
   "select",
-  "configuration",
   "resource",
 ]);
 const parameterPresentations = new Set(["detailPanel", "inlineAndDetail"]);
@@ -309,9 +309,37 @@ export function isParameterEditor(value: unknown): boolean {
     (value.valueType === null || isBackendDataType(value.valueType)) &&
     typeof value.multiline === "boolean" &&
     isJsonValue(value.value) &&
-    (value.configuration === null ||
-      isSchemaAwareParameterEditorDto(value.configuration, isParameterEditor))
+    (value.configuration === null || isSchemaAwareParameterEditorDto(value.configuration))
   );
+}
+
+function isParameterGroup(value: unknown): value is ParameterGroupDto {
+  return (
+    hasExactKeys(value, ["key", "display", "parameters"]) &&
+    typeof value.key === "string" &&
+    value.key.length > 0 &&
+    hasExactKeys(value.display, ["title", "description"]) &&
+    typeof value.display.title === "string" &&
+    isStringOrNull(value.display.description) &&
+    Array.isArray(value.parameters) &&
+    value.parameters.length > 0 &&
+    value.parameters.every(isParameterEditor)
+  );
+}
+
+function isParameterGroups(value: unknown): value is ParameterGroupDto[] {
+  if (!Array.isArray(value) || !value.every(isParameterGroup)) return false;
+  const groups = new Set<string>();
+  const parameters = new Set<string>();
+  for (const group of value) {
+    if (groups.has(group.key)) return false;
+    groups.add(group.key);
+    for (const parameter of group.parameters) {
+      if (parameters.has(parameter.key)) return false;
+      parameters.add(parameter.key);
+    }
+  }
+  return true;
 }
 
 function isDiagnosticLocation(value: unknown): value is DiagnosticLocationDto {
@@ -375,7 +403,7 @@ function isNode(value: unknown): boolean {
       "display",
       "ports",
       "portInstanceAdditions",
-      "parameterEditors",
+      "parameterGroups",
       "capabilities",
       "diagnostics",
     ]) &&
@@ -388,8 +416,7 @@ function isNode(value: unknown): boolean {
     value.ports.every(isPort) &&
     Array.isArray(value.portInstanceAdditions) &&
     value.portInstanceAdditions.every(isPortInstanceAddition) &&
-    Array.isArray(value.parameterEditors) &&
-    value.parameterEditors.every(isParameterEditor) &&
+    isParameterGroups(value.parameterGroups) &&
     isCapabilities(value.capabilities) &&
     Array.isArray(value.diagnostics) &&
     value.diagnostics.every(isDiagnostic)

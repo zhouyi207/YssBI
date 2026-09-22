@@ -75,9 +75,10 @@ export function parseExecutionDemandDto(value: unknown): ExecutionDemandDto {
       return { type: "default" };
     case "outputs":
       if (
-        !hasExactKeys(value, ["type", "outputs", "includeDefaultResults"]) ||
+        !hasExactKeys(value, ["type", "outputs", "includeDefaultResults", "reuseInputs"]) ||
         !Array.isArray(value.outputs) ||
-        typeof value.includeDefaultResults !== "boolean"
+        typeof value.includeDefaultResults !== "boolean" ||
+        typeof value.reuseInputs !== "boolean"
       ) {
         return fail("outputs execution demand");
       }
@@ -85,6 +86,7 @@ export function parseExecutionDemandDto(value: unknown): ExecutionDemandDto {
         type: "outputs",
         outputs: value.outputs.map(parseGraphOutputRefDto),
         includeDefaultResults: value.includeDefaultResults,
+        reuseInputs: value.reuseInputs,
       };
     default:
       return assertNever(type);

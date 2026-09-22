@@ -1,4 +1,4 @@
-import type { Coefficient, RegressionResultData } from "./regression";
+import type { RegressionResultData } from "./regression";
 import { coefficientField, linearModelInfoField, binaryModelInfoField } from "./parseCommon";
 import {
   numberField,
@@ -244,6 +244,18 @@ function validateRegression<ModelInfo>(
   if (betas && betas.length !== coefficients.length) return issue("betas");
   if (covariance && !matrixSize(covariance, betas?.length ?? covariance.length))
     return issue("cov_beta");
+  const diag = value.diagnostic_info;
+  if (diag.fitted_values && diag.residuals && diag.fitted_values.length !== diag.residuals.length)
+    return issue("diagnostic_info.residuals");
+  if (
+    diag.residual_scatter &&
+    diag.residual_scatter.e.length !== diag.residual_scatter.e_lag1.length
+  )
+    return issue("diagnostic_info.residual_scatter");
+  if (diag.exog_means && diag.exog_means.length !== coefficients.length)
+    return issue("diagnostic_info.exog_means");
+  if (diag.exog?.some((row) => row.length !== coefficients.length))
+    return issue("diagnostic_info.exog");
   if (statistics) {
     const size = coefficients.length;
     if (
@@ -267,15 +279,13 @@ function validateRegression<ModelInfo>(
 }
 function regressionReportField<ModelInfo>(
   model: ReportField<ModelInfo>,
-  coefficient: ReportField<Coefficient> = coefficientField,
-  title: ReportField<string> = stringField,
 ): ReportField<RegressionResultData<ModelInfo>> {
   return refineField(
     objectField<RegressionResultData<ModelInfo>>({
-      title,
+      title: stringField,
       endog_name: optionalField(stringField),
       model_basic_info: model,
-      coefficients: arrayField(coefficient),
+      coefficients: arrayField(coefficientField),
       diagnostic_info: diagnosticInfoField,
       betas: optionalField(arrayField(numberField)),
       cov_beta: optionalField(arrayField(arrayField(numberField))),
@@ -285,6 +295,5 @@ function regressionReportField<ModelInfo>(
     validateRegression,
   );
 }
-export const linearRegressionReportField = regressionReportField(linearModelInfoField);
+export const inlineRegressionReportField = regressionReportField(linearModelInfoField);
 export const binaryRegressionReportField = regressionReportField(binaryModelInfoField);
-export { linearRegressionReportField as canonicalLinearRegressionReportField } from "./parseLinearRegression";

@@ -109,8 +109,6 @@ export interface DatabaseDeclDTO {
   loadFailed?: boolean;
 }
 
-export type DatabaseDecl = DatabaseDeclDTO;
-
 export interface DatabaseDocumentDto {
   id: string;
   engine: DatabaseEngineDTO;

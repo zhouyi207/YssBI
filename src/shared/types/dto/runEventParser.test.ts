@@ -22,6 +22,7 @@ describe("execution wire parsers", () => {
       parseExecutionDemandDto({
         type: "outputs",
         outputs: [],
+        reuseInputs: false,
         includeDefaultResults: false,
       }),
     ).not.toThrow();
@@ -170,7 +171,11 @@ describe("execution wire parsers", () => {
 // Caller-side type constraints complement the runtime parser checks above.
 // These assertions are checked by `pnpm check:ts`.
 // @ts-expect-error outputs demand requires outputs
-const missingOutputs: ExecutionDemandDto = { type: "outputs", includeDefaultResults: false };
+const missingOutputs: ExecutionDemandDto = {
+  type: "outputs",
+  reuseInputs: false,
+  includeDefaultResults: false,
+};
 
 // @ts-expect-error outputs demand requires includeDefaultResults
 const missingIncludeDefaults: ExecutionDemandDto = { type: "outputs", outputs: [] };
@@ -195,6 +200,7 @@ const extraOutputField: ExecutionDemandDto = {
       extra: true,
     },
   ],
+  reuseInputs: false,
   includeDefaultResults: false,
 };
 

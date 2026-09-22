@@ -1,9 +1,7 @@
 import { parseGraphResultState } from "./resultParser";
 import type {
-  EditorGraphMutationDto,
   GraphDocumentDto,
   GraphSaveResultDto,
-  GraphEditResultDto,
   GraphEditorSessionDto,
   GraphEditingStateDto,
   GraphEditVersionDto,
@@ -47,36 +45,6 @@ function isPosition(value: unknown): boolean {
     isFiniteNumber(value.x) &&
     isFiniteNumber(value.y)
   );
-}
-
-export function parseEditorGraphMutationDto(
-  value: unknown,
-): Extract<EditorGraphMutationDto, { type: "insertReroute" }> {
-  if (
-    !isRecord(value) ||
-    value.type !== "insertReroute" ||
-    !hasExactKeys(value, ["type", "payload"]) ||
-    !isRecord(value.payload) ||
-    !hasExactKeys(value.payload, ["connectionId", "position"]) ||
-    typeof value.payload.connectionId !== "string" ||
-    value.payload.connectionId.trim().length === 0 ||
-    !isPosition(value.payload.position)
-  ) {
-    throw new Error(
-      "InsertReroute mutation must have exact connectionId and finite position fields",
-    );
-  }
-
-  return {
-    type: "insertReroute",
-    payload: {
-      connectionId: value.payload.connectionId,
-      position: {
-        x: (value.payload.position as { x: number }).x,
-        y: (value.payload.position as { y: number }).y,
-      },
-    },
-  };
 }
 
 function isDocumentPortAddress(value: unknown): boolean {
@@ -326,26 +294,6 @@ export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDt
     document: parseGraphDocumentDto(value.document),
     projection,
     resultState,
-  };
-}
-
-export function parseGraphEditResultDto(value: unknown): GraphEditResultDto {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["changed", "document", "projection", "editing", "resultState"]) ||
-    typeof value.changed !== "boolean" ||
-    !isEditorGraphProjectionDto(value.projection)
-  ) {
-    throw new Error("Graph draft transform result is malformed");
-  }
-  return {
-    ...parseGraphEditorSessionDto({
-      document: value.document,
-      projection: value.projection,
-      editing: value.editing,
-      resultState: value.resultState,
-    }),
-    changed: value.changed,
   };
 }
 

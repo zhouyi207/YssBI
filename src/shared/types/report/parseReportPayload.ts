@@ -2,20 +2,17 @@ import type { ReportPayloadKind } from "./reportKinds";
 import { parsedField, type ReportField, type ReportFieldResult } from "./fields";
 import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from "./parseDfadf";
 import { panelDidResultDataField, panelSummaryField } from "./parsePanel";
-import {
-  binaryRegressionReportField,
-  canonicalLinearRegressionReportField,
-  linearRegressionReportField,
-} from "./parseRegression";
+import { binaryRegressionReportField, inlineRegressionReportField } from "./parseRegression";
+import { linearRegressionReportField } from "./parseLinearRegression";
 import { varSocResultDataField, varSummaryResultDataField } from "./parseVar";
 import { vecRankResultDataField, vecSummaryResultDataField } from "./parseVec";
 
 const reportFields = {
-  linearRegressionSummary: canonicalLinearRegressionReportField,
+  linearRegressionSummary: linearRegressionReportField,
   binarySummary: binaryRegressionReportField,
-  iv2slsSummary: linearRegressionReportField,
-  ivLimlSummary: linearRegressionReportField,
-  praisSummary: linearRegressionReportField,
+  iv2slsSummary: inlineRegressionReportField,
+  ivLimlSummary: inlineRegressionReportField,
+  praisSummary: inlineRegressionReportField,
   varSummary: varSummaryResultDataField,
   varSoc: varSocResultDataField,
   panelSummary: panelSummaryField,

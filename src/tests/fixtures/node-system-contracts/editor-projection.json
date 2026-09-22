@@ -25,22 +25,31 @@
       "graphPath": "events/contract.yssbi-event",
       "nodeId": "00000000-0000-0000-0000-000000000002",
       "nodeTypeId": "yssbi.constant.get",
-      "parameterEditors": [
+      "parameterGroups": [
         {
-          "configuration": null,
+          "key": "parameters",
           "display": {
-            "description": "Immutable value defined in this graph's Details panel.",
-            "title": "Constant"
+            "title": "Parameters",
+            "description": null
           },
-          "editor": "graphConstant",
-          "key": "constant",
-          "multiline": false,
-          "presentation": "detailPanel",
-          "value": "00000000-0000-0000-0000-000000000004",
-          "valueType": {
-            "kind": "Scalar",
-            "inner": "Text"
-          }
+          "parameters": [
+            {
+              "configuration": null,
+              "display": {
+                "description": "Immutable value defined in this graph's Details panel.",
+                "title": "Constant"
+              },
+              "editor": "graphConstant",
+              "key": "constant",
+              "multiline": false,
+              "presentation": "detailPanel",
+              "value": "00000000-0000-0000-0000-000000000004",
+              "valueType": {
+                "kind": "Scalar",
+                "inner": "Text"
+              }
+            }
+          ]
         }
       ],
       "portInstanceAdditions": [],

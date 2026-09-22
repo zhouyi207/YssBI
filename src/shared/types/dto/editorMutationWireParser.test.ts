@@ -1,12 +1,6 @@
-import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { parseEditorGraphProjectionDto } from "../domain/editorProjectionParser";
 import { describe, expect, it } from "vitest";
-import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
-import {
-  parseEditorGraphMutationDto,
-  parseGraphEditResultDto,
-  parseGraphProjectionReplacementDto,
-} from "./editorMutationWireParser";
+import { parseGraphProjectionReplacementDto } from "./editorMutationWireParser";
 
 const graphPath = "events/Main.yssbi-event";
 const functionPath = "functions/Forecast.yssbi-function";
@@ -37,16 +31,22 @@ function projectionWithParameterEditor(): Record<string, unknown> {
     reasonCode: "unconnected_input",
   });
   const projectedNode = (value.nodes as Array<Record<string, unknown>>)[0];
-  projectedNode.parameterEditors = [
+  projectedNode.parameterGroups = [
     {
-      key: "value",
-      display: { title: "Value", description: null },
-      editor: "number",
-      presentation: "inlineAndDetail",
-      valueType: { kind: "Scalar", inner: "Numeric" },
-      multiline: false,
-      value: 1,
-      configuration: null,
+      key: "parameters",
+      display: { title: "Parameters", description: null },
+      parameters: [
+        {
+          key: "value",
+          display: { title: "Value", description: null },
+          editor: "number",
+          presentation: "inlineAndDetail",
+          valueType: { kind: "Scalar", inner: "Numeric" },
+          multiline: false,
+          value: 1,
+          configuration: null,
+        },
+      ],
     },
   ];
   return value;
@@ -89,7 +89,7 @@ function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
         },
       ],
       portInstanceAdditions: [],
-      parameterEditors: [],
+      parameterGroups: [],
       capabilities: {
         managed: false,
       },
@@ -160,66 +160,6 @@ describe("editor mutation wire parser", () => {
     ).toThrow();
   });
 
-  it("parses the current graph edit result", () => {
-    const transformed = {
-      resultState: makeGraphEditorSession(parseEditorGraphProjectionDto(projection(graphPath)))
-        .resultState,
-
-      editing: makeGraphEditingState(),
-      changed: true,
-      document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
-      projection: projection(graphPath),
-    };
-
-    expect(parseGraphEditResultDto(transformed)).toEqual(transformed);
-    expect(() => parseGraphEditResultDto({ ...transformed, changed: "yes" })).toThrow();
-  });
-
-  it("parses the exact InsertReroute DTO wire shape", () => {
-    const mutation = {
-      type: "insertReroute",
-      payload: {
-        connectionId: "edge-1",
-        position: { x: 120, y: 80 },
-      },
-    };
-
-    expect(parseEditorGraphMutationDto(mutation)).toEqual(mutation);
-  });
-
-  it.each([
-    { type: "insertReroute", payload: { connectionId: "", position: { x: 120, y: 80 } } },
-    { type: "insertReroute", payload: { connectionId: "   ", position: { x: 120, y: 80 } } },
-    { type: "unknownReroute", payload: { connectionId: "edge-1", position: { x: 120, y: 80 } } },
-    {
-      type: "insertReroute",
-      payload: { connectionId: "edge-1", position: { x: Infinity, y: 80 } },
-    },
-    {
-      type: "insertReroute",
-      payload: { connectionId: "edge-1", position: { x: -Infinity, y: 80 } },
-    },
-    { type: "insertReroute", payload: { connectionId: "edge-1", position: { x: 120, y: NaN } } },
-    { type: "insertReroute", payload: { connectionId: "edge-1", position: { x: "120", y: 80 } } },
-    { type: "insertReroute", payload: { connectionId: 1, position: { x: 120, y: 80 } } },
-    { type: "insertReroute", payload: { connectionId: "edge-1", position: { x: 120 } } },
-    {
-      type: "insertReroute",
-      payload: { connectionId: "edge-1", position: { x: 120, y: 80, z: 0 } },
-    },
-    {
-      type: "insertReroute",
-      payload: { connectionId: "edge-1", position: { x: 120, y: 80 }, extra: true },
-    },
-    {
-      type: "insertReroute",
-      payload: { connectionId: "edge-1", position: { x: 120, y: 80 } },
-      extra: true,
-    },
-  ])("rejects malformed InsertReroute DTO wire shape %#", (mutation) => {
-    expect(() => parseEditorGraphMutationDto(mutation)).toThrow("InsertReroute");
-  });
-
   it("requires all six exact connection capability fields", () => {
     const valid = projectionWithTypeState({
       status: "exact",
@@ -269,11 +209,11 @@ describe("editor mutation wire parser", () => {
     expect(parseGraphProjectionReplacementDto(replacement)).toEqual(replacement);
 
     const missing = structuredClone(replacement) as any;
-    delete missing.projection.nodes[0].parameterEditors[0].presentation;
+    delete missing.projection.nodes[0].parameterGroups[0].parameters[0].presentation;
     expect(() => parseGraphProjectionReplacementDto(missing)).toThrow("projection replacement");
 
     const invalid = structuredClone(replacement) as any;
-    invalid.projection.nodes[0].parameterEditors[0].presentation = "inlineOnly";
+    invalid.projection.nodes[0].parameterGroups[0].parameters[0].presentation = "inlineOnly";
     expect(() => parseGraphProjectionReplacementDto(invalid)).toThrow("projection replacement");
   });
 
@@ -314,7 +254,9 @@ describe("editor mutation wire parser", () => {
       projection: projectionWithParameterEditor(),
     };
     const projectedNode = (replacement.projection.nodes as Array<Record<string, unknown>>)[0];
-    const editor = (projectedNode.parameterEditors as Array<Record<string, unknown>>)[0];
+    const editor = (
+      projectedNode.parameterGroups as Array<{ parameters: Array<Record<string, unknown>> }>
+    )[0].parameters[0];
     mutate(editor);
     expect(() => parseGraphProjectionReplacementDto(replacement)).toThrow("projection replacement");
   });

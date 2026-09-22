@@ -35,10 +35,10 @@ export function parsePlotCorrelogramBar(raw: unknown): PlotCorrelogramBarDTO | n
   return { lag, value, qStat, pValue };
 }
 
-export function acfSeriesToBars(acf: number[]): CorrelogramBarDTO[] {
+export function acfSeriesToBars(acf: readonly number[]): CorrelogramBarDTO[] {
   return acf.map((value, i) => ({ lag: i, value }));
 }
 
-export function pacfSeriesToBars(pacf: number[]): CorrelogramBarDTO[] {
+export function pacfSeriesToBars(pacf: readonly number[]): CorrelogramBarDTO[] {
   return pacf.map((value, i) => ({ lag: i + 1, value }));
 }

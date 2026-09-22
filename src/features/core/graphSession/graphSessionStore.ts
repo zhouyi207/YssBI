@@ -8,7 +8,7 @@ export type FocusedGraphSession = {
 interface GraphSessionState {
   /** Focus bookkeeping only; active tabs and command targets come from FlexLayout. */
   focusedSession: FocusedGraphSession | null;
-  setFocusedSession: (groupId: string, graphPath: string) => string | null;
+  setFocusedSession: (groupId: string, graphPath: string) => void;
   clearFocusedSession: (groupId: string) => void;
   getFocusedGroupId: () => string | null;
   isFocusedGraphPath: (graphPath: string) => boolean;
@@ -20,10 +20,8 @@ export const useGraphSessionStore = create<GraphSessionState>((set, get) => ({
 
   setFocusedSession: (groupId, graphPath) => {
     const focused = get().focusedSession;
-    const previous = focused?.graphPath ?? null;
-    if (focused?.groupId === groupId && focused.graphPath === graphPath) return previous;
+    if (focused?.groupId === groupId && focused.graphPath === graphPath) return;
     set({ focusedSession: { groupId, graphPath } });
-    return previous;
   },
 
   clearFocusedSession: (groupId) =>

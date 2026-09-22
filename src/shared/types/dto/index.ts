@@ -13,5 +13,4 @@ export * from "./runEvent";
 export * from "./executionDemand";
 export type { IpcErrorDto } from "./ipcError";
 
-export * from "./valueType";
 export * from "./dataValue";

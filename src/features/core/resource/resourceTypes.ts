@@ -9,7 +9,6 @@ import type {
 } from "@/features/domain/resource/resourceTypes";
 
 export type {
-  BackendProjectResourceMeta,
   ProjectResourceMeta,
   ResourceKey,
   ResourceKind,

@@ -31,12 +31,3 @@ export function isIpcErrorDto(value: unknown): value is IpcErrorDto {
     (value.incidentId === null || typeof value.incidentId === "string")
   );
 }
-
-export function parseIpcErrorDto(value: unknown): IpcErrorDto {
-  if (!isIpcErrorDto(value)) throw new Error("Invalid IPC error response");
-  return {
-    code: value.code,
-    details: value.details,
-    incidentId: value.incidentId,
-  };
-}

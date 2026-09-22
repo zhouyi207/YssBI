@@ -65,7 +65,7 @@ export interface EditorNodeProjectionDto {
   display: NodeDisplayDto;
   ports: EditorPortDto[];
   portInstanceAdditions: PortInstanceAdditionDto[];
-  parameterEditors: ParameterEditorDto[];
+  parameterGroups: ParameterGroupDto[];
   capabilities: NodeCapabilitiesDto;
   /** Node-local index for Canvas, Pin, and Details rendering. */
   diagnostics: DiagnosticDto[];
@@ -173,6 +173,12 @@ export type SchemaSummaryKindDto = "input" | "project" | "append" | "rename" | "
 export type ResolvedPortStatusDto = "resolved" | "orphan";
 export type ParameterPresentationDto = "detailPanel" | "inlineAndDetail";
 
+export interface ParameterGroupDto {
+  key: string;
+  display: ParameterDisplayDto;
+  parameters: ParameterEditorDto[];
+}
+
 export interface ParameterEditorDto {
   key: string;
   display: ParameterDisplayDto;
@@ -212,7 +218,6 @@ export interface FilterPredicateDto {
 }
 
 export type SchemaAwareParameterEditorDto =
-  | { kind: "configuration"; fields: ParameterEditorDto[] }
   | { kind: "selectOptions"; options: string[] }
   | {
       kind: "projectColumns";
@@ -247,7 +252,6 @@ export type ParameterEditorKindDto =
   | "number"
   | "toggle"
   | "select"
-  | "configuration"
   | "resource";
 
 export interface DiagnosticDto {

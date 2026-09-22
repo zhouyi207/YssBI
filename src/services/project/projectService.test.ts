@@ -81,6 +81,17 @@ function chartRow(): Record<string, unknown> {
   };
 }
 
+it("reads active project metadata with the no-argument IPC contract", async () => {
+  ipc.invoke.mockClear();
+  ipc.response = "D:/demo/metadata.yssbi";
+  await expect(ProjectService.getProjectPath()).resolves.toBe(ipc.response);
+  expect(ipc.invoke).toHaveBeenLastCalledWith("get_project_path");
+
+  ipc.response = { databases: {} };
+  await expect(ProjectService.getDatabases()).resolves.toEqual(ipc.response);
+  expect(ipc.invoke).toHaveBeenLastCalledWith("get_project_databases");
+});
+
 describe("ProjectService.getProjectIndex function editor projection parser", () => {
   beforeEach(() => {
     ipc.invoke.mockClear();

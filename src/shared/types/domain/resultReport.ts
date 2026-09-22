@@ -1,4 +1,4 @@
-import type { LinearModelInfo } from "@/shared/types/report/regression";
+import type { UiKeyValueData, UiTableData, UiStatCardData } from "./uiData";
 import type { SerialTestsResponseDTO } from "@/shared/types/report/serialTests";
 import type { ResultReference } from "./result";
 
@@ -10,15 +10,55 @@ export interface ResultTableReference<Part extends ResultTablePart = ResultTable
 }
 
 export interface LinearRegressionReportData {
+  summary: LinearSummaryOptions;
   title: "Linear Regression Summary";
   endog_name: string;
   resultRef: ResultReference;
   paramNames: string[];
-  model_basic_info: LinearModelInfo;
-  diagnostic_info: { cond_no: number };
+  presentation: {
+    readonly summary: UiKeyValueData;
+    readonly anova: UiTableData;
+    readonly conditionNumber: UiStatCardData;
+  };
   coefficients: ResultTableReference<"coefficients">;
   observations: ResultTableReference<"observations">;
 }
+
+export interface LinearSummaryOptions {
+  equation: boolean;
+  model_summary: boolean;
+  anova: boolean;
+  coefficient_table: boolean;
+  coefficient_chart: boolean;
+  diagnostics: boolean;
+  residual_plot: boolean;
+  observations: boolean;
+  acf_pacf: boolean;
+  acf_max_lag: number;
+  serial_tests: boolean;
+  serial_lags: number;
+  bg_nomiss0: boolean;
+  hypothesis_test: boolean;
+  hypothesis: string;
+}
+
+export const LINEAR_SUMMARY_CONTENTS = [
+  { key: "model_summary", section: "modelSummary" },
+  { key: "coefficient_table", section: "coefficientTable" },
+  { key: "coefficient_chart", section: "coefficientMagnitude" },
+  { key: "equation", section: "equation" },
+  { key: "anova", section: "anova" },
+  { key: "diagnostics", section: "diagnostics" },
+  { key: "residual_plot", section: "residualPlot" },
+  { key: "observations", section: "observations" },
+  { key: "acf_pacf", section: "acfPacf" },
+  { key: "serial_tests", section: "serialTests" },
+  { key: "hypothesis_test", section: "hypothesisTest" },
+] as const;
+
+export type LinearSummaryContent = (typeof LINEAR_SUMMARY_CONTENTS)[number]["key"];
+export type LinearSummaryAddition = Partial<Record<LinearSummaryContent, true>> &
+  Partial<Pick<LinearSummaryOptions, "acf_max_lag" | "serial_lags" | "bg_nomiss0" | "hypothesis">>;
 
 export interface AcfPacfResult {
   acf: number[];
@@ -48,9 +88,9 @@ export interface ResidualPlotResult {
 
 export type ResultAnalysisRequest =
   | { kind: "residualPlot"; maxPoints: number; xRange?: [number, number] }
-  | { kind: "acfPacf"; maxLag: number }
-  | { kind: "serialTests"; lags: number; bgNomiss0: boolean }
-  | { kind: "hypothesis"; hypothesis: string };
+  | { kind: "acfPacf" }
+  | { kind: "serialTests" }
+  | { kind: "hypothesis" };
 
 export type ResultAnalysisValues = {
   residualPlot: ResidualPlotResult;

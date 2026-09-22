@@ -46,25 +46,6 @@ export interface LogBatchDto {
   failure?: "storage_unavailable";
 }
 
-export interface LogQuery {
-  beforeSequence?: number;
-  level?: LogLevel;
-  origin?: LogOrigin;
-  limit?: number;
-}
-
-export interface LogPage {
-  entries: LogRecordDto[];
-  nextBeforeSequence: number | null;
-}
-
-export interface LogStatistics {
-  total: number;
-  latestSequence: number;
-  byLevel: Partial<Record<LogLevel, number>>;
-  byOrigin: Partial<Record<LogOrigin, number>>;
-}
-
 /** Payload accepted by `plugin:tracing|submit_frontend_logs`; Rust assigns stream metadata. */
 export interface FrontendLogEntryDto {
   level: LogLevel;

@@ -6,11 +6,12 @@ import {
   nullableField,
   arrayField,
   objectField,
+  type ReportField,
 } from "./fields";
 import { coefficientField } from "./parseCommon";
 
 /**
- * IV / 2SLS / LIML 报告 DTO（对齐 Rust `info_nodes.rs`）
+ * IV / 2SLS / LIML 报告 DTO，对齐 yss-sci-runtime 的 regression/types.rs。
  */
 
 import type { Coefficient } from "./regression";
@@ -58,16 +59,21 @@ export interface Iv2slsStockYogoCv {
   size: Iv2slsStockYogoSizeRow;
 }
 
-export interface Iv2slsOveridTest {
-  test_type: "sargan_basmann" | "wooldridge";
-  sargan_stat?: number;
-  sargan_p_value?: number;
-  basmann_stat?: number;
-  basmann_p_value?: number;
-  wooldridge_stat?: number;
-  wooldridge_p_value?: number;
-  df: number;
-}
+export type Iv2slsOveridTest =
+  | {
+      test_type: "sargan_basmann";
+      sargan_stat: number;
+      sargan_p_value: number;
+      basmann_stat: number;
+      basmann_p_value: number;
+      df: number;
+    }
+  | {
+      test_type: "wooldridge";
+      wooldridge_stat: number;
+      wooldridge_p_value: number;
+      df: number;
+    };
 
 export interface Iv2slsFirstStageSummary {
   k_included_instruments: number;
@@ -140,16 +146,33 @@ const iv2slsStockYogoCvField = objectField<Iv2slsStockYogoCv>({
   size: iv2slsStockYogoSizeRowField,
 });
 
-export const iv2slsOveridTestField = objectField<Iv2slsOveridTest>({
+const overidTagField = objectField({
   test_type: literalField("sargan_basmann", "wooldridge"),
-  sargan_stat: optionalField(numberField),
-  sargan_p_value: optionalField(numberField),
-  basmann_stat: optionalField(numberField),
-  basmann_p_value: optionalField(numberField),
-  wooldridge_stat: optionalField(numberField),
-  wooldridge_p_value: optionalField(numberField),
+});
+const sarganBasmannField = objectField({
+  test_type: literalField("sargan_basmann"),
+  sargan_stat: numberField,
+  sargan_p_value: numberField,
+  basmann_stat: numberField,
+  basmann_p_value: numberField,
   df: numberField,
 });
+const wooldridgeField = objectField({
+  test_type: literalField("wooldridge"),
+  wooldridge_stat: numberField,
+  wooldridge_p_value: numberField,
+  df: numberField,
+});
+
+export const iv2slsOveridTestField: ReportField<Iv2slsOveridTest> = {
+  read(value, path) {
+    const tag = overidTagField.read(value, path);
+    if (!tag.ok) return tag;
+    return tag.value.test_type === "wooldridge"
+      ? wooldridgeField.read(value, path)
+      : sarganBasmannField.read(value, path);
+  },
+};
 
 export const iv2slsFirstStageSummaryField = objectField<Iv2slsFirstStageSummary>({
   k_included_instruments: numberField,

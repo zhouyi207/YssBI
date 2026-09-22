@@ -11,6 +11,7 @@ export type ExecutionDemandDto =
       type: "outputs";
       outputs: GraphOutputRefDto[];
       includeDefaultResults: boolean;
+      reuseInputs: boolean;
     };
 
 export const EXECUTION_DEMAND_TYPES = {

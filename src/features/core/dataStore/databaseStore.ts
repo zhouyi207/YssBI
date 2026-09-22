@@ -11,13 +11,6 @@ interface DatabaseStore {
 
   addDatabase(id: DatabaseId, db: DatabaseRecord): void;
   updateDatabase(id: DatabaseId, patch: Partial<DatabaseRecord>): void;
-  deleteDatabase(id: DatabaseId): void;
-
-  setDatabaseSnapshot(
-    dbs: Record<DatabaseId, DatabaseRecord>,
-    revisions: Record<DatabaseId, number>,
-  ): void;
-  setDatabases(dbs: Record<DatabaseId, DatabaseRecord>): void;
   clear(): void;
 }
 
@@ -58,29 +51,6 @@ export const useDatabaseStore = create<DatabaseStore>((set) => ({
         },
       };
     }),
-
-  deleteDatabase: (id) =>
-    set((state) => {
-      if (!state.databases[id]) {
-        logger.data.warn(`deleteDatabase: id "${id}" not found`, "DatabaseStore");
-        return state;
-      }
-
-      const next = { ...state.databases };
-      delete next[id];
-
-      const revisions = { ...state.revisions };
-      delete revisions[id];
-      return { databases: next, revisions };
-    }),
-
-  setDatabaseSnapshot: (dbs, revisions) =>
-    set({
-      databases: dbs ?? {},
-      revisions: revisions ?? {},
-    }),
-
-  setDatabases: (dbs) => set({ databases: dbs ?? {} }),
 
   clear: () =>
     set({
