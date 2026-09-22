@@ -175,10 +175,6 @@ impl JuliaWorkerManager {
         }
     }
 
-    pub fn warm_up(&self, app_data_dir: &Path) -> Result<(), JuliaWorkerError> {
-        self.warm_up_cancellable(app_data_dir, &AtomicBool::new(false))
-    }
-
     pub fn warm_up_cancellable(
         &self,
         app_data_dir: &Path,

@@ -34,7 +34,7 @@ describe("Bayes formula parsing state", () => {
   });
 
   it("keeps only normalized code, safe details, and incident ID", () => {
-    const error = normalizeIpcError("parse_bayes_expression", {
+    const error = normalizeIpcError({
       code: "bayes_expression_parse_failed",
       details: { column: "formula", row: 2, path: "formulaText" },
       incidentId: "incident-formula-42",
@@ -48,7 +48,7 @@ describe("Bayes formula parsing state", () => {
   });
 
   it("drops legacy backend prose and never copies a raw Error message", () => {
-    const legacy = normalizeIpcError("parse_bayes_expression", {
+    const legacy = normalizeIpcError({
       code: "bayes_expression_parse_failed",
       details: { detail: "private parser prose" },
       incidentId: null,

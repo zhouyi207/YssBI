@@ -95,7 +95,7 @@ describe("Bayes result action feedback", () => {
 
   it("shows an open-folder IPC failure beside its button", async () => {
     mocks.revealFolder.mockRejectedValueOnce(
-      normalizeIpcError("reveal_bayes_result_folder", {
+      normalizeIpcError({
         code: "bayes_result_reveal_failed",
         details: { debug: "raw folder failure" },
         incidentId: "incident-bayes-folder-42",
@@ -117,7 +117,7 @@ describe("Bayes result action feedback", () => {
 
   it("shows an export IPC failure beside its button", async () => {
     mocks.exportCsv.mockRejectedValueOnce(
-      normalizeIpcError("export_bayes_artifact_csv", {
+      normalizeIpcError({
         code: "bayes_export_failed",
         details: { debug: "raw export failure" },
         incidentId: "incident-bayes-export-42",

@@ -9,5 +9,3 @@ export interface ChartSize {
   width: number;
   height: number;
 }
-
-export type ChartSurfaceVariant = "plain" | "card";

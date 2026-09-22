@@ -4,7 +4,7 @@ export interface IpcError {
   details: Record<string, unknown> | null;
   incidentId: string | null;
 }
-export function normalizeIpcError(_command: string, error: unknown): IpcError {
+export function normalizeIpcError(error: unknown): IpcError {
   if (error && typeof error === "object" && "code" in error && typeof error.code === "string")
     return {
       code: error.code,
@@ -59,6 +59,6 @@ export async function invokeCommand<T>(
     if (command === "read_bayes_inference_result") return await request<T>("tasks.result", args);
     return await request<T>("commands.execute", { commandId: command, args });
   } catch (error) {
-    throw normalizeIpcError(command, error);
+    throw normalizeIpcError(error);
   }
 }

@@ -5,5 +5,5 @@ export interface ErrorReference {
 }
 export const isApplicationIpcError = isIpcError;
 export function toErrorReference(value: unknown, code: string): ErrorReference {
-  return isIpcError(value) ? normalizeIpcError("plugin", value) : { code, incidentId: null };
+  return isIpcError(value) ? normalizeIpcError(value) : { code, incidentId: null };
 }
