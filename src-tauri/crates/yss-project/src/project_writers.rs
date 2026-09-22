@@ -6,7 +6,7 @@ use std::path::Path;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation};
 use yss_graph_document::GraphResourcePath;
-use yss_project_history::{ChartResourceKey, FunctionResourceKey, ResourceKey};
+use yss_project_history::{ChartResourceKey, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{CHART_EXTENSION, PROJECT_METADATA_FILE};
@@ -93,14 +93,6 @@ pub(crate) struct WriterSnapshot {
         std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     pub(crate) chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_generation: u64,
-}
-
-fn graph_key(path: &GraphResourcePath) -> ResourceKey {
-    ResourceKey::Graph(path.clone())
-}
-
-fn function_key(path: &GraphResourcePath) -> ResourceKey {
-    ResourceKey::Function(FunctionResourceKey(path.as_str().into()))
 }
 
 fn chart_key(path: &ChartResourcePath) -> ResourceKey {
@@ -240,5 +232,4 @@ impl ProjectState {
         }
         Ok(())
     }
-
 }

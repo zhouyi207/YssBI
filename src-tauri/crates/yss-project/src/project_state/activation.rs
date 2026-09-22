@@ -18,7 +18,6 @@ struct ActivationGarbage {
 pub(crate) struct PublishedProjectActivation {
     instance_id: ProjectInstanceId,
     garbage: ActivationGarbage,
-    postcommit_panic: Option<ActivationPanicPayload>,
 }
 
 impl PublishedProjectActivation {
@@ -26,12 +25,8 @@ impl PublishedProjectActivation {
         let Self {
             instance_id,
             garbage,
-            postcommit_panic,
         } = self;
         drop(garbage);
-        if let Some(payload) = postcommit_panic {
-            std::panic::resume_unwind(payload);
-        }
         instance_id
     }
 }
@@ -70,21 +65,6 @@ impl ProjectState {
         &self,
         prepared: PreparedProjectActivation,
     ) -> Result<PublishedProjectActivation, ProjectOperationError> {
-        self.publish_project_activation_with_test_hooks(prepared, true)
-    }
-
-    pub(crate) fn publish_project_activation_without_test_hooks(
-        &self,
-        prepared: PreparedProjectActivation,
-    ) -> Result<PublishedProjectActivation, ProjectOperationError> {
-        self.publish_project_activation_with_test_hooks(prepared, false)
-    }
-
-    fn publish_project_activation_with_test_hooks(
-        &self,
-        prepared: PreparedProjectActivation,
-        run_test_hooks: bool,
-    ) -> Result<PublishedProjectActivation, ProjectOperationError> {
         let PreparedProjectActivation {
             session_root: project_root,
             data,
@@ -106,7 +86,6 @@ impl ProjectState {
         };
         let database_authority_revisions =
             data.databases.keys().cloned().map(|id| (id, 0)).collect();
-        let postcommit_panic;
         let garbage;
 
         {
@@ -195,9 +174,6 @@ impl ProjectState {
                 _identity: std::mem::replace(&mut *current_identity, next_identity),
                 _recovery_message: std::mem::take(&mut *recovery),
             };
-            postcommit_panic = run_test_hooks
-                .then(|| self.run_activation_store_replaced_test_hook())
-                .flatten();
             generation.complete();
 
             if publication_recovered {
@@ -238,7 +214,6 @@ impl ProjectState {
         Ok(PublishedProjectActivation {
             instance_id: next_instance_id,
             garbage,
-            postcommit_panic,
         })
     }
 }

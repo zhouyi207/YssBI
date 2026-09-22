@@ -247,9 +247,7 @@ impl ProjectState {
         move_project_to_recycle_bin(normalized.as_path())?;
         let post_activation_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if let Some(cleared) = cleared_activation {
-                let published = self
-                    .publish_project_activation_without_test_hooks(cleared)
-                    .map_err(|_| ())?;
+                let published = self.publish_project_activation(cleared).map_err(|_| ())?;
                 published.dispose();
             }
             Ok::<(), ()>(())

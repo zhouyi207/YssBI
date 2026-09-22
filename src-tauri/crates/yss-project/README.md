@@ -83,3 +83,5 @@ writer 不再重复构造 delta。刷新文档时可绑定 Project publication r
 声明迁移或兼容转换，也不维护单独的类型迁移版本字段。
 
 `read_graph_editing` 返回文档只读快照和编辑身份。`capture_graph_edit` 检查编辑会话与资源修订，`commit_graph_edit` 在同一 publication 边界安装候选文档、revision 及可逆历史。内容指纹用于 dirty 判断；历史没有完整文档或解析投影副本。保存、重命名与图卸载在各自事务中同步维护这些元数据。详情见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
+
+图命令回执的 `GraphEditCorrelation.result_facts` 可保留有界的调用方结果事实，与文档和实际提交版本原子记录。Application 拥有其中的 Harness 差分编码，Project 仅执行序列化预算和回执生命周期管理，不解释节点语义。查询原命令返回原始事实，不用当前图重建历史结果；总字节数、单回执大小和条目数继续受既有上限约束。

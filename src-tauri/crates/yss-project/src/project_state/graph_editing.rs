@@ -46,13 +46,14 @@ pub enum GraphEditCommandKind {
     Save,
 }
 
-/// Caller aliases describe the committed batch's result, not another graph document.
+/// Bounded caller-owned facts retained atomically with the original commit for replay.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GraphEditCorrelation {
     pub client_key: String,
     pub document_hash: String,
     pub created_nodes: BTreeMap<String, yss_graph_document::NodeId>,
     pub created_ports: BTreeMap<String, yss_graph_document::PortAddress>,
+    pub result_facts: serde_json::Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -895,6 +896,7 @@ mod tests {
                 .map(|index| (format!("node_{index:059}"), NodeId::new()))
                 .collect(),
             created_ports: BTreeMap::new(),
+            result_facts: serde_json::json!({}),
         };
         let mut first_noop = None;
         for _ in 0..65 {

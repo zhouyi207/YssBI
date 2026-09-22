@@ -6,7 +6,7 @@
 > Update when: 计算入口、输入输出契约或调用边界改变时
 
 Stateless scientific computation entry points over `yss-sci`, called directly
-by `yss-node-kernel`, `yss-graph-execution` result analyses and its focused SCI benchmark,
+by `yss-node-kernel`, `yss-graph-execution`'s focused SCI benchmark,
 and `yss-application::ipc::commands`.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
@@ -18,8 +18,8 @@ Time alignment consumes Arrow `Int64` and `Date32` arrays directly. Alignment an
 panel preparation share the checked numeric-grid helpers in `data::time_series::align`.
 
 `ols` and `acf_pacf` accept neutral requests and `ScientificExecutionControl` from
-`yss-sci-contract`. The OLS kernel forwards the execution cancellation and deadline;
-result analyses and standalone IPC ACF/PACF use the existing 60-second deadline.
+`yss-sci-contract`. Fit and Summary kernels forward the execution cancellation and deadline;
+standalone IPC ACF/PACF uses a 60-second deadline.
 Application declares this dependency for its IPC commands. Desktop composition
 and other application modules do not call it or construct/inject a backend object.
 The runtime has no Execution dependency.
@@ -55,10 +55,10 @@ SCI's `regression::fit::fit_ols` projects `OlsFit`, including its already-comput
 values and residuals. `regression::report::ols_report` returns typed model and
 coefficient statistics without duplicating observation arrays. The OLS function
 returns these statistics alongside ordinary fitted/residual vectors and the fitted
-design columns. Execution shares that immutable result across its report outputs;
-Application projects report references, validates the session and retained result,
-and asks Execution to derive ACF/PACF, serial-test or hypothesis inputs from the same
-fit. Execution calls the corresponding runtime functions. Serial-test input/output
+design columns. The Summary kernel computes the selected ACF/PACF, serial-test and
+hypothesis analyses from that model. Execution retains the shared model and immutable
+summary; Application validates result identity and reads those computed analyses.
+Serial-test input/output
 records belong to `yss-sci-contract::serial_tests`. No opaque JSON report crosses
 this boundary.
 
@@ -74,11 +74,11 @@ Tauri commands, frontend state, Julia processes or Bayesian worker lifecycle.
 
 ## 宿主调用与数值所有权
 
-科学计算使用独立的中性契约。Node Kernel 负责节点适配，Execution 保留结果分析和独立 OLS benchmark 的入口，IPC Command 提供独立统计命令：
+科学计算使用独立的中性契约。Node Kernel 负责拟合与汇总分析，Execution 仅在独立 OLS benchmark 中直接调用 runtime，IPC Command 提供独立统计命令：
 
 ```text
 Application → yss-graph-execution → yss-node-kernel → yss-sci-runtime (stateless functions)
-Execution result analysis / OLS benchmark → yss-sci-runtime
+OLS benchmark (dev dependency) → yss-sci-runtime
 IPC Command → yss-sci-runtime
 yss-sci-runtime → yss-sci algorithms → yss-sci-linalg Mat / Col / views / checked factors → faer
 yss-sci algorithms → shared model options/results in yss-sci-contract

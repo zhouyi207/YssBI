@@ -52,16 +52,12 @@ pub use state::ProjectState;
 
 #[cfg(any(test, feature = "test-support"))]
 mod test_support;
-#[cfg(any(test, feature = "test-support"))]
-use test_support::ActivationPublicationTestHook;
 #[cfg(test)]
 use test_support::GraphLoadAfterReadTestHook;
 #[cfg(any(test, feature = "test-support"))]
 pub use test_support::ProjectActivationTestHook;
 #[cfg(any(test, feature = "test-support"))]
 use test_support::ProjectStateTestHooks;
-
-type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
 impl ProjectState {
     pub fn get_data(&self) -> Result<ProjectData, ProjectOperationError> {
@@ -118,23 +114,6 @@ impl ProjectState {
     #[cfg(not(any(test, feature = "test-support")))]
     pub(super) fn run_project_activation_test_hook(&self) {}
 
-    #[cfg(any(test, feature = "test-support"))]
-    fn run_activation_store_replaced_test_hook(&self) -> Option<ActivationPanicPayload> {
-        self.test_hooks
-            .activation_store_replaced_test_hook
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-            .and_then(|hook| {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hook())).err()
-            })
-    }
-
-    #[cfg(not(any(test, feature = "test-support")))]
-    fn run_activation_store_replaced_test_hook(&self) -> Option<ActivationPanicPayload> {
-        None
-    }
-
     #[cfg(test)]
     pub(crate) fn set_graph_load_after_read_test_hook(&self, hook: GraphLoadAfterReadTestHook) {
         *self
@@ -167,23 +146,6 @@ impl ProjectState {
             .project_activation_test_hook
             .write()
             .unwrap() = Some(hook);
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn set_activation_store_replaced_test_hook(&self, hook: ActivationPublicationTestHook) {
-        *self
-            .test_hooks
-            .activation_store_replaced_test_hook
-            .write()
-            .unwrap() = Some(hook);
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn authority_generation_for_test(&self) -> u64 {
-        self.mutation_publication
-            .lock()
-            .unwrap()
-            .authority_generation
     }
 
     pub fn activation_revision(&self) -> u64 {
