@@ -72,7 +72,7 @@ function projectedReroute(): UINode {
       iconId: null,
       styleId: "builtin.reroute",
     },
-    parameterEditors: [],
+    parameterGroups: [],
     diagnostics: [],
     inputs: [projectedPin(id, "input")],
     outputs: [projectedPin(id, "output")],

@@ -27,7 +27,7 @@ import {
   type EditorViewport,
 } from "@/features/core/viewport/editorViewport";
 import { ConnectionContextMenu } from "../../ContextMenu";
-import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
+import { portAddressKey } from "@/features/domain/editorProjection";
 import {
   GraphFlowContext,
   GraphFlowInteractionContext,
@@ -219,7 +219,11 @@ function GraphFlowRuntime({
     renderedEdges.current = nextCache;
     return next;
   }, [model.edges, workspace.selectedConnectionIds, interactive]);
-  const sourceId = connectionSource?.sourceId ?? interaction.pendingConnection?.id;
+  const pendingSourceId = interaction.pendingConnection
+    ? portAddressKey(interaction.pendingConnection)
+    : undefined;
+  const pendingSource = pendingSourceId ? model.pins[pendingSourceId] : undefined;
+  const sourceId = connectionSource?.sourceId ?? pendingSourceId;
   const [connectionStore] = useState(createGraphFlowInteractionStore);
   const previousFeedback = useRef<FlowInteractionProjection | undefined>(undefined);
   const feedback = useMemo(() => {
@@ -489,7 +493,7 @@ function GraphFlowRuntime({
       const pin = modelRef.current.pins[current.sourceId];
       if (!pin) return;
       interaction.setContextMenu({ x: point.x, y: point.y, visible: true });
-      interaction.setPendingConnection(toInteractionPinData(pin));
+      interaction.setPendingConnection(pin.address);
     },
     [interaction.setContextMenu, interaction.setPendingConnection],
   );
@@ -786,11 +790,8 @@ function GraphFlowRuntime({
           autoPanOnSelection={false}
           proOptions={{ hideAttribution: true }}
         >
-          {interaction.pendingConnection && interaction.contextMenu ? (
-            <PendingFlowConnection
-              pin={interaction.pendingConnection}
-              menu={interaction.contextMenu}
-            />
+          {pendingSource && interaction.contextMenu ? (
+            <PendingFlowConnection pin={pendingSource} menu={interaction.contextMenu} />
           ) : null}
         </ReactFlow>
         {interactive && edgeMenu ? (

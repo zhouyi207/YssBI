@@ -91,7 +91,6 @@ export function GraphCanvasController({
     setContextMenu,
     setPendingConnection,
   });
-  const sourcePort = pendingConnection?.address ?? null;
   const handlePaletteSelect = useCallback(
     (descriptor: NodeCreationDescriptor, locale: string) => {
       if (contextMenu?.visible) {
@@ -115,7 +114,7 @@ export function GraphCanvasController({
             x: contextMenu.x,
             y: contextMenu.y,
             graphPath: activeResourceRef,
-            sourcePort,
+            sourcePort: pendingConnection,
             onSelect: handlePaletteSelect,
             onClose: closePalette,
           }
@@ -153,7 +152,7 @@ export function GraphCanvasController({
       executeGraph,
       handlePaletteSelect,
       projectionAllowsExecution,
-      sourcePort,
+      pendingConnection,
     ],
   );
   const contextMenuActions = useMemo(

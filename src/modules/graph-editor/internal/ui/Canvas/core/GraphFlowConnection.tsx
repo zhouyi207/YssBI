@@ -44,7 +44,7 @@ export function PendingFlowConnection({
   pin,
   menu,
 }: {
-  pin: PinData;
+  pin: Pick<PinData, "id" | "nodeId" | "direction">;
   menu: { x: number; y: number };
 }) {
   const node = useInternalNode(pin.nodeId);

@@ -278,6 +278,7 @@ export function createWorkbenchLayoutRuntime(): {
     openEditor: (request) => mutate((model) => model.openEditor(request)),
     ensureView: (request) => mutate((model) => model.ensureView(request)),
     upsertResult: (request) => mutate((model) => model.upsertResult(request)),
+    replaceResult: (expected, request) => mutate((model) => model.replaceResult(expected, request)),
     activate: (id) => mutate((model) => model.activate(id)),
     reveal: (id) => mutate((model) => model.reveal(id)),
     move: (request) => mutate((model) => model.move(request)),

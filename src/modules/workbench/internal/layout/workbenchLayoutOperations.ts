@@ -8,7 +8,7 @@ import {
   type Action,
   type IJsonTabNode,
 } from "flexlayout-react";
-import { resultReferenceKey } from "@/shared/types/domain/result";
+import { resultReferenceKey, type ResultReference } from "@/shared/types/domain/result";
 import {
   canMoveWorkbenchPanel,
   canFloatWorkbenchPanel,
@@ -268,6 +268,38 @@ export class WorkbenchModelOperations {
       request.title,
       "border_" + WORKBENCH_HOME_LOCATION.result,
     );
+  };
+  replaceResult = (
+    expected: ResultReference,
+    request: UpsertResultRequest,
+  ): WorkbenchPanelInfo | null => {
+    const metadata = { role: "result" as const, ...request };
+    if (!isWorkbenchPanelMetadata(metadata))
+      throw new WorkbenchLayoutError("invalid_panel_metadata");
+    const panels = this.listPanels();
+    const previous = panels.find(
+      (panel) =>
+        panel.metadata.role === "result" &&
+        resultReferenceKey(panel.metadata.reference) === resultReferenceKey(expected),
+    );
+    if (!previous) return null;
+    const existing = panels.find(
+      (panel) =>
+        panel.metadata.role === "result" &&
+        resultReferenceKey(panel.metadata.reference) === resultReferenceKey(request.reference),
+    );
+    if (existing) {
+      this.reveal(existing.panelInstanceId);
+      return this.getPanel(existing.panelInstanceId)!;
+    }
+    const tab = this.tab(previous.panelInstanceId)!;
+    this.model.doAction(
+      Actions.updateNodeAttributes(tab.getId(), {
+        name: request.title,
+        config: { ...tab.getConfig(), metadata },
+      }),
+    );
+    return this.getPanel(previous.panelInstanceId)!;
   };
   activate = (id: string): boolean => {
     const tab = this.tab(id);

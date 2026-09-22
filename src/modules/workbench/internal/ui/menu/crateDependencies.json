@@ -515,12 +515,6 @@
     "manifest": "src-tauri/crates/yss-database-io/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-data-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-database-arrow",
         "kind": "normal",
         "optional": false,
@@ -969,18 +963,6 @@
       },
       {
         "name": "yss-relational-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-runtime",
         "kind": "normal",
         "optional": false,
         "target": null

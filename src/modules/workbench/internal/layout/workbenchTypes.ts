@@ -1,4 +1,5 @@
 import type { IJsonModel } from "flexlayout-react";
+import type { ResultReference } from "@/shared/types/domain/result";
 
 import type {
   EditorPanelMetadata,
@@ -146,6 +147,10 @@ export interface WorkbenchLayoutControlContract {
   openEditor(request: OpenEditorRequest): Promise<WorkbenchPanelInfo>;
   ensureView(request: EnsureViewRequest): Promise<WorkbenchPanelInfo>;
   upsertResult(request: UpsertResultRequest): Promise<WorkbenchPanelInfo>;
+  replaceResult(
+    expected: ResultReference,
+    request: UpsertResultRequest,
+  ): Promise<WorkbenchPanelInfo | null>;
   activate(panelInstanceId: string): Promise<boolean>;
   reveal(panelInstanceId: string): Promise<boolean>;
   move(request: MoveWorkbenchPanelRequest): Promise<boolean>;

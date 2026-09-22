@@ -4,6 +4,8 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
 import { chartUi } from "@/features/core/chart/ui";
 import { editorUi } from "@/features/core/editor/ui";
 import type { ChartDocument } from "@/shared/types/domain/chart";
@@ -31,6 +33,7 @@ describe("Chart detail subscriptions", () => {
   }
 
   beforeEach(() => {
+    useResourceStore.getState().clear();
     useChartDocumentStore.getState().clear();
     editorUi.clearDetailFocus();
     host = document.createElement("div");
@@ -42,6 +45,7 @@ describe("Chart detail subscriptions", () => {
     act(() => root.unmount());
     editorUi.clearDetailFocus();
     useChartDocumentStore.getState().clear();
+    useResourceStore.getState().clear();
     host.remove();
   });
 
@@ -54,8 +58,19 @@ describe("Chart detail subscriptions", () => {
       encodings: { x: "time", y: "amount" },
     };
     const store = useChartDocumentStore.getState();
+    const chartResource = { kind: "chart" as const, id: chartPath };
+    useResourceStore.getState().upsertResource({
+      ...chartResource,
+      name: "Report",
+      uri: resourceKey(chartResource),
+      revision: 1,
+      exists: true,
+      loaded: true,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
     store.upsertDocument(chartPath, document);
-    store.setIndex([{ chartPath, name: "Report", revision: 1, ...document }]);
     act(() =>
       root.render(
         <StrictMode>
@@ -69,8 +84,13 @@ describe("Chart detail subscriptions", () => {
     expect(host.textContent).toBe("scatter");
     expect(latest.chartDocument).toBe(document);
     expect(latest.model).toMatchObject({ kind: "chart", document });
+    expect(latest.chartName).toBe("Report");
 
-    act(() => store.setIndex([{ chartPath, name: "Renamed report", revision: 2, ...document }]));
+    act(() =>
+      useResourceStore
+        .getState()
+        .patchResource(chartResource, { name: "Renamed report", revision: 2 }),
+    );
     expect(latest.chartName).toBe("Renamed report");
     expect(latest.chartDocument).toBe(document);
 

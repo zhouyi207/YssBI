@@ -373,7 +373,7 @@ describe("React Flow canvas command bridge", () => {
       visible: true,
     });
     expect(canvas.interaction.setPendingConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "out" }),
+      mocks.snapshot.graphEntities[FLOW_GRAPH_PATH].pins.out.address,
     );
     vi.mocked(canvas.interaction.setContextMenu).mockClear();
     act(() => {

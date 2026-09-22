@@ -206,7 +206,7 @@ export function NodeParameterEditor({
   );
 }
 
-export function ParameterValueEditor({
+function ParameterValueEditor({
   parameter,
   pending,
   errors,

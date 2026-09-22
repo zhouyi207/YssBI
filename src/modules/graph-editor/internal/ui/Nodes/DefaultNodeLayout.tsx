@@ -30,9 +30,9 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   contextMenuActions,
   renderPinHandle,
 }) => {
-  const inlineParameters = node.parameterEditors.filter(
-    (parameter) => parameter.presentation === "inlineAndDetail",
-  );
+  const inlineParameters = node.parameterGroups
+    .flatMap((group) => group.parameters)
+    .filter((parameter) => parameter.presentation === "inlineAndDetail");
 
   return (
     <>

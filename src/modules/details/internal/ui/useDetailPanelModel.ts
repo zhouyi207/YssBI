@@ -3,6 +3,8 @@ import { useDetailResourceProjection } from "@/features/application/editor";
 import { useEditorUi } from "@/features/core/editor/ui";
 import { useLogStore } from "@/features/application/log";
 import { useChartRead } from "@/features/core/chart/read";
+import { useResourceRead } from "@/features/core/resource/read";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import { resolveDetailPanelModel } from "./resolveDetailPanelModel";
 import type { DetailPanelModel } from "./resolveDetailPanelModel";
@@ -22,9 +24,9 @@ export function useDetailPanelModel(): {
   const chartDocument = useChartRead((snapshot) =>
     chartPath ? (snapshot.documents[chartPath] ?? null) : null,
   );
-  const chartName = useChartRead((snapshot) =>
+  const chartName = useResourceRead((snapshot) =>
     chartPath
-      ? (snapshot.index.find((chart) => chart.chartPath === chartPath)?.name ?? null)
+      ? (snapshot.resources[resourceKey({ kind: "chart", id: chartPath })]?.name ?? null)
       : null,
   );
 

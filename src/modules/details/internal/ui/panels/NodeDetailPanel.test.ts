@@ -61,7 +61,7 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
           iconId: null,
           styleId: null,
         },
-        parameterEditors: [],
+        parameterGroups: [],
         portInstanceAdditions: [],
         capabilities: {
           managed: false,
@@ -109,16 +109,22 @@ describe("NodeDetailPanel projection selection", () => {
   it("renders the parameter editor in Details", () => {
     const graphPath = "events/Main.yssbi-event";
     const graphBucket = bucket(graphPath, "Node");
-    graphBucket.nodes.shared.parameterEditors = [
+    graphBucket.nodes.shared.parameterGroups = [
       {
-        key: "value",
-        display: { title: "Value", description: null },
-        editor: "number",
-        presentation: "inlineAndDetail",
-        valueType: { kind: "Scalar", inner: "Numeric" },
-        multiline: false,
-        value: 42,
-        configuration: null,
+        key: "parameters",
+        display: { title: "Parameters", description: null },
+        parameters: [
+          {
+            key: "value",
+            display: { title: "Value", description: null },
+            editor: "number",
+            presentation: "inlineAndDetail",
+            valueType: { kind: "Scalar", inner: "Numeric" },
+            multiline: false,
+            value: 42,
+            configuration: null,
+          },
+        ],
       },
     ];
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });

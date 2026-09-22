@@ -7,7 +7,7 @@ import { projectPublicationCoordinator } from "@/features/application/editorMuta
 import { DatabaseService } from "@/services/database/databaseService";
 import type { LoadDatabaseResult } from "@/shared/types/dto/database";
 import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
-import { databasePublication } from "@/features/core/database/publication";
+import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { ChartDetailPanel } from "./ChartDetailPanel";
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -81,7 +81,7 @@ describe("chart detail metadata lifecycle ownership", () => {
     const request = deferred<LoadDatabaseResult>();
     vi.spyOn(DatabaseService, "getDatabaseMeta").mockReturnValue(request.promise);
     const isCancelled = vi.fn(() => false);
-    const updateDatabase = vi.spyOn(databasePublication, "updateDatabase");
+    const updateDatabase = vi.spyOn(useDatabaseStore.getState(), "updateDatabase");
 
     const completion = hydrateDatabaseEditorMetadata("sales", isCancelled);
     expect(DatabaseService.getDatabaseMeta).toHaveBeenCalledWith(projectInstanceId, "sales");

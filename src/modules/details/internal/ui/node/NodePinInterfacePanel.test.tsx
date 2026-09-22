@@ -96,7 +96,7 @@ function makeNode(
     pinIds: [...inputs, ...outputs],
     position: { x: 0, y: 0 },
     display: { title, userLabel: null, iconId: null, styleId: "builtin.default" },
-    parameterEditors: [],
+    parameterGroups: [],
     portInstanceAdditions: [],
     capabilities: {
       managed: false,

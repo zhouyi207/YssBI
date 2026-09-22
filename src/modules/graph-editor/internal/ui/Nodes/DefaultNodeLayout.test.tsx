@@ -30,7 +30,7 @@ function projectedNode(): UINode {
       iconId: null,
       styleId: null,
     },
-    parameterEditors: [],
+    parameterGroups: [],
     diagnostics: [],
     inputs: [],
     outputs: [
@@ -61,16 +61,22 @@ describe("DefaultNodeLayout projection authority", () => {
 
   it("renders inlineAndDetail parameters as read-only summaries even with graph context", () => {
     const node = projectedNode();
-    node.parameterEditors = [
+    node.parameterGroups = [
       {
-        key: "value",
-        display: { title: "Value", description: null },
-        editor: "number",
-        presentation: "inlineAndDetail",
-        valueType: { kind: "Scalar", inner: "Numeric" },
-        multiline: false,
-        value: 42,
-        configuration: null,
+        key: "parameters",
+        display: { title: "Parameters", description: null },
+        parameters: [
+          {
+            key: "value",
+            display: { title: "Value", description: null },
+            editor: "number",
+            presentation: "inlineAndDetail",
+            valueType: { kind: "Scalar", inner: "Numeric" },
+            multiline: false,
+            value: 42,
+            configuration: null,
+          },
+        ],
       },
     ];
 

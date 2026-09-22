@@ -239,6 +239,7 @@ Singleton 与 multi-instance contract：
 - 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
 Result panel 固定读取 `reference`，不订阅 pin 的当前结果。删除来源节点或重新运行不会清空已打开的报告。
+Report 的显式“添加并计算”是引用更新入口：Results 先取得新结果租约，再通过 `replaceResult(expected, request)` 在同一个物理面板上更新引用与租约；原面板已关闭或引用已变则拒绝。新引用已有面板时复用并 reveal，释放重复取得的临时租约。替换后仍由真实面板集合对账旧租约，移动、隐藏和重新挂载不回退到旧结果。
 Application 的结果租约控制器订阅完成 hydration 后的真实面板集合，按 `leaseId` 与后端对账；切换标签、移动、重置布局保留持有关系，真实关闭才释放。
 跨窗口交接和后端窗口销毁负责独立报告的租约生命周期，详见 [Graph 与 Execution](../../features/application/results/README.md#results)。
 结果引用的来源信息留在不可变 provenance 中，不随图重命名改写；会话结束后关闭对应独立窗口并移除项目面板。
