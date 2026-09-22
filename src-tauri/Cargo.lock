@@ -10138,7 +10138,7 @@ dependencies = [
 
 [[package]]
 name = "yssbi"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "tauri",
  "tauri-build",
