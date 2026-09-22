@@ -1,11 +1,13 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { useConnection, type EdgeProps } from "@xyflow/react";
-import { graphElementState } from "@/features/application/results";
+import { useShallow } from "zustand/react/shallow";
+import { useGraphRead } from "@/features/core/graph/read";
+import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
-import { useGraphFlowContext } from "./GraphFlowContext";
+import { useGraphFlowContext, useGraphFlowInteraction } from "./GraphFlowContext";
 import type { GraphFlowEdge as FlowEdge } from "./graphFlowModel";
 import { Edge } from "./Edge";
 
@@ -20,24 +22,47 @@ export const GraphFlowEdge = memo(function GraphFlowEdge({
   selected,
   data,
 }: EdgeProps<FlowEdge>) {
-  const { interactive, model, sourcePin, feedbackForPin, presentation, blockedConnections } =
-    useGraphFlowContext();
+  const { interactive, graphPath } = useGraphFlowContext();
+  const { sourcePin, feedbackForPin } = useGraphFlowInteraction();
   const { t } = useTranslation();
-  const targetHandle = useConnection((connection) => connection.toHandle?.id ?? null);
-  const feedback = targetHandle ? feedbackForPin(targetHandle) : null;
-  const replaced = feedback?.kind === "replace" && feedback.displacedConnectionIds.includes(id);
+  const replaced = useConnection((connection) => {
+    const target = connection.toHandle?.id;
+    const feedback = target ? feedbackForPin(target) : null;
+    return feedback?.kind === "replace" && feedback.displacedConnectionIds.includes(id);
+  });
   const { tokens } = useTheme();
-  const pin = data ? model.pins[data.fromPinId] : undefined;
-  const input = data ? model.pins[data.toPinId] : undefined;
-  const cache = pin && input ? (presentation.connections[pin.id]?.[input.id] ?? "new") : "new";
-  const state = graphElementState(
-    presentation,
-    target,
-    cache,
-    blockedConnections.has(id) ||
-      pin?.orphan ||
-      input?.orphan ||
-      presentation.failure?.source?.nodeId === source,
+  const pin = useGraphRead((snapshot) =>
+    data ? snapshot.graphEntities[graphPath]?.pins[data.fromPinId] : undefined,
+  );
+  const input = useGraphRead((snapshot) =>
+    data ? snapshot.graphEntities[graphPath]?.pins[data.toPinId] : undefined,
+  );
+  const blocked = useGraphRead(
+    (snapshot) =>
+      snapshot.graphEntities[graphPath]?.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.blocking &&
+          diagnostic.location.kind === "connection" &&
+          diagnostic.location.connectionId === id,
+      ) ?? false,
+  );
+  const [cache, state] = useGraphResultPresentation(
+    graphPath,
+    useShallow((presentation) => {
+      const cache = pin && input ? (presentation.connections[pin.id]?.[input.id] ?? "new") : "new";
+      return [
+        cache,
+        graphElementState(
+          presentation,
+          target,
+          cache,
+          blocked ||
+            pin?.orphan ||
+            input?.orphan ||
+            presentation.failure?.source?.nodeId === source,
+        ),
+      ] as const;
+    }),
   );
   const color = pin
     ? getPinTypeColor(resolvePinVisualSpec(pin).colorKey, tokens)

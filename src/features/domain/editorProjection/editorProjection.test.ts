@@ -121,11 +121,6 @@ function validProjection(): EditorGraphProjectionDto {
         ],
         capabilities: {
           managed: false,
-          canCopy: true,
-          canDelete: true,
-          canEditLabel: true,
-          canEditParameters: true,
-          supportsInlineLiterals: true,
         },
         diagnostics: [
           {

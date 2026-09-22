@@ -1,14 +1,7 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
-import type {
-  ConnectionData,
-  NodeData,
-  PinData,
-} from "@/features/domain/editorProjection/graphRuntimeTypes";
-import {
-  formatNodePinDisplayLabel,
-  nodeDisplayTitle,
-  pinDisplayTitle,
-} from "@/features/domain/editorProjection";
+import type { ConnectionData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { formatNodePinDisplayLabel, pinDisplayTitle } from "@/features/domain/editorProjection";
 
 export interface PinConnectionOption {
   label: string;
@@ -16,23 +9,23 @@ export interface PinConnectionOption {
 }
 
 export interface PinConnectionOptionConfig {
-  connections?: readonly ConnectionData[];
+  connections?: DeepReadonly<ConnectionData[]>;
   excludedIds?: ReadonlySet<string>;
   includedIds?: ReadonlySet<string>;
 }
 
 export function formatPinConnectionOptionLabel(
-  pin: PinData,
-  nodes: Readonly<Record<string, NodeData>>,
+  pin: DeepReadonly<PinData>,
+  nodeTitles: Readonly<Record<string, string>>,
 ): string {
-  return formatNodePinDisplayLabel(nodeDisplayTitle(nodes[pin.nodeId]), pinDisplayTitle(pin)) ?? "";
+  return formatNodePinDisplayLabel(nodeTitles[pin.nodeId], pinDisplayTitle(pin)) ?? "";
 }
 
 export function listPinConnections(
   pinId: string,
   direction: PinData["direction"],
-  connections: readonly ConnectionData[],
-): ConnectionData[] {
+  connections: DeepReadonly<ConnectionData[]>,
+): DeepReadonly<ConnectionData>[] {
   return connections.filter((connection) =>
     direction === "output" ? connection.from === pinId : connection.to === pinId,
   );
@@ -41,16 +34,16 @@ export function listPinConnections(
 export function connectedPeerId(
   pinId: string,
   direction: PinData["direction"],
-  connection: ConnectionData,
+  connection: DeepReadonly<ConnectionData>,
 ): string | null {
   if (direction === "output") return connection.from === pinId ? connection.to : null;
   return connection.to === pinId ? connection.from : null;
 }
 
 function candidateCanAppendToInput(
-  anchor: PinData,
-  candidate: PinData,
-  connections: readonly ConnectionData[],
+  anchor: DeepReadonly<PinData>,
+  candidate: DeepReadonly<PinData>,
+  connections: DeepReadonly<ConnectionData[]>,
 ): boolean {
   if (anchor.direction !== "output" || candidate.direction !== "input") return true;
   if (candidate.connections?.canAppend) return true;
@@ -60,9 +53,9 @@ function candidateCanAppendToInput(
 }
 
 export function listCompatiblePinOptions(
-  anchor: PinData,
-  pins: readonly PinData[],
-  nodes: Readonly<Record<string, NodeData>>,
+  anchor: DeepReadonly<PinData>,
+  pins: DeepReadonly<PinData[]>,
+  nodeTitles: Readonly<Record<string, string>>,
   {
     connections = [],
     excludedIds = new Set<string>(),
@@ -81,6 +74,6 @@ export function listCompatiblePinOptions(
     })
     .map((candidate) => ({
       value: candidate.id,
-      label: formatPinConnectionOptionLabel(candidate, nodes),
+      label: formatPinConnectionOptionLabel(candidate, nodeTitles),
     }));
 }

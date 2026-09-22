@@ -1,15 +1,14 @@
+import { useShallow } from "zustand/react/shallow";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { useGraphRead } from "@/features/core/graph/read";
-import { derivePinConnectionView } from "@/features/core/dataStore/pinLinks";
 import {
   formatDiagnosticLocationLabel,
   formatGraphDiagnostic,
 } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 
-import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { DiagnosticDto, ParameterEditorDto } from "@/shared/types/domain/editorProjection";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { NodeParameterEditor } from "../node/parameterEditors/NodeParameterEditor";
 
 import { DetailPanelShell } from "../shared/DetailPanelShell";
@@ -22,7 +21,6 @@ import { DetailBadge, DetailText } from "../shared/DetailText";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 
 const EMPTY_PINS: PinData[] = [];
-const EMPTY_PIN_CONNECTIONS: string[][] = [];
 
 function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
@@ -36,35 +34,27 @@ interface NodeDetailPanelProps {
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   const { t, i18n } = useTranslation();
   const node = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.nodes[nodeId]);
-  const graphBucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
+  const diagnosticLabels = useGraphRead(
+    useShallow((snapshot) => {
+      const bucket = snapshot.graphEntities[graphPath];
+      return (bucket?.nodes[nodeId]?.diagnostics ?? []).map((diagnostic) =>
+        formatDiagnosticLocationLabel(diagnostic.location, bucket, nodeId),
+      );
+    }),
+  );
   const { catalog } = useLocalizedNodeCatalog(Boolean(node));
-  const pinObjs = useGraphRead((snapshot) => {
-    const bucket = snapshot.graphEntities[graphPath];
-    const pinIds = bucket?.nodes[nodeId]?.pinIds;
-    if (!bucket || !pinIds?.length) return EMPTY_PINS;
-    return pinIds
-      .map((pinId) => bucket.pins[pinId])
-      .filter(isPresent)
-      .map((pin) => structuredClone(pin) as PinData);
-  });
-  const pinConns = useGraphRead((snapshot) => {
-    const bucket = snapshot.graphEntities[graphPath];
-    const pinIds = bucket?.nodes[nodeId]?.pinIds;
-    if (!bucket || !pinIds?.length) return EMPTY_PIN_CONNECTIONS;
-    return pinIds.map((pinId) => [...(bucket.pinConnections[pinId] ?? [])]);
-  });
-
-  const pins = useMemo<PinView[]>(
-    () =>
-      pinObjs.map((pin, index) => ({
-        ...pin,
-        ...derivePinConnectionView(pinConns[index]),
-      })),
-    [pinObjs, pinConns],
+  const pins = useGraphRead(
+    useShallow((snapshot) => {
+      const bucket = snapshot.graphEntities[graphPath];
+      const pinIds = bucket?.nodes[nodeId]?.pinIds;
+      return bucket && pinIds?.length
+        ? pinIds.map((pinId) => bucket.pins[pinId]).filter(isPresent)
+        : EMPTY_PINS;
+    }),
   );
 
   const pinSpecs = useMemo(() => {
-    const toViewModel = (pin: PinView): NodePinViewModel => ({
+    const toViewModel = (pin: (typeof pins)[number]): NodePinViewModel => ({
       id: pin.id,
       name: pin.display.instanceLabel ?? pin.display.label,
       direction: pin.direction,
@@ -119,8 +109,8 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
                   graphPath={graphPath}
                   nodeId={nodeId}
                   locale={i18n?.resolvedLanguage ?? "en-US"}
-                  parameter={structuredClone(parameter) as ParameterEditorDto}
-                  diagnostics={structuredClone(node.diagnostics) as DiagnosticDto[]}
+                  parameter={parameter}
+                  diagnostics={node.diagnostics}
                   formatFallback={(value) =>
                     value == null ? "—" : typeof value === "string" ? value : JSON.stringify(value)
                   }
@@ -133,24 +123,11 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
 
       <NodeConfigurationPanel graphPath={graphPath} nodeId={nodeId} />
 
-      <DetailCollapsibleSection title={t("detail.sections.capabilities")}>
-        <div className="flex flex-wrap gap-1.5 px-1 py-2">
-          {Object.entries(node.capabilities)
-            .filter(([, enabled]) => enabled)
-            .map(([capability]) => (
-              <DetailBadge key={capability}>{capability}</DetailBadge>
-            ))}
-        </div>
-      </DetailCollapsibleSection>
       {node.diagnostics.length > 0 && (
         <DetailCollapsibleSection title={t("detail.sections.diagnostics")} defaultOpen>
           <div className="space-y-2 px-1 py-2">
             {node.diagnostics.map((diagnostic, index) => {
-              const locationLabel = formatDiagnosticLocationLabel(
-                diagnostic.location,
-                graphBucket,
-                nodeId,
-              );
+              const locationLabel = diagnosticLabels[index];
               const nodeTitle = node.display.title;
               return (
                 <div key={`${diagnostic.code}-${index}`} className="flex items-start gap-2">

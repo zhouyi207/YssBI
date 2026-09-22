@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 /**
  * Data pin runtime semantics — single source for display labels and theme
  * keys. Editor connection compatibility uses the
@@ -11,10 +12,10 @@ import type { PortTypeStateDto } from "./editorProjection";
 export type PinContainerOverlay = "array" | "dataseries";
 
 export interface PinSemanticsFields {
-  typeState: PortTypeStateDto;
+  typeState: DeepReadonly<PortTypeStateDto>;
 }
 
-export function exactPinDataType(pin: PinSemanticsFields): ValueType | undefined {
+export function exactPinDataType(pin: PinSemanticsFields): DeepReadonly<ValueType> | undefined {
   return pin.typeState.status === "exact" ? (pin.typeState.dataType ?? undefined) : undefined;
 }
 
@@ -32,7 +33,7 @@ export function pinTypeLabel(pin: PinSemanticsFields): string {
 
 /** Array / DataSeries 容器叠加层（签名编辑与 pin 视觉共用）。 */
 export function dataTypeContainerOverlay(
-  dataType: ValueType | undefined,
+  dataType: DeepReadonly<ValueType> | undefined,
 ): PinContainerOverlay | undefined {
   if (!dataType) return undefined;
   if (dataType.kind === "Array") return "array";
@@ -41,7 +42,7 @@ export function dataTypeContainerOverlay(
 }
 
 /** 容器类型递归到内层标量，返回供固定引脚语义调色板解析的类型别名。 */
-export function dataTypeToThemePinType(dt: ValueType): string {
+export function dataTypeToThemePinType(dt: DeepReadonly<ValueType>): string {
   switch (dt.kind) {
     case "Scalar":
       return {
@@ -71,7 +72,9 @@ export function dataTypeToThemePinType(dt: ValueType): string {
 }
 
 /** Scalar pin input widget key, or null when the pin is not an editable scalar. */
-export function scalarPinInputKey(type: ValueType | undefined): string | null {
+export function scalarPinInputKey(
+  type: DeepReadonly<ValueType> | undefined,
+): "number" | "bool" | "string" | null {
   if (type?.kind !== "Scalar") return null;
   return type.inner === "Numeric"
     ? "number"
@@ -81,5 +84,3 @@ export function scalarPinInputKey(type: ValueType | undefined): string | null {
         ? "string"
         : null;
 }
-
-export const PRIMITIVE_SCALAR_INPUT_KEYS = new Set(["bool", "number", "string"]);

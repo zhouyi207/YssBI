@@ -141,18 +141,7 @@ function isNodeDisplay(value: unknown): boolean {
 }
 
 function isCapabilities(value: unknown): boolean {
-  if (
-    !hasExactKeys(value, [
-      "managed",
-      "canCopy",
-      "canDelete",
-      "canEditLabel",
-      "canEditParameters",
-      "supportsInlineLiterals",
-    ])
-  )
-    return false;
-  return Object.values(value).every((entry) => typeof entry === "boolean");
+  return hasExactKeys(value, ["managed"]) && typeof value.managed === "boolean";
 }
 
 export function isPortAddressDto(value: unknown): value is PortAddressDto {

@@ -11,6 +11,5 @@ export type * from "./graphRuntimeTypes";
 export {
   getDataTypeCompatibility,
   getPinCompatibility,
-  isPinCompatible,
   resolveConnectionCompatibility,
 } from "./connectionRules";

@@ -20,13 +20,13 @@ import {
 } from "@xyflow/react";
 import type { EditorCanvasSession, GraphContextMenuActions } from "@/features/application/editor";
 import { useGraphRead } from "@/features/core/graph/read";
-import { useGraphResultPresentation } from "@/features/application/results";
 import {
   EDITOR_VIEWPORT_SCALE_LIMITS,
   type EditorViewport,
 } from "@/features/core/viewport/editorViewport";
 import { ConnectionContextMenu } from "../../ContextMenu";
-import { GraphFlowContext } from "./GraphFlowContext";
+import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
+import { GraphFlowContext, GraphFlowInteractionContext } from "./GraphFlowContext";
 import { GraphFlowNode } from "./GraphFlowNode";
 import { GraphFlowEdge } from "./GraphFlowEdge";
 import { GraphFlowConnection, PendingFlowConnection } from "./GraphFlowConnection";
@@ -37,6 +37,8 @@ import {
   type GraphFlowNode as FlowNode,
   type GraphFlowEdge as FlowEdge,
   type FlowConnectionIntent,
+  type FlowConnectionFeedback,
+  type GraphFlowModel,
 } from "./graphFlowModel";
 import "@xyflow/react/dist/base.css";
 import "./graphFlow.css";
@@ -99,19 +101,12 @@ function GraphFlowRuntime({
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
   const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
-  const presentation = useGraphResultPresentation(graphPath);
-  const blockedConnections = useMemo(
-    () =>
-      new Set(
-        (bucket?.diagnostics ?? []).flatMap((diagnostic) =>
-          diagnostic.blocking && diagnostic.location.kind === "connection"
-            ? [diagnostic.location.connectionId]
-            : [],
-        ),
-      ),
-    [bucket?.diagnostics],
-  );
-  const model = useMemo(() => buildGraphFlowModel(bucket), [bucket]);
+  const projectedModel = useRef<GraphFlowModel | undefined>(undefined);
+  const model = useMemo(() => {
+    const next = buildGraphFlowModel(bucket, projectedModel.current);
+    projectedModel.current = next;
+    return next;
+  }, [bucket]);
   const modelRef = useRef(model);
   modelRef.current = model;
   const { interaction, commands, workspace } = canvas;
@@ -200,45 +195,56 @@ function GraphFlowRuntime({
     renderedNodes.current = nextCache;
     return next;
   }, [model.nodes, positions, measurements, workspace.selectedNodeIds, interactive]);
+  const renderedEdges = useRef(new Map<string, { projection: FlowEdge; view: FlowEdge }>());
   const edges = useMemo(() => {
     const selected = new Set(workspace.selectedConnectionIds);
-    return model.edges.map((edge) => ({ ...edge, selected: interactive && selected.has(edge.id) }));
+    const nextCache = new Map<string, { projection: FlowEdge; view: FlowEdge }>();
+    const next = model.edges.map((edge) => {
+      const isSelected = interactive && selected.has(edge.id);
+      const previous = renderedEdges.current.get(edge.id);
+      const view =
+        previous?.projection === edge && previous.view.selected === isSelected
+          ? previous.view
+          : { ...edge, selected: isSelected };
+      nextCache.set(edge.id, { projection: edge, view });
+      return view;
+    });
+    renderedEdges.current = nextCache;
+    return next;
   }, [model.edges, workspace.selectedConnectionIds, interactive]);
-  const feedbackForPin = useCallback(
-    (pinId: string) => {
-      const sourceId = connectionSource?.sourceId ?? interaction.pendingConnection?.id;
-      return sourceId
-        ? resolveFlowConnection(model, sourceId, pinId, connectionSource?.intent ?? "connect")
-        : null;
-    },
-    [model, connectionSource, interaction.pendingConnection],
-  );
-  const sourcePin =
+  const sourceId = connectionSource?.sourceId ?? interaction.pendingConnection?.id;
+  const connectionModel = sourceId ? model : null;
+  const feedbackForPin = useMemo(() => {
+    const feedback = new Map<string, FlowConnectionFeedback>();
+    return (pinId: string) => {
+      if (!sourceId || !connectionModel) return null;
+      let value = feedback.get(pinId);
+      if (!value) {
+        value = resolveFlowConnection(
+          connectionModel,
+          sourceId,
+          pinId,
+          connectionSource?.intent ?? "connect",
+        );
+        feedback.set(pinId, value);
+      }
+      return value;
+    };
+  }, [connectionModel, sourceId, connectionSource?.intent]);
+  const rawSourcePin =
     (connectionSource ? model.pins[connectionSource.sourceId] : null) ??
     interaction.pendingConnection;
+  const sourcePin = useMemo(
+    () => (rawSourcePin ? toInteractionPinData(rawSourcePin) : null),
+    [rawSourcePin],
+  );
   const context = useMemo(
-    () => ({
-      graphPath,
-      groupId,
-      interactive,
-      contextMenuActions,
-      model,
-      presentation,
-      blockedConnections,
-      sourcePin,
-      feedbackForPin,
-    }),
-    [
-      graphPath,
-      groupId,
-      interactive,
-      contextMenuActions,
-      model,
-      sourcePin,
-      feedbackForPin,
-      presentation,
-      blockedConnections,
-    ],
+    () => ({ graphPath, groupId, interactive, contextMenuActions }),
+    [graphPath, groupId, interactive, contextMenuActions],
+  );
+  const connectionContext = useMemo(
+    () => ({ sourcePin, feedbackForPin }),
+    [sourcePin, feedbackForPin],
   );
   const flowViewport = useMemo(
     () => ({ x: viewport.x, y: viewport.y, zoom: viewport.scale }),
@@ -479,319 +485,321 @@ function GraphFlowRuntime({
       const pin = modelRef.current.pins[current.sourceId];
       if (!pin) return;
       interaction.setContextMenu({ x: point.x, y: point.y, visible: true });
-      interaction.setPendingConnection(pin);
+      interaction.setPendingConnection(toInteractionPinData(pin));
     },
     [interaction.setContextMenu, interaction.setPendingConnection],
   );
 
   return (
     <GraphFlowContext.Provider value={context}>
-      <ReactFlow<FlowNode, FlowEdge>
-        id={panelInstanceId}
-        className="yss-flow"
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        viewport={flowViewport}
-        onViewportChange={(next: Viewport) => {
-          if (!interaction.isInteractive() || !pan.current?.isCurrent()) return;
-          const nextViewport = { x: next.x, y: next.y, scale: next.zoom };
-          viewportRef.current = nextViewport;
-          onViewportChange(nextViewport);
-        }}
-        minZoom={EDITOR_VIEWPORT_SCALE_LIMITS.min}
-        maxZoom={EDITOR_VIEWPORT_SCALE_LIMITS.max}
-        onMoveStart={(event) => {
-          // Controlled viewport synchronization emits { sync: true }, not a user input event.
-          if (
-            !event ||
-            typeof event.type !== "string" ||
-            drag.current?.lease.isCurrent() ||
-            connection.current?.lease.isCurrent() ||
-            selectionGesture.current?.isCurrent()
-          )
-            return;
-          pan.current?.finish();
-          const start = viewportRef.current;
-          pan.current = interaction.beginGesture("panning", () => {
-            suppressClick.current = true;
-            flowStore.setState({ paneDragging: false });
-            viewportRef.current = start;
-            onViewportChange(start);
-            flowStore
-              .getState()
-              .panZoom?.syncViewport({ x: start.x, y: start.y, zoom: start.scale });
-          });
-        }}
-        onMoveEnd={(event) => {
-          if (!event || typeof event.type !== "string") return;
-          const current = pan.current;
-          pan.current = null;
-          if (!current) return;
-          const valid = current.isCurrent();
-          current.finish();
-          if (valid) onViewportCommit();
-          else {
-            // D3 still receives mouse moves until release; restore its private transform too.
-            const restored = viewportRef.current;
-            flowStore
-              .getState()
-              .panZoom?.syncViewport({ x: restored.x, y: restored.y, zoom: restored.scale });
-          }
-        }}
-        onNodesChange={onNodesChange}
-        onNodeClick={(event, node) => {
-          if (
-            event.shiftKey ||
-            event.ctrlKey ||
-            event.metaKey ||
-            suppressClick.current ||
-            !interaction.isInteractive()
-          )
-            return;
-          void commands.revealNodeDetails(node.id);
-        }}
-        onNodeDragStart={startNodeDrag}
-        onNodeDragStop={stopNodeDrag}
-        onSelectionDragStart={startNodeDrag}
-        onSelectionDragStop={stopNodeDrag}
-        onSelectionStart={() => {
-          const snapshot = selectionPointer.current ?? {
-            nodeIds: [...workspace.selectedNodeIds],
-            connectionIds: [...workspace.selectedConnectionIds],
-            nodesSelectionActive: false,
-            shiftKey: false,
-          };
-          selectionPointer.current = snapshot;
-          selectionGesture.current = interaction.beginGesture("selecting", () => {
-            suppressClick.current = true;
-            resetSelectionOverlay(snapshot);
-            if (snapshot.connectionIds.length)
-              commands.setSelectedConnectionIds(snapshot.connectionIds, groupId);
-            else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
-          });
-        }}
-        onSelectionEnd={() => {
-          selectionGesture.current?.finish();
-          selectionGesture.current = null;
-          selectionPointer.current = null;
-        }}
-        onPaneClick={(event) => {
-          if (!event.shiftKey && !suppressClick.current && interaction.isInteractive())
-            commands.setSelectedNodeIds([], groupId);
-        }}
-        onContextMenuCapture={(event) => {
-          const target = event.target instanceof Element ? event.target : null;
-          if (!target?.classList.contains("react-flow__pane")) return;
-          // Right-button panning consumes React Flow's pane context-menu callback.
-          // Handle the native event once, allowing click jitter but not a completed drag.
-          event.preventDefault();
-          event.stopPropagation();
-          if (
-            !interactive ||
-            !interaction.isInteractive() ||
-            contextMenuPress.current?.moved ||
-            (pan.current && !pan.current.isCurrent())
-          )
-            return;
-          onContextMenu(event);
-        }}
-        onMove={(event) => {
-          const press = contextMenuPress.current;
-          if (press && event && "clientX" in event && (event.buttons & 2) !== 0) {
-            press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
-          }
-        }}
-        onEdgeClick={(event, edge) => {
-          if (!interaction.isInteractive() || event.detail > 1) return;
-          const before = {
-            nodeIds: new Set(workspace.selectedNodeIds),
-            connectionIds: new Set(workspace.selectedConnectionIds),
-          };
-          const toggle = event.ctrlKey || event.metaKey || event.shiftKey;
-          const ids = toggle ? before.connectionIds : new Set<string>();
-          if (toggle && ids.has(edge.id)) ids.delete(edge.id);
-          else ids.add(edge.id);
-          const temporary = { nodeIds: new Set<string>(), connectionIds: new Set(ids) };
-          beforeEdgeClick.current = {
-            id: edge.id,
-            before: {
-              nodeIds: new Set(workspace.selectedNodeIds),
-              connectionIds: new Set(workspace.selectedConnectionIds),
-            },
-            temporary,
-          };
-          commands.setSelectedConnectionIds([...ids], groupId);
-          setEdgeMenu(null);
-        }}
-        onEdgeDoubleClick={(event, edge) => {
-          if (!interaction.isInteractive()) return;
-          const element = flowStore.getState().domNode;
-          if (!element) return;
-          const rect = element.getBoundingClientRect();
-          const position = {
-            x: (event.clientX - rect.left - viewport.x) / viewport.scale,
-            y: (event.clientY - rect.top - viewport.y) / viewport.scale,
-          };
-          const selected = {
-            nodeIds: new Set(workspace.selectedNodeIds),
-            connectionIds: new Set(workspace.selectedConnectionIds),
-          };
-          const pending = beforeEdgeClick.current;
-          const snapshot =
-            pending?.id === edge.id ? pending : { before: selected, temporary: selected };
-          beforeEdgeClick.current = null;
-          void interaction.insertRerouteAtConnection(
-            edge.id,
-            position,
-            graphPath,
-            groupId,
-            snapshot,
-          );
-        }}
-        onEdgeContextMenu={(event, edge) => {
-          event.preventDefault();
-          if (!interaction.isInteractive()) return;
-          const ids = workspace.selectedConnectionIds.includes(edge.id)
-            ? workspace.selectedConnectionIds
-            : [edge.id];
-          commands.setSelectedConnectionIds(ids, groupId);
-          setEdgeMenu({ x: event.clientX, y: event.clientY, ids });
-        }}
-        onPointerDownCapture={(event) => {
-          contextMenuPress.current =
-            event.button === 2 ? { x: event.clientX, y: event.clientY, moved: false } : null;
-          suppressClick.current = false;
-          // A new press also recovers an aborted gesture whose release happened outside the view.
-          if (selectionGesture.current && !selectionGesture.current.isCurrent()) {
-            selectionGesture.current.finish();
-            selectionGesture.current = null;
-          }
-          if (drag.current && !drag.current.lease.isCurrent()) {
-            drag.current.lease.finish();
-            drag.current = null;
-          }
-          if (pan.current && !pan.current.isCurrent()) {
-            pan.current.finish();
+      <GraphFlowInteractionContext.Provider value={connectionContext}>
+        <ReactFlow<FlowNode, FlowEdge>
+          id={panelInstanceId}
+          className="yss-flow"
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          viewport={flowViewport}
+          onViewportChange={(next: Viewport) => {
+            if (!interaction.isInteractive() || !pan.current?.isCurrent()) return;
+            const nextViewport = { x: next.x, y: next.y, scale: next.zoom };
+            viewportRef.current = nextViewport;
+            onViewportChange(nextViewport);
+          }}
+          minZoom={EDITOR_VIEWPORT_SCALE_LIMITS.min}
+          maxZoom={EDITOR_VIEWPORT_SCALE_LIMITS.max}
+          onMoveStart={(event) => {
+            // Controlled viewport synchronization emits { sync: true }, not a user input event.
+            if (
+              !event ||
+              typeof event.type !== "string" ||
+              drag.current?.lease.isCurrent() ||
+              connection.current?.lease.isCurrent() ||
+              selectionGesture.current?.isCurrent()
+            )
+              return;
+            pan.current?.finish();
+            const start = viewportRef.current;
+            pan.current = interaction.beginGesture("panning", () => {
+              suppressClick.current = true;
+              flowStore.setState({ paneDragging: false });
+              viewportRef.current = start;
+              onViewportChange(start);
+              flowStore
+                .getState()
+                .panZoom?.syncViewport({ x: start.x, y: start.y, zoom: start.scale });
+            });
+          }}
+          onMoveEnd={(event) => {
+            if (!event || typeof event.type !== "string") return;
+            const current = pan.current;
             pan.current = null;
-            const current = viewportRef.current;
-            flowStore
-              .getState()
-              .panZoom?.syncViewport({ x: current.x, y: current.y, zoom: current.scale });
-          }
-          const target = event.target instanceof Element ? event.target : null;
-          // Snapshot before React Flow clears its selection on the first rectangle movement.
-          selectionPointer.current =
-            event.button === 0 && target?.classList.contains("react-flow__pane")
-              ? {
-                  nodeIds: [...workspace.selectedNodeIds],
-                  connectionIds: [...workspace.selectedConnectionIds],
-                  nodesSelectionActive: flowStore.getState().nodesSelectionActive,
-                  shiftKey: event.shiftKey,
-                }
-              : null;
-          const handle = target?.closest<HTMLElement>(".react-flow__handle");
-          const pin = handle?.dataset.handleid
-            ? modelRef.current.pins[handle.dataset.handleid]
-            : null;
-          if (!pin) return;
-          const action = resolveFlowPinAction(event, pin);
-          if (!interaction.isInteractive() || action === "none" || action === "disconnect") {
+            if (!current) return;
+            const valid = current.isCurrent();
+            current.finish();
+            if (valid) onViewportCommit();
+            else {
+              // D3 still receives mouse moves until release; restore its private transform too.
+              const restored = viewportRef.current;
+              flowStore
+                .getState()
+                .panZoom?.syncViewport({ x: restored.x, y: restored.y, zoom: restored.scale });
+            }
+          }}
+          onNodesChange={onNodesChange}
+          onNodeClick={(event, node) => {
+            if (
+              event.shiftKey ||
+              event.ctrlKey ||
+              event.metaKey ||
+              suppressClick.current ||
+              !interaction.isInteractive()
+            )
+              return;
+            void commands.revealNodeDetails(node.id);
+          }}
+          onNodeDragStart={startNodeDrag}
+          onNodeDragStop={stopNodeDrag}
+          onSelectionDragStart={startNodeDrag}
+          onSelectionDragStop={stopNodeDrag}
+          onSelectionStart={() => {
+            const snapshot = selectionPointer.current ?? {
+              nodeIds: [...workspace.selectedNodeIds],
+              connectionIds: [...workspace.selectedConnectionIds],
+              nodesSelectionActive: false,
+              shiftKey: false,
+            };
+            selectionPointer.current = snapshot;
+            selectionGesture.current = interaction.beginGesture("selecting", () => {
+              suppressClick.current = true;
+              resetSelectionOverlay(snapshot);
+              if (snapshot.connectionIds.length)
+                commands.setSelectedConnectionIds(snapshot.connectionIds, groupId);
+              else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
+            });
+          }}
+          onSelectionEnd={() => {
+            selectionGesture.current?.finish();
+            selectionGesture.current = null;
+            selectionPointer.current = null;
+          }}
+          onPaneClick={(event) => {
+            if (!event.shiftKey && !suppressClick.current && interaction.isInteractive())
+              commands.setSelectedNodeIds([], groupId);
+          }}
+          onContextMenuCapture={(event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (!target?.classList.contains("react-flow__pane")) return;
+            // Right-button panning consumes React Flow's pane context-menu callback.
+            // Handle the native event once, allowing click jitter but not a completed drag.
             event.preventDefault();
             event.stopPropagation();
-            if (interaction.isInteractive() && action === "disconnect") {
-              void interaction.mutations
-                .disconnectPort(graphPath, pin.id)
-                .then((outcome) => {
-                  if (outcome.status === "failed")
+            if (
+              !interactive ||
+              !interaction.isInteractive() ||
+              contextMenuPress.current?.moved ||
+              (pan.current && !pan.current.isCurrent())
+            )
+              return;
+            onContextMenu(event);
+          }}
+          onMove={(event) => {
+            const press = contextMenuPress.current;
+            if (press && event && "clientX" in event && (event.buttons & 2) !== 0) {
+              press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
+            }
+          }}
+          onEdgeClick={(event, edge) => {
+            if (!interaction.isInteractive() || event.detail > 1) return;
+            const before = {
+              nodeIds: new Set(workspace.selectedNodeIds),
+              connectionIds: new Set(workspace.selectedConnectionIds),
+            };
+            const toggle = event.ctrlKey || event.metaKey || event.shiftKey;
+            const ids = toggle ? before.connectionIds : new Set<string>();
+            if (toggle && ids.has(edge.id)) ids.delete(edge.id);
+            else ids.add(edge.id);
+            const temporary = { nodeIds: new Set<string>(), connectionIds: new Set(ids) };
+            beforeEdgeClick.current = {
+              id: edge.id,
+              before: {
+                nodeIds: new Set(workspace.selectedNodeIds),
+                connectionIds: new Set(workspace.selectedConnectionIds),
+              },
+              temporary,
+            };
+            commands.setSelectedConnectionIds([...ids], groupId);
+            setEdgeMenu(null);
+          }}
+          onEdgeDoubleClick={(event, edge) => {
+            if (!interaction.isInteractive()) return;
+            const element = flowStore.getState().domNode;
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const position = {
+              x: (event.clientX - rect.left - viewport.x) / viewport.scale,
+              y: (event.clientY - rect.top - viewport.y) / viewport.scale,
+            };
+            const selected = {
+              nodeIds: new Set(workspace.selectedNodeIds),
+              connectionIds: new Set(workspace.selectedConnectionIds),
+            };
+            const pending = beforeEdgeClick.current;
+            const snapshot =
+              pending?.id === edge.id ? pending : { before: selected, temporary: selected };
+            beforeEdgeClick.current = null;
+            void interaction.insertRerouteAtConnection(
+              edge.id,
+              position,
+              graphPath,
+              groupId,
+              snapshot,
+            );
+          }}
+          onEdgeContextMenu={(event, edge) => {
+            event.preventDefault();
+            if (!interaction.isInteractive()) return;
+            const ids = workspace.selectedConnectionIds.includes(edge.id)
+              ? workspace.selectedConnectionIds
+              : [edge.id];
+            commands.setSelectedConnectionIds(ids, groupId);
+            setEdgeMenu({ x: event.clientX, y: event.clientY, ids });
+          }}
+          onPointerDownCapture={(event) => {
+            contextMenuPress.current =
+              event.button === 2 ? { x: event.clientX, y: event.clientY, moved: false } : null;
+            suppressClick.current = false;
+            // A new press also recovers an aborted gesture whose release happened outside the view.
+            if (selectionGesture.current && !selectionGesture.current.isCurrent()) {
+              selectionGesture.current.finish();
+              selectionGesture.current = null;
+            }
+            if (drag.current && !drag.current.lease.isCurrent()) {
+              drag.current.lease.finish();
+              drag.current = null;
+            }
+            if (pan.current && !pan.current.isCurrent()) {
+              pan.current.finish();
+              pan.current = null;
+              const current = viewportRef.current;
+              flowStore
+                .getState()
+                .panZoom?.syncViewport({ x: current.x, y: current.y, zoom: current.scale });
+            }
+            const target = event.target instanceof Element ? event.target : null;
+            // Snapshot before React Flow clears its selection on the first rectangle movement.
+            selectionPointer.current =
+              event.button === 0 && target?.classList.contains("react-flow__pane")
+                ? {
+                    nodeIds: [...workspace.selectedNodeIds],
+                    connectionIds: [...workspace.selectedConnectionIds],
+                    nodesSelectionActive: flowStore.getState().nodesSelectionActive,
+                    shiftKey: event.shiftKey,
+                  }
+                : null;
+            const handle = target?.closest<HTMLElement>(".react-flow__handle");
+            const pin = handle?.dataset.handleid
+              ? modelRef.current.pins[handle.dataset.handleid]
+              : null;
+            if (!pin) return;
+            const action = resolveFlowPinAction(event, pin);
+            if (!interaction.isInteractive() || action === "none" || action === "disconnect") {
+              event.preventDefault();
+              event.stopPropagation();
+              if (interaction.isInteractive() && action === "disconnect") {
+                void interaction.mutations
+                  .disconnectPort(graphPath, pin.id)
+                  .then((outcome) => {
+                    if (outcome.status === "failed")
+                      interaction.mutations.reportMutationFailure({
+                        graphPath,
+                        intent: "disconnectPort",
+                        message: outcome.message,
+                      });
+                  })
+                  .catch(() =>
                     interaction.mutations.reportMutationFailure({
                       graphPath,
                       intent: "disconnectPort",
-                      message: outcome.message,
-                    });
-                })
-                .catch(() =>
-                  interaction.mutations.reportMutationFailure({
-                    graphPath,
-                    intent: "disconnectPort",
-                  }),
-                );
+                    }),
+                  );
+              }
             }
-          }
-        }}
-        onPointerUpCapture={(event) => {
-          const target = event.target instanceof Element ? event.target : null;
-          const current = selectionGesture.current;
-          const snapshot = selectionPointer.current;
-          const cancelled = current !== null && !current.isCurrent();
-          const additiveClick = !current && snapshot?.shiftKey;
-          if (
-            event.button !== 0 ||
-            !target?.classList.contains("react-flow__pane") ||
-            (!cancelled && !additiveClick)
-          )
-            return;
-          resetSelectionOverlay(snapshot);
-          current?.finish();
-          selectionGesture.current = null;
-          selectionPointer.current = null;
-          suppressClick.current = true;
-          if (target.hasPointerCapture?.(event.pointerId))
-            target.releasePointerCapture(event.pointerId);
-          // Pane handles a zero-sized rectangle as a click during pointerup, before onClick.
-          event.stopPropagation();
-        }}
-        onClickCapture={(event) => {
-          if (!suppressClick.current) return;
-          suppressClick.current = false;
-          event.stopPropagation();
-        }}
-        onConnectStart={onConnectStart}
-        onConnect={onConnect}
-        onConnectEnd={onConnectEnd}
-        isValidConnection={isValidConnection}
-        connectionMode={ConnectionMode.Loose}
-        connectionLineComponent={GraphFlowConnection}
-        connectionRadius={18}
-        connectOnClick={false}
-        nodesDraggable={interactive}
-        nodesConnectable={interactive}
-        elementsSelectable={interactive}
-        edgesReconnectable={false}
-        deleteKeyCode={null}
-        disableKeyboardA11y
-        selectionOnDrag={interactive}
-        selectionMode={SelectionMode.Partial}
-        selectionKeyCode={null}
-        multiSelectionKeyCode={multiSelectionKeys}
-        panOnDrag={interactive ? panButtons : false}
-        panActivationKeyCode={interactive ? "Alt" : null}
-        zoomOnScroll={interactive}
-        zoomOnPinch={interactive}
-        zoomOnDoubleClick={false}
-        autoPanOnNodeDrag={false}
-        autoPanOnConnect={false}
-        autoPanOnSelection={false}
-        proOptions={{ hideAttribution: true }}
-      >
-        {interaction.pendingConnection && interaction.contextMenu ? (
-          <PendingFlowConnection
-            pin={interaction.pendingConnection}
-            menu={interaction.contextMenu}
+          }}
+          onPointerUpCapture={(event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const current = selectionGesture.current;
+            const snapshot = selectionPointer.current;
+            const cancelled = current !== null && !current.isCurrent();
+            const additiveClick = !current && snapshot?.shiftKey;
+            if (
+              event.button !== 0 ||
+              !target?.classList.contains("react-flow__pane") ||
+              (!cancelled && !additiveClick)
+            )
+              return;
+            resetSelectionOverlay(snapshot);
+            current?.finish();
+            selectionGesture.current = null;
+            selectionPointer.current = null;
+            suppressClick.current = true;
+            if (target.hasPointerCapture?.(event.pointerId))
+              target.releasePointerCapture(event.pointerId);
+            // Pane handles a zero-sized rectangle as a click during pointerup, before onClick.
+            event.stopPropagation();
+          }}
+          onClickCapture={(event) => {
+            if (!suppressClick.current) return;
+            suppressClick.current = false;
+            event.stopPropagation();
+          }}
+          onConnectStart={onConnectStart}
+          onConnect={onConnect}
+          onConnectEnd={onConnectEnd}
+          isValidConnection={isValidConnection}
+          connectionMode={ConnectionMode.Loose}
+          connectionLineComponent={GraphFlowConnection}
+          connectionRadius={18}
+          connectOnClick={false}
+          nodesDraggable={interactive}
+          nodesConnectable={interactive}
+          elementsSelectable={interactive}
+          edgesReconnectable={false}
+          deleteKeyCode={null}
+          disableKeyboardA11y
+          selectionOnDrag={interactive}
+          selectionMode={SelectionMode.Partial}
+          selectionKeyCode={null}
+          multiSelectionKeyCode={multiSelectionKeys}
+          panOnDrag={interactive ? panButtons : false}
+          panActivationKeyCode={interactive ? "Alt" : null}
+          zoomOnScroll={interactive}
+          zoomOnPinch={interactive}
+          zoomOnDoubleClick={false}
+          autoPanOnNodeDrag={false}
+          autoPanOnConnect={false}
+          autoPanOnSelection={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          {interaction.pendingConnection && interaction.contextMenu ? (
+            <PendingFlowConnection
+              pin={interaction.pendingConnection}
+              menu={interaction.contextMenu}
+            />
+          ) : null}
+        </ReactFlow>
+        {interactive && edgeMenu ? (
+          <ConnectionContextMenu
+            position={edgeMenu}
+            selectedCount={edgeMenu.ids.length}
+            onBreak={() => {
+              void commands.breakConnectionsById(edgeMenu.ids, graphPath, groupId);
+            }}
+            onClose={() => setEdgeMenu(null)}
           />
         ) : null}
-      </ReactFlow>
-      {interactive && edgeMenu ? (
-        <ConnectionContextMenu
-          position={edgeMenu}
-          selectedCount={edgeMenu.ids.length}
-          onBreak={() => {
-            void commands.breakConnectionsById(edgeMenu.ids, graphPath, groupId);
-          }}
-          onClose={() => setEdgeMenu(null)}
-        />
-      ) : null}
+      </GraphFlowInteractionContext.Provider>
     </GraphFlowContext.Provider>
   );
 }

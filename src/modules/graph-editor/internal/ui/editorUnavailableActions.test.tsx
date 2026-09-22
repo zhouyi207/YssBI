@@ -28,20 +28,20 @@ describe("unavailable node actions", () => {
   it.each([
     {
       name: "managed node",
-      capabilities: { managed: true, canCopy: false, canDelete: false },
+      managed: true,
     },
     {
-      name: "copyable but non-deletable node",
-      capabilities: { managed: false, canCopy: true, canDelete: false },
+      name: "node without a projection",
+      managed: undefined,
     },
-  ])("disables delete and cut for a $name", ({ capabilities }) => {
+  ])("disables delete and cut for a $name", ({ managed }) => {
     const onCut = vi.fn();
     const onDelete = vi.fn();
     act(() => {
       root.render(
         <NodeContextMenu
           position={{ x: 0, y: 0 }}
-          capabilities={capabilities}
+          managed={managed}
           onCopy={vi.fn()}
           onCut={onCut}
           onDuplicate={vi.fn()}
@@ -66,13 +66,13 @@ describe("unavailable node actions", () => {
     expect(onDelete).not.toHaveBeenCalled();
   });
 
-  it("enables duplicate only for an unmanaged copyable node", () => {
+  it("enables duplicate for an unmanaged node", () => {
     const onDuplicate = vi.fn();
     act(() => {
       root.render(
         <NodeContextMenu
           position={{ x: 0, y: 0 }}
-          capabilities={{ managed: false, canCopy: true, canDelete: false }}
+          managed={false}
           onCopy={vi.fn()}
           onCut={vi.fn()}
           onDuplicate={onDuplicate}
@@ -92,12 +92,12 @@ describe("unavailable node actions", () => {
     expect(onDuplicate).toHaveBeenCalledOnce();
   });
 
-  it("requires both copy and delete capability before enabling cut", () => {
+  it("prevents cut and deletion of managed nodes", () => {
     act(() => {
       root.render(
         <NodeContextMenu
           position={{ x: 0, y: 0 }}
-          capabilities={{ managed: false, canCopy: false, canDelete: true }}
+          managed={true}
           onCopy={vi.fn()}
           onCut={vi.fn()}
           onDuplicate={vi.fn()}
@@ -115,6 +115,6 @@ describe("unavailable node actions", () => {
       item.textContent?.includes("contextMenu.node.delete"),
     );
     expect(cut?.hasAttribute("data-disabled")).toBe(true);
-    expect(deleteButton?.hasAttribute("data-disabled")).toBe(false);
+    expect(deleteButton?.hasAttribute("data-disabled")).toBe(true);
   });
 });

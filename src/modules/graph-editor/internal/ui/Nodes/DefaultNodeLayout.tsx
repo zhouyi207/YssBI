@@ -3,14 +3,12 @@ import { GraphPinController } from "../Pins/GraphPinController";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { UINode } from "@/features/core/dataStore/nodeView";
 import type { GraphContextMenuActions } from "@/features/application/editor";
-import { isPinCompatible } from "@/features/domain/editorProjection/connectionRules";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
   activePinId?: string | null;
   activePin?: PinData | null;
   graphPath?: string;
-  groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
   renderPinHandle?: (pin: PinData) => React.ReactNode;
   canConnectPin?: (pin: PinData) => boolean;
@@ -34,7 +32,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   activePinId,
   activePin,
   graphPath,
-  groupId,
   contextMenuActions,
   renderPinHandle,
   canConnectPin,
@@ -46,8 +43,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
     (pin: PinData): "normal" | "highlighted" | "dimmed" => {
       if (!activePin) return "normal";
       if (pin.id === activePin.id) return "highlighted";
-      if (canConnectPin ? canConnectPin(pin) : isPinCompatible(pin, activePin))
-        return "highlighted";
+      if (canConnectPin?.(pin)) return "highlighted";
       return "dimmed";
     },
     [activePin, canConnectPin],
@@ -89,7 +85,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   pin={pin}
                   graphPath={graphPath}
-                  groupId={groupId}
+
                   contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
@@ -107,7 +103,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   pin={pin}
                   graphPath={graphPath}
-                  groupId={groupId}
+
                   contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}

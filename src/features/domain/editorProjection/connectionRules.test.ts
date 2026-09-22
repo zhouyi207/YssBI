@@ -1,32 +1,21 @@
 import { describe, it, expect } from "vitest";
 import type { PinDirection } from "@/shared/types/domain/pin";
 import { dataTypeDisplay, type ValueType } from "@/shared/types/domain/valueType";
-import type { TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
 import {
-  isPinCompatible,
   resolveConnectionCompatibility,
   getDataTypeCompatibility,
   getPinCompatibility,
   type ConnectionCandidatePin,
 } from "./connectionRules";
 
-const FLOAT64: ValueType = { kind: "Scalar", inner: "Numeric" };
-const STRING: ValueType = { kind: "Scalar", inner: "Text" };
-const SERIES_FLOAT64: ValueType = {
+const NUMERIC: ValueType = { kind: "Scalar", inner: "Numeric" };
+const TEXT: ValueType = { kind: "Scalar", inner: "Text" };
+const NUMERIC_SERIES: ValueType = {
   kind: "DataSeries",
   inner: { kind: "Scalar", inner: "Numeric" },
 };
-const MODEL: ValueType = { kind: "Struct", inner: "Model" };
-const OLS_MODEL: ValueType = { kind: "Struct", inner: "OLSModel" };
-const OLS_RESULT: ValueType = { kind: "Struct", inner: "OLSResult" };
-
-const TYPE_SYSTEM: TypeSystemSnapshot = {
-  structTypes: {
-    Model: { key: "Model", parents: [], category: "model" },
-    OLSModel: { key: "OLSModel", parents: ["Model"], category: "model" },
-    OLSResult: { key: "OLSResult", parents: [], category: "result" },
-  },
-};
+const LINEAR_MODEL: ValueType = { kind: "Struct", inner: "statistics.model.linear" };
+const LINEAR_RESULT: ValueType = { kind: "Struct", inner: "statistics.result.linear" };
 
 function pin(
   partial: Partial<ConnectionCandidatePin> & { direction: PinDirection; dataType?: ValueType },
@@ -115,14 +104,14 @@ describe("getDataTypeCompatibility", () => {
           kind: "OneOf",
           inner: [
             { kind: "Scalar", inner: "Numeric" },
-            { kind: "Scalar", inner: "Numeric" },
+            { kind: "Scalar", inner: "Text" },
           ],
         },
         {
           kind: "OneOf",
           inner: [
             { kind: "Scalar", inner: "Numeric" },
-            { kind: "Scalar", inner: "Numeric" },
+            { kind: "Scalar", inner: "Text" },
           ],
         },
       ),
@@ -138,21 +127,21 @@ describe("getDataTypeCompatibility", () => {
     );
   });
 
-  it("accepts homogeneous numeric series into DataSeries Number union", () => {
+  it("accepts numeric series into a union containing numeric series", () => {
     const target = {
       kind: "OneOf",
       inner: [
-        { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
+        { kind: "DataSeries", inner: { kind: "Scalar", inner: "Text" } },
         { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
       ],
     } satisfies ValueType;
 
-    expect(getDataTypeCompatibility(SERIES_FLOAT64, target)).toBe("compatible");
+    expect(getDataTypeCompatibility(NUMERIC_SERIES, target)).toBe("compatible");
   });
 
   it("does not treat Any as a wildcard", () => {
-    expect(getDataTypeCompatibility({ kind: "Any" }, FLOAT64)).toBe("incompatible");
-    expect(getDataTypeCompatibility(FLOAT64, { kind: "Any" })).toBe("incompatible");
+    expect(getDataTypeCompatibility({ kind: "Any" }, NUMERIC)).toBe("incompatible");
+    expect(getDataTypeCompatibility(NUMERIC, { kind: "Any" })).toBe("incompatible");
   });
 });
 
@@ -168,22 +157,12 @@ describe("getPinCompatibility", () => {
       id: "input",
       nodeId: "target",
       direction: "input",
-      acceptedType: { display: "core.numeric", domain: [FLOAT64] },
-      typeState: { status: "exact", display: "core.numeric", dataType: FLOAT64 },
-      dataType: FLOAT64,
+      acceptedType: { display: "core.numeric", domain: [NUMERIC] },
+      typeState: { status: "exact", display: "core.numeric", dataType: NUMERIC },
+      dataType: NUMERIC,
     });
 
     expect(getPinCompatibility(output, input)).toBe("indeterminate");
-  });
-});
-
-describe("isPinCompatible", () => {
-  it("matches output -> input of the same structured type", () => {
-    const out = pin({ id: "o", nodeId: "a", direction: "output", dataType: SERIES_FLOAT64 });
-    const inSeries = pin({ id: "i", nodeId: "b", direction: "input", dataType: SERIES_FLOAT64 });
-    const inScalar = pin({ id: "i2", nodeId: "b", direction: "input", dataType: FLOAT64 });
-    expect(isPinCompatible(inSeries, out)).toBe(true);
-    expect(isPinCompatible(inScalar, out)).toBe(false);
   });
 });
 
@@ -201,19 +180,30 @@ describe("resolveConnectionCompatibility", () => {
     id: "output",
     nodeId: "source",
     direction: "output",
-    dataType: FLOAT64,
+    dataType: NUMERIC,
     connections: appendCapability,
   });
   const input = pin({
     id: "input",
     nodeId: "target",
     direction: "input",
-    dataType: FLOAT64,
+    dataType: NUMERIC,
     connections: appendCapability,
   });
 
   it("returns append for compatible append-capable endpoints", () => {
     expect(resolveConnectionCompatibility(output, input)).toEqual({ kind: "append" });
+  });
+
+  it("matches output -> input of the same structured type", () => {
+    const out = pin({ id: "o", nodeId: "a", direction: "output", dataType: NUMERIC_SERIES });
+    const inSeries = pin({ id: "i", nodeId: "b", direction: "input", dataType: NUMERIC_SERIES });
+    const inScalar = pin({ id: "i2", nodeId: "b", direction: "input", dataType: NUMERIC });
+    expect(resolveConnectionCompatibility(inSeries, out)).toEqual({ kind: "append" });
+    expect(resolveConnectionCompatibility(inScalar, out)).toEqual({
+      kind: "invalid",
+      reason: "typeMismatch",
+    });
   });
 
   it.each([
@@ -225,9 +215,9 @@ describe("resolveConnectionCompatibility", () => {
       output,
       pin({
         ...input,
-        dataType: STRING,
-        acceptedType: { display: "String", domain: [STRING] },
-        typeState: { status: "exact", display: "String", dataType: STRING },
+        dataType: TEXT,
+        acceptedType: { display: "Text", domain: [TEXT] },
+        typeState: { status: "exact", display: "Text", dataType: TEXT },
       }),
     ],
     ["orphan", output, pin({ ...input, orphan: true })],
@@ -248,33 +238,33 @@ describe("resolveConnectionCompatibility", () => {
     expect(resolveConnectionCompatibility(source, target)).toEqual({ kind: "invalid", reason });
   });
 
-  it("preserves structured data type compatibility and argument-order independence", () => {
+  it("matches nominal types by identity independently of endpoint argument order", () => {
     const modelOutput = pin({
       id: "modelOut",
       nodeId: "ols",
       direction: "output",
-      dataType: OLS_MODEL,
+      dataType: LINEAR_MODEL,
     });
     const modelInput = pin({
       id: "modelIn",
       nodeId: "predict",
       direction: "input",
-      dataType: MODEL,
+      dataType: LINEAR_MODEL,
     });
     const resultInput = pin({
       id: "resultIn",
       nodeId: "consumer",
       direction: "input",
-      dataType: OLS_RESULT,
+      dataType: LINEAR_RESULT,
     });
 
-    expect(resolveConnectionCompatibility(modelOutput, modelInput, TYPE_SYSTEM)).toEqual({
+    expect(resolveConnectionCompatibility(modelOutput, modelInput)).toEqual({
       kind: "append",
     });
-    expect(resolveConnectionCompatibility(modelInput, modelOutput, TYPE_SYSTEM)).toEqual({
+    expect(resolveConnectionCompatibility(modelInput, modelOutput)).toEqual({
       kind: "append",
     });
-    expect(resolveConnectionCompatibility(modelOutput, resultInput, TYPE_SYSTEM)).toEqual({
+    expect(resolveConnectionCompatibility(modelOutput, resultInput)).toEqual({
       kind: "invalid",
       reason: "typeMismatch",
     });

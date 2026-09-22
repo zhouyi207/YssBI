@@ -13,12 +13,7 @@
   "nodes": [
     {
       "capabilities": {
-        "canCopy": true,
-        "canDelete": true,
-        "canEditLabel": true,
-        "canEditParameters": true,
-        "managed": false,
-        "supportsInlineLiterals": false
+        "managed": false
       },
       "diagnostics": [],
       "display": {

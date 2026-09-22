@@ -65,11 +65,6 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
         portInstanceAdditions: [],
         capabilities: {
           managed: false,
-          canCopy: true,
-          canDelete: true,
-          canEditLabel: false,
-          canEditParameters: true,
-          supportsInlineLiterals: false,
         },
         diagnostics: [],
       },

@@ -1,12 +1,9 @@
-import { useMemo } from "react";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { useGraphEditingLocked } from "@/features/application/graphEditing/useGraphEditingLocked";
 import { useGraphRead } from "@/features/core/graph/read";
-import type {
-  ConnectionData,
-  NodeData,
-  PinData,
-} from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { ConnectionData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { PortInstanceAdditionDto } from "@/shared/types/domain/editorProjection";
 import type { NodePinViewModel } from "./NodePinViewModel";
 import { detailEmptyHintClass } from "../shared/detailStyles";
@@ -31,7 +28,7 @@ function PinList({
   emptyLabel,
   pins,
   graphPins,
-  nodes,
+  nodeTitles,
   connections,
   additions,
   disabled,
@@ -40,9 +37,9 @@ function PinList({
   nodeId: string;
   emptyLabel: string;
   pins: NodePinViewModel[];
-  graphPins: readonly PinData[];
-  nodes: Readonly<Record<string, NodeData>>;
-  connections: readonly ConnectionData[];
+  graphPins: DeepReadonly<PinData[]>;
+  nodeTitles: Readonly<Record<string, string>>;
+  connections: DeepReadonly<ConnectionData[]>;
   additions: readonly PortInstanceAdditionDto[];
   disabled: boolean;
 }) {
@@ -57,7 +54,7 @@ function PinList({
               pin={pin}
               pinData={pinData}
               pins={graphPins}
-              nodes={nodes}
+              nodeTitles={nodeTitles}
               connections={connections}
               disabled={disabled}
             />
@@ -99,22 +96,22 @@ export function NodePinInterfacePanel({
   portInstanceAdditions,
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
-  const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
   const editingLocked = useGraphEditingLocked(graphPath);
-  const graphPins = useMemo(
-    () => Object.values(bucket?.pins ?? {}).map((pin) => structuredClone(pin) as PinData),
-    [bucket],
+  const graphPins = useGraphRead(
+    useShallow((snapshot) => Object.values(snapshot.graphEntities[graphPath]?.pins ?? {})),
   );
-  const graphConnections = useMemo(
-    () =>
-      Object.values(bucket?.connections ?? {}).map(
-        (connection) => structuredClone(connection) as ConnectionData,
+  const graphConnections = useGraphRead(
+    useShallow((snapshot) => Object.values(snapshot.graphEntities[graphPath]?.connections ?? {})),
+  );
+  const nodeTitles = useGraphRead(
+    useShallow((snapshot) =>
+      Object.fromEntries(
+        Object.entries(snapshot.graphEntities[graphPath]?.nodes ?? {}).map(([id, node]) => [
+          id,
+          node.display.title,
+        ]),
       ),
-    [bucket],
-  );
-  const graphNodes = useMemo(
-    () => structuredClone(bucket?.nodes ?? {}) as Record<string, NodeData>,
-    [bucket],
+    ),
   );
 
   return (
@@ -126,7 +123,7 @@ export function NodePinInterfacePanel({
           emptyLabel={t("detail.nodeDoc.noInputs")}
           pins={inputs}
           graphPins={graphPins}
-          nodes={graphNodes}
+          nodeTitles={nodeTitles}
           connections={graphConnections}
           additions={portInstanceAdditions.filter((addition) => addition.direction === "input")}
           disabled={editingLocked}
@@ -139,7 +136,7 @@ export function NodePinInterfacePanel({
           emptyLabel={t("detail.nodeDoc.noOutputs")}
           pins={outputs}
           graphPins={graphPins}
-          nodes={graphNodes}
+          nodeTitles={nodeTitles}
           connections={graphConnections}
           additions={portInstanceAdditions.filter((addition) => addition.direction === "output")}
           disabled={editingLocked}

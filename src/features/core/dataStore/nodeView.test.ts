@@ -18,11 +18,6 @@ const baseNode: NodeData = {
   portInstanceAdditions: [],
   capabilities: {
     managed: false,
-    canCopy: true,
-    canDelete: true,
-    canEditLabel: true,
-    canEditParameters: false,
-    supportsInlineLiterals: true,
   },
   diagnostics: [],
 };

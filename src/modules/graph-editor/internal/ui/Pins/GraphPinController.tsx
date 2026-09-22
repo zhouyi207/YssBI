@@ -6,7 +6,8 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { graphElementState } from "@/features/application/results";
+import { useShallow } from "zustand/react/shallow";
+import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
 import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
 import { useTranslation } from "react-i18next";
 import type { GraphContextMenuActions } from "@/features/application/editor";
@@ -29,30 +30,11 @@ import {
   formatGraphDiagnostic,
   isUnboundInputDiagnostic,
 } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
-import { deserializeDataValue, dataValueToRaw } from "@/shared/types/domain/dataValue";
-import { PRIMITIVE_SCALAR_INPUT_KEYS, scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
+import { scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinContextMenu } from "../ContextMenu";
 import { GraphPinView } from "./GraphPinView";
 import { PinInput } from "./PinInput";
-
-function toDisplayValue(value: unknown): unknown {
-  if (value == null) return value;
-  if (
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    ("String" in value ||
-      "Boolean" in value ||
-      "Int64" in value ||
-      "Float64" in value ||
-      "Null" in value)
-  ) {
-    return dataValueToRaw(
-      deserializeDataValue(value as Parameters<typeof deserializeDataValue>[0]),
-    );
-  }
-  return value;
-}
 
 export type GraphPinDragState = "normal" | "highlighted" | "dimmed";
 
@@ -61,7 +43,6 @@ const EMPTY_CONNECTION_IDS: string[] = [];
 export interface GraphPinControllerProps {
   pin: PinData & Partial<Pick<PinView, "connected" | "linkCount">>;
   graphPath?: string;
-  groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
   handleSlot?: ReactNode;
   isActive?: boolean;
@@ -94,7 +75,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const defaultValue = input?.protocolDefault;
   const userValue = input?.literalOverride;
   const { t, i18n } = useTranslation();
-  const presentation = useContext(GraphFlowContext)?.presentation;
+  const inCanvas = useContext(GraphFlowContext) !== null;
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const pinSemantics = useMemo(() => ({ typeState }), [typeState]);
@@ -112,8 +93,13 @@ export function GraphPinController(props: GraphPinControllerProps) {
       ? (snapshot.graphEntities[graphPath]?.pinConnections[id] ?? EMPTY_CONNECTION_IDS)
       : EMPTY_CONNECTION_IDS,
   );
-  const graphConnections = useGraphRead((snapshot) =>
-    graphPath ? snapshot.graphEntities[graphPath]?.connections : undefined,
+  const graphConnections = useGraphRead(
+    useShallow((snapshot) => {
+      const bucket = graphPath ? snapshot.graphEntities[graphPath] : undefined;
+      return (bucket?.pinConnections[id] ?? EMPTY_CONNECTION_IDS).map(
+        (connectionId) => bucket?.connections[connectionId],
+      );
+    }),
   );
   const pinDiagnostic = useGraphRead((snapshot) => {
     const diagnostics = graphPath
@@ -121,20 +107,27 @@ export function GraphPinController(props: GraphPinControllerProps) {
       : undefined;
     return diagnostics ? findPrimaryPortDiagnostic(diagnostics, address) : undefined;
   });
-  const nodeCache = presentation?.nodes[nodeId];
-  const cacheState =
-    direction === "output"
-      ? (presentation?.outputs[id] ?? "new")
-      : (presentation?.inputs[id] ??
-        (nodeCache?.valid ? "valid" : nodeCache?.stale ? "stale" : "new"));
-  const executionState = presentation
-    ? graphElementState(presentation, nodeId, cacheState, pinDiagnostic?.blocking)
-    : undefined;
+  const [cacheState, executionState] = useGraphResultPresentation(
+    graphPath,
+    useShallow((presentation) => {
+      const nodeCache = presentation.nodes[nodeId];
+      const cache =
+        direction === "output"
+          ? (presentation.outputs[id] ?? "new")
+          : (presentation.inputs[id] ??
+            (nodeCache?.valid ? "valid" : nodeCache?.stale ? "stale" : "new"));
+      return [
+        cache,
+        inCanvas
+          ? graphElementState(presentation, nodeId, cache, pinDiagnostic?.blocking)
+          : undefined,
+      ] as const;
+    }),
+  );
   const connections = useMemo(
     () =>
-      connectionIds.flatMap((connectionId) => {
-        const connection = graphConnections?.[connectionId];
-        return connection?.output && connection.input
+      graphConnections.flatMap((connection) =>
+        connection?.output && connection.input
           ? [
               {
                 connectionId: connection.id,
@@ -143,9 +136,9 @@ export function GraphPinController(props: GraphPinControllerProps) {
                 order: connection.order ?? null,
               },
             ]
-          : [];
-      }),
-    [connectionIds, graphConnections],
+          : [],
+      ),
+    [graphConnections],
   );
   const viewParams = useMemo(
     () =>
@@ -181,24 +174,11 @@ export function GraphPinController(props: GraphPinControllerProps) {
   }, [graphPath, id, previewActionAvailable, viewParams, viewState?.enabled]);
 
   const hasLinks = linkCount > 0 || connectionIds.length > 0;
-  const scalarInputKey = scalarPinInputKey(dataType);
-  const canReset =
-    direction === "input" &&
-    scalarInputKey != null &&
-    PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) &&
-    !visualSpec.container &&
-    userValue != null;
+  const editableInput = direction === "input" && scalarPinInputKey(dataType) !== null;
+  const canReset = editableInput && userValue != null;
   const shouldPulse =
     !isConnected && direction === "input" && isUnboundInputDiagnostic(pinDiagnostic);
-  const showInput = Boolean(
-    !isConnected &&
-    scalarInputKey != null &&
-    PRIMITIVE_SCALAR_INPUT_KEYS.has(scalarInputKey) &&
-    !visualSpec.container &&
-    direction === "input" &&
-    graphPath &&
-    nodeId,
-  );
+  const showInput = Boolean(editableInput && !isConnected && graphPath && nodeId);
   const effectivePinDragState = contextMenu ? "highlighted" : pinDragState;
   const dragStyle: CSSProperties | undefined =
     effectivePinDragState === "dimmed"
@@ -223,7 +203,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
       nodeId={nodeId}
       graphPath={graphPath!}
       dataType={dataType}
-      value={toDisplayValue(userValue ?? defaultValue)}
+      value={userValue ?? defaultValue}
     />
   ) : null;
   const contextMenuSlot = contextMenu ? (

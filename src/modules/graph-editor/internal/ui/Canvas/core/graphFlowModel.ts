@@ -1,7 +1,7 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { GraphProjectionSnapshot } from "@/features/core/graph/read";
 import type { PinData, ConnectionData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
 
 export type GraphFlowNode = Node<{ handlesKey: string }, "graph">;
@@ -21,48 +21,97 @@ const REASONS = {
   capacityReached: "capacity",
 } as const;
 
+export interface GraphFlowModel {
+  nodes: GraphFlowNode[];
+  nodeIds: ReadonlySet<string>;
+  edges: GraphFlowEdge[];
+  pins: DeepReadonly<Record<string, PinData>>;
+  connections: DeepReadonly<Record<string, ConnectionData>>;
+  pinConnections: Readonly<Record<string, readonly string[]>>;
+  draggableNodeIds: ReadonlySet<string>;
+}
+
+function reuseArray<T>(previous: T[] | undefined, next: T[]): T[] {
+  return previous?.length === next.length && next.every((value, index) => value === previous[index])
+    ? previous
+    : next;
+}
+
 export function buildGraphFlowModel(
   bucket: GraphProjectionSnapshot["graphEntities"][string] | undefined,
-) {
-  const pins: Record<string, PinData> = {};
-  for (const pin of Object.values(bucket?.pins ?? {})) pins[pin.id] = toInteractionPinData(pin);
-  const nodes: GraphFlowNode[] = (bucket?.graphNodes ?? []).flatMap((id) => {
-    const node = bucket?.nodes[id];
-    return node
-      ? [
-          {
-            id,
-            type: "graph" as const,
-            position: { ...node.position },
-            data: { handlesKey: node.pinIds.join("\u0000") },
-            selectable: !node.capabilities.managed,
-            draggable: !node.capabilities.managed,
-            deletable: false,
-          },
-        ]
-      : [];
-  });
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const connections = structuredClone(bucket?.connections ?? {}) as Record<string, ConnectionData>;
-  const edges: GraphFlowEdge[] = Object.values(connections).flatMap((connection) => {
-    const from = pins[connection.from],
-      to = pins[connection.to];
-    if (!from || !to || !nodeIds.has(from.nodeId) || !nodeIds.has(to.nodeId)) return [];
-    return [
-      {
-        id: connection.id,
-        type: "graph" as const,
-        source: from.nodeId,
-        target: to.nodeId,
-        sourceHandle: from.id,
-        targetHandle: to.id,
-        data: { fromPinId: from.id, toPinId: to.id },
-        deletable: false,
-        reconnectable: false,
-        selectable: false,
-      },
-    ];
-  });
+  previous?: GraphFlowModel,
+): GraphFlowModel {
+  const pins = bucket?.pins ?? {};
+  const previousNodes = new Map(previous?.nodes.map((node) => [node.id, node]));
+  const nodes = reuseArray(
+    previous?.nodes,
+    (bucket?.graphNodes ?? []).flatMap((id) => {
+      const node = bucket?.nodes[id];
+      if (!node) return [];
+      const old = previousNodes.get(id);
+      const handlesKey = node.pinIds.join("\u0000");
+      const draggable = !node.capabilities.managed;
+      if (
+        old &&
+        old.position.x === node.position.x &&
+        old.position.y === node.position.y &&
+        old.data.handlesKey === handlesKey &&
+        old.draggable === draggable
+      )
+        return [old];
+      return [
+        {
+          id,
+          type: "graph" as const,
+          position: { ...node.position },
+          data: old?.data.handlesKey === handlesKey ? old.data : { handlesKey },
+          selectable: draggable,
+          draggable,
+          deletable: false,
+        },
+      ];
+    }),
+  );
+  const nodeIds =
+    previous &&
+    nodes.length === previous.nodeIds.size &&
+    nodes.every((node) => previous.nodeIds.has(node.id))
+      ? previous.nodeIds
+      : new Set(nodes.map((node) => node.id));
+  const connections = bucket?.connections ?? {};
+  const previousEdges = new Map(previous?.edges.map((edge) => [edge.id, edge]));
+  const edges = reuseArray(
+    previous?.edges,
+    Object.values(connections).flatMap((connection) => {
+      const from = pins[connection.from],
+        to = pins[connection.to];
+      if (!from || !to || !nodeIds.has(from.nodeId) || !nodeIds.has(to.nodeId)) return [];
+      const old = previousEdges.get(connection.id);
+      if (
+        old &&
+        old.source === from.nodeId &&
+        old.target === to.nodeId &&
+        old.sourceHandle === from.id &&
+        old.targetHandle === to.id
+      )
+        return [old];
+      return [
+        {
+          id: connection.id,
+          type: "graph" as const,
+          source: from.nodeId,
+          target: to.nodeId,
+          sourceHandle: from.id,
+          targetHandle: to.id,
+          data: { fromPinId: from.id, toPinId: to.id },
+          deletable: false,
+          reconnectable: false,
+          selectable: false,
+        },
+      ];
+    }),
+  );
+  const draggableIds = nodes.filter((node) => node.draggable).map((node) => node.id);
   return {
     nodes,
     nodeIds,
@@ -70,11 +119,14 @@ export function buildGraphFlowModel(
     pins,
     connections,
     pinConnections: bucket?.pinConnections ?? {},
-    draggableNodeIds: new Set(nodes.filter((node) => node.draggable).map((node) => node.id)),
+    draggableNodeIds:
+      previous &&
+      draggableIds.length === previous.draggableNodeIds.size &&
+      draggableIds.every((id) => previous.draggableNodeIds.has(id))
+        ? previous.draggableNodeIds
+        : new Set(draggableIds),
   };
 }
-
-export type GraphFlowModel = ReturnType<typeof buildGraphFlowModel>;
 
 export function resolveFlowConnection(
   model: GraphFlowModel,
@@ -132,7 +184,7 @@ export function resolveFlowConnection(
 
 export function resolveFlowPinAction(
   event: Pick<MouseEvent, "button" | "altKey" | "ctrlKey" | "metaKey">,
-  pin: PinData,
+  pin: DeepReadonly<PinData>,
 ): "none" | "disconnect" | FlowConnectionIntent {
   if (event.button !== 0 || pin.orphan) return "none";
   if (event.altKey) return pin.connections.canMove ? "disconnect" : "none";

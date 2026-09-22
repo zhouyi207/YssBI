@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { TFunction } from "i18next";
 import { useGraphConstants } from "@/features/application/graphEditing/graphConstantActions";
 import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
@@ -19,12 +20,12 @@ interface NodeParameterEditorProps {
   graphPath: string;
   nodeId: string;
   locale: string;
-  parameter: ParameterEditorDto;
-  diagnostics: readonly DiagnosticDto[];
+  parameter: DeepReadonly<ParameterEditorDto>;
+  diagnostics: DeepReadonly<DiagnosticDto[]>;
   formatFallback(value: unknown): string;
 }
 
-function projectedDraft(parameter: ParameterEditorDto): string {
+function projectedDraft(parameter: DeepReadonly<ParameterEditorDto>): string {
   return parameter.value === null || parameter.value === undefined ? "" : String(parameter.value);
 }
 
@@ -63,7 +64,7 @@ type NumberDraftError = "required" | "notFinite" | "notInteger" | "outOfRange" |
 
 function parseNumberDraft(
   draft: string,
-  valueType: ValueType | null,
+  valueType: DeepReadonly<ValueType> | null,
 ): { ok: true; value: number } | { ok: false; error: NumberDraftError } {
   const trimmed = draft.trim();
   if (trimmed.length === 0) return { ok: false, error: "required" };
@@ -320,7 +321,7 @@ export function ParameterValueEditor({
 }
 
 interface OrdinaryValueEditorProps {
-  parameter: ParameterEditorDto;
+  parameter: DeepReadonly<ParameterEditorDto>;
   pending: boolean;
   errors: readonly string[];
   onCommit(value: unknown, callbacks?: CommitCallbacks): void;

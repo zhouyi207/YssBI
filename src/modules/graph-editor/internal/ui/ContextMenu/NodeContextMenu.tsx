@@ -6,11 +6,10 @@ import {
   type ActionMenuPosition,
   type ActionMenuSection,
 } from "@/shared/ui/actionMenu";
-import type { NodeCapabilitiesDto } from "@/shared/types/domain/editorProjection";
 
 export interface NodeContextMenuProps {
   position: ActionMenuPosition;
-  capabilities?: Pick<NodeCapabilitiesDto, "managed" | "canCopy" | "canDelete">;
+  managed?: boolean;
   hasLinks?: boolean;
   onCopy: () => void;
   onCut: () => void;
@@ -23,7 +22,7 @@ export interface NodeContextMenuProps {
 
 export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   position,
-  capabilities,
+  managed,
   hasLinks,
   onCopy,
   onCut,
@@ -34,9 +33,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
-  const canCopy = capabilities?.managed === false && capabilities.canCopy === true;
-  const canDelete = capabilities?.managed === false && capabilities.canDelete === true;
-  const canCut = canCopy && canDelete;
+  const canModify = managed === false;
 
   const sections = useMemo((): ActionMenuSection[] => {
     const n = (key: string) => t(`contextMenu.node.${key}`);
@@ -47,7 +44,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
             id: "copy",
             label: n("copy"),
             icon: <VscCopy size={12} />,
-            disabled: !canCopy,
+            disabled: !canModify,
             shortcut: "Ctrl+C",
             onClick: onCopy,
           },
@@ -55,7 +52,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
             id: "cut",
             label: n("cut"),
             icon: <VscCopy size={12} />,
-            disabled: !canCut,
+            disabled: !canModify,
             shortcut: "Ctrl+X",
             onClick: onCut,
           },
@@ -63,7 +60,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
             id: "duplicate",
             label: n("duplicate"),
             icon: <VscCopy size={12} />,
-            disabled: !canCopy,
+            disabled: !canModify,
             shortcut: "Ctrl+D",
             onClick: onDuplicate,
           },
@@ -93,7 +90,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
             id: "delete",
             label: n("delete"),
             icon: <VscTrash size={12} />,
-            disabled: !canDelete,
+            disabled: !canModify,
             danger: true,
             shortcut: "Del",
             onClick: onDelete,
@@ -103,9 +100,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
     ];
   }, [
     t,
-    canCopy,
-    canCut,
-    canDelete,
+    canModify,
     hasLinks,
     onCopy,
     onCut,

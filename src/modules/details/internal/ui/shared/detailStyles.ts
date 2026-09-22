@@ -4,8 +4,6 @@ export const detailTableClass = "text-sm text-foreground";
 
 export const detailLabelCellClass = "text-xs font-medium text-muted-foreground";
 
-export const detailValueMutedClass = "text-muted-foreground";
-
 export const detailBodyTextClass = "text-sm leading-relaxed text-foreground";
 
 export const detailMetaTextClass = "text-xs leading-relaxed text-muted-foreground";

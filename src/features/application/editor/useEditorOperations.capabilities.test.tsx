@@ -15,8 +15,7 @@ const mocks = vi.hoisted(() => ({
   activeGroupId: "group-a" as string | null,
   activeResourceByGroup: new Map<string, string>(),
   selectionByGroup: new Map<string, string[]>(),
-  canCopyNode: vi.fn((_graphPath: string, _nodeId: string) => true),
-  canDeleteNode: vi.fn((_graphPath: string, _nodeId: string) => true),
+  isUnmanagedNode: vi.fn((_graphPath: string, _nodeId: string) => true),
   exportEditorSubgraph: vi.fn(),
   writeGraphClipboard: vi.fn(),
   readGraphClipboard: vi.fn(),
@@ -83,10 +82,7 @@ vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
   },
 }));
 vi.mock("@/features/core/dataStore/graphNodeSelectors", () => ({
-  canCopyNode: mocks.canCopyNode,
-  canDeleteNode: mocks.canDeleteNode,
-  canCutNode: (graphPath: string, nodeId: string) =>
-    mocks.canCopyNode(graphPath, nodeId) && mocks.canDeleteNode(graphPath, nodeId),
+  isUnmanagedNode: mocks.isUnmanagedNode,
 }));
 vi.mock("@/features/application/graphEditing/subgraphExportCoordinator", () => ({
   exportEditorSubgraph: mocks.exportEditorSubgraph,
@@ -167,8 +163,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.canCopyNode.mockReset();
-    mocks.canDeleteNode.mockReset();
+    mocks.isUnmanagedNode.mockReset();
     mocks.exportEditorSubgraph.mockReset();
     mocks.writeGraphClipboard.mockReset();
     mocks.readGraphClipboard.mockReset();
@@ -180,8 +175,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     mocks.activeGroupId = "group-a";
     mocks.activeResourceByGroup = new Map([["group-a", graphPath]]);
     mocks.selectionByGroup = new Map([["group-a", ["node-a", "node-b"]]]);
-    mocks.canCopyNode.mockReturnValue(true);
-    mocks.canDeleteNode.mockReturnValue(true);
+    mocks.isUnmanagedNode.mockReturnValue(true);
     mocks.exportEditorSubgraph.mockResolvedValue(snapshot);
     mocks.writeGraphClipboard.mockResolvedValue(undefined);
     mocks.readGraphClipboard.mockResolvedValue(snapshot);
@@ -226,7 +220,7 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
   });
 
   it("does not export unless every selected node is copyable", async () => {
-    mocks.canCopyNode.mockImplementation((_path: string, id: string) => id !== "node-b");
+    mocks.isUnmanagedNode.mockImplementation((_path: string, id: string) => id !== "node-b");
     await act(async () => operations.copyNodes(["node-a", "node-b"]));
     expect(mocks.exportEditorSubgraph).not.toHaveBeenCalled();
   });

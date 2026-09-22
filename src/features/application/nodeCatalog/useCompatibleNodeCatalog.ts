@@ -97,7 +97,7 @@ export function useCompatibleNodeCatalog({
     return () => {
       current = false;
     };
-  }, [enabled, document, graphPath, locale, projectInstanceId, refreshGeneration, sourcePortKey]);
+  }, [enabled, version, graphPath, locale, projectInstanceId, refreshGeneration, sourcePortKey]);
 
   const refresh = useCallback(() => {
     if (enabled) setRefreshGeneration((generation) => generation + 1);

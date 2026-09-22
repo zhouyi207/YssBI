@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { SEMANTIC_TYPES, type SemanticType } from "./database";
 
 /** Analysis meaning and structure; physical storage stays in field/value metadata. */
@@ -44,7 +45,7 @@ export function dataTypeKind(type: ValueType): string {
   return type.kind === "Scalar" ? type.inner : type.kind;
 }
 
-export function dataTypeDisplay(type: ValueType): string {
+export function dataTypeDisplay(type: DeepReadonly<ValueType>): string {
   switch (type.kind) {
     case "Scalar":
       return type.inner;

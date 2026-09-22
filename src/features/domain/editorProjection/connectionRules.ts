@@ -1,11 +1,12 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { ValueType } from "@/shared/types/domain/valueType";
-import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
-import { structCanAccept } from "@/shared/types/domain/typeSystem";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 
-export type ConnectionCandidatePin = Pick<
-  PinData,
-  "id" | "nodeId" | "direction" | "connections" | "orphan" | "acceptedType" | "typeState"
+export type ConnectionCandidatePin = DeepReadonly<
+  Pick<
+    PinData,
+    "id" | "nodeId" | "direction" | "connections" | "orphan" | "acceptedType" | "typeState"
+  >
 >;
 
 export type TypeCompatibility = "compatible" | "incompatible" | "indeterminate";
@@ -23,47 +24,36 @@ function someCompatibility(results: TypeCompatibility[]): TypeCompatibility {
 }
 
 export function getDataTypeCompatibility(
-  source: ValueType | null | undefined,
-  target: ValueType | null | undefined,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
+  source: DeepReadonly<ValueType> | null | undefined,
+  target: DeepReadonly<ValueType> | null | undefined,
 ): TypeCompatibility {
   if (!source || !target) return "indeterminate";
   if (source.kind === "Scalar" && target.kind === "Scalar")
     return source.inner === target.inner ? "compatible" : "incompatible";
   if (source.kind === "OneOf") {
     return everyCompatibility(
-      source.inner.map((member) => getDataTypeCompatibility(member, target, typeSystem)),
+      source.inner.map((member) => getDataTypeCompatibility(member, target)),
     );
   }
   if (target.kind === "OneOf") {
     return someCompatibility(
-      target.inner.map((member) => getDataTypeCompatibility(source, member, typeSystem)),
+      target.inner.map((member) => getDataTypeCompatibility(source, member)),
     );
   }
   if (target.kind !== source.kind) return "incompatible";
   if (target.kind === "Array" && source.kind === "Array") {
-    return getDataTypeCompatibility(source.inner, target.inner, typeSystem);
+    return getDataTypeCompatibility(source.inner, target.inner);
   }
   if (target.kind === "DataSeries" && source.kind === "DataSeries") {
-    return getDataTypeCompatibility(source.inner, target.inner, typeSystem);
+    return getDataTypeCompatibility(source.inner, target.inner);
   }
   if (target.kind === "Struct" && source.kind === "Struct") {
-    return structCanAccept(target.inner, source.inner, typeSystem) ? "compatible" : "incompatible";
+    return source.inner === target.inner ? "compatible" : "incompatible";
   }
   return "compatible";
 }
 
-export function isPinCompatible(
-  candidate: ConnectionCandidatePin,
-  dragged: ConnectionCandidatePin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): boolean {
-  const source = candidate.direction === "output" ? candidate : dragged;
-  const target = candidate.direction === "input" ? candidate : dragged;
-  return getPinCompatibility(source, target, typeSystem) !== "incompatible";
-}
-
-function effectiveDomain(pin: ConnectionCandidatePin): readonly ValueType[] | null {
+function effectiveDomain(pin: ConnectionCandidatePin): DeepReadonly<ValueType[]> | null {
   switch (pin.typeState.status) {
     case "exact":
       return pin.typeState.dataType ? [pin.typeState.dataType] : null;
@@ -78,7 +68,6 @@ function effectiveDomain(pin: ConnectionCandidatePin): readonly ValueType[] | nu
 export function getPinCompatibility(
   source: ConnectionCandidatePin,
   target: ConnectionCandidatePin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): TypeCompatibility {
   if (
     source.id === target.id ||
@@ -95,9 +84,7 @@ export function getPinCompatibility(
   }
   const sourceResults = sourceDomain.map((sourceType) =>
     someCompatibility(
-      targetDomain.map((targetType) =>
-        getDataTypeCompatibility(sourceType, targetType, typeSystem),
-      ),
+      targetDomain.map((targetType) => getDataTypeCompatibility(sourceType, targetType)),
     ),
   );
   if (sourceResults.every((result) => result === "compatible")) return "compatible";
@@ -126,7 +113,6 @@ function canAppendOrReplace(pin: ConnectionCandidatePin): boolean {
 export function resolveConnectionCompatibility(
   a: ConnectionCandidatePin,
   b: ConnectionCandidatePin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): ConnectionCompatibility {
   if (a.id === b.id) return { kind: "invalid", reason: "samePort" };
   if (a.nodeId === b.nodeId) return { kind: "invalid", reason: "sameNode" };
@@ -139,7 +125,7 @@ export function resolveConnectionCompatibility(
     return { kind: "invalid", reason: "capacityReached" };
   }
 
-  if (getPinCompatibility(source, target, typeSystem) === "incompatible") {
+  if (getPinCompatibility(source, target) === "incompatible") {
     return { kind: "invalid", reason: "typeMismatch" };
   }
 

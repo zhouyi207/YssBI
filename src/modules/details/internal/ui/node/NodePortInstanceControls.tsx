@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { VscAdd, VscTrash } from "react-icons/vsc";
@@ -99,7 +100,7 @@ export function RemoveNodePortInstanceButton({
   graphPath,
   pin,
   disabled,
-}: PortInstanceControlProps & { pin: PinData }) {
+}: PortInstanceControlProps & { pin: DeepReadonly<PinData> }) {
   const { t } = useTranslation();
   if (!pin.canRemove || pin.address.kind !== "instance") return null;
   const address = pin.address;

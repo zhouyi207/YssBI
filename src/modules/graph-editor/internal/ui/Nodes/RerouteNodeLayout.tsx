@@ -15,7 +15,6 @@ interface RerouteNodeLayoutProps {
   node: UINode;
   activePinId?: string | null;
   graphPath?: string;
-  groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
   renderPinHandle?: (pin: PinData) => React.ReactNode;
 }
@@ -24,7 +23,6 @@ export function RerouteNodeLayout({
   node,
   activePinId,
   graphPath,
-  groupId,
   contextMenuActions,
   renderPinHandle,
 }: RerouteNodeLayoutProps) {
@@ -38,7 +36,7 @@ export function RerouteNodeLayout({
           <GraphPinController
             pin={input}
             graphPath={graphPath}
-            groupId={groupId}
+
             contextMenuActions={contextMenuActions}
             isActive={activePinId === input.id}
             handleSlot={renderPinHandle?.(input)}
@@ -55,7 +53,7 @@ export function RerouteNodeLayout({
           <GraphPinController
             pin={output}
             graphPath={graphPath}
-            groupId={groupId}
+
             contextMenuActions={contextMenuActions}
             isActive={activePinId === output.id}
             handleSlot={renderPinHandle?.(output)}

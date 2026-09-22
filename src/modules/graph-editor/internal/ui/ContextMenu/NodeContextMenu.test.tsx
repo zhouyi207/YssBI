@@ -3,7 +3,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NodeCapabilitiesDto } from "@/shared/types/dto/editorProjection";
 import { NodeContextMenu } from "./NodeContextMenu";
 
 vi.mock("react-i18next", () => ({
@@ -12,8 +11,6 @@ vi.mock("react-i18next", () => ({
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
-
-type Capabilities = Pick<NodeCapabilitiesDto, "managed" | "canCopy" | "canDelete">;
 
 let container: HTMLDivElement;
 let portal: HTMLDivElement;
@@ -35,24 +32,12 @@ afterEach(() => {
 
 describe("NodeContextMenu", () => {
   it.each([
-    {
-      name: "unmanaged copyable node",
-      capabilities: { managed: false, canCopy: true, canDelete: false },
-      enabled: true,
-    },
-    {
-      name: "unmanaged non-copyable node",
-      capabilities: { managed: false, canCopy: false, canDelete: true },
-      enabled: false,
-    },
-    {
-      name: "managed copyable node",
-      capabilities: { managed: true, canCopy: true, canDelete: true },
-      enabled: false,
-    },
-  ])("enables Duplicate only for an $name", ({ capabilities, enabled }) => {
+    { name: "ordinary node", managed: false, enabled: true },
+    { name: "missing projection", managed: undefined, enabled: false },
+    { name: "managed node", managed: true, enabled: false },
+  ])("enables Duplicate according to ownership for $name", ({ managed, enabled }) => {
     const onDuplicate = vi.fn();
-    renderMenu(capabilities, { onDuplicate });
+    renderMenu(managed, { onDuplicate });
 
     const duplicate = item("duplicate")!;
     expect(duplicate.hasAttribute("data-disabled")).toBe(!enabled);
@@ -60,12 +45,12 @@ describe("NodeContextMenu", () => {
     expect(onDuplicate).toHaveBeenCalledTimes(enabled ? 1 : 0);
   });
 
-  it("preserves capability and link state for the other supported actions", () => {
-    renderMenu({ managed: false, canCopy: true, canDelete: false }, { hasLinks: false });
+  it("preserves ownership and link state for the other supported actions", () => {
+    renderMenu(false, { hasLinks: false });
 
     expect(item("copy")?.hasAttribute("data-disabled")).toBe(false);
-    expect(item("cut")?.hasAttribute("data-disabled")).toBe(true);
-    expect(item("delete")?.hasAttribute("data-disabled")).toBe(true);
+    expect(item("cut")?.hasAttribute("data-disabled")).toBe(false);
+    expect(item("delete")?.hasAttribute("data-disabled")).toBe(false);
     expect(item("breakAllLinks")?.hasAttribute("data-disabled")).toBe(true);
     expect(item("selectLinkedNodes")?.hasAttribute("data-disabled")).toBe(true);
   });
@@ -78,14 +63,14 @@ function item(label: string): HTMLElement | undefined {
 }
 
 function renderMenu(
-  capabilities: Capabilities,
+  managed: boolean | undefined,
   overrides: Partial<React.ComponentProps<typeof NodeContextMenu>> = {},
 ): void {
   act(() => {
     root.render(
       <NodeContextMenu
         position={{ x: 0, y: 0 }}
-        capabilities={capabilities}
+        managed={managed}
         hasLinks={false}
         onCopy={vi.fn()}
         onCut={vi.fn()}

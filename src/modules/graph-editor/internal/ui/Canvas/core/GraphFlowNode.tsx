@@ -12,11 +12,12 @@ import {
   pinConnectionFeedbackAttributes,
   pinConnectionFeedbackClass,
 } from "../../Pins/GraphPinView";
-import { useGraphFlowContext } from "./GraphFlowContext";
+import { useGraphFlowContext, useGraphFlowInteraction } from "./GraphFlowContext";
 import type { GraphFlowNode as FlowNode } from "./graphFlowModel";
 
 function GraphFlowHandle({ pin }: { pin: PinData }) {
-  const { interactive, feedbackForPin } = useGraphFlowContext();
+  const { interactive } = useGraphFlowContext();
+  const { feedbackForPin } = useGraphFlowInteraction();
   const targeted = useConnection((connection) => connection.toHandle?.id === pin.id);
   const feedback = targeted ? feedbackForPin(pin.id) : null;
   const viewFeedback =
@@ -46,8 +47,8 @@ export const GraphFlowNode = memo(function GraphFlowNode({
   data,
   selected,
 }: NodeProps<FlowNode>) {
-  const { graphPath, groupId, sourcePin, contextMenuActions, feedbackForPin } =
-    useGraphFlowContext();
+  const { graphPath, groupId, contextMenuActions } = useGraphFlowContext();
+  const { sourcePin, feedbackForPin } = useGraphFlowInteraction();
   const updateNodeInternals = useUpdateNodeInternals();
   // Reordering equal-sized dynamic rows does not trigger ResizeObserver.
   useLayoutEffect(() => {

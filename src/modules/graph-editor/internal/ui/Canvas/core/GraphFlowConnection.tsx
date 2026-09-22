@@ -6,7 +6,7 @@ import {
 } from "@xyflow/react";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { computeEdgePath } from "@/features/core/canvas/edgePath";
-import { useGraphFlowContext } from "./GraphFlowContext";
+import { useGraphFlowInteraction } from "./GraphFlowContext";
 
 export function GraphFlowConnection({
   fromX,
@@ -15,7 +15,7 @@ export function GraphFlowConnection({
   toY,
   toHandle,
 }: ConnectionLineComponentProps) {
-  const { feedbackForPin, sourcePin } = useGraphFlowContext();
+  const { feedbackForPin, sourcePin } = useGraphFlowInteraction();
   const feedback = toHandle?.id ? feedbackForPin(toHandle.id) : null;
   const color =
     feedback?.kind === "invalid"

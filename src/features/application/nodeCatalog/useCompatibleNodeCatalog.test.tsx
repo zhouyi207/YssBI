@@ -7,7 +7,6 @@ import { useProjectIOStore } from "@/features/application/project/projectIOStore
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { CatalogService, type LocalizedCatalogDto } from "@/services/nodeSystem/catalogService";
 import { normalizeIpcError } from "@/services/ipc";
-import type { GraphDocumentDto } from "@/shared/types/domain/editorMutation";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import {
   makeEditorProjectionFixture,
@@ -39,21 +38,6 @@ const sourcePort: PortAddressDto = {
   portKey: "value",
 };
 const graphPath = "events/Main.yssbi-event";
-
-const draftDocument: GraphDocumentDto = {
-  nodes: {
-    [sourcePort.nodeId]: {
-      id: sourcePort.nodeId,
-      node_type: "yssbi.constant.get",
-      position: { x: 10, y: 20 },
-      parameters: {},
-      user_label: null,
-    },
-  },
-  port_bindings: [],
-  connections: {},
-  input_states: [],
-};
 
 function catalog(projectInstanceId: string, itemId: string): LocalizedCatalogDto {
   return {
@@ -131,12 +115,6 @@ describe("useCompatibleNodeCatalog", () => {
     useGraphEditingStore
       .getState()
       .install(graphPath, makeGraphEditorSession(projection.projection));
-    useGraphEditingStore.setState((state) => ({
-      sessions: {
-        ...state.sessions,
-        [graphPath]: { ...state.sessions[graphPath], document: structuredClone(draftDocument) },
-      },
-    }));
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);

@@ -26,7 +26,6 @@ export * from "./functionSignaturePin";
 export * from "./graph";
 export * from "./graphResourcePath";
 export * from "./valueType";
-export * from "./typeSystem";
 export * from "./dataValue";
 export * from "./project";
 export * from "./database";

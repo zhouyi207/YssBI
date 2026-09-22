@@ -92,11 +92,6 @@ export interface NodeDisplayDto {
 
 export interface NodeCapabilitiesDto {
   managed: boolean;
-  canCopy: boolean;
-  canDelete: boolean;
-  canEditLabel: boolean;
-  canEditParameters: boolean;
-  supportsInlineLiterals: boolean;
 }
 
 export interface EditorPortDto {

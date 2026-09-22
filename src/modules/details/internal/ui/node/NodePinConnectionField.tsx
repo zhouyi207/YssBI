@@ -1,13 +1,10 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { VscAdd, VscRemove } from "react-icons/vsc";
 
 import { Button } from "@/components/ui/button";
-import type {
-  NodeData,
-  PinData,
-  ConnectionData,
-} from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PinData, ConnectionData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { Select } from "@/shared/ui/Select";
 import {
   connectPinsById,
@@ -27,10 +24,10 @@ import { graphMutationMessageKey, graphMutationSucceeded } from "./nodeMutationF
 interface NodePinConnectionFieldProps {
   graphPath: string;
   pin: NodePinViewModel;
-  pinData: PinData | undefined;
-  pins: readonly PinData[];
-  nodes: Readonly<Record<string, NodeData>>;
-  connections: readonly ConnectionData[];
+  pinData: DeepReadonly<PinData> | undefined;
+  pins: DeepReadonly<PinData[]>;
+  nodeTitles: Readonly<Record<string, string>>;
+  connections: DeepReadonly<ConnectionData[]>;
   disabled?: boolean;
 }
 
@@ -76,7 +73,7 @@ export function NodePinConnectionField({
   pin,
   pinData,
   pins,
-  nodes,
+  nodeTitles,
   connections,
   disabled = false,
 }: NodePinConnectionFieldProps) {
@@ -104,19 +101,19 @@ export function NodePinConnectionField({
 
   const inputOptions = useMemo(() => {
     if (!anchor) return [];
-    return listCompatiblePinOptions(anchor, pins, nodes, {
+    return listCompatiblePinOptions(anchor, pins, nodeTitles, {
       connections,
       includedIds: connectionTargets,
     });
-  }, [anchor, connections, connectionTargets, nodes, pins]);
+  }, [anchor, connections, connectionTargets, nodeTitles, pins]);
 
   const outputOptions = useMemo(() => {
     if (!anchor) return [];
-    return listCompatiblePinOptions(anchor, pins, nodes, {
+    return listCompatiblePinOptions(anchor, pins, nodeTitles, {
       connections,
       excludedIds: connectionTargets,
     });
-  }, [anchor, connections, connectionTargets, nodes, pins]);
+  }, [anchor, connections, connectionTargets, nodeTitles, pins]);
 
   const handleInputChange = async (value: string) => {
     if (!anchor || busy || disabled) return;
@@ -191,12 +188,6 @@ export function NodePinConnectionField({
       </Button>
     </div>
   );
-  const connectedOptions = anchor
-    ? listCompatiblePinOptions(anchor, pins, nodes, {
-        connections,
-        includedIds: connectionTargets,
-      })
-    : [];
 
   return (
     <div>
@@ -217,7 +208,7 @@ export function NodePinConnectionField({
               >
                 <Select
                   value={targetId}
-                  options={connectedOptions}
+                  options={inputOptions}
                   onChange={() => undefined}
                   disabled
                   id={`detail-output-${pin.id}-${index}`}

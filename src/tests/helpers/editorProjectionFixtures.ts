@@ -209,11 +209,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
           parameterEditors: [],
           capabilities: {
             managed: false,
-            canCopy: true,
-            canDelete: true,
-            canEditLabel: true,
-            canEditParameters: false,
-            supportsInlineLiterals: false,
           },
           diagnostics: [],
         },

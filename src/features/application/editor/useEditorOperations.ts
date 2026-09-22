@@ -1,10 +1,6 @@
 import { useCallback } from "react";
 import { logger } from "@/features/application/observability/appLogger";
-import {
-  canCopyNode,
-  canCutNode,
-  canDeleteNode,
-} from "@/features/core/dataStore/graphNodeSelectors";
+import { isUnmanagedNode } from "@/features/core/dataStore/graphNodeSelectors";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   getEditorGroupGraphSelection,
@@ -154,7 +150,7 @@ export function useEditorOperations() {
     try {
       const context = captureEditorOperationContext(target);
       if (!context || nodeIds.length === 0) return false;
-      if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
+      if (!nodeIds.every((nodeId) => isUnmanagedNode(context.graphPath, nodeId))) return false;
       if (!isEditorOperationContextCurrent(context)) return false;
       const snapshot = await exportEditorSubgraph({
         graphPath: context.graphPath,
@@ -183,7 +179,7 @@ export function useEditorOperations() {
       try {
         const context = captureSelectionAwareEditorOperationContext(target);
         if (!context || nodeIds.length === 0) return false;
-        if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
+        if (!nodeIds.every((nodeId) => isUnmanagedNode(context.graphPath, nodeId))) return false;
         if (!isEditorOperationContextCurrent(context)) return false;
         const outcome = await executeGraphEdit(context.graphPath, "DuplicateSubgraph", {
           nodeIds: [...nodeIds],
@@ -211,7 +207,7 @@ export function useEditorOperations() {
     const context = captureEditorOperationContext(target);
     if (!context || nodeIds.length === 0) return false;
 
-    const idsToDelete = nodeIds.filter((id) => canDeleteNode(context.graphPath, id));
+    const idsToDelete = nodeIds.filter((id) => isUnmanagedNode(context.graphPath, id));
     if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
     return (
@@ -369,7 +365,7 @@ export function useEditorOperations() {
       const dataStore = useGraphProjectionStore.getState();
       const idsToDelete = dataStore
         .getGraphNodeIds(context.graphPath)
-        .filter((nodeId) => selectedIds.has(nodeId) && canDeleteNode(context.graphPath, nodeId));
+        .filter((nodeId) => selectedIds.has(nodeId) && isUnmanagedNode(context.graphPath, nodeId));
       if (idsToDelete.length === 0 || !isEditorOperationContextCurrent(context)) return false;
 
       const applied = await executeGraphEdit(context.graphPath, "DeleteNodes", {
@@ -396,7 +392,7 @@ export function useEditorOperations() {
       try {
         const context = captureSelectionAwareEditorOperationContext(target);
         if (!context || nodeIds.length === 0) return false;
-        if (!nodeIds.every((nodeId) => canCutNode(context.graphPath, nodeId))) return false;
+        if (!nodeIds.every((nodeId) => isUnmanagedNode(context.graphPath, nodeId))) return false;
         if (!isEditorOperationContextCurrent(context)) return false;
         const snapshot = await exportEditorSubgraph({
           graphPath: context.graphPath,

@@ -1,17 +1,16 @@
 import { createContext, useContext } from "react";
 import type { GraphContextMenuActions } from "@/features/application/editor";
-import type { GraphResultPresentation } from "@/features/application/results";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import type { GraphFlowModel, FlowConnectionFeedback } from "./graphFlowModel";
+import type { FlowConnectionFeedback } from "./graphFlowModel";
 
 export interface GraphFlowContextValue {
   graphPath: string;
   groupId: string;
   interactive: boolean;
   contextMenuActions: GraphContextMenuActions | null;
-  model: GraphFlowModel;
-  presentation: GraphResultPresentation;
-  blockedConnections: ReadonlySet<string>;
+}
+
+export interface GraphFlowInteractionValue {
   sourcePin: PinData | null;
   feedbackForPin(pinId: string): FlowConnectionFeedback | null;
 }
@@ -22,4 +21,12 @@ export function useGraphFlowContext() {
   const context = useContext(GraphFlowContext);
   if (!context) throw new Error("Graph flow content requires its panel-scoped canvas");
   return context;
+}
+
+export const GraphFlowInteractionContext = createContext<GraphFlowInteractionValue>({
+  sourcePin: null,
+  feedbackForPin: () => null,
+});
+export function useGraphFlowInteraction() {
+  return useContext(GraphFlowInteractionContext);
 }

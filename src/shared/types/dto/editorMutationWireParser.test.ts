@@ -91,11 +91,6 @@ function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
       parameterEditors: [],
       capabilities: {
         managed: false,
-        canCopy: true,
-        canDelete: true,
-        canEditLabel: true,
-        canEditParameters: false,
-        supportsInlineLiterals: false,
       },
       diagnostics: [],
     },
@@ -120,6 +115,25 @@ function functionEditorProjection(revision = 5) {
 }
 
 describe("editor mutation wire parser", () => {
+  it("requires the exact managed-only node ownership projection", () => {
+    const valid = parseEditorGraphProjectionDto(
+      projectionWithTypeState({
+        status: "exact",
+        display: "Numeric",
+        dataType: { kind: "Scalar", inner: "Numeric" },
+      }),
+    );
+    expect(valid.nodes[0].capabilities).toEqual({ managed: false });
+    for (const capabilities of [{}, { managed: "false" }, { managed: false, extra: true }]) {
+      expect(() =>
+        parseEditorGraphProjectionDto({
+          ...valid,
+          nodes: [{ ...valid.nodes[0], capabilities }],
+        }),
+      ).toThrow();
+    }
+  });
+
   it("parses readiness and blocking diagnostics directly from the editor projection", () => {
     const ready = projection(graphPath);
     expect(parseEditorGraphProjectionDto(ready)).toEqual(ready);

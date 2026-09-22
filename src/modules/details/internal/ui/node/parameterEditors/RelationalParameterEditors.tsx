@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -25,8 +26,12 @@ interface EditorProps<TEditor, TValue> {
   onCommit(value: TValue): void | Promise<void>;
 }
 
-type ProjectEditor = Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }>;
-type FilterEditor = Extract<SchemaAwareParameterEditorDto, { kind: "filterPredicate" }>;
+type ProjectEditor = DeepReadonly<
+  Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }>
+>;
+type FilterEditor = DeepReadonly<
+  Extract<SchemaAwareParameterEditorDto, { kind: "filterPredicate" }>
+>;
 
 function EditorMessages({
   unavailable,
@@ -54,7 +59,7 @@ export function ProjectColumnsEditor({
   onCommit,
 }: EditorProps<ProjectEditor, string[]>) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<string[]>(editor.value);
+  const [selected, setSelected] = useState<readonly string[]>(editor.value);
   useEffect(() => setSelected(editor.value), [editor.value]);
 
   if (!editor.available) {
@@ -86,7 +91,7 @@ export function ProjectColumnsEditor({
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (editor.allowEmpty || selected.length > 0) void onCommit(selected);
+        if (editor.allowEmpty || selected.length > 0) void onCommit([...selected]);
       }}
     >
       <div className="space-y-2">

@@ -1,3 +1,4 @@
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 /**
  * Pin visual spec — single source for shape, color key, and edge semantics.
  * Consumed by Pin rendering, connection lines, and edge overlays.
@@ -29,7 +30,7 @@ export interface PinRenderStyle {
   strokeWidth: number;
 }
 
-function resolveShape(pin: PinVisualInput): PinShape {
+function resolveShape(pin: DeepReadonly<PinVisualInput>): PinShape {
   const dataType = exactPinDataType(pin);
   if (dataType?.kind === "DataFrame") return "gridRect";
   if (dataType?.kind === "Struct") return "hexagon";
@@ -40,7 +41,7 @@ function resolveShape(pin: PinVisualInput): PinShape {
   return "circle";
 }
 
-export function resolvePinVisualSpec(pin: PinVisualInput): PinVisualSpec {
+export function resolvePinVisualSpec(pin: DeepReadonly<PinVisualInput>): PinVisualSpec {
   const dataType = exactPinDataType(pin);
   const colorKey = dataType ? dataTypeToThemePinType(dataType) : "object";
   const container = dataTypeContainerOverlay(dataType);
