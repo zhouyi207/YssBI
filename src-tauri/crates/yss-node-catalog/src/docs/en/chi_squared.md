@@ -8,6 +8,6 @@ $$
 
 ## Usage
 
-Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+Set distribution parameters and sample count in the **Distribution** and **Sampling** groups in Detail. The canvas exposes the **Samples** output.
 
 Wire **DF** and **N**, then run the graph. **Samples** is a non-negative `DataSeries<Float64>`. Use for variance tests, goodness-of-fit statistics, and as a building block of the **FisherSnedecor** distribution.

@@ -33,7 +33,7 @@ pub enum BuiltinAssemblyError {
     },
     InvalidParameterSchema {
         node_type: Box<str>,
-        source: ParameterSchemaError,
+        source: ParametersError,
     },
     InvalidDecimal {
         node_type: Box<str>,
@@ -174,52 +174,18 @@ pub(crate) fn assembled_interface(
         })
 }
 
-pub(crate) fn configuration_parameter(
-    title_key: &'static str,
-    schema: ConfigurationSchema,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    let value_type = TypeExpr::Concrete(sid("core.object", TypeId::new)?);
-    let defaults = schema
-        .fields
-        .iter()
-        .filter(|field| field.visible_when.is_none())
-        .map(|field| {
-            (
-                field.parameter.key.as_str().into(),
-                field
-                    .parameter
-                    .default_value
-                    .as_ref()
-                    .expect("configuration fields have defaults")
-                    .value
-                    .clone(),
-            )
-        })
-        .collect();
-    Ok(ParameterSpec {
-        key: sid("configuration", ParameterKey::new)?,
-        title_key: iid(title_key)?,
-        description_key: None,
-        default_value: Some(TypedValue {
-            value_type: value_type.clone(),
-            value: DataValue::Object(defaults),
-        }),
-        value_type,
-        constraints: vec![ParameterConstraint::Required],
-        editor: ParameterEditorSpec::Configuration(schema),
-        presentation: ParameterPresentation::DetailPanel,
-    })
-}
-
 pub(crate) fn assembled_parameters(
     node_type: &str,
-    parameters: Vec<ParameterSpec>,
-) -> Result<ParameterSchema, BuiltinAssemblyError> {
-    ParameterSchema::new(parameters).map_err(|source| {
-        BuiltinAssemblyError::InvalidParameterSchema {
-            node_type: node_type.into(),
-            source,
-        }
+    parameters: Vec<Parameter>,
+) -> Result<Parameters, BuiltinAssemblyError> {
+    Parameters::new(if parameters.is_empty() {
+        vec![]
+    } else {
+        vec![ParameterGroup::new("parameters", parameters)]
+    })
+    .map_err(|source| BuiltinAssemblyError::InvalidParameterSchema {
+        node_type: node_type.into(),
+        source,
     })
 }
 
@@ -579,29 +545,27 @@ pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
     )
 }
 
-fn comparison_parameters(id: &'static str) -> Result<ParameterSchema, BuiltinAssemblyError> {
+fn comparison_parameters(id: &'static str) -> Result<Parameters, BuiltinAssemblyError> {
     let numeric = concrete("core.numeric")?;
     let text = concrete("core.text")?;
-    let mut fields = vec![ConfigurationFieldSpec {
-        parameter: ParameterSpec {
-            key: sid("mode", ParameterKey::new)?,
-            title_key: iid("parameters.comparison_mode.title")?,
-            description_key: None,
-            value_type: text.clone(),
-            default_value: Some(TypedValue {
-                value_type: text,
-                value: DataValue::String("exact".into()),
-            }),
-            constraints: vec![
-                ParameterConstraint::Required,
-                ParameterConstraint::OneOf(vec![
-                    DataValue::String("exact".into()),
-                    DataValue::String("tolerance".into()),
-                ]),
-            ],
-            editor: ParameterEditorSpec::Select,
-            presentation: ParameterPresentation::DetailPanel,
-        },
+    let mut fields = vec![Parameter {
+        key: sid("mode", ParameterKey::new)?,
+        title_key: iid("parameters.comparison_mode.title")?,
+        description_key: None,
+        value_type: text.clone(),
+        default_value: Some(TypedValue {
+            value_type: text,
+            value: DataValue::String("exact".into()),
+        }),
+        constraints: vec![
+            ParameterConstraint::Required,
+            ParameterConstraint::OneOf(vec![
+                DataValue::String("exact".into()),
+                DataValue::String("tolerance".into()),
+            ]),
+        ],
+        editor: ParameterEditorSpec::Select,
+        presentation: ParameterPresentation::DetailPanel,
         visible_when: None,
     }];
     for (key, default) in [
@@ -610,8 +574,8 @@ fn comparison_parameters(id: &'static str) -> Result<ParameterSchema, BuiltinAss
     ] {
         let title = leak(format!("parameters.{key}.title"));
 
-        fields.push(ConfigurationFieldSpec {
-            parameter: ParameterSpec {
+        fields.push(
+            Parameter {
                 key: sid(key, ParameterKey::new)?,
                 title_key: iid(title)?,
                 description_key: None,
@@ -623,22 +587,15 @@ fn comparison_parameters(id: &'static str) -> Result<ParameterSchema, BuiltinAss
                 constraints: vec![ParameterConstraint::Required],
                 editor: ParameterEditorSpec::Number,
                 presentation: ParameterPresentation::DetailPanel,
-            },
-            visible_when: Some(ConfigurationCondition {
+                visible_when: None,
+            }
+            .when(ParameterCondition {
                 key: sid("mode", ParameterKey::new)?,
                 values: vec![DataValue::String("tolerance".into())].into_boxed_slice(),
             }),
-        });
+        );
     }
-    assembled_parameters(
-        id,
-        vec![configuration_parameter(
-            "parameters.configuration.title",
-            ConfigurationSchema {
-                fields: fields.into_boxed_slice(),
-            },
-        )?],
-    )
+    assembled_parameters(id, fields)
 }
 
 fn comparison_protocol(
@@ -728,7 +685,7 @@ fn protocol(
     id: &'static str,
     category: &'static str,
     ports: Vec<PortSpec>,
-    parameters: Vec<ParameterSpec>,
+    parameters: Vec<Parameter>,
     execution: ExecutionSemantics,
 ) -> Result<NodeProtocol, BuiltinAssemblyError> {
     Ok(NodeProtocol {
@@ -820,15 +777,13 @@ fn i18n_requirements(
             keys.insert(key.clone());
             alias_keys.insert(key.clone());
         }
-        for parameter in &protocol.parameters.parameters {
+        for group in &protocol.parameters.groups {
+            keys.insert(group.title_key.clone());
+            keys.extend(group.description_key.iter().cloned());
+        }
+        for parameter in protocol.parameters.iter() {
             keys.insert(parameter.title_key.clone());
             keys.extend(parameter.description_key.iter().cloned());
-            if let ParameterEditorSpec::Configuration(schema) = &parameter.editor {
-                for field in &schema.fields {
-                    keys.insert(field.parameter.title_key.clone());
-                    keys.extend(field.parameter.description_key.iter().cloned());
-                }
-            }
         }
     }
     Ok((I18nManifest { keys }, alias_keys))
@@ -839,7 +794,19 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ("types.binary.title", "Binary", "二元"),
         ("types.text.title", "Text", "文本"),
         ("types.object.title", "Object", "对象"),
-        ("parameters.configuration.title", "Configuration", "配置"),
+        ("parameter_groups.parameters.title", "Parameters", "参数"),
+        (
+            "parameter_groups.distribution.title",
+            "Distribution",
+            "分布参数",
+        ),
+        ("parameter_groups.sampling.title", "Sampling", "采样设置"),
+        ("parameter_groups.model.title", "Model", "模型参数"),
+        (
+            "parameter_groups.covariance.title",
+            "Covariance",
+            "协方差估计",
+        ),
         ("types.numeric.title", "Numeric", "数值"),
         ("types.datetime.title", "Datetime", "日期时间"),
         ("types.ordinal.title", "Ordinal", "有序分类"),

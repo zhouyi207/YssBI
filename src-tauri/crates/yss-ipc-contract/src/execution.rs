@@ -62,6 +62,7 @@ pub enum ExecutionDemandDto {
     Outputs {
         outputs: Box<[GraphOutputRefDto]>,
         include_default_results: bool,
+        reuse_inputs: bool,
     },
 }
 

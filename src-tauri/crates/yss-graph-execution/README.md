@@ -31,6 +31,9 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 
 ## ResultStore and cache validity
 
+显式 `Outputs` demand 的 `reuse_inputs` 控制是否复用当前有效输入。Report 补选设为 true；普通 Execute 和原有输出运行保持 false。请求的输出生产者始终执行，受它们影响的下游也不能复用；其他依赖仅在同一生产者全部输出有效时被跳过。调度以共享结果填充输入槽，RunStarted 只失效实际重算的输出。
+ResultStore 在准入时校验复用结果的 ID 与当前缓存一致，并记录实际消费的源结果。发布时再次检查这些输入仍有效且 ID 未变；另一次运行替换输入、图编辑或资源失效后，旧补算不能发布。复用没有单独的结果存储，也不改变常规运行的随机节点行为。
+
 `ResultStore` 是 session-scoped result authority，分别维护当前 output address 索引和不可变结果记录。
 
 图输入更新与对应结果有效性摘要在同一写锁内完成。摘要携带执行会话内单调递增的 `revision`，运行准入、结果发布和依赖重验都推进这一顺序；它独立于图编辑 revision，用于拒绝迟到的旧结果投影。读取摘要不复制结果 payload，既有图缓存有效性与租约规则继续由 ResultStore 执行。
@@ -46,5 +49,7 @@ Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；A
 已删除输出、重算准入或显式清理释放的结果不会被撤销重新创建。
 
 ## 相关模块
+
+科学计算适配属于 Node Kernel。报告读取不经过 Execution 的临时计算入口；本 crate 的 SCI runtime/contract 依赖仅用于 `ols_bench` 示例，不进入生产依赖。
 
 [内核与数值/关系操作](../yss-node-kernel/README.md) · [Results 查询与租约](../../../src/features/application/results/README.md) · [Application 编排](../yss-application/src/graph/README.md)

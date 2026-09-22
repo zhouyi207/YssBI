@@ -6,12 +6,12 @@ pub use model::{
     EditorAcceptedType, EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel,
     EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorFilterColumnOption,
     EditorFilterLiteralType, EditorInputBinding, EditorNodeCapabilities, EditorNodeDisplay,
-    EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay, EditorParameterModel,
-    EditorPortConnectionCapabilities, EditorPortDisplay, EditorPortInstanceAdditionModel,
-    EditorPortModel, EditorPortStatus, EditorPortTypeState, EditorProjectionBasis,
-    EditorProjectionError, EditorProjectionInput, EditorProjectionModel, EditorResolutionOutcome,
-    EditorResolutionStage, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
-    ParameterEditorKind,
+    EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay,
+    EditorParameterGroupModel, EditorParameterModel, EditorPortConnectionCapabilities,
+    EditorPortDisplay, EditorPortInstanceAdditionModel, EditorPortModel, EditorPortStatus,
+    EditorPortTypeState, EditorProjectionBasis, EditorProjectionError, EditorProjectionInput,
+    EditorProjectionModel, EditorResolutionOutcome, EditorResolutionStage, EditorSchemaField,
+    EditorSchemaSummary, EditorSchemaSummaryKind, ParameterEditorKind,
 };
 
 #[cfg(test)]

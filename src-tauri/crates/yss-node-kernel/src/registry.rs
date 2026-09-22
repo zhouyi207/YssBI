@@ -33,6 +33,7 @@ impl KernelInputSpec {
 pub struct KernelContract {
     inputs: Box<[KernelInputSpec]>,
     parameters: BTreeSet<KernelParameterKey>,
+    optional_parameters: BTreeSet<KernelParameterKey>,
     outputs: RangeInclusive<usize>,
 }
 
@@ -61,14 +62,28 @@ impl KernelContract {
         Ok(Self {
             inputs,
             parameters: fields,
+            optional_parameters: BTreeSet::new(),
             outputs,
         })
+    }
+
+    pub fn with_optional_parameters(
+        mut self,
+        keys: impl IntoIterator<Item = KernelParameterKey>,
+    ) -> Result<Self, KernelRegistrationError> {
+        for key in keys {
+            if !self.parameters.contains(&key) {
+                return Err(KernelRegistrationError::UnknownOptionalParameter(key));
+            }
+            self.optional_parameters.insert(key);
+        }
+        Ok(self)
     }
 
     pub fn validate_binding<'a>(
         &self,
         inputs: impl IntoIterator<Item = (&'a str, RangeInclusive<usize>)>,
-        parameters: impl IntoIterator<Item = &'a str>,
+        parameters: impl IntoIterator<Item = (&'a str, bool)>,
         outputs: RangeInclusive<usize>,
     ) -> Result<(), KernelBindingError> {
         let mut inputs = inputs.into_iter();
@@ -90,7 +105,7 @@ impl KernelContract {
         if self
             .parameters
             .iter()
-            .map(|field| field.as_str())
+            .map(|field| (field.as_str(), self.optional_parameters.contains(field)))
             .collect::<BTreeSet<_>>()
             != parameters.into_iter().collect::<BTreeSet<_>>()
         {
@@ -131,6 +146,8 @@ pub enum KernelRegistrationError {
     DuplicateParameter(KernelParameterKey),
     #[error("kernel output arity is empty")]
     InvalidOutputArity,
+    #[error("optional kernel parameter is not declared: {0:?}")]
+    UnknownOptionalParameter(KernelParameterKey),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -224,6 +241,12 @@ impl KernelRegistryBuilder {
                         .iter()
                         .map(|field| field.as_str())
                         .collect::<Vec<_>>(),
+                    kernel
+                        .contract
+                        .optional_parameters
+                        .iter()
+                        .map(|field| field.as_str())
+                        .collect::<Vec<_>>(),
                     *kernel.contract.outputs.start() as u64,
                     (*kernel.contract.outputs.end() != usize::MAX)
                         .then_some(*kernel.contract.outputs.end() as u64),
@@ -271,11 +294,15 @@ impl KernelRegistry {
         {
             return Err(KernelError::InputLayoutMismatch);
         }
-        if !kernel
-            .contract
+        if invocation
             .parameters
-            .iter()
-            .eq(invocation.parameters.keys())
+            .keys()
+            .any(|key| !kernel.contract.parameters.contains(key))
+            || kernel
+                .contract
+                .parameters
+                .difference(&kernel.contract.optional_parameters)
+                .any(|key| !invocation.parameters.contains_key(key))
         {
             return Err(KernelError::InvalidParameter);
         }

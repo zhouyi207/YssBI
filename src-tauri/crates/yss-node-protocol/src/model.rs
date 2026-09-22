@@ -1,6 +1,6 @@
 use super::{
     I18nKey, IconId, InterfaceResolverId, InvalidSemanticId, NodeCategoryId, NodeStyleId,
-    NodeTypeId, NodeTypingSpec, ParameterKey, ParameterSchema, PortKey, SchemaExpr, TypeExpr,
+    NodeTypeId, NodeTypingSpec, ParameterKey, Parameters, PortKey, SchemaExpr, TypeExpr,
     TypeParameterId, TypedValue,
 };
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ pub struct NodeProtocol {
     pub type_id: NodeTypeId,
     pub catalog: NodeCatalogProtocol,
     pub interface: NodeInterfaceProtocol,
-    pub parameters: ParameterSchema,
+    pub parameters: Parameters,
     #[serde(default)]
     pub instance_display: NodeInstanceDisplaySpec,
     pub execution: ExecutionSemantics,

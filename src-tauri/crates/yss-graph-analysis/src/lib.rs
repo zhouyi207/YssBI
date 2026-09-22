@@ -218,6 +218,7 @@ pub struct GraphNodeSemanticFact {
     pub icon_id: Option<Box<str>>,
     pub style_id: Option<Box<str>>,
     pub managed: bool,
+    pub parameter_groups: Box<[GraphParameterGroupFact]>,
     pub parameters: Box<[GraphParameterFact]>,
     pub inputs: Box<[GraphResolvedInputBinding]>,
     pub ports: Box<[GraphPortSemanticFact]>,
@@ -255,7 +256,15 @@ pub enum GraphResolvedInputSource {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphParameterGroupFact {
+    pub key: yss_node_protocol::ParameterGroupKey,
+    pub title: Box<str>,
+    pub description: Option<Box<str>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphParameterFact {
+    pub group_key: yss_node_protocol::ParameterGroupKey,
     pub key: ParameterKey,
     pub title: Box<str>,
     pub description: Option<Box<str>>,
@@ -268,9 +277,6 @@ pub struct GraphParameterFact {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphParameterConfigurationFact {
-    Configuration {
-        fields: Box<[GraphParameterFact]>,
-    },
     SelectOptions {
         options: Box<[Box<str>]>,
     },
@@ -553,6 +559,7 @@ fn resolve_graph_semantics_inner(
                     icon_id: None,
                     style_id: None,
                     managed: false,
+                    parameter_groups: Box::new([]),
                     parameters: Box::new([]),
                     inputs: Box::new([]),
                     ports: Box::new([]),
@@ -583,7 +590,7 @@ fn resolve_graph_semantics_inner(
                     [("parameter_key", issue.key.as_str().into())],
                 ));
             }
-            for parameter in protocol.parameters.parameters.iter() {
+            for parameter in protocol.parameters.iter() {
                 let ParameterEditorSpec::Resource { kind } = &parameter.editor else {
                     continue;
                 };
@@ -813,11 +820,13 @@ fn resolve_graph_semantics_inner(
                 icon_id: Some(protocol.catalog.icon_id.as_str().into()),
                 style_id: Some(protocol.catalog.style_id.as_str().into()),
                 managed: protocol.managed_role.is_some(),
-                parameters: protocol
-                    .parameters
-                    .parameters
-                    .iter()
-                    .map(|parameter| parameter_fact(parameter,
+                parameter_groups: protocol.parameters.groups.iter().map(|group| GraphParameterGroupFact {
+                    key: group.key.clone(), title: group.title_key.as_str().into(),
+                    description: group.description_key.as_ref().map(|key| key.as_str().into()),
+                }).collect(),
+                parameters: protocol.parameters.groups.iter().flat_map(|group| group.parameters.iter().map(move |parameter| (group, parameter)))
+                    .filter(|(_, parameter)| protocol.parameters.is_visible(parameter, &node.parameters))
+                    .map(|(group, parameter)| parameter_fact(&group.key, parameter,
                         effective_parameter_value(node, parameter).map(|value| match (&parameter.editor, value.as_str()) {
                             (ParameterEditorSpec::Resource { .. }, Some(identity)) => GraphResolvedParameterValue::Resource(GraphResourceId::new(identity)),
                             _ if !node.parameters.contains_key(&parameter.key) => GraphResolvedParameterValue::DefaultLiteral(
@@ -1639,7 +1648,7 @@ mod tests {
                     .registry
                     .protocol(node_type)
                     .into_iter()
-                    .flat_map(|protocol| protocol.parameters.parameters.iter())
+                    .flat_map(|protocol| protocol.parameters.iter())
                     .find(|parameter| {
                         parameter.default_value.is_none()
                             && parameter
@@ -1685,7 +1694,7 @@ mod tests {
                     .registry
                     .protocol(node_type)
                     .into_iter()
-                    .flat_map(|protocol| protocol.parameters.parameters.iter())
+                    .flat_map(|protocol| protocol.parameters.iter())
                     .find_map(|parameter| match &parameter.editor {
                         ParameterEditorSpec::Resource { kind } => {
                             Some((node_type.clone(), parameter.key.clone(), *kind))

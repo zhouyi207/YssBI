@@ -87,7 +87,7 @@ pub(crate) fn protocol(
     category: &'static str,
     ports: Vec<PortSpec>,
     type_parameters: Vec<TypeParameterId>,
-    parameters: Vec<ParameterSpec>,
+    parameters: Vec<Parameter>,
     execution: ExecutionSemantics,
 ) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let keys = NodeKeys::new(id)?;
@@ -155,8 +155,8 @@ pub(crate) fn parameter(
     default_value: Option<TypedValue>,
     constraints: Vec<ParameterConstraint>,
     editor: ParameterEditorSpec,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    Ok(ParameterSpec {
+) -> Result<Parameter, BuiltinAssemblyError> {
+    Ok(Parameter {
         key: semantic(key, ParameterKey::new)?,
         title_key: parameter_key(node_id, key, "title")?,
         description_key: Some(parameter_key(node_id, key, "description")?),
@@ -165,6 +165,7 @@ pub(crate) fn parameter(
         constraints,
         editor,
         presentation: ParameterPresentation::DetailPanel,
+        visible_when: None,
     })
 }
 

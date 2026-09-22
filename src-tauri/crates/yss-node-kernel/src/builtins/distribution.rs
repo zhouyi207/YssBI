@@ -1,5 +1,4 @@
 use crate::{KernelError, KernelInvocation, RuntimeValue};
-use std::collections::BTreeMap;
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
 use yss_sci_contract::scientific::{ScientificComputationError, ScientificExecutionControl};
@@ -31,8 +30,8 @@ pub(crate) enum DistributionKernel {
     Hypergeometric,
 }
 
-fn integer(values: &BTreeMap<Box<str>, RuntimeValue>, key: &str) -> Result<i64, KernelError> {
-    match values.get(key) {
+fn integer(invocation: &KernelInvocation<'_>, key: &str) -> Result<i64, KernelError> {
+    match invocation.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => Ok(*value),
         Some(RuntimeValue::Scalar(TabularScalar::Unsigned(value))) => {
             i64::try_from(*value).map_err(|_| KernelError::InvalidParameter)
@@ -48,17 +47,9 @@ pub(crate) fn execute(
     use DistributionKernel::*;
     use SamplingDistribution as D;
     invocation.check_control()?;
-    let Some(RuntimeValue::Record(config)) = invocation.parameter("configuration") else {
-        return Err(KernelError::InvalidParameter);
-    };
     let number = |key: &str| {
-        // Configuration decimals retain the protocol's exact textual spelling at the wire.
-        let value = match config.get(key) {
-            Some(RuntimeValue::Scalar(TabularScalar::String(value))) => value
-                .parse::<f64>()
-                .map_err(|_| KernelError::InvalidParameter)?,
-            value => super::numeric_input(value).map_err(|_| KernelError::InvalidParameter)?,
-        };
+        let value = super::numeric_input(invocation.parameter(key))
+            .map_err(|_| KernelError::InvalidParameter)?;
         if value.is_finite() {
             Ok(value)
         } else {
@@ -66,8 +57,8 @@ pub(crate) fn execute(
         }
     };
     let natural =
-        |key| u64::try_from(integer(config, key)?).map_err(|_| KernelError::InvalidParameter);
-    let count = usize::try_from(integer(config, "sample_count")?)
+        |key| u64::try_from(integer(invocation, key)?).map_err(|_| KernelError::InvalidParameter);
+    let count = usize::try_from(integer(invocation, "sample_count")?)
         .ok()
         .filter(|n| *n > 0)
         .ok_or(KernelError::InvalidParameter)?;
@@ -155,8 +146,8 @@ pub(crate) fn execute(
             probability: number("probability")?,
         },
         DiscreteUniform => D::DiscreteUniform {
-            lower: integer(config, "lower_bound")?,
-            upper: integer(config, "upper_bound")?,
+            lower: integer(invocation, "lower_bound")?,
+            upper: integer(invocation, "upper_bound")?,
         },
         Hypergeometric => D::Hypergeometric {
             population: natural("population_size")?,

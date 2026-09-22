@@ -11,8 +11,6 @@ test-support = []
 
 [dependencies]
 yss-node-kernel = { path = "../yss-node-kernel" }
-yss-sci-runtime = { path = "../yss-sci-runtime" }
-yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -25,6 +23,8 @@ yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 yss-node-protocol = { path = "../yss-node-protocol" }
 
 [dev-dependencies]
+yss-sci-runtime = { path = "../yss-sci-runtime" }
+yss-sci-contract = { path = "../yss-sci-contract" }
 arrow-array.workspace = true
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-node-registry = { path = "../yss-node-registry" }

@@ -1,6 +1,6 @@
 # Linear Regression
 
-Fit **Response** against ordered **Predictors**. Choose **OLS** (default), **WLS**, or **GLS** in model configuration, with an optional intercept.
+Fit **Response** against ordered **Predictors**. Choose **OLS** (default), **WLS**, or **GLS** in the **Model** parameter group in Detail, with an optional intercept.
 
 - **OLS** requires the response and at least one predictor.
 - **WLS** additionally requires one **Weights (WLS)** input. Supply aligned, finite, strictly positive precision weights proportional to inverse error variance, not survey sampling weights.

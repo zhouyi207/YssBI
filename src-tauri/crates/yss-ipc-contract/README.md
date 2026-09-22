@@ -14,6 +14,7 @@ Graph editor sessions require `document`, `projection`, `editing`, and `resultSt
 The crate has no Tauri, Application, database or execution runtime dependency. It reuses neutral identity/document contracts and existing projection value types, including their value conversions. It creates no subscriptions, tasks, caches, incident records or business state. Application mappings and incident recording remain in their adapters.
 
 Execution demands use `default` or `outputs`; run events describe run lifecycle and result inspection requests. Pin View reads current results through result queries and has no separate execution demand, generation allocator or completion event.
+An `outputs` demand includes `includeDefaultResults` and the required boolean `reuseInputs`. Report extensions set `reuseInputs` to true to reuse valid upstream inputs while recomputing requested outputs; ordinary output runs set it to false. Execution owns cache validation and publication checks.
 
 Command-only request/response schemas may stay beside their handler. Shared types have one definition here, with no compatibility re-export from the former schema modules.
 

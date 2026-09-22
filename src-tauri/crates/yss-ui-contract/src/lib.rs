@@ -16,19 +16,15 @@ pub struct UiSource {
     pub result_id: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum ReportSection {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UiBindingKind {
     Equation,
-    ModelSummary,
-    Anova,
+    KeyValue,
+    Table,
+    StatCard,
     CoefficientTable,
-    HypothesisTest,
-    Diagnostics,
-    ResidualPlot,
-    Observations,
-    AcfPacf,
-    SerialTests,
+    Chart,
+    Analysis,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -75,8 +71,31 @@ pub enum UiComponent {
     Column { gap: u8 },
     Row { gap: u8 },
     Text { text: String },
-    ReportSection { section: ReportSection },
+    Section { title: String, collapsible: bool },
+    Equation { binding: String },
+    KeyValue { binding: String },
+    Table { binding: String },
+    StatCard { binding: String },
+    CoefficientTable { binding: String },
+    Chart { binding: String },
+    Analysis { binding: String },
     Button { label: String, intent: UiIntent },
+}
+
+impl UiComponent {
+    pub fn binding(&self) -> Option<(&str, UiBindingKind)> {
+        let (binding, kind) = match self {
+            Self::Equation { binding } => (binding, UiBindingKind::Equation),
+            Self::KeyValue { binding } => (binding, UiBindingKind::KeyValue),
+            Self::Table { binding } => (binding, UiBindingKind::Table),
+            Self::StatCard { binding } => (binding, UiBindingKind::StatCard),
+            Self::CoefficientTable { binding } => (binding, UiBindingKind::CoefficientTable),
+            Self::Chart { binding } => (binding, UiBindingKind::Chart),
+            Self::Analysis { binding } => (binding, UiBindingKind::Analysis),
+            _ => return None,
+        };
+        Some((binding, kind))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -136,7 +155,18 @@ impl UiSpec {
         match &element.component {
             UiComponent::Column { gap } | UiComponent::Row { gap } if *gap <= 8 => {}
             UiComponent::Text { text } if text.len() <= 8_192 && element.children.is_empty() => {}
-            UiComponent::ReportSection { .. } if element.children.is_empty() => {}
+            UiComponent::Section { title, .. }
+                if !title
+                    .trim_matches(|character: char| {
+                        character.is_whitespace() || character == '\u{feff}'
+                    })
+                    .is_empty()
+                    && title.len() <= 256 => {}
+            component
+                if component
+                    .binding()
+                    .is_some_and(|(binding, _)| valid_id(binding))
+                    && element.children.is_empty() => {}
             UiComponent::Button { label, intent }
                 if !label
                     .trim_matches(|character: char| {
@@ -154,52 +184,6 @@ impl UiSpec {
             self.visit(child, depth + 1, visited)?;
         }
         Ok(())
-    }
-
-    pub fn regression_report() -> Self {
-        use ReportSection::*;
-        let sections = [
-            Equation,
-            ModelSummary,
-            Anova,
-            CoefficientTable,
-            HypothesisTest,
-            Diagnostics,
-            ResidualPlot,
-            Observations,
-            AcfPacf,
-            SerialTests,
-        ];
-        let mut elements = BTreeMap::new();
-        let mut children = Vec::new();
-        for section in sections {
-            let id = serde_json::to_value(section)
-                .expect("section serializes")
-                .as_str()
-                .unwrap()
-                .to_owned();
-            children.push(id.clone());
-            elements.insert(
-                id,
-                UiElement {
-                    component: UiComponent::ReportSection { section },
-                    visible: true,
-                    children: vec![],
-                },
-            );
-        }
-        elements.insert(
-            "report".into(),
-            UiElement {
-                component: UiComponent::Column { gap: 4 },
-                visible: true,
-                children,
-            },
-        );
-        Self {
-            root: "report".into(),
-            elements,
-        }
     }
 }
 
@@ -452,9 +436,38 @@ pub enum UiEvent {
 mod tests {
     use super::*;
 
+    fn sample_spec() -> UiSpec {
+        UiSpec {
+            root: "report".into(),
+            elements: BTreeMap::from([
+                (
+                    "report".into(),
+                    UiElement {
+                        component: UiComponent::Section {
+                            title: "Results".into(),
+                            collapsible: false,
+                        },
+                        visible: true,
+                        children: vec!["anova".into()],
+                    },
+                ),
+                (
+                    "anova".into(),
+                    UiElement {
+                        component: UiComponent::Table {
+                            binding: "anova".into(),
+                        },
+                        visible: true,
+                        children: vec![],
+                    },
+                ),
+            ]),
+        }
+    }
+
     #[test]
     fn closed_spec_rejects_unknown_props_cycles_and_orphans() {
-        let mut spec = UiSpec::regression_report();
+        let mut spec = sample_spec();
         let children = std::mem::replace(
             &mut spec.elements.get_mut("report").unwrap().children,
             vec!["row".into()],
@@ -530,7 +543,7 @@ mod tests {
                 result_id: "1".into(),
             },
             revision: 1,
-            spec: UiSpec::regression_report(),
+            spec: sample_spec(),
         };
         let mut after = before.clone();
         after.revision = 2;

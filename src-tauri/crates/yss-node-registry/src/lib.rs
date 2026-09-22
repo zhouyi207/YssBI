@@ -150,9 +150,7 @@ impl NodeRegistryBuilder {
         let fingerprint = fingerprint::registry_fingerprint(&canonical)?;
         Ok(NodeRegistry {
             by_id: parts.nodes,
-            node_providers: parts.node_providers,
             type_index: parts.types,
-            type_providers: parts.type_providers,
             category_index: parts.categories,
             catalog_manifest: CatalogManifest {
                 node_protocols: protocol_fingerprints,

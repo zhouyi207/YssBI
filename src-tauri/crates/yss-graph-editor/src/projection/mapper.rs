@@ -138,20 +138,26 @@ fn project_node(
     diagnostics: &[&GraphDiagnosticFact],
     document: &GraphDocument,
 ) -> Result<EditorNodeModel, EditorProjectionError> {
-    let parameters = facts
-        .parameters
+    let parameter_groups = facts
+        .parameter_groups
         .iter()
-        .filter_map(project_parameter)
-        .map(|mut parameter| {
-            parameter.value = node
+        .filter_map(|group| {
+            let parameters: Box<[_]> = facts
                 .parameters
-                .get(&parameter.key)
-                .cloned()
-                .or(parameter.value);
-            parameter
+                .iter()
+                .filter(|parameter| parameter.group_key == group.key)
+                .filter_map(project_parameter)
+                .collect();
+            (!parameters.is_empty()).then(|| EditorParameterGroupModel {
+                key: group.key.clone(),
+                display: EditorParameterDisplay {
+                    title: group.title.clone(),
+                    description: group.description.clone(),
+                },
+                parameters,
+            })
         })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+        .collect();
     let ports = facts
         .ports
         .iter()
@@ -181,7 +187,7 @@ fn project_node(
         },
         ports: ports.into_boxed_slice(),
         port_instance_additions,
-        parameters,
+        parameter_groups,
         capabilities,
         diagnostics: diagnostics
             .iter()
@@ -300,7 +306,6 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         ParameterEditorSpec::Text { multiline } => (ParameterEditorKind::Text, multiline),
         ParameterEditorSpec::Number => (ParameterEditorKind::Number, false),
         ParameterEditorSpec::Toggle => (ParameterEditorKind::Toggle, false),
-        ParameterEditorSpec::Configuration(_) => (ParameterEditorKind::Configuration, false),
         ParameterEditorSpec::Select => (ParameterEditorKind::Select, false),
         ParameterEditorSpec::GraphConstant => (ParameterEditorKind::GraphConstant, false),
         ParameterEditorSpec::SemanticDomain => (ParameterEditorKind::SemanticDomain, false),
@@ -319,7 +324,7 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         value: fact.effective_value.as_ref().map(|value| match value {
             yss_graph_analysis::GraphResolvedParameterValue::Literal(value) => value.clone(),
             yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral(value) => {
-                yss_node_protocol::protocol_value_to_json(value)
+                yss_node_protocol::parameter_value_to_json(value, &fact.value_type)
             }
             yss_graph_analysis::GraphResolvedParameterValue::Resource(identity) => {
                 serde_json::Value::String(identity.as_str().to_owned())
@@ -331,11 +336,6 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
 
 fn project_configuration(fact: &GraphParameterConfigurationFact) -> EditorParameterConfiguration {
     match fact {
-        GraphParameterConfigurationFact::Configuration { fields } => {
-            EditorParameterConfiguration::Configuration {
-                fields: fields.iter().filter_map(project_parameter).collect(),
-            }
-        }
         GraphParameterConfigurationFact::SelectOptions { options } => {
             EditorParameterConfiguration::SelectOptions {
                 options: options.clone(),

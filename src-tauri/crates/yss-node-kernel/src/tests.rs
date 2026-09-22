@@ -65,11 +65,10 @@ fn compare(
             inputs,
             input_keys: &["left", "right"],
             parameters: BTreeMap::from([(
-                crate::KernelParameterKey::new("configuration".into()).unwrap(),
-                std::borrow::Cow::Owned(RuntimeValue::Record(Arc::new(BTreeMap::from([(
-                    "mode".into(),
-                    RuntimeValue::Scalar(TabularScalar::String("exact".into())),
-                )])))),
+                crate::KernelParameterKey::new("mode".into()).unwrap(),
+                std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                    "exact".into(),
+                ))),
             )]),
             outputs: &[KernelOutputSpec {
                 data_type: if inputs.iter().any(|v| {

@@ -183,57 +183,31 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
 }
 
 pub(super) fn parameter_fact(
-    parameter: &yss_node_protocol::ParameterSpec,
+    group_key: &yss_node_protocol::ParameterGroupKey,
+    parameter: &yss_node_protocol::Parameter,
     effective_value: Option<GraphResolvedParameterValue>,
 ) -> GraphParameterFact {
-    let configuration = match &parameter.editor {
-        ParameterEditorSpec::Configuration(schema) => {
-            let raw = match &effective_value {
-                Some(GraphResolvedParameterValue::Literal(value)) => value.clone(),
-                Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
-                    yss_node_protocol::protocol_value_to_json(value)
-                }
-                _ => serde_json::Value::Null,
-            };
-            let values = schema.effective_values(&raw);
-            Some(GraphParameterConfigurationFact::Configuration {
-                fields: schema
-                    .fields
-                    .iter()
-                    .filter(|field| field.is_visible(&values))
-                    .map(|field| {
-                        parameter_fact(
-                            &field.parameter,
-                            values
-                                .get(field.parameter.key.as_str())
-                                .cloned()
-                                .map(GraphResolvedParameterValue::Literal),
-                        )
-                    })
-                    .collect(),
-            })
-        }
-        _ => parameter
-            .constraints
-            .iter()
-            .find_map(|constraint| match constraint {
-                yss_node_protocol::ParameterConstraint::OneOf(options)
-                    if matches!(parameter.editor, ParameterEditorSpec::Select) =>
-                {
-                    Some(GraphParameterConfigurationFact::SelectOptions {
-                        options: options
-                            .iter()
-                            .filter_map(|value| match value {
-                                yss_data_contract::DataValue::String(value) => Some(value.clone()),
-                                _ => None,
-                            })
-                            .collect(),
-                    })
-                }
-                _ => None,
-            }),
-    };
+    let configuration = parameter
+        .constraints
+        .iter()
+        .find_map(|constraint| match constraint {
+            yss_node_protocol::ParameterConstraint::OneOf(options)
+                if matches!(parameter.editor, ParameterEditorSpec::Select) =>
+            {
+                Some(GraphParameterConfigurationFact::SelectOptions {
+                    options: options
+                        .iter()
+                        .filter_map(|value| match value {
+                            yss_data_contract::DataValue::String(value) => Some(value.clone()),
+                            _ => None,
+                        })
+                        .collect(),
+                })
+            }
+            _ => None,
+        });
     GraphParameterFact {
+        group_key: group_key.clone(),
         key: parameter.key.clone(),
         title: parameter.title_key.as_str().into(),
         description: parameter
@@ -250,12 +224,10 @@ pub(super) fn parameter_fact(
 
 pub(crate) fn effective_parameter_value(
     node: &yss_graph_document::DocumentNode,
-    parameter: &yss_node_protocol::ParameterSpec,
+    parameter: &yss_node_protocol::Parameter,
 ) -> Option<serde_json::Value> {
-    node.parameters.get(&parameter.key).cloned().or_else(|| {
-        parameter
-            .default_value
-            .as_ref()
-            .map(|value| yss_node_protocol::protocol_value_to_json(&value.value))
-    })
+    node.parameters
+        .get(&parameter.key)
+        .cloned()
+        .or_else(|| parameter.default_json())
 }

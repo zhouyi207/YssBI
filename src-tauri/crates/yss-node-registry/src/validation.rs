@@ -116,9 +116,7 @@ fn builtin_nominal_type_ids() -> Result<BuiltinNominalTypeIds, RegistryValidatio
 
 pub(crate) struct ValidatedParts {
     pub nodes: BTreeMap<NodeTypeId, std::sync::Arc<RegisteredNode>>,
-    pub node_providers: BTreeMap<NodeTypeId, ProviderId>,
     pub types: TypeRegistry,
-    pub type_providers: BTreeMap<TypeId, ProviderId>,
     pub categories: CategoryRegistry,
     pub i18n: I18nManifest,
 }
@@ -129,9 +127,7 @@ pub(crate) fn validate(
 ) -> Result<ValidatedParts, RegistryValidationError> {
     let mut provider_ids = BTreeSet::new();
     let mut nodes = BTreeMap::new();
-    let mut node_providers = BTreeMap::new();
     let mut types = TypeRegistry::default();
-    let mut type_providers = BTreeMap::new();
     let mut categories = CategoryRegistry::default();
     let mut i18n = I18nManifest::default();
     let mut interface_resolvers = BTreeSet::new();
@@ -148,7 +144,6 @@ pub(crate) fn validate(
             match types.types.entry(item.id.clone()) {
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     entry.insert(item.clone());
-                    type_providers.insert(item.id.clone(), provider.provider.clone());
                 }
                 std::collections::btree_map::Entry::Occupied(_) => {
                     return Err(RegistryValidationError::DuplicateType(item.id.clone()));
@@ -208,7 +203,6 @@ pub(crate) fn validate(
             match nodes.entry(id.clone()) {
                 std::collections::btree_map::Entry::Vacant(entry) => {
                     entry.insert(std::sync::Arc::new(node.clone()));
-                    node_providers.insert(id, provider.provider.clone());
                 }
                 std::collections::btree_map::Entry::Occupied(_) => {
                     return Err(RegistryValidationError::DuplicateNode(id));
@@ -263,9 +257,7 @@ pub(crate) fn validate(
     }
     Ok(ValidatedParts {
         nodes,
-        node_providers,
         types,
-        type_providers,
         categories,
         i18n,
     })
@@ -389,15 +381,15 @@ fn validate_node(
         .iter()
         .map(|p| (&p.key, p))
         .collect();
-    let parameter_specs: BTreeMap<_, _> = protocol
+    protocol
         .parameters
+        .validate()
+        .map_err(|error| fail(error.to_string()))?;
+    let parameter_specs: BTreeMap<_, _> = protocol
         .parameters
         .iter()
         .map(|parameter| (&parameter.key, parameter))
         .collect();
-    if parameter_specs.len() != protocol.parameters.parameters.len() {
-        return Err(fail("duplicate parameter key".into()));
-    }
     validate_typing(&protocol.typing, &ports, &parameter_specs).map_err(&fail)?;
     for port in &protocol.interface.ports {
         validate_type_expr(&port.value_type, types, &protocol.interface.type_parameters)
@@ -419,22 +411,13 @@ fn validate_node(
             .map_err(&fail)?;
         }
     }
-    for parameter in
-        protocol
-            .parameters
-            .parameters
-            .iter()
-            .chain(protocol.parameters.parameters.iter().flat_map(|parameter| {
-                match &parameter.editor {
-                    ParameterEditorSpec::Configuration(schema) => schema
-                        .fields
-                        .iter()
-                        .map(|field| &field.parameter)
-                        .collect::<Vec<_>>(),
-                    _ => Vec::new(),
-                }
-            }))
-    {
+    for group in &protocol.parameters.groups {
+        require_i18n(i18n, &group.title_key).map_err(&fail)?;
+        if let Some(key) = &group.description_key {
+            require_i18n(i18n, key).map_err(&fail)?;
+        }
+    }
+    for parameter in protocol.parameters.iter() {
         require_i18n(i18n, &parameter.title_key).map_err(&fail)?;
         if let Some(key) = &parameter.description_key {
             require_i18n(i18n, key).map_err(&fail)?;
@@ -454,20 +437,6 @@ fn validate_node(
             )));
         }
         validate_parameter_constraints(parameter).map_err(&fail)?;
-        if let ParameterEditorSpec::Configuration(schema) = &parameter.editor {
-            if !matches!(&parameter.value_type, TypeExpr::Concrete(id) if id.as_str() == "core.object")
-            {
-                return Err(fail("configuration parameters require core.object".into()));
-            }
-            schema.validate().map_err(|reason| fail(reason.into()))?;
-            let default = parameter
-                .default_value
-                .as_ref()
-                .ok_or_else(|| fail("configuration parameters require defaults".into()))?;
-            schema
-                .validate_json(&yss_node_protocol::protocol_value_to_json(&default.value))
-                .map_err(&fail)?;
-        }
     }
     if let NodeInstanceDisplaySpec::ResourceParameter { parameter, kind } =
         &protocol.instance_display
@@ -501,7 +470,7 @@ fn validate_node(
 fn validate_typing(
     typing: &NodeTypingSpec,
     ports: &BTreeMap<&PortKey, &PortSpec>,
-    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
+    parameters: &BTreeMap<&ParameterKey, &Parameter>,
 ) -> Result<(), String> {
     let input = |selector: &PortSelector| {
         let (key, requires_instances) = match selector {
@@ -668,7 +637,7 @@ fn validate_type_expr(
 
 fn validate_schema_parameter(
     key: &ParameterKey,
-    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
+    parameters: &BTreeMap<&ParameterKey, &Parameter>,
 ) -> Result<(), String> {
     parameters
         .contains_key(key)
@@ -678,7 +647,7 @@ fn validate_schema_parameter(
 
 fn validate_schema_parameter_type(
     key: &ParameterKey,
-    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
+    parameters: &BTreeMap<&ParameterKey, &Parameter>,
     expected: &TypeId,
 ) -> Result<(), String> {
     validate_schema_parameter(key, parameters)?;
@@ -694,7 +663,7 @@ fn validate_schema_parameter_type(
 fn validate_schema(
     expr: &SchemaExpr,
     ports: &BTreeMap<&PortKey, &PortSpec>,
-    parameters: &BTreeMap<&ParameterKey, &ParameterSpec>,
+    parameters: &BTreeMap<&ParameterKey, &Parameter>,
     interface_resolvers: &BTreeSet<InterfaceResolverId>,
     schema_resolvers: &BTreeSet<SchemaResolverId>,
     nominal_type_ids: &BuiltinNominalTypeIds,
@@ -809,7 +778,7 @@ fn validate_schema(
     }
 }
 
-fn validate_parameter_constraints(parameter: &ParameterSpec) -> Result<(), String> {
+fn validate_parameter_constraints(parameter: &Parameter) -> Result<(), String> {
     for constraint in &parameter.constraints {
         match constraint {
             ParameterConstraint::IntegerRange {
@@ -859,8 +828,8 @@ mod nominal_schema_tests {
         );
     }
 
-    fn parameter(key: &str, value_type: TypeExpr) -> ParameterSpec {
-        ParameterSpec {
+    fn parameter(key: &str, value_type: TypeExpr) -> Parameter {
+        Parameter {
             key: ParameterKey::new(key).unwrap(),
             title_key: I18nKey::new(format!("parameters.{key}.title")).unwrap(),
             description_key: None,
@@ -869,6 +838,7 @@ mod nominal_schema_tests {
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
             presentation: ParameterPresentation::DetailPanel,
+            visible_when: None,
         }
     }
 

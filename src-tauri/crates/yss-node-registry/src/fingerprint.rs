@@ -65,24 +65,18 @@ pub(crate) fn canonical_semantic_protocol(protocol: &NodeProtocol) -> serde_json
             "memberGroups": protocol.interface.member_groups,
         },
         "managedRole": &protocol.managed_role,
-        "parameters": protocol.parameters.parameters.iter().map(semantic_parameter).collect::<Vec<_>>(),
+        "parameters": protocol.parameters.iter().map(|parameter| (&parameter.key, semantic_parameter(parameter))).collect::<std::collections::BTreeMap<_, _>>(),
         "scope": &protocol.scope,
         "typing": &protocol.typing,
         "typeId": &protocol.type_id,
     })
 }
 
-fn semantic_parameter(parameter: &yss_node_protocol::ParameterSpec) -> serde_json::Value {
+fn semantic_parameter(parameter: &yss_node_protocol::Parameter) -> serde_json::Value {
     use yss_node_protocol::ParameterEditorSpec;
     // Some editors also own validation/normalization. Preserve those contracts explicitly;
     // labels, placement and ordinary widget choices do not affect execution identity.
     let validation = match &parameter.editor {
-        ParameterEditorSpec::Configuration(schema) => serde_json::json!({
-            "configuration": schema.fields.iter().map(|field| serde_json::json!({
-                "parameter": semantic_parameter(&field.parameter),
-                "condition": field.visible_when,
-            })).collect::<Vec<_>>()
-        }),
         ParameterEditorSpec::Resource { kind } => serde_json::json!({ "resource": kind }),
         ParameterEditorSpec::SemanticDomain => serde_json::json!("semanticDomain"),
         ParameterEditorSpec::GraphConstant => serde_json::json!("graphConstant"),
@@ -93,6 +87,7 @@ fn semantic_parameter(parameter: &yss_node_protocol::ParameterSpec) -> serde_jso
         "valueType": parameter.value_type,
         "default": parameter.default_value,
         "constraints": parameter.constraints,
+        "condition": parameter.visible_when,
         "validation": validation,
     })
 }
@@ -109,8 +104,8 @@ mod tests {
     use yss_node_protocol::*;
 
     #[test]
-    fn semantic_identity_ignores_presentation_and_preserves_nested_validation() {
-        let field = ParameterSpec {
+    fn semantic_identity_ignores_presentation_and_preserves_parameter_validation() {
+        let field = Parameter {
             key: "count".parse().unwrap(),
             title_key: "test.count.title".parse().unwrap(),
             description_key: None,
@@ -119,6 +114,7 @@ mod tests {
             constraints: vec![],
             editor: ParameterEditorSpec::Number,
             presentation: ParameterPresentation::DetailPanel,
+            visible_when: None,
         };
         let mut protocol = NodeProtocol {
             type_id: "test.numeric.node".parse().unwrap(),
@@ -149,17 +145,13 @@ mod tests {
                 type_parameters: Box::new([]),
                 member_groups: Box::new([]),
             },
-            parameters: ParameterSchema::new(vec![ParameterSpec {
-                key: "configuration".parse().unwrap(),
-                editor: ParameterEditorSpec::Configuration(ConfigurationSchema {
-                    fields: vec![ConfigurationFieldSpec {
-                        parameter: field.clone(),
-                        visible_when: None,
-                    }]
-                    .into_boxed_slice(),
-                }),
-                ..field
-            }])
+            parameters: Parameters::new([
+                ParameterGroup::new("parameters", [field]),
+                ParameterGroup::new(
+                    "sampling",
+                    [Parameter::number("sample_count").int().min(1).default(100)],
+                ),
+            ])
             .unwrap(),
             instance_display: NodeInstanceDisplaySpec::Static,
             execution: ExecutionSemantics {
@@ -172,32 +164,20 @@ mod tests {
         };
         let original = protocol_fingerprint(&protocol).unwrap();
         protocol.interface.ports[0].title = "Translated result".into();
-        protocol.parameters.parameters[0].presentation = ParameterPresentation::InlineAndDetail;
-        protocol.parameters.parameters[0].title_key = "other.title".parse().unwrap();
-        let ParameterEditorSpec::Configuration(schema) =
-            &mut protocol.parameters.parameters[0].editor
-        else {
-            unreachable!()
-        };
-        schema.fields[0].parameter.description_key = Some("other.description".parse().unwrap());
+        protocol.parameters.groups[0].parameters[0].presentation =
+            ParameterPresentation::InlineAndDetail;
+        protocol.parameters.groups[0].parameters[0].title_key = "other.title".parse().unwrap();
+        protocol.parameters.groups[0].key = "renamed".parse().unwrap();
+        protocol.parameters.groups[0].title_key = "other.group".parse().unwrap();
+        protocol.parameters.groups.swap(0, 1);
         assert_eq!(original, protocol_fingerprint(&protocol).unwrap());
-        let ParameterEditorSpec::Configuration(schema) =
-            &mut protocol.parameters.parameters[0].editor
-        else {
-            unreachable!()
-        };
-        schema.fields[0]
-            .parameter
+        protocol.parameters.groups.swap(0, 1);
+        protocol.parameters.groups[0].parameters[0]
             .constraints
             .push(ParameterConstraint::Positive);
         let constrained = protocol_fingerprint(&protocol).unwrap();
         assert_ne!(original, constrained);
-        let ParameterEditorSpec::Configuration(schema) =
-            &mut protocol.parameters.parameters[0].editor
-        else {
-            unreachable!()
-        };
-        schema.fields[0].visible_when = Some(ConfigurationCondition {
+        protocol.parameters.groups[0].parameters[0].visible_when = Some(ParameterCondition {
             key: "method".parse().unwrap(),
             values: vec![serde_json::from_value(serde_json::json!({"String": "WLS"})).unwrap()]
                 .into_boxed_slice(),

@@ -1,6 +1,6 @@
 # Correlogram (ACF & PACF)
 
-Connect the series input, then set **Maximum lag** in **Detail → Configuration**.
+Connect the series input, then set **Maximum lag** in **Detail → Parameters**.
 
 Plots sample ACF and PACF of a **Float64** **DataSeries** up to **Lags** (default 20; capped at $n/2$).
 

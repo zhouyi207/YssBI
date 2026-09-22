@@ -222,9 +222,7 @@ impl ProviderRegistration {
 #[derive(Debug, Clone)]
 pub struct NodeRegistry {
     pub(super) by_id: BTreeMap<NodeTypeId, Arc<RegisteredNode>>,
-    pub(super) node_providers: BTreeMap<NodeTypeId, ProviderId>,
     pub(super) type_index: TypeRegistry,
-    pub(super) type_providers: BTreeMap<TypeId, ProviderId>,
     pub(super) category_index: CategoryRegistry,
     pub(super) catalog_manifest: CatalogManifest,
     pub(super) nominal_validators:
@@ -247,12 +245,6 @@ impl NodeRegistry {
     }
     pub fn types(&self) -> &TypeRegistry {
         &self.type_index
-    }
-    pub fn node_provider(&self, id: &NodeTypeId) -> Option<&ProviderId> {
-        self.node_providers.get(id)
-    }
-    pub fn type_provider(&self, id: &TypeId) -> Option<&ProviderId> {
-        self.type_providers.get(id)
     }
     pub fn categories(&self) -> &CategoryRegistry {
         &self.category_index

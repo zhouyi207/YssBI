@@ -262,6 +262,7 @@ pub enum PlanExecutionDemand {
     Outputs {
         outputs: Box<[PlanOutputRef]>,
         include_default_results: bool,
+        reuse_inputs: bool,
     },
 }
 

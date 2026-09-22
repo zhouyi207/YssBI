@@ -8,6 +8,6 @@ $$
 
 ## 用法
 
-在 **Detail → 配置** 中设置分布参数和样本数，画布上保留 **Samples** 数据输出。
+在 Detail 的**分布参数**和**采样设置**两组中设置分布参数和样本数，画布上保留 **Samples** 数据输出。
 
 形状和尺度必须有限且严格为正。Scale 为 exp(-beta / x) 中的 beta，等价于 Gamma(shape, rate = scale) 样本的倒数。输出正 Float64 样本。

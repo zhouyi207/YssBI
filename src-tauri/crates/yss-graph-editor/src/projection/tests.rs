@@ -88,7 +88,13 @@ fn node_facts(
         style_id: Some("builtin.default".into()),
         managed: false,
         inputs: Box::new([]),
+        parameter_groups: Box::new([yss_graph_analysis::GraphParameterGroupFact {
+            key: "parameters".parse().unwrap(),
+            title: "Parameters".into(),
+            description: None,
+        }]),
         parameters: Box::new([yss_graph_analysis::GraphParameterFact {
+            group_key: "parameters".parse().unwrap(),
             key: ParameterKey::new("value").expect("test parameter key is valid"),
             title: "Value".into(),
             description: Some("The constant value.".into()),
@@ -181,13 +187,17 @@ fn editor_projection_closes_resource_node_port_and_connection_facts() {
     );
     let path =
         GraphResourcePath::new("events/contract.yssbi-event").expect("test graph path is valid");
+    let mut source_facts = node_facts(
+        source,
+        source_type,
+        Box::new([port(output.clone(), "Value", PortDirection::Output, 1)]),
+    );
+    source_facts.parameters[0].effective_value = Some(
+        yss_graph_analysis::GraphResolvedParameterValue::Literal(serde_json::Value::Bool(true)),
+    );
     let facts = GraphSemanticSnapshot::new(
         [
-            node_facts(
-                source,
-                source_type,
-                Box::new([port(output.clone(), "Value", PortDirection::Output, 1)]),
-            ),
+            source_facts,
             node_facts(
                 target,
                 target_type,
@@ -216,11 +226,11 @@ fn editor_projection_closes_resource_node_port_and_connection_facts() {
     );
     assert_eq!(model.nodes.len(), 2);
     assert_eq!(
-        model.nodes[0].parameters[0].value,
+        model.nodes[0].parameter_groups[0].parameters[0].value,
         Some(serde_json::Value::Bool(true))
     );
     assert_eq!(
-        model.nodes[1].parameters[0].value,
+        model.nodes[1].parameter_groups[0].parameters[0].value,
         Some(serde_json::Value::Bool(false))
     );
     assert_eq!(

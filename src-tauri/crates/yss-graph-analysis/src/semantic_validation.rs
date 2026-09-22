@@ -115,7 +115,7 @@ pub(crate) fn validate(
         let Some(protocol) = registry.protocol(&document_node.node_type) else {
             continue;
         };
-        for parameter in &protocol.parameters.parameters {
+        for parameter in protocol.parameters.iter() {
             let Some(schema) =
                 super::parameter_projection::parameter_schema(&node.ports, parameter.key.as_str())
             else {

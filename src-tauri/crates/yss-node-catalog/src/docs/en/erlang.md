@@ -8,6 +8,6 @@ $$
 
 ## Usage
 
-Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+Set distribution parameters and sample count in the **Distribution** and **Sampling** groups in Detail. The canvas exposes the **Samples** output.
 
 Integer Shape is in [1, 2^53], and Rate must be finite and positive. Uses the Gamma shape/rate convention and outputs positive Float64 samples.

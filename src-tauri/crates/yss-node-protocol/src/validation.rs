@@ -366,20 +366,22 @@ pub fn validate_and_prepare_parameter_values<T>(
     let mut issues = Vec::new();
     let mut prepared_nominal = std::collections::BTreeMap::new();
     for key in values.keys() {
-        if !protocol
-            .parameters
-            .parameters
-            .iter()
-            .any(|spec| &spec.key == key)
-        {
+        if protocol.parameters.get(key).is_none() {
             issues.push(issue(key, ParameterIssueKind::Unknown));
         }
     }
-    for spec in protocol.parameters.parameters.iter() {
-        let Some(value) = values.get(&spec.key) else {
-            if spec.default_value.is_none()
-                && spec.constraints.contains(&ParameterConstraint::Required)
-            {
+    for spec in protocol.parameters.iter() {
+        if !protocol.parameters.is_visible(spec, values) {
+            if values.contains_key(&spec.key) {
+                issues.push(issue(&spec.key, ParameterIssueKind::Constraint));
+            }
+            continue;
+        }
+        let default = (!values.contains_key(&spec.key))
+            .then(|| spec.default_json())
+            .flatten();
+        let Some(value) = values.get(&spec.key).or(default.as_ref()) else {
+            if spec.constraints.contains(&ParameterConstraint::Required) {
                 issues.push(issue(&spec.key, ParameterIssueKind::Required));
             }
             continue;
@@ -404,12 +406,6 @@ pub fn validate_and_prepare_parameter_values<T>(
             && !value.as_str().is_some_and(valid_opaque_resource_id)
         {
             issues.push(issue(&spec.key, ParameterIssueKind::InvalidResourceId));
-            continue;
-        }
-        if let ParameterEditorSpec::Configuration(schema) = &spec.editor
-            && schema.validate_json(value).is_err()
-        {
-            issues.push(issue(&spec.key, ParameterIssueKind::Constraint));
             continue;
         }
         if matches!(spec.editor, ParameterEditorSpec::SemanticDomain)
@@ -499,7 +495,10 @@ fn parameter_length(value: &serde_json::Value) -> Option<usize> {
     }
 }
 
-fn protocol_value_matches_json(expected: &DataValue, actual: &serde_json::Value) -> bool {
+pub(crate) fn protocol_value_matches_json(
+    expected: &DataValue,
+    actual: &serde_json::Value,
+) -> bool {
     match (expected, actual) {
         (DataValue::Null, serde_json::Value::Null) => true,
         (DataValue::Bool(expected), serde_json::Value::Bool(actual)) => expected == actual,
@@ -507,6 +506,9 @@ fn protocol_value_matches_json(expected: &DataValue, actual: &serde_json::Value)
         (DataValue::Unsigned(expected), actual) => actual.as_u64() == Some(*expected),
         (DataValue::Decimal(expected), serde_json::Value::String(actual)) => {
             expected.as_str() == actual
+        }
+        (DataValue::Decimal(expected), serde_json::Value::Number(actual)) => {
+            expected.as_str().parse::<f64>().ok() == actual.as_f64()
         }
         (DataValue::String(expected), serde_json::Value::String(actual)) => {
             expected.as_ref() == actual

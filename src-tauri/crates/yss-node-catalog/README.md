@@ -65,6 +65,7 @@ GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配�
 现有 IV 和 DID 节点归入“计量与因果分析”，Panel 模型归入“面板模型”；ADF、VAR、VEC 与协整检验归入“时间序列”。现有 Predict 节点归入“预测与估计后分析”；Summary 跟随方法所在主分类，不因包含诊断指标就归入“模型诊断与比较”。尚无节点的分类保留注册，展示与筛选由通用目录树处理。
 
 所有统计 Summary 的唯一输入为对应方法的已拟合 `model`，输出 `result` 和 `report`，不接收原始数据或估计参数。
+已接入内核的 Linear Summary 在 Parameters 的 Configure 分组声明内容开关及条件可见的检验参数。默认选模型概览、系数表、方程和 ANOVA；内容选择是图参数，参与语义失效、历史与保存。其他尚无内核的方法不登记未实现的内容开关。
 原始输入与估计配置属于 Fit；IV 2SLS、IV LIML、Panel、VAR 均有对应 Fit 定义，Panel DID 的 TWFE 节点也属于 Fit。
 ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验，输出 `statistics.result.adf` 类型的 `result` 和 `report`。
 `adf.summary` 已删除，不提供旧节点或旧端口的兼容转换。上述为目录契约；目前统计节点仅 Linear 的 Fit/Summary/Predict 已注册执行内核，其他方法仍暂不可用。
@@ -85,7 +86,7 @@ ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验
 23 个采样节点均已接入 SCI 执行：正态、连续均匀、指数、Gamma、Beta、
 学生 t、柯西、卡方、对数正态、Weibull、Laplace、Pareto、逆 Gamma、三角、F、Erlang，
 以及 Bernoulli、二项、泊松、几何、负二项、离散均匀和超几何分布。
-所有参数位于 Detail → 配置，唯一输出为 Samples；样本数必须为正整数，分配前检查内存预算。
+参数在 Detail 中分为“分布参数”和“采样设置”两组，唯一输出为 Samples；样本数必须为正整数，分配前检查内存预算。
 每次执行重新随机采样，不缓存结果、不在图编辑或分析时采样；输出连续分布的 Float64
 或离散分布的 Int64 数列。参数须有限且符合分布定义，标准差、尺度、形状和自由度必须为正。
 Bernoulli/二项允许概率 0 和 1；几何/负二项要求 0 < p ≤ 1；泊松率允许零。
@@ -121,3 +122,33 @@ Bernoulli/二项允许概率 0 和 1；几何/负二项要求 0 < p ≤ 1；泊�
 Catalog 消费 Protocol、Registry 和 SCI 的中立配置契约。
 图文档与语义快照属于 Graph，计划构建与缓存属于 Execution；图诊断定义、校验和前端模板生成
 属于 Graph 诊断链路，不会装配进节点目录。
+
+## 参数声明
+
+`yss-node-protocol` 使用 `Parameters → ParameterGroup → Parameter` 声明节点参数。
+分组 key 在节点内唯一，参数 key 在所有组之间唯一；声明顺序决定 Details 中的组和字段顺序。
+组拥有本地化标题和可选说明，参数拥有类型、默认值、约束、编辑器和 `visible_when` 条件。
+无参数节点使用空 `Parameters`，有参数的组不能为空。注册阶段重新校验分组、默认值、条件引用与本地化 key。
+
+```rust
+fn normal_parameters() -> Result<Parameters, ParametersError> {
+    Parameters::new([
+        ParameterGroup::new("distribution", [
+            Parameter::number("mean").float().default(0.0),
+            Parameter::number("standard_deviation").float().positive().default(1.0),
+        ]),
+        ParameterGroup::new("sampling", [
+            Parameter::number("sample_count").int().positive().min(1).default(100),
+        ]),
+    ])
+}
+```
+
+构造器用于可信节点声明，非法 key 或数值字面量立即报错。数值 builder 的 `int()` 增加整数约束，
+`min(i64)` 设置整数下界；`float()` 使用 Numeric 浮点默认值。参数标题 key 默认为
+`parameters.{key}.title`，组标题默认为 `parameter_groups.{key}.title`，均须登记本地化资源，
+也可用 `title(I18nKey)` 指定目录自己的 key。
+
+参数值始终按参数 key 扁平保存，分组不创建对象值或执行参数。分组名称、顺序和字段归组不进入
+协议执行指纹；参数类型、默认值、约束及条件显隐参与指纹。条件可以引用同节点其他组的无条件参数，
+使用显式值或协议默认值判断。编辑、条件清理及执行投影见 [Graph analysis](../yss-graph-analysis/README.md)。

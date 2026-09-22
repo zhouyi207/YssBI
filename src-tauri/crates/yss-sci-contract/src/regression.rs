@@ -1,6 +1,7 @@
 //! Shared ordinary least-squares configuration.
 pub mod fit;
 pub mod report;
+pub mod summary;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum OlsCovariance {

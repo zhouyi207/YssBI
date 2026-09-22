@@ -615,7 +615,6 @@ fn localize_semantic_snapshot(
         for parameter in &mut node_facts.parameters {
             let Some(spec) = protocol
                 .parameters
-                .parameters
                 .iter()
                 .find(|spec| spec.key == parameter.key)
             else {
@@ -627,32 +626,37 @@ fn localize_semantic_snapshot(
                 .as_ref()
                 .map(|key| catalog.text(locale, key));
             if let Some(
-                yss_graph_analysis::GraphParameterConfigurationFact::ProjectColumns { unavailable_reason, .. }
-                | yss_graph_analysis::GraphParameterConfigurationFact::FilterPredicate { unavailable_reason, .. }
+                yss_graph_analysis::GraphParameterConfigurationFact::ProjectColumns {
+                    unavailable_reason,
+                    ..
+                }
+                | yss_graph_analysis::GraphParameterConfigurationFact::FilterPredicate {
+                    unavailable_reason,
+                    ..
+                },
             ) = &mut parameter.configuration
-                && let Some(key) = unavailable_reason.as_ref()
+                && let Some(key) = unavailable_reason
+                    .as_ref()
                     .and_then(|key| yss_node_protocol::I18nKey::new(key.clone()).ok())
             {
                 *unavailable_reason = Some(catalog.text(locale, &key));
             }
-            let Some(yss_graph_analysis::GraphParameterConfigurationFact::Configuration { fields }) =
-                &mut parameter.configuration
-            else {
-                continue;
-            };
-            for field in fields.iter_mut() {
-                if let Ok(key) = yss_node_protocol::I18nKey::new(field.title.clone()) {
-                    field.title = catalog.text(locale, &key);
-                }
-                if let Some(key) = field
-                    .description
+        }
+        for group in &mut node_facts.parameter_groups {
+            if let Some(spec) = protocol
+                .parameters
+                .groups
+                .iter()
+                .find(|spec| spec.key == group.key)
+            {
+                group.title = catalog.text(locale, &spec.title_key);
+                group.description = spec
+                    .description_key
                     .as_ref()
-                    .and_then(|key| yss_node_protocol::I18nKey::new(key.clone()).ok())
-                {
-                    field.description = Some(catalog.text(locale, &key));
-                }
+                    .map(|key| catalog.text(locale, key));
             }
         }
+
         node_facts
     })
 }

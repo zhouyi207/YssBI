@@ -242,12 +242,9 @@ pub(crate) fn execute(
     use SeriesKernel::*;
     invocation.check_control()?;
     if matches!(kind, Range) {
-        let Some(RuntimeValue::Record(config)) = invocation.parameter("configuration") else {
-            return Err(KernelError::InvalidParameter);
-        };
-        let start = integer(config.get("start"))?;
-        let end = integer(config.get("end"))?;
-        let step = integer(config.get("step"))?;
+        let start = integer(invocation.parameter("start"))?;
+        let end = integer(invocation.parameter("end"))?;
+        let step = integer(invocation.parameter("step"))?;
         if step == 0 {
             return Err(KernelError::InvalidParameter);
         }

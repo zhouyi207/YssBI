@@ -25,12 +25,6 @@ pub enum DiagnosticSeverity {
     Information,
 }
 
-impl DiagnosticSeverity {
-    pub fn is_blocking(self) -> bool {
-        matches!(self, Self::Error)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity> {
     Graph,

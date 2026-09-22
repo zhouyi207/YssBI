@@ -58,6 +58,11 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
+节点参数按参数 key 扁平传入，内核通过 `invocation.parameter(key)` 读取。参数组只属于声明与编辑呈现，
+不会形成运行期 Record。`with_optional_parameters` 将已声明的条件参数标为可选；组装时同时核对参数键和
+可选性，运行时拒绝未知参数及缺少必需参数。Graph 在准备计划时解析默认值并排除不适用的条件参数；
+内核按所选算法检查适用字段。可选参数集合进入能力指纹，分布、比较、整数范围和线性 Fit 的实现 revision 已随调用契约更新。
+
 `with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖排序后的 ID、revision、输入布局、参数键和输出数量。具体已安装能力以 [builtins](src/builtins/mod.rs) 的注册表为准；未安装的节点仍返回缺少执行能力的诊断。
 
 新增节点时在对应方法族模块实现适配，再加入内置装配或由应用 provider 注册；实际算法放回 SCI 或相应数据所有者。执行函数只使用已经解析的类型和资源，不重新求解图类型，也不自行读取项目资源。
@@ -108,7 +113,9 @@ DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命�
 
 线性回归 Fit 从节点参数构造 `OlsOptions` 和 `LinearRegressionMethod`，由 Node Kernel 调用 `yss_sci_runtime::linear_regression`，传入本次执行的取消标记和 deadline。OLS/WLS 支持截距、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale；GLS 接收相对误差协方差矩阵并估计尺度，标准误仅支持 Nonrobust。Summary 读取上游原生模型，不调用拟合；Predict 复用训练系数和截距。
 
-Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
+`LinearRegressionValue` 共享不可变拟合模型；Summary 另持有本次 `LinearSummaryOptions` 和选中检验的不可变结果。ACF/PACF、序列相关和假设检验在 Summary 执行时按选项计算，未选项不调用 SCI。模型拥有有界 memo，每类分析只缓存最近一组参数；补选复用相同模型和参数的结果，参数变化重新计算，新 Fit 使用独立缓存。计算不持有 memo 锁，遵守调用预算并在分析间检查取消；旧 Summary 继续持有原分析快照。
+
+Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Summary 的 ACF/PACF、序列检验和假设检验统一由本 crate 的 `linear_summary` 从同一模型构造输入并调用 runtime。Application 只读取选中项的已存结果，保留请求范围、会话与结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
 概率分布目录的 23 个采样节点由 Node Kernel 解析配置，调用 SCI Runtime 的 `sample_into`，
 再由 SCI 使用既有 statrs/rand 实现。中立的分布参数与整数/浮点采样值由 SCI Contract 定义。

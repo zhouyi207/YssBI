@@ -129,6 +129,9 @@ semantic_id!(ParameterKey, "parameter key", |value| validate_local(
     value,
     "parameter key"
 ));
+semantic_id!(ParameterGroupKey, "parameter group key", |value| {
+    validate_local(value, "parameter group key")
+});
 semantic_id!(
     TypeParameterId,
     "type parameter id",

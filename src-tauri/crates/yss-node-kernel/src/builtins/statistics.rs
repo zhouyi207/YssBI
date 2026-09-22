@@ -1,6 +1,5 @@
 use super::numeric_input;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
@@ -26,9 +25,11 @@ pub(crate) fn execute(
             let Some(RuntimeValue::LinearRegression(model)) = invocation.inputs.first() else {
                 return Err(KernelError::InvalidNumericInput);
             };
+            let summary =
+                Arc::new(model.summarize(summary_options(invocation)?, invocation.control)?);
             vec![
-                RuntimeValue::LinearRegression(model.clone()),
-                RuntimeValue::LinearRegression(model.clone()),
+                RuntimeValue::LinearRegression(summary.clone()),
+                RuntimeValue::LinearRegression(summary),
             ]
         }
         LinearKernel::Predict => {
@@ -76,15 +77,11 @@ pub(crate) fn execute(
             vec![RuntimeValue::List(prediction.into())]
         }
         LinearKernel::Fit => {
-            let Some(RuntimeValue::Record(configuration)) = invocation.parameter("configuration")
-            else {
-                return Err(KernelError::InvalidParameter);
-            };
-            let constant = match configuration.get("constant") {
+            let constant = match invocation.parameter("constant") {
                 Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) => *value,
                 _ => return Err(KernelError::InvalidParameter),
             };
-            let method = match configuration.get("method") {
+            let method = match invocation.parameter("method") {
                 Some(RuntimeValue::Scalar(TabularScalar::String(value))) => value.as_ref(),
                 _ => return Err(KernelError::InvalidParameter),
             };
@@ -143,7 +140,7 @@ pub(crate) fn execute(
                     predictors: prepared,
                     options: OlsOptions {
                         constant,
-                        covariance: covariance(configuration)?,
+                        covariance: covariance(invocation)?,
                     },
                     method,
                 },
@@ -165,7 +162,7 @@ pub(crate) fn execute(
             let fitted = numeric_list(&result.fitted, invocation)?;
             let residuals = numeric_list(&result.residuals, invocation)?;
             vec![
-                RuntimeValue::LinearRegression(Arc::new(result)),
+                RuntimeValue::LinearRegression(Arc::new(result.into())),
                 fitted,
                 residuals,
             ]
@@ -270,14 +267,74 @@ fn check_fit_workspace(
     invocation.control.check_bytes(bytes).map(|_| ())
 }
 
-fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance, KernelError> {
-    let integer = |key: &str| match values.get(key) {
+fn summary_options(
+    invocation: &KernelInvocation<'_>,
+) -> Result<yss_sci_contract::regression::summary::LinearSummaryOptions, KernelError> {
+    use yss_sci_contract::regression::summary::LinearSummaryOptions;
+    let mut options = LinearSummaryOptions::default();
+    for (key, target) in [
+        ("equation", &mut options.equation),
+        ("model_summary", &mut options.model_summary),
+        ("anova", &mut options.anova),
+        ("coefficient_table", &mut options.coefficient_table),
+        ("coefficient_chart", &mut options.coefficient_chart),
+        ("diagnostics", &mut options.diagnostics),
+        ("residual_plot", &mut options.residual_plot),
+        ("observations", &mut options.observations),
+        ("acf_pacf", &mut options.acf_pacf),
+        ("serial_tests", &mut options.serial_tests),
+        ("hypothesis_test", &mut options.hypothesis_test),
+    ] {
+        let Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) = invocation.parameter(key)
+        else {
+            return Err(KernelError::InvalidParameter);
+        };
+        *target = *value;
+    }
+    for (key, enabled, target) in [
+        ("acf_max_lag", options.acf_pacf, &mut options.acf_max_lag),
+        (
+            "serial_lags",
+            options.serial_tests,
+            &mut options.serial_lags,
+        ),
+    ] {
+        if enabled {
+            let Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) =
+                invocation.parameter(key)
+            else {
+                return Err(KernelError::InvalidParameter);
+            };
+            *target = usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)?;
+        }
+    }
+    if options.serial_tests {
+        let Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) =
+            invocation.parameter("bg_nomiss0")
+        else {
+            return Err(KernelError::InvalidParameter);
+        };
+        options.bg_nomiss0 = *value;
+    }
+    if options.hypothesis_test {
+        let Some(RuntimeValue::Scalar(TabularScalar::String(value))) =
+            invocation.parameter("hypothesis")
+        else {
+            return Err(KernelError::InvalidParameter);
+        };
+        options.hypothesis = value.to_string();
+    }
+    Ok(options)
+}
+
+fn covariance(invocation: &KernelInvocation<'_>) -> Result<OlsCovariance, KernelError> {
+    let integer = |key: &str| match invocation.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => {
             usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)
         }
         _ => Err(KernelError::InvalidParameter),
     };
-    let string = |key: &str| match values.get(key) {
+    let string = |key: &str| match invocation.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value.clone()),
         _ => Err(KernelError::InvalidParameter),
     };
@@ -288,13 +345,7 @@ fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance
         "HC2" => OlsCovariance::Hc2,
         "HC3" => OlsCovariance::Hc3,
         "fixed scale" => OlsCovariance::FixedScale {
-            scale: match values.get("scale") {
-                // Configuration fields also accept the protocol's decimal JSON spelling.
-                Some(RuntimeValue::Scalar(TabularScalar::String(value))) => {
-                    value.parse().map_err(|_| KernelError::InvalidParameter)?
-                }
-                value => numeric_input(value)?,
-            },
+            scale: numeric_input(invocation.parameter("scale"))?,
         },
         "HAC" => OlsCovariance::Hac {
             kernel: string("kernel")?.into_string(),
@@ -330,6 +381,7 @@ fn numeric_list(
 mod tests {
     use super::*;
     use crate::{KernelControl, KernelId, KernelOutputSpec, KernelRegistry};
+    use std::collections::BTreeMap;
     use std::{
         borrow::Cow,
         sync::atomic::AtomicBool,
@@ -344,7 +396,7 @@ mod tests {
         count: usize,
         constant: bool,
     ) -> Result<Vec<RuntimeValue>, KernelError> {
-        let config = RuntimeValue::Record(std::sync::Arc::new(BTreeMap::from([
+        let config = BTreeMap::<Box<str>, _>::from([
             (
                 "constant".into(),
                 RuntimeValue::Scalar(TabularScalar::Bool(constant)),
@@ -357,7 +409,7 @@ mod tests {
                 "covariance".into(),
                 RuntimeValue::Scalar(TabularScalar::String("nonrobust".into())),
             ),
-        ])));
+        ]);
         let control = KernelControl::new(
             Arc::new(AtomicBool::new(false)),
             Instant::now() + Duration::from_secs(10),
@@ -386,10 +438,37 @@ mod tests {
                     .map(|key| key.unwrap_or(if kind == "fit" { "response" } else { "model" }))
                     .collect::<Vec<_>>(),
                 parameters: if kind == "fit" {
-                    BTreeMap::from([(
-                        crate::KernelParameterKey::new("configuration".into()).unwrap(),
-                        Cow::Borrowed(&config),
-                    )])
+                    config
+                        .iter()
+                        .map(|(key, value)| {
+                            (
+                                crate::KernelParameterKey::new(key.clone()).unwrap(),
+                                Cow::Borrowed(value),
+                            )
+                        })
+                        .collect()
+                } else if kind == "summary" {
+                    [
+                        ("equation", true),
+                        ("model_summary", true),
+                        ("anova", true),
+                        ("coefficient_table", true),
+                        ("coefficient_chart", false),
+                        ("diagnostics", false),
+                        ("residual_plot", false),
+                        ("observations", false),
+                        ("acf_pacf", false),
+                        ("serial_tests", false),
+                        ("hypothesis_test", false),
+                    ]
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (
+                            crate::KernelParameterKey::new(key.into()).unwrap(),
+                            Cow::Owned(RuntimeValue::Scalar(TabularScalar::Bool(value))),
+                        )
+                    })
+                    .collect()
                 } else {
                     BTreeMap::new()
                 },
@@ -526,7 +605,7 @@ mod tests {
                     let RuntimeValue::LinearRegression(result) = value else {
                         panic!("native result");
                     };
-                    assert!(Arc::ptr_eq(model, &result));
+                    assert!(Arc::ptr_eq(&model.model, &result.model));
                 }
                 let prediction = run(
                     "predict",

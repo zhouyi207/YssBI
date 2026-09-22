@@ -542,7 +542,6 @@ fn conversion_target<'a>(
     let parameter = registry
         .protocol(&node.node_type)?
         .parameters
-        .parameters
         .iter()
         .find(|candidate| &candidate.key == parameter)?;
     match &parameter.default_value.as_ref()?.value {

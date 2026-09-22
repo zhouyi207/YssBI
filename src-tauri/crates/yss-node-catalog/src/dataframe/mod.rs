@@ -9,8 +9,8 @@ mod inventory;
 pub(crate) use inventory::documentation as inventory_documentation;
 
 use super::builtin::{
-    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters,
-    configuration_parameter, iid, leaf, sid,
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
+    sid,
 };
 use crate::{Aliases, Message, Text};
 use yss_node_protocol::*;
@@ -112,9 +112,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
     })
 }
 
-fn interface(
-    kind: InterfaceKind,
-) -> Result<(Vec<PortSpec>, Vec<ParameterSpec>), BuiltinAssemblyError> {
+fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAssemblyError> {
     use InterfaceKind::*;
     match kind {
         DataframeSource => Ok((
@@ -332,32 +330,24 @@ fn interface(
                 int_series_type()?,
                 None,
             )?],
-            vec![configuration_parameter(
-                "parameters.configuration.title",
-                ConfigurationSchema {
-                    fields: [("start", 0), ("end", 10), ("step", 1)]
-                        .into_iter()
-                        .map(|(key, default)| {
-                            Ok(ConfigurationFieldSpec {
-                                parameter: parameter(
-                                    key,
-                                    concrete("core.numeric")?,
-                                    ParameterEditorSpec::Number,
-                                    Some(TypedValue {
-                                        value_type: concrete("core.numeric")?,
-                                        value: DataValue::Integer(default),
-                                    }),
-                                    vec![ParameterConstraint::IntegerRange {
-                                        min: None,
-                                        max: None,
-                                    }],
-                                )?,
-                                visible_when: None,
-                            })
-                        })
-                        .collect::<Result<_, BuiltinAssemblyError>>()?,
-                },
-            )?],
+            [("start", 0), ("end", 10), ("step", 1)]
+                .into_iter()
+                .map(|(key, default)| {
+                    parameter(
+                        key,
+                        concrete("core.numeric")?,
+                        ParameterEditorSpec::Number,
+                        Some(TypedValue {
+                            value_type: concrete("core.numeric")?,
+                            value: DataValue::Integer(default),
+                        }),
+                        vec![ParameterConstraint::IntegerRange {
+                            min: None,
+                            max: None,
+                        }],
+                    )
+                })
+                .collect::<Result<_, BuiltinAssemblyError>>()?,
         )),
         SeriesLength | SeriesCount => Ok((
             vec![
@@ -510,7 +500,7 @@ fn choice_parameter(
     key: &'static str,
     default: &'static str,
     values: &[&str],
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.text")?,
@@ -659,7 +649,7 @@ fn port(
     })
 }
 
-fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.text")?,
@@ -671,7 +661,7 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
     )
 }
 
-fn column_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+fn column_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.text")?,
@@ -684,7 +674,7 @@ fn column_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyE
 fn nominal_parameter(
     key: &'static str,
     type_id: &'static str,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete(type_id)?,
@@ -694,7 +684,7 @@ fn nominal_parameter(
     )
 }
 
-fn required_text_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+fn required_text_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.text")?,
@@ -704,7 +694,7 @@ fn required_text_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAs
     )
 }
 
-fn select_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+fn select_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.text")?,
@@ -717,7 +707,7 @@ fn select_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyE
 fn positive_integer_parameter(
     key: &'static str,
     default: i64,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.numeric")?,
@@ -737,7 +727,7 @@ fn bounded_positive_integer_parameter(
     key: &'static str,
     default: i64,
     max: i64,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     let mut spec = positive_integer_parameter(key, default)?;
     spec.constraints = vec![ParameterConstraint::IntegerRange {
         min: Some(1),
@@ -752,8 +742,8 @@ fn parameter(
     editor: ParameterEditorSpec,
     default_value: Option<TypedValue>,
     constraints: Vec<ParameterConstraint>,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    Ok(ParameterSpec {
+) -> Result<Parameter, BuiltinAssemblyError> {
+    Ok(Parameter {
         key: sid(key, ParameterKey::new)?,
         title_key: iid(leak(format!("parameters.{key}.title")))?,
         description_key: Some(iid(leak(format!("parameters.{key}.description")))?),
@@ -762,6 +752,7 @@ fn parameter(
         constraints,
         editor,
         presentation: ParameterPresentation::DetailPanel,
+        visible_when: None,
     })
 }
 

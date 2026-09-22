@@ -47,7 +47,7 @@ mod tests {
                 "{} needs an explicit interface review",
                 entry.id
             );
-            assert!(protocol.parameters.parameters.is_empty());
+            assert!(protocol.parameters.is_empty());
             let item = catalog
                 .items
                 .iter()

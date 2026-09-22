@@ -6,7 +6,7 @@ $$
 \text{Result} = (A = B)
 $$
 
-Compares scalars or series with matching meanings. Select a comparison mode under Configuration in Detail:
+Compares scalars or series with matching meanings. Select a comparison mode under Parameters in Detail:
 
 - `exact` (default): supports all seven basic meanings. Numeric values compare exactly across signed integer, unsigned integer and floating representations without epsilon or lossy promotion. Text compares original case-sensitive values without numeric parsing. Categorical and Ordinal compare codes rather than display labels.
 - `tolerance`: Numeric only, using the symmetric rule `abs(a-b) <= atol + rtol * max(abs(a), abs(b))`. This mode shows absolute tolerance (default 1e-12) and relative tolerance (default 1e-9). Both must be finite and nonnegative; lossy Float64 conversions are rejected. Zero tolerances compare the converted values exactly.

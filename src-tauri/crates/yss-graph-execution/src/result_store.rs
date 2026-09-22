@@ -500,11 +500,21 @@ impl ResultStore {
         run: RunId,
         outputs: &[PlanOutputRef],
         basis: Option<&ResultRunBasis>,
+        reused_inputs: &BTreeMap<PlanOutputRef, ResultId>,
     ) -> bool {
         let mut registry = self
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
+        if reused_inputs.iter().any(|(output, id)| {
+            outputs.contains(output)
+                || !registry
+                    .outputs
+                    .get(output)
+                    .is_some_and(|cached| cached.valid && cached.result == Some(*id))
+        }) {
+            return false;
+        }
         if let Some(basis) = basis {
             if !registry
                 .graph_inputs
@@ -540,6 +550,14 @@ impl ResultStore {
                     CachedOutput {
                         run: Some(run),
                         inputs: basis.and_then(|basis| basis.inputs.outputs.get(output).cloned()),
+                        source_results: basis
+                            .and_then(|basis| basis.inputs.outputs.get(output))
+                            .into_iter()
+                            .flat_map(|inputs| inputs.sources())
+                            .filter_map(|source| {
+                                reused_inputs.get(source).map(|id| (source.clone(), *id))
+                            })
+                            .collect(),
                         ..Default::default()
                     },
                 )
@@ -581,9 +599,14 @@ impl ResultStore {
                 || registry.outputs.get(result.output()).is_some_and(|cached| {
                     cached.result.is_some()
                         || cached.inputs.as_ref().is_some_and(|inputs| {
-                            inputs
-                                .sources()
-                                .any(|source| !published.contains_key(source))
+                            inputs.sources().any(|source| {
+                                !published.contains_key(source)
+                                    && !cached.source_results.get(source).is_some_and(|expected| {
+                                        registry.outputs.get(source).is_some_and(|current| {
+                                            current.valid && current.result == Some(*expected)
+                                        })
+                                    })
+                            })
                         })
                 })
                 || registry
@@ -611,6 +634,7 @@ impl ResultStore {
                 .filter_map(|source| {
                     published
                         .get(source)
+                        .or_else(|| cached.source_results.get(source))
                         .copied()
                         .map(|id| (source.clone(), id))
                 })
@@ -900,7 +924,7 @@ mod tests {
             .unwrap();
         let outputs = inputs.outputs.keys().cloned().collect::<Vec<_>>();
         let run = RunId::from_existing(1);
-        assert!(store.begin_run(run, &outputs, Some(&basis)));
+        assert!(store.begin_run(run, &outputs, Some(&basis), &BTreeMap::new()));
         assert!(
             store.publish(
                 &outputs
@@ -942,7 +966,12 @@ mod tests {
             .collect::<Vec<_>>();
         let basis = store.capture_run_basis(graph, original.clone()).unwrap();
         let run = RunId::from_existing(1);
-        assert!(store.begin_run(run, std::slice::from_ref(&output), Some(&basis)));
+        assert!(store.begin_run(
+            run,
+            std::slice::from_ref(&output),
+            Some(&basis),
+            &BTreeMap::new()
+        ));
         assert!(store.publish(&[cached_result(1, run, output.clone())], &observations));
         let states = store.query_cache_states(graph, &[1; 32]).unwrap();
         assert_eq!(states.connections.len(), 3);
@@ -1011,7 +1040,12 @@ mod tests {
         );
         let basis = store.capture_run_basis(graph, original).unwrap();
         let run = RunId::from_existing(2);
-        assert!(store.begin_run(run, std::slice::from_ref(&output), Some(&basis)));
+        assert!(store.begin_run(
+            run,
+            std::slice::from_ref(&output),
+            Some(&basis),
+            &BTreeMap::new()
+        ));
         assert!(store.get(ResultId::from_existing(1)).is_none());
         assert!(store.publish(&[cached_result(2, run, output.clone())], &[]));
         assert!(
@@ -1166,10 +1200,15 @@ mod tests {
             restored_state.revision
         );
         let outputs = [named_output("a")];
-        assert!(!store.begin_run(RunId::from_existing(2), &outputs, Some(&obsolete)));
+        assert!(!store.begin_run(
+            RunId::from_existing(2),
+            &outputs,
+            Some(&obsolete),
+            &BTreeMap::new()
+        ));
         let basis = store.capture_run_basis(graph, original.clone()).unwrap();
         let run = RunId::from_existing(3);
-        assert!(store.begin_run(run, &outputs, Some(&basis)));
+        assert!(store.begin_run(run, &outputs, Some(&basis), &BTreeMap::new()));
         let started_revision = store
             .query_cache_states(graph, &original.semantic_input_hash)
             .unwrap()
@@ -1191,7 +1230,7 @@ mod tests {
         assert!(store.query_pin_result(&named_output("b")).is_none());
         let run = RunId::from_existing(4);
         let basis = store.capture_run_basis(graph, original.clone()).unwrap();
-        assert!(store.begin_run(run, &outputs, Some(&basis)));
+        assert!(store.begin_run(run, &outputs, Some(&basis), &BTreeMap::new()));
         store.observe_graph_inputs(graph, edited);
         store.observe_graph_inputs(graph, original.clone());
         assert!(!store.publish(&[cached_result(4, run, named_output("a"))], &[]));
@@ -1214,7 +1253,12 @@ mod tests {
         )]));
         assert!(resources.query_pin_result(&named_output("a")).is_none());
         assert!(resources.query_pin_result(&named_output("b")).is_none());
-        assert!(!resources.begin_run(RunId::from_existing(2), &outputs, Some(&old_admission)));
+        assert!(!resources.begin_run(
+            RunId::from_existing(2),
+            &outputs,
+            Some(&old_admission),
+            &BTreeMap::new()
+        ));
         // Undo restores graph semantics, while the independent data revision stays current.
         original
             .outputs
@@ -1268,7 +1312,7 @@ mod tests {
             ReadyPinResult::new(output(), result(1, run).pin().provenance().clone()),
         );
         let store = ResultStore::new();
-        store.begin_run(run, &[output()], None);
+        store.begin_run(run, &[output()], None, &BTreeMap::new());
         assert!(store.publish(std::slice::from_ref(&ready), &[]));
         let snapshot = store.get(ready.result_id()).unwrap();
         assert!(Arc::ptr_eq(ready.value(), snapshot.value()));
@@ -1286,7 +1330,7 @@ mod tests {
     fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() {
         let store = ResultStore::new();
         let first = RunId::from_existing(1);
-        store.begin_run(first, &[output()], None);
+        store.begin_run(first, &[output()], None, &BTreeMap::new());
         assert!(store.publish(&[result(1, first)], &[]));
         let id = ResultId::from_existing(1);
         let weak = Arc::downgrade(store.get(id).unwrap().value());
@@ -1305,7 +1349,7 @@ mod tests {
         );
         assert!(store.get(id).is_some());
         let next = RunId::from_existing(2);
-        store.begin_run(next, &[output()], None);
+        store.begin_run(next, &[output()], None, &BTreeMap::new());
         assert!(store.publish(&[result(2, next)], &[]));
         assert_eq!(
             store
@@ -1338,7 +1382,7 @@ mod tests {
     fn window_handoffs_and_owner_reconciliation_do_not_leak_or_drop_claimed_results() {
         let store = ResultStore::new();
         let run = RunId::from_existing(1);
-        store.begin_run(run, &[output()], None);
+        store.begin_run(run, &[output()], None, &BTreeMap::new());
         store.publish(&[result(1, run)], &[]);
         let id = ResultId::from_existing(1);
         let lease = Uuid::new_v4();
@@ -1365,7 +1409,7 @@ mod tests {
         for closed in ["main", "plot"] {
             let store = ResultStore::new();
             let run = RunId::from_existing(2);
-            store.begin_run(run, &[output()], None);
+            store.begin_run(run, &[output()], None, &BTreeMap::new());
             store.publish(&[result(2, run)], &[]);
             let id = ResultId::from_existing(2);
             store
@@ -1384,10 +1428,10 @@ mod tests {
         let store = ResultStore::new();
         let first = RunId::from_existing(1);
         let second = RunId::from_existing(2);
-        store.begin_run(first, &[output()], None);
+        store.begin_run(first, &[output()], None, &BTreeMap::new());
         assert!(store.publish(&[result(1, first)], &[]));
         let previous = Arc::downgrade(store.get(ResultId::from_existing(1)).unwrap().value());
-        store.begin_run(second, &[output()], None);
+        store.begin_run(second, &[output()], None, &BTreeMap::new());
         assert!(previous.upgrade().is_none());
         assert!(store.query_pin_result(&output()).is_none());
         assert!(!store.publish(&[result(2, first)], &[]));
@@ -1431,9 +1475,9 @@ mod tests {
                 ),
             )
         };
-        assert!(store.begin_run(first, &[output(), other.clone()], None));
+        assert!(store.begin_run(first, &[output(), other.clone()], None, &BTreeMap::new()));
         assert!(store.publish(&[result(1, first), other_result(2, first)], &[]));
-        assert!(store.begin_run(second, &[output()], None));
+        assert!(store.begin_run(second, &[output()], None, &BTreeMap::new()));
         assert_eq!(
             store
                 .query_pin_result(&other)
@@ -1442,12 +1486,12 @@ mod tests {
                 .result_id(),
             ResultId::from_existing(2)
         );
-        assert!(store.begin_run(second, std::slice::from_ref(&other), None));
-        assert!(store.begin_run(third, &[output()], None));
+        assert!(store.begin_run(second, std::slice::from_ref(&other), None, &BTreeMap::new()));
+        assert!(store.begin_run(third, &[output()], None, &BTreeMap::new()));
         assert!(!store.publish(&[result(3, second), other_result(4, second)], &[]));
         assert!(store.query_pin_result(&other).is_none());
         assert!(store.publish(&[result(5, third)], &[]));
-        assert!(!store.begin_run(second, &[output()], None));
+        assert!(!store.begin_run(second, &[output()], None, &BTreeMap::new()));
         assert!(store.get(ResultId::from_existing(5)).is_some());
         store.observe_graph_inputs(
             output().graph().as_str(),

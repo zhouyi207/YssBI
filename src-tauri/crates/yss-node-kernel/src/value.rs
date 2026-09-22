@@ -15,7 +15,7 @@ pub enum RuntimeValue {
     Resource(Box<str>),
     Relation(yss_relational_contract::RelationHandle),
     Series(yss_relational_contract::SeriesHandle),
-    LinearRegression(Arc<yss_sci_contract::scientific::LinearRegressionResult>),
+    LinearRegression(Arc<crate::LinearRegressionValue>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

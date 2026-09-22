@@ -149,7 +149,7 @@ fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortCardinality::Declared,
         )?],
         vec![generic],
-        vec![ParameterSpec {
+        vec![Parameter {
             key: sid("constant", ParameterKey::new)?,
             title_key: iid("parameters.constant.title")?,
             description_key: Some(iid("parameters.constant.description")?),
@@ -158,6 +158,7 @@ fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::GraphConstant,
             presentation: ParameterPresentation::DetailPanel,
+            visible_when: None,
         }],
         NodeScope::Any,
         None,
@@ -177,7 +178,7 @@ fn protocol(
     id: &'static str,
     ports: Vec<PortSpec>,
     type_parameters: Vec<TypeParameterId>,
-    parameters: Vec<ParameterSpec>,
+    parameters: Vec<Parameter>,
     scope: NodeScope,
     managed_role: Option<ManagedNodeRole>,
     execution: ExecutionSemantics,
@@ -252,7 +253,7 @@ fn data_port(
     })
 }
 
-fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
     let kind = match key {
         "target" | "function" => ResourceDisplayKind::Function,
         _ => {
@@ -262,7 +263,7 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
             });
         }
     };
-    Ok(ParameterSpec {
+    Ok(Parameter {
         key: sid(key, ParameterKey::new)?,
         title_key: iid(Box::leak(
             format!("parameters.{key}.title").into_boxed_str(),
@@ -275,6 +276,7 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Resource { kind },
         presentation: ParameterPresentation::DetailPanel,
+        visible_when: None,
     })
 }
 

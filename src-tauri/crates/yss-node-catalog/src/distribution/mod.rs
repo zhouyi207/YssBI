@@ -1,9 +1,5 @@
-use super::builtin::{
-    BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
-    assembled_parameters, configuration_parameter, leaf, sid,
-};
+use super::builtin::{BuiltinAssemblyError, ProviderFragment, assembled_interface, leaf, sid};
 use crate::Message;
-use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
 
@@ -17,15 +13,6 @@ enum NumericRepresentation {
     Int64,
 }
 
-impl NumericRepresentation {
-    fn type_id(self) -> &'static str {
-        match self {
-            Self::Float64 => "core.numeric",
-            Self::Int64 => "core.numeric",
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 struct DistributionParameter {
     key: &'static str,
@@ -37,13 +24,11 @@ struct DistributionParameter {
 struct DistributionSpec {
     id: &'static str,
     category: &'static str,
-    kernel: &'static str,
     en: &'static str,
     zh: &'static str,
     aliases: &'static [&'static str],
     zh_aliases: &'static [&'static str],
     parameters: &'static [DistributionParameter],
-    output: NumericRepresentation,
 }
 
 const F: NumericRepresentation = NumericRepresentation::Float64;
@@ -64,7 +49,6 @@ const SPECS: &[DistributionSpec] = &[
     DistributionSpec {
         id: "yssbi.distribution.normal.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.normal.sample",
         en: "Normal Samples",
         zh: "正态分布采样",
         aliases: &["normal distribution", "Gaussian", "random normal"],
@@ -74,12 +58,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("standard_deviation", "Standard Deviation", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.uniform.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.uniform.sample",
         en: "Uniform Samples",
         zh: "连续均匀分布采样",
         aliases: &["continuous uniform distribution", "random uniform"],
@@ -89,12 +71,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("upper_bound", "Upper Bound", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.exponential.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.exponential.sample",
         en: "Exponential Samples",
         zh: "指数分布采样",
         aliases: &["exponential distribution", "Exp", "rate"],
@@ -103,12 +83,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("rate", "Rate", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.gamma.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.gamma.sample",
         en: "Gamma Samples",
         zh: "伽马分布采样",
         aliases: &["gamma distribution", "shape rate"],
@@ -118,12 +96,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("rate", "Rate", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.beta.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.beta.sample",
         en: "Beta Samples",
         zh: "贝塔分布采样",
         aliases: &["beta distribution", "alpha beta"],
@@ -133,12 +109,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("beta", "Beta", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.students_t.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.students_t.sample",
         en: "Student's t Samples",
         zh: "学生 t 分布采样",
         aliases: &[
@@ -151,12 +125,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("degrees_of_freedom", "Degrees of Freedom", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.cauchy.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.cauchy.sample",
         en: "Cauchy Samples",
         zh: "柯西分布采样",
         aliases: &["Cauchy distribution", "location scale"],
@@ -166,12 +138,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("scale", "Scale", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.chi_squared.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.chi_squared.sample",
         en: "Chi-squared Samples",
         zh: "卡方分布采样",
         aliases: &[
@@ -184,12 +154,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("degrees_of_freedom", "Degrees of Freedom", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.log_normal.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.log_normal.sample",
         en: "Log-normal Samples",
         zh: "对数正态分布采样",
         aliases: &["lognormal distribution", "log normal", "mu sigma"],
@@ -199,12 +167,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("sigma", "Sigma", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.weibull.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.weibull.sample",
         en: "Weibull Samples",
         zh: "威布尔分布采样",
         aliases: &["Weibull distribution", "shape scale"],
@@ -214,12 +180,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("scale", "Scale", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.laplace.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.laplace.sample",
         en: "Laplace Samples",
         zh: "拉普拉斯分布采样",
         aliases: &["Laplace distribution", "double exponential"],
@@ -229,12 +193,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("scale", "Scale", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.pareto.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.pareto.sample",
         en: "Pareto Samples",
         zh: "帕累托分布采样",
         aliases: &["Pareto distribution", "power law"],
@@ -244,12 +206,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("scale", "Scale", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.inverse_gamma.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.inverse_gamma.sample",
         en: "Inverse-gamma Samples",
         zh: "逆伽马分布采样",
         aliases: &["inverse gamma distribution", "reciprocal gamma"],
@@ -259,12 +219,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("scale", "Scale", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.triangular.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.triangular.sample",
         en: "Triangular Samples",
         zh: "三角分布采样",
         aliases: &["triangular distribution", "minimum maximum mode"],
@@ -275,12 +233,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("mode", "Mode", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.fisher_snedecor.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.fisher_snedecor.sample",
         en: "F-distribution Samples",
         zh: "F 分布采样",
         aliases: &[
@@ -302,12 +258,10 @@ const SPECS: &[DistributionSpec] = &[
             ),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.erlang.sample",
         category: CONTINUOUS_CATEGORY,
-        kernel: "yssbi.distribution.erlang.sample",
         en: "Erlang Samples",
         zh: "爱尔朗分布采样",
         aliases: &["Erlang distribution", "integer shape gamma"],
@@ -317,12 +271,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("rate", "Rate", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: F,
     },
     DistributionSpec {
         id: "yssbi.distribution.bernoulli.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.bernoulli.sample",
         en: "Bernoulli Samples",
         zh: "伯努利分布采样",
         aliases: &["Bernoulli distribution", "binary trial", "probability"],
@@ -331,12 +283,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("probability", "Success Probability", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
     DistributionSpec {
         id: "yssbi.distribution.binomial.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.binomial.sample",
         en: "Binomial Samples",
         zh: "二项分布采样",
         aliases: &["binomial distribution", "trials probability"],
@@ -346,12 +296,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("probability", "Success Probability", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
     DistributionSpec {
         id: "yssbi.distribution.poisson.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.poisson.sample",
         en: "Poisson Samples",
         zh: "泊松分布采样",
         aliases: &["Poisson distribution", "lambda", "count distribution"],
@@ -360,12 +308,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("rate", "Lambda", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
     DistributionSpec {
         id: "yssbi.distribution.geometric.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.geometric.sample",
         en: "Geometric Samples",
         zh: "几何分布采样",
         aliases: &["geometric distribution", "waiting time", "probability"],
@@ -374,12 +320,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("probability", "Success Probability", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
     DistributionSpec {
         id: "yssbi.distribution.negative_binomial.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.negative_binomial.sample",
         en: "Negative-binomial Samples",
         zh: "负二项分布采样",
         aliases: &["negative binomial distribution", "Pascal distribution"],
@@ -389,12 +333,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("probability", "Success Probability", F),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
     DistributionSpec {
         id: "yssbi.distribution.discrete_uniform.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.discrete_uniform.sample",
         en: "Discrete-uniform Samples",
         zh: "离散均匀分布采样",
         aliases: &["discrete uniform distribution", "random integer"],
@@ -404,12 +346,10 @@ const SPECS: &[DistributionSpec] = &[
             setting("upper_bound", "Upper Bound", I),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
     DistributionSpec {
         id: "yssbi.distribution.hypergeometric.sample",
         category: DISCRETE_CATEGORY,
-        kernel: "yssbi.distribution.hypergeometric.sample",
         en: "Hypergeometric Samples",
         zh: "超几何分布采样",
         aliases: &[
@@ -423,7 +363,6 @@ const SPECS: &[DistributionSpec] = &[
             setting("draw_count", "Draw Count", I),
             setting("sample_count", "Sample Count", I),
         ],
-        output: I,
     },
 ];
 
@@ -520,7 +459,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
                 }),
             ));
         }
-        nodes.push(leaf(protocol(spec)?, spec.kernel));
+        nodes.push(leaf(protocol(spec)?, spec.id));
     }
     Ok(ProviderFragment {
         types,
@@ -532,15 +471,15 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
 }
 
 fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    let parameters = spec
+    let mut parameters = spec
         .parameters
         .iter()
-        .map(|parameter| configuration_field(spec, parameter))
+        .map(|field| parameter(spec, field))
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
     let ports = vec![data_port(
         "samples",
         "Samples",
-        data_series_type(concrete(spec.output.type_id())?),
+        data_series_type(concrete("core.numeric")?),
     )?];
     Ok(NodeProtocol {
         type_id: node_id(spec.id)?,
@@ -554,15 +493,22 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
             hidden: false,
         },
         interface: assembled_interface(spec.id, ports, vec![], vec![])?,
-        parameters: assembled_parameters(
-            spec.id,
-            vec![configuration_parameter(
-                "parameters.configuration.title",
-                ConfigurationSchema {
-                    fields: parameters.into_boxed_slice(),
-                },
-            )?],
-        )?,
+        parameters: {
+            let sampling = parameters.remove(
+                parameters
+                    .iter()
+                    .position(|parameter| parameter.key.as_str() == "sample_count")
+                    .expect("sampling count"),
+            );
+            Parameters::new([
+                ParameterGroup::new("distribution", parameters),
+                ParameterGroup::new("sampling", [sampling]),
+            ])
+            .map_err(|source| BuiltinAssemblyError::InvalidParameterSchema {
+                node_type: spec.id.into(),
+                source,
+            })?
+        },
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
@@ -574,56 +520,49 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
     })
 }
 
-fn configuration_field(
+fn parameter(
     spec: &DistributionSpec,
     field: &DistributionParameter,
-) -> Result<ConfigurationFieldSpec, BuiltinAssemblyError> {
-    let value_type = concrete(field.value_type.type_id())?;
-    let value = match field.value_type {
-        NumericRepresentation::Int64 => DataValue::Integer(match field.key {
-            "sample_count" => 100,
-            "population_size" | "trial_count" => 10,
-            "success_population" => 5,
-            "lower_bound" => 0,
-            _ => 1,
-        }),
-        NumericRepresentation::Float64 => DataValue::Decimal(assembled_decimal(
-            spec.id,
-            match field.key {
-                "mean" | "location" | "mu" | "minimum" | "lower_bound" => "0",
-                "probability" | "mode" => "0.5",
-                _ => "1",
-            },
-        )?),
-    };
-    let constraints = if field.key == "sample_count" {
-        vec![ParameterConstraint::IntegerRange {
-            min: Some(1),
-            max: None,
-        }]
-    } else if matches!(field.value_type, NumericRepresentation::Int64) {
-        vec![ParameterConstraint::IntegerRange {
-            min: None,
-            max: None,
-        }]
-    } else {
-        vec![]
-    };
-    Ok(ConfigurationFieldSpec {
-        parameter: ParameterSpec {
-            key: sid(field.key, ParameterKey::new)?,
-            title_key: field_key(spec.id, field.key)?,
-            description_key: None,
-            default_value: Some(TypedValue {
-                value_type: value_type.clone(),
-                value,
-            }),
-            value_type,
-            constraints,
-            editor: ParameterEditorSpec::Number,
-            presentation: ParameterPresentation::DetailPanel,
-        },
-        visible_when: None,
+) -> Result<Parameter, BuiltinAssemblyError> {
+    let parameter = Parameter::number(field.key).title(field_key(spec.id, field.key)?);
+    Ok(match field.value_type {
+        NumericRepresentation::Int64 => {
+            let parameter = parameter.int();
+            if field.key == "sample_count" {
+                parameter.positive().min(1).default(100)
+            } else {
+                parameter.default(match field.key {
+                    "population_size" | "trial_count" => 10,
+                    "success_population" => 5,
+                    "lower_bound" => 0,
+                    _ => 1,
+                })
+            }
+        }
+        NumericRepresentation::Float64 => {
+            let parameter = parameter.float();
+            let parameter = if matches!(
+                field.key,
+                "standard_deviation"
+                    | "scale"
+                    | "shape"
+                    | "alpha"
+                    | "beta"
+                    | "sigma"
+                    | "degrees_of_freedom"
+                    | "numerator_degrees_of_freedom"
+                    | "denominator_degrees_of_freedom"
+            ) {
+                parameter.positive()
+            } else {
+                parameter
+            };
+            parameter.default(match field.key {
+                "mean" | "location" | "mu" | "minimum" | "lower_bound" => 0.0,
+                "probability" | "mode" => 0.5,
+                _ => 1.0,
+            })
+        }
     })
 }
 
@@ -663,8 +602,8 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &Dis
     out.extend([
         ("en-US", title, Message::Text(spec.en)),
         ("zh-CN", title, Message::Text(spec.zh)),
-        ("en-US", documentation, Message::Text("Parameters use the conventional statistical parameterization in Detail → Configuration. Sample count must be a positive integer.")),
-        ("zh-CN", documentation, Message::Text("在 Detail → 配置中设置分布参数和样本数；样本数必须为正整数。")),
+        ("en-US", documentation, Message::Text("Distribution parameters and sample count are edited in the Distribution and Sampling groups in Detail. Sample count must be a positive integer.")),
+        ("zh-CN", documentation, Message::Text("在 Detail 的分布参数和采样设置两组中设置分布参数和样本数；样本数必须为正整数。")),
         ("en-US", aliases, Message::Aliases(spec.aliases)),
         ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
     ]);
@@ -705,29 +644,38 @@ fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
 mod tests {
     use super::*;
     #[test]
-    fn sampling_parameters_are_editable_configuration_with_valid_defaults() {
+    fn sampling_groups_have_valid_flat_defaults() {
         for spec in SPECS {
             let protocol = protocol(spec).unwrap();
             assert_eq!(protocol.interface.ports.len(), 1, "{}", spec.id);
             assert_eq!(protocol.interface.ports[0].direction, PortDirection::Output);
             assert_eq!(protocol.interface.ports[0].key.as_str(), "samples");
-            let parameter = &protocol.parameters.parameters[0];
-            let ParameterEditorSpec::Configuration(schema) = &parameter.editor else {
-                panic!("{} requires a configuration editor", spec.id);
-            };
-            assert_eq!(schema.fields.len(), spec.parameters.len());
+            assert_eq!(protocol.parameters.groups.len(), 2);
+            assert_eq!(protocol.parameters.iter().count(), spec.parameters.len());
             assert!(
-                schema
-                    .fields
+                protocol
+                    .parameters
                     .iter()
-                    .all(|field| matches!(field.parameter.editor, ParameterEditorSpec::Number))
+                    .all(|field| matches!(field.editor, ParameterEditorSpec::Number))
             );
-            let mut defaults =
-                protocol_value_to_json(&parameter.default_value.as_ref().unwrap().value);
-            schema.validate_json(&defaults).unwrap();
-            assert_eq!(defaults["sample_count"], 100);
-            defaults["sample_count"] = 0.into();
-            assert!(schema.validate_json(&defaults).is_err());
+            let mut defaults: ParameterValues = protocol
+                .parameters
+                .iter()
+                .map(|parameter| (parameter.key.clone(), parameter.default_json().unwrap()))
+                .collect();
+            assert!(
+                validate_and_prepare_parameter_values::<()>(&protocol, &defaults, |_, _| None)
+                    .issues
+                    .is_empty()
+            );
+            let count = ParameterKey::new("sample_count").unwrap();
+            assert_eq!(defaults[&count], 100);
+            defaults.insert(count, 0.into());
+            assert!(
+                !validate_and_prepare_parameter_values::<()>(&protocol, &defaults, |_, _| None)
+                    .issues
+                    .is_empty()
+            );
         }
     }
 }

@@ -8,11 +8,7 @@ pub(super) fn execute(
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
     let tolerance = {
-        let Some(RuntimeValue::Record(configuration)) = invocation.parameter("configuration")
-        else {
-            return Err(KernelError::InvalidParameter);
-        };
-        match configuration.get("mode").map(RuntimeValue::unannotated) {
+        match invocation.parameter("mode").map(RuntimeValue::unannotated) {
             Some(RuntimeValue::Scalar(TabularScalar::String(mode))) if mode.as_ref() == "exact" => {
                 None
             }
@@ -20,14 +16,8 @@ pub(super) fn execute(
                 if mode.as_ref() == "tolerance" =>
             {
                 let read = |key: &str| -> Result<f64, KernelError> {
-                    match configuration.get(key).map(RuntimeValue::unannotated) {
-                        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => {
-                            value.parse().map_err(|_| KernelError::InvalidParameter)
-                        }
-                        value => {
-                            super::numeric_input(value).map_err(|_| KernelError::InvalidParameter)
-                        }
-                    }
+                    super::numeric_input(invocation.parameter(key))
+                        .map_err(|_| KernelError::InvalidParameter)
                 };
                 Some(
                     yss_relational_contract::NumericTolerance::new(

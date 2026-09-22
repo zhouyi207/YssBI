@@ -12,7 +12,7 @@ pub(crate) use inventory::documentation as inventory_documentation;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
-    assembled_parameters, configuration_parameter, iid, leaf, sid,
+    assembled_parameters, iid, leaf, sid,
 };
 use crate::{Aliases, Message, Text};
 use yss_node_protocol::*;
@@ -54,7 +54,33 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             hidden: false,
         },
         interface: assembled_interface(spec.id, ports(spec)?, vec![], vec![])?,
-        parameters: assembled_parameters(spec.id, parameters(spec)?)?,
+        parameters: {
+            let parameters = parameters(spec)?;
+            if spec.family == Family::Linear && spec.stage == Stage::Fit {
+                let (model, covariance): (Vec<_>, Vec<_>) = parameters
+                    .into_iter()
+                    .partition(|parameter| matches!(parameter.key.as_str(), "method" | "constant"));
+                Parameters::new([
+                    ParameterGroup::new("model", model),
+                    ParameterGroup::new("covariance", covariance),
+                ])
+                .map_err(|source| {
+                    BuiltinAssemblyError::InvalidParameterSchema {
+                        node_type: spec.id.into(),
+                        source,
+                    }
+                })?
+            } else if spec.family == Family::Linear && spec.stage == Stage::Summary {
+                Parameters::new([ParameterGroup::new("configure", parameters)]).map_err(
+                    |source| BuiltinAssemblyError::InvalidParameterSchema {
+                        node_type: spec.id.into(),
+                        source,
+                    },
+                )?
+            } else {
+                assembled_parameters(spec.id, parameters)?
+            }
+        },
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: execution(),
         typing: NodeTypingSpec::Fixed,
@@ -174,9 +200,13 @@ fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErr
     Ok(ports)
 }
 
-fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyError> {
+fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     if spec.stage == Stage::Summary {
-        return Ok(vec![]);
+        return if spec.family == Family::Linear {
+            linear_summary_parameters()
+        } else {
+            Ok(vec![])
+        };
     }
     let mut parameters = match spec.stage {
         Stage::Test if spec.family == Family::Adf => vec![
@@ -215,27 +245,72 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyErro
         )
     {
         let schema = if spec.family == Family::Linear {
-            linear_configuration_schema()?
+            linear_parameters()?
         } else {
-            ConfigurationSchema {
-                fields: configure_parameters(spec.family)?
-                    .into_iter()
-                    .map(|parameter| ConfigurationFieldSpec {
-                        parameter,
-                        visible_when: None,
-                    })
-                    .collect(),
-            }
+            configure_parameters(spec.family)?
         };
-        parameters.push(configuration_parameter(
-            "parameters.statistics.configuration.title",
-            schema,
-        )?);
+        parameters.extend(schema);
     }
     Ok(parameters)
 }
 
-fn configure_parameters(family: Family) -> Result<Vec<ParameterSpec>, BuiltinAssemblyError> {
+fn linear_summary_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
+    let defaults = yss_sci_contract::regression::summary::LinearSummaryOptions::default();
+    let mut parameters = vec![];
+    for (key, enabled) in [
+        ("model_summary", defaults.model_summary),
+        ("coefficient_table", defaults.coefficient_table),
+        ("coefficient_chart", defaults.coefficient_chart),
+        ("equation", defaults.equation),
+        ("anova", defaults.anova),
+        ("diagnostics", defaults.diagnostics),
+        ("residual_plot", defaults.residual_plot),
+        ("observations", defaults.observations),
+        ("acf_pacf", defaults.acf_pacf),
+        ("serial_tests", defaults.serial_tests),
+        ("hypothesis_test", defaults.hypothesis_test),
+    ] {
+        parameters.push(toggle_parameter(key, enabled)?);
+    }
+    let enabled = |key| -> Result<ParameterCondition, BuiltinAssemblyError> {
+        Ok(ParameterCondition {
+            key: sid(key, ParameterKey::new)?,
+            values: vec![DataValue::Bool(true)].into_boxed_slice(),
+        })
+    };
+    for (key, selector, default) in [
+        ("acf_max_lag", "acf_pacf", defaults.acf_max_lag),
+        ("serial_lags", "serial_tests", defaults.serial_lags),
+    ] {
+        let mut lag = positive_integer_parameter(key, default as i64)?;
+        lag.constraints = vec![ParameterConstraint::IntegerRange {
+            min: Some(1),
+            max: Some(40),
+        }];
+        parameters.push(lag.when(enabled(selector)?));
+    }
+    parameters
+        .push(toggle_parameter("bg_nomiss0", defaults.bg_nomiss0)?.when(enabled("serial_tests")?));
+    parameters.push(
+        parameter(
+            "hypothesis",
+            concrete("core.text")?,
+            ParameterEditorSpec::Text { multiline: false },
+            DataValue::String(defaults.hypothesis.into()),
+            vec![
+                ParameterConstraint::Required,
+                ParameterConstraint::Length {
+                    min: Some(1),
+                    max: Some(4096),
+                },
+            ],
+        )?
+        .when(enabled("hypothesis_test")?),
+    );
+    Ok(parameters)
+}
+
+fn configure_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     let mut parameters = vec![toggle_parameter("constant", true)?];
     match family {
         Family::Logit | Family::Probit => {
@@ -255,7 +330,7 @@ fn configure_parameters(family: Family) -> Result<Vec<ParameterSpec>, BuiltinAss
     Ok(parameters)
 }
 
-fn linear_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyError> {
+fn linear_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     let defaults = yss_sci_contract::regression::OlsOptions::default();
     let choice = |key, default, choices: &[&'static str]| {
         let mut parameter = select_parameter(key, default)?;
@@ -267,58 +342,44 @@ fn linear_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyE
         ));
         Ok::<_, BuiltinAssemblyError>(parameter)
     };
-    let conditional = |parameter, covariance: &'static str| -> Result<_, BuiltinAssemblyError> {
-        Ok(ConfigurationFieldSpec {
-            parameter,
-            visible_when: Some(ConfigurationCondition {
+    let conditional =
+        |parameter: Parameter, covariance: &'static str| -> Result<_, BuiltinAssemblyError> {
+            Ok(parameter.when(ParameterCondition {
                 key: sid("covariance", ParameterKey::new)?,
                 values: vec![DataValue::String(covariance.into())].into_boxed_slice(),
-            }),
-        })
-    };
+            }))
+        };
     let mut scale = decimal_parameter("scale", "1")?;
     scale.constraints.push(ParameterConstraint::Positive);
-    Ok(ConfigurationSchema {
-        fields: vec![
-            ConfigurationFieldSpec {
-                parameter: choice("method", "OLS", &["OLS", "WLS", "GLS"])?,
-                visible_when: None,
-            },
-            ConfigurationFieldSpec {
-                parameter: toggle_parameter("constant", defaults.constant)?,
-                visible_when: None,
-            },
-            ConfigurationFieldSpec {
-                parameter: choice(
-                    "covariance",
-                    defaults.covariance.name(),
-                    &[
-                        "nonrobust",
-                        "HC0",
-                        "HC1",
-                        "HC2",
-                        "HC3",
-                        "HAC",
-                        "newey",
-                        "fixed scale",
-                    ],
-                )?,
-                visible_when: None,
-            },
-            conditional(
-                choice(
-                    "kernel",
-                    "bartlett",
-                    &["bartlett", "parzen", "quadratic spectral"],
-                )?,
+    Ok(vec![
+        choice("method", "OLS", &["OLS", "WLS", "GLS"])?,
+        toggle_parameter("constant", defaults.constant)?,
+        choice(
+            "covariance",
+            defaults.covariance.name(),
+            &[
+                "nonrobust",
+                "HC0",
+                "HC1",
+                "HC2",
+                "HC3",
                 "HAC",
+                "newey",
+                "fixed scale",
+            ],
+        )?,
+        conditional(
+            choice(
+                "kernel",
+                "bartlett",
+                &["bartlett", "parzen", "quadratic spectral"],
             )?,
-            conditional(positive_integer_parameter("bandwidth", 1)?, "HAC")?,
-            conditional(positive_integer_parameter("lag", 1)?, "newey")?,
-            conditional(scale, "fixed scale")?,
-        ]
-        .into_boxed_slice(),
-    })
+            "HAC",
+        )?,
+        conditional(positive_integer_parameter("bandwidth", 1)?, "HAC")?,
+        conditional(positive_integer_parameter("lag", 1)?, "newey")?,
+        conditional(scale, "fixed scale")?,
+    ])
 }
 
 fn execution() -> ExecutionSemantics {
@@ -407,7 +468,7 @@ fn data_port(
 fn positive_integer_parameter(
     key: &'static str,
     default: i64,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.numeric")?,
@@ -422,7 +483,7 @@ fn positive_integer_parameter(
 fn decimal_parameter(
     key: &'static str,
     default: &'static str,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.numeric")?,
@@ -431,10 +492,7 @@ fn decimal_parameter(
         vec![],
     )
 }
-fn toggle_parameter(
-    key: &'static str,
-    default: bool,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+fn toggle_parameter(key: &'static str, default: bool) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.binary")?,
@@ -446,7 +504,7 @@ fn toggle_parameter(
 fn select_parameter(
     key: &'static str,
     default: &'static str,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
+) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
         concrete("core.text")?,
@@ -461,8 +519,8 @@ fn parameter(
     editor: ParameterEditorSpec,
     value: DataValue,
     constraints: Vec<ParameterConstraint>,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    Ok(ParameterSpec {
+) -> Result<Parameter, BuiltinAssemblyError> {
+    Ok(Parameter {
         key: sid(key, ParameterKey::new)?,
         title_key: iid(leak(format!("parameters.statistics.{key}.title")))?,
         description_key: Some(iid(leak(format!(
@@ -476,6 +534,7 @@ fn parameter(
         constraints,
         editor,
         presentation: ParameterPresentation::DetailPanel,
+        visible_when: None,
     })
 }
 
@@ -747,6 +806,60 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
+    out.extend([
+        (
+            "en-US",
+            "parameter_groups.configure.title",
+            Text("Configure"),
+        ),
+        ("zh-CN", "parameter_groups.configure.title", Text("配置")),
+    ]);
+    for (key, en, zh) in [
+        ("model_summary", "Model summary", "模型概览"),
+        ("coefficient_table", "Coefficient table", "系数表"),
+        ("coefficient_chart", "Coefficient magnitude", "系数大小图"),
+        ("equation", "Equation", "回归方程"),
+        ("anova", "ANOVA", "方差分析"),
+        ("diagnostics", "Diagnostics", "诊断信息"),
+        ("residual_plot", "Residual plot", "残差图"),
+        (
+            "observations",
+            "Fitted values and residuals",
+            "拟合值与残差表",
+        ),
+        ("acf_pacf", "ACF / PACF", "自相关与偏自相关"),
+        ("acf_max_lag", "ACF / PACF lags", "自相关滞后阶数"),
+        ("serial_tests", "Serial correlation tests", "序列相关检验"),
+        ("serial_lags", "BG / Q lags", "BG / Q 滞后阶数"),
+        (
+            "bg_nomiss0",
+            "BG: fill initial residual lags with zero",
+            "BG：初始滞后残差补零",
+        ),
+        ("hypothesis_test", "Hypothesis test", "假设检验"),
+        (
+            "hypothesis",
+            "Hypothesis (e.g. x1 = 0)",
+            "检验假设（例如 x1 = 0）",
+        ),
+    ] {
+        let title = leak(format!("parameters.statistics.{key}.title"));
+        let description = leak(format!("parameters.statistics.{key}.description"));
+        out.extend([
+            ("en-US", title, Text(en)),
+            ("zh-CN", title, Text(zh)),
+            (
+                "en-US",
+                description,
+                Text("Only selected summary contents and their dependencies are computed."),
+            ),
+            (
+                "zh-CN",
+                description,
+                Text("仅计算选中的汇总内容及其必要依赖。"),
+            ),
+        ]);
+    }
     for (key, en, zh) in [
         (
             "types.statistics_model_linear.title",
@@ -823,7 +936,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for key in [
         "method",
         "scale",
-        "configuration",
         "kernel",
         "bandwidth",
         "lag",
@@ -847,7 +959,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         let description = leak(format!("parameters.statistics.{key}.description"));
         let (en, zh) = match key {
             "method" => ("Estimation method", "估计方法"),
-            "configuration" => ("Model configuration", "模型配置"),
             "constant" => ("Include intercept", "包含常数项"),
             "covariance" => (
                 "Standard error method (GLS: nonrobust only)",

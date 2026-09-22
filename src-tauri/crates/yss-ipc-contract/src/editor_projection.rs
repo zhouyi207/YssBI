@@ -99,7 +99,7 @@ pub struct EditorNodeProjectionDto {
     pub display: NodeDisplayDto,
     pub ports: Vec<EditorPortDto>,
     pub port_instance_additions: Vec<PortInstanceAdditionDto>,
-    pub parameter_editors: Vec<ParameterEditorDto>,
+    pub parameter_groups: Vec<ParameterGroupDto>,
     pub capabilities: NodeCapabilitiesDto,
     pub diagnostics: Vec<DiagnosticDto>,
 }
@@ -296,6 +296,14 @@ pub enum ResolvedPortStatusDto {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ParameterGroupDto {
+    pub key: Box<str>,
+    pub display: ParameterDisplayDto,
+    pub parameters: Vec<ParameterEditorDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ParameterEditorDto {
     pub key: Box<str>,
     pub display: ParameterDisplayDto,
@@ -330,9 +338,6 @@ impl From<ParameterPresentation> for ParameterPresentationDto {
     rename_all_fields = "camelCase"
 )]
 pub enum SchemaAwareParameterEditorDto {
-    Configuration {
-        fields: Vec<ParameterEditorDto>,
-    },
     SelectOptions {
         options: Vec<Box<str>>,
     },
@@ -393,7 +398,6 @@ pub enum ParameterEditorKindDto {
     Number,
     Toggle,
     Select,
-    Configuration,
     Resource,
 }
 

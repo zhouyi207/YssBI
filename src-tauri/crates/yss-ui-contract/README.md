@@ -10,6 +10,8 @@
 首个接入场景是线性回归结果报告。Rust Application session 保存每个结果的页面 JSON，React 只安装其只读投影。
 GUI 的排序、显隐、重置、JSON 导入和 Harness 的页面修改调用相同用例。模型不能改写统计结果；报告组件继续使用既有 Results 查询、分页、分析与面板租约。
 
+Summary 内容和检验参数属于图节点参数。默认页面只生成本次结果已选择的绑定；布局 replace/patch/reset 同样受该结果能力约束，不能通过 JSON 加入未计算的分析。Report 的“添加并计算”调用 Results 的节点编辑与定向执行流程，成功后切换到新结果及其默认页面，不改写旧结果的统计快照。
+
 Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态仍由 FlexLayout Model 拥有。后端可以请求打开图、定位节点、打开结果和显示登记过的面板，由前端调用已有的面板与编辑器操作。输入草稿、选择、视口、拖拽和悬停保留在前端；拖拽过程不往返 IPC。
 
 ```mermaid
@@ -33,14 +35,20 @@ UiPage 包含 `source: { executionSessionId, resultId }`、运行期 `revision` 
 Spec 只包含 `root` 和按稳定 ID 索引的 `elements`；每个元素有 `component`、`visible`、`children`。
 容器以 ID 引用子元素，必须形成单根树；循环、重复引用、孤立元素和未知字段均被拒绝。没有旧报告 Spec 的转换或迁移路径。
 
-| 组件          | props                | children         |
-| ------------- | -------------------- | ---------------- |
-| column / row  | gap                  | 稳定元素 ID 列表 |
-| text          | text，按纯文本呈现   | 空               |
-| reportSection | 登记过的 section     | 空               |
-| button        | label、封闭的 intent | 空               |
+| 组件                                                              | props                     | children         |
+| ----------------------------------------------------------------- | ------------------------- | ---------------- |
+| column / row                                                      | gap                       | 稳定元素 ID 列表 |
+| section                                                           | title、collapsible        | 稳定元素 ID 列表 |
+| text                                                              | text，按纯文本呈现        | 空               |
+| equation / keyValue / table / statCard / coefficientTable / chart | binding                   | 空               |
+| analysis                                                          | binding，登记过的分析交互 | 空               |
+| button                                                            | label、封闭的 intent      | 空               |
 
-报告章节包含原有模型概览、系数表、残差图、观测表和检验等组件。绑定目标始终是页面的当前结果，Spec 不携带可覆盖 Results 的数值或查询参数。
+组件目录按展示方式定义。`section` 只负责标题和折叠；模型概览、ANOVA、诊断等业务名称属于报告模板的元素 ID 和数据绑定。默认模板按报告类型放在 Application 的 [templates/regression.rs](../yss-application/src/presentation/templates/regression.rs)，UI contract 不拥有回归模板。
+
+模板条目直接关联 Summary 的内容选项，仅为已选内容构造元素及子树；同一份生成结果用于默认页、重置和绑定能力校验。
+
+`binding` 是当前报告登记的数据名称，按组件类型校验；未知绑定、类型不匹配和超出当前结果能力的绑定在提交前被拒绝。原生回归报告的 `presentation` 字段提供 `summary` 键值条目、`anova` 列和行、`conditionNumber` 指标，数值保持原始类型并带格式标记。`coefficients` / `observations` 沿用分页表引用；公式、图表和分析绑定由 Results 交付，系数表与系数图可独立排序、显隐。绑定目标始终是页面的当前结果，Spec 不携带可覆盖 Results 的数值或查询参数。
 纯文本可以作说明，但不会被当作计算证据。按钮不能指定 IPC 命令名、脚本、URL 或任意事件处理函数；点击时提交元素 ID 和页面修订，Rust 从当前 Spec 解析操作并再次校验目标。
 
 `inspect_ui` 的 catalog 查询返回由 Rust 类型生成的 JSON Schema 及大小、节点数、深度上限。Harness 和 GUI 遵循同一份封闭词汇；前端在 Service 边界校验 wire，在页面导入和安装时校验完整 Spec。
@@ -58,7 +66,7 @@ Spec 只包含 `root` 和按稳定 ID 索引的 `elements`；每个元素有 `co
       "children": ["summary", "assistant"]
     },
     "summary": {
-      "component": { "type": "reportSection", "props": { "section": "modelSummary" } },
+      "component": { "type": "keyValue", "props": { "binding": "summary" } },
       "visible": true,
       "children": []
     },

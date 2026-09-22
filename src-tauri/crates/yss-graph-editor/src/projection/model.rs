@@ -24,7 +24,7 @@ pub struct EditorNodeModel {
     pub display: EditorNodeDisplay,
     pub ports: Box<[EditorPortModel]>,
     pub port_instance_additions: Box<[EditorPortInstanceAdditionModel]>,
-    pub parameters: Box<[EditorParameterModel]>,
+    pub parameter_groups: Box<[EditorParameterGroupModel]>,
     pub capabilities: EditorNodeCapabilities,
     pub diagnostics: Box<[EditorDiagnosticModel]>,
 }
@@ -149,6 +149,13 @@ pub enum EditorPortStatus {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct EditorParameterGroupModel {
+    pub key: yss_node_protocol::ParameterGroupKey,
+    pub display: EditorParameterDisplay,
+    pub parameters: Box<[EditorParameterModel]>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct EditorParameterModel {
     pub key: ParameterKey,
     pub display: EditorParameterDisplay,
@@ -175,15 +182,11 @@ pub enum ParameterEditorKind {
     Number,
     Toggle,
     Select,
-    Configuration,
     Resource,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EditorParameterConfiguration {
-    Configuration {
-        fields: Box<[EditorParameterModel]>,
-    },
     SelectOptions {
         options: Box<[Box<str>]>,
     },

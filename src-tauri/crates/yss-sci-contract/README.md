@@ -9,6 +9,8 @@ the scientific runtime and numerical models.
 - `regression`: the single OLS configuration/default and covariance selection.
   `fit` defines neutral computed model statistics; `report` defines typed OLS
   summary records. Report construction and labels belong to the runtime.
+  `summary` owns the selected linear-summary contents and analysis defaults; it
+  does not contain UI layout, graph identity, or cache state.
 - `hypothesis`: neutral hypothesis requests, results, alternatives and errors.
 - `serial_tests`: serial-correlation requests and BG/Q/Durbin-Watson results.
 - `panel`: DID inputs, inference results and typed unavailable/error codes.

@@ -191,7 +191,6 @@ pub fn authoritative_static_descriptor(
     }
     let required_parameters = protocol
         .parameters
-        .parameters
         .iter()
         .filter(|parameter| {
             parameter.default_value.is_none()
@@ -430,7 +429,6 @@ impl BuiltinCatalog {
         locale: &str,
     ) -> Vec<LocalizedParameter> {
         protocol
-            .parameters
             .parameters
             .iter()
             .map(|parameter| LocalizedParameter {

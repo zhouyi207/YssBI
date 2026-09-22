@@ -112,7 +112,22 @@ mod tests {
                 .collect();
             assert_eq!(inputs.len(), 1, "{id}");
             assert_eq!(inputs[0].key.as_str(), "model", "{id}");
-            assert!(summary.parameters.parameters.is_empty(), "{id}");
+            if id.as_str() == "yssbi.statistics.linear.summary" {
+                assert!(
+                    summary
+                        .parameters
+                        .iter()
+                        .any(|parameter| parameter.key.as_str() == "coefficient_table")
+                );
+                assert!(
+                    !summary
+                        .parameters
+                        .iter()
+                        .any(|parameter| parameter.key.as_str() == "constant")
+                );
+            } else {
+                assert!(summary.parameters.is_empty(), "{id}");
+            }
             let fit_id = NodeTypeId::new(format!(
                 "{}.fit",
                 id.as_str().strip_suffix(".summary").unwrap()

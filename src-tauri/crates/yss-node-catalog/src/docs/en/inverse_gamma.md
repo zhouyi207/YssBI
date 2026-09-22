@@ -8,6 +8,6 @@ $$
 
 ## Usage
 
-Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+Set distribution parameters and sample count in the **Distribution** and **Sampling** groups in Detail. The canvas exposes the **Samples** output.
 
 Shape and Scale must be finite and strictly positive. Scale is beta in exp(-beta / x): sample the reciprocal of Gamma(shape, rate = scale). Produces positive Float64 samples.

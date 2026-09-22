@@ -38,6 +38,7 @@ pub struct HypothesisTestInput {
     pub hypothesis: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct HypothesisTestOutput {
     pub test_type: String,
     pub h0_form: String,

@@ -51,6 +51,69 @@ fn static_descriptor(registry: &NodeRegistry, node_type: &str) -> yss_node_catal
 }
 
 #[test]
+fn grouped_parameters_merge_reset_and_undo_atomically() {
+    let system = build_builtin_node_system().unwrap();
+    let mut document = GraphDocument::default();
+    let node_id = insert_node(
+        &mut document,
+        document_node("yssbi.statistics.linear.fit", 0.0),
+    );
+    let edit = |document: &GraphDocument, values: serde_json::Value| {
+        EditorGraphMutation::SetParameters {
+            node_id,
+            parameters: serde_json::from_value(values).unwrap(),
+        }
+        .into_patch(&graph_path(), document, &system.registry)
+    };
+    let patch = edit(
+        &document,
+        serde_json::json!({"constant": false, "covariance": "HAC", "bandwidth": 5}),
+    )
+    .unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(
+        serde_json::to_value(&document.nodes[&node_id].parameters).unwrap(),
+        serde_json::json!({"constant": false, "covariance": "HAC", "bandwidth": 5})
+    );
+    let before = document.clone();
+    assert!(
+        edit(
+            &document,
+            serde_json::json!({"constant": true, "covariance": "fixed scale", "scale": -1})
+        )
+        .is_err()
+    );
+    assert_eq!(document, before);
+    let patch = edit(&document, serde_json::json!({"covariance": "HC1"})).unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(
+        serde_json::to_value(&document.nodes[&node_id].parameters).unwrap(),
+        serde_json::json!({"constant": false, "covariance": "HC1"})
+    );
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, before);
+    let patch = edit(&document, serde_json::json!({"bandwidth": null})).unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    let protocol = system
+        .registry
+        .protocol(&document.nodes[&node_id].node_type)
+        .unwrap();
+    assert_eq!(
+        protocol
+            .parameters
+            .get(&"bandwidth".parse().unwrap())
+            .unwrap()
+            .default_json(),
+        Some(1.into())
+    );
+    assert!(
+        !document.nodes[&node_id]
+            .parameters
+            .contains_key(&"bandwidth".parse().unwrap())
+    );
+}
+
+#[test]
 fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone() {
     let system = build_builtin_node_system().unwrap();
     let mut document = GraphDocument::default();

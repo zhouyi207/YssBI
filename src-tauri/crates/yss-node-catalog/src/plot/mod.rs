@@ -1,6 +1,5 @@
 use super::builtin::{
-    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters,
-    configuration_parameter, leaf, sid,
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, leaf, sid,
 };
 use crate::Message;
 use yss_data_contract::DataValue;
@@ -218,31 +217,23 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         parameters: assembled_parameters(
             spec.id,
             if matches!(spec.inputs, PlotInputs::Correlogram) {
-                vec![configuration_parameter(
-                    "parameters.configuration.title",
-                    ConfigurationSchema {
-                        fields: vec![ConfigurationFieldSpec {
-                            parameter: ParameterSpec {
-                                key: sid("maximum_lag", ParameterKey::new)?,
-                                title_key: i18n_key("parameters.plot.maximum_lag.title")?,
-                                description_key: None,
-                                value_type: concrete("core.numeric")?,
-                                default_value: Some(TypedValue {
-                                    value_type: concrete("core.numeric")?,
-                                    value: DataValue::Integer(20),
-                                }),
-                                constraints: vec![ParameterConstraint::IntegerRange {
-                                    min: Some(1),
-                                    max: None,
-                                }],
-                                editor: ParameterEditorSpec::Number,
-                                presentation: ParameterPresentation::DetailPanel,
-                            },
-                            visible_when: None,
-                        }]
-                        .into_boxed_slice(),
-                    },
-                )?]
+                vec![Parameter {
+                    key: sid("maximum_lag", ParameterKey::new)?,
+                    title_key: i18n_key("parameters.plot.maximum_lag.title")?,
+                    description_key: None,
+                    value_type: concrete("core.numeric")?,
+                    default_value: Some(TypedValue {
+                        value_type: concrete("core.numeric")?,
+                        value: DataValue::Integer(20),
+                    }),
+                    constraints: vec![ParameterConstraint::IntegerRange {
+                        min: Some(1),
+                        max: None,
+                    }],
+                    editor: ParameterEditorSpec::Number,
+                    presentation: ParameterPresentation::DetailPanel,
+                    visible_when: None,
+                }]
             } else {
                 vec![]
             },

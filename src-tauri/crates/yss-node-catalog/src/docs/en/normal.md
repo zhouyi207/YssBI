@@ -8,6 +8,6 @@ $$
 
 ## Usage
 
-Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+Set distribution parameters and sample count in the **Distribution** and **Sampling** groups in Detail. The canvas exposes the **Samples** output.
 
 Mean must be finite; Standard Deviation must be finite and strictly positive. Produces Float64 samples. New samples are generated each execution; results are not cached.

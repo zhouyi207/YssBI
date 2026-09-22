@@ -1,7 +1,6 @@
 #![deny(unused_must_use)]
 pub use yss_data_contract::SemanticType;
 
-mod configuration;
 mod data_series;
 pub mod dataframe;
 mod identity;
@@ -15,14 +14,13 @@ pub mod validation;
 mod tests;
 mod value;
 
-pub use configuration::{ConfigurationCondition, ConfigurationFieldSpec, ConfigurationSchema};
 pub use data_series::{
     DATA_SERIES_CONSTRUCTOR_ID, NUMERIC_TYPE_CLASS_ID, data_series_type, numeric_data_series_type,
 };
 pub use identity::{
     I18nKey, IconId, InterfaceResolverId, InvalidSemanticId, NodeCategoryId, NodeStyleId,
-    NodeTypeId, ParameterKey, PortKey, ProviderId, SchemaResolverId, TypeClassId,
-    TypeConstructorId, TypeId, TypeParameterId,
+    NodeTypeId, ParameterGroupKey, ParameterKey, PortKey, ProviderId, SchemaResolverId,
+    TypeClassId, TypeConstructorId, TypeId, TypeParameterId,
 };
 pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InputBindingSpec,
@@ -32,8 +30,8 @@ pub use model::{
     ResourceDisplayKind, validate_execution,
 };
 pub use parameter::{
-    DuplicateParameterKey, ParameterConstraint, ParameterEditorSpec, ParameterPresentation,
-    ParameterSchema, ParameterSchemaError, ParameterSpec, ParameterValues,
+    Parameter, ParameterCondition, ParameterConstraint, ParameterEditorSpec, ParameterGroup,
+    ParameterPresentation, ParameterValues, Parameters, ParametersError, parameter_value_to_json,
 };
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,

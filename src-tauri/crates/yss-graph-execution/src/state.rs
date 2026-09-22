@@ -249,6 +249,9 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
         } = execution;
         let operations = package.plan().operations();
         let mut values: Vec<Option<RuntimeValue>> = vec![None; producers.len()];
+        for (index, snapshot) in &selection.cached_values {
+            values[*index] = Some(snapshot.value().value().clone());
+        }
         let mut remaining_dependencies = vec![0usize; operations.len()];
         let mut dependents = vec![Vec::new(); operations.len()];
         for (operation_index, operation) in operations.iter().enumerate() {
@@ -259,6 +262,9 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 let crate::plan::PlanInputSource::Value(reference) = binding.source() else {
                     continue;
                 };
+                if values[reference.index() as usize].is_some() {
+                    continue;
+                }
                 let Some(producer) = producers
                     .get(reference.index() as usize)
                     .and_then(|producer| *producer)
@@ -397,6 +403,7 @@ struct SelectedObservation {
 struct ExecutionSelection {
     required_operations: Vec<bool>,
     observations: Vec<SelectedObservation>,
+    cached_values: BTreeMap<usize, StoredResultSnapshot>,
 }
 
 fn execution_producers(
@@ -427,6 +434,7 @@ fn select_execution(
     package: &crate::plan::ExecutionPlanPackage,
     demand: &crate::plan::PlanExecutionDemand,
     producers: &[Option<usize>],
+    cached_output: impl Fn(&crate::plan::PlanOutputRef) -> Option<StoredResultSnapshot>,
 ) -> Result<ExecutionSelection, OperationExecutionError> {
     let operations = package.plan().operations();
     let consumed = operations
@@ -510,6 +518,31 @@ fn select_execution(
                 }),
         )
         .collect::<Vec<_>>();
+    // Requested producers always run. A consumer of a requested producer must also
+    // run even if it still has a valid cache before this run is admitted.
+    let mut downstream = vec![Vec::new(); operations.len()];
+    for (index, operation) in operations.iter().enumerate() {
+        for binding in operation.inputs() {
+            if let crate::plan::PlanInputSource::Value(value) = binding.source()
+                && let Some(Some(producer)) = producers.get(value.index() as usize)
+            {
+                downstream[*producer].push(index);
+            }
+        }
+    }
+    let mut forced = vec![false; operations.len()];
+    let mut affected = pending
+        .iter()
+        .filter_map(|value| producers.get(value.index() as usize).copied().flatten())
+        .collect::<Vec<_>>();
+    while let Some(index) = affected.pop() {
+        if std::mem::replace(&mut forced[index], true) {
+            continue;
+        }
+        affected.extend(&downstream[index]);
+    }
+    let mut reused = vec![false; operations.len()];
+    let mut cached_values = BTreeMap::new();
     while let Some(value) = pending.pop() {
         let Some(producer) = producers
             .get(value.index() as usize)
@@ -517,9 +550,24 @@ fn select_execution(
         else {
             return Err(OperationExecutionError::Failed);
         };
-        if std::mem::replace(&mut required_operations[producer], true) {
+        if required_operations[producer] || reused[producer] {
             continue;
         }
+        if !forced[producer]
+            && let Some(cached) = operations[producer]
+                .outputs()
+                .iter()
+                .map(|output| {
+                    cached_output(output.output())
+                        .map(|snapshot| (output.value().index() as usize, snapshot))
+                })
+                .collect::<Option<Vec<_>>>()
+        {
+            cached_values.extend(cached);
+            reused[producer] = true;
+            continue;
+        }
+        required_operations[producer] = true;
         pending.extend(operations[producer].inputs().iter().filter_map(|binding| {
             match binding.source() {
                 crate::plan::PlanInputSource::Value(value) => Some(*value),
@@ -531,6 +579,7 @@ fn select_execution(
     Ok(ExecutionSelection {
         required_operations,
         observations,
+        cached_values,
     })
 }
 
@@ -768,11 +817,6 @@ impl ExecutionRuntimeState {
         state.lock().unwrap_or_else(PoisonError::into_inner).closed = true;
     }
 
-    pub fn is_admission_closed(&self) -> bool {
-        let (state, _) = &*self.admission;
-        state.lock().unwrap_or_else(PoisonError::into_inner).closed
-    }
-
     pub fn query_result(&self, result_id: ResultId) -> Option<StoredResultSnapshot> {
         self.results.get(result_id)
     }
@@ -880,8 +924,25 @@ impl ExecutionRuntimeState {
 
         let producers =
             execution_producers(plan.package()).map_err(ExecutePreparedError::Kernel)?;
-        let selection = select_execution(plan.package(), demand, &producers)
-            .map_err(ExecutePreparedError::Kernel)?;
+        let reuse_inputs = result_basis.is_some()
+            && matches!(
+                demand,
+                crate::plan::PlanExecutionDemand::Outputs {
+                    reuse_inputs: true,
+                    ..
+                }
+            );
+        let selection = select_execution(plan.package(), demand, &producers, |output| {
+            reuse_inputs
+                .then(|| self.results.query_pin_result(output))
+                .flatten()
+        })
+        .map_err(ExecutePreparedError::Kernel)?;
+        let reused_inputs = selection
+            .cached_values
+            .values()
+            .map(|snapshot| (snapshot.output().clone(), snapshot.provenance().result_id()))
+            .collect::<BTreeMap<_, _>>();
         let outputs = plan
             .package()
             .plan()
@@ -906,7 +967,10 @@ impl ExecutionRuntimeState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(run_id, Arc::clone(&control.cancellation));
-        if !self.results.begin_run(run_id, &outputs, result_basis) {
+        if !self
+            .results
+            .begin_run(run_id, &outputs, result_basis, &reused_inputs)
+        {
             let result = terminate_run(
                 &mut lifecycle,
                 ExecutePreparedError::Cancelled {
@@ -981,7 +1045,7 @@ impl ExecutionRuntimeState {
 
         let mut results = Vec::with_capacity(output.results.len());
         let mut observation_intents = Vec::new();
-        let mut result_ids_by_output = BTreeMap::new();
+        let mut result_ids_by_output = reused_inputs;
         for scheduled in output.results {
             let result_id = match self.allocate_result_id() {
                 Ok(result_id) => result_id,
@@ -1495,9 +1559,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
-        let state = state();
+    fn numeric_chain_plan(state: &ExecutionRuntimeState) -> PreparedExecutionPlan {
         let parameter_handle = PlanParameterHandle::from_existing("constant/value".into());
         let consumer = PlanOperation::new(
             operation_source("consumer"),
@@ -1542,7 +1604,7 @@ mod tests {
             operation_specialization("yssbi.constant.get", "producer"),
         );
         let plan = prepared_operation_plan(
-            &state,
+            state,
             [consumer, producer],
             [(
                 parameter_handle,
@@ -1554,6 +1616,14 @@ mod tests {
                 ),
             )],
         );
+
+        plan
+    }
+
+    #[test]
+    fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
+        let state = state();
+        let plan = numeric_chain_plan(&state);
 
         let candidate = state
             .execute_prepared(
@@ -1627,6 +1697,113 @@ mod tests {
     }
 
     #[test]
+    fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
+        use crate::result::OutputResultInputs;
+        let state = state();
+        let plan = numeric_chain_plan(&state);
+        let source = operation_output("producer", ValueRef::new(1))
+            .output()
+            .clone();
+        let target = operation_output("consumer", ValueRef::new(0))
+            .output()
+            .clone();
+        let source_inputs = OutputResultInputs {
+            fingerprint: [1; 32],
+            bindings: BTreeMap::new(),
+            resources: BTreeMap::new(),
+            available: true,
+        };
+        let inputs = GraphResultInputs {
+            semantic_input_hash: [1; 32],
+            observers: BTreeMap::new(),
+            outputs: BTreeMap::from([
+                (source.clone(), source_inputs.clone()),
+                (
+                    target.clone(),
+                    OutputResultInputs {
+                        bindings: BTreeMap::from([(
+                            PlanPortAddress::from_existing("consumer:value".into()),
+                            vec![source.clone()].into_boxed_slice(),
+                        )]),
+                        ..source_inputs
+                    },
+                ),
+            ]),
+        };
+        let basis = state
+            .capture_result_run_basis("events/main", inputs.clone())
+            .unwrap();
+        let run = |demand: &PlanExecutionDemand, basis: &ResultRunBasis| {
+            state
+                .execute_prepared_handoff(
+                    &plan,
+                    empty_bindings(),
+                    &ResourceProviderFactory::new("session".into()),
+                    &RunExecutionControl::new(Instant::now() + Duration::from_secs(10)),
+                    ExecutionResultRequest {
+                        demand,
+                        basis: Some(basis),
+                    },
+                    |_| {},
+                )
+                .unwrap()
+        };
+        let initial = run(&PlanExecutionDemand::Default, &basis);
+        assert!(state.publish_committed_results(initial.handoff()));
+        state.finalize_run_success(initial.run_id()).unwrap();
+        let source_id = state
+            .query_pin_result(&source)
+            .unwrap()
+            .provenance()
+            .result_id();
+        let demand = PlanExecutionDemand::Outputs {
+            outputs: vec![target.clone()].into_boxed_slice(),
+            include_default_results: false,
+            reuse_inputs: true,
+        };
+        let extension = run(&demand, &basis);
+        assert_eq!(extension.handoff().results().len(), 1);
+        assert_eq!(extension.handoff().results()[0].output(), &target);
+        assert!(state.publish_committed_results(extension.handoff()));
+        state.finalize_run_success(extension.run_id()).unwrap();
+        assert_eq!(
+            state
+                .query_pin_result(&source)
+                .unwrap()
+                .provenance()
+                .result_id(),
+            source_id
+        );
+        assert!(state.query_pin_result(&target).is_some());
+
+        let delayed = run(&demand, &basis);
+        let replacement = run(
+            &PlanExecutionDemand::Outputs {
+                outputs: vec![source.clone()].into_boxed_slice(),
+                include_default_results: false,
+                reuse_inputs: false,
+            },
+            &basis,
+        );
+        assert!(state.publish_committed_results(replacement.handoff()));
+        state.finalize_run_success(replacement.run_id()).unwrap();
+        assert!(!state.publish_committed_results(delayed.handoff()));
+        state.finalize_run_cancelled(delayed.run_id()).unwrap();
+
+        let mut changed = inputs;
+        changed.semantic_input_hash = [2; 32];
+        changed.outputs.get_mut(&source).unwrap().fingerprint = [2; 32];
+        state.observe_graph_result_inputs("events/main", changed.clone());
+        let basis = state
+            .capture_result_run_basis("events/main", changed)
+            .unwrap();
+        let recomputed = run(&demand, &basis);
+        assert_eq!(recomputed.handoff().results().len(), 2);
+        assert!(state.publish_committed_results(recomputed.handoff()));
+        state.finalize_run_success(recomputed.run_id()).unwrap();
+    }
+
+    #[test]
     fn explicit_output_demand_skips_unrelated_graph_components() {
         let state = state();
         let parameter_handle = PlanParameterHandle::from_existing("constant/value".into());
@@ -1677,6 +1854,7 @@ mod tests {
                     demand: &PlanExecutionDemand::Outputs {
                         outputs: vec![requested].into_boxed_slice(),
                         include_default_results: false,
+                        reuse_inputs: false,
                     },
                     basis: None,
                 },
