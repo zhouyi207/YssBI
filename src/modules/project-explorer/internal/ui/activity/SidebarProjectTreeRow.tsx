@@ -18,7 +18,7 @@ export interface SidebarProjectTreeActions {
     target: { type: "graph"; id: string; name: string; graphType: GraphResourceType },
   ) => void;
   onChartContextMenu: (event: React.MouseEvent, path: string, name: string) => void;
-  onOpenChart: (path: string, name: string) => void;
+  onOpenChart: (path: string) => void;
   onDatabaseContextMenu: (event: React.MouseEvent, id: string, name: string) => void;
 }
 

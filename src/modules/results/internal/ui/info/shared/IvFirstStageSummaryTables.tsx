@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatNum } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import {
   InfoStatsTable,
   infoStatsCellClass,
@@ -15,7 +15,7 @@ import {
   infoStatsHeadCompactClass,
   infoStatsRowEvenClass,
   infoStatsRowOddClass,
-} from "./InfoStatsTable";
+} from "@/components/ui-presentation/TableFrame";
 import type { Iv2slsFirstStageResult, Iv2slsFirstStageSummary } from "@/shared/types/report";
 
 export function IvFirstStageSummaryTables({
@@ -55,7 +55,7 @@ export function IvFirstStageSummaryTables({
               <TableHead className={infoStatsHeadCompactClass}>Adj R-sq.</TableHead>
               <TableHead className={infoStatsHeadCompactClass}>Partial R-sq.</TableHead>
               <TableHead className={infoStatsHeadCompactClass}>
-                F({summary.f_df1 ?? 0},{summary.f_df2 ?? 0})
+                F({summary.f_df1 ?? "—"},{summary.f_df2 ?? "—"})
               </TableHead>
               <TableHead className={infoStatsHeadCompactClass}>Prob &gt; F</TableHead>
             </TableRow>
@@ -66,7 +66,7 @@ export function IvFirstStageSummaryTables({
                 {firstStage?.[0]?.endog_name ?? "—"}
               </TableCell>
               <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-                {summary.r2 != null ? formatNum(summary.r2, 4) : "—"}
+                {formatNum(summary.r2, 4)}
               </TableCell>
               <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
                 {summary.r2_adjusted != null ? formatNum(summary.r2_adjusted, 4) : "—"}
@@ -104,10 +104,10 @@ export function IvFirstStageSummaryTables({
                   {fs.endog_name}
                 </TableCell>
                 <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-                  {formatNum(summary.shea_partial_r2[i] ?? 0, 4)}
+                  {formatNum(summary.shea_partial_r2[i], 4)}
                 </TableCell>
                 <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-                  {formatNum(summary.shea_adj_partial_r2[i] ?? 0, 4)}
+                  {formatNum(summary.shea_adj_partial_r2[i], 4)}
                 </TableCell>
               </TableRow>
             ))}

@@ -1,6 +1,6 @@
 import React from "react";
 
-export const LazyFormulaBlock = React.lazy(() => import("../FormulaBlock"));
+export const LazyEquation = React.lazy(() => import("@/components/ui-presentation/Equation"));
 export const LazyFormulaBlock2SLS = React.lazy(() => import("../FormulaBlock2SLS"));
 export const LazyBinaryFormulaBlock = React.lazy(() => import("../BinaryFormulaBlock"));
 export const LazyVARFormulaBlock = React.lazy(() => import("../VARFormulaBlock"));

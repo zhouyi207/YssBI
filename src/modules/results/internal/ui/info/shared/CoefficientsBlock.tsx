@@ -1,6 +1,6 @@
 import { SectionHeader } from "./RegressionShared";
-import { CoefficientTable } from "./CoefficientTable";
-import { CoeffBarChart } from "./CoeffBarChart";
+import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
+import { CoeffBarChart } from "@/components/ui-presentation/CoefficientChart";
 import type { Coefficient } from "@/shared/types/report";
 
 const COEFF_ICON = (

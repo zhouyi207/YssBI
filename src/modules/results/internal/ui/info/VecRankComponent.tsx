@@ -1,7 +1,8 @@
 import type { FC } from "react";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ReportLayout, ReportSection, formatNum } from "./shared";
-import { InfoStatsTable } from "./shared/InfoStatsTable";
+import { ReportLayout, ReportSection } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
+import { InfoStatsTable } from "@/components/ui-presentation/TableFrame";
 import type { VecRankResultData } from "@/shared/types/report";
 
 function fmt(v: number | null | undefined, d = 4): string {

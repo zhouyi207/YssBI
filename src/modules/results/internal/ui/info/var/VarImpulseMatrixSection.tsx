@@ -1,8 +1,8 @@
 import { TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ReportSection } from "../shared/ReportLayout";
 import type { ReportSectionIcon } from "../shared/reportIcons";
-import { formatNum } from "../shared/RegressionShared";
-import { InfoStatsTable } from "../shared/InfoStatsTable";
+import { formatNum } from "@/shared/stats/formatStat";
+import { InfoStatsTable } from "@/components/ui-presentation/TableFrame";
 import { infoVarHeadClass, VarModelCell, VarModelRow } from "../shared/VarModelTable";
 
 export function VarImpulseMatrixSection({
@@ -45,7 +45,7 @@ export function VarImpulseMatrixSection({
               {varNames.flatMap((_, impIdx) =>
                 varNames.map((_, respIdx) => (
                   <VarModelCell key={`${impIdx}-${respIdx}`}>
-                    {formatNum(stepData[respIdx]?.[impIdx] ?? 0)}
+                    {formatNum(stepData[respIdx]?.[impIdx])}
                   </VarModelCell>
                 )),
               )}

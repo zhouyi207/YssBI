@@ -8,7 +8,7 @@ import type { AcfPacfResponse } from "@/features/application/stats/statsActions"
 import { acfSeriesToBars, pacfSeriesToBars } from "@/shared/types/report";
 import { useChartTheme } from "@/shared/charts/core";
 import { SectionHeader } from "./RegressionShared";
-import { InfoAccentButton } from "./InfoViewControls";
+import { InfoAccentButton } from "@/components/ui-presentation/Controls";
 
 const CorrelogramChart = React.lazy(() => import("@/shared/charts/statistical/CorrelogramChart"));
 
@@ -26,7 +26,6 @@ export function ACFPACFBlock({
   const [result, setResult] = useState<AcfPacfResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { series: seriesColors } = useChartTheme();
 
   const canRun = observationCount >= 4 && lag >= 1 && lag <= 40;
 
@@ -46,8 +45,6 @@ export function ACFPACFBlock({
   };
 
   if (observationCount < 4) return null;
-
-  const ciHalfWidth = 1.96 / Math.sqrt(result?.n ?? observationCount);
 
   return (
     <div className="mt-6">
@@ -85,29 +82,39 @@ export function ACFPACFBlock({
           Stata ac / pac 风格，95% 置信区间 ±1.96/√n
         </div>
         {error && <div className="text-xs text-red-400 font-mono">{error}</div>}
-        {result && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-            <div>
-              <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
-                <CorrelogramChart
-                  data={acfSeriesToBars(result.acf)}
-                  ciHalfWidth={ciHalfWidth}
-                  title="ACF"
-                />
-              </Suspense>
-            </div>
-            <div>
-              <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
-                <CorrelogramChart
-                  data={pacfSeriesToBars(result.pacf)}
-                  ciHalfWidth={ciHalfWidth}
-                  title="PACF"
-                  color={seriesColors.secondary}
-                />
-              </Suspense>
-            </div>
-          </div>
-        )}
+        {result && <AcfPacfResultView result={result} />}
+      </div>
+    </div>
+  );
+}
+
+export function AcfPacfResultView({
+  result,
+}: {
+  result: { readonly acf: readonly number[]; readonly pacf: readonly number[]; readonly n: number };
+}) {
+  const { series: seriesColors } = useChartTheme();
+  const ciHalfWidth = 1.96 / Math.sqrt(result.n);
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+      <div>
+        <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
+          <CorrelogramChart
+            data={acfSeriesToBars(result.acf)}
+            ciHalfWidth={ciHalfWidth}
+            title="ACF"
+          />
+        </Suspense>
+      </div>
+      <div>
+        <Suspense fallback={<div className="h-[240px] animate-pulse bg-muted rounded" />}>
+          <CorrelogramChart
+            data={pacfSeriesToBars(result.pacf)}
+            ciHalfWidth={ciHalfWidth}
+            title="PACF"
+            color={seriesColors.secondary}
+          />
+        </Suspense>
       </div>
     </div>
   );

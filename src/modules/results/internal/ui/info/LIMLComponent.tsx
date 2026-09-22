@@ -3,11 +3,11 @@ import { useRegressionReport } from "@/features/application/stats/useRegressionR
 import {
   ReportLayout,
   RSquaredBadge,
-  formatNum,
   RegressionModelCoreSections,
   OlsStyleDiagnosticsSection,
   IvReportSections,
 } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { LinearRegressionResultData } from "@/shared/types/report";
 
 export const LIMLComponent: FC<{ data: LinearRegressionResultData }> = ({ data }) => {

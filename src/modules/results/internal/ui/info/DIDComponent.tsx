@@ -15,9 +15,8 @@ import {
   CoefficientsBlock,
   HypothesisTestBlock,
   OmittedVariablesAlert,
-  formatNum,
-  formatNullableNum,
 } from "./shared";
+import { formatNum, formatNullableNum } from "@/shared/stats/formatStat";
 import { DidEventStudyChart } from "@/shared/charts/statistical";
 import type {
   DidPlaceboFakeGroupUnavailableBlock,

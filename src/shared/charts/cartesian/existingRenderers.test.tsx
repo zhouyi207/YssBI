@@ -5,7 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChartThemeContextProvider, type ChartThemeValue } from "@/shared/charts/core/theme";
 import { KdeChart } from "./KdeChart";
-import { PredictiveIntervalChart } from "../statistical/PredictiveIntervalChart";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -104,24 +103,5 @@ describe("existing shared chart renderers", () => {
     const coordinates = densityPath?.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const yCoordinates = coordinates.filter((_, index) => index % 2 === 1);
     expect(Math.max(...yCoordinates) - Math.min(...yCoordinates)).toBeGreaterThan(100);
-  });
-
-  it("renders interval, mean, and observed mark layers", () => {
-    renderChart(
-      <PredictiveIntervalChart
-        data={[
-          { observation: 1, observed: 1.2, mean: 1, lower: 0.7, upper: 1.3 },
-          { observation: 2, observed: 1.8, mean: 2, lower: 1.5, upper: 2.4 },
-        ]}
-      />,
-    );
-
-    const interval = host.querySelector('[data-chart-mark-layer="interval"]');
-    const mean = host.querySelector('[data-chart-mark-layer="mean"]');
-    const observed = host.querySelector('[data-chart-mark-layer="observed"]');
-
-    expect(interval?.querySelector("path")?.getAttribute("d")).toBeTruthy();
-    expect(mean?.querySelector("path")?.getAttribute("d")).toBeTruthy();
-    expect(observed?.querySelectorAll("circle")).toHaveLength(2);
   });
 });

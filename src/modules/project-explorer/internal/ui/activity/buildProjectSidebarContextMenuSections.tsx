@@ -107,7 +107,7 @@ export function buildProjectSidebarContextMenuSections(
             id: "open",
             label: t("contextMenu.sidebar.open"),
             icon: <VscChevronRight size={12} />,
-            onClick: () => actions.openChart(target.chartPath, target.name),
+            onClick: () => actions.openChart(target.chartPath),
           },
           {
             id: "reveal-in-explorer",

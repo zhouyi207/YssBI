@@ -5,7 +5,7 @@ import {
   type VarStabilityValueField,
 } from "@/shared/charts/statistical";
 import type { VARStableRow } from "@/shared/types/report";
-import { formatNum } from "./utils";
+import { formatNum } from "@/shared/stats/formatStat";
 import { VarEigenvalueTable } from "./VarModelTable";
 
 function formatVarStabilityValue(value: number, field: VarStabilityValueField): string {

@@ -1,8 +1,9 @@
-import { Chi2TestCards, formatNum } from "./RegressionShared";
-import { CoefficientTable } from "./CoefficientTable";
+import { Chi2TestCards } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
+import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
 import { IvFirstStageSummaryTables } from "./IvFirstStageSummaryTables";
 import { ReportLazyBoundary, ReportSection } from "./ReportLayout";
-import { LazyFormulaBlock, LazyFormulaBlock2SLS } from "./reportLazyModules";
+import { LazyEquation, LazyFormulaBlock2SLS } from "./reportLazyModules";
 import type { Coefficient, DiagnosticInfo } from "@/shared/types/report";
 
 type IvVariant = "2sls" | "liml";
@@ -26,7 +27,7 @@ function IvEquationSection({
             firstStage={firstStage}
           />
         ) : (
-          <LazyFormulaBlock endogName={endogName} coefficients={coefficients} />
+          <LazyEquation endogName={endogName} coefficients={coefficients} />
         )}
       </ReportLazyBoundary>
     </ReportSection>
@@ -103,23 +104,23 @@ function Iv2slsOveridSection({ diag }: { diag: DiagnosticInfo }) {
                   ? [
                       {
                         label: "Wooldridge score",
-                        chi2: diag.iv2sls_overid.wooldridge_stat ?? 0,
+                        chi2: diag.iv2sls_overid.wooldridge_stat,
                         df: diag.iv2sls_overid.df,
-                        p_value: diag.iv2sls_overid.wooldridge_p_value ?? 0,
+                        p_value: diag.iv2sls_overid.wooldridge_p_value,
                       },
                     ]
                   : [
                       {
                         label: "Sargan",
-                        chi2: diag.iv2sls_overid.sargan_stat ?? 0,
+                        chi2: diag.iv2sls_overid.sargan_stat,
                         df: diag.iv2sls_overid.df,
-                        p_value: diag.iv2sls_overid.sargan_p_value ?? 0,
+                        p_value: diag.iv2sls_overid.sargan_p_value,
                       },
                       {
                         label: "Basmann",
-                        chi2: diag.iv2sls_overid.basmann_stat ?? 0,
+                        chi2: diag.iv2sls_overid.basmann_stat,
                         df: diag.iv2sls_overid.df,
-                        p_value: diag.iv2sls_overid.basmann_p_value ?? 0,
+                        p_value: diag.iv2sls_overid.basmann_p_value,
                       },
                     ]
               }
@@ -134,8 +135,10 @@ function Iv2slsOveridSection({ diag }: { diag: DiagnosticInfo }) {
         ) : (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
             <p className="text-sm text-amber-700 dark:text-amber-200">
-              Model is exactly identified (k_iv = {diag.iv2sls_overid_dims.k_iv}, k_endog ={" "}
-              {diag.iv2sls_overid_dims.k_endog}).
+              {diag.iv2sls_overid_dims.k_iv === diag.iv2sls_overid_dims.k_endog
+                ? "Model is exactly identified"
+                : "Overidentification test unavailable"}{" "}
+              (k_iv = {diag.iv2sls_overid_dims.k_iv}, k_endog = {diag.iv2sls_overid_dims.k_endog}).
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               The overidentification test requires k_iv &gt; k_endog (excluded instruments &gt;

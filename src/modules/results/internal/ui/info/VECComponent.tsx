@@ -2,13 +2,13 @@ import React, { useMemo } from "react";
 import {
   ReportLayout,
   ReportSection,
-  formatNum,
   CoefficientsBlock,
-  CoefficientTable,
   VarModelTable,
   VarModelRow,
   VarModelCell,
 } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
+import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
 import { VarEigenvalueStabilityPanel } from "./shared/VarEigenvalueStabilityPanel";
 import type { Coefficient, VECSummaryResultData } from "@/shared/types/report";
 

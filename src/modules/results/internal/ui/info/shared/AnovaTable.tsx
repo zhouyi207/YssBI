@@ -1,69 +1,23 @@
-import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatNum } from "./RegressionShared";
+import { DataTable } from "@/components/ui-presentation/DataTable";
+import type { UiTableColumn } from "@/shared/types/domain/uiData";
 import type { LinearModelInfo } from "@/shared/types/report";
-import {
-  InfoStatsTable,
-  infoStatsCellClass,
-  infoStatsCellRightClass,
-  infoStatsHeadClass,
-  infoStatsHeadCompactClass,
-  infoStatsRowEvenClass,
-  infoStatsRowOddClass,
-} from "./InfoStatsTable";
+
+const columns: readonly UiTableColumn[] = [
+  { id: "source", label: "Source", format: "text" },
+  { id: "ss", label: "SS", format: "number" },
+  { id: "df", label: "df", format: "integer" },
+  { id: "ms", label: "MS", format: "number" },
+];
 
 export function AnovaTable({ info }: { info: LinearModelInfo }) {
   return (
-    <InfoStatsTable className="mb-2">
-      <TableHeader>
-        <TableRow className="border-0 hover:bg-transparent">
-          <TableHead className={infoStatsHeadClass}>Source</TableHead>
-          <TableHead className={infoStatsHeadCompactClass}>SS</TableHead>
-          <TableHead className={infoStatsHeadCompactClass}>df</TableHead>
-          <TableHead className={infoStatsHeadCompactClass}>MS</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow className={infoStatsRowEvenClass}>
-          <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>Model</TableCell>
-          <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-            {formatNum(info.ss_model)}
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-            {info.df_model}
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-            {formatNum(info.ms_model)}
-          </TableCell>
-        </TableRow>
-        <TableRow className={infoStatsRowOddClass}>
-          <TableCell className={`${infoStatsCellClass} font-mono text-foreground`}>
-            Residual
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-            {formatNum(info.ss_residual)}
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-            {info.df_residual}
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} text-foreground`}>
-            {formatNum(info.ms_residual)}
-          </TableCell>
-        </TableRow>
-        <TableRow className={infoStatsRowEvenClass}>
-          <TableCell className={`${infoStatsCellClass} font-mono font-semibold text-foreground`}>
-            Total
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} font-semibold text-foreground`}>
-            {formatNum(info.ss_total)}
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} font-semibold text-foreground`}>
-            {info.df_total}
-          </TableCell>
-          <TableCell className={`${infoStatsCellRightClass} font-semibold text-foreground`}>
-            {formatNum(info.ms_total)}
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </InfoStatsTable>
+    <DataTable
+      columns={columns}
+      rows={[
+        ["Model", info.ss_model, info.df_model, info.ms_model],
+        ["Residual", info.ss_residual, info.df_residual, info.ms_residual],
+        ["Total", info.ss_total, info.df_total, info.ms_total],
+      ]}
+    />
   );
 }

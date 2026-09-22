@@ -3,14 +3,9 @@ import { regressionHypothesisSource } from "@/features/application/stats/useHypo
 import { computeAcfPacf, computeSerialTests } from "@/features/application/stats/statsActions";
 import type { XYPoint } from "@/shared/charts/ChartModel";
 
-import {
-  StatCard,
-  Chi2TestCards,
-  BP_VARIANTS,
-  FTestCards,
-  OV_VARIANTS,
-  formatNum,
-} from "./RegressionShared";
+import { Chi2TestCards, BP_VARIANTS, FTestCards, OV_VARIANTS } from "./RegressionShared";
+import { StatCard } from "@/components/ui-presentation/StatCard";
+import { formatNum } from "@/shared/stats/formatStat";
 import { ModelSummaryGrid } from "./ModelSummaryGrid";
 import { AnovaTable } from "./AnovaTable";
 import { CoefficientsBlock } from "./CoefficientsBlock";

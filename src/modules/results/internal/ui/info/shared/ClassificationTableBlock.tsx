@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatNum, formatPercent } from "./RegressionShared";
+import { formatNum, formatPercent } from "@/shared/stats/formatStat";
 import type { ClassificationTable } from "@/shared/types/report";
 
 /** Stata estat classification — classification table and statistics */

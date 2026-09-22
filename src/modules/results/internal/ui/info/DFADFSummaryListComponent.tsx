@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ReportLayout, formatNum, SignificanceStars } from "./shared";
+import { ReportLayout } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
+import { SignificanceStars } from "@/components/ui-presentation/CoefficientTable";
 import {
   InfoStatsTable,
   infoStatsCellClass,
@@ -12,7 +14,7 @@ import {
   infoStatsHeadCompactClass,
   infoStatsRowEvenClass,
   infoStatsRowOddClass,
-} from "./shared/InfoStatsTable";
+} from "@/components/ui-presentation/TableFrame";
 import { DFADFComponent } from "./DFADFComponent";
 import type {
   DFADFRegRowData,

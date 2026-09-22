@@ -1,28 +1,21 @@
+import katex from "katex";
+import type { HypothesisTestResult } from "@/shared/types/domain/resultReport";
 import { Input } from "@/components/ui/input";
 import {
   useHypothesisTestBlock,
   type HypothesisTestSource,
 } from "@/features/application/stats/useHypothesisTestBlock";
-import { InfoAccentButton } from "./InfoViewControls";
+import { InfoAccentButton } from "@/components/ui-presentation/Controls";
 import { ReportSection } from "./ReportLayout";
-import { formatNum } from "./RegressionShared";
-import { linearFormToLatex, renderHypothesisLatex } from "./utils";
+import { formatNum } from "@/shared/stats/formatStat";
 
-function HypothesisFormulas({
-  form,
-  paramNames,
-  className = "",
-}: {
-  form: string;
-  paramNames: string[];
-  className?: string;
-}) {
+function HypothesisFormulas({ form, paramNames }: { form: string; paramNames: string[] }) {
   const parts = form
     .split(" ; ")
     .map((s) => s.trim())
     .filter(Boolean);
   return (
-    <div className={`flex flex-col gap-2 ${className}`}>
+    <div className="flex flex-col gap-2">
       {parts.map((part, i) => {
         const html = renderHypothesisLatex(linearFormToLatex(part, paramNames));
         return (
@@ -62,48 +55,82 @@ export function HypothesisTestBlock({ source }: { source: HypothesisTestSource }
             Param names: {paramNames.join(", ")}
           </div>
           {error ? <div className="font-mono text-xs text-red-400">{error}</div> : null}
-          {result ? (
-            <div className="overflow-hidden rounded-md border border-border bg-muted">
-              <div className="grid grid-cols-2 divide-x divide-border">
-                <div className="min-w-0 p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    H₀ 原假设
-                  </div>
-                  <HypothesisFormulas form={result.h0_form} paramNames={paramNames} />
-                </div>
-                <div className="min-w-0 p-4">
-                  <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    H₁ 备择假设
-                  </div>
-                  <HypothesisFormulas form={result.h1_form} paramNames={paramNames} />
-                </div>
-              </div>
-              <div className="space-y-1.5 border-t border-border px-4 py-3 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    {result.test_type === "t" ? "t-statistic" : "F-statistic"}
-                  </span>
-                  <span className="font-mono text-foreground">{formatNum(result.stat, 4)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">df</span>
-                  <span className="font-mono text-muted-foreground">
-                    {result.df1}, {result.df2}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">p-value</span>
-                  <span
-                    className={`font-mono font-medium ${result.p_value < 0.05 ? "text-emerald-400" : "text-muted-foreground"}`}
-                  >
-                    {formatNum(result.p_value, 4)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          {result && <HypothesisTestResultView result={result} paramNames={paramNames} />}
         </div>
       </ReportSection>
     </div>
   );
+}
+
+export function HypothesisTestResultView({
+  result,
+  paramNames,
+}: {
+  result: HypothesisTestResult;
+  paramNames: string[];
+}) {
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-muted">
+      <div className="grid grid-cols-2 divide-x divide-border">
+        <div className="min-w-0 p-4">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+            H₀ 原假设
+          </div>
+          <HypothesisFormulas form={result.h0_form} paramNames={paramNames} />
+        </div>
+        <div className="min-w-0 p-4">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+            H₁ 备择假设
+          </div>
+          <HypothesisFormulas form={result.h1_form} paramNames={paramNames} />
+        </div>
+      </div>
+      <div className="space-y-1.5 border-t border-border px-4 py-3 text-xs">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">
+            {result.test_type === "t" ? "t-statistic" : "F-statistic"}
+          </span>
+          <span className="font-mono text-foreground">{formatNum(result.stat, 4)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">df</span>
+          <span className="font-mono text-muted-foreground">
+            {result.df1}, {result.df2}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">p-value</span>
+          <span
+            className={`font-mono font-medium ${result.p_value < 0.05 ? "text-emerald-400" : "text-muted-foreground"}`}
+          >
+            {formatNum(result.p_value, 4)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function linearFormToLatex(form: string, paramNames: string[]): string {
+  const sorted = [...paramNames].sort((a, b) => b.length - a.length);
+  let latex = form;
+  for (const p of sorted) {
+    const escaped = p.replace(/_/g, "\\_");
+    const replacement = `\\beta_{\\text{${escaped}}}`;
+    const regex = new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g");
+    latex = latex.replace(regex, replacement);
+  }
+  latex = latex.replace(/\*/g, " \\cdot ");
+  latex = latex.replace(/ ≠ /g, " \\neq ");
+  latex = latex.replace(/ ≤ /g, " \\leq ");
+  latex = latex.replace(/ ≥ /g, " \\geq ");
+  return latex;
+}
+
+function renderHypothesisLatex(latex: string): string | null {
+  try {
+    return katex.renderToString(latex, { displayMode: true, throwOnError: false });
+  } catch {
+    return null;
+  }
 }

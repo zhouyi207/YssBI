@@ -1,18 +1,8 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatNum, formatNullableNum, coerceFiniteNumber } from "./utils";
+import { formatNum, formatNullableNum, coerceFiniteNumber } from "@/shared/stats/formatStat";
 import type { BreuschPaganTests } from "@/shared/types/report";
-
-export { formatNum, formatNullableNum, formatPercent, coerceFiniteNumber } from "./utils";
-
-export function SignificanceStars({ pValue }: { pValue: number }) {
-  if (pValue < 0.001) return <span className="text-yellow-400 font-bold ml-1">***</span>;
-  if (pValue < 0.01) return <span className="text-yellow-400 font-bold ml-1">**</span>;
-  if (pValue < 0.05) return <span className="text-yellow-400 font-bold ml-1">*</span>;
-  if (pValue < 0.1) return <span className="text-muted-foreground ml-1">.</span>;
-  return null;
-}
 
 export function RSquaredBadge({ value }: { value: unknown }) {
   const n = coerceFiniteNumber(value);
@@ -26,28 +16,6 @@ export function RSquaredBadge({ value }: { value: unknown }) {
     >
       R² = {formatNullableNum(value, 3, "N/A")}
     </Badge>
-  );
-}
-
-export function StatCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-}) {
-  return (
-    <Card className="rounded-lg py-0 shadow-none">
-      <CardContent className="px-4 py-3">
-        <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-          {label}
-        </div>
-        <div className="font-mono text-sm font-medium text-foreground">{value}</div>
-        {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
-      </CardContent>
-    </Card>
   );
 }
 

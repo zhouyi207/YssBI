@@ -12,8 +12,8 @@ import {
   CoefficientsBlock,
   HypothesisTestBlock,
   MarginsBlock,
-  formatNum,
 } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { BinaryResultData } from "@/shared/types/report";
 
 export type { BinaryResultData };
@@ -21,6 +21,7 @@ export type { BinaryResultData };
 /** Binary choice model component (Logit, Probit) */
 export const BinaryComponent: FC<{ data: BinaryResultData }> = ({ data }) => {
   const { info, coefficients, diag, hasCategorical } = useRegressionReport(data);
+  const { fitted_values: fitted, residuals } = diag;
 
   return (
     <ReportLayout
@@ -66,11 +67,11 @@ export const BinaryComponent: FC<{ data: BinaryResultData }> = ({ data }) => {
       <MarginsBlock data={data} />
       <HypothesisTestBlock source={regressionHypothesisSource(data)} />
 
-      {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 ? (
+      {fitted && residuals && fitted.length > 0 ? (
         <ReportSection title="Residuals vs Fitted (Probabilities)" icon="anova">
           <ReportLazyBoundary variant="chart">
             <LazyScatter
-              data={diag.fitted_values.map((x, i) => ({ x, y: (diag.residuals ?? [])[i] ?? 0 }))}
+              data={fitted.map((x, i) => ({ x, y: residuals[i] }))}
               xAxis={{ label: "Fitted (P)", valueType: "number" }}
               yAxis={{ label: "Residual (y - P)", valueType: "number" }}
               height={280}

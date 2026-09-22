@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { InfoSegmentedToggle } from "./shared/InfoViewControls";
+import { InfoSegmentedToggle } from "@/components/ui-presentation/Controls";
 import {
   Table,
   TableBody,
@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatNum } from "./shared/utils";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { VARCoefDisplay } from "@/shared/types/report";
 
 function escapeLatex(s: string): string {

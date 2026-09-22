@@ -7,13 +7,13 @@ import {
   ReportSection,
   ReportSubheading,
   RSquaredBadge,
-  StatCard,
-  formatNum,
-  LazyFormulaBlock,
+  LazyEquation,
   RegressionModelCoreSections,
   MulticollinearityBlock,
   ResidualDiagnosticsSection,
 } from "./shared";
+import { StatCard } from "@/components/ui-presentation/StatCard";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { RegressionResultData } from "@/shared/types/report";
 
 export interface PraisResultData extends RegressionResultData {
@@ -46,7 +46,7 @@ export const PraisComponent: FC<{ data: PraisResultData }> = ({ data }) => {
     >
       <ReportSection title="Equation" icon="equation">
         <ReportLazyBoundary variant="formula">
-          <LazyFormulaBlock
+          <LazyEquation
             endogName={data.endog_name || "y"}
             coefficients={coefficients}
             ar1Rho={praisInfo.rho}

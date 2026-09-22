@@ -37,9 +37,11 @@ export function ResultPageLayoutControls({
         <ul className="space-y-1">
           {rows.map(({ id: elementId, element, index, count, depth }) => {
             const label =
-              element.component.type === "reportSection"
-                ? t(`reportLayout.sections.${element.component.props.section}`)
-                : elementId;
+              element.component.type === "section"
+                ? element.component.props.title
+                : "binding" in element.component.props
+                  ? element.component.props.binding
+                  : elementId;
             return (
               <li
                 key={elementId}
@@ -47,6 +49,7 @@ export function ResultPageLayoutControls({
                 style={{ marginLeft: `${depth}rem` }}
               >
                 <Checkbox
+                  aria-label={label}
                   id={`${id}-${elementId}`}
                   checked={element.visible}
                   disabled={busy}
@@ -54,9 +57,7 @@ export function ResultPageLayoutControls({
                     void onAction({ kind: "visibility", id: elementId, visible: checked === true })
                   }
                 />
-                <label htmlFor={`${id}-${elementId}`} className="flex-1 cursor-pointer text-sm">
-                  {label}
-                </label>
+                <span className="flex-1 text-sm">{label}</span>
                 <Button
                   type="button"
                   variant="ghost"

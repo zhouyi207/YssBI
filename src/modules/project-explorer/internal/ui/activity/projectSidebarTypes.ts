@@ -20,7 +20,7 @@ export interface ProjectSidebarContextMenuActions {
   renameGraphItem: (id: string, name: string, type: GraphResourceType) => void;
   deleteGraphItem: (id: string, type: GraphResourceType) => unknown | Promise<unknown>;
   duplicateGraphItem: (id: string) => unknown | Promise<unknown>;
-  openChart: (chartPath: string, name: string) => unknown | Promise<unknown>;
+  openChart: (chartPath: string) => unknown | Promise<unknown>;
   renameChartItem: (chartPath: string, name: string) => void;
   duplicateChart: (chartPath: string) => unknown | Promise<unknown>;
   deleteChart: (chartPath: string) => unknown | Promise<unknown>;

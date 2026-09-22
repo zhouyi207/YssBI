@@ -13,32 +13,16 @@ import { ReportView } from "./ReportView";
 import type { ResultReference } from "@/shared/types/domain/result";
 
 vi.mock("@/features/application/presentation/useUiPage", async () => {
-  const { REPORT_SECTIONS } = await import("@/shared/types/domain/uiPresentation");
+  const { readFileSync } = await import("node:fs");
+  const spec = JSON.parse(
+    readFileSync("src/tests/fixtures/node-system-contracts/regression-ui.json", "utf8"),
+  );
   return {
     useUiPage: (source: ResultReference) => ({
       page: {
         source,
         revision: 1,
-        spec: {
-          root: "report",
-          elements: {
-            report: {
-              component: { type: "column", props: { gap: 4 } },
-              visible: true,
-              children: REPORT_SECTIONS,
-            },
-            ...Object.fromEntries(
-              REPORT_SECTIONS.map((section) => [
-                section,
-                {
-                  component: { type: "reportSection", props: { section } },
-                  visible: true,
-                  children: [],
-                },
-              ]),
-            ),
-          },
-        },
+        spec,
       },
       error: null,
       busy: false,
@@ -55,7 +39,7 @@ vi.mock("@/services/result/resultSessionChannel", () => ({
 vi.mock("@/shared/charts/cartesian/ScatterChart", () => ({
   ScatterChart: () => <div>Residual scatter</div>,
 }));
-vi.mock("./FormulaBlock", () => ({ default: () => <div>Equation</div> }));
+vi.mock("@/components/ui-presentation/Equation", () => ({ default: () => <div>Equation</div> }));
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: vi.fn() },
   useTranslation: () => ({ t: (key: string) => key }),
@@ -66,7 +50,9 @@ it("loads an OLS overview and requests report data and tests by reference on dem
   const report = JSON.parse(
     readFileSync("src/tests/fixtures/node-system-contracts/ols-summary-report.json", "utf8"),
   );
-  report.model_basic_info.num_observation = 53940;
+  report.presentation.summary.items.find(
+    (item: { id: string }) => item.id === "numObservations",
+  ).value = 53940;
   report.observations.rowCount = 53940;
   vi.spyOn(ResultService, "getDescriptor").mockResolvedValue({
     resultId: "17",

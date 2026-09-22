@@ -1,4 +1,5 @@
-import { formatNum, InfoRow } from "./RegressionShared";
+import { InfoRow } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { BinaryModelInfo } from "@/shared/types/report";
 
 /** Model summary for binary choice models (Logit, Probit) */
@@ -15,26 +16,18 @@ export function BinaryModelSummaryGrid({
       <InfoRow label="Method">{info.method}</InfoRow>
       <InfoRow label="Pseudo R-squared">{formatNum(info.pseudo_r2)}</InfoRow>
       <InfoRow label="Pseudo Adj. R-squared">{formatNum(info.adjusted_pseudo_r2)}</InfoRow>
-      {info.lr_chi2 != null && (
-        <>
-          <InfoRow label={`LR chi2(${info.df_model})`}>{formatNum(info.lr_chi2)}</InfoRow>
-          <InfoRow label="Prob &gt; chi2">
-            <span
-              className={
-                (info.prob_lr_chi2 ?? 1) < 0.05 ? "text-emerald-400" : "text-muted-foreground"
-              }
-            >
-              {formatNum(info.prob_lr_chi2 ?? 0)}
-            </span>
-          </InfoRow>
-        </>
-      )}
+      <InfoRow label={`LR chi2(${info.df_model})`}>{formatNum(info.lr_chi2)}</InfoRow>
+      <InfoRow label="Prob &gt; chi2">
+        <span className={info.prob_lr_chi2 < 0.05 ? "text-emerald-400" : "text-muted-foreground"}>
+          {formatNum(info.prob_lr_chi2)}
+        </span>
+      </InfoRow>
       <InfoRow label="No. Observations">{info.num_observation}</InfoRow>
       <InfoRow label="Covariance Type">{info.covariance_type}</InfoRow>
       <InfoRow label="Df Model">{info.df_model}</InfoRow>
       <InfoRow label="Df Residual">{info.df_residual}</InfoRow>
-      {info.aic != null && <InfoRow label="AIC">{formatNum(info.aic)}</InfoRow>}
-      {info.bic != null && <InfoRow label="BIC">{formatNum(info.bic)}</InfoRow>}
+      <InfoRow label="AIC">{formatNum(info.aic)}</InfoRow>
+      <InfoRow label="BIC">{formatNum(info.bic)}</InfoRow>
       {executionTimeMs != null && (
         <div className="bg-card px-4 py-2.5 flex justify-between col-span-2 border-t border-border">
           <span className="text-muted-foreground text-xs">后端计算耗时</span>

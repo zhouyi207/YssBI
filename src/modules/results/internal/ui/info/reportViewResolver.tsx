@@ -33,5 +33,5 @@ const REPORT_COMPONENTS: Record<ReportKind, ComponentType<ReportViewProps>> = {
 };
 
 export function resolveReportComponent(report: ReportKind): ComponentType<ReportViewProps> {
-  return REPORT_COMPONENTS[report] ?? LinearRegressionComponent;
+  return REPORT_COMPONENTS[report];
 }

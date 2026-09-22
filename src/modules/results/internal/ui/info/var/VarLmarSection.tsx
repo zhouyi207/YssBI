@@ -1,5 +1,5 @@
 import { ReportSection } from "../shared/ReportLayout";
-import { formatNum } from "../shared/RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import { VarModelCell, VarModelRow, VarModelTable } from "../shared/VarModelTable";
 import type { VARLmarDisplay } from "@/shared/types/report";
 

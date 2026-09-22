@@ -1,8 +1,3 @@
-export { PredictiveIntervalChart } from "./PredictiveIntervalChart";
-export type {
-  PredictiveIntervalChartProps,
-  PredictiveIntervalPoint,
-} from "./PredictiveIntervalChart";
 export { CorrelationMatrixChart } from "./CorrelationMatrixChart";
 export type { CorrelationMatrixChartProps } from "./CorrelationMatrixChart";
 export { CorrelogramChart } from "./CorrelogramChart";

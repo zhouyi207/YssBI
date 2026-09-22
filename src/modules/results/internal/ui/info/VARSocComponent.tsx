@@ -1,12 +1,13 @@
 import type { FC } from "react";
 import { useMemo } from "react";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ReportLayout, ReportSection, formatNum } from "./shared";
+import { ReportLayout, ReportSection } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
 import {
   InfoStatsTable,
   infoStatsRowEvenClass,
   infoStatsRowOddClass,
-} from "./shared/InfoStatsTable";
+} from "@/components/ui-presentation/TableFrame";
 import type { VARSocResultData } from "@/shared/types/report";
 
 function fmtCell(v: number | null | undefined, decimals = 4): string {

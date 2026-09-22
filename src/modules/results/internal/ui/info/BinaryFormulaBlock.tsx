@@ -2,9 +2,9 @@ import React, { useMemo, useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { InfoSegmentedToggle } from "./shared/InfoViewControls";
-import { FormulaMappingTable } from "./shared/FormulaMappingTable";
-import { formatNum } from "./shared/utils";
+import { InfoSegmentedToggle } from "@/components/ui-presentation/Controls";
+import { FormulaMappingTable } from "@/components/ui-presentation/FormulaMappingTable";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { Coefficient } from "@/shared/types/report";
 
 function escapeLatex(s: string): string {
@@ -106,7 +106,7 @@ function buildSymbolicData(
   \\Phi(\\eta) = \\int_{-\\infty}^{\\eta} \\frac{1}{\\sqrt{2\\pi}} e^{-t^2/2} \\, \\mathrm{d}t \\\\
   \\eta = ${etaPart}
 \\end{gathered}`;
-  return { latex, mappings, terms };
+  return { latex, mappings };
 }
 
 function renderKatex(latex: string, displayMode = true): string | null {
@@ -179,7 +179,6 @@ const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({
           <FormulaMappingTable
             mappings={mappings}
             hasCat={hasCat}
-            formatNum={formatNum}
             renderSymbol={(symbol) => {
               const symHtml = renderInlineKatex(symbol);
               return symHtml ? (

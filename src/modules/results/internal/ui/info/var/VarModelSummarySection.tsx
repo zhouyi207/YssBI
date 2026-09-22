@@ -1,5 +1,5 @@
 import { ReportSection } from "../shared/ReportLayout";
-import { formatNum } from "../shared/RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 
 export function VarModelSummarySection({
   completeSampleRows,

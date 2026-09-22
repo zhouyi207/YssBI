@@ -1,4 +1,5 @@
-import { formatNum, InfoRow } from "./RegressionShared";
+import { InfoRow } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { PanelFEInfo } from "@/shared/types/report";
 import type { LinearModelInfo } from "@/shared/types/report";
 

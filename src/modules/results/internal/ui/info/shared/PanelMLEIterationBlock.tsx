@@ -1,4 +1,4 @@
-import { formatNum } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { LinearModelInfo } from "@/shared/types/report";
 
 /** MLE iteration log — separate module at bottom (Stata-style) */

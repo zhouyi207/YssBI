@@ -1,4 +1,4 @@
-import { formatNum } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { PanelSelectionTest } from "@/shared/types/report";
 
 function DecisionBadge({ decision }: { decision: string }) {

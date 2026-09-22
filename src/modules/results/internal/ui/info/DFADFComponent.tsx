@@ -1,6 +1,8 @@
 import type { FC } from "react";
 import { useMemo } from "react";
-import { ReportLayout, ReportSection, formatNum, InfoRow, CoefficientTable } from "./shared";
+import { ReportLayout, ReportSection, InfoRow } from "./shared";
+import { formatNum } from "@/shared/stats/formatStat";
+import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
 import type { Coefficient, DFADFSummaryResultData } from "@/shared/types/report";
 
 export const DFADFComponent: FC<{ data: DFADFSummaryResultData }> = ({ data }) => {

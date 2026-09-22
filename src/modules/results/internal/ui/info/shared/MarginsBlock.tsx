@@ -3,8 +3,13 @@ import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/shared/ui";
-import { SectionHeader, formatNum } from "./RegressionShared";
-import { InfoStatsTable, infoStatsCellClass, infoStatsHeadClass } from "./InfoStatsTable";
+import { SectionHeader } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
+import {
+  InfoStatsTable,
+  infoStatsCellClass,
+  infoStatsHeadClass,
+} from "@/components/ui-presentation/TableFrame";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { buildParamNames } from "@/shared/stats/regressionReportUtils";
 import { parseAtValues } from "@/features/application/stats/statsActions";
@@ -39,9 +44,7 @@ function buildEvalPoint(
   paramNames: string[],
   atOverrides: Record<string, number>,
 ): number[] {
-  return paramNames.map((p, i) =>
-    atOverrides[p] !== undefined ? atOverrides[p] : (exogMeans[i] ?? 0),
-  );
+  return paramNames.map((p, i) => (atOverrides[p] !== undefined ? atOverrides[p] : exogMeans[i]));
 }
 
 type MarginType = "dydx_avg" | "dydx_means" | "dydx_at" | "eyex" | "eydx" | "dyex";

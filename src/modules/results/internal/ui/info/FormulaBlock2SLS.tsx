@@ -2,8 +2,8 @@ import React, { useMemo, useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { InfoSegmentedToggle } from "./shared/InfoViewControls";
-import { formatNum } from "./shared/utils";
+import { InfoSegmentedToggle } from "@/components/ui-presentation/Controls";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { Coefficient } from "@/shared/types/report";
 import type { Iv2slsFirstStageResult } from "@/shared/types/report";
 

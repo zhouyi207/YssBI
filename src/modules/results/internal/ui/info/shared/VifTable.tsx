@@ -1,7 +1,11 @@
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatNum } from "./RegressionShared";
+import { formatNum } from "@/shared/stats/formatStat";
 import type { VifEntry } from "@/shared/types/report";
-import { InfoStatsTable, infoStatsCellClass, infoStatsHeadClass } from "./InfoStatsTable";
+import {
+  InfoStatsTable,
+  infoStatsCellClass,
+  infoStatsHeadClass,
+} from "@/components/ui-presentation/TableFrame";
 
 function vifRowKey(row: VifEntry, idx: number): string {
   return row.category != null ? `${row.variable}-${row.category}` : `${row.variable}-${idx}`;

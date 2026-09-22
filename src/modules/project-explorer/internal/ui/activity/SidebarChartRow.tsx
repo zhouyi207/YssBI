@@ -20,7 +20,7 @@ export const SidebarChartRow = memo(function SidebarChartRow({
   name: string;
   indentDepth?: number;
   isSelected?: boolean;
-  onOpen: (chartPath: string, name: string) => void;
+  onOpen: (chartPath: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
@@ -34,7 +34,7 @@ export const SidebarChartRow = memo(function SidebarChartRow({
       label={name}
       onClick={(e) => {
         e.stopPropagation();
-        void onOpen(chartPath, name);
+        void onOpen(chartPath);
       }}
       onContextMenu={onContextMenu}
       trailing={
@@ -43,7 +43,7 @@ export const SidebarChartRow = memo(function SidebarChartRow({
           tooltip={t("sidebar.open")}
           onClick={(e) => {
             e.stopPropagation();
-            void onOpen(chartPath, name);
+            void onOpen(chartPath);
           }}
         />
       }

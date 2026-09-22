@@ -43,6 +43,11 @@ vi.mock("@/shared/charts/statistical", () => ({
   DidEventStudyChart: () => null,
 }));
 
+vi.mock("@/shared/stats/formatStat", () => ({
+  formatNum: (value: number) => String(value),
+  formatNullableNum: (value: number | null | undefined) => String(value),
+}));
+
 vi.mock("./shared", async () => {
   const React = await import("react");
   const Container = ({ children }: { children?: ReactNode }) =>
@@ -55,8 +60,6 @@ vi.mock("./shared", async () => {
     CoefficientsBlock: () => null,
     HypothesisTestBlock: () => null,
     OmittedVariablesAlert: () => null,
-    formatNum: (value: number) => String(value),
-    formatNullableNum: (value: number | null | undefined) => String(value),
   };
 });
 

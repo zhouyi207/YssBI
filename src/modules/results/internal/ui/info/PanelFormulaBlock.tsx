@@ -1,7 +1,7 @@
 import React from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { FormulaMappingTable } from "./shared/FormulaMappingTable";
+import { FormulaMappingTable } from "@/components/ui-presentation/FormulaMappingTable";
 
 export type PanelMethod =
   | "mixed_ols"
@@ -221,7 +221,6 @@ const PanelFormulaBlock: React.FC<PanelFormulaBlockProps> = ({ modelType, effect
           mappings={mappings}
           hasCat={false}
           showCoef={false}
-          formatNum={() => ""}
           renderSymbol={(symbol) => {
             const symHtml = renderInlineKatex(symbol);
             return symHtml ? (
