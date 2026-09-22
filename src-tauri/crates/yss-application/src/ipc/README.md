@@ -18,6 +18,8 @@ YssBI's desktop IPC boundary has an Application-owned command module and three s
 
 Event and Channel depend on Contract and never depend on Application. Contract has no Tauri or runtime dependency. Execution encoding and graph-client handoff consume Application types, so they live in [channel/](channel/mod.rs) within this module. Business workflows and committed state remain in their use-case/domain owners.
 
+Result JSON encoding is shared by the desktop and Harness adapters in [result_encoding.rs](../result_encoding.rs). Graph Results returns typed, bounded projections; the shared mapping owns field names and the final inline wire budget, counted without a second encoded buffer. Command handlers do not rebuild report JSON or duplicate this limit.
+
 ## Public surface
 
 Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initialize(app)`. The desktop entry connects these two functions directly to Tauri. Commands, schemas, response caches and diagnosed errors remain private to the IPC module.

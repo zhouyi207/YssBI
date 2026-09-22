@@ -8,8 +8,6 @@ use tauri::State;
 use yss_graph_execution::result::{ResultId, ResultRetentionError};
 use yss_node_kernel::RuntimeValue;
 
-pub(super) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ResultPagingErrorDetails {
@@ -99,18 +97,17 @@ pub fn get_result_value(
     ) {
         return Err(result_requires_paging(result_id, "sequence"));
     }
-    let Some(value) = state
-        .query_result_json(reference)
-        .map_err(result_query_command_error)?
+    let Some(value) = crate::result_encoding::query_result_json(&state, reference).map_err(
+        |error| match error {
+            ResultQueryApplicationError::PageTooLarge => {
+                result_requires_paging(result_id, "scalar")
+            }
+            other => result_query_command_error(other),
+        },
+    )?
     else {
         return Ok(None);
     };
-    let encoded_size = serde_json::to_vec(&value)
-        .map_err(|_| CommandError::expected("result_value_not_json"))?
-        .len();
-    if encoded_size > MAX_INLINE_RESULT_JSON_BYTES {
-        return Err(result_requires_paging(result_id, "scalar"));
-    }
     Ok(Some(ResultValueDto::Value(value)))
 }
 

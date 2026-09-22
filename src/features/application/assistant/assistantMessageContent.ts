@@ -45,16 +45,9 @@ export function updateAssistantContent(
 ): AssistantMessageContent {
   const parts = [...content];
   for (const tool of tools) {
-    let index = parts.findIndex(
+    const index = parts.findIndex(
       (part) => part.type === "tool-call" && part.toolCallId === tool.invocationId,
     );
-    if (index < 0)
-      index = parts.findIndex(
-        (part) =>
-          part.type === "tool-call" &&
-          part.toolCallId?.startsWith("pending-") &&
-          part.toolName === tool.capabilityId,
-      );
     const part = {
       type: "tool-call" as const,
       toolCallId: tool.invocationId,

@@ -11,4 +11,6 @@ The crate has no Tauri, Application, database or execution runtime dependency. I
 
 Command-only request/response schemas may stay beside their handler. Shared types have one definition here, with no compatibility re-export from the former schema modules.
 
+Harness tool lifecycle events are `tool_invocation_started`, `tool_invocation_completed`, and `tool_invocation_failed`. Each carries its actual invocation identity and capability ID; there is no pre-identity placeholder event or legacy event conversion.
+
 The complete wire and delivery contract is maintained in [Desktop IPC](../yss-application/src/ipc/README.md).

@@ -24,27 +24,11 @@ pub struct LinearRegressionReportProjection {
     pub reference: ResultReference,
     pub title: String,
     pub endog_name: String,
+    pub param_names: Vec<String>,
     pub model: LinearModelSummary,
     pub condition_number: f64,
     pub coefficient_count: usize,
     pub observation_count: usize,
-}
-
-impl LinearRegressionReportProjection {
-    pub fn into_json(self) -> serde_json::Value {
-        serde_json::json!({
-            "title": self.title,
-            "endog_name": self.endog_name,
-            "resultRef": {
-                "executionSessionId": self.reference.execution_session_id.as_uuid().to_string(),
-                "resultId": self.reference.result_id.get().to_string(),
-            },
-            "model_basic_info": self.model,
-            "diagnostic_info": { "cond_no": self.condition_number },
-            "coefficients": { "kind": "tableRef", "part": "coefficients", "rowCount": self.coefficient_count },
-            "observations": { "kind": "tableRef", "part": "observations", "rowCount": self.observation_count },
-        })
-    }
 }
 
 pub enum ResultAnalysisRequest {
@@ -205,6 +189,12 @@ pub(super) fn report_projection(
         reference,
         title: result.report.title.clone(),
         endog_name: result.report.endog_name.clone(),
+        param_names: result
+            .report
+            .coefficients
+            .iter()
+            .map(|coefficient| coefficient.variable.clone())
+            .collect(),
         model: result.report.model_basic_info.clone(),
         condition_number: result.report.diagnostic_info.cond_no,
         coefficient_count: result.report.coefficients.len(),

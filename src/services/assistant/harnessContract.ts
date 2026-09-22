@@ -65,10 +65,6 @@ export type HarnessEvent = Readonly<{
     | Readonly<{ type: "text_delta"; payload: { delta: string } }>
     | Readonly<{ type: "plan_proposed"; payload: { plan: unknown } }>
     | Readonly<{
-        type: "tool_invocation_requested";
-        payload: { capabilityId: HarnessCapabilityId };
-      }>
-    | Readonly<{
         type: "tool_invocation_started" | "tool_invocation_completed";
         payload: { invocationId: string; capabilityId: HarnessCapabilityId };
       }>
@@ -351,9 +347,6 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
     if (typeof delta === "string") return { ...base, type, payload: { delta } };
   } else if (type === "plan_proposed" && record(eventPayload.plan)) {
     return { ...base, type, payload: { plan: eventPayload.plan } };
-  } else if (type === "tool_invocation_requested") {
-    const capabilityId = capability(eventPayload.capabilityId);
-    if (capabilityId) return { ...base, type, payload: { capabilityId } };
   } else if (type === "tool_invocation_started" || type === "tool_invocation_completed") {
     const invocationId = stringField(eventPayload, "invocationId");
     const capabilityId = capability(eventPayload.capabilityId);

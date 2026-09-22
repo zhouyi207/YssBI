@@ -144,24 +144,31 @@ impl PresentationSession {
     }
 
     fn page(&self, source: &UiSource) -> Result<UiPage, UiError> {
-        let mut state = self.state.lock().map_err(|_| UiError::Unavailable)?;
-        if !state.pages.contains_key(source) && state.pages.len() >= 64 {
-            return Err(UiError::Capacity);
-        }
-        Ok(state
+        let state = self.state.lock().map_err(|_| UiError::Unavailable)?;
+        Ok(state.pages.get(source).cloned().unwrap_or_else(|| UiPage {
+            source: source.clone(),
+            revision: 1,
+            spec: UiSpec::regression_report(),
+        }))
+    }
+
+    fn prune_pages(&self, available: impl Fn(&UiSource) -> bool) -> Result<(), UiError> {
+        self.state
+            .lock()
+            .map_err(|_| UiError::Unavailable)?
             .pages
-            .entry(source.clone())
-            .or_insert_with(|| UiPage {
-                source: source.clone(),
-                revision: 1,
-                spec: UiSpec::regression_report(),
-            })
-            .clone())
+            .retain(|source, _| available(source));
+        Ok(())
     }
 
     fn update(&self, request: UpdateUiRequest) -> Result<UiUpdate, UiError> {
         let mut state = self.state.lock().map_err(|_| UiError::Unavailable)?;
-        let previous = state.pages.get(&request.source).ok_or(UiError::Conflict)?;
+        let default = UiPage {
+            source: request.source.clone(),
+            revision: 1,
+            spec: UiSpec::regression_report(),
+        };
+        let previous = state.pages.get(&request.source).unwrap_or(&default);
         if previous.revision != request.base_revision {
             return Err(UiError::Conflict);
         }
@@ -224,7 +231,12 @@ impl PresentationSession {
         }
         let update = diff(previous, &next);
         let changed = next.revision != previous.revision;
-        state.pages.insert(request.source, next);
+        if changed {
+            if !state.pages.contains_key(&request.source) && state.pages.len() >= 64 {
+                return Err(UiError::Capacity);
+            }
+            state.pages.insert(request.source, next);
+        }
         // Publish under the commit lock so concurrent GUI / Harness mutations keep their order.
         if changed {
             self.publish(UiEvent::Update {
@@ -350,6 +362,9 @@ impl ApplicationState {
         if captured.project_instance_id() != project {
             return Err(UiError::Session);
         }
+        captured
+            .presentation
+            .prune_pages(|source| validate_source(&captured, source, true).is_ok())?;
         Ok(captured)
     }
 
@@ -487,6 +502,65 @@ fn validate_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pages_follow_result_retention_and_defaults_do_not_consume_capacity() {
+        let (application, reference, _) = crate::graph::results::report::tests::fixture(12);
+        let session = application.capture_session().unwrap();
+        let project = session.project_instance_id();
+        let source = UiSource {
+            execution_session_id: reference.execution_session_id.as_uuid().to_string(),
+            result_id: reference.result_id.get().to_string(),
+        };
+        for id in 1..100 {
+            session
+                .presentation
+                .page(&UiSource {
+                    result_id: id.to_string(),
+                    ..source.clone()
+                })
+                .unwrap();
+        }
+        assert!(session.presentation.state.lock().unwrap().pages.is_empty());
+        let [first, second] = [uuid::Uuid::new_v4(), uuid::Uuid::new_v4()];
+        application
+            .retain_result(reference, first, "first", None)
+            .unwrap();
+        application
+            .retain_result(reference, second, "second", None)
+            .unwrap();
+        application
+            .update_ui(
+                project,
+                UpdateUiRequest {
+                    source: source.clone(),
+                    base_revision: 1,
+                    action: UiAction::Visibility {
+                        id: "anova".into(),
+                        visible: false,
+                    },
+                },
+            )
+            .unwrap();
+        session
+            .execution()
+            .invalidate_graph_results("events/report.yssbi-event");
+        application.release_result_lease(first, "first").unwrap();
+        application
+            .inspect_ui(
+                project,
+                InspectUiRequest::Page {
+                    source: source.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(session.presentation.page(&source).unwrap().revision, 2);
+        application.release_result_lease(second, "second").unwrap();
+        application
+            .inspect_ui(project, InspectUiRequest::Catalog)
+            .unwrap();
+        assert!(session.presentation.state.lock().unwrap().pages.is_empty());
+    }
 
     fn observe(
         session: &PresentationSession,

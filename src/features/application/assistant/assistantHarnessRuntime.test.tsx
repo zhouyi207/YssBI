@@ -91,17 +91,16 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
     .mockImplementationOnce(async () => {
       event(2, "turn-1", "turn_started", { userMessage: "First request" });
       const capabilityId = "inspect_dataset_profile";
-      event(3, "turn-1", "tool_invocation_requested", { capabilityId });
-      event(4, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-1" });
-      event(5, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-2" });
-      event(6, "turn-1", "tool_invocation_completed", { capabilityId, invocationId: "tool-2" });
-      event(7, "turn-1", "tool_invocation_failed", {
+      event(3, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-1" });
+      event(4, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-2" });
+      event(5, "turn-1", "tool_invocation_completed", { capabilityId, invocationId: "tool-2" });
+      event(6, "turn-1", "tool_invocation_failed", {
         capabilityId,
         invocationId: "tool-1",
         failureCode: "deadline_elapsed",
       });
-      event(8, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-3" });
-      event(9, "turn-1", "turn_failed");
+      event(7, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-3" });
+      event(8, "turn-1", "turn_failed");
       throw normalizeIpcError("submit_harness_turn", {
         code: "assistant_provider_connection_failed",
         details: null,
@@ -109,8 +108,8 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
       });
     })
     .mockImplementationOnce(async () => {
-      event(10, "turn-2", "turn_started", { userMessage: "Second request" });
-      event(11, "turn-2", "turn_completed", { finalText: "Recovered" });
+      event(9, "turn-2", "turn_started", { userMessage: "Second request" });
+      event(10, "turn-2", "turn_completed", { finalText: "Recovered" });
       return { finalText: "Recovered" };
     });
   function Harness() {

@@ -285,6 +285,10 @@ where
     let captured = state
         .capture_session()
         .map_err(ExecutionApplicationError::SessionCapture)?;
+    let mut deliver = |event: RunApplicationEvent| {
+        captured.publish_graph_activity(super::editing::GraphActivity::Execution(event.clone()));
+        deliver(event)
+    };
     let _execution_admission = captured
         .execution()
         .admit()

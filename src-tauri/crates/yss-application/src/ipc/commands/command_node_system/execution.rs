@@ -222,10 +222,12 @@ pub async fn execute_graph(
             .current_graph_document(&project_instance_id, &graph_path, version)
             .map_err(|error| {
                 super::common::resource_mutation_to_command_error(error, "graph_edit_changed")
+                    .with_details(serde_json::json!({ "executionAccepted": false }))
             })?;
         let channel = TauriExecutionChannelAdapter::new(on_event);
         let mut delivery_failed = false;
         let mut terminal_run_event_sent = false;
+        let mut execution_accepted = false;
         let request = RunGraphRequest::new(
             project_instance_id,
             graph_path,
@@ -234,6 +236,10 @@ pub async fn execute_graph(
         )
         .with_demand(demand);
         let execution = run_graph_with_sink(&state, request, |event| {
+            execution_accepted |= matches!(
+                event.kind(),
+                crate::graph::run::RunApplicationEventKind::RunStarted { .. }
+            );
             let terminal = matches!(
                 event.kind(),
                 crate::graph::run::RunApplicationEventKind::RunCompleted
@@ -248,17 +254,17 @@ pub async fn execute_graph(
             delivered
         });
         if delivery_failed {
-            Err(execution_channel_command_error())
+            Err(execution_channel_command_error()
+                .with_details(serde_json::json!({ "executionAccepted": execution_accepted })))
         } else {
             match execution {
                 Ok(_) => Ok(()),
                 Err(error) => {
                     let error = map_application_execution_error(error);
-                    Err(if terminal_run_event_sent {
-                        error.with_details(serde_json::json!({ "terminalRunEventSent": true }))
-                    } else {
-                        error
-                    })
+                    Err(error.with_details(serde_json::json!({
+                        "terminalRunEventSent": terminal_run_event_sent,
+                        "executionAccepted": execution_accepted,
+                    })))
                 }
             }
         }

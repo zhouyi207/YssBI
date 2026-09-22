@@ -130,6 +130,10 @@ impl ApplicationSession {
         self.graph_activity.publish(activity);
     }
 
+    pub(crate) fn execution_snapshot(&self) -> Vec<crate::graph::run::RunApplicationEvent> {
+        self.graph_activity.execution_snapshot()
+    }
+
     pub(crate) fn coordinate_graph_edit(
         &self,
         path: &yss_graph_document::GraphResourcePath,

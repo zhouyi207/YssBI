@@ -316,6 +316,7 @@ mod tests {
             },
             title: "Linear Regression Summary".into(),
             endog_name: "response".into(),
+            param_names: vec!["const".into(), "x".into()],
             condition_number: 2.0,
             coefficient_count: 2,
             observation_count: n,
@@ -339,13 +340,14 @@ mod tests {
                 covariance_type: "nonrobust".into(),
             },
         };
-        let small = projection(3).into_json();
+        let small = crate::result_encoding::report_to_json(projection(3));
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../../../src/tests/fixtures/node-system-contracts/ols-summary-report.json"
         ))
         .unwrap();
         assert_eq!(small, fixture);
-        let large = serde_json::to_vec(&projection(53_940).into_json()).unwrap();
+        let large = serde_json::to_vec(&crate::result_encoding::report_to_json(projection(53_940)))
+            .unwrap();
         assert!(large.len() < 4096);
         assert!(large.len() <= serde_json::to_vec(&small).unwrap().len() + 16);
     }

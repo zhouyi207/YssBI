@@ -86,7 +86,7 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 页面与动作契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
 页面变更不写入 Project；模型必须区分意图被接受与前端已完成操作，具体校验、回执、恢复与会话边界见 [JSON 页面与界面意图](../yss-ui-contract/README.md)。
 
-`inspect_result` 与界面复用 Application 的 `query_result_json`，返回 `ResultValueInspection::Json` 中的完整 JSON。结果字段、嵌套对象、统计数组与文本不做 AI 专用裁剪；不保留 title/observations/rSquared 三字段白名单，也不使用原有 100 项、4 层或 4096 字符截断。工具的通用响应字节预算不限制此 JSON 分支。
+`inspect_result` 与界面复用 Application 的有界 `query_result_projection` 和共享 `result_encoding` 映射，返回 `ResultValueInspection::Json`。内联结果受投影展开预算及 64 KiB 编码上限约束，超限明确拒绝，不静默裁剪。原生报告使用概览、参数目录与表引用，统计数据按表引用继续读取。普通结果字段、嵌套对象与文本没有 AI 专用白名单或截断规则。
 
 DataFrame、DataSeries 和内存数列仍通过 `offset`/`limit` 分页，不展开全部数据。JSON 中的数据引用保持原样；AI 可以把 `resultRef.executionSessionId`、`resultRef.resultId` 和 `tableRef.part` 传给同一个 `inspect_result` 继续分页读取。未指定 `part` 时读取完整 JSON；指定 `part` 时读取该结果公开的表。分页响应使用 JSON 行值和 `nextOffset`/`hasMore`，保留行数及字节边界。项目会话、结果可用性、取消和 deadline 检查继续生效。
 
@@ -115,6 +115,8 @@ Capability invocation identity 由 ledger 已保存的 idempotency key 确定，
 成功后 dirty 为 false，批次仍可整体撤销；重试读取原回执，不重复修改或保存。
 校验和执行不隐式保存。显式 `save_graph` 用于用户要求单独保存现有编辑，复用正常 Save。
 图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
+
+GraphPortInspection 的 declared/instance 字段统一使用 camelCase，序列化、会话持久化读取与 capability schema 使用同一契约，不接受 snake_case 别名。
 
 SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护迁移版本字段。空数据库在事务中创建全部当前表；已有数据库的 DDL 必须与 adapter 拥有的 schema 一致，JSON 列由 `json_valid` 约束保护，读取再使用当前类型校验。不兼容结构返回 `InvalidRecord`，保留原表与记录，不自动重建。需要重新初始化时，应先备份并移走应用数据目录下的 `db/statistical-harness.sqlite` 及其 SQLite sidecar 文件，再启动应用；此操作不由初始化代码自动执行。当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
 
@@ -211,7 +213,7 @@ AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和�
 Assistant 面板使用 assistant-ui 的 Thread Viewport 管理流式滚动和回到底部，Composer 管理发送/停止，ActionBar 提供回复复制。文本通过配套 MarkdownTextPrimitive 渲染 GFM 表格、列表、代码块和数学公式，代码块提供复制；排版适配工作台主题与窄面板。引用 source part 显示来源标题；连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先。摘要显示调用进度和异常数，每项显示本地化名称与原位更新的状态，详情保留原始工具标识。参数展示支持截断预览、展开与复制；当前 Harness 事件不提供参数，生产记录明确显示未提供参数，不将占位空对象解释为真实参数。统计计划和记忆仍由业务组件展示，不新增会话 authority。
 
 事件 `type` 使用 snake_case，envelope 和 payload 的字段使用 camelCase。Rust 序列化和 TypeScript 解析共用代表性事件夹具，避免两端各自使用不同的手工样本。
-Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片按 invocation ID 更新，显示完成、失败、取消、超时或中断；旧持久事件中的 `ToolInvocationRequested` 仅作为重放占位，遇到真实 ID 后合并。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载后才完成创建的 session 会被关闭。
+Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片从携带真实 invocation ID 的 `ToolInvocationStarted` 创建，并按同一 ID 更新完成、失败、取消、超时或中断状态；不生成待替换的工具占位身份。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载后才完成创建的 session 会被关闭。
 订阅建立后才开放发送。已终止的模型轮次失败保留安全错误引用并允许再次发送，下一次发送清除该错误；会话或传输故障仍阻止发送。提交请求尚未结束时不能再次提交，关闭后的迟到回调不能更新新会话。
 
 React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gateway，也不在 Zustand 建立 conversation authority。Project/session replacement 或 provider unavailable 只改变 projection/action availability，不能保留旧 backend handle 继续提交。

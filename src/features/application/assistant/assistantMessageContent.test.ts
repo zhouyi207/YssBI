@@ -11,9 +11,6 @@ it("replays interleaved text and tool events without moving content or overwriti
     let content: AssistantMessageContent = appendAssistantText([], "先检查");
     content = appendAssistantText(content, "数据。");
     content = updateAssistantContent(content, [], null, [
-      { invocationId: "pending-3", capabilityId: "inspect_graph", state: "running" },
-    ]);
-    content = updateAssistantContent(content, [], null, [
       { invocationId: "tool-1", capabilityId: "inspect_graph", state: "running" },
     ]);
     content = appendAssistantText(content, "已发现两列。");

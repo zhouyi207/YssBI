@@ -134,9 +134,6 @@ pub enum HarnessEventKindDto {
     PlanProposed {
         plan: StatisticalPlan,
     },
-    ToolInvocationRequested {
-        capability_id: CapabilityId,
-    },
     ToolInvocationStarted {
         invocation_id: String,
         capability_id: CapabilityId,
@@ -280,11 +277,6 @@ impl From<&AgentEvent> for HarnessEventKindDto {
                 delta: delta.clone(),
             },
             AgentEvent::PlanProposed { plan } => Self::PlanProposed { plan: plan.clone() },
-            AgentEvent::ToolInvocationRequested { capability_id } => {
-                Self::ToolInvocationRequested {
-                    capability_id: *capability_id,
-                }
-            }
             AgentEvent::ToolInvocationStarted {
                 invocation_id,
                 capability_id,

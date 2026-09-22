@@ -242,7 +242,6 @@ pub fn invoke_graph_capability(
                         }
                         _ => {}
                     }
-                    captured.publish_graph_activity(GraphActivity::Execution(event));
                     true
                 },
             );

@@ -494,7 +494,7 @@ fn inspect_result(
         let rows = page
             .values
             .iter()
-            .map(crate::graph::results::runtime_value_to_json)
+            .map(crate::result_encoding::runtime_value_to_json)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?;
         ResultValueInspection::Table {
@@ -514,8 +514,7 @@ fn inspect_result(
         }
     } else {
         ResultValueInspection::Json(
-            application
-                .query_result_json(reference)
+            crate::result_encoding::query_result_json(application, reference)
                 .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
                 .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
         )
@@ -701,7 +700,7 @@ mod tests {
         for _ in 0..8 {
             value = RuntimeValue::Record(std::sync::Arc::new([("nested".into(), value)].into()));
         }
-        let json = crate::graph::results::runtime_value_to_json(&value).unwrap();
+        let json = crate::result_encoding::runtime_value_to_json(&value).unwrap();
         let mut nested = &json;
         for _ in 0..8 {
             nested = &nested["nested"];
@@ -760,7 +759,9 @@ mod tests {
         };
         assert_eq!(
             json,
-            application.query_result_json(reference).unwrap().unwrap()
+            crate::result_encoding::query_result_json(&application, reference)
+                .unwrap()
+                .unwrap()
         );
         assert_eq!(json["model_basic_info"]["num_observation"], 1_000);
         assert!(json["model_basic_info"]["f_statistic"].is_number());

@@ -93,6 +93,13 @@ pub(crate) fn query_graph_results(
     })
 }
 
+pub enum ResultValueProjection {
+    Value(RuntimeValue),
+    LinearReport(Box<report::LinearRegressionReportProjection>),
+}
+
+// Bounds projection work before allocating a JSON tree. Wire size is checked by the shared encoder.
+const MAX_INLINE_PROJECTION_BYTES: usize = 512 * 1024;
 pub const MAX_RESULT_PAGE_ROWS: usize = 1_000;
 const MAX_RESULT_PAGE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -115,10 +122,10 @@ pub struct ResultPageProjection {
 
 impl ApplicationState {
     /// Full result metadata and JSON values, with native report data kept behind table references.
-    pub fn query_result_json(
+    pub fn query_result_projection(
         &self,
         reference: ResultReference,
-    ) -> Result<Option<serde_json::Value>, ResultQueryApplicationError> {
+    ) -> Result<Option<ResultValueProjection>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         if captured.execution_session_id() != reference.execution_session_id {
             return Err(ResultQueryApplicationError::SessionChanged);
@@ -128,12 +135,35 @@ impl ApplicationState {
         };
         let value = match snapshot.value().value().unannotated() {
             RuntimeValue::LinearRegression(result) => {
-                Ok(report::report_projection(reference, result).into_json())
+                let mut remaining = MAX_INLINE_PROJECTION_BYTES;
+                for text in [
+                    &result.report.title,
+                    &result.report.endog_name,
+                    &result.report.model_basic_info.model_type,
+                    &result.report.model_basic_info.method,
+                    &result.report.model_basic_info.covariance_type,
+                ] {
+                    remaining = remaining
+                        .checked_sub(text.len())
+                        .ok_or(ResultQueryApplicationError::PageTooLarge)?;
+                }
+                for coefficient in &result.report.coefficients {
+                    remaining = remaining
+                        .checked_sub(coefficient.variable.len().saturating_add(16))
+                        .ok_or(ResultQueryApplicationError::PageTooLarge)?;
+                }
+                Ok(ResultValueProjection::LinearReport(Box::new(
+                    report::report_projection(reference, result),
+                )))
             }
             RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_) => {
                 Err(ResultQueryApplicationError::InvalidPageRequest)
             }
-            value => runtime_value_to_json(value),
+            value => {
+                let mut remaining = MAX_INLINE_PROJECTION_BYTES;
+                charge_value(value, &mut remaining, 0)?;
+                Ok(ResultValueProjection::Value(value.clone()))
+            }
         };
         self.revalidate_captured_session(&captured)
             .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
@@ -413,36 +443,32 @@ fn charge_value(
     Ok(())
 }
 
-pub(crate) fn runtime_value_to_json(
-    value: &RuntimeValue,
-) -> Result<serde_json::Value, ResultQueryApplicationError> {
-    Ok(match value {
-        RuntimeValue::Annotated(value) => runtime_value_to_json(value.value())?,
-        RuntimeValue::Scalar(value) => serde_json::to_value(value.display_value())
-            .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
-        RuntimeValue::Resource(value) => value.as_ref().into(),
-        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::LinearRegression(_) => {
-            return Err(ResultQueryApplicationError::UnrepresentableValue);
-        }
-        RuntimeValue::List(values) => values
-            .iter()
-            .map(runtime_value_to_json)
-            .collect::<Result<Vec<_>, _>>()?
-            .into(),
-        RuntimeValue::Record(values) => values
-            .iter()
-            .map(|(key, value)| Ok((key.to_string(), runtime_value_to_json(value)?)))
-            .collect::<Result<std::collections::BTreeMap<_, _>, ResultQueryApplicationError>>()?
-            .into_iter()
-            .collect::<serde_json::Map<_, _>>()
-            .into(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     mod paging;
     use super::*;
+    use crate::result_encoding::runtime_value_to_json;
+
+    #[test]
+    fn inline_projection_budget_rejects_large_and_deep_values_before_encoding() {
+        let large = RuntimeValue::Scalar(TabularScalar::String(
+            "x".repeat(MAX_INLINE_PROJECTION_BYTES).into(),
+        ));
+        let mut budget = MAX_INLINE_PROJECTION_BYTES;
+        assert!(matches!(
+            charge_value(&large, &mut budget, 0),
+            Err(ResultQueryApplicationError::PageTooLarge)
+        ));
+        let mut deep = RuntimeValue::Scalar(TabularScalar::Null);
+        for _ in 0..66 {
+            deep = RuntimeValue::List(Arc::from([deep]));
+        }
+        let mut budget = MAX_INLINE_PROJECTION_BYTES;
+        assert!(matches!(
+            charge_value(&deep, &mut budget, 0),
+            Err(ResultQueryApplicationError::PageTooLarge)
+        ));
+    }
     use yss_graph_execution::plan::{PlanGraphId, PlanPortAddress};
 
     #[test]

@@ -399,3 +399,19 @@ pub fn get_execution_run_state(
         })
         .map_err(map_editor_resource_error)
 }
+
+#[tauri::command]
+pub fn get_execution_snapshot(
+    application: State<'_, ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+) -> Result<Vec<yss_ipc_contract::execution::RunEventDto>, CommandError> {
+    application
+        .execution_snapshot(&project_instance_id)
+        .map_err(map_editor_resource_error)?
+        .into_iter()
+        .map(|event| {
+            crate::ipc::channel::execution::execution_event_to_transport(event)
+                .map_err(|_| CommandError::expected("execution_channel_failed"))
+        })
+        .collect()
+}

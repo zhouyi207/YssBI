@@ -290,6 +290,23 @@ fn fixture_with_method(
 }
 
 #[test]
+fn parameter_catalog_is_independent_of_coefficient_pages() {
+    let (_, reference, fit) = fixture(10);
+    let mut model = (*fit).clone();
+    model.report.coefficients = (0..201)
+        .map(|index| {
+            let mut coefficient = fit.report.coefficients[0].clone();
+            coefficient.variable = format!("x{index}");
+            coefficient
+        })
+        .collect();
+    let overview = crate::result_encoding::report_to_json(report_projection(reference, &model));
+    assert_eq!(overview["paramNames"].as_array().unwrap().len(), 201);
+    assert_eq!(overview["paramNames"][200], "x200");
+    assert_eq!(overview["coefficients"]["rowCount"], 201);
+}
+
+#[test]
 fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     let (app, reference, fit) = fixture(53_940);
     let lease = uuid::Uuid::new_v4();

@@ -10,6 +10,7 @@ mod ipc;
 pub mod plugins;
 pub mod presentation;
 pub mod project;
+mod result_encoding;
 pub mod runtime;
 pub mod session;
 

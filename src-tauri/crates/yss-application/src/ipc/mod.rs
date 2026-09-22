@@ -43,6 +43,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         subscribe_graph_activity,
         unsubscribe_graph_activity,
         get_execution_run_state,
+        get_execution_snapshot,
         allocate_pin_preview_generation,
         execute_graph,
         cancel_graph_run,

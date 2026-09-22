@@ -35,6 +35,7 @@ export const linearRegressionReportField = refineField(
     title: literalField("Linear Regression Summary"),
     endog_name: stringField,
     resultRef: resultReferenceField,
+    paramNames: arrayField(stringField),
     model_basic_info: linearModelInfoField,
     diagnostic_info: objectField({ cond_no: numberField }),
     coefficients: objectField({

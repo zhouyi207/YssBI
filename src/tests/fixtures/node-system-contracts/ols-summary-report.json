@@ -8,6 +8,7 @@
     "cond_no": 2.0
   },
   "endog_name": "response",
+  "paramNames": ["const", "x"],
   "model_basic_info": {
     "adj_r_squared": 0.75,
     "covariance_type": "nonrobust",

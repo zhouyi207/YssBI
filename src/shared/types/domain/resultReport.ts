@@ -13,6 +13,7 @@ export interface LinearRegressionReportData {
   title: "Linear Regression Summary";
   endog_name: string;
   resultRef: ResultReference;
+  paramNames: string[];
   model_basic_info: LinearModelInfo;
   diagnostic_info: { cond_no: number };
   coefficients: ResultTableReference<"coefficients">;

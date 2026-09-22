@@ -1,8 +1,7 @@
-use crate::graph::results::{
-    ResultPageKind, ResultPageProjection, ResultStructure, runtime_value_to_json,
-};
+use crate::graph::results::{ResultPageKind, ResultPageProjection, ResultStructure};
 use crate::graph::run::RunDemand;
 use crate::ipc::channel::execution::{RunEventDtoError, output_dto};
+use crate::result_encoding::runtime_value_to_json;
 use serde::Serialize;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};

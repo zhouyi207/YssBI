@@ -2583,7 +2583,9 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
 #[test]
 fn project_dataset_graph_runs_through_application_authority_and_paged_results() {
     use yss_application::graph::results::ResultPinQuery;
-    use yss_application::graph::run::{RunGraphRequest, run_graph};
+    use yss_application::graph::run::{
+        RunApplicationEventKind, RunGraphRequest, run_graph_with_sink,
+    };
     use yss_application::session::{
         ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState,
     };
@@ -3008,16 +3010,35 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .unwrap()
         .projection()
         .clone();
-    let run_id = run_graph(
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let _subscription = app
+        .subscribe_graph_activity(
+            &instance,
+            Arc::new(move |event| {
+                let _ = sender.send(event);
+            }),
+        )
+        .unwrap();
+    let run_id = run_graph_with_sink(
         &app,
         RunGraphRequest::new(
-            instance,
+            instance.clone(),
             path.clone(),
             document,
             ready.basis.semantic_input_hash,
         ),
+        |_| false,
     )
     .unwrap();
+    assert!(receiver.try_iter().any(|event| matches!(event,
+        yss_application::graph::editing::GraphActivity::Execution(event)
+            if matches!(event.kind(), RunApplicationEventKind::RunCompleted))));
+    let snapshot = app.execution_snapshot(&instance).unwrap();
+    assert_eq!(snapshot.len(), 2);
+    assert!(matches!(
+        snapshot[1].kind(),
+        RunApplicationEventKind::RunCompleted
+    ));
     let query = |node, key: &str| {
         ResultPinQuery::new(
             path.clone(),

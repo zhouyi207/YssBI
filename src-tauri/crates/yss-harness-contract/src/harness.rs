@@ -327,9 +327,6 @@ pub enum AgentEvent {
     PlanProposed {
         plan: StatisticalPlan,
     },
-    ToolInvocationRequested {
-        capability_id: CapabilityId,
-    },
     ToolInvocationStarted {
         invocation_id: ToolInvocationId,
         capability_id: CapabilityId,

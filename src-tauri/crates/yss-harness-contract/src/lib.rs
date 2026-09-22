@@ -841,17 +841,12 @@ pub struct GraphNodeInspection {
 )]
 pub enum GraphPortInspection {
     Declared {
-        #[serde(alias = "node_id")]
         node_id: String,
-        #[serde(alias = "port_key")]
         port_key: String,
     },
     Instance {
-        #[serde(alias = "node_id")]
         node_id: String,
-        #[serde(alias = "template_key")]
         template_key: String,
-        #[serde(alias = "instance_id")]
         instance_id: String,
     },
 }
@@ -1255,6 +1250,24 @@ pub fn capability_output_schema(capability_id: CapabilityId) -> schemars::Schema
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn graph_port_inspection_uses_current_field_names() {
+        for (current, old) in [
+            (
+                serde_json::json!({"kind": "declared", "nodeId": "n", "portKey": "value"}),
+                serde_json::json!({"kind": "declared", "node_id": "n", "port_key": "value"}),
+            ),
+            (
+                serde_json::json!({"kind": "instance", "nodeId": "n", "templateKey": "x", "instanceId": "i"}),
+                serde_json::json!({"kind": "instance", "node_id": "n", "template_key": "x", "instance_id": "i"}),
+            ),
+        ] {
+            let port: super::GraphPortInspection = serde_json::from_value(current.clone()).unwrap();
+            assert_eq!(serde_json::to_value(port).unwrap(), current);
+            assert!(serde_json::from_value::<super::GraphPortInspection>(old).is_err());
+        }
+    }
+
     use super::*;
 
     #[test]

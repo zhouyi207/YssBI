@@ -474,26 +474,6 @@ class AssistantHarnessProjection {
       );
       isRunning = false;
       activity = null;
-    } else if (event.type === "tool_invocation_requested" && event.turnId) {
-      const turnId = event.turnId;
-      const tools = [
-        ...(this.toolsByTurn.get(turnId) ?? []),
-        {
-          invocationId: `pending-${event.sequence}`,
-          capabilityId: event.payload.capabilityId,
-          state: "running" as const,
-        },
-      ];
-      this.toolsByTurn.set(turnId, tools);
-      messages = upsertToolMessage(
-        messages,
-        turnId,
-        event.occurredAt,
-        this.citationsByTurn.get(turnId) ?? [],
-        this.plansByTurn.get(turnId) ?? null,
-        tools,
-      );
-      activity = event.payload.capabilityId;
     } else if (
       (event.type === "tool_invocation_started" ||
         event.type === "tool_invocation_completed" ||
@@ -516,15 +496,7 @@ class AssistantHarnessProjection {
                   ? "timed-out"
                   : "failed";
       const tools = [...(this.toolsByTurn.get(turnId) ?? [])];
-      let index = tools.findIndex((tool) => tool.invocationId === event.payload.invocationId);
-      // Older persisted streams contain a requested placeholder before the identified event.
-      if (index < 0)
-        index = tools.findIndex(
-          (tool) =>
-            tool.invocationId.startsWith("pending-") &&
-            tool.state === "running" &&
-            tool.capabilityId === event.payload.capabilityId,
-        );
+      const index = tools.findIndex((tool) => tool.invocationId === event.payload.invocationId);
       const tool = {
         invocationId: event.payload.invocationId,
         capabilityId: event.payload.capabilityId,

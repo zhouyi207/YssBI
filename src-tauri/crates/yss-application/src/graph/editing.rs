@@ -26,6 +26,9 @@ pub type GraphActivityObserver = Arc<dyn Fn(GraphActivity) + Send + Sync>;
 #[derive(Default)]
 pub(crate) struct GraphActivitySource {
     observers: Arc<Mutex<BTreeMap<uuid::Uuid, GraphActivityObserver>>>,
+    runs: Mutex<
+        BTreeMap<yss_graph_execution::run_registry::RunId, Vec<super::run::RunApplicationEvent>>,
+    >,
 }
 
 pub struct GraphActivitySubscription {
@@ -45,7 +48,45 @@ impl Drop for GraphActivitySubscription {
 }
 
 impl GraphActivitySource {
+    pub(crate) fn execution_snapshot(&self) -> Vec<super::run::RunApplicationEvent> {
+        self.runs
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .values()
+            .flatten()
+            .cloned()
+            .collect()
+    }
+
     pub(crate) fn publish(&self, activity: GraphActivity) {
+        if let GraphActivity::Execution(event) = &activity {
+            use super::run::RunApplicationEventKind;
+            let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+            let id = event.identity().run_id();
+            match event.kind() {
+                RunApplicationEventKind::RunStarted { .. } => {
+                    runs.insert(id, vec![event.clone()]);
+                }
+                RunApplicationEventKind::RunCompleted
+                | RunApplicationEventKind::RunCancelled
+                | RunApplicationEventKind::RunErrored { .. } => {
+                    if let Some(events) = runs.get_mut(&id) {
+                        events.push(event.clone());
+                    }
+                }
+                _ => {}
+            }
+            // Keep every active run and each graph's newest run, never an event history.
+            let latest = runs
+                .iter()
+                .fold(BTreeMap::new(), |mut latest, (id, events)| {
+                    latest.insert(events[0].identity().graph_path().clone(), *id);
+                    latest
+                });
+            runs.retain(|id, events| {
+                events.len() == 1 || latest.get(events[0].identity().graph_path()) == Some(id)
+            });
+        }
         let observers = self
             .observers
             .lock()
@@ -535,5 +576,16 @@ impl ApplicationState {
         Ok(captured.execution().runs().state(
             yss_graph_execution::run_registry::RunId::from_existing(run_id),
         ))
+    }
+
+    pub fn execution_snapshot(
+        &self,
+        project: &ProjectInstanceId,
+    ) -> Result<Vec<super::run::RunApplicationEvent>, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(project)?;
+        let snapshot = captured.execution_snapshot();
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(snapshot)
     }
 }
