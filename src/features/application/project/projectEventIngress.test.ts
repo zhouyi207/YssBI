@@ -20,14 +20,16 @@ async function flushQueue(): Promise<void> {
 
 function event(operationId: string): ProjectEvent {
   return {
-    type: "ProjectSaved",
+    type: "ResourceMutationCommitted",
     payload: {
       result: {
         projectInstanceId: "project-a",
         operationId,
         publicationRevision: 1,
-        affectedResources: [],
-        indexInvalidated: false,
+        moves: [],
+        deltas: [],
+        projectionReplacements: [],
+        projectionStatus: { status: "complete", expectedGraphPaths: [] },
       },
     },
   };

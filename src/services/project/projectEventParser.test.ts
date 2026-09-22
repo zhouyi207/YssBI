@@ -18,14 +18,6 @@ const lifecycleResult = {
   invalidation: { project: true, registry: true },
 };
 
-const projectSavedResult = {
-  projectInstanceId,
-  operationId,
-  publicationRevision: 2,
-  affectedResources: [{ kind: "chart", key: "charts/Sales.yssbi-chart" }],
-  indexInvalidated: true,
-};
-
 const supportedEvents = [
   {
     type: "Project",
@@ -44,10 +36,6 @@ const supportedEvents = [
   {
     type: "Project",
     payload: { type: "ProjectLifecycleCommitted", payload: { result: lifecycleResult } },
-  },
-  {
-    type: "Project",
-    payload: { type: "ProjectSaved", payload: { result: projectSavedResult } },
   },
   projectEvents.events[0],
   {
@@ -68,7 +56,6 @@ describe("project event parser", () => {
       "ProjectLoaded",
       "ProjectCleared",
       "ProjectLifecycleCommitted",
-      "ProjectSaved",
       "ResourceMutationCommitted",
       "ProjectIndexInvalidated",
     ]);
@@ -76,7 +63,7 @@ describe("project event parser", () => {
       ok: true,
       event: { type: "ProjectCleared", payload: { projectInstanceId } },
     });
-    expect(parsed[4]).toEqual({
+    expect(parsed[3]).toEqual({
       ok: true,
       event: {
         type: "ResourceMutationCommitted",

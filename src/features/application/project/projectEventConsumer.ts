@@ -1,18 +1,9 @@
 import type {
-  ResourceKeyDto,
   ResourceMutationResultDto,
 } from "@/shared/types/domain/editorMutation";
 import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
 
 type Awaitable<T> = T | PromiseLike<T>;
-
-export interface ProjectSaveReceipt {
-  readonly projectInstanceId: string;
-  readonly operationId: string;
-  readonly publicationRevision: number;
-  readonly affectedResources: readonly ResourceKeyDto[];
-  readonly indexInvalidated: boolean;
-}
 
 export interface ProjectLoadedPayload {
   readonly result: {
@@ -24,10 +15,6 @@ export interface ProjectLoadedPayload {
 
 export interface ProjectLifecycleCommittedPayload {
   readonly result: LifecycleMutationResultDto;
-}
-
-export interface ProjectSavedPayload {
-  readonly result: ProjectSaveReceipt;
 }
 
 export interface ProjectIndexInvalidatedPayload {
@@ -48,7 +35,6 @@ export type ProjectEvent =
       readonly type: "ProjectLifecycleCommitted";
       readonly payload: ProjectLifecycleCommittedPayload;
     }
-  | { readonly type: "ProjectSaved"; readonly payload: ProjectSavedPayload }
   | {
       readonly type: "ProjectIndexInvalidated";
       readonly payload: ProjectIndexInvalidatedPayload;
@@ -69,7 +55,6 @@ export interface ProjectEventConsumerDependencies {
   readonly currentProjectInstanceId: () => string | null;
   readonly publishProjectCleared?: (projectInstanceId: string) => Awaitable<void>;
   readonly publishLifecycleCommitted?: (result: LifecycleMutationResultDto) => Awaitable<void>;
-  readonly publishProjectSaved?: (result: ProjectSaveReceipt) => Awaitable<void>;
   readonly publishResourceMutationCommitted?: (
     result: ResourceMutationResultDto,
   ) => Awaitable<void>;
@@ -94,12 +79,6 @@ export function createProjectEventConsumer(
           return { status: "applied" };
         case "ProjectLifecycleCommitted":
           await dependencies.publishLifecycleCommitted?.(event.payload.result);
-          return { status: "applied" };
-        case "ProjectSaved":
-          if (dependencies.currentProjectInstanceId() !== event.payload.result.projectInstanceId) {
-            return { status: "ignored" };
-          }
-          await dependencies.publishProjectSaved?.(event.payload.result);
           return { status: "applied" };
         case "ProjectIndexInvalidated":
           if (dependencies.currentProjectInstanceId() !== event.payload.projectInstanceId) {

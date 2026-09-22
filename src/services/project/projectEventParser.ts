@@ -1,8 +1,7 @@
-import type { ResourceKeyDto, ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
+import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
-  ProjectSaveResultDto,
 } from "@/shared/types/dto/project";
 import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 
@@ -18,10 +17,6 @@ export interface ProjectLoadedPayload {
 
 export interface ProjectLifecycleCommittedPayload {
   readonly result: LifecycleMutationResultDto;
-}
-
-export interface ProjectSavedPayload {
-  readonly result: ProjectSaveResultDto;
 }
 
 export interface ProjectIndexInvalidatedPayload {
@@ -41,7 +36,6 @@ export type ProjectEvent =
       readonly type: "ProjectLifecycleCommitted";
       readonly payload: ProjectLifecycleCommittedPayload;
     }
-  | { readonly type: "ProjectSaved"; readonly payload: ProjectSavedPayload }
   | {
       readonly type: "ProjectIndexInvalidated";
       readonly payload: ProjectIndexInvalidatedPayload;
@@ -61,7 +55,6 @@ const PROJECT_EVENT_TYPES = {
   ProjectLoaded: true,
   ProjectCleared: true,
   ProjectLifecycleCommitted: true,
-  ProjectSaved: true,
   ProjectIndexInvalidated: true,
   ResourceMutationCommitted: true,
 } as const;
@@ -93,21 +86,6 @@ function isRevision(value: unknown): value is number {
 
 function isWatcherVersion(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1;
-}
-
-function parseResourceKey(value: unknown): ResourceKeyDto | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["kind", "key"]) || !isNonEmptyString(value.key)) {
-    return null;
-  }
-  if (
-    value.kind !== "graph" &&
-    value.kind !== "function" &&
-    value.kind !== "database" &&
-    value.kind !== "chart"
-  ) {
-    return null;
-  }
-  return { kind: value.kind, key: value.key };
 }
 
 function parseProjectLoadedPayload(value: unknown): ProjectLoadedPayload | null {
@@ -251,42 +229,6 @@ function parseLifecyclePayload(value: unknown): ProjectLifecycleCommittedPayload
   } as ProjectLifecycleCommittedPayload;
 }
 
-function parseProjectSavedPayload(value: unknown): ProjectSavedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["result"]) || !isRecord(value.result)) {
-    return null;
-  }
-  const result = value.result;
-  if (
-    !hasExactKeys(result, [
-      "projectInstanceId",
-      "operationId",
-      "publicationRevision",
-      "affectedResources",
-      "indexInvalidated",
-    ]) ||
-    !isNonEmptyString(result.projectInstanceId) ||
-    !isNonEmptyString(result.operationId) ||
-    !isRevision(result.publicationRevision) ||
-    !Array.isArray(result.affectedResources) ||
-    typeof result.indexInvalidated !== "boolean"
-  ) {
-    return null;
-  }
-
-  const affectedResources = result.affectedResources.map(parseResourceKey);
-  if (affectedResources.some((resource) => resource === null)) return null;
-
-  return {
-    result: {
-      projectInstanceId: result.projectInstanceId,
-      operationId: result.operationId,
-      publicationRevision: result.publicationRevision,
-      affectedResources: affectedResources as ResourceKeyDto[],
-      indexInvalidated: result.indexInvalidated,
-    },
-  };
-}
-
 function parseIndexInvalidatedPayload(value: unknown): ProjectIndexInvalidatedPayload | null {
   if (
     !isRecord(value) ||
@@ -374,12 +316,6 @@ export function parseProjectEvent(value: unknown): ProjectEventParseOutcome {
     }
     case "ProjectLifecycleCommitted": {
       const payload = parseLifecyclePayload(nested.payload);
-      return payload === null
-        ? invalidPayload()
-        : { ok: true, event: { type: nested.type, payload } };
-    }
-    case "ProjectSaved": {
-      const payload = parseProjectSavedPayload(nested.payload);
       return payload === null
         ? invalidPayload()
         : { ok: true, event: { type: nested.type, payload } };

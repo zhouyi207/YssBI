@@ -49,7 +49,6 @@ function createConsumer(): ProjectEventConsumer {
       );
       if (result.invalidation.project) resetResultQueryProject();
     },
-    publishProjectSaved: () => undefined,
     publishResourceMutationCommitted: async (result) => {
       await projectPublicationCoordinator.submit({ result });
     },

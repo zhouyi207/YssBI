@@ -16,6 +16,8 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 - 宿主 IPC/CSV/Parquet 文件边界使用 Arrow batches；精确存储 Schema 与 Graph 语义 Schema 分开，见 [Database runtime](../../../yss-database-runtime/README.md)；
 - mutation 在锁外执行 I/O，并在最终 Project gate 重新验证 session/revision 后提交。
 
+当前数据库窗口只读展示分页行与元数据，并提供导出；前端 `DatabaseService` 仅保留导入、查询、资源管理及 Details 使用的类型转换和语义设置入口。后端数据库编辑、历史和 checkpoint 仍由 Database runtime 的当前契约拥有。
+
 数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，用例入口位于 `database/mod.rs`，会话装配位于 `session/database.rs`。编辑历史是 Database Runtime 的私有实现，供 IPC 共享的 EditState 归 `yss-database-contract`。数据库导出、插件 JSON/文件导出和 Julia worker assets 直接使用 `atomicwrites::replace_atomic`；临时文件、内容同步、会话重验和失败清理由各调用方负责。窗口状态由官方插件独立持久化。
 
 文件替换要求临时文件与目标位于同一文件系统。`replace_atomic` 在 Unix 重命名后同步父目录，返回错误时目标可能已经更新；调用方统一保守地报告发布结果不确定，不自动重试、不回滚或删除目标，只清理临时路径。不能通过临时文件消失推断持久化成功。
