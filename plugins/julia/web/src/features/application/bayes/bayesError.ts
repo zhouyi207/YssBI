@@ -25,15 +25,6 @@ export function normalizeBayesApplicationError(
   };
 }
 
-export function normalizeBayesActionError(
-  caught: unknown,
-  fallbackCode: string,
-): BayesApplicationError | null {
-  return isApplicationIpcError(caught)
-    ? normalizeBayesApplicationError(caught, fallbackCode)
-    : null;
-}
-
 function normalizeBayesErrorDetails(value: unknown): TaskErrorDetailsDTO | null {
   if (value === null) return null;
   if (

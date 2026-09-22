@@ -9,8 +9,3 @@ export interface ValidationReportDTO {
   errors: ValidationIssueDTO[];
   warnings: ValidationIssueDTO[];
 }
-
-export interface BayesValidationStateDTO {
-  draftHash: string;
-  report: ValidationReportDTO | null;
-}

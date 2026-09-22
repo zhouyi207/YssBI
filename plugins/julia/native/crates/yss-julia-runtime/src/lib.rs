@@ -1,4 +1,4 @@
-//! System Julia discovery and installation.
+//! System Julia discovery.
 //!
 //! YssBI uses the Julia executable available to the operating system. It does
 //! not maintain a separate project-local Julia runtime.
@@ -27,21 +27,6 @@ pub enum JuliaRuntimeError {
     Missing,
     #[error("{message}")]
     Invalid { message: String },
-    #[error(
-        "automatic Julia installation is currently supported on Windows only; install Julia from https://julialang.org/downloads/ and refresh the status"
-    )]
-    AutomaticInstallationUnsupported,
-    #[error("failed to {operation}: {source}")]
-    CommandIo {
-        operation: &'static str,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("failed to {operation}: {detail}")]
-    CommandFailed {
-        operation: &'static str,
-        detail: String,
-    },
 }
 
 /// Constructs a subprocess command using the platform's background-window policy.
@@ -107,17 +92,6 @@ pub fn get_runtime_status() -> JuliaRuntimeStatus {
 }
 
 /// Installs the latest Julia release for the system, then returns its status.
-pub fn install_latest_julia() -> Result<JuliaRuntimeStatus, JuliaRuntimeError> {
-    let (status, readiness) = status_and_readiness_from_probe(inspect_system_julia());
-    if readiness.is_ok() {
-        return Ok(status);
-    }
-
-    install_juliaup()?;
-    let (status, readiness) = status_and_readiness_from_probe(inspect_system_julia());
-    readiness.map(|()| status)
-}
-
 fn inspect_system_julia() -> RuntimeProbe {
     probe_julia_candidates(system_julia_candidates(), julia_version)
 }
@@ -208,101 +182,30 @@ fn windows_app_execution_alias(executable_name: &str) -> Option<PathBuf> {
     }
 }
 
-fn juliaup_command() -> Command {
-    windows_app_execution_alias("juliaup.exe")
-        .map(background_command)
-        .unwrap_or_else(|| background_command("juliaup"))
-}
-
-fn install_juliaup() -> Result<(), JuliaRuntimeError> {
-    #[cfg(windows)]
-    {
-        run_command(
-            background_command("winget").args([
-                "install",
-                "--id",
-                "JuliaLang.Juliaup",
-                "--exact",
-                "--source",
-                "winget",
-                "--accept-package-agreements",
-                "--accept-source-agreements",
-            ]),
-            "install Juliaup",
-        )?;
-        run_command(
-            juliaup_command().args(["add", "release"]),
-            "install the latest Julia release",
-        )?;
-        run_command(
-            juliaup_command().args(["default", "release"]),
-            "select the latest Julia release",
-        )
-    }
-
-    #[cfg(not(windows))]
-    {
-        Err(JuliaRuntimeError::AutomaticInstallationUnsupported)
-    }
-}
-
-fn run_command(command: &mut Command, operation: &'static str) -> Result<(), JuliaRuntimeError> {
-    let output = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|source| JuliaRuntimeError::CommandIo { operation, source })?;
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let detail = command_output_failure_detail(&output);
-    Err(JuliaRuntimeError::CommandFailed { operation, detail })
-}
-
 fn status_from_probe(probe: RuntimeProbe) -> JuliaRuntimeStatus {
-    status_and_readiness_from_probe(probe).0
-}
-
-fn status_and_readiness_from_probe(
-    probe: RuntimeProbe,
-) -> (JuliaRuntimeStatus, Result<(), JuliaRuntimeError>) {
     match probe {
-        RuntimeProbe::Missing => (
-            JuliaRuntimeStatus {
-                state: JuliaRuntimeState::Missing,
-                version: None,
-                install_dir: None,
-            },
-            Err(JuliaRuntimeError::Missing),
-        ),
+        RuntimeProbe::Missing => JuliaRuntimeStatus {
+            state: JuliaRuntimeState::Missing,
+            version: None,
+            install_dir: None,
+        },
         RuntimeProbe::Ready {
             executable,
             version,
-        } => (
-            JuliaRuntimeStatus {
-                state: JuliaRuntimeState::Ready,
-                version: Some(version),
-                install_dir: executable
-                    .parent()
-                    .map(|path| path.to_string_lossy().into_owned()),
-            },
-            Ok(()),
-        ),
-        RuntimeProbe::Invalid {
-            executable,
-            message,
-        } => (
-            JuliaRuntimeStatus {
-                state: JuliaRuntimeState::Invalid,
-                version: None,
-                install_dir: executable
-                    .parent()
-                    .map(|path| path.to_string_lossy().into_owned()),
-            },
-            Err(JuliaRuntimeError::Invalid { message }),
-        ),
+        } => JuliaRuntimeStatus {
+            state: JuliaRuntimeState::Ready,
+            version: Some(version),
+            install_dir: executable
+                .parent()
+                .map(|path| path.to_string_lossy().into_owned()),
+        },
+        RuntimeProbe::Invalid { executable, .. } => JuliaRuntimeStatus {
+            state: JuliaRuntimeState::Invalid,
+            version: None,
+            install_dir: executable
+                .parent()
+                .map(|path| path.to_string_lossy().into_owned()),
+        },
     }
 }
 

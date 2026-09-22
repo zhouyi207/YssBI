@@ -62,11 +62,11 @@ describe("Bayes wire parsers", () => {
     expect(parseBayesInferenceTaskDTO(validTask)).toEqual(validTask);
   });
 
-  it.each(["message", "detail", "hint"])("rejects legacy TaskError field %s", (field) => {
+  it("rejects unknown TaskError fields", () => {
     expect(() =>
       parseBayesInferenceTaskDTO({
         ...validTask,
-        error: { ...validTask.error, [field]: "private backend prose" },
+        error: { ...validTask.error, extra: true },
       }),
     ).toThrow("Invalid Bayes inference task response");
   });
