@@ -9,6 +9,8 @@ import {
   VscGraphLine,
   VscInfo,
   VscLibrary,
+  VscLayoutPanelCenter,
+  VscMultipleWindows,
   VscProject,
   VscOutput,
   VscPreview,
@@ -138,41 +140,56 @@ export function RootPanelTabRenderer({
     canFloatWorkbenchPanel(menuPanel.metadata)
   ) {
     const location = menuPanel.location;
-    sections.push({
-      items: [
-        {
-          id: "float-tab",
-          label: t("tabBar.contextMenu.floatTab"),
-          onClick: () =>
-            void workbenchLayoutControl
-              .floatPanel(menuPanel.panelInstanceId)
-              .catch(showWorkbenchLayoutError),
-        },
-        {
-          id: "float-group",
-          label: t("tabBar.contextMenu.floatGroup"),
-          disabled: !workbenchLayoutRead
-            .listGroupPanels(menuPanel.groupId)
-            .every((panel) => canFloatWorkbenchPanel(panel.metadata)),
-          onClick: () =>
-            void workbenchLayoutControl
-              .floatGroup(menuPanel.groupId)
-              .catch(showWorkbenchLayoutError),
-        },
-        ...(location.type === "float"
-          ? [
-              {
-                id: "dock-float",
-                label: t("tabBar.contextMenu.dockFloat"),
-                onClick: () =>
-                  void workbenchLayoutControl
-                    .dockFloat(location.layoutId)
-                    .catch(showWorkbenchLayoutError),
-              },
-            ]
-          : []),
-      ],
+    const groupPanels = workbenchLayoutRead.listGroupPanels(menuPanel.groupId);
+    const floatTab = (label: string) => ({
+      id: "float-tab",
+      label,
+      icon: <VscMultipleWindows size={12} aria-hidden />,
+      onClick: () =>
+        void workbenchLayoutControl
+          .floatPanel(menuPanel.panelInstanceId)
+          .catch(showWorkbenchLayoutError),
     });
+    const floatGroup = (label: string) => ({
+      id: "float-group",
+      label,
+      icon: <VscMultipleWindows size={12} aria-hidden />,
+      disabled: !groupPanels.every((panel) => canFloatWorkbenchPanel(panel.metadata)),
+      onClick: () =>
+        void workbenchLayoutControl.floatGroup(menuPanel.groupId).catch(showWorkbenchLayoutError),
+    });
+    if (location.type === "float") {
+      const windowPanelCount = workbenchLayoutRead
+        .listPanels()
+        .filter(
+          (panel) =>
+            panel.location.type === "float" && panel.location.layoutId === location.layoutId,
+        ).length;
+      sections.push({
+        items: [
+          ...(windowPanelCount > 1 ? [floatTab(t("tabBar.contextMenu.detachTab"))] : []),
+          ...(windowPanelCount > groupPanels.length && groupPanels.length > 1
+            ? [floatGroup(t("tabBar.contextMenu.detachGroup"))]
+            : []),
+          {
+            id: "dock-float",
+            label: t("tabBar.contextMenu.dockFloat"),
+            icon: <VscLayoutPanelCenter size={12} aria-hidden />,
+            onClick: () =>
+              void workbenchLayoutControl
+                .dockFloat(location.layoutId)
+                .catch(showWorkbenchLayoutError),
+          },
+        ],
+      });
+    } else {
+      sections.push({
+        items: [
+          floatTab(t("tabBar.contextMenu.floatTab")),
+          ...(groupPanels.length > 1 ? [floatGroup(t("tabBar.contextMenu.floatGroup"))] : []),
+        ],
+      });
+    }
   }
   return (
     <>

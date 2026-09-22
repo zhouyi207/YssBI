@@ -177,7 +177,6 @@ export class WorkbenchModelOperations {
       config: { metadata },
       enableClose: hasWorkbenchPanelCloseButton(metadata),
       enableFloat: canFloatWorkbenchPanel(metadata),
-      enableFloatIcon: canFloatWorkbenchPanel(metadata),
       enableDrag: !isWorkbenchPersistentViewMetadata(metadata),
     };
     this.model.doAction(

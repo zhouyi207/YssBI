@@ -1793,12 +1793,21 @@ export const enUS = {
     splitBottom: "Split Down",
   },
   tabBar: {
+    toolbar: {
+      maximizeGroup: "Maximize Group",
+      restoreGroup: "Restore Group",
+      moreTabs: "More Tabs",
+      dragToDock: "Drag to Dock Floating Window",
+      floatWindowActions: "Floating Window Actions",
+    },
     contextMenu: {
       close: "Close",
       hideContent: "Hide Content",
       floatTab: "Float Tab",
       floatGroup: "Float Group",
-      dockFloat: "Dock in Main Workspace",
+      detachTab: "Move Tab to New Floating Window",
+      detachGroup: "Move Group to New Floating Window",
+      dockFloat: "Dock Floating Window in Main Workspace",
       closeFloat: "Close All Tabs in Floating Window",
       expandContent: "Expand Content",
       closeOthers: "Close Others",
@@ -2121,7 +2130,6 @@ export const enUS = {
     nodeNotFound: "Node not found in graph.",
     parameters: "Parameters",
     sections: {
-      capabilities: "Capabilities",
       diagnostics: "Problems",
     },
     parameterEditor: {

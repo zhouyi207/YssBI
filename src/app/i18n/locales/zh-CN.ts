@@ -1629,12 +1629,21 @@ export const zhCN = {
     splitBottom: "向下拆分",
   },
   tabBar: {
+    toolbar: {
+      maximizeGroup: "最大化分组",
+      restoreGroup: "还原分组",
+      moreTabs: "更多标签",
+      dragToDock: "拖动以停靠整个浮窗",
+      floatWindowActions: "浮动窗口操作",
+    },
     contextMenu: {
       close: "关闭",
       hideContent: "隐藏内容",
       floatTab: "浮动标签",
       floatGroup: "浮动整个分组",
-      dockFloat: "停靠回主工作区",
+      detachTab: "将此标签分离为新浮窗",
+      detachGroup: "将此分组分离为新浮窗",
+      dockFloat: "将整个浮窗停靠回主工作区",
       closeFloat: "关闭浮动窗口中的全部标签",
       expandContent: "展开内容",
       closeOthers: "关闭其他",
@@ -1946,7 +1955,6 @@ export const zhCN = {
     nodeNotFound: "图中未找到该节点。",
     parameters: "参数",
     sections: {
-      capabilities: "能力",
       diagnostics: "问题",
     },
     parameterEditor: {

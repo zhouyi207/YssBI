@@ -79,7 +79,7 @@ function normalize(layout: IJsonModel): IJsonModel {
       if (isWorkbenchPanelMetadata(metadata)) {
         tab.enableClose = hasWorkbenchPanelCloseButton(metadata);
         tab.enableFloat = canFloatWorkbenchPanel(metadata);
-        tab.enableFloatIcon = canFloatWorkbenchPanel(metadata);
+        delete tab.enableFloatIcon;
         tab.enablePopout = false;
       }
     }

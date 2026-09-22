@@ -6,6 +6,23 @@
   --flexlayout-splitter-size: 6px;
 }
 
+/* Keep host actions and native group controls on the same icon and hit-target scale. */
+.workbench-layout-host .flexlayout__tab_toolbar_button {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+}
+.workbench-layout-host .flexlayout__tab_toolbar_button > svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 /* Align the first horizontal tab button with its content, without a leading gutter. */
 .workbench-layout-host
   :is(.flexlayout__tabset_tabbar_outer, .flexlayout__tabset_tabbar_inner_tab_container) {

@@ -14,6 +14,7 @@ import {
   BorderNode,
   DockLocation,
   GroupAction,
+  I18nLabel,
   Layout,
   Model,
   TabNode,
@@ -21,7 +22,20 @@ import {
   type Action,
 } from "flexlayout-react";
 import { useTranslation } from "react-i18next";
-import { VscChromeClose, VscLinkExternal, VscLayoutPanelCenter } from "react-icons/vsc";
+import {
+  VscChromeMaximize,
+  VscChromeRestore,
+  VscCloseAll,
+  VscEllipsis,
+  VscMultipleWindows,
+  VscLayoutPanelCenter,
+} from "react-icons/vsc";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { workbenchLayoutControl } from "./workbenchControl";
 import { showWorkbenchLayoutError } from "../application/workbenchLayoutErrorFeedback";
 import {
@@ -45,6 +59,20 @@ import type {
   RootPanelTabComponent,
   RootPanelProps,
 } from "./panelContribution";
+
+const layoutIcons = {
+  maximize: <VscChromeMaximize size={14} aria-hidden />,
+  restore: <VscChromeRestore size={14} aria-hidden />,
+};
+const layoutLabelKeys: Readonly<Record<string, string>> = {
+  [I18nLabel.Maximize]: "tabBar.toolbar.maximizeGroup",
+  [I18nLabel.Restore]: "tabBar.toolbar.restoreGroup",
+  [I18nLabel.Overflow_Menu_Tooltip]: "tabBar.toolbar.moreTabs",
+  [I18nLabel.Dock_Float_To_Layout]: "tabBar.toolbar.dragToDock",
+  [I18nLabel.Close_Tab]: "tabBar.contextMenu.close",
+  [I18nLabel.Menu_Float]: "tabBar.contextMenu.floatTab",
+  [I18nLabel.Menu_Float_Tabset]: "tabBar.contextMenu.floatGroup",
+};
 
 export interface RootLayoutDndCoordinator {
   readonly onDragStart: (event: DragStartEvent) => void;
@@ -217,6 +245,8 @@ export const RootLayoutHost = memo(
             <Layout
               model={model}
               factory={factory}
+              icons={layoutIcons}
+              i18nTranslator={(key) => (layoutLabelKeys[key] ? t(layoutLabelKeys[key]) : key)}
               supportsPopout={false}
               constrainFloatPanels
               realtimeResize
@@ -259,36 +289,65 @@ export const RootLayoutHost = memo(
                           .catch(showWorkbenchLayoutError)
                       }
                     >
-                      <VscLayoutPanelCenter aria-hidden />
+                      <VscLayoutPanelCenter size={14} aria-hidden />
                     </button>,
-                    <button
-                      key="close-float"
-                      type="button"
-                      className="flexlayout__tab_toolbar_button"
-                      title={t("tabBar.contextMenu.closeFloat")}
-                      aria-label={t("tabBar.contextMenu.closeFloat")}
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() =>
-                        onClosePanels(
-                          workbenchLayoutRead
-                            .listPanels()
-                            .filter(
-                              (panel) =>
-                                panel.location.type === "float" &&
-                                panel.location.layoutId === layoutId,
+                    <DropdownMenu key="float-menu" modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="flexlayout__tab_toolbar_button"
+                          title={t("tabBar.toolbar.floatWindowActions")}
+                          aria-label={t("tabBar.toolbar.floatWindowActions")}
+                          onPointerDown={(event) => event.stopPropagation()}
+                        >
+                          <VscEllipsis size={14} aria-hidden />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="min-w-60"
+                        aria-label={t("tabBar.toolbar.floatWindowActions")}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onSelect={() =>
+                            void workbenchLayoutControl
+                              .dockFloat(layoutId)
+                              .catch(showWorkbenchLayoutError)
+                          }
+                        >
+                          <VscLayoutPanelCenter size={14} aria-hidden />
+                          {t("tabBar.contextMenu.dockFloat")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="gap-2 text-destructive focus:text-destructive"
+                          onSelect={() =>
+                            onClosePanels(
+                              workbenchLayoutRead
+                                .listPanels()
+                                .filter(
+                                  (panel) =>
+                                    panel.location.type === "float" &&
+                                    panel.location.layoutId === layoutId,
+                                )
+                                .map((panel) => panel.panelInstanceId),
                             )
-                            .map((panel) => panel.panelInstanceId),
-                        )
-                      }
-                    >
-                      <VscChromeClose aria-hidden />
-                    </button>,
+                          }
+                        >
+                          <VscCloseAll size={14} aria-hidden />
+                          {t("tabBar.contextMenu.closeFloat")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>,
                   );
                 }
                 if (
                   node instanceof TabSetNode &&
                   node.getLayoutId() === Model.MAIN_LAYOUT_ID &&
-                  node.getTabNodes().length > 1 &&
+                  node.getTabNodes().length > 0 &&
                   node.getTabNodes().every((tab) => tab.isEnableFloat())
                 ) {
                   values.buttons.push(
@@ -305,7 +364,7 @@ export const RootLayoutHost = memo(
                           .catch(showWorkbenchLayoutError)
                       }
                     >
-                      <VscLinkExternal aria-hidden />
+                      <VscMultipleWindows size={14} aria-hidden />
                     </button>,
                   );
                 }

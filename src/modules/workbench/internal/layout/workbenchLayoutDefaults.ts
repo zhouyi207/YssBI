@@ -26,6 +26,7 @@ export function createEmptyWorkbenchLayout(): IJsonModel {
   return {
     global: {
       tabEnableFloat: false,
+      tabEnableFloatIcon: false,
       tabEnablePopout: false,
       tabEnableRename: false,
       tabEnablePin: false,
