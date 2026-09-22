@@ -103,11 +103,32 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-appl
 
 图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
+同一次图请求复用打开图时捕获的文档、编辑身份和解析投影，图检查、校验及 Harness 执行准入不重复读取和解析同一图。编辑与保存仍由 Project 在提交时重验捕获版本，执行准备继续重验文档及依赖。快照直接以 graphPath、revision、graphHash 和 semanticInputHash 标识；编辑请求的 graphHash、节点端口与参数、快照事实和编辑回执中的必需字段缺失时拒绝解析，不补成空值或空集合。
+
 `apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（后端图修订）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向后端图历史 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
 Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复针对 `apply_graph_edit`，不提供执行和保存的跨进程重放。
 
-`GraphEditReceipt` 保存图修订、graph hash、`clientKey` 和创建元素的身份映射，回执不暴露内部 Project 操作 ID；数据层提交使用内部 operation ID 保证准入与提交关联。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
+`GraphEditReceipt` 保存图修订、graph hash、`clientKey`、创建元素的身份映射及本次提交的 `changes`。节点、端口、参数、连接和常量与 `inspect_graph` 共用事实结构；新增或改变的节点返回完整信息，包含派生列和端口，连接包含实际顺序。删除节点、连接和常量明确返回 ID；未变化实体省略。`ready` 和 `diagnostics` 是提交时的完整状态，替换此前诊断。所有图编辑操作统一比较提交前后解析投影，覆盖下游连带变化，不根据模型请求猜测结果。
+
+差分绑定外层 `fromRevision` / `toRevision` 及 `changes.baseSemanticInputHash` / `semanticInputHash`。`inspect_graph` 同时提供语义 hash 和 ready，模型基线匹配且所需事实齐全时直接使用回执继续编辑或执行；基线缺失、语义依赖变化、版本冲突或缺少所需信息时再读取。保存后的 `resourceRevision` 同样可作为下一次编辑的 `baseRevision`。历史重放或幂等重试保留原提交事实，不能覆盖较新的证据。
+
+Application 复用打开图时的基线和编辑流程的最终解析投影，在提交前构造并验证完整差分；不在提交后独立查询当前图来补回执。Project 将有界的调用方事实与文档、历史、版本一起提交，恢复时由 Application 解码为 typed changes，不重新解析较新的图。回执超过工具或 Project 字节预算时，在写入前返回 `result_too_large`，调用方可缩小批次；不静默裁剪节点、端口或诊断。回执不暴露内部 Project 操作 ID；Harness 的 session、turn、tool 等编号继续使用独立类型的通用 UUID。
+
+常量检查和编辑差分都包含覆盖完整常量内容的 `contentHash`。长文本、列表或表格等值即使以 `valueIncluded=false` 只暴露元数据，内容改变也会产生新的事实和差分，不因展示元数据相同而漏报。
+
+`execute_graph` 从本次 `RunGraphReceipt` 取得已发布结果引用，不在运行后重新查询当前图的结果索引。后续编辑、另一次运行或结果失效不会改变原回执。`resultCount` 是成功运行实际发布的结果数，失败时为 null；`resultsComplete` 明确区分完整列表和受能力条目上限约束的部分引用。结果引用不取得新的租约，后续读取仍检查实际可用性；部分列表不能当成该次运行的全部结果。
+
+所有改变状态的模型能力按各自 owner 返回事实：
+
+| 请求                       | 返回的提交或执行事实                                             | 后续读取条件                                                       |
+| -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `apply_graph_edit`         | 新 revision/hash、创建 ID、受影响实体、删除 ID、就绪状态和诊断   | 缺少基线、语义基线不匹配、版本冲突或事实不足                       |
+| `save_graph`               | 保存前后 revision、graph hash、实际 dirty/canUndo/canRedo        | 后续状态变化或需要未掌握的图信息                                   |
+| `execute_graph`            | 实际 run 状态、失败位置、带执行会话的结果引用                    | 通过 `inspect_result` 读取所需内容或数据页，无需先重复列举本次结果 |
+| `update_ui`                | 与 GUI 共用的已提交页面差分、新 revision、完整改变元素与删除操作 | 页面基线缺失或修订冲突                                             |
+| `request_ui_intent`        | 意图身份和实际回执状态                                           | pending/claimed 时查询完成状态，不能把接受当成界面已执行           |
+| `propose_statistical_plan` | Harness 校验且持久化成功后返回 accepted 和实际记录的完整 plan    | 计划正文可直接继续使用，不代表分析已经执行                         |
 
 `apply_graph_edit` 默认自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
 它复用 Project 的文件事务，将文件、当前文档、保存指纹、可撤销历史及编辑回执作为一次提交；
@@ -186,7 +207,7 @@ Frontend AI settings 通过 explicit Harness configuration command 更新 config
 
 Rig adapter 显式启用 `rig-core` 的 Reqwest 和 Rustls 功能，以支持 HTTPS、证书校验及系统代理。
 模型调用使用 Rig 多轮 streaming 接口，只发布公开 text 内容；首段立即发布，后续短片段按 40ms 或 4KiB 合并，工具边界和终止前刷新。工具生命周期仍由 Gateway 发布，不能用 Rig 的批次完成事件代替实时工具状态。取消和超时停止读取模型流，保留已产生的文本并等待已接纳工具完成清理。`finalText` 保存整轮公开文本，不在流结束时再发送一份完整 TextDelta。
-实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务校验失败、revision/invocation conflict、执行图失败及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。成功结果继续使用原能力输出。`outcome_unknown` 也保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录失败，不因协议层成功交付反馈而改写为成功。
+实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
 
 Rig 0.42 默认会把 ToolExecutionError 转成模型反馈，不能以返回该错误作为必然中止的保证。Adapter 因此对取消、超时、项目会话失效、内部错误、持久化故障和工具运行通道异常发出独立的致命信号：流消费者在下一次模型调用前结束，刷新已产生的公开文本，并等待已准入工具完成收尾。计划工具的事件持久化或交付故障也使用此路径。Provider/stream 错误继续由 AgentDriverFailure 终止；ModelTurnRetried 的拒绝策略保持原有语义。
 
@@ -213,7 +234,7 @@ AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和�
 Assistant 面板使用 assistant-ui 的 Thread Viewport 管理流式滚动和回到底部，Composer 管理发送/停止，ActionBar 提供回复复制。文本通过配套 MarkdownTextPrimitive 渲染 GFM 表格、列表、代码块和数学公式，代码块提供复制；排版适配工作台主题与窄面板。引用 source part 显示来源标题；连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先。摘要显示调用进度和异常数，每项显示本地化名称与原位更新的状态，详情保留原始工具标识。参数展示支持截断预览、展开与复制；当前 Harness 事件不提供参数，生产记录明确显示未提供参数，不将占位空对象解释为真实参数。统计计划和记忆仍由业务组件展示，不新增会话 authority。
 
 事件 `type` 使用 snake_case，envelope 和 payload 的字段使用 camelCase。Rust 序列化和 TypeScript 解析共用代表性事件夹具，避免两端各自使用不同的手工样本。
-Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片从携带真实 invocation ID 的 `ToolInvocationStarted` 创建，并按同一 ID 更新完成、失败、取消、超时或中断状态；不生成待替换的工具占位身份。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载后才完成创建的 session 会被关闭。
+Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片从携带真实 invocation ID 的 `ToolInvocationStarted` 创建，并按同一 ID 更新完成、失败、取消、超时或中断状态；不生成待替换的工具占位身份。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载使旧回调失效并释放订阅；已创建的对话继续持久化，供重新打开。
 订阅建立后才开放发送。已终止的模型轮次失败保留安全错误引用并允许再次发送，下一次发送清除该错误；会话或传输故障仍阻止发送。提交请求尚未结束时不能再次提交，关闭后的迟到回调不能更新新会话。
 
 React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gateway，也不在 Zustand 建立 conversation authority。Project/session replacement 或 provider unavailable 只改变 projection/action availability，不能保留旧 backend handle 继续提交。

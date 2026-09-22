@@ -468,30 +468,6 @@ impl HarnessHost {
         Ok(())
     }
 
-    pub async fn mark_project_replaced(
-        &self,
-        session_id: &HarnessSessionId,
-    ) -> Result<(), HarnessError> {
-        let mut session = self
-            .ports
-            .sessions
-            .load_session(session_id)
-            .await?
-            .ok_or(HarnessError::SessionNotFound)?;
-        session.state = HarnessSessionState::Stale;
-        session.updated_at = self.ports.clock.now();
-        self.ports.sessions.update_session(&session).await?;
-        self.cancel_active_turn(session_id, CancellationReason::ProjectReplaced);
-        MemoryService::new(
-            Arc::clone(&self.ports.memory),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-        )
-        .expire_session(session_id)
-        .await?;
-        Ok(())
-    }
-
     pub async fn reconcile_project_session(
         &self,
         current: &ProjectSessionBinding,
@@ -1185,7 +1161,7 @@ fn agent_messages(
     active_graph_path: Option<&str>,
 ) -> Vec<AgentMessage> {
     let mut messages = vec![AgentMessage::System {
-        content: "You operate YssBI through typed tools. Discover graph paths with inspect_project, including graphs without open editor panels. Inspect the chosen current Project graph before edits or execution; use its exact revision, graphHash, node/port IDs and schema. Output ports may fan out: maximumConnections=null means unbounded. Do not infer column roles from opaque instance IDs. Null profile metrics mean unknown/not computed, never zero. Search concise node terms or type IDs; an empty phrase search is not proof a node is absent. When the user requests graph edits, apply one atomic undoable batch directly; clientId aliases can be referenced as $clientId later in the same batch. Reinspect after connecting a DataFrame to discover derived columns. Preserve unrelated nodes and parameters. Each successful graph edit automatically saves the complete current graph in the same transaction and retains undo history; no editor panel needs to open. A failed save means the edit was not committed. Use save_graph only when the user asks to save existing manual changes without an edit. To run an existing graph, call execute_graph with the inspected graphHash; validation is optional and execution prepares its own plan. Inspect the returned result IDs and report actual diagnostics/status. list_graph_results discovers results from earlier/manual runs. Do not require a new statistical plan for graph validation or executing an existing graph. When designing a new statistical analysis, clarify missing scientific intent and propose a complete statistical plan. Current tool evidence takes precedence over conversation history. If a tool returns outcome_unknown, inspect current graph facts before deciding whether a new edit is needed; never blindly retry a possibly applied mutation. Constants with valueIncluded=false contain metadata only; do not overwrite their values by reconstructing them from metadata. Never invent numerical results or claim a tool succeeded without its receipt. Give concise user-facing progress updates before tool use when helpful, and explain findings as evidence arrives. Avoid repeating an identical inspection unless relevant state changed or the earlier result was incomplete."
+        content: "You operate YssBI through typed tools. Discover graph paths with inspect_project, including graphs without open editor panels. Inspect the chosen current Project graph to establish a baseline. Continue edits or execution using the latest successful tool facts: exact revision, graphHash, node/port IDs and schema. Output ports may fan out: maximumConnections=null means unbounded. Do not infer column roles from opaque instance IDs. Null profile metrics mean unknown/not computed, never zero. Search concise node terms or type IDs; an empty phrase search is not proof a node is absent. When the user requests graph edits, apply one atomic undoable batch directly; clientId aliases can be referenced as $clientId later in the same batch. apply_graph_edit returns committed changes: complete replacements for changed nodes and their parameters/ports/derived columns, changed connections including order, removed entity IDs, changed constants, ready and the complete diagnostics. Apply these facts to the known baseline, use toRevision and graphHash for the next call, and continue without an inspection when the needed facts are present. Check changes.baseSemanticInputHash against the known semanticInputHash; if the baseline is missing or mismatched, inspect before relying on unchanged entities. Reinspect on a revision conflict or when required facts are absent. Replayed receipts describe their original commit and must not replace newer facts. Preserve unrelated nodes and parameters. Each successful graph edit automatically saves the complete current graph in the same transaction and retains undo history; no editor panel needs to open. A failed save means the edit was not committed. Use save_graph only when the user asks to save existing manual changes without an edit. save_graph returns resourceRevision and the committed dirty/canUndo/canRedo state; use that revision for the next edit. update_ui returns the committed page patch with complete changed elements and the new revision; use it directly with its matching baseline. request_ui_intent returns acceptance and its actual receipt status; pending/claimed require an intent inspection before claiming completion. To run an existing graph, call execute_graph with the latest returned graphHash; validation is optional and execution prepares its own plan. Use execute_graph's returned run status and result IDs directly; inspect_result retrieves the result content needed for the answer, without first listing the same run's results. Check resultCount and resultsComplete before treating the returned references as all outputs; an incomplete list must not support a claim about unreturned results. list_graph_results discovers results from earlier/manual runs. Do not require a new statistical plan for graph validation or executing an existing graph. When designing a new statistical analysis, clarify missing scientific intent and propose a complete statistical plan. Current tool evidence takes precedence over conversation history. If a tool returns outcome_unknown, inspect current graph facts before deciding whether a new edit is needed; never blindly retry a possibly applied mutation. Constants with valueIncluded=false contain metadata only; do not overwrite their values by reconstructing them from metadata. Never invent numerical results or claim a tool succeeded without its receipt. Give concise user-facing progress updates before tool use when helpful, and explain findings as evidence arrives."
             .to_owned(),
     }];
     if !knowledge.is_empty() {
@@ -1880,6 +1856,18 @@ mod tests {
                         from_revision: 1,
                         to_revision: 2,
                         client_key: "assistant-edit-1".to_owned(),
+                        changes: yss_harness_contract::GraphEditChanges {
+                            base_semantic_input_hash: "0".repeat(64),
+                            semantic_input_hash: "1".repeat(64),
+                            nodes: Vec::new(),
+                            removed_node_ids: Vec::new(),
+                            connections: Vec::new(),
+                            removed_connection_ids: Vec::new(),
+                            constants: BTreeMap::new(),
+                            removed_constant_ids: Vec::new(),
+                            ready: true,
+                            diagnostics: Vec::new(),
+                        },
                     },
                 ))
             })

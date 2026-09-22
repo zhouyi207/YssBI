@@ -649,6 +649,18 @@ mod tests {
                         graph_hash: "1".repeat(64),
                         created_nodes: BTreeMap::new(),
                         created_ports: BTreeMap::new(),
+                        changes: yss_harness_contract::GraphEditChanges {
+                            base_semantic_input_hash: "0".repeat(64),
+                            semantic_input_hash: "1".repeat(64),
+                            nodes: Vec::new(),
+                            removed_node_ids: Vec::new(),
+                            connections: Vec::new(),
+                            removed_connection_ids: Vec::new(),
+                            constants: BTreeMap::new(),
+                            removed_constant_ids: Vec::new(),
+                            ready: true,
+                            diagnostics: Vec::new(),
+                        },
                     };
                     *self.committed.lock().unwrap() = Some((context, receipt.clone()));
                     control.cancellation().cancel(CancellationReason::User);

@@ -453,21 +453,9 @@ fn fatal_capability_failure(code: CapabilityFailureCode) -> Option<AgentDriverFa
         }
         DeadlineElapsed => Some(AgentDriverFailureCode::DeadlineElapsed),
         PersistenceUnavailable | InternalFailure => Some(AgentDriverFailureCode::InternalFailure),
-        GraphClientUnavailable => Some(AgentDriverFailureCode::OutputUnavailable),
-        InvalidRequest
-        | GraphUnavailable
-        | DatabaseUnavailable
-        | CatalogUnavailable
-        | ResultUnavailable
-        | ApprovalRequired
-        | RevisionConflict
-        | MutationRejected
-        | ResultTooLarge
-        | InvocationConflict
-        | GraphDraftChanged
-        | GraphValidationFailed
-        | GraphExecutionFailed
-        | OutcomeUnknown => None,
+        InvalidRequest | GraphUnavailable | DatabaseUnavailable | CatalogUnavailable
+        | ResultUnavailable | ApprovalRequired | RevisionConflict | MutationRejected
+        | ResultTooLarge | InvocationConflict | GraphDraftChanged | OutcomeUnknown => None,
     }
 }
 
@@ -611,7 +599,7 @@ fn statistical_plan_tool(
         serde_json::to_value(statistical_plan_schema()).map_err(|_| invalid_response())?;
     Ok(DynamicTool::new(
         "propose_statistical_plan",
-        "Propose a complete typed statistical plan for Harness policy validation before analytical execution.",
+        "Propose a complete typed statistical plan for Harness policy validation before analytical execution. Returns accepted and the exact plan recorded by Harness after validation and persistence.",
         parameters,
         move |_context, arguments| {
             let output = Arc::clone(&output);
@@ -620,6 +608,7 @@ fn statistical_plan_tool(
                 let plan = serde_json::from_value::<StatisticalPlan>(arguments).map_err(|_| {
                     ToolExecutionError::invalid_args("statistical plan did not match the schema")
                 })?;
+                let receipt = serde_json::json!({ "accepted": true, "plan": &plan });
                 output
                     .emit(AgentEvent::PlanProposed { plan })
                     .await
@@ -637,7 +626,7 @@ fn statistical_plan_tool(
                             )
                         }
                     })?;
-                Ok(ToolOutput::json(serde_json::json!({ "accepted": true })))
+                Ok(ToolOutput::json(receipt))
             })
         },
     ))
@@ -703,13 +692,13 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "Inspect the closed UI catalog/schema, a retained linear regression result's current page and revision, or an intent receipt by ID. UI pages contain presentation only; report sections bind to actual Results. Page state lasts for the current project execution session."
         }
         CapabilityId::UpdateUi => {
-            "Update a result page using its inspected baseRevision. Replace the spec or apply one atomic batch of stable-element patches, change visibility, move an element within its parent, or reset. Only catalog components/actions are accepted. Send complete valid batches, never partial JSON text. Conflicts require a fresh inspection; numerical facts remain in Results."
+            "Update a result page using the revision from inspect_ui or the latest successful update_ui. Replace the spec or apply one atomic batch of stable-element patches, change visibility, move an element within its parent, or reset. Only catalog components/actions are accepted. Send complete valid batches, never partial JSON text. Returns the committed patch with complete changed elements, removals and revision; continue from it without rereading the page when its baseRevision matches your known page. Conflicts or a missing baseline require a fresh inspection; numerical facts remain in Results."
         }
         CapabilityId::RequestUiIntent => {
             "Request opening an existing graph, focusing its node, opening a retained result, or revealing an allowed panel. Use a unique clientKey, reused only for the identical request. Pending is acceptance, not success: inspect the receipt ID until applied/failed/expired. Requires the workbench to be attached; does not edit/save project data or own FlexLayout."
         }
         CapabilityId::InspectGraph => {
-            "Inspect the current Project graph by graphPath, whether or not an editor panel is open: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or running."
+            "Inspect the current Project graph by graphPath, whether or not an editor panel is open: revision, graphHash, semanticInputHash, ready, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Establish a baseline before editing or running; later successful edit/save receipts provide fresh facts and revisions. Inspect again when required facts are missing, the semantic baseline differs or a version conflict occurs."
         }
         CapabilityId::SearchNodeCatalog => {
             "Search node IDs, localized names, aliases and technical terms. Use concise terms (e.g. decompose, ols, multiply) or node type IDs. This searches the node catalog."
@@ -727,16 +716,16 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "List bounded project metadata and resource identities, including graph files with no open editor panel. Use a graph resourceId as graphPath for inspect_graph and graph edits. Does not read raw dataset rows."
         }
         CapabilityId::ApplyGraphEdit => {
-            "Apply one atomic, undoable batch to the current Project graph after the user requests edits. No editor panel is required. Use revision as baseRevision and graphHash from inspect_graph; use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/configuration/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters merges supplied keys with existing parameters. Each successful batch automatically persists the complete current graph and retains undo history. File, document, history and receipt commit together; a save failure does not apply the batch."
+            "Apply one atomic, undoable batch to the current Project graph after the user requests edits. No editor panel is required. Use baseRevision and graphHash from the latest inspection or committed receipt (toRevision for edits, resourceRevision for saves); use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters atomically merges supplied keys with current parameters; null resets a field to its protocol default. Conditional fields are resolved by the host. Each successful batch automatically persists the complete current graph and retains undo history. File, document, history and receipt commit together; a save failure does not apply the batch. Returns toRevision, graphHash and changes with complete changed nodes/parameters/ports/derived columns, changed connections and order, removals, constants, ready and complete diagnostics. Reuse the returned facts for subsequent edits or execution without inspecting again; apply the changes only to a matching fromRevision and baseSemanticInputHash. Unchanged entities are omitted. Replayed receipts retain the original facts. Oversized receipts are rejected before commit; use smaller batches."
         }
         CapabilityId::ValidateGraph => {
-            "Validate the inspected current graph, passing its graphHash. Returns readiness and blocking diagnostics from editor analysis. This optional read-only check does not save, prepare an execution plan, or execute."
+            "Validate the current graph using graphHash from the latest inspection or successful edit receipt. The edit receipt already includes ready and diagnostics for its commit. Returns readiness and blocking diagnostics from editor analysis. This optional read-only check does not save, prepare an execution plan, or execute."
         }
         CapabilityId::ExecuteGraph => {
-            "Execute the current graph using its current graphHash. Prepares its execution plan automatically; no prior validation call or artifact ID is required. Returns actual run status, failures and result IDs; inspect_result reads those results. Does not save."
+            "Execute the current graph using its current graphHash. Prepares its execution plan automatically; no prior validation call or artifact ID is required. Returns actual run status, failures and result references captured from this run's committed handoff. resultCount is the number published on success (null on failure); resultsComplete=false means the bounded references are not the complete output list. Use returned references directly with inspect_result for needed content, without listing the same results again. Later edits or runs do not change this receipt; referenced results still require availability checks. Does not save."
         }
         CapabilityId::SaveGraph => {
-            "Save the current graph only when the user requests saving. Pass the current graphHash. Uses the normal Save operation and clears its undo history."
+            "Save the current graph only when the user requests saving. Pass the current graphHash. Uses the normal Save operation and clears its undo history. Returns fromRevision, resourceRevision, graphHash and the committed dirty/canUndo/canRedo state. Use resourceRevision as the next baseRevision without an inspection solely to refresh the version. These facts describe this save, not later edits."
         }
         CapabilityId::ListGraphResults => {
             "List currently retained result IDs, run IDs and output ports for a graph, including manual runs. Use these IDs with inspect_result; do not ask the user to invent or locate an ID."
@@ -1070,6 +1059,28 @@ mod tests {
 
     #[tokio::test]
     async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
+        let plan = serde_json::json!({
+            "researchQuestion": "How does x relate to y?",
+            "analysisMode": "exploratory",
+            "studyDesign": { "kind": "cross_sectional", "description": "Observed data" },
+            "estimands": [],
+            "variableRoles": [
+                { "resourceId": "database-1", "variable": "y", "role": "outcome" },
+                { "resourceId": "database-1", "variable": "x", "role": "predictor" }
+            ],
+            "candidateMethods": ["yssbi.statistics.ols"],
+            "selectedWorkflow": "dataset_quality_review",
+            "requiredDiagnostics": ["measurement_scale", "missingness", "outliers", "model_assumptions", "influential_observations", "multiple_testing"],
+            "robustnessChecks": [],
+            "reportingContract": {
+                "requireEffectSizes": true, "requireUncertainty": true,
+                "requireDiagnostics": true, "requireLimitations": true, "confidenceLevel": 0.95
+            }
+        });
+        serde_json::from_value::<StatisticalPlan>(plan.clone())
+            .unwrap()
+            .validate()
+            .unwrap();
         struct ObservingExecutor(Arc<CollectingOutput>);
         impl ModelCapabilityExecutor for ObservingExecutor {
             fn execute<'a>(
@@ -1104,10 +1115,15 @@ mod tests {
                     ),
                 )),
             ],
+            vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                "plan-call",
+                ToolFunction::new("propose_statistical_plan".into(), plan.clone()),
+            ))],
             vec![AssistantContent::text(
                 "The schema inspection completed.".to_owned(),
             )],
         ]);
+        let requests = model.requests.clone();
         let driver = RigAgentDriver::new(model, RigAgentDriverConfig::default()).unwrap();
         let output = Arc::new(CollectingOutput::default());
 
@@ -1136,12 +1152,34 @@ mod tests {
         assert_eq!(
             events
                 .iter()
-                .map(|event| match event {
-                    AgentEvent::TextDelta { delta } => delta.as_str(),
+                .filter_map(|event| match event {
+                    AgentEvent::TextDelta { delta } => Some(delta.as_str()),
+                    AgentEvent::PlanProposed { .. } => None,
                     _ => panic!("unexpected event"),
                 })
                 .collect::<String>(),
             result.final_text
+        );
+        assert!(events.iter().any(|event| matches!(event, AgentEvent::PlanProposed { plan: recorded } if serde_json::to_value(recorded).unwrap() == plan)));
+        let requests = requests.lock().unwrap();
+        let wire = requests[2]
+            .chat_history
+            .clone()
+            .into_iter()
+            .flat_map(|message| {
+                Vec::<rig_core::providers::openai::completion::Message>::try_from(message).unwrap()
+            })
+            .map(|message| serde_json::to_value(message).unwrap())
+            .collect::<Vec<_>>();
+        let receipt = wire
+            .iter()
+            .find(|message| message["tool_call_id"] == "plan-call")
+            .unwrap();
+        let receipt: serde_json::Value =
+            serde_json::from_str(receipt["content"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            receipt,
+            serde_json::json!({ "accepted": true, "plan": plan })
         );
     }
 
@@ -1252,10 +1290,6 @@ mod tests {
             (
                 Some(CapabilityFailureCode::PersistenceUnavailable),
                 AgentDriverFailureCode::InternalFailure,
-            ),
-            (
-                Some(CapabilityFailureCode::GraphClientUnavailable),
-                AgentDriverFailureCode::OutputUnavailable,
             ),
             (
                 Some(CapabilityFailureCode::Cancelled),

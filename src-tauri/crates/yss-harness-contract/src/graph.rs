@@ -1,4 +1,7 @@
-use crate::{CapabilityContractError, GraphEditPortRef, ResultCategoryInspection};
+use crate::{
+    CapabilityContractError, GraphConnectionInspection, GraphEditPortRef, GraphNodeInspection,
+    ResultCategoryInspection,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -47,8 +50,6 @@ pub struct GraphParameterInspection {
     pub editor: String,
     pub value: Option<serde_json::Value>,
     pub options: Vec<String>,
-    #[serde(default)]
-    pub fields: Vec<GraphParameterInspection>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -74,7 +75,7 @@ pub struct GraphPortTemplateInspection {
     pub can_add: bool,
 }
 
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphDiagnosticInspection {
     pub code: String,
@@ -83,6 +84,23 @@ pub struct GraphDiagnosticInspection {
     pub severity: String,
     pub location: String,
     pub arguments: BTreeMap<String, String>,
+}
+
+/// Complete replacements for changed entities, relative to the receipt's fromRevision.
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphEditChanges {
+    pub base_semantic_input_hash: String,
+    pub semantic_input_hash: String,
+    pub nodes: Vec<GraphNodeInspection>,
+    pub removed_node_ids: Vec<String>,
+    pub connections: Vec<GraphConnectionInspection>,
+    pub removed_connection_ids: Vec<String>,
+    pub constants: BTreeMap<String, serde_json::Value>,
+    pub removed_constant_ids: Vec<String>,
+    pub ready: bool,
+    /// The complete diagnostics at this commit, replacing the previous set.
+    pub diagnostics: Vec<GraphDiagnosticInspection>,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -102,8 +120,10 @@ pub struct GraphExecution {
     pub run_id: Option<u64>,
     pub status: String,
     pub failure_code: Option<String>,
-    #[serde(default)]
     pub failure_location: Option<String>,
+    /// Number of results published by a successful run; unknown when execution failed.
+    pub result_count: Option<usize>,
+    pub results_complete: bool,
     pub results: Vec<GraphResultReference>,
 }
 
@@ -112,7 +132,11 @@ pub struct GraphExecution {
 pub struct GraphSaved {
     pub graph_path: String,
     pub graph_hash: String,
+    pub from_revision: u64,
     pub resource_revision: u64,
+    pub dirty: bool,
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]

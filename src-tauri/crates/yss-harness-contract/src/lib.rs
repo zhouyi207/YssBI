@@ -431,7 +431,6 @@ pub enum GraphEditOperation {
         client_id: Option<String>,
     },
     CreateNode {
-        #[serde(default)]
         client_id: Option<String>,
         node_type_id: String,
         resource_path: Option<String>,
@@ -456,11 +455,6 @@ pub enum GraphEditOperation {
     SetParameters {
         node_id: String,
         parameters: BTreeMap<String, serde_json::Value>,
-    },
-    SetConfiguration {
-        node_id: String,
-        key: String,
-        values: BTreeMap<String, serde_json::Value>,
     },
     SetLiteral {
         address: GraphEditPortRef,
@@ -506,7 +500,6 @@ pub enum GraphEditOperation {
 pub struct ApplyGraphEditRequest {
     pub graph_path: String,
     pub base_revision: u64,
-    #[serde(default)]
     pub graph_hash: String,
     pub client_key: String,
     pub locale: String,
@@ -715,15 +708,6 @@ fn validate_graph_edit_operation(
             validate_resource_id("nodeId", node_id)?;
             validate_graph_json(parameters)?;
         }
-        GraphEditOperation::SetConfiguration {
-            node_id,
-            key,
-            values,
-        } => {
-            validate_resource_id("nodeId", node_id)?;
-            validate_resource_id("key", key)?;
-            validate_graph_json(values)?;
-        }
         GraphEditOperation::SetLiteral { address, literal } => {
             validate_graph_edit_port(address)?;
             validate_graph_json(literal)?;
@@ -823,13 +807,9 @@ pub struct GraphNodeInspection {
     pub user_label: Option<String>,
     pub x: f64,
     pub y: f64,
-    #[serde(default)]
     pub title: String,
-    #[serde(default)]
     pub parameters: Vec<GraphParameterInspection>,
-    #[serde(default)]
     pub ports: Vec<GraphPortFacts>,
-    #[serde(default)]
     pub port_templates: Vec<GraphPortTemplateInspection>,
 }
 
@@ -857,23 +837,20 @@ pub struct GraphConnectionInspection {
     pub connection_id: String,
     pub output: GraphPortInspection,
     pub input: GraphPortInspection,
+    pub order: Option<String>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphInspection {
     pub graph_path: String,
+    pub semantic_input_hash: String,
+    pub ready: bool,
     pub nodes: Vec<GraphNodeInspection>,
     pub connections: Vec<GraphConnectionInspection>,
-    #[serde(default)]
     pub revision: u64,
-    #[serde(default)]
     pub graph_hash: String,
-    #[serde(default)]
-    pub source: String,
-    #[serde(default)]
     pub constants: BTreeMap<String, serde_json::Value>,
-    #[serde(default)]
     pub diagnostics: Vec<GraphDiagnosticInspection>,
 }
 
@@ -990,19 +967,17 @@ pub struct ProjectInspection {
     pub resources: Vec<ProjectResourceInspection>,
 }
 
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphEditReceipt {
     pub graph_path: String,
     pub from_revision: u64,
     pub to_revision: u64,
     pub client_key: String,
-    #[serde(default)]
     pub graph_hash: String,
-    #[serde(default)]
     pub created_nodes: BTreeMap<String, String>,
-    #[serde(default)]
     pub created_ports: BTreeMap<String, GraphEditPortRef>,
+    pub changes: GraphEditChanges,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -1104,14 +1079,8 @@ pub enum CapabilityFailureCode {
     PersistenceUnavailable,
     #[error("internal_failure")]
     InternalFailure,
-    #[error("graph_client_unavailable")]
-    GraphClientUnavailable,
     #[error("graph_draft_changed")]
     GraphDraftChanged,
-    #[error("graph_validation_failed")]
-    GraphValidationFailed,
-    #[error("graph_execution_failed")]
-    GraphExecutionFailed,
     #[error("outcome_unknown")]
     OutcomeUnknown,
 }
@@ -1269,6 +1238,49 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn graph_tool_contracts_require_the_facts_used_by_followup_edits() {
+        let mut request = serde_json::json!({
+            "graphPath": "events/Main.yssbi-event", "baseRevision": 1,
+            "graphHash": "0".repeat(64), "clientKey": "batch", "locale": "en-US",
+            "operations": [{"type": "move_nodes", "payload": {
+                "positions": [{"nodeId": "node-1", "x": 10.0, "y": 20.0}]
+            }}]
+        });
+        AutomationCapabilityRequest::ApplyGraphEdit(
+            serde_json::from_value::<ApplyGraphEditRequest>(request.clone()).unwrap(),
+        )
+        .validate()
+        .unwrap();
+        request.as_object_mut().unwrap().remove("graphHash");
+        assert!(serde_json::from_value::<ApplyGraphEditRequest>(request).is_err());
+        let schema =
+            serde_json::to_value(capability_input_schema(CapabilityId::ApplyGraphEdit)).unwrap();
+        assert!(
+            schema["required"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("graphHash"))
+        );
+
+        let mut node = serde_json::json!({
+            "nodeId": "node-1", "nodeTypeId": "yssbi.numeric.multiply",
+            "x": 10.0, "y": 20.0, "title": "Multiply",
+            "parameters": [], "ports": [], "portTemplates": []
+        });
+        serde_json::from_value::<GraphNodeInspection>(node.clone()).unwrap();
+        node.as_object_mut().unwrap().remove("ports");
+        assert!(serde_json::from_value::<GraphNodeInspection>(node).is_err());
+        let schema =
+            serde_json::to_value(capability_output_schema(CapabilityId::ApplyGraphEdit)).unwrap();
+        assert!(
+            schema["required"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("graphHash"))
+        );
+    }
 
     #[test]
     fn identities_and_requests_reject_ambiguous_or_unbounded_input() {
