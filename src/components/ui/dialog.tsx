@@ -66,7 +66,7 @@ function DialogContent({
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
           // Stack dialogs open through actions, so Radix has no DialogTrigger to return to.
-          if (!event.defaultPrevented && stackIndex > 0 && returnFocusRef.current?.isConnected) {
+          if (!event.defaultPrevented && returnFocusRef.current?.isConnected) {
             event.preventDefault();
             returnFocusRef.current.focus({ preventScroll: true });
           }

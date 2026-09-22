@@ -135,6 +135,9 @@ export const zhCN = {
       openResourceBeforeSaving: "请先打开一个图或图表",
       saveFailed: "保存失败：{{error}}",
       problemsBlockExecution: "请先解决图中的阻断问题再运行",
+      executionStateUnknown: "同步中断，暂时无法确认运行状态。计算可能仍在继续，系统没有自动重跑。",
+      executionRejected: "运行请求未被受理",
+      executionStatusUnknown: "运行状态未知",
       loadFailed: "加载项目失败",
     },
     chart: {
@@ -1629,6 +1632,10 @@ export const zhCN = {
     contextMenu: {
       close: "关闭",
       hideContent: "隐藏内容",
+      floatTab: "浮动标签",
+      floatGroup: "浮动整个分组",
+      dockFloat: "停靠回主工作区",
+      closeFloat: "关闭浮动窗口中的全部标签",
       expandContent: "展开内容",
       closeOthers: "关闭其他",
       closeSaved: "关闭已保存",
@@ -1883,6 +1890,9 @@ export const zhCN = {
     database: "数据库",
     connectionRequired: "请填写连接信息",
     connectionFieldsInvalid: "一个或多个连接字段包含无效文本",
+    discardConnectionTitle: "放弃连接配置？",
+    discardConnectionConfirm: "放弃配置",
+    discardConnectionMessage: "关闭后将丢弃当前输入的连接配置。",
   },
   dataOperation: {
     importing: "正在导入数据…",

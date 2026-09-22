@@ -1,4 +1,5 @@
 import { DialogStackLayer } from "@/components/ui/dialog";
+import { SettingsDialog } from "@/modules/settings/public";
 import { applicationUi, useApplicationUiRead } from "@/features/application/ui/applicationUi";
 import {
   ExcelSheetSelectModal,
@@ -19,6 +20,9 @@ export const UIHost = () => {
 
       {modals.map((modal, index) => (
         <DialogStackLayer key={modal.id} index={index}>
+          {modal.type === "settings" && (
+            <SettingsDialog onClose={() => applicationUi.closeModal(modal.id)} />
+          )}
           {modal.type === "message" && (
             <MessageDialog
               options={modal.options}
@@ -60,6 +64,7 @@ export const UIHost = () => {
 
           {modal.type === "sqlConnection" && (
             <SqlConnectionModal
+              modalId={modal.id}
               options={modal.options}
               onClose={() => applicationUi.closeModal(modal.id)}
             />

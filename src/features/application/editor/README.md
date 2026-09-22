@@ -83,7 +83,7 @@ Activating a cached graph reuses its ready loading status and loaded document st
 
 Focus synchronization is synchronous and never loads, retries or unloads graphs. Canvas gestures call the same focus coordinator directly. Visible panels and explicit data-dependent use cases call the same `ProjectIOStore.loadGraph` entry, which deduplicates in-flight loads and reuses cached graphs. Project restoration first ensures visible graphs, then synchronizes the active editor's focus. Cache cleanup follows successful loads and panel closure instead of every focus switch; the old activation/suspension queue and bootstrap retries are removed.
 
-Menus capture the native active central editor. Explicit canvas actions capture their own visible panel. Both revalidate identity before committing; the menu target also revalidates the central selection. Keyboard node commands resolve the owning panel from the DOM event path or focused element, while inputs, menus and modals retain their shortcuts. Execution controls use the canvas graph path and stay mounted while focus changes.
+Menus capture the native active editor across the main layout and floating tabsets. Workbench keeps one native active tabset across those layouts; no separate active-editor store is introduced. Explicit canvas actions capture their own visible panel. Both revalidate identity before committing; the menu target also revalidates the active selection. Keyboard node commands resolve the owning panel from the DOM event path or focused element, while inputs, menus, modals and import progress retain their shortcuts. Execution controls use the canvas graph path and stay mounted while focus changes.
 
 Use the narrow capability matching the caller:
 

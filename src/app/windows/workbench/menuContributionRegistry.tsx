@@ -6,7 +6,6 @@ import {
   useEditorHistoryAvailability,
   type WorkbenchCommandCapability,
 } from "@/features/application/editor";
-import { EDITOR_MUTATION_CAPABILITIES } from "@/features/application/editor/editorMutationAvailability";
 import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useActiveProjectPath } from "@/features/application/project/projectSession";
@@ -73,7 +72,7 @@ export function buildEditMenuItems(
     {
       label: translate("menubar.paste"),
       shortcut: "Ctrl+V",
-      onClick: authorized && EDITOR_MUTATION_CAPABILITIES.pasteNodes ? actions.paste : undefined,
+      onClick: authorized ? actions.paste : undefined,
     },
     { label: "-", type: "separator" },
     {

@@ -3,5 +3,5 @@ packages:
 allowBuilds:
   esbuild: false
 patchedDependencies:
-  # Fix the missing CSS map, avoid float-gesture root redraws, and expose the native float header slot.
+  # Remove the reference to the missing CSS source map.
   flexlayout-react@0.11.0: patches/flexlayout-react@0.11.0.patch

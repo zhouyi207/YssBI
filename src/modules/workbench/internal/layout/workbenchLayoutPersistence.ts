@@ -45,7 +45,6 @@ export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
       )
         return false;
       const metadata = tab.config.metadata;
-      if (floating && !canFloatWorkbenchPanel(metadata)) return false;
       if (
         componentForWorkbenchMetadata(metadata) !== tab.component ||
         !canMoveWorkbenchPanel(metadata, parent, floating ? "float" : undefined)
@@ -79,9 +78,8 @@ function normalize(layout: IJsonModel): IJsonModel {
       const metadata: unknown = tab.config?.metadata;
       if (isWorkbenchPanelMetadata(metadata)) {
         tab.enableClose = hasWorkbenchPanelCloseButton(metadata);
-        tab.enableFloat = false;
-        tab.enableFloatIcon = false;
-        if (canFloatWorkbenchPanel(metadata)) tab.enableDrag = false;
+        tab.enableFloat = canFloatWorkbenchPanel(metadata);
+        tab.enableFloatIcon = canFloatWorkbenchPanel(metadata);
         tab.enablePopout = false;
       }
     }
@@ -92,6 +90,9 @@ function normalize(layout: IJsonModel): IJsonModel {
       const tabset = node as IJsonTabSetNode;
       delete tabset.enableClose;
       delete tabset.enableDeleteWhenEmpty;
+      delete tabset.enableTabStrip;
+      delete tabset.enableDrag;
+      delete tabset.enableDivide;
       normalizeTabs(tabset.children);
       return;
     }
@@ -102,14 +103,6 @@ function normalize(layout: IJsonModel): IJsonModel {
   normalizeTabsets(copy.layout);
   for (const layout of Object.values(copy.subLayouts ?? {})) {
     normalizeTabsets(layout.layout);
-    for (const group of layout.layout.children ?? []) {
-      if (group.type === "tabset") {
-        const tabset = group as IJsonTabSetNode;
-        tabset.enableTabStrip = false;
-        tabset.enableDrag = false;
-        tabset.enableDivide = false;
-      }
-    }
   }
   const borders = copy.borders ?? [];
   for (const border of createEmptyWorkbenchLayout().borders ?? []) {

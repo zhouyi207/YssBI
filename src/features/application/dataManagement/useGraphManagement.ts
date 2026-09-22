@@ -46,96 +46,61 @@ export function useGraphManagement(openGraph: OpenGraphFn) {
   /** 创建后是否自动打开。 */
   type AddGraphOptions = { openAfterCreate?: boolean };
 
-  // Events
-  const addEvent = useCallback(
-    async (name?: string, options?: AddGraphOptions) => {
+  const addGraph = useCallback(
+    async (kind: GraphResourceKind, name?: string, options?: AddGraphOptions) => {
       const openAfterCreate = options?.openAfterCreate ?? false;
-
+      const baseName = name || (kind === "event" ? DEFAULT_EVENT_NAME : DEFAULT_FUNCTION_NAME);
       logger.graph.debug(
-        `addEvent called with name: ${name}, openAfterCreate: ${openAfterCreate}`,
+        `Creating ${kind}: ${baseName}, openAfterCreate: ${openAfterCreate}`,
         "GraphManagement",
       );
-
-      const baseName = name || DEFAULT_EVENT_NAME;
-      logger.graph.debug(`Creating event: ${baseName}`, "GraphManagement");
-
       try {
-        const id = await createGraphResource("event", baseName);
-
-        logger.graph.info(`Event created at path: ${id}`, "GraphManagement");
-
-        if (openAfterCreate) {
-          await openCreatedGraph(id, "event");
-        }
-
+        const id = await createGraphResource(kind, baseName);
+        logger.graph.info(`${kind} created at path: ${id}`, "GraphManagement");
+        if (openAfterCreate) await openCreatedGraph(id, kind);
         void revealWorkbenchView("project");
         useSidebarStore
           .getState()
-          .setCategoryExpanded("project", PROJECT_TREE_CATEGORY_IDS.events, true);
+          .setCategoryExpanded(
+            "project",
+            kind === "event"
+              ? PROJECT_TREE_CATEGORY_IDS.events
+              : PROJECT_TREE_CATEGORY_IDS.functions,
+            true,
+          );
       } catch (error) {
-        const message = formatErrorMessage(error);
-        logger.graph.error(`Failed to create event: ${message}`, "GraphManagement");
+        logger.graph.error(
+          `Failed to create ${kind}: ${formatErrorMessage(error)}`,
+          "GraphManagement",
+        );
         throw error;
       }
     },
     [openCreatedGraph],
   );
 
-  const deleteEvent = useCallback(async (id: string) => {
+  const deleteGraph = useCallback(async (kind: GraphResourceKind, id: string) => {
     try {
-      await deleteGraphWithConfirm(id, "event");
-    } catch (error) {
-      logger.graph.error(`Failed to delete event: ${formatErrorMessage(error)}`, "GraphManagement");
-      throw error;
-    }
-  }, []);
-
-  // Functions
-  const addFunction = useCallback(
-    async (name?: string, options?: AddGraphOptions) => {
-      const openAfterCreate = options?.openAfterCreate ?? false;
-
-      logger.graph.debug(
-        `addFunction called with name: ${name}, openAfterCreate: ${openAfterCreate}`,
-        "GraphManagement",
-      );
-
-      const baseName = name || DEFAULT_FUNCTION_NAME;
-      logger.graph.debug(`Creating function: ${baseName}`, "GraphManagement");
-
-      try {
-        const id = await createGraphResource("function", baseName);
-
-        logger.graph.info(`Function created at path: ${id}`, "GraphManagement");
-
-        if (openAfterCreate) {
-          await openCreatedGraph(id, "function");
-        }
-
-        void revealWorkbenchView("project");
-        useSidebarStore
-          .getState()
-          .setCategoryExpanded("project", PROJECT_TREE_CATEGORY_IDS.functions, true);
-      } catch (error) {
-        const message = formatErrorMessage(error);
-        logger.graph.error(`Failed to create function: ${message}`, "GraphManagement");
-        throw error;
-      }
-    },
-    [openCreatedGraph],
-  );
-
-  const deleteFunction = useCallback(async (id: string) => {
-    try {
-      await deleteGraphWithConfirm(id, "function");
+      await deleteGraphWithConfirm(id, kind);
     } catch (error) {
       logger.graph.error(
-        `Failed to delete function: ${formatErrorMessage(error)}`,
+        `Failed to delete ${kind}: ${formatErrorMessage(error)}`,
         "GraphManagement",
       );
       throw error;
     }
   }, []);
+
+  const addEvent = useCallback(
+    (name?: string, options?: AddGraphOptions) => addGraph("event", name, options),
+    [addGraph],
+  );
+  const addFunction = useCallback(
+    (name?: string, options?: AddGraphOptions) => addGraph("function", name, options),
+    [addGraph],
+  );
+  const deleteEvent = useCallback((id: string) => deleteGraph("event", id), [deleteGraph]);
+  const deleteFunction = useCallback((id: string) => deleteGraph("function", id), [deleteGraph]);
 
   const renameGraphItem = useCallback(async (id: string, name: string, kind: GraphResourceKind) => {
     try {
@@ -163,9 +128,9 @@ export function useGraphManagement(openGraph: OpenGraphFn) {
 
   const createGraph = useCallback(
     (kind: GraphResourceKind) => {
-      return kind === "event" ? addEvent() : addFunction();
+      return addGraph(kind);
     },
-    [addEvent, addFunction],
+    [addGraph],
   );
 
   return {

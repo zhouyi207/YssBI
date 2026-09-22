@@ -1,4 +1,10 @@
 import { useCallback } from "react";
+import {
+  assertCurrentProjectIdentity,
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { i18n } from "@/app/i18n";
 import { useDatabaseStore } from "@/features/core/dataStore";
 import { useEditorStore } from "@/features/core/editor";
@@ -23,12 +29,8 @@ function showDataOperationMessage(message: string, type: "info" | "warning" = "w
   });
 }
 
-function showDataOperationError(
-  error: unknown,
-  command: string,
-  messageForCode: (code: string) => string,
-): void {
-  const ipcError = normalizeApplicationIpcError(command, error);
+function showDataOperationError(error: unknown, messageForCode: (code: string) => string): void {
+  const ipcError = normalizeApplicationIpcError(error);
   void uiStore.alert({
     title: i18n.t("common.error"),
     message: messageForCode(ipcError.code),
@@ -39,8 +41,8 @@ function showDataOperationError(
   });
 }
 
-function logDataOperationFailure(error: unknown, command: string, context: string): void {
-  const ipcError = normalizeApplicationIpcError(command, error);
+function logDataOperationFailure(error: unknown, context: string): void {
+  const ipcError = normalizeApplicationIpcError(error);
   logger.data.error(
     `${context} failed code=${ipcError.code} incidentId=${ipcError.incidentId ?? "none"}`,
     "DatabaseManagement",
@@ -54,7 +56,7 @@ function commitLoadedDatabase(result: LoadDatabaseResult) {
   else store.addDatabase(result.id, record);
 }
 
-async function loadSqliteTable(dbPath: string, table: string) {
+async function loadSqliteTable(project: ProjectIdentitySnapshot, dbPath: string, table: string) {
   const engine: DatabaseImportSourceDTO = {
     sql: {
       engine: "sqlite",
@@ -66,16 +68,23 @@ async function loadSqliteTable(dbPath: string, table: string) {
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingSqlite", { table }),
     () =>
-      executeDatabaseCreate((authority) =>
-        DatabaseService.loadDatabase(authority.projectInstanceId, authority.operationId, engine),
-      ),
+      executeDatabaseCreate((authority) => {
+        assertCurrentProjectIdentity(project);
+        return DatabaseService.loadDatabase(
+          authority.projectInstanceId,
+          authority.operationId,
+          engine,
+        );
+      }),
   );
+  assertCurrentProjectIdentity(project);
   commitLoadedDatabase(result);
 }
 
 type SqlRemoteEngine = "postgres" | "mysql" | "mariadb";
 
 async function loadSqlRemoteTable(
+  project: ProjectIdentitySnapshot,
   engine: SqlRemoteEngine,
   connectionString: string,
   table: string,
@@ -92,31 +101,39 @@ async function loadSqlRemoteTable(
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingRemote", { label, table }),
     () =>
-      executeDatabaseCreate((authority) =>
-        DatabaseService.loadDatabase(
+      executeDatabaseCreate((authority) => {
+        assertCurrentProjectIdentity(project);
+        return DatabaseService.loadDatabase(
           authority.projectInstanceId,
           authority.operationId,
           loadEngine,
-        ),
-      ),
+        );
+      }),
   );
+  assertCurrentProjectIdentity(project);
   commitLoadedDatabase(result);
 }
 
-async function loadExcelSheet(filePath: string, sheet: string) {
+async function loadExcelSheet(project: ProjectIdentitySnapshot, filePath: string, sheet: string) {
   const engine: DatabaseImportSourceDTO = { excel: { path: filePath, sheet } };
   const result = await runWithDataOperationProgress(
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingExcel", { sheet }),
     () =>
-      executeDatabaseCreate((authority) =>
-        DatabaseService.loadDatabase(authority.projectInstanceId, authority.operationId, engine),
-      ),
+      executeDatabaseCreate((authority) => {
+        assertCurrentProjectIdentity(project);
+        return DatabaseService.loadDatabase(
+          authority.projectInstanceId,
+          authority.operationId,
+          engine,
+        );
+      }),
   );
+  assertCurrentProjectIdentity(project);
   commitLoadedDatabase(result);
 }
 
-async function loadCsv(path: string) {
+async function loadCsv(project: ProjectIdentitySnapshot, path: string) {
   const engine: DatabaseImportSourceDTO = {
     csv: {
       path,
@@ -129,17 +146,48 @@ async function loadCsv(path: string) {
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingCsv"),
     () =>
-      executeDatabaseCreate((authority) =>
-        DatabaseService.loadDatabase(authority.projectInstanceId, authority.operationId, engine),
-      ),
+      executeDatabaseCreate((authority) => {
+        assertCurrentProjectIdentity(project);
+        return DatabaseService.loadDatabase(
+          authority.projectInstanceId,
+          authority.operationId,
+          engine,
+        );
+      }),
   );
+  assertCurrentProjectIdentity(project);
   commitLoadedDatabase(result);
 }
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
 export function triggerImportData() {
+  if (uiStore.getState().modals.some((modal) => modal.type === "import")) return;
+  const project = captureProjectIdentity();
+  const current = () =>
+    isCurrentProjectIdentity(project) &&
+    uiStore.getState().modals.some((modal) => modal.id === importModalId);
+  let busy = false;
+
+  const importSelected = async (load: () => Promise<void>): Promise<string | null> => {
+    if (!current() || busy) return null;
+    busy = true;
+    try {
+      await load();
+      if (current()) uiStore.closeModal(importModalId);
+      return null;
+    } catch (error) {
+      if (!current()) return null;
+      logDataOperationFailure(error, "Data import");
+      const failure = normalizeApplicationIpcError(error);
+      return i18n.t("dataOperation.importFailed", { error: failure.code });
+    } finally {
+      busy = false;
+    }
+  };
+
   const importModalId = uiStore.showImportDialog({
     onImportSample: async (sampleId, version) => {
+      if (!current()) return;
       try {
         const result = await executeDatabaseCreate((authority) =>
           DatabaseService.importSampleDataset(
@@ -149,175 +197,148 @@ export function triggerImportData() {
             version,
           ),
         );
+        if (!current()) return;
         commitLoadedDatabase(result);
+        uiStore.closeModal(importModalId);
       } catch (error) {
-        logDataOperationFailure(error, "import_sample_dataset", "Sample import");
+        logDataOperationFailure(error, "Sample import");
         throw error;
       }
     },
     onSelect: async (type) => {
-      if (type === "csv") {
-        try {
-          const result = await openPathDialog({
-            multiple: false,
-            filters: [{ name: "CSV File", extensions: ["csv"] }],
-          });
-          if (!result.ok) throw new Error(result.failure.code);
-          const selected = result.value;
-          if (selected && !Array.isArray(selected)) {
-            await loadCsv(selected);
-            uiStore.closeModal(importModalId);
-          }
-        } catch (error) {
-          logDataOperationFailure(error, "load_database", "CSV import");
-          showDataOperationError(error, "load_database", (code) =>
-            i18n.t("dataOperation.importFailed", { error: code }),
-          );
-        }
-      } else if (type === "sqlite") {
-        try {
-          const result = await openPathDialog({
-            multiple: false,
-            filters: [
-              { name: "SQLite Database", extensions: ["db", "sqlite", "sqlite3"] },
-              { name: "All Files", extensions: ["*"] },
-            ],
-          });
-          if (!result.ok) throw new Error(result.failure.code);
-          const selected = result.value;
-          if (selected && !Array.isArray(selected)) {
-            const tables = await runWithDataOperationProgress(
-              i18n.t("dataOperation.reading"),
-              i18n.t("dataOperation.readingSqlite"),
-              () => DatabaseService.listSqliteTables(selected),
-            );
-            if (tables.length === 0) {
-              showDataOperationMessage(i18n.t("dataOperation.noSqliteTables"));
-              return;
-            }
-            if (tables.length === 1) {
-              await loadSqliteTable(selected, tables[0]);
-              uiStore.closeModal(importModalId);
-            } else {
-              uiStore.showSqliteTableSelectDialog({
-                dbPath: selected,
-                tables,
-                onSelect: (table) => {
-                  loadSqliteTable(selected, table)
-                    .then(() => uiStore.closeModal(importModalId))
-                    .catch((error) => {
-                      logDataOperationFailure(error, "load_database", "SQLite table load");
-                      showDataOperationError(error, "load_database", (code) =>
-                        i18n.t("dataOperation.importFailed", { error: code }),
-                      );
-                    });
-                },
-              });
-            }
-          }
-        } catch (error) {
-          logDataOperationFailure(error, "list_sqlite_tables", "SQLite import");
-          showDataOperationError(error, "list_sqlite_tables", (code) =>
-            i18n.t("dataOperation.importFailed", { error: code }),
-          );
-        }
-      } else if (["postgres", "mysql", "mariadb"].includes(type)) {
-        const engine = type as SqlRemoteEngine;
+      if (!current() || busy) return;
+      if (type === "postgres" || type === "mysql" || type === "mariadb") {
+        const engine = type;
         const label =
           engine === "postgres" ? "PostgreSQL" : engine === "mysql" ? "MySQL" : "MariaDB";
-        uiStore.showSqlConnectionDialog({
-          engine,
-          onConnect: async (connectionString) => {
-            try {
-              const tables = await runWithDataOperationProgress(
-                i18n.t("dataOperation.reading"),
-                i18n.t("dataOperation.readingRemote", { label }),
-                () => DatabaseService.listSqlTables(engine, connectionString),
-              );
-              if (tables.length === 0) {
-                showDataOperationMessage(i18n.t("dataOperation.noRemoteTables"));
-                return;
-              }
-              if (tables.length === 1) {
-                await loadSqlRemoteTable(engine, connectionString, tables[0]);
-                uiStore.closeModal(importModalId);
-              } else {
-                uiStore.showSqlRemoteTableSelectDialog({
-                  connectionString,
-                  engine,
-                  tables,
-                  onSelect: (table) => {
-                    loadSqlRemoteTable(engine, connectionString, table)
-                      .then(() => uiStore.closeModal(importModalId))
-                      .catch((error) => {
-                        logDataOperationFailure(error, "load_database", `${label} table load`);
-                        showDataOperationError(error, "load_database", (code) =>
-                          i18n.t("dataOperation.importFailed", { error: code }),
-                        );
-                      });
+        const connectionId = uiStore.showSqlConnectionDialog(
+          {
+            engine,
+            onConnect: async (connectionString) => {
+              const connectionCurrent = () =>
+                current() && uiStore.getState().modals.some((modal) => modal.id === connectionId);
+              if (!connectionCurrent()) return null;
+              try {
+                const tables = await runWithDataOperationProgress(
+                  i18n.t("dataOperation.reading"),
+                  i18n.t("dataOperation.readingRemote", { label }),
+                  () => DatabaseService.listSqlTables(engine, connectionString),
+                );
+                if (!connectionCurrent()) return null;
+                if (!tables.length) return i18n.t("dataOperation.noRemoteTables");
+                if (tables.length === 1)
+                  return importSelected(() =>
+                    loadSqlRemoteTable(project, engine, connectionString, tables[0]),
+                  );
+                uiStore.showSqlRemoteTableSelectDialog(
+                  {
+                    connectionString,
+                    engine,
+                    tables,
+                    onSelect: (table) =>
+                      importSelected(() =>
+                        loadSqlRemoteTable(project, engine, connectionString, table),
+                      ),
                   },
-                });
+                  connectionId!,
+                );
+                return null;
+              } catch (error) {
+                if (!connectionCurrent()) return null;
+                logDataOperationFailure(error, "Remote table listing");
+                const failure = normalizeApplicationIpcError(error);
+                return i18n.t("dataOperation.connectFailed", { label, error: failure.code });
               }
-            } catch (error) {
-              logDataOperationFailure(error, "list_sql_tables", `${label} table listing`);
-              showDataOperationError(error, "list_sql_tables", (code) =>
-                i18n.t("dataOperation.connectFailed", { label, error: code }),
-              );
-            }
+            },
           },
-        });
-      } else if (type === "xlsx") {
-        try {
-          const result = await openPathDialog({
-            multiple: false,
-            filters: [
-              { name: "Excel File", extensions: ["xlsx", "xls"] },
-              { name: "All Files", extensions: ["*"] },
-            ],
-          });
-          if (!result.ok) throw new Error(result.failure.code);
-          const selected = result.value;
-          if (selected && !Array.isArray(selected)) {
-            const sheets = await runWithDataOperationProgress(
-              i18n.t("dataOperation.reading"),
-              i18n.t("dataOperation.readingExcel"),
-              () => DatabaseService.listExcelSheets(selected),
-            );
-            if (sheets.length === 0) {
-              showDataOperationMessage(i18n.t("dataOperation.noExcelSheets"));
-              return;
-            }
-            if (sheets.length === 1) {
-              await loadExcelSheet(selected, sheets[0]);
-              uiStore.closeModal(importModalId);
-            } else {
-              uiStore.showExcelSheetSelectDialog({
-                filePath: selected,
-                sheets,
-                onSelect: (sheet) => {
-                  loadExcelSheet(selected, sheet)
-                    .then(() => uiStore.closeModal(importModalId))
-                    .catch((error) => {
-                      logDataOperationFailure(error, "load_database", "Excel sheet load");
-                      showDataOperationError(error, "load_database", (code) =>
-                        i18n.t("dataOperation.importFailed", { error: code }),
-                      );
-                    });
-                },
-              });
-            }
-          }
-        } catch (error) {
-          logDataOperationFailure(error, "list_excel_sheets", "Excel import");
-          showDataOperationError(error, "list_excel_sheets", (code) =>
-            i18n.t("dataOperation.importFailed", { error: code }),
-          );
-        }
-      } else {
+          importModalId,
+        );
+        return;
+      }
+      if (type !== "csv" && type !== "sqlite" && type !== "xlsx") {
         showDataOperationMessage(
-          i18n.t("dataOperation.comingSoon", { type: String(type).toUpperCase() }),
+          i18n.t("dataOperation.comingSoon", { type: type.toUpperCase() }),
           "info",
         );
+        return;
+      }
+      busy = true;
+      try {
+        const selection = await openPathDialog({
+          multiple: false,
+          filters:
+            type === "csv"
+              ? [{ name: "CSV File", extensions: ["csv"] }]
+              : type === "sqlite"
+                ? [
+                    { name: "SQLite Database", extensions: ["db", "sqlite", "sqlite3"] },
+                    { name: "All Files", extensions: ["*"] },
+                  ]
+                : [
+                    { name: "Excel File", extensions: ["xlsx", "xls"] },
+                    { name: "All Files", extensions: ["*"] },
+                  ],
+        });
+        if (!current()) return;
+        if (!selection.ok) throw new Error(selection.failure.code);
+        const path = selection.value;
+        if (!path || Array.isArray(path)) return;
+        if (type === "csv") {
+          await loadCsv(project, path);
+          if (current()) uiStore.closeModal(importModalId);
+          return;
+        }
+        const entries = await runWithDataOperationProgress(
+          i18n.t("dataOperation.reading"),
+          i18n.t(type === "sqlite" ? "dataOperation.readingSqlite" : "dataOperation.readingExcel"),
+          () =>
+            type === "sqlite"
+              ? DatabaseService.listSqliteTables(path)
+              : DatabaseService.listExcelSheets(path),
+        );
+        if (!current()) return;
+        if (!entries.length) {
+          showDataOperationMessage(
+            i18n.t(
+              type === "sqlite" ? "dataOperation.noSqliteTables" : "dataOperation.noExcelSheets",
+            ),
+          );
+          return;
+        }
+        const load = (entry: string) =>
+          type === "sqlite"
+            ? loadSqliteTable(project, path, entry)
+            : loadExcelSheet(project, path, entry);
+        if (entries.length === 1) {
+          await load(entries[0]);
+          if (current()) uiStore.closeModal(importModalId);
+        } else if (type === "sqlite") {
+          uiStore.showSqliteTableSelectDialog(
+            {
+              dbPath: path,
+              tables: entries,
+              onSelect: (table) => importSelected(() => load(table)),
+            },
+            importModalId,
+          );
+        } else {
+          uiStore.showExcelSheetSelectDialog(
+            {
+              filePath: path,
+              sheets: entries,
+              onSelect: (sheet) => importSelected(() => load(sheet)),
+            },
+            importModalId,
+          );
+        }
+      } catch (error) {
+        if (!current()) return;
+        logDataOperationFailure(error, "File import");
+        showDataOperationError(error, (code) =>
+          i18n.t("dataOperation.importFailed", { error: code }),
+        );
+      } finally {
+        busy = false;
       }
     },
   });
@@ -346,10 +367,8 @@ export function useDatabaseManagement() {
         editor.clearDetailFocus();
       }
     } catch (e) {
-      logDataOperationFailure(e, "delete_database", "Database deletion");
-      showDataOperationError(e, "delete_database", (code) =>
-        i18n.t("dataOperation.deleteFailed", { error: code }),
-      );
+      logDataOperationFailure(e, "Database deletion");
+      showDataOperationError(e, (code) => i18n.t("dataOperation.deleteFailed", { error: code }));
     }
   }, []);
 
@@ -368,10 +387,8 @@ export function useDatabaseManagement() {
         ),
       );
     } catch (e) {
-      logDataOperationFailure(e, "rename_database", "Database rename");
-      showDataOperationError(e, "rename_database", (code) =>
-        i18n.t("dataOperation.renameFailed", { error: code }),
-      );
+      logDataOperationFailure(e, "Database rename");
+      showDataOperationError(e, (code) => i18n.t("dataOperation.renameFailed", { error: code }));
     }
   }, []);
 

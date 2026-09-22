@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ui } from "@/features/core/ui/ui";
 import {
   clearEditorGroupGraphSelection,
   getEditorGroupGraphSelection,
@@ -14,7 +15,6 @@ import {
 } from "@/features/core/graphInteraction/graphInteractionStore";
 import { cancelCanvasInteraction } from "@/features/core/canvas/canvasInteractionCleanup";
 import { useEditorStore } from "@/features/core/editor";
-import { EDITOR_MUTATION_CAPABILITIES } from "./editorMutationAvailability";
 import type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 import {
   captureActiveEditorCommandTarget,
@@ -29,7 +29,6 @@ import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 import {
   toggleActivityWorkbenchGroup,
-  revealWorkbenchView,
   toggleBottomWorkbenchGroup,
 } from "@/modules/workbench/public";
 
@@ -123,7 +122,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === ",") {
         event.preventDefault();
-        void revealWorkbenchView("settings");
+        ui.showSettings();
         return;
       }
 
@@ -212,7 +211,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
         const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
-        if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
+        if (!event.repeat) {
           const point = getActiveCanvasLocalPoint(
             target,
             lastMousePosRef.current.x,
@@ -227,7 +226,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
         const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
-        if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) {
+        if (!event.repeat) {
           void commands.duplicateSelected(target);
         }
         return;

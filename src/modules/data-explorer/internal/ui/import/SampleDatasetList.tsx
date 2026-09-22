@@ -9,11 +9,9 @@ import {
 
 export function SampleDatasetList({
   onImport,
-  onImported,
   onBusyChange,
 }: {
   onImport: (id: string, version: number) => Promise<void>;
-  onImported: () => void;
   onBusyChange: (busy: boolean) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -39,9 +37,8 @@ export function SampleDatasetList({
     onBusyChange(true);
     try {
       await onImport(id, version);
-      if (mounted.current) onImported();
     } catch (error) {
-      if (mounted.current) setImportError(sampleDatasetFailure(error, "import_sample_dataset"));
+      if (mounted.current) setImportError(sampleDatasetFailure(error));
     } finally {
       inFlight.current = false;
       if (mounted.current) {

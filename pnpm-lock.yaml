@@ -106,7 +106,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  flexlayout-react@0.11.0: ded4140652119427ab6ee65a5eba589b0defee947fd67ed8cd796f5ac8055d8b
+  flexlayout-react@0.11.0: e8ef02721d55530a989ce7a62c9861a75aa7873433754a1be85a66993ff6d9b1
 
 importers:
 
@@ -159,7 +159,7 @@ importers:
         version: 7.9.0
       flexlayout-react:
         specifier: ^0.11.0
-        version: 0.11.0(patch_hash=ded4140652119427ab6ee65a5eba589b0defee947fd67ed8cd796f5ac8055d8b)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 0.11.0(patch_hash=e8ef02721d55530a989ce7a62c9861a75aa7873433754a1be85a66993ff6d9b1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       i18next:
         specifier: ^26.0.8
         version: 26.3.6(typescript@7.0.2)
@@ -7018,7 +7018,7 @@ snapshots:
     dependencies:
       locate-path: 3.0.0
 
-  flexlayout-react@0.11.0(patch_hash=ded4140652119427ab6ee65a5eba589b0defee947fd67ed8cd796f5ac8055d8b)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  flexlayout-react@0.11.0(patch_hash=e8ef02721d55530a989ce7a62c9861a75aa7873433754a1be85a66993ff6d9b1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)

@@ -150,6 +150,9 @@ export interface WorkbenchLayoutControlContract {
   reveal(panelInstanceId: string): Promise<boolean>;
   move(request: MoveWorkbenchPanelRequest): Promise<boolean>;
   split(request: SplitWorkbenchPanelRequest): Promise<boolean>;
+  floatPanel(panelInstanceId: string): Promise<boolean>;
+  floatGroup(groupId: string): Promise<boolean>;
+  dockFloat(layoutId: string): Promise<boolean>;
   configureEdge(request: ConfigureWorkbenchEdgeRequest): Promise<ConfiguredWorkbenchEdgeState>;
   setEdgeCollapsed(position: WorkbenchEdgePosition, collapsed: boolean): Promise<boolean>;
   setEdgeSize(position: WorkbenchEdgePosition, size: number): Promise<boolean>;

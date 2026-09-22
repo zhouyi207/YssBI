@@ -9,7 +9,21 @@ import {
   type FunctionComponent,
   type ReactNode,
 } from "react";
-import { Actions, BorderNode, DockLocation, Layout, TabNode } from "flexlayout-react";
+import {
+  Actions,
+  BorderNode,
+  DockLocation,
+  GroupAction,
+  Layout,
+  Model,
+  TabNode,
+  TabSetNode,
+  type Action,
+} from "flexlayout-react";
+import { useTranslation } from "react-i18next";
+import { VscChromeClose, VscLinkExternal, VscLayoutPanelCenter } from "react-icons/vsc";
+import { workbenchLayoutControl } from "./workbenchControl";
+import { showWorkbenchLayoutError } from "../application/workbenchLayoutErrorFeedback";
 import {
   DndContext,
   DragOverlay,
@@ -30,7 +44,6 @@ import type {
   RootPanelRegistry,
   RootPanelTabComponent,
   RootPanelProps,
-  RootPanelComponent,
 } from "./panelContribution";
 
 export interface RootLayoutDndCoordinator {
@@ -40,12 +53,10 @@ export interface RootLayoutDndCoordinator {
 export type RootPanelActivationCoordinator = (panel: RootPanelActivationTarget) => void;
 export interface RootLayoutHostProps {
   readonly panelRegistry: RootPanelRegistry;
-  readonly floatingHeaderComponent?: RootPanelComponent;
   readonly tabComponent: RootPanelTabComponent;
   readonly dndCoordinator: RootLayoutDndCoordinator;
   readonly onActiveEditorPanelChange: RootPanelActivationCoordinator;
-  readonly onClosePanel: (panelInstanceId: string) => void;
-  readonly onCloseGroup: (groupId: string) => void;
+  readonly onClosePanels: (panelInstanceIds: readonly string[]) => void;
   readonly layoutTheme: string;
   readonly watermarkComponent: FunctionComponent;
   readonly statusBar: ReactNode;
@@ -136,12 +147,10 @@ export const RootLayoutHost = memo(
     (
       {
         panelRegistry,
-        floatingHeaderComponent: FloatingHeader,
         tabComponent: TabComponent,
         dndCoordinator,
         onActiveEditorPanelChange,
-        onClosePanel,
-        onCloseGroup,
+        onClosePanels,
         layoutTheme,
         watermarkComponent: Watermark,
         statusBar,
@@ -149,6 +158,7 @@ export const RootLayoutHost = memo(
       },
       ref,
     ) => {
+      const { t } = useTranslation();
       const [binding] = useState(workbenchLayoutRootBinding.create);
       const model = useSyncExternalStore(
         binding.subscribeModel,
@@ -183,6 +193,15 @@ export const RootLayoutHost = memo(
         (node: TabNode) => <PanelContent id={node.getId()} registry={panelRegistry} />,
         [panelRegistry],
       );
+      const closingPanels = (action: Action): string[] => {
+        if (action instanceof GroupAction) return action.actions.flatMap(closingPanels);
+        if (action.type === Actions.DELETE_TAB) return [action.data.node];
+        if (action.type === Actions.DELETE_TABSET)
+          return workbenchLayoutRead
+            .listGroupPanels(action.data.node)
+            .map((panel) => panel.panelInstanceId);
+        return [];
+      };
       return (
         <DndContext
           sensors={sensors}
@@ -198,42 +217,20 @@ export const RootLayoutHost = memo(
             <Layout
               model={model}
               factory={factory}
-              renderFloatHeader={
-                FloatingHeader
-                  ? (layout) => {
-                      let tab: TabNode | undefined;
-                      model.visitLayoutNodes(layout.getLayoutId(), (node) => {
-                        if (node instanceof TabNode) tab = node;
-                      });
-                      const props = tab ? panelProps(tab) : undefined;
-                      return props ? (
-                        <div
-                          className="w-full"
-                          data-panel-instance-id={props.panelInstanceId}
-                          onFocusCapture={() =>
-                            workbenchLayoutRootBinding.activatePanel(props.panelInstanceId)
-                          }
-                        >
-                          <FloatingHeader {...props} />
-                        </div>
-                      ) : undefined;
-                    }
-                  : undefined
-              }
               supportsPopout={false}
               constrainFloatPanels
               realtimeResize
               invalidateTabContentOnParentRender={false}
               onAction={(action) => {
-                if (action.type === Actions.DELETE_TAB) onClosePanel(action.data.node);
-                else if (action.type === Actions.DELETE_TABSET) onCloseGroup(action.data.node);
+                const ids = closingPanels(action);
+                if (ids.length) onClosePanels(ids);
                 else workbenchLayoutRootBinding.dispatchAction(action);
                 return undefined;
               }}
               onAuxMouseClick={(node, event) => {
                 if (event.button === 1 && node instanceof TabNode) {
                   event.preventDefault();
-                  onClosePanel(node.getId());
+                  onClosePanels([node.getId()]);
                 }
               }}
               onRenderTab={(node, values) => {
@@ -241,6 +238,77 @@ export const RootLayoutHost = memo(
                 if (props) values.content = <TabComponent {...props} />;
               }}
               onRenderTabSet={(node, values) => {
+                const layoutId = node.getLayoutId();
+                const floatToolbarGroup =
+                  layoutId !== Model.MAIN_LAYOUT_ID
+                    ? (model.getMaximizedTabset(layoutId) ??
+                      model.getFirstTabSet(model.getRootRow(layoutId)))
+                    : undefined;
+                if (node instanceof TabSetNode && node === floatToolbarGroup) {
+                  values.buttons.push(
+                    <button
+                      key="dock-float"
+                      type="button"
+                      className="flexlayout__tab_toolbar_button"
+                      title={t("tabBar.contextMenu.dockFloat")}
+                      aria-label={t("tabBar.contextMenu.dockFloat")}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() =>
+                        void workbenchLayoutControl
+                          .dockFloat(layoutId)
+                          .catch(showWorkbenchLayoutError)
+                      }
+                    >
+                      <VscLayoutPanelCenter aria-hidden />
+                    </button>,
+                    <button
+                      key="close-float"
+                      type="button"
+                      className="flexlayout__tab_toolbar_button"
+                      title={t("tabBar.contextMenu.closeFloat")}
+                      aria-label={t("tabBar.contextMenu.closeFloat")}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() =>
+                        onClosePanels(
+                          workbenchLayoutRead
+                            .listPanels()
+                            .filter(
+                              (panel) =>
+                                panel.location.type === "float" &&
+                                panel.location.layoutId === layoutId,
+                            )
+                            .map((panel) => panel.panelInstanceId),
+                        )
+                      }
+                    >
+                      <VscChromeClose aria-hidden />
+                    </button>,
+                  );
+                }
+                if (
+                  node instanceof TabSetNode &&
+                  node.getLayoutId() === Model.MAIN_LAYOUT_ID &&
+                  node.getTabNodes().length > 1 &&
+                  node.getTabNodes().every((tab) => tab.isEnableFloat())
+                ) {
+                  values.buttons.push(
+                    <button
+                      key="float-group"
+                      type="button"
+                      className="flexlayout__tab_toolbar_button"
+                      title={t("tabBar.contextMenu.floatGroup")}
+                      aria-label={t("tabBar.contextMenu.floatGroup")}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() =>
+                        void workbenchLayoutControl
+                          .floatGroup(node.getId())
+                          .catch(showWorkbenchLayoutError)
+                      }
+                    >
+                      <VscLinkExternal aria-hidden />
+                    </button>,
+                  );
+                }
                 if (!(node instanceof BorderNode)) return;
                 if (node.getLocation() === DockLocation.BOTTOM) {
                   values.leading = <WorkbenchSettingsButton />;

@@ -13,7 +13,6 @@ import {
   VscOutput,
   VscPreview,
   VscSparkle,
-  VscSettingsGear,
   VscSymbolEvent,
   VscSymbolMethod,
   VscTerminal,
@@ -26,7 +25,10 @@ import {
 } from "@/shared/ui/actionMenu";
 import type { WorkbenchPanelMetadata, WorkbenchViewId } from "./workbenchPanelModel";
 import type { RootPanelProps } from "./panelContribution";
-import { hasWorkbenchPanelCloseButton } from "./workbenchActivityGroup";
+import { canFloatWorkbenchPanel, hasWorkbenchPanelCloseButton } from "./workbenchActivityGroup";
+import { workbenchLayoutRead } from "./workbenchRead";
+import { workbenchLayoutControl } from "./workbenchControl";
+import { showWorkbenchLayoutError } from "../application/workbenchLayoutErrorFeedback";
 import { isWorkbenchActivityViewId } from "./workbenchPanelModel";
 
 export interface WorkbenchTabTarget {
@@ -51,7 +53,6 @@ const VIEW_ICONS: Record<WorkbenchViewId, IconType> = {
   plugins: VscExtensions,
   details: VscInfo,
   assistant: VscSparkle,
-  settings: VscSettingsGear,
   logs: VscTerminal,
   output: VscOutput,
   problems: VscError,
@@ -63,7 +64,6 @@ const VIEW_TITLE_KEYS: Record<WorkbenchViewId, string> = {
   plugins: "activityBar.plugins",
   details: "panel.details",
   assistant: "panel.assistant",
-  settings: "settings.title",
   logs: "panel.logs",
   output: "panel.output",
   problems: "panel.problems",
@@ -131,6 +131,49 @@ export function RootPanelTabRenderer({
           },
         ]
     : [];
+  const menuPanel = contextMenu && workbenchLayoutRead.getPanel(contextMenu.target.panelInstanceId);
+  if (
+    menuPanel &&
+    menuPanel.location.type !== "edge" &&
+    canFloatWorkbenchPanel(menuPanel.metadata)
+  ) {
+    const location = menuPanel.location;
+    sections.push({
+      items: [
+        {
+          id: "float-tab",
+          label: t("tabBar.contextMenu.floatTab"),
+          onClick: () =>
+            void workbenchLayoutControl
+              .floatPanel(menuPanel.panelInstanceId)
+              .catch(showWorkbenchLayoutError),
+        },
+        {
+          id: "float-group",
+          label: t("tabBar.contextMenu.floatGroup"),
+          disabled: !workbenchLayoutRead
+            .listGroupPanels(menuPanel.groupId)
+            .every((panel) => canFloatWorkbenchPanel(panel.metadata)),
+          onClick: () =>
+            void workbenchLayoutControl
+              .floatGroup(menuPanel.groupId)
+              .catch(showWorkbenchLayoutError),
+        },
+        ...(location.type === "float"
+          ? [
+              {
+                id: "dock-float",
+                label: t("tabBar.contextMenu.dockFloat"),
+                onClick: () =>
+                  void workbenchLayoutControl
+                    .dockFloat(location.layoutId)
+                    .catch(showWorkbenchLayoutError),
+              },
+            ]
+          : []),
+      ],
+    });
+  }
   return (
     <>
       <span

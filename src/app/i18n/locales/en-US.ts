@@ -140,6 +140,10 @@ export const enUS = {
       openResourceBeforeSaving: "Open a graph or chart before saving",
       saveFailed: "Could not save: {{error}}",
       problemsBlockExecution: "Resolve the graph's blocking problems before running it",
+      executionStateUnknown:
+        "Execution status is unknown because synchronization was interrupted. The computation may still be running; it has not been restarted.",
+      executionRejected: "The execution request was not accepted",
+      executionStatusUnknown: "Run status unknown",
       loadFailed: "Could not load project",
     },
     chart: {
@@ -1792,6 +1796,10 @@ export const enUS = {
     contextMenu: {
       close: "Close",
       hideContent: "Hide Content",
+      floatTab: "Float Tab",
+      floatGroup: "Float Group",
+      dockFloat: "Dock in Main Workspace",
+      closeFloat: "Close All Tabs in Floating Window",
       expandContent: "Expand Content",
       closeOthers: "Close Others",
       closeSaved: "Close Saved",
@@ -2055,6 +2063,9 @@ export const enUS = {
     database: "Database",
     connectionRequired: "Please fill in the connection information",
     connectionFieldsInvalid: "One or more connection fields contain invalid text",
+    discardConnectionTitle: "Discard connection settings?",
+    discardConnectionConfirm: "Discard Settings",
+    discardConnectionMessage: "Closing will discard the connection settings you entered.",
   },
   dataOperation: {
     importing: "Importing data…",

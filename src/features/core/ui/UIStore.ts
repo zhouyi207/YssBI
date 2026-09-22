@@ -6,7 +6,6 @@ import {
   ProgressState,
 } from "@/shared/types/ui";
 import type {
-  ApplicationUiModal,
   ApplicationUiState,
   ExcelSheetSelectDialogOptions,
   ImportDialogOptions,
@@ -15,13 +14,10 @@ import type {
   SqlRemoteTableSelectDialogOptions,
 } from "./applicationUiTypes";
 
-type UIModal = ApplicationUiModal;
-type UIState = ApplicationUiState;
-
 type Listener = () => void;
 
 class UIStore {
-  private state: UIState = {
+  private state: ApplicationUiState = {
     modals: [],
     progress: null,
   };
@@ -39,12 +35,25 @@ class UIStore {
     this.listeners.forEach((l) => l());
   }
 
-  getState(): UIState {
+  getState(): ApplicationUiState {
     return this.state;
   }
 
   // --- Modal Stack ---
-  showDialog(options: DialogOptions) {
+  showSettings() {
+    if (this.state.modals.some((modal) => modal.type === "settings")) return;
+    this.state = {
+      ...this.state,
+      modals: [...this.state.modals, { id: crypto.randomUUID(), type: "settings" }],
+    };
+    this.emit();
+  }
+
+  private showDialog(options: DialogOptions, parentId?: string) {
+    if (parentId && !this.state.modals.some((modal) => modal.id === parentId)) {
+      options.onCancel?.();
+      return;
+    }
     this.state = {
       ...this.state,
       modals: [
@@ -52,6 +61,7 @@ class UIStore {
         {
           id: crypto.randomUUID(),
           type: "confirm",
+          parentId,
           options,
         },
       ],
@@ -75,13 +85,19 @@ class UIStore {
     });
   }
 
-  confirm(options: Omit<DialogOptions, "onConfirm" | "onCancel">): Promise<boolean> {
+  confirm(
+    options: Omit<DialogOptions, "onConfirm" | "onCancel">,
+    parentId?: string,
+  ): Promise<boolean> {
     return new Promise((resolve) => {
-      this.showDialog({
-        ...options,
-        onConfirm: () => resolve(true),
-        onCancel: () => resolve(false),
-      });
+      this.showDialog(
+        {
+          ...options,
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+        },
+        parentId,
+      );
     });
   }
 
@@ -124,6 +140,8 @@ class UIStore {
   }
 
   showImportDialog(options: ImportDialogOptions) {
+    const existing = this.state.modals.find((modal) => modal.type === "import");
+    if (existing) return existing.id;
     const id = crypto.randomUUID();
     this.state = {
       ...this.state,
@@ -140,7 +158,8 @@ class UIStore {
     return id;
   }
 
-  showSqliteTableSelectDialog(options: SqliteTableSelectDialogOptions) {
+  showSqliteTableSelectDialog(options: SqliteTableSelectDialogOptions, parentId: string) {
+    if (!this.state.modals.some((modal) => modal.id === parentId)) return;
     this.state = {
       ...this.state,
       modals: [
@@ -148,6 +167,7 @@ class UIStore {
         {
           id: crypto.randomUUID(),
           type: "sqliteTableSelect",
+          parentId,
           options,
         },
       ],
@@ -155,7 +175,8 @@ class UIStore {
     this.emit();
   }
 
-  showExcelSheetSelectDialog(options: ExcelSheetSelectDialogOptions) {
+  showExcelSheetSelectDialog(options: ExcelSheetSelectDialogOptions, parentId: string) {
+    if (!this.state.modals.some((modal) => modal.id === parentId)) return;
     this.state = {
       ...this.state,
       modals: [
@@ -163,6 +184,7 @@ class UIStore {
         {
           id: crypto.randomUUID(),
           type: "excelSheetSelect",
+          parentId,
           options,
         },
       ],
@@ -170,22 +192,27 @@ class UIStore {
     this.emit();
   }
 
-  showSqlConnectionDialog(options: SqlConnectionDialogOptions) {
+  showSqlConnectionDialog(options: SqlConnectionDialogOptions, parentId: string) {
+    if (!this.state.modals.some((modal) => modal.id === parentId)) return;
+    const id = crypto.randomUUID();
     this.state = {
       ...this.state,
       modals: [
         ...this.state.modals,
         {
-          id: crypto.randomUUID(),
+          id,
           type: "sqlConnection",
+          parentId,
           options,
         },
       ],
     };
     this.emit();
+    return id;
   }
 
-  showSqlRemoteTableSelectDialog(options: SqlRemoteTableSelectDialogOptions) {
+  showSqlRemoteTableSelectDialog(options: SqlRemoteTableSelectDialogOptions, parentId: string) {
+    if (!this.state.modals.some((modal) => modal.id === parentId)) return;
     this.state = {
       ...this.state,
       modals: [
@@ -193,6 +220,7 @@ class UIStore {
         {
           id: crypto.randomUUID(),
           type: "sqlRemoteTableSelect",
+          parentId,
           options,
         },
       ],
@@ -200,21 +228,24 @@ class UIStore {
     this.emit();
   }
 
-  closeModal(id?: string) {
-    if (!this.state.modals.length) return;
-
-    let newModals: UIModal[];
-    if (!id) {
-      newModals = this.state.modals.slice(0, -1);
-    } else {
-      newModals = this.state.modals.filter((m) => m.id !== id);
-    }
-
+  closeModal(id: string) {
+    if (!this.state.modals.some((modal) => modal.id === id)) return;
+    const removedIds = new Set([id]);
+    // Children are appended after their parent; closing a workflow removes only its descendants.
+    const newModals = this.state.modals.filter((modal) => {
+      if (modal.parentId && removedIds.has(modal.parentId)) removedIds.add(modal.id);
+      return !removedIds.has(modal.id);
+    });
+    const removedModals = this.state.modals.filter((modal) => removedIds.has(modal.id));
     this.state = {
       ...this.state,
       modals: newModals,
     };
     this.emit();
+    // Complete programmatically dismissed prompts too. A user's decision has already settled its promise.
+    for (const modal of removedModals) {
+      if (modal.type === "confirm" || modal.type === "input") modal.options.onCancel?.();
+    }
   }
 
   // --- Progress Overlay ---

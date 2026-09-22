@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { ui } from "@/features/core/ui/ui";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import { captureActiveEditorCommandTarget } from "@/features/application/editor/editorCommandFocus";
 import { splitEditorPanel } from "@/features/application/editor/editorGroupCommands";
 import {
   resetWorkbenchLayout,
-  revealWorkbenchView,
   toggleActivityWorkbenchGroup,
   toggleWorkbenchView,
   WORKBENCH_ACTIVITY_GROUP_ID,
@@ -26,7 +26,7 @@ function openViewIds(): ReadonlySet<WorkbenchViewId> {
 /** Menubar model projected from live root FlexLayout state and semantic application actions. */
 export function useMenubar() {
   const openSettings = useCallback(() => {
-    void revealWorkbenchView("settings");
+    ui.showSettings();
   }, []);
   const flexlayoutSnapshot = useSyncExternalStore(
     workbenchLayoutRead.subscribe,

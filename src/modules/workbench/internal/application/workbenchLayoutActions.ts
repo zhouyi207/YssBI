@@ -28,7 +28,6 @@ const VIEW_TITLE_KEYS = {
   plugins: "activityBar.plugins",
   details: "panel.details",
   assistant: "panel.assistant",
-  settings: "settings.title",
   logs: "panel.logs",
   output: "panel.output",
   problems: "panel.problems",
@@ -266,7 +265,11 @@ export async function resetWorkbenchLayout(): Promise<void> {
         before.map((panel) => panel.panelInstanceId),
       ).map((panelId) => beforeById.get(panelId)!);
 
-      const centralPanels = ordered.filter((panel) => panel.metadata.role === "editor");
+      const centralPanels = ordered.filter(
+        (panel) =>
+          panel.metadata.role === "editor" ||
+          (panel.metadata.role === "plugin" && panel.metadata.location === "editor"),
+      );
       const physicallyActive = tx.getActivePanel();
       const panelToRestore =
         centralPanels.find(

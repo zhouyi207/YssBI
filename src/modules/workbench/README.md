@@ -26,9 +26,9 @@ WorkbenchWindow
 └─ WorkbenchOverlayHost
 ```
 
-Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动和分屏。Settings 支持窗口内 float；其余面板的 float、浏览器 popout 和标签分组禁用。
+Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动、分屏和窗口内 float。设置与导入由应用 Dialog 栈承载；浏览器 popout 和标签分组禁用。
 
-FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和顶部活动分组；各 border 独立保存选择，不覆盖顶部活动 tab。`getActivePanel` 只读取顶部活动 tabset 的 selected tab。非空顶部分组始终有选中 tab，活动分组被删除后通过原生 Action 选定剩余分组。输入焦点由 DOM 和事件路径决定，不写入布局配置或另建状态库。
+FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和活动分组；各 border 独立保存选择，不覆盖活动编辑区。主布局与所有 float 之间只保留一个原生 active tabset，激活分组时通过原生 Action 清除其他布局的 active 标记。`getActivePanel` 读取该分组的 selected tab，保存、菜单、侧栏高亮与命令目标因此包含浮动编辑器。非空分组始终有选中 tab，活动分组被删除后选定剩余分组。输入焦点由 DOM 和事件路径决定，不写入布局配置或另建状态库。
 
 中央 group 的最后一个 tab 关闭或移走后，由 FlexLayout 删除空组并回收分屏空间；空 border 自动隐藏，底部仅保留承载状态信息的条带，空的内容面板仍消失。只有中央工作区没有非空 group 时才显示一份 watermark，侧栏和底部工具面板不影响该判断。FlexLayout 内部保留的最后一个空投放容器用于接收新 tab，不计入 Workbench 的 group 查询，也不显示分组标签栏。恢复旧布局时移除阻止空组删除的节点配置，由原生模型清理空组；不逐帧扫描或重建布局。
 
@@ -54,12 +54,15 @@ React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路�
 
 `architecture=dependencies` 在同一张图上展示全部 Cargo workspace crates 及其直接引用关系，按依赖层级从左向右排列，箭头从引用方指向被依赖方。不设置单独的 crate 下拉框；点击节点仅高亮引用关系，`crate` 参数同步高亮状态，始终保留全部节点和连线。条件、可选和构建依赖以虚线标示，不显示 dev 或第三方依赖，也不宣称这些声明在同一次构建中全部启用。数据为静态快照，Cargo 清单变化后运行 `pnpm docs:crate-dependencies` 更新，`pnpm docs:crate-dependencies:check` 校验快照。
 
-应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
-调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
+应用内 Dialog 通过点击遮罩空白区域、Escape 或关闭按钮请求关闭；遮罩不参与原生窗口拖动。
+设置即时生效，关闭不撤销设置。导入执行期间禁止关闭；已填写的数据库连接配置在关闭前确认丢弃。关闭界面不等同于取消后台操作。
 `UIHost` 按 `UIStore` 的弹窗栈保持各层挂载，后打开的弹窗及其遮罩位于前一层之上；
 只有最上层接受交互与关闭操作，关闭后恢复下层的焦点和本地输入状态。
 导入外部数据时，选择数据源、取消文件选择或内层弹窗均保留导入弹窗及当前分类；
-导入成功后由导入流程按弹窗 ID 关闭对应的导入弹窗。
+连接和选表步骤在等待及失败时保持挂载，错误原地显示；关闭选表窗口返回保留输入的连接窗口。
+导入根窗口为 singleton，子窗口记录 parentId；成功或项目重置按根 ID 关闭其子树，保留无关弹窗。
+异步继续执行前检查原项目身份和流程是否仍存在，已关闭流程的响应不能打开新子窗口。
+连接配置的丢弃确认归属连接窗口；弹窗关闭必须指定 ID，直接移除或随父窗口移除的未决确认以取消结算。示例及外部数据导入成功后，统一由 Application 关闭所属流程，界面不再执行第二次关闭。模态及导入进度期间拦截工作台编辑快捷键。
 
 `src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
 `editorRendererRegistry.ts` 是唯一把 event/function/chart/database 映射到具体 editor 的位置。Workbench module
@@ -177,7 +180,6 @@ bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标�
 | `view:commands`  | Commands activity panel                   | left Activity edge                  |
 | `view:details`   | permanent fixed Details                   | right edge index 0                  |
 | `view:assistant` | movable/closable Assistant                | right edge index 1 on default/reset |
-| `view:settings`  | application Settings                      | 独立 float 子布局                   |
 | `result`         | 一个可检查结果                            | right edge                          |
 | `view:logs`      | Logs workspace                            | bottom edge                         |
 | `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
@@ -265,13 +267,13 @@ Layout 通过 `subscribeModel` 只订阅 Model 实例替换；Model 内部动作
 - `subscribe` / `getSnapshot` 反映面板、分组和边栏语义变化，菜单使用此入口，不因尺寸或浮窗坐标变化重算。
 - `subscribeActivePanel` / `getActiveSnapshot` 只反映中央活动面板及就绪状态，供活动 Graph 上下文和激活协调者使用。
 - `subscribePanelSet` 只反映面板身份和 metadata 集合变化，供结果租约对账使用；排序、选择、可见性和尺寸变化不触发它。
-- `subscribePanel(id, listener)` 只反映该面板及所在边栏的状态变化，供内容、标签菜单和浮动设置的呈现使用。
+- `subscribePanel(id, listener)` 只反映该面板及所在边栏的状态变化，供面板内容和标签菜单的呈现使用。
 
 绑定、解除绑定及 hydration 状态变化会通知相关订阅者。公共查询读取同一份冻结的提交投影，保证记录引用稳定；中间手势只改变原生 Model 与 mutation revision，结束后发布读投影。投影没有写入口，不是第二份可写面板布局。
 
 异步命令的过期检查使用 `getMutationRevision()`，它包含绑定/操作代际、hydration 及原生动作 revision，中间动作也会改变此 token。`getSnapshot().revision` 与 `getActiveSnapshot().revision` 仅表示对应通知投影的变化，不用于并发提交校验；图问题定位和内部布局事务分别使用 mutation token 和 binding revision。
 
-当前 FlexLayout 依赖补丁跳过 adjusting `MOVE_FLOAT` 引起的整棵 Layout 重绘：FloatWindow 自己更新矩形，尺寸变化继续由原生 ResizeObserver 处理，结束动作恢复正常布局通知。补丁与缺失 CSS source map 的修正同由 `patches/flexlayout-react@0.11.0.patch` 管理，升级依赖时应核对上游实现。
+浮窗拖动和缩放沿用 FlexLayout 原生渲染路径。库区分布局重绘与面板内容重绘，面板内容由原生 memo 边界复用；宿主继续按上述订阅规则限制业务通知。`patches/flexlayout-react@0.11.0.patch` 仅移除指向缺失 CSS source map 的引用。布局性能调整应先在真实工作台测量帧耗时和组件渲染，确认瓶颈及改动收益。
 
 PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化时返回相同快照。父级回调和 drag overlay 保持稳定，减少画布、标签和无关面板的重渲染。查询面板集合时只计算一次活动面板。
 
@@ -281,7 +283,7 @@ PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化�
 
 ### 6.1 Close coordinator
 
-所有 root tab 关闭入口都进入 `requestCloseWorkbenchPanel(s)`：close button、中键、context menu、`Ctrl+W`、view toggle 和 Close Group 不直接调用 FlexLayout close。
+所有 root tab 关闭入口都进入 `requestCloseWorkbenchPanel(s)`：close button、中键、context menu、`Ctrl+W`、view toggle 和 Close Group 不直接调用 FlexLayout close。布局宿主统一通过 `onClosePanels` 提交实际 panel ID 集合，覆盖单个标签、分组及整个浮窗。
 
 Problems、Output、Logs 的原生 tab 使用 `enableClose: false` 隐藏关闭按钮；新建和恢复布局应用同一规则。Details、Problems、Output、Logs 均提供 tab 右键菜单，其中“关闭”复用关闭按钮规则保持禁用，隐藏/展开内容仍可用。点击底部 tab 仍可切换、展开和折叠内容，中键与应用关闭命令继续由上述 coordinator 处理。
 
@@ -302,14 +304,14 @@ Coordinator 按顺序执行：
 
 命令以 root FlexLayout Model 的实时 group 为准：
 
-- `Ctrl+Tab` 在键盘事件所属面板的原生 group 中循环，未指向面板时使用顶部活动 group；
+- `Ctrl+Tab` 在键盘事件所属面板的原生 group 中循环，未指向面板时使用主区或浮窗中的活动 group；
 - Close Group 关闭该 physical group 中 editor、Result 和 tool panels 的完整集合；若 group 同时包含 fixed Details，现有 close coordinator 拒绝整批关闭，Assistant 只能单独关闭；Assistant 移到不含 fixed panel 的普通 group 后沿用 Close Group；
 - editor tab 的 Close Others、Close All、Close Saved 只筛选该 group 中的 `editor` role；
 - split 作用于 active canonical editor，native FlexLayout drag/drop 继续拥有后续物理移动与顺序。
 
 ### 6.3 命令目标与输入焦点
 
-`editorCommandFocus` 从两个明确入口捕获目标：菜单和保存命令读取顶部活动编辑器；画布按钮、手势和编辑快捷键读取自身可见面板。执行时重验项目身份、面板、分组、资源和可见性；顶部菜单目标还要重验活动 tab。切到非编辑器 tab 后，不回退到旧 Graph 会话。
+`editorCommandFocus` 从两个明确入口捕获目标：菜单和保存命令读取主区或浮窗中的活动编辑器；画布按钮、手势和编辑快捷键读取自身可见面板。执行时重验项目身份、面板、分组、资源和可见性；菜单目标还要重验活动 tab。切到非编辑器 tab 后，不回退到旧 Graph 会话。
 
 输入框、菜单、弹窗等先消费自己的快捷键。Delete、复制粘贴、节点选择和画布导航根据键盘事件路径或 DOM 当前焦点定位面板，不能从侧栏误操作顶部 Graph。`Ctrl+W` 按实际键盘面板关闭；保存和分屏使用顶部活动编辑器。
 
@@ -326,20 +328,20 @@ Coordinator 按顺序执行：
 
 Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；同一结果引用的 Result 只 reveal 既有 panel。
 
-设置菜单、底栏齿轮和 Ctrl+, 共用 `revealWorkbenchView("settings")`。缺失时通过原生 `Actions.createSubLayout` 直接创建 singleton float，不经过中央标签；已存在时置前同一浮窗。Settings 不能停靠、分屏或拖入中央与边栏区域，中央区不提供 float 图标或转换入口。其打开状态、位置和尺寸只来自 FlexLayout，不在 UI store 保留第二份状态。布局恢复与项目切换保留浮窗，关闭后恢复不会重新创建。
+设置菜单、底栏齿轮和 Ctrl+, 共用 `ui.showSettings()`，在应用 UIStore 中创建 singleton Dialog，与导入复用 Dialog 栈、背景虚化和焦点管理。Settings 模块拥有分类、搜索、表单和标题内容；设置值由 Settings store 持久化，窗口打开状态不进入布局 JSON。项目管理页的简化设置弹窗仍属于独立页面。
 
-Settings 模块继续拥有分类、搜索、表单和标题内容；设置值由现有 Settings store 持久化，不进入布局 JSON。页面根据浮窗宽度适配。工作台不再为设置挂载 Dialog；项目管理页的简化设置弹窗仍属于独立页面。恢复布局不承诺恢复 Settings 的搜索和分类选择。
+普通 tab 的浮动使用原生 `Actions.popoutTab`，整个物理 group 使用 `Actions.popoutTabset`，均指定 `float`。浮动保留面板身份、组内顺序和内容状态；主区与浮动区之间允许停靠、移动和分屏。Activity 与 Details 沿用固定位置限制。
 
-浮动页使用同一根 Model 的 `subLayouts`，位置、尺寸和层级由 FlexLayout 管理，并限制在工作台窗口内。中央分组最大化不隐藏它，重置主布局保留已打开设置的浮动位置。恢复校验拒绝停靠的 Settings、其他浮动内容和浏览器窗口子布局；不存在旧格式迁移。浮动设置不改变顶部活动编辑器的命令目标。
+浮动页使用同一根 Model 的 `subLayouts`，位置、尺寸和层级由 FlexLayout 管理，并限制在工作台窗口内。它们保持非模态，点击外部只切换焦点；应用 Dialog 的遮罩覆盖主布局和浮窗。主区最大化不隐藏浮窗。恢复校验拒绝固定面板的浮动及浏览器窗口子布局；不提供旧格式迁移。
 
-浮动 Settings 的齿轮、标题和关闭按钮通过依赖补丁提供的 `renderFloatHeader` 扩展点渲染在原生 float header 内；标题区域由库直接处理拖动，按钮隔离 pointer-down，关闭经过统一协调者。内部 tabset 通过原生 `enableTabStrip: false` 隐藏标签。没有透明覆盖层、固定按钮避让宽度或自建拖动几何状态；加载期间也保留标题与关闭操作。
+浮窗保留原生标题拖动、停靠拖柄和内部标签栏。“停靠回主工作区”和“关闭全部标签”按钮通过原生 `onRenderTabSet` 插槽放入浮窗首个分组的工具栏；分组最大化时放入该最大化分组，确保操作始终可见。不扩展依赖的浮窗标题 API。停靠按钮保留内部布局并放回主区；关闭按钮将浮窗全部 tab 一次提交给现有关闭协调者，取消未保存确认时不物理删除任何 tab。原生批量删除 Action 也进入该协调者。
 
 ### 7.2 Reset
 
 Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提交，并保留既有 editor、Result 与 panel identities：
 
 - Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
-- editor panels 按 deterministic snapshot order 集中到第一个 central tabset；Settings 保留浮窗，reset 不创建已关闭的 Settings；
+- editor 与插件 editor panels（含浮窗中的面板）按 deterministic snapshot order 集中到第一个 central tabset；设置、导入 Dialog 不参与布局重置；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Result 回到其后，reset 不凭空创建 Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 的原生 tab 顺序；重置完成时收起内容面板，用户点击底部 tab 再次展开；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
@@ -363,7 +365,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 yssbi-workbench-flexlayout:<window-label>
 ```
 
-tab config 只包含 metadata，不持久化输入焦点；含其他 config 字段的布局按现有无效快照规则回退默认布局。
+原生 Model JSON 顶层仅接受 `global`、`layout`、`borders`、`subLayouts`；其余字段按无效快照处理，不接受旧 `popouts` 格式。tab config 只包含 metadata，不持久化输入焦点；含其他 config 字段的布局按现有无效快照规则回退默认布局。
 
 value 为：
 
@@ -374,7 +376,7 @@ value 为：
 }
 ```
 
-root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。root 的 Settings float 与主树共用 ID、singleton 和数量校验，浮动矩形必须包含有限坐标及正尺寸；nested.logs 不接受浮动子布局。恢复时重新施加宿主的浮动、关闭和拖放约束。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。
+root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。root 的 float 与主树共用 ID、singleton 和数量校验，浮动矩形必须包含有限坐标及正尺寸；nested.logs 不接受浮动子布局。恢复时重新施加宿主的浮动、关闭和拖放约束，并保留普通浮窗的标签栏。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。设置与导入不注册为 root panel，也不恢复其打开状态、输入或进度。
 
 窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
 

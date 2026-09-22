@@ -37,7 +37,7 @@
   height: 14px;
   color: var(--muted-foreground);
 }
-.settings-title h1 {
+.settings-title [data-slot="dialog-title"] {
   font-size: 12px;
   font-weight: 500;
 }

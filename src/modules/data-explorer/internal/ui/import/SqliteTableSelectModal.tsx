@@ -1,3 +1,4 @@
+import { useImportStep } from "./useImportStep";
 import { useTranslation } from "react-i18next";
 import { VscDatabase, VscClose } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +25,10 @@ export const SqliteTableSelectModal = ({
   const { dbPath, tables, onSelect } = options;
   const dbName = dbPath.replace(/^.*[/\\]/, "");
 
+  const { busy, error, run } = useImportStep(onSelect);
+
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent className="max-w-[420px]">
         <DialogHeader className="border-b border-border bg-muted/20">
           <div className="flex items-center justify-between gap-4">
@@ -37,6 +40,7 @@ export const SqliteTableSelectModal = ({
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
+              disabled={busy}
               aria-label={t("importModal.close")}
             >
               <VscClose size={20} />
@@ -45,6 +49,11 @@ export const SqliteTableSelectModal = ({
         </DialogHeader>
 
         <div className="p-6">
+          {error && (
+            <p role="alert" className="mb-3 text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <p className="mb-3 truncate text-xs text-muted-foreground">{dbName}</p>
@@ -61,10 +70,8 @@ export const SqliteTableSelectModal = ({
                   type="button"
                   variant="outline"
                   size="lg"
-                  onClick={() => {
-                    onSelect(table);
-                    onClose();
-                  }}
+                  disabled={busy}
+                  onClick={() => void run(table)}
                   className="h-auto justify-start gap-3 px-4 py-3 text-left"
                 >
                   <Badge variant="default">Table</Badge>

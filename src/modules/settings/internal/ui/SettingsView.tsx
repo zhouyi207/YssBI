@@ -17,31 +17,43 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { i18n, type AppLanguage } from "@/app/i18n";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import "./settings.css";
 
-export function SettingsWindowHeader({ onRequestClose }: { readonly onRequestClose: () => void }) {
+export function SettingsDialog({ onClose }: { readonly onClose: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="settings-header">
-      <div className="settings-title">
-        <VscSettingsGear aria-hidden="true" />
-        <h1>{t("settings.title")}</h1>
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="settings-close"
-        aria-label={t("settings.close")}
-        title={t("settings.close")}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={onRequestClose}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex h-[min(720px,88dvh)] max-w-[min(1000px,92vw)] flex-col gap-0 rounded-md bg-[var(--workbench-bg)] p-0 motion-reduce:animate-none max-[720px]:h-[92dvh] max-[720px]:max-w-[96vw]"
       >
-        <VscClose aria-hidden="true" />
-      </Button>
-    </div>
+        <div className="settings-header">
+          <div className="settings-title">
+            <VscSettingsGear aria-hidden="true" />
+            <DialogTitle className="text-xs font-medium normal-case tracking-normal">
+              {t("settings.title")}
+            </DialogTitle>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="settings-close"
+            aria-label={t("settings.close")}
+            title={t("settings.close")}
+            onClick={onClose}
+          >
+            <VscClose aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1">
+          <SettingsView />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -384,42 +396,28 @@ interface SettingItemBase {
   label: string;
   description: string;
   placeholder?: string;
-  disabled?: boolean;
 }
 
 type SettingItemProps =
   | (SettingItemBase & {
       type: "checkbox";
-      checked?: boolean;
-      onChange?: (val: boolean) => void;
+      checked: boolean;
+      onChange: (val: boolean) => void;
     })
   | (SettingItemBase & {
-      type: "text";
-      value?: string;
-      defaultValue?: string;
-      onChange?: (val: string) => void;
-    })
-  | (SettingItemBase & {
-      type: "password";
-      value?: string;
-      defaultValue?: string;
-      onChange?: (val: string) => void;
-    })
-  | (SettingItemBase & {
-      type: "number";
-      value?: string;
-      defaultValue?: string;
-      onChange?: (val: string) => void;
+      type: "text" | "password";
+      value: string;
+      onChange: (val: string) => void;
     })
   | (SettingItemBase & {
       type: "select";
-      value?: string;
-      options?: Array<{ label: string; value: string }>;
-      onChange?: (val: string) => void;
+      value: string;
+      options: Array<{ label: string; value: string }>;
+      onChange: (val: string) => void;
     });
 
 const SettingItem: React.FC<SettingItemProps> = (props) => {
-  const { label, description, type, placeholder, disabled } = props;
+  const { label, description, type, placeholder } = props;
   const controlId = React.useId();
 
   return (
@@ -440,43 +438,20 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
             className="settings-switch"
             id={controlId}
             aria-describedby={`${controlId}-description`}
-            disabled={disabled}
-            checked={props.checked ?? false}
-            onCheckedChange={(value) => props.onChange?.(value === true)}
+            checked={props.checked}
+            onCheckedChange={(value) => props.onChange(value === true)}
           />
         )}
-        {type === "text" && (
+        {(type === "text" || type === "password") && (
           <Input
             id={controlId}
-            type="text"
+            type={type}
             aria-describedby={`${controlId}-description`}
-            value={props.value ?? props.defaultValue ?? ""}
-            onChange={(e) => props.onChange?.(e.target.value)}
+            value={props.value}
+            onChange={(e) => props.onChange(e.target.value)}
             placeholder={placeholder}
-            disabled={disabled}
+            autoComplete={type === "password" ? "off" : undefined}
             className="settings-input"
-          />
-        )}
-        {type === "password" && (
-          <Input
-            id={controlId}
-            type="password"
-            aria-describedby={`${controlId}-description`}
-            value={props.value ?? props.defaultValue ?? ""}
-            onChange={(e) => props.onChange?.(e.target.value)}
-            placeholder={placeholder}
-            disabled={disabled}
-            autoComplete="off"
-            className="settings-input"
-          />
-        )}
-        {type === "number" && (
-          <Input
-            id={controlId}
-            type="number"
-            value={props.value ?? props.defaultValue ?? ""}
-            onChange={(e) => props.onChange?.(e.target.value)}
-            className="w-24"
           />
         )}
         {type === "select" && (
@@ -484,10 +459,9 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
             <Select
               id={controlId}
               className="settings-input"
-              options={props.options || []}
-              value={props.value || props.options?.[0]?.value || ""}
-              onChange={(val) => props.onChange?.(val)}
-              disabled={disabled}
+              options={props.options}
+              value={props.value}
+              onChange={(val) => props.onChange(val)}
             />
           </div>
         )}

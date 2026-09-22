@@ -35,7 +35,7 @@ describe("workbench notification boundaries", () => {
       referenceGroupId: first.groupId,
       direction: "right",
     });
-    const settings = ops.ensureView({ viewId: "settings", title: "Settings" });
+    const logs = ops.ensureView({ viewId: "logs", title: "Logs" });
     const details = ops.ensureView({ viewId: "details", title: "Details" });
     const assistant = ops.ensureView({ viewId: "assistant", title: "Assistant" });
     ops.reveal(details.panelInstanceId);
@@ -91,7 +91,7 @@ describe("workbench notification boundaries", () => {
     ops.activate(second.panelInstanceId);
     expect(calls).toMatchObject({ active: 1, members: 0, first: 1, second: 2 });
     expect(read.getActiveSnapshot()).not.toBe(activeBefore);
-    ops.removePanels([settings.panelInstanceId]);
+    ops.removePanels([logs.panelInstanceId]);
     expect(calls.members).toBe(1);
     const semanticCount = calls.semantic;
     binding.replace(ops.serialize());
@@ -105,7 +105,7 @@ describe("workbench notification boundaries", () => {
 
   it("defers any adjusting action and nested gesture batch without an action-name allowlist", () => {
     const { binding, read, internal, ops } = createRuntime();
-    const panel = ops.ensureView({ viewId: "settings", title: "Settings" });
+    const panel = ops.ensureView({ viewId: "logs", title: "Logs" });
     const model = binding.getModel();
     const pending = new PendingWorkbenchTransaction(binding);
     const revision = binding.getSnapshot().revision;
@@ -131,7 +131,7 @@ describe("workbench notification boundaries", () => {
     expect(model.getNodeById(panel.panelInstanceId)?.getAttributeOwn("name")).toBe(
       "Last intermediate",
     );
-    expect(read.getPanel(panel.panelInstanceId)?.title).toBe("Settings");
+    expect(read.getPanel(panel.panelInstanceId)?.title).toBe("Logs");
     expect(binding.getSnapshot().revision).toBe(revision + 2);
     expect(read.getMutationRevision()).not.toBe(mutationRevision);
     expect(() => pending.commit()).toThrow("layout_restore_failed");

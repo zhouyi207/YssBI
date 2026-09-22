@@ -1,6 +1,6 @@
 import { shareProjection } from "@/features/core/state/readProjection";
 import { freezePublishedValue } from "@/shared/types/deepReadonly";
-import { Actions, type Action } from "flexlayout-react";
+import { Actions, GroupAction, type Action } from "flexlayout-react";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { WorkbenchModelOperations, metadataEqual } from "./workbenchLayoutOperations";
 import { PendingWorkbenchTransaction } from "./workbenchLayoutTransaction";
@@ -283,6 +283,9 @@ export function createWorkbenchLayoutRuntime(): {
     move: (request) => mutate((model) => model.move(request)),
     split: (request) => mutate((model) => model.split(request)),
     configureEdge: (request) => mutate((model) => model.configureEdge(request)),
+    floatPanel: (id) => mutate((model) => model.floatPanel(id)),
+    floatGroup: (id) => mutate((model) => model.floatGroup(id)),
+    dockFloat: (id) => mutate((model) => model.dockFloat(id)),
     setEdgeCollapsed: (position, collapsed) =>
       mutate((model) => model.setEdgeCollapsed(position, collapsed)),
     setEdgeSize: (position, size) => mutate((model) => model.setEdgeSize(position, size)),
@@ -335,13 +338,22 @@ export function createWorkbenchLayoutRuntime(): {
         ? Promise.resolve()
         : new Promise((resolve) => idleWaiters.add(resolve)),
     dispatchAction(action) {
-      if (
-        !binding ||
-        !hydrated ||
-        action.type === Actions.DELETE_TAB ||
-        action.type === Actions.DELETE_TABSET
-      )
-        return;
+      const allowed = (candidate: Action): boolean => {
+        if (candidate instanceof GroupAction) return candidate.actions.every(allowed);
+        if (
+          [
+            Actions.DELETE_TAB,
+            Actions.DELETE_TABSET,
+            Actions.POPOUT_FLOAT,
+            Actions.CREATE_SUBLAYOUT,
+          ].includes(candidate.type)
+        )
+          return false;
+        if ([Actions.POPOUT_TAB, Actions.POPOUT_TABSET].includes(candidate.type))
+          return candidate.data.type === "float";
+        return true;
+      };
+      if (!binding || !hydrated || !allowed(action)) return;
       const model = binding.getModel();
       model.doAction(action);
     },

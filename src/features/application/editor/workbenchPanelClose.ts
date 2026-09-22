@@ -186,7 +186,7 @@ async function saveChartDocument(
     );
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
-    showBlockingIpcError(error, "save_chart", (code) =>
+    showBlockingIpcError(error, (code) =>
       i18n.t("notifications.editor.documentSaveFailed", {
         title: document.name,
         error: code,
@@ -206,7 +206,7 @@ async function saveGraphDocument(
     return saved && isCurrentProjectIdentity(identity);
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
-    showBlockingIpcError(error, "save_project_graph", (code) =>
+    showBlockingIpcError(error, (code) =>
       i18n.t("notifications.editor.documentSaveFailed", {
         title: document.name,
         error: code,
@@ -327,13 +327,6 @@ function showCloseFailedMessage(): void {
 
 export async function requestCloseWorkbenchPanel(panelInstanceId: string): Promise<boolean> {
   return requestCloseWorkbenchPanels([panelInstanceId]);
-}
-
-export function requestCloseWorkbenchGroup(groupId: string): Promise<boolean> {
-  const panelInstanceIds = workbenchLayoutRead
-    .listGroupPanels(groupId)
-    .map((panel) => panel.panelInstanceId);
-  return requestCloseWorkbenchPanels(panelInstanceIds);
 }
 
 async function requestCloseWorkbenchPanelsNow(

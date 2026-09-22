@@ -7,12 +7,10 @@ import type { WorkbenchOverlayRegistry } from "./overlay/overlayContribution";
 
 export interface WorkbenchWindowProps {
   readonly panelRegistry: RootPanelRegistry;
-  readonly floatingHeaderComponent?: RootLayoutHostProps["floatingHeaderComponent"];
   readonly tabComponent: RootPanelTabComponent;
   readonly dndCoordinator: RootLayoutHostProps["dndCoordinator"];
   readonly onActiveEditorPanelChange: RootLayoutHostProps["onActiveEditorPanelChange"];
-  readonly onClosePanel: RootLayoutHostProps["onClosePanel"];
-  readonly onCloseGroup: RootLayoutHostProps["onCloseGroup"];
+  readonly onClosePanels: RootLayoutHostProps["onClosePanels"];
   readonly layoutTheme: RootLayoutHostProps["layoutTheme"];
   readonly watermarkComponent: FunctionComponent;
   readonly menuBar: ReactNode;
@@ -23,13 +21,11 @@ export interface WorkbenchWindowProps {
 
 export function WorkbenchWindow({
   panelRegistry,
-  floatingHeaderComponent,
   tabComponent,
   dndCoordinator,
   onActiveEditorPanelChange,
   layoutTheme,
-  onClosePanel,
-  onCloseGroup,
+  onClosePanels,
   watermarkComponent,
   menuBar,
   statusBar,
@@ -45,13 +41,11 @@ export function WorkbenchWindow({
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
         <RootLayoutHost
           panelRegistry={panelRegistry}
-          floatingHeaderComponent={floatingHeaderComponent}
           tabComponent={tabComponent}
           dndCoordinator={dndCoordinator}
           onActiveEditorPanelChange={onActiveEditorPanelChange}
           layoutTheme={layoutTheme}
-          onClosePanel={onClosePanel}
-          onCloseGroup={onCloseGroup}
+          onClosePanels={onClosePanels}
           watermarkComponent={watermarkComponent}
           statusBar={statusBar}
           dragOverlay={dragOverlay}

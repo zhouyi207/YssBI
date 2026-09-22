@@ -56,7 +56,11 @@ describe("SqlConnectionModal validation", () => {
   it("replaces URI encoder prose with localized field feedback", () => {
     act(() =>
       root.render(
-        <SqlConnectionModal options={{ engine: "postgres", onConnect }} onClose={onClose} />,
+        <SqlConnectionModal
+          modalId="connection-test"
+          options={{ engine: "postgres", onConnect }}
+          onClose={onClose}
+        />,
       ),
     );
 

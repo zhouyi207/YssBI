@@ -1,6 +1,10 @@
-import { Actions, Model, Rect, TabNode } from "flexlayout-react";
+import { Actions, Model, Rect } from "flexlayout-react";
 import { describe, expect, it } from "vitest";
-import { createWorkbenchLayoutController } from "../application/workbenchLayoutController";
+import {
+  createWorkbenchLayoutController,
+  workbenchLayoutController,
+} from "../application/workbenchLayoutController";
+import { resetWorkbenchLayout } from "../application/workbenchLayoutActions";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { DEFAULT_LOGS_LAYOUT } from "./logsLayoutModel";
 import { configureWorkbenchModel } from "./workbenchActivityGroup";
@@ -9,19 +13,63 @@ import { WorkbenchModelOperations } from "./workbenchLayoutOperations";
 import { PendingWorkbenchTransaction } from "./workbenchLayoutTransaction";
 import { createPersistedWorkbenchLayout, isValidRootLayout } from "./workbenchLayoutPersistence";
 
-function floatSettings(model: Model, id: string): string {
+function floatEditor(model: Model, id: string): string {
+  new WorkbenchModelOperations(model).floatPanel(id);
   const layoutId = model.getNodeById(id)!.getLayoutId();
   model.doAction(Actions.moveFloat(layoutId, new Rect(20, 30, 900, 600)));
   return layoutId;
 }
 
-describe("workbench floating Settings", () => {
+describe("workbench floating panels", () => {
+  it("floats an entire group and resets its tabs to the main workspace with their identities and selection intact", async () => {
+    const binding = new LayoutModelBinding(createEmptyWorkbenchLayout(), configureWorkbenchModel);
+    try {
+      workbenchLayoutController.bind(binding, "float-reset");
+      await workbenchLayoutController.whenHydrated();
+      const ops = new WorkbenchModelOperations(binding.getModel());
+      const first = ops.openEditor({
+        resourceKind: "event",
+        resourceRef: "events/A",
+        title: "A",
+        mode: "reuse-resource",
+      });
+      const second = ops.openEditor({
+        resourceKind: "event",
+        resourceRef: "events/B",
+        title: "B",
+        mode: "reuse-resource",
+      });
+      expect(ops.floatGroup(first.groupId)).toBe(true);
+      const layoutId = binding.getModel().getNodeById(first.panelInstanceId)!.getLayoutId();
+      binding.getModel().doAction(Actions.moveFloat(layoutId, new Rect(20, 30, 900, 600)));
+      expect(ops.listGroupPanels(first.groupId).map((panel) => panel.panelInstanceId)).toEqual([
+        first.panelInstanceId,
+        second.panelInstanceId,
+      ]);
+      expect(ops.getActivePanel()?.panelInstanceId).toBe(second.panelInstanceId);
+      await resetWorkbenchLayout();
+      const reset = new WorkbenchModelOperations(binding.getModel());
+      expect(reset.getPanel(first.panelInstanceId)?.location.type).toBe("grid");
+      expect(reset.getPanel(second.panelInstanceId)?.groupId).toBe(
+        reset.getPanel(first.panelInstanceId)?.groupId,
+      );
+      expect(reset.getActivePanel()?.panelInstanceId).toBe(second.panelInstanceId);
+      expect(Object.keys(reset.serialize().subLayouts ?? {})).toEqual([]);
+    } finally {
+      workbenchLayoutController.unbind(binding);
+    }
+  });
   it("notifies the application once per float gesture while invalidating stale transactions on every move", () => {
     const binding = new LayoutModelBinding(createEmptyWorkbenchLayout(), configureWorkbenchModel);
     const model = binding.getModel();
     const ops = new WorkbenchModelOperations(model);
-    const settings = ops.ensureView({ viewId: "settings", title: "Settings" });
-    const layoutId = floatSettings(model, settings.panelInstanceId);
+    const floating = ops.openEditor({
+      resourceKind: "event",
+      resourceRef: "events/Float",
+      title: "Float",
+      mode: "reuse-resource",
+    });
+    const layoutId = floatEditor(model, floating.panelInstanceId);
     const pending = new PendingWorkbenchTransaction(binding);
     const revision = binding.getSnapshot().revision;
     let notifications = 0;
@@ -46,25 +94,29 @@ describe("workbench floating Settings", () => {
     unsubscribe();
   });
 
-  it("opens and restores Settings only as a singleton float without changing the active editor", async () => {
+  it("restores a floating editor as the command target and docks it without changing identity", async () => {
     const model = Model.fromJson(createEmptyWorkbenchLayout());
     configureWorkbenchModel(model);
     const ops = new WorkbenchModelOperations(model);
-    const editor = ops.openEditor({
+    const first = ops.openEditor({
       resourceKind: "event",
       resourceRef: "events/Main",
       title: "Main",
       mode: "reuse-resource",
     });
-    const request = { viewId: "settings", title: "Settings" } as const;
-    const settings = ops.ensureView(request);
-    expect((model.getNodeById(settings.panelInstanceId) as TabNode).isEnableFloat()).toBe(false);
-    expect((model.getNodeById(settings.panelInstanceId) as TabNode).isEnableFloatIcon()).toBe(
-      false,
-    );
-    const layoutId = floatSettings(model, settings.panelInstanceId);
-    model.doAction(Actions.maximizeToggle(editor.groupId));
-    expect(ops.getPanel(settings.panelInstanceId)?.visible).toBe(true);
+    const editor = ops.openEditor({
+      resourceKind: "event",
+      resourceRef: "events/Float",
+      title: "Float",
+      mode: "reuse-resource",
+    });
+    const layoutId = floatEditor(model, editor.panelInstanceId);
+    expect(ops.getActivePanel()?.panelInstanceId).toBe(editor.panelInstanceId);
+    ops.activate(first.panelInstanceId);
+    expect(ops.getActivePanel()?.panelInstanceId).toBe(first.panelInstanceId);
+    ops.activate(editor.panelInstanceId);
+    model.doAction(Actions.maximizeToggle(first.groupId));
+    expect(ops.getPanel(editor.panelInstanceId)?.visible).toBe(true);
     const persisted = createPersistedWorkbenchLayout(ops.serialize(), DEFAULT_LOGS_LAYOUT);
     expect(isValidRootLayout(persisted.root)).toBe(true);
     const controller = createWorkbenchLayoutController({ read: () => JSON.stringify(persisted) });
@@ -73,27 +125,21 @@ describe("workbench floating Settings", () => {
       controller.bind(binding, "main");
       await controller.whenHydrated();
       const restored = new WorkbenchModelOperations(binding.getModel());
-      expect(restored.ensureView(request)).toMatchObject({
-        panelInstanceId: settings.panelInstanceId,
+      expect(restored.getPanel(editor.panelInstanceId)).toMatchObject({
         location: { type: "float", layoutId },
         visible: true,
       });
+      expect(restored.getActivePanel()?.panelInstanceId).toBe(editor.panelInstanceId);
       expect(restored.serialize().subLayouts?.[layoutId]?.rect).toEqual({
         x: 20,
         y: 30,
         width: 900,
         height: 600,
       });
+      expect(restored.dockFloat(layoutId)).toBe(true);
+      expect(restored.getPanel(editor.panelInstanceId)?.location.type).toBe("grid");
+      expect(restored.getPanel(editor.panelInstanceId)?.visible).toBe(true);
       expect(restored.getActivePanel()?.panelInstanceId).toBe(editor.panelInstanceId);
-      expect(
-        restored.move({
-          panelInstanceId: settings.panelInstanceId,
-          groupId: restored.ensureCentralGroup(),
-        }),
-      ).toBe(false);
-      expect(restored.getPanel(settings.panelInstanceId)?.location.type).toBe("float");
-      restored.removePanels([settings.panelInstanceId]);
-      expect(restored.getPanel(settings.panelInstanceId)).toBeUndefined();
       expect(Object.keys(restored.serialize().subLayouts ?? {})).toEqual([]);
     } finally {
       controller.unbind(binding);
@@ -104,9 +150,14 @@ describe("workbench floating Settings", () => {
     const model = Model.fromJson(createEmptyWorkbenchLayout());
     configureWorkbenchModel(model);
     const ops = new WorkbenchModelOperations(model);
-    const settings = ops.ensureView({ viewId: "settings", title: "Settings" });
-    const layoutId = floatSettings(model, settings.panelInstanceId);
-    const floatingGroup = ops.getPanel(settings.panelInstanceId)!.groupId;
+    const floating = ops.openEditor({
+      resourceKind: "event",
+      resourceRef: "events/Float",
+      title: "Float",
+      mode: "reuse-resource",
+    });
+    const layoutId = floatEditor(model, floating.panelInstanceId);
+    const floatingGroup = ops.getPanel(floating.panelInstanceId)!.groupId;
     const editor = ops.openEditor({
       resourceKind: "event",
       resourceRef: "events/Main",
@@ -114,7 +165,7 @@ describe("workbench floating Settings", () => {
       mode: "reuse-resource",
     });
     expect(ops.move({ panelInstanceId: editor.panelInstanceId, groupId: floatingGroup })).toBe(
-      false,
+      true,
     );
     expect(
       ops.split({
@@ -122,12 +173,13 @@ describe("workbench floating Settings", () => {
         referenceGroupId: floatingGroup,
         direction: "right",
       }),
-    ).toBe(false);
+    ).toBe(true);
     const browser = ops.serialize();
+    expect(isValidRootLayout({ ...browser, popouts: {} })).toBe(false);
     browser.subLayouts![layoutId].type = "window";
     expect(isValidRootLayout(browser)).toBe(false);
     model.doAction(
-      Actions.updateNodeAttributes(settings.panelInstanceId, {
+      Actions.updateNodeAttributes(floating.panelInstanceId, {
         component: "Details",
         config: { metadata: { role: "view", viewId: "details" } },
       }),

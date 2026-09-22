@@ -116,7 +116,7 @@ describe("SettingsView preferences", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
-    while (uiStore.getState().modals.length) uiStore.closeModal();
+    for (const modal of uiStore.getState().modals) uiStore.closeModal(modal.id);
     vi.restoreAllMocks();
   });
 

@@ -1,3 +1,4 @@
+import { uiStore } from "@/features/core/ui/UIStore";
 import type { ProjectLifecycleStateSnapshot } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { isProjectLifecycleStateCurrent } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useViewportStore } from "@/features/core/viewport";
@@ -39,6 +40,9 @@ export async function resetClientProjectState(
   actions: ProjectPresentationResetActions,
 ): Promise<void> {
   if (!isProjectLifecycleStateCurrent(owner)) return;
+  for (const modal of uiStore.getState().modals) {
+    if (modal.type === "import") uiStore.closeModal(modal.id);
+  }
   if (previousProjectInstanceId) {
     await actions.removeProjectScopedWorkbenchPanels(previousProjectInstanceId, owner);
   }

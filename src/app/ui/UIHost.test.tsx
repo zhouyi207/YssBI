@@ -59,7 +59,7 @@ describe("UIHost modal stack", () => {
 
   afterEach(async () => {
     await act(async () => root.unmount());
-    while (uiStore.getState().modals.length) uiStore.closeModal();
+    for (const modal of uiStore.getState().modals) uiStore.closeModal(modal.id);
     host.remove();
     await flushDialogEffects();
   });

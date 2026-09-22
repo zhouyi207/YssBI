@@ -14,7 +14,6 @@ export const WORKBENCH_VIEW_IDS = [
   ...WORKBENCH_ACTIVITY_VIEW_IDS,
   "details",
   "assistant",
-  "settings",
   "logs",
   "output",
   "problems",
@@ -35,7 +34,6 @@ export type WorkbenchComponentId =
   | "Plugin"
   | "Details"
   | "Assistant"
-  | "Settings"
   | "Result"
   | "Logs"
   | "Output"
@@ -108,7 +106,6 @@ const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentI
   plugins: "Plugins",
   details: "Details",
   assistant: "Assistant",
-  settings: "Settings",
   logs: "Logs",
   output: "Output",
   problems: "Problems",

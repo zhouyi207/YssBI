@@ -3,8 +3,8 @@ import { DatabaseService } from "@/services/database/databaseService";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 import type { SampleDatasetSummary } from "@/shared/types/domain/database";
 
-export function sampleDatasetFailure(error: unknown, command: string) {
-  const failure = normalizeApplicationIpcError(command, error);
+export function sampleDatasetFailure(error: unknown) {
+  const failure = normalizeApplicationIpcError(error);
   return { code: failure.code, incidentId: failure.incidentId };
 }
 
@@ -26,7 +26,7 @@ export function useSampleDatasets() {
       },
       (failure: unknown) => {
         if (active) {
-          setError(sampleDatasetFailure(failure, "list_sample_datasets"));
+          setError(sampleDatasetFailure(failure));
           setLoading(false);
         }
       },

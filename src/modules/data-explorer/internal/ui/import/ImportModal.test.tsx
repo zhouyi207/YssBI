@@ -67,7 +67,7 @@ it("loads the catalog only on selection and allows retry after a discovery failu
   expect(onImportSample).not.toHaveBeenCalled();
 });
 
-it("keeps a failed import open, blocks duplicate clicks and closes only after success", async () => {
+it("keeps a failed import open, blocks duplicate clicks and delegates completion to the import action", async () => {
   await act(async () => button("importModal.categories.samples").click());
   let rejectImport!: (error: Error) => void;
   onImportSample.mockImplementationOnce(
@@ -98,5 +98,5 @@ it("keeps a failed import open, blocks duplicate clicks and closes only after su
   act(() => button("importModal.samples.import").click());
   expect(onClose).not.toHaveBeenCalled();
   await act(async () => finishImport());
-  expect(onClose).toHaveBeenCalledOnce();
+  expect(onClose).not.toHaveBeenCalled();
 });

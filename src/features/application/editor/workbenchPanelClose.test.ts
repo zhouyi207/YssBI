@@ -296,11 +296,7 @@ vi.mock("./resolveResourceDisplayName", () => ({
   resolveResourceDisplayName: mocks.resolveResourceDisplayName,
 }));
 
-import {
-  requestCloseWorkbenchGroup,
-  requestCloseWorkbenchPanel,
-  requestCloseWorkbenchPanels,
-} from "./workbenchPanelClose";
+import { requestCloseWorkbenchPanel, requestCloseWorkbenchPanels } from "./workbenchPanelClose";
 
 function editorPanel(
   panelInstanceId: string,
@@ -395,14 +391,14 @@ beforeEach(() => {
 });
 
 describe("workbench panel close coordinator", () => {
-  it("resolves a physical group before entering the batch close workflow", async () => {
+  it("closes the requested group members without affecting another group", async () => {
     seedPanels([
       viewPanel("logs-a", "logs", "group-a"),
       viewPanel("output-a", "output", "group-a"),
       viewPanel("problems-b", "problems", "group-b"),
     ]);
 
-    await expect(requestCloseWorkbenchGroup("group-a")).resolves.toBe(true);
+    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a"])).resolves.toBe(true);
 
     expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["problems-b"]);
   });
@@ -646,10 +642,10 @@ describe("workbench panel close coordinator", () => {
     seedPanels([
       viewPanel("logs-a", "logs"),
       viewPanel("output-a", "output"),
-      viewPanel("settings-a", "settings"),
+      viewPanel("assistant-a", "assistant"),
     ]);
 
-    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a", "settings-a"])).resolves.toBe(
+    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a", "assistant-a"])).resolves.toBe(
       true,
     );
 

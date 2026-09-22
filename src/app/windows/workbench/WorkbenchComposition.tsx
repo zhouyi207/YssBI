@@ -1,7 +1,4 @@
-import {
-  requestCloseWorkbenchPanel,
-  requestCloseWorkbenchGroup,
-} from "@/features/application/editor/workbenchPanelClose";
+import { requestCloseWorkbenchPanels } from "@/features/application/editor/workbenchPanelClose";
 import { useTranslation } from "react-i18next";
 
 import { useEditorKeyboard, useWorkbenchWindowCloseGuard } from "@/features/application/editor";
@@ -19,7 +16,7 @@ import { panelActivationCoordinator } from "./integrations/panelActivationCoordi
 import { useWorkbenchCommandCoordinator } from "./integrations/workbenchCommandCoordinator";
 import { WorkbenchMenuContribution } from "./menuContributionRegistry";
 import { rootPanelTabRenderer } from "./rootPanelTabRenderer";
-import { rootPanelRegistry, floatingPanelHeader } from "./rootPanelRegistry";
+import { rootPanelRegistry } from "./rootPanelRegistry";
 import { WorkbenchStatusBarContribution } from "./statusBarContributionRegistry";
 import { PluginProvider } from "./integrations/PluginProvider";
 import { useResultPanelLeases } from "@/features/application/results/useResultPanelLeases";
@@ -31,11 +28,8 @@ const overlayRegistry = {
 
 const dragOverlay = <ActivityEditorDndOverlay />;
 const statusBar = <WorkbenchStatusBarContribution />;
-const closePanel = (id: string): void => {
-  void requestCloseWorkbenchPanel(id);
-};
-const closeGroup = (id: string): void => {
-  void requestCloseWorkbenchGroup(id);
+const closePanels = (ids: readonly string[]): void => {
+  void requestCloseWorkbenchPanels(ids);
 };
 
 function WorkbenchReadyComposition() {
@@ -53,12 +47,10 @@ function WorkbenchReadyComposition() {
     <PluginProvider>
       <WorkbenchWindow
         panelRegistry={rootPanelRegistry}
-        floatingHeaderComponent={floatingPanelHeader}
         tabComponent={rootPanelTabRenderer}
         dndCoordinator={dndCoordinator}
         onActiveEditorPanelChange={panelActivationCoordinator}
-        onClosePanel={closePanel}
-        onCloseGroup={closeGroup}
+        onClosePanels={closePanels}
         layoutTheme={resolveYssbiLayoutTheme(themeMode)}
         watermarkComponent={WatermarkView}
         menuBar={<WorkbenchMenuContribution commands={commands} />}

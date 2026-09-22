@@ -180,7 +180,7 @@ describe("project workbench lifecycle", () => {
         presentation: { kind: "inspector" },
       }),
       panel("details-old", { role: "view", viewId: "details" }),
-      panel("settings-stable", { role: "view", viewId: "settings" }),
+      panel("assistant-stable", { role: "view", viewId: "assistant" }),
       panel("project-stable", { role: "view", viewId: "project" }),
       panel("nodes-stable", { role: "view", viewId: "nodes" }),
       panel("commands-stable", { role: "view", viewId: "commands" }),
@@ -193,7 +193,7 @@ describe("project workbench lifecycle", () => {
 
     expect(lifecycleMocks.state.panels.map((candidate) => candidate.panelInstanceId)).toEqual([
       "details-old",
-      "settings-stable",
+      "assistant-stable",
       "project-stable",
       "nodes-stable",
       "commands-stable",

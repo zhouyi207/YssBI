@@ -11,15 +11,14 @@ export function isLayoutJson(
   allowFloats = false,
 ): value is IJsonModel {
   if (!isRecord(value) || !isRecord(value.layout) || value.layout.type !== "row") return false;
+  if (
+    Object.keys(value).some((key) => !["global", "layout", "borders", "subLayouts"].includes(key))
+  )
+    return false;
   if (value.global !== undefined && !isRecord(value.global)) return false;
   if (
     value.subLayouts !== undefined &&
     (!isRecord(value.subLayouts) || (!allowFloats && Object.keys(value.subLayouts).length))
-  )
-    return false;
-  if (
-    value.popouts !== undefined &&
-    (!isRecord(value.popouts) || Object.keys(value.popouts).length)
   )
     return false;
   const ids = new Set<string>();

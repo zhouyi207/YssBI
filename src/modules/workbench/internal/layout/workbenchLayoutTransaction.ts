@@ -1,3 +1,4 @@
+import { configureWorkbenchModel } from "./workbenchActivityGroup";
 import { Model } from "flexlayout-react";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { WorkbenchModelOperations } from "./workbenchLayoutOperations";
@@ -13,6 +14,7 @@ export class PendingWorkbenchTransaction {
     this.operations = new WorkbenchModelOperations(
       Model.fromJson(structuredClone(binding.getModel().toJson())),
     );
+    configureWorkbenchModel(this.operations.model);
   }
   commit(): void {
     if (this.binding.getSnapshot().revision !== this.baseRevision)

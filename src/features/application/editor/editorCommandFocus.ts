@@ -120,7 +120,8 @@ function consumesEditorShortcut(target: EventTarget): boolean {
 }
 
 export function shouldIgnoreEditorShortcutEvent(event: KeyboardEvent): boolean {
-  if (uiStore.getState().modals.length > 0 || isAppModalOpen()) return true;
+  if (uiStore.getState().modals.length > 0 || uiStore.getState().progress || isAppModalOpen())
+    return true;
   return eventPath(event).some(consumesEditorShortcut);
 }
 
