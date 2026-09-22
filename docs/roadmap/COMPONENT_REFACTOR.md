@@ -174,7 +174,7 @@ Chart 是跨前后端的逻辑能力：Rust 负责权威数据及相关规则，
 
 节点定义可按冻结版本在多个会话间共享；资源目录、本地化查询结果和图语义缓存仍按各自输入与版本失效，不能把项目相关内容混入进程级定义缓存。
 
-Runtime 继续选择 SQLite、Rig、文件监听器及通用插件管理实现。SCI 沿用现有规则：只有 Graph Execution 和 Application 的独立 SCI commands 消费 SCI runtime；组装层不构造或注入科学计算后端。
+Runtime 继续选择 SQLite、Rig、文件监听器及通用插件管理实现。SCI runtime 由 Node Kernel、独立 OLS benchmark 和 Application 的独立 SCI commands 消费；组装层不构造或注入科学计算后端。
 
 ### 5.2 会话切换
 
