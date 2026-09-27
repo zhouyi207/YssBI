@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+mod arguments;
+
 use futures_util::StreamExt;
 use std::sync::{
     Arc, Mutex, RwLock,
@@ -245,11 +247,7 @@ where
             Some(limit) => builder.max_tokens(limit),
             None => builder,
         };
-        let agent = if tools.is_empty() {
-            builder.build()
-        } else {
-            builder.dynamic_tools(tools).build()
-        };
+        let agent = builder.dynamic_tools(tools).build();
         let stream_output = Arc::clone(&output);
         let stream_cancellation = cancellation.clone();
         let duration = self.config.maximum_turn_duration;
@@ -556,30 +554,29 @@ fn dynamic_tool(
 ) -> Result<DynamicTool, AgentDriverFailure> {
     let parameters =
         serde_json::to_value(&descriptor.input_schema).map_err(|_| invalid_response())?;
+    let schema = Arc::new(parameters.clone());
     let capability_id = descriptor.capability_id;
     Ok(DynamicTool::new(
         descriptor.id.as_str(),
         tool_description(capability_id),
         parameters,
         move |_context, arguments| {
+            let schema = Arc::clone(&schema);
             let capabilities = Arc::clone(&capabilities);
             let tasks = Arc::clone(&tasks);
             let tool_failure = tool_failure.clone();
             Box::pin(async move {
-                let request = match decode_request(capability_id, arguments) {
+                let request = match decode_request(capability_id, arguments, &schema) {
                     Ok(request) => request,
-                    Err(_) => {
-                        return tool_result_json(Err(CapabilityFailure::new(
-                            CapabilityFailureCode::InvalidRequest,
-                        )
-                        .with_detail("reason", "tool_arguments_do_not_match_schema")))
-                        .map(ToolOutput::json)
-                        .map_err(|_| {
-                            runtime_tool_failure(
-                                &tool_failure,
-                                AgentDriverFailureCode::InternalFailure,
-                            )
-                        });
+                    Err(failure) => {
+                        return tool_result_json(Err(failure))
+                            .map(ToolOutput::json)
+                            .map_err(|_| {
+                                runtime_tool_failure(
+                                    &tool_failure,
+                                    AgentDriverFailureCode::InternalFailure,
+                                )
+                            });
                     }
                 };
                 let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -617,20 +614,29 @@ fn statistical_plan_tool(
 ) -> Result<DynamicTool, AgentDriverFailure> {
     let parameters =
         serde_json::to_value(statistical_plan_schema()).map_err(|_| invalid_response())?;
+    let schema = Arc::new(parameters.clone());
     Ok(DynamicTool::new(
         "propose_statistical_plan",
         "Propose a complete typed statistical plan for Harness policy validation before analytical execution. Returns accepted and the exact plan recorded by Harness after validation and persistence.",
         parameters,
         move |_context, arguments| {
+            let schema = Arc::clone(&schema);
             let output = Arc::clone(&output);
             let tool_failure = tool_failure.clone();
             Box::pin(async move {
-                let plan =
-                    serde_json::from_value::<StatisticalPlan>(arguments).map_err(|error| {
-                        ToolExecutionError::invalid_args(format!(
-                            "statistical plan did not match the schema: {error}"
-                        ))
-                    })?;
+                let plan = match arguments::decode::<StatisticalPlan>(arguments, &schema) {
+                    Ok(plan) => plan,
+                    Err(failure) => {
+                        return tool_result_json(Err(failure))
+                            .map(ToolOutput::json)
+                            .map_err(|_| {
+                                runtime_tool_failure(
+                                    &tool_failure,
+                                    AgentDriverFailureCode::InternalFailure,
+                                )
+                            });
+                    }
+                };
                 let receipt = serde_json::json!({ "accepted": true, "plan": &plan });
                 output
                     .emit(AgentEvent::PlanProposed { plan })
@@ -658,55 +664,59 @@ fn statistical_plan_tool(
 fn decode_request(
     capability_id: CapabilityId,
     arguments: serde_json::Value,
-) -> Result<AutomationCapabilityRequest, ToolExecutionError> {
+    schema: &serde_json::Value,
+) -> Result<AutomationCapabilityRequest, CapabilityFailure> {
     match capability_id {
-        CapabilityId::InspectGraph => serde_json::from_value::<InspectGraphRequest>(arguments)
+        CapabilityId::InspectGraph => arguments::decode::<InspectGraphRequest>(arguments, schema)
             .map(AutomationCapabilityRequest::InspectGraph),
         CapabilityId::SearchNodeCatalog => {
-            serde_json::from_value::<SearchNodeCatalogRequest>(arguments)
+            arguments::decode::<SearchNodeCatalogRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::SearchNodeCatalog)
         }
         CapabilityId::InspectDatasetSchema => {
-            serde_json::from_value::<InspectDatasetSchemaRequest>(arguments)
+            arguments::decode::<InspectDatasetSchemaRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::InspectDatasetSchema)
         }
         CapabilityId::InspectDatasetProfile => {
-            serde_json::from_value::<InspectDatasetProfileRequest>(arguments)
+            arguments::decode::<InspectDatasetProfileRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::InspectDatasetProfile)
         }
-        CapabilityId::InspectResult => serde_json::from_value::<InspectResultRequest>(arguments)
+        CapabilityId::InspectResult => arguments::decode::<InspectResultRequest>(arguments, schema)
             .map(AutomationCapabilityRequest::InspectResult),
-        CapabilityId::InspectProject => serde_json::from_value::<InspectProjectRequest>(arguments)
-            .map(AutomationCapabilityRequest::InspectProject),
-        CapabilityId::ApplyGraphEdit => serde_json::from_value::<ApplyGraphEditRequest>(arguments)
-            .map(AutomationCapabilityRequest::ApplyGraphEdit),
+        CapabilityId::InspectProject => {
+            arguments::decode::<InspectProjectRequest>(arguments, schema)
+                .map(AutomationCapabilityRequest::InspectProject)
+        }
+        CapabilityId::ApplyGraphEdit => {
+            arguments::decode::<ApplyGraphEditRequest>(arguments, schema)
+                .map(AutomationCapabilityRequest::ApplyGraphEdit)
+        }
         CapabilityId::ValidateGraph => {
-            serde_json::from_value::<yss_harness_contract::ValidateGraphRequest>(arguments)
+            arguments::decode::<yss_harness_contract::ValidateGraphRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::ValidateGraph)
         }
         CapabilityId::ExecuteGraph => {
-            serde_json::from_value::<yss_harness_contract::ExecuteGraphRequest>(arguments)
+            arguments::decode::<yss_harness_contract::ExecuteGraphRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::ExecuteGraph)
         }
         CapabilityId::SaveGraph => {
-            serde_json::from_value::<yss_harness_contract::SaveGraphRequest>(arguments)
+            arguments::decode::<yss_harness_contract::SaveGraphRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::SaveGraph)
         }
         CapabilityId::InspectUi => {
-            serde_json::from_value(arguments).map(AutomationCapabilityRequest::InspectUi)
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::InspectUi)
         }
         CapabilityId::UpdateUi => {
-            serde_json::from_value(arguments).map(AutomationCapabilityRequest::UpdateUi)
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::UpdateUi)
         }
         CapabilityId::RequestUiIntent => {
-            serde_json::from_value(arguments).map(AutomationCapabilityRequest::RequestUiIntent)
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::RequestUiIntent)
         }
         CapabilityId::ListGraphResults => {
-            serde_json::from_value::<yss_harness_contract::ListGraphResultsRequest>(arguments)
+            arguments::decode::<yss_harness_contract::ListGraphResultsRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::ListGraphResults)
         }
     }
-    .map_err(|_| ToolExecutionError::invalid_args("tool arguments did not match the schema"))
 }
 
 fn tool_description(capability_id: CapabilityId) -> &'static str {
@@ -1342,6 +1352,75 @@ mod tests {
             receipt,
             serde_json::json!({ "accepted": true, "plan": plan })
         );
+    }
+
+    #[tokio::test]
+    async fn argument_diagnostics_reach_the_model_and_allow_correction() {
+        let call = |id: &str, name: &str, arguments| {
+            vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                id,
+                ToolFunction::new(name.to_owned(), arguments),
+            ))]
+        };
+        let model = ScriptedCompletionModel::new([
+            call(
+                "malformed",
+                "inspect_dataset_schema",
+                serde_json::json!({"databaseId": {"secret": "secret"}}),
+            ),
+            call(
+                "malformed-plan",
+                "propose_statistical_plan",
+                serde_json::json!({"analysisMode": "secret"}),
+            ),
+            call(
+                "corrected",
+                "inspect_dataset_schema",
+                serde_json::json!({"databaseId": "database-1"}),
+            ),
+            vec![AssistantContent::text("Corrected.")],
+        ]);
+        let requests = model.requests.clone();
+        let driver = RigAgentDriver::new(model, RigAgentDriverConfig::default()).unwrap();
+        let result = driver
+            .run_turn(
+                request(vec![
+                    ToolDescriptor::for_capability(CapabilityId::InspectDatasetSchema).unwrap(),
+                ]),
+                Arc::new(StaticExecutor),
+                Arc::new(CollectingOutput::default()),
+                CancellationToken::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.final_text, "Corrected.");
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 4);
+        for (index, id, path) in [
+            (1, "malformed", "$.databaseId"),
+            (2, "malformed-plan", "$.analysisMode"),
+        ] {
+            let wire = requests[index]
+                .chat_history
+                .clone()
+                .into_iter()
+                .flat_map(|message| {
+                    Vec::<rig_core::providers::openai::completion::Message>::try_from(message)
+                        .unwrap()
+                })
+                .map(|message| serde_json::to_value(message).unwrap())
+                .collect::<Vec<_>>();
+            let message = wire
+                .iter()
+                .find(|message| message["tool_call_id"] == id)
+                .unwrap();
+            let content = message["content"].as_str().unwrap();
+            let feedback: serde_json::Value = serde_json::from_str(content).unwrap();
+            assert_eq!(feedback["state"], "failed");
+            assert_eq!(feedback["failure"]["code"], "invalid_request");
+            assert_eq!(feedback["failure"]["details"]["path"], path);
+            assert!(!content.contains("secret"));
+        }
     }
 
     #[tokio::test]
