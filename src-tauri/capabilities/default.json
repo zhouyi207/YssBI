@@ -28,28 +28,6 @@
     },
     "dialog:default",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text",
-    "fs:default",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file",
-    "fs:allow-read",
-    "fs:allow-write",
-    "fs:allow-exists",
-    "fs:allow-mkdir",
-    "fs:allow-appconfig-meta",
-    "fs:allow-appconfig-read-recursive",
-    "fs:allow-appconfig-write-recursive",
-    "fs:scope-appconfig",
-    {
-      "identifier": "fs:scope",
-      "allow": [
-        {
-          "path": "**"
-        },
-        {
-          "path": "$APPCONFIG/**"
-        }
-      ]
-    }
+    "clipboard-manager:allow-write-text"
   ]
 }
