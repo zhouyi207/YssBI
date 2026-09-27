@@ -37,6 +37,11 @@ There are no YssBI window-state query/save commands or geometry DTOs. The fronte
 windows through the platform adapter and the Rust plugin owns restoration and persistence;
 see [Workbench window geometry](../../../../../src/modules/workbench/README.md#81-原生窗口几何与关闭).
 
+The desktop does not register the filesystem plugin or grant webviews `fs:*`
+permissions. Project/file operations use the existing Rust Application owners.
+The dialog plugin's transitive filesystem dependency in Cargo.lock does not grant
+webview filesystem access.
+
 ## Command responsibilities
 
 A command handler may:
@@ -58,9 +63,12 @@ in-memory representation; the tagged event wire remains unchanged.
 
 Standalone statistical commands convert DTOs and directly call the stateless
 `yss-sci-runtime` functions. ACF/PACF retains Application session admission and its
-60-second deadline. Analyses of retained graph results go through Application's
-session/result validation and Execution's result analysis functions. Only
-`yss-application::ipc` and `yss-graph-execution` directly consume SCI runtime; numerical rules
+60-second deadline, including blocking-pool queue time. The async command dispatches
+numerical work to that pool and rechecks its session and execution budget before returning.
+SCI cooperatively checks the same budget inside ACF/PACF loops. Analyses of retained
+graph results read the Summary computed by Node Kernel through Application's
+session/result validation. Node Kernel, standalone IPC commands and Execution's
+focused benchmark consume SCI runtime; numerical rules
 remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
 
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
