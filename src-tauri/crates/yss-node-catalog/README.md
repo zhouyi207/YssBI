@@ -125,6 +125,9 @@ Catalog 消费 Protocol、Registry 和 SCI 的中立配置契约。
 
 ## 参数声明
 
+动态节点 ID 和本地化 key 使用拥有型字符串，由装配片段、协议和目录持有并随其释放。
+节点 key 由 `builtin::node_key` / `node_key_text` 统一构造；静态文案仍借用常量，不要求动态 key 具有永久生命周期。
+
 `yss-node-protocol` 使用 `Parameters → ParameterGroup → Parameter` 声明节点参数。
 分组 key 在节点内唯一，参数 key 在所有组之间唯一；声明顺序决定 Details 中的组和字段顺序。
 组拥有本地化标题和可选说明，参数拥有类型、默认值、约束、编辑器和 `visible_when` 条件。

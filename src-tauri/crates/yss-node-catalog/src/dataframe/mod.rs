@@ -3,6 +3,7 @@
 //! This module depends exclusively on the node-system IR and keeps graph authoring,
 //! pin reconciliation, and execution concerns behind their current boundaries.
 
+use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod families;
 mod inventory;
@@ -745,8 +746,8 @@ fn parameter(
 ) -> Result<Parameter, BuiltinAssemblyError> {
     Ok(Parameter {
         key: sid(key, ParameterKey::new)?,
-        title_key: iid(leak(format!("parameters.{key}.title")))?,
-        description_key: Some(iid(leak(format!("parameters.{key}.description")))?),
+        title_key: iid(format!("parameters.{key}.title"))?,
+        description_key: Some(iid(format!("parameters.{key}.description"))?),
         value_type,
         default_value,
         constraints,
@@ -790,7 +791,7 @@ fn dataframe_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyEr
     .map(|(id, parent, order)| {
         Ok(CategoryRegistration {
             id: sid(id, NodeCategoryId::new)?,
-            title_key: iid(leak(format!("categories.{id}.title")))?,
+            title_key: iid(format!("categories.{id}.title"))?,
             parent: parent
                 .map(|value| sid(value, NodeCategoryId::new))
                 .transpose()?,
@@ -890,17 +891,11 @@ fn derived_schema(
         dependencies,
     })
 }
-fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    iid(leak(format!("nodes.{id}.{suffix}")))
-}
-fn leak(value: String) -> &'static str {
-    Box::leak(value.into_boxed_str())
-}
 
-fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &NodeSpec) {
-    let title = leak(format!("nodes.{}.title", spec.id));
-    let documentation = leak(format!("nodes.{}.documentation", spec.id));
-    let aliases = leak(format!("nodes.{}.aliases", spec.id));
+fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &NodeSpec) {
+    let title = node_key_text(spec.id, "title");
+    let documentation = node_key_text(spec.id, "documentation");
+    let aliases = node_key_text(spec.id, "aliases");
     let (en_documentation, zh_documentation) = match spec.interface {
         InterfaceKind::IntRange => (
             "Generates integers from start (inclusive) to end (exclusive). Step must be a nonzero integer; negative steps are supported. Output allocation is bounded by the execution budget.",
@@ -944,16 +939,16 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
         ),
     };
     out.extend([
-        ("en-US", title, Text(spec.title)),
-        ("zh-CN", title, Text(spec.zh_title)),
-        ("en-US", documentation, Text(en_documentation)),
-        ("zh-CN", documentation, Text(zh_documentation)),
-        ("en-US", aliases, Aliases(spec.aliases)),
-        ("zh-CN", aliases, Aliases(spec.zh_aliases)),
+        ("en-US", title.to_owned(), Text(spec.title)),
+        ("zh-CN", title.to_owned(), Text(spec.zh_title)),
+        ("en-US", documentation.to_owned(), Text(en_documentation)),
+        ("zh-CN", documentation.to_owned(), Text(zh_documentation)),
+        ("en-US", aliases.to_owned(), Aliases(spec.aliases)),
+        ("zh-CN", aliases.to_owned(), Aliases(spec.zh_aliases)),
     ]);
 }
 
-fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
+fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
     for (key, en, zh) in [
         ("types.dataframe.title", "DataFrame", "数据框"),
         ("types.series.title", "DataSeries", "数据序列"),
@@ -990,8 +985,8 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "列将在读取结果时确定；未选择检查列时检查全部列。",
         ),
     ] {
-        out.push(("en-US", key, Text(en)));
-        out.push(("zh-CN", key, Text(zh)));
+        out.push(("en-US", key.to_owned(), Text(en)));
+        out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
     for key in [
         "dataframe",
@@ -1002,12 +997,16 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         "window",
         "rows",
     ] {
-        let title = leak(format!("parameters.{key}.title"));
-        let description = leak(format!("parameters.{key}.description"));
-        out.push(("en-US", title, Text(key)));
-        out.push(("zh-CN", title, Text(key)));
-        out.push(("en-US", description, Text("Typed node parameter.")));
-        out.push(("zh-CN", description, Text("类型化节点参数。")));
+        let title = format!("parameters.{key}.title");
+        let description = format!("parameters.{key}.description");
+        out.push(("en-US", title.to_owned(), Text(key)));
+        out.push(("zh-CN", title.to_owned(), Text(key)));
+        out.push((
+            "en-US",
+            description.to_owned(),
+            Text("Typed node parameter."),
+        ));
+        out.push(("zh-CN", description.to_owned(), Text("类型化节点参数。")));
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
         (
@@ -1123,11 +1122,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "新的列名。",
         ),
     ] {
-        let title = leak(format!("parameters.{key}.title"));
-        let description = leak(format!("parameters.{key}.description"));
-        out.push(("en-US", title, Text(en_title)));
-        out.push(("zh-CN", title, Text(zh_title)));
-        out.push(("en-US", description, Text(en_description)));
-        out.push(("zh-CN", description, Text(zh_description)));
+        let title = format!("parameters.{key}.title");
+        let description = format!("parameters.{key}.description");
+        out.push(("en-US", title.to_owned(), Text(en_title)));
+        out.push(("zh-CN", title.to_owned(), Text(zh_title)));
+        out.push(("en-US", description.to_owned(), Text(en_description)));
+        out.push(("zh-CN", description.to_owned(), Text(zh_description)));
     }
 }

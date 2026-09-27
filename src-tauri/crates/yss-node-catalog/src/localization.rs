@@ -228,13 +228,13 @@ pub fn authoritative_static_descriptor(
 
 impl BuiltinCatalog {
     pub(crate) fn new(
-        entries: &[(&'static str, &'static str, Message)],
+        entries: &[(&'static str, String, Message)],
     ) -> Result<Self, yss_node_protocol::ProtocolError> {
         let mut bundles = BTreeMap::<Box<str>, Bundle>::new();
         for (locale, key, message) in entries {
-            let key = I18nKey::new(*key).map_err(|source| {
+            let key = I18nKey::new(key.as_str()).map_err(|source| {
                 yss_node_protocol::ProtocolError::InvalidSemanticId {
-                    value: (*key).into(),
+                    value: key.as_str().into(),
                     source,
                 }
             })?;

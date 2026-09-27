@@ -1,6 +1,7 @@
 pub(crate) use crate::builtin::BuiltinAssemblyError;
 pub(crate) use crate::builtin::ProviderFragment;
-use crate::builtin::{assembled_interface, assembled_parameters, sid};
+use crate::builtin::node_key_text;
+use crate::builtin::{assembled_interface, assembled_parameters};
 use crate::{Aliases, Text};
 use std::sync::Arc;
 use yss_node_protocol::*;
@@ -9,7 +10,7 @@ use yss_node_registry::{CategoryRegistration, RegisteredNode, TransparentNodeRol
 impl ProviderFragment {
     pub(crate) fn add_node_messages(
         &mut self,
-        spec: &NodeTextSpec,
+        spec: &NodeTextSpec<'_>,
     ) -> Result<(), BuiltinAssemblyError> {
         let keys = NodeKeys::new(spec.id)?;
         for (locale, title, documentation, aliases) in [
@@ -30,7 +31,7 @@ impl ProviderFragment {
 
     pub(crate) fn text(&mut self, locale: &'static str, key: I18nKey, value: &'static str) {
         self.messages
-            .push((locale, leak(key.as_str().to_owned()), Text(value)));
+            .push((locale, key.as_str().to_owned(), Text(value)));
     }
 
     pub(crate) fn aliases(
@@ -40,12 +41,12 @@ impl ProviderFragment {
         values: &'static [&'static str],
     ) {
         self.messages
-            .push((locale, leak(key.as_str().to_owned()), Aliases(values)));
+            .push((locale, key.as_str().to_owned(), Aliases(values)));
     }
 }
 
-pub(crate) struct NodeTextSpec {
-    pub id: &'static str,
+pub(crate) struct NodeTextSpec<'a> {
+    pub id: &'a str,
     pub title: &'static str,
     pub zh_title: &'static str,
     pub documentation: &'static str,
@@ -62,16 +63,16 @@ struct NodeKeys {
 }
 
 impl NodeKeys {
-    fn new(id: &'static str) -> Result<Self, BuiltinAssemblyError> {
+    fn new(id: &str) -> Result<Self, BuiltinAssemblyError> {
         Ok(Self {
-            title: i18n(leak(format!("nodes.{id}.title")))?,
-            documentation: i18n(leak(format!("nodes.{id}.documentation")))?,
-            aliases: i18n(leak(format!("nodes.{id}.aliases")))?,
+            title: i18n(node_key_text(id, "title"))?,
+            documentation: i18n(node_key_text(id, "documentation"))?,
+            aliases: i18n(node_key_text(id, "aliases"))?,
         })
     }
 }
 
-pub(crate) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
+pub(crate) fn leaf(protocol: NodeProtocol, kernel: &str) -> RegisteredNode {
     super::super::builtin::leaf(protocol, kernel)
 }
 
@@ -83,7 +84,7 @@ pub(in crate::core_nodes) fn transparent(
 }
 
 pub(crate) fn protocol(
-    id: &'static str,
+    id: &str,
     category: &'static str,
     ports: Vec<PortSpec>,
     type_parameters: Vec<TypeParameterId>,
@@ -98,7 +99,7 @@ pub(crate) fn protocol(
             documentation_key: Some(keys.documentation),
             aliases_key: Some(keys.aliases),
             category_id: semantic(category, NodeCategoryId::new)?,
-            icon_id: semantic(leak(format!("builtin.{category}")), IconId::new)?,
+            icon_id: semantic(format!("builtin.{category}"), IconId::new)?,
             style_id: semantic("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
@@ -149,7 +150,7 @@ pub(crate) fn data_port_with_cardinality(
 }
 
 pub(crate) fn parameter(
-    node_id: &'static str,
+    node_id: &str,
     key: &'static str,
     value_type: TypeExpr,
     default_value: Option<TypedValue>,
@@ -169,7 +170,7 @@ pub(crate) fn parameter(
     })
 }
 
-pub(crate) fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+pub(crate) fn concrete(id: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(semantic(id, TypeId::new)?))
 }
 
@@ -188,16 +189,16 @@ pub(crate) fn pure() -> ExecutionSemantics {
 }
 
 pub(crate) fn parameter_key(
-    node_id: &'static str,
+    node_id: &str,
     key: &'static str,
     suffix: &'static str,
 ) -> Result<I18nKey, BuiltinAssemblyError> {
-    i18n(leak(format!("nodes.{node_id}.parameters.{key}.{suffix}")))
+    i18n(format!("nodes.{node_id}.parameters.{key}.{suffix}"))
 }
 
 pub(crate) fn add_parameter_messages(
     fragment: &mut ProviderFragment,
-    node_id: &'static str,
+    node_id: &str,
     entries: &[(
         &'static str,
         &'static str,
@@ -218,7 +219,7 @@ pub(crate) fn add_parameter_messages(
 }
 
 pub(crate) fn category(
-    id: &'static str,
+    id: &str,
     title_key: &'static str,
     order: i32,
 ) -> Result<CategoryRegistration, BuiltinAssemblyError> {
@@ -230,17 +231,4 @@ pub(crate) fn category(
     })
 }
 
-pub(crate) fn i18n(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    semantic(value, I18nKey::new)
-}
-
-pub(crate) fn semantic<T>(
-    value: &'static str,
-    make: impl FnOnce(&'static str) -> Result<T, InvalidSemanticId>,
-) -> Result<T, crate::BuiltinAssemblyError> {
-    sid(value, make)
-}
-
-pub(crate) fn leak(value: String) -> &'static str {
-    Box::leak(value.into_boxed_str())
-}
+pub(crate) use crate::builtin::{iid as i18n, sid as semantic};

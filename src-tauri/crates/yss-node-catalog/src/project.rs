@@ -1,6 +1,7 @@
 use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
+use crate::builtin::{node_key, node_key_text};
 use crate::{Aliases, Message, Text};
 use std::sync::Arc;
 use yss_node_protocol::*;
@@ -24,7 +25,7 @@ pub(crate) fn builtin_function_interface_resolver_ids() -> Box<[InterfaceResolve
 
 pub(super) fn register(
     nodes: &mut Vec<RegisteredNode>,
-    messages: &mut Vec<(&'static str, &'static str, Message)>,
+    messages: &mut Vec<(&'static str, String, Message)>,
 ) -> Result<(), BuiltinAssemblyError> {
     for (id, en, zh, aliases, zh_aliases) in [
         (
@@ -265,12 +266,8 @@ fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyErr
     };
     Ok(Parameter {
         key: sid(key, ParameterKey::new)?,
-        title_key: iid(Box::leak(
-            format!("parameters.{key}.title").into_boxed_str(),
-        ))?,
-        description_key: Some(iid(Box::leak(
-            format!("parameters.{key}.description").into_boxed_str(),
-        ))?),
+        title_key: iid(format!("parameters.{key}.title"))?,
+        description_key: Some(iid(format!("parameters.{key}.description"))?),
         value_type: TypeExpr::Concrete(sid("core.text", TypeId::new)?),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
@@ -287,11 +284,7 @@ fn pure() -> ExecutionSemantics {
     }
 }
 
-fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    iid(Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str()))
-}
-
-fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
+fn add_messages(out: &mut Vec<(&'static str, String, Message)>) {
     for (key, en, zh) in [
         ("parameters.function.title", "Function", "函数"),
         (
@@ -312,29 +305,28 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "在当前图详情面板中定义的常量值。",
         ),
     ] {
-        out.push(("en-US", key, Text(en)));
-        out.push(("zh-CN", key, Text(zh)));
+        out.push(("en-US", key.to_owned(), Text(en)));
+        out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
 }
 
 fn add_node_messages(
-    out: &mut Vec<(&'static str, &'static str, Message)>,
+    out: &mut Vec<(&'static str, String, Message)>,
     id: &'static str,
     en: &'static str,
     zh: &'static str,
     en_aliases: &'static [&'static str],
     zh_aliases: &'static [&'static str],
 ) {
-    let title: &'static str = Box::leak(format!("nodes.{id}.title").into_boxed_str());
-    let documentation: &'static str =
-        Box::leak(format!("nodes.{id}.documentation").into_boxed_str());
-    let aliases: &'static str = Box::leak(format!("nodes.{id}.aliases").into_boxed_str());
+    let title = node_key_text(id, "title");
+    let documentation = node_key_text(id, "documentation");
+    let aliases = node_key_text(id, "aliases");
     out.extend([
-        ("en-US", title, Text(en)),
-        ("zh-CN", title, Text(zh)),
-        ("en-US", documentation, Text("Resource identity is stored as a stable node parameter and resolved from the semantic snapshot.")),
-        ("zh-CN", documentation, Text("资源身份作为稳定节点参数保存，并从编译快照解析。")),
-        ("en-US", aliases, Aliases(en_aliases)),
-        ("zh-CN", aliases, Aliases(zh_aliases)),
+        ("en-US", title.to_owned(), Text(en)),
+        ("zh-CN", title.to_owned(), Text(zh)),
+        ("en-US", documentation.to_owned(), Text("Resource identity is stored as a stable node parameter and resolved from the semantic snapshot.")),
+        ("zh-CN", documentation.to_owned(), Text("资源身份作为稳定节点参数保存，并从编译快照解析。")),
+        ("en-US", aliases.to_owned(), Aliases(en_aliases)),
+        ("zh-CN", aliases.to_owned(), Aliases(zh_aliases)),
     ]);
 }

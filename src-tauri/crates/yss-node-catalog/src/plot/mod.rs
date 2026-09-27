@@ -2,6 +2,7 @@ use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, leaf, sid,
 };
 use crate::Message;
+use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
@@ -111,18 +112,22 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     let mut messages = vec![
         (
             "en-US",
-            "categories.plot.title",
+            "categories.plot.title".to_owned(),
             Message::Text("Visualization"),
         ),
-        ("zh-CN", "categories.plot.title", Message::Text("可视化")),
+        (
+            "zh-CN",
+            "categories.plot.title".to_owned(),
+            Message::Text("可视化"),
+        ),
         (
             "en-US",
-            "parameters.plot.maximum_lag.title",
+            "parameters.plot.maximum_lag.title".to_owned(),
             Message::Text("Maximum lag"),
         ),
         (
             "zh-CN",
-            "parameters.plot.maximum_lag.title",
+            "parameters.plot.maximum_lag.title".to_owned(),
             Message::Text("最大滞后阶数"),
         ),
     ];
@@ -284,17 +289,17 @@ fn data_port(
     })
 }
 
-fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &PlotSpec) {
-    let title = key_text(spec.id, "title");
-    let documentation = key_text(spec.id, "documentation");
-    let aliases = key_text(spec.id, "aliases");
+fn add_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &PlotSpec) {
+    let title = node_key_text(spec.id, "title");
+    let documentation = node_key_text(spec.id, "documentation");
+    let aliases = node_key_text(spec.id, "aliases");
     out.extend([
-        ("en-US", title, Message::Text(spec.en)),
-        ("zh-CN", title, Message::Text(spec.zh)),
-        ("en-US", documentation, Message::Text("This dataflow view node returns a presentation result that can be opened from the graph output.")),
-        ("zh-CN", documentation, Message::Text("此数据流视图节点返回可从图结果中打开的展示结果。")),
-        ("en-US", aliases, Message::Aliases(spec.aliases)),
-        ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
+        ("en-US", title.to_owned(), Message::Text(spec.en)),
+        ("zh-CN", title.to_owned(), Message::Text(spec.zh)),
+        ("en-US", documentation.to_owned(), Message::Text("This dataflow view node returns a presentation result that can be opened from the graph output.")),
+        ("zh-CN", documentation.to_owned(), Message::Text("此数据流视图节点返回可从图结果中打开的展示结果。")),
+        ("en-US", aliases.to_owned(), Message::Aliases(spec.aliases)),
+        ("zh-CN", aliases.to_owned(), Message::Aliases(spec.zh_aliases)),
     ]);
 }
 
@@ -319,12 +324,4 @@ fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
 fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
     sid(value, NodeStyleId::new)
 }
-fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    sid(value, I18nKey::new)
-}
-fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    i18n_key(key_text(id, suffix))
-}
-fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
-    Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
-}
+use crate::builtin::iid as i18n_key;

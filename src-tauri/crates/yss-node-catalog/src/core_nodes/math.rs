@@ -148,9 +148,9 @@ fn register_arithmetic_operator(
     fragment: &mut ProviderFragment,
     spec: MathSpec,
 ) -> Result<(), BuiltinAssemblyError> {
-    let id = leak(format!("yssbi.numeric.{}", spec.operation));
+    let id = format!("yssbi.numeric.{}", spec.operation);
     fragment.add_node_messages(&NodeTextSpec {
-        id,
+        id: &id,
         title: spec.title,
         zh_title: spec.zh_title,
         documentation: "Scalar-only inputs produce a scalar. If any input is a DataSeries, scalar inputs are broadcast and the result is a DataSeries. Int64 widens to Float64 when required.",
@@ -204,7 +204,7 @@ fn register_arithmetic_operator(
             }
         }
     }
-    let mut protocol = protocol(id, "numeric", ports, vec![], vec![], pure())?;
+    let mut protocol = protocol(&id, "numeric", ports, vec![], vec![], pure())?;
     protocol.typing = NodeTypingSpec::NumericFold {
         inputs: if spec.operation == "add" {
             Box::new([PortSelector::AllInstances(semantic(
@@ -220,7 +220,7 @@ fn register_arithmetic_operator(
         output: semantic("result", PortKey::new)?,
         shape: ShapeRule::AnySeriesElseScalar,
     };
-    fragment.nodes.push(leaf(protocol, id));
+    fragment.nodes.push(leaf(protocol, &id));
     Ok(())
 }
 
@@ -228,9 +228,9 @@ fn register_unary(
     fragment: &mut ProviderFragment,
     spec: MathSpec,
 ) -> Result<(), BuiltinAssemblyError> {
-    let id = leak(format!("yssbi.numeric.{}", spec.operation));
+    let id = format!("yssbi.numeric.{}", spec.operation);
     fragment.add_node_messages(&NodeTextSpec {
-        id,
+        id: &id,
         title: spec.title,
         zh_title: spec.zh_title,
         documentation: "The output shape matches the input shape. Non-finite results are rejected by the runtime kernel.",
@@ -244,7 +244,7 @@ fn register_unary(
         data_series("core.numeric")?,
     ]);
     let mut protocol = protocol(
-        id,
+        &id,
         "numeric",
         vec![
             data_port("input", "Input", PortDirection::Input, numeric)?,
@@ -265,7 +265,7 @@ fn register_unary(
             port.production = Some(OutputProduction::Streaming);
         }
     }
-    fragment.nodes.push(leaf(protocol, id));
+    fragment.nodes.push(leaf(protocol, &id));
     Ok(())
 }
 

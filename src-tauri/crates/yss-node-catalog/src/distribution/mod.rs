@@ -1,5 +1,6 @@
 use super::builtin::{BuiltinAssemblyError, ProviderFragment, assembled_interface, leaf, sid};
 use crate::Message;
+use crate::builtin::{node_key, node_key_text};
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
 
@@ -371,32 +372,32 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     let mut messages = vec![
         (
             "en-US",
-            "categories.distribution.title",
+            "categories.distribution.title".to_owned(),
             Message::Text("Probability Distributions"),
         ),
         (
             "zh-CN",
-            "categories.distribution.title",
+            "categories.distribution.title".to_owned(),
             Message::Text("概率分布"),
         ),
         (
             "en-US",
-            "categories.distribution.continuous.title",
+            "categories.distribution.continuous.title".to_owned(),
             Message::Text("Continuous Distributions"),
         ),
         (
             "zh-CN",
-            "categories.distribution.continuous.title",
+            "categories.distribution.continuous.title".to_owned(),
             Message::Text("连续分布"),
         ),
         (
             "en-US",
-            "categories.distribution.discrete.title",
+            "categories.distribution.discrete.title".to_owned(),
             Message::Text("Discrete Distributions"),
         ),
         (
             "zh-CN",
-            "categories.distribution.discrete.title",
+            "categories.distribution.discrete.title".to_owned(),
             Message::Text("离散分布"),
         ),
     ];
@@ -424,11 +425,11 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     for spec in SPECS {
         add_messages(&mut messages, spec);
         for field in spec.parameters {
-            let key = Box::leak(field_key(spec.id, field.key)?.to_string().into_boxed_str());
-            messages.push(("en-US", key, Message::Text(field.title)));
+            let key = field_key(spec.id, field.key)?.to_string();
+            messages.push(("en-US", key.to_owned(), Message::Text(field.title)));
             messages.push((
                 "zh-CN",
-                key,
+                key.to_owned(),
                 Message::Text(match field.key {
                     "mean" => "均值",
                     "standard_deviation" => "标准差",
@@ -567,9 +568,7 @@ fn parameter(
 }
 
 fn field_key(node: &'static str, field: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    i18n_key(Box::leak(
-        format!("nodes.{node}.parameters.{field}.title").into_boxed_str(),
-    ))
+    i18n_key(format!("nodes.{node}.parameters.{field}.title"))
 }
 
 fn data_port(
@@ -595,17 +594,17 @@ fn data_port(
     })
 }
 
-fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &DistributionSpec) {
-    let title = key_text(spec.id, "title");
-    let documentation = key_text(spec.id, "documentation");
-    let aliases = key_text(spec.id, "aliases");
+fn add_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &DistributionSpec) {
+    let title = node_key_text(spec.id, "title");
+    let documentation = node_key_text(spec.id, "documentation");
+    let aliases = node_key_text(spec.id, "aliases");
     out.extend([
-        ("en-US", title, Message::Text(spec.en)),
-        ("zh-CN", title, Message::Text(spec.zh)),
-        ("en-US", documentation, Message::Text("Distribution parameters and sample count are edited in the Distribution and Sampling groups in Detail. Sample count must be a positive integer.")),
-        ("zh-CN", documentation, Message::Text("在 Detail 的分布参数和采样设置两组中设置分布参数和样本数；样本数必须为正整数。")),
-        ("en-US", aliases, Message::Aliases(spec.aliases)),
-        ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
+        ("en-US", title.to_owned(), Message::Text(spec.en)),
+        ("zh-CN", title.to_owned(), Message::Text(spec.zh)),
+        ("en-US", documentation.to_owned(), Message::Text("Distribution parameters and sample count are edited in the Distribution and Sampling groups in Detail. Sample count must be a positive integer.")),
+        ("zh-CN", documentation.to_owned(), Message::Text("在 Detail 的分布参数和采样设置两组中设置分布参数和样本数；样本数必须为正整数。")),
+        ("en-US", aliases.to_owned(), Message::Aliases(spec.aliases)),
+        ("zh-CN", aliases.to_owned(), Message::Aliases(spec.zh_aliases)),
     ]);
 }
 
@@ -630,15 +629,7 @@ fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
 fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
     sid(value, NodeStyleId::new)
 }
-fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    sid(value, I18nKey::new)
-}
-fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    i18n_key(key_text(id, suffix))
-}
-fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
-    Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
-}
+use crate::builtin::iid as i18n_key;
 
 #[cfg(test)]
 mod tests {

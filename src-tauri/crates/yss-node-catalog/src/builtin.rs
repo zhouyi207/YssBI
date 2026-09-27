@@ -208,7 +208,7 @@ pub(crate) struct ProviderFragment {
     pub interface_resolvers: Vec<InterfaceResolverId>,
     pub schema_resolvers: Vec<SchemaResolverId>,
     pub nodes: Vec<RegisteredNode>,
-    pub messages: Vec<(&'static str, &'static str, Message)>,
+    pub messages: Vec<(&'static str, String, Message)>,
 }
 
 impl ProviderFragment {
@@ -243,7 +243,7 @@ impl ProviderFragment {
 
         let mut messages = BTreeMap::new();
         for (locale, key, message) in self.messages {
-            if let Some(existing) = messages.insert((locale, key), message.clone())
+            if let Some(existing) = messages.insert((locale, key.clone()), message.clone())
                 && existing != message
             {
                 return Err(BuiltinAssemblyError::LocalizationConflict {
@@ -394,12 +394,12 @@ fn assemble_builtin_parts()
 
     messages.push((
         "en-US",
-        "parameters.comparison_mode.title",
+        "parameters.comparison_mode.title".to_owned(),
         Text("Comparison Mode"),
     ));
     messages.push((
         "zh-CN",
-        "parameters.comparison_mode.title",
+        "parameters.comparison_mode.title".to_owned(),
         Text("比较模式"),
     ));
     for (key, en, zh) in [
@@ -414,34 +414,34 @@ fn assemble_builtin_parts()
             "相对容差",
         ),
     ] {
-        messages.push(("en-US", key, Text(en)));
-        messages.push(("zh-CN", key, Text(zh)));
+        messages.push(("en-US", key.to_owned(), Text(en)));
+        messages.push(("zh-CN", key.to_owned(), Text(zh)));
     }
     for spec in COMPARISONS {
-        let id = leak(format!("yssbi.logic.{}", spec.id));
+        let id = format!("yssbi.logic.{}", spec.id);
         add_node_messages(
             messages,
-            id,
+            &id,
             spec.title,
             spec.zh_title,
             spec.aliases,
             spec.zh_aliases,
         );
-        let mut protocol = comparison_protocol(id, matches!(spec.id, "equal" | "not_equal"))?;
-        protocol.parameters = comparison_parameters(id)?;
+        let mut protocol = comparison_protocol(&id, matches!(spec.id, "equal" | "not_equal"))?;
+        protocol.parameters = comparison_parameters(&id)?;
         nodes.push(leaf(protocol, spec.kernel));
     }
     for spec in LOGIC {
-        let id = leak(format!("yssbi.logic.{}", spec.id));
+        let id = format!("yssbi.logic.{}", spec.id);
         add_node_messages(
             messages,
-            id,
+            &id,
             spec.title,
             spec.zh_title,
             spec.aliases,
             spec.zh_aliases,
         );
-        nodes.push(leaf(boolean_protocol(id, false)?, spec.kernel));
+        nodes.push(leaf(boolean_protocol(&id, false)?, spec.kernel));
     }
     add_node_messages(
         messages,
@@ -465,7 +465,7 @@ fn assemble_builtin_parts()
             .expect("core semantic ID");
         fragment.types.push(TypeRegistration {
             id: sid(semantic.type_id(), TypeId::new)?,
-            title_key: iid(leak(format!("types.{name}.title")))?,
+            title_key: iid(format!("types.{name}.title"))?,
             classes: if semantic == SemanticType::Numeric {
                 BTreeSet::from([sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?])
             } else {
@@ -493,7 +493,7 @@ fn assemble_builtin_parts()
         .map(|(name, parent, order)| {
             Ok(CategoryRegistration {
                 id: sid(name, NodeCategoryId::new)?,
-                title_key: iid(leak(format!("categories.{name}.title")))?,
+                title_key: iid(format!("categories.{name}.title"))?,
                 parent: parent
                     .map(|value| sid(value, NodeCategoryId::new))
                     .transpose()?,
@@ -533,7 +533,7 @@ fn assemble_builtin_parts()
     Ok((provider, catalog, alias_keys))
 }
 
-pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNode {
+pub(super) fn leaf(protocol: NodeProtocol, kernel: &str) -> RegisteredNode {
     let identity = if kernel.starts_with("yssbi.") {
         kernel.to_owned()
     } else {
@@ -545,7 +545,7 @@ pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
     )
 }
 
-fn comparison_parameters(id: &'static str) -> Result<Parameters, BuiltinAssemblyError> {
+fn comparison_parameters(id: &str) -> Result<Parameters, BuiltinAssemblyError> {
     let numeric = concrete("core.numeric")?;
     let text = concrete("core.text")?;
     let mut fields = vec![Parameter {
@@ -572,7 +572,7 @@ fn comparison_parameters(id: &'static str) -> Result<Parameters, BuiltinAssembly
         ("absolute_tolerance", "0.000000000001"),
         ("relative_tolerance", "0.000000001"),
     ] {
-        let title = leak(format!("parameters.{key}.title"));
+        let title = format!("parameters.{key}.title");
 
         fields.push(
             Parameter {
@@ -598,10 +598,7 @@ fn comparison_parameters(id: &'static str) -> Result<Parameters, BuiltinAssembly
     assembled_parameters(id, fields)
 }
 
-fn comparison_protocol(
-    id: &'static str,
-    equality: bool,
-) -> Result<NodeProtocol, BuiltinAssemblyError> {
+fn comparison_protocol(id: &str, equality: bool) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let input = TypeExpr::Union(
         SemanticType::ALL
             .into_iter()
@@ -619,7 +616,7 @@ fn comparison_protocol(
 }
 
 fn binary_predicate_protocol(
-    id: &'static str,
+    id: &str,
     input: TypeExpr,
 ) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let binary = TypeExpr::Concrete(sid("core.binary", TypeId::new)?);
@@ -650,7 +647,7 @@ fn binary_predicate_protocol(
     Ok(protocol)
 }
 
-fn boolean_protocol(id: &'static str, unary: bool) -> Result<NodeProtocol, BuiltinAssemblyError> {
+fn boolean_protocol(id: &str, unary: bool) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let scalar = concrete("core.binary")?;
     let binary = TypeExpr::Union(vec![scalar.clone(), data_series_type(scalar)]);
     if !unary {
@@ -682,7 +679,7 @@ fn boolean_protocol(id: &'static str, unary: bool) -> Result<NodeProtocol, Built
 }
 
 fn protocol(
-    id: &'static str,
+    id: &str,
     category: &'static str,
     ports: Vec<PortSpec>,
     parameters: Vec<Parameter>,
@@ -691,11 +688,11 @@ fn protocol(
     Ok(NodeProtocol {
         type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
-            title_key: iid(leak(format!("nodes.{id}.title")))?,
-            documentation_key: Some(iid(leak(format!("nodes.{id}.documentation")))?),
-            aliases_key: Some(iid(leak(format!("nodes.{id}.aliases")))?),
+            title_key: iid(node_key_text(id, "title"))?,
+            documentation_key: Some(iid(node_key_text(id, "documentation"))?),
+            aliases_key: Some(iid(node_key_text(id, "aliases"))?),
             category_id: sid(category, NodeCategoryId::new)?,
-            icon_id: sid(leak(format!("builtin.{category}")), IconId::new)?,
+            icon_id: sid(format!("builtin.{category}"), IconId::new)?,
             style_id: sid("builtin.default", NodeStyleId::new)?,
             hidden: false,
         },
@@ -734,7 +731,7 @@ fn data_port_expr(
     })
 }
 
-fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+fn concrete(id: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
 }
 fn pure() -> ExecutionSemantics {
@@ -744,20 +741,17 @@ fn pure() -> ExecutionSemantics {
     }
 }
 
-pub(super) fn iid(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    sid(value, I18nKey::new)
+pub(super) fn iid(value: impl AsRef<str>) -> Result<I18nKey, BuiltinAssemblyError> {
+    sid(value.as_ref(), I18nKey::new)
 }
-pub(super) fn sid<T>(
-    value: &'static str,
-    make: impl FnOnce(&'static str) -> Result<T, InvalidSemanticId>,
+pub(super) fn sid<T, S: AsRef<str> + Clone>(
+    value: S,
+    make: impl FnOnce(S) -> Result<T, InvalidSemanticId>,
 ) -> Result<T, BuiltinAssemblyError> {
-    make(value).map_err(|source| BuiltinAssemblyError::InvalidSemanticId {
-        value: value.into(),
+    make(value.clone()).map_err(|source| BuiltinAssemblyError::InvalidSemanticId {
+        value: value.as_ref().into(),
         source,
     })
-}
-fn leak(value: String) -> &'static str {
-    Box::leak(value.into_boxed_str())
 }
 
 fn i18n_requirements(
@@ -789,7 +783,7 @@ fn i18n_requirements(
     Ok((I18nManifest { keys }, alias_keys))
 }
 
-fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
+fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
     for (key, en, zh) in [
         ("types.binary.title", "Binary", "二元"),
         ("types.text.title", "Text", "文本"),
@@ -826,31 +820,43 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "常量的值。",
         ),
     ] {
-        out.push(("en-US", key, Text(en)));
-        out.push(("zh-CN", key, Text(zh)));
+        out.push(("en-US", key.to_owned(), Text(en)));
+        out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
 }
 fn add_node_messages(
-    out: &mut Vec<(&'static str, &'static str, Message)>,
-    id: &'static str,
+    out: &mut Vec<(&'static str, String, Message)>,
+    id: &str,
     en: &'static str,
     zh: &'static str,
     en_aliases: &'static [&'static str],
     zh_aliases: &'static [&'static str],
 ) {
-    let title = leak(format!("nodes.{id}.title"));
-    let docs = leak(format!("nodes.{id}.documentation"));
-    let aliases = leak(format!("nodes.{id}.aliases"));
+    let title = node_key_text(id, "title");
+    let docs = node_key_text(id, "documentation");
+    let aliases = node_key_text(id, "aliases");
     out.extend([
-        ("en-US", title, Text(en)),
-        ("zh-CN", title, Text(zh)),
+        ("en-US", title.to_owned(), Text(en)),
+        ("zh-CN", title.to_owned(), Text(zh)),
         (
             "en-US",
-            docs,
+            docs.to_owned(),
             Text("This node is part of the trusted built-in provider."),
         ),
-        ("zh-CN", docs, Text("此节点属于可信内建 provider。")),
-        ("en-US", aliases, Aliases(en_aliases)),
-        ("zh-CN", aliases, Aliases(zh_aliases)),
+        (
+            "zh-CN",
+            docs.to_owned(),
+            Text("此节点属于可信内建 provider。"),
+        ),
+        ("en-US", aliases.to_owned(), Aliases(en_aliases)),
+        ("zh-CN", aliases.to_owned(), Aliases(zh_aliases)),
     ]);
+}
+
+pub(super) fn node_key_text(id: &str, suffix: &str) -> String {
+    format!("nodes.{id}.{suffix}")
+}
+
+pub(super) fn node_key(id: &str, suffix: &str) -> Result<I18nKey, BuiltinAssemblyError> {
+    iid(node_key_text(id, suffix))
 }

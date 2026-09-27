@@ -4,6 +4,7 @@
 //! node-system contracts. Runtime adapters consume the `sci` and `tabular`
 //! application boundaries.
 
+use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod families;
 mod inventory;
@@ -522,10 +523,8 @@ fn parameter(
 ) -> Result<Parameter, BuiltinAssemblyError> {
     Ok(Parameter {
         key: sid(key, ParameterKey::new)?,
-        title_key: iid(leak(format!("parameters.statistics.{key}.title")))?,
-        description_key: Some(iid(leak(format!(
-            "parameters.statistics.{key}.description"
-        )))?),
+        title_key: iid(format!("parameters.statistics.{key}.title"))?,
+        description_key: Some(iid(format!("parameters.statistics.{key}.description"))?),
         default_value: Some(TypedValue {
             value_type: value_type.clone(),
             value,
@@ -683,7 +682,7 @@ fn statistics_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyE
     for (index, &(id, _, _)) in CATEGORIES.iter().enumerate() {
         categories.push(CategoryRegistration {
             id: sid(id, NodeCategoryId::new)?,
-            title_key: iid(leak(format!("categories.{id}.title")))?,
+            title_key: iid(format!("categories.{id}.title"))?,
             parent: Some(sid("statistics", NodeCategoryId::new)?),
             order: 71 + index as i32,
         });
@@ -776,43 +775,41 @@ fn report_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 fn port_key(key: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
     sid(key, PortKey::new)
 }
-fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    iid(leak(format!("nodes.{id}.{suffix}")))
-}
-fn leak(value: String) -> &'static str {
-    Box::leak(value.into_boxed_str())
-}
 
-fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &NodeSpec) {
-    let title = leak(format!("nodes.{}.title", spec.id));
-    let documentation = leak(format!("nodes.{}.documentation", spec.id));
-    let aliases = leak(format!("nodes.{}.aliases", spec.id));
+fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &NodeSpec) {
+    let title = node_key_text(spec.id, "title");
+    let documentation = node_key_text(spec.id, "documentation");
+    let aliases = node_key_text(spec.id, "aliases");
     out.extend([
-        ("en-US", title, Text(spec.title)),
-        ("zh-CN", title, Text(spec.zh_title)),
+        ("en-US", title.to_owned(), Text(spec.title)),
+        ("zh-CN", title.to_owned(), Text(spec.zh_title)),
         (
             "en-US",
-            documentation,
+            documentation.to_owned(),
             Text("Lowered through the scientific runtime API and node-system contracts."),
         ),
         (
             "zh-CN",
-            documentation,
+            documentation.to_owned(),
             Text("通过科学计算运行时 API 和节点系统契约执行。"),
         ),
-        ("en-US", aliases, Aliases(spec.aliases)),
-        ("zh-CN", aliases, Aliases(spec.zh_aliases)),
+        ("en-US", aliases.to_owned(), Aliases(spec.aliases)),
+        ("zh-CN", aliases.to_owned(), Aliases(spec.zh_aliases)),
     ]);
 }
 
-fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
+fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
     out.extend([
         (
             "en-US",
-            "parameter_groups.configure.title",
+            "parameter_groups.configure.title".to_owned(),
             Text("Configure"),
         ),
-        ("zh-CN", "parameter_groups.configure.title", Text("配置")),
+        (
+            "zh-CN",
+            "parameter_groups.configure.title".to_owned(),
+            Text("配置"),
+        ),
     ]);
     for (key, en, zh) in [
         ("model_summary", "Model summary", "模型概览"),
@@ -843,19 +840,19 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "检验假设（例如 x1 = 0）",
         ),
     ] {
-        let title = leak(format!("parameters.statistics.{key}.title"));
-        let description = leak(format!("parameters.statistics.{key}.description"));
+        let title = format!("parameters.statistics.{key}.title");
+        let description = format!("parameters.statistics.{key}.description");
         out.extend([
-            ("en-US", title, Text(en)),
-            ("zh-CN", title, Text(zh)),
+            ("en-US", title.to_owned(), Text(en)),
+            ("zh-CN", title.to_owned(), Text(zh)),
             (
                 "en-US",
-                description,
+                description.to_owned(),
                 Text("Only selected summary contents and their dependencies are computed."),
             ),
             (
                 "zh-CN",
-                description,
+                description.to_owned(),
                 Text("仅计算选中的汇总内容及其必要依赖。"),
             ),
         ]);
@@ -925,13 +922,13 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ),
         ("categories.statistics.title", "Statistics", "统计"),
     ] {
-        out.push(("en-US", key, Text(en)));
-        out.push(("zh-CN", key, Text(zh)));
+        out.push(("en-US", key.to_owned(), Text(en)));
+        out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
     for &(id, en, zh) in CATEGORIES {
-        let key = leak(format!("categories.{id}.title"));
-        out.push(("en-US", key, Text(en)));
-        out.push(("zh-CN", key, Text(zh)));
+        let key = format!("categories.{id}.title");
+        out.push(("en-US", key.to_owned(), Text(en)));
+        out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
     for key in [
         "method",
@@ -955,8 +952,8 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         "event_study",
         "placebo_repetitions",
     ] {
-        let title = leak(format!("parameters.statistics.{key}.title"));
-        let description = leak(format!("parameters.statistics.{key}.description"));
+        let title = format!("parameters.statistics.{key}.title");
+        let description = format!("parameters.statistics.{key}.description");
         let (en, zh) = match key {
             "method" => ("Estimation method", "估计方法"),
             "constant" => ("Include intercept", "包含常数项"),
@@ -970,9 +967,13 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "scale" => ("Variance scale", "方差尺度"),
             _ => (key, key),
         };
-        out.push(("en-US", title, Text(en)));
-        out.push(("zh-CN", title, Text(zh)));
-        out.push(("en-US", description, Text("Typed statistical parameter.")));
-        out.push(("zh-CN", description, Text("类型化统计参数。")));
+        out.push(("en-US", title.to_owned(), Text(en)));
+        out.push(("zh-CN", title.to_owned(), Text(zh)));
+        out.push((
+            "en-US",
+            description.to_owned(),
+            Text("Typed statistical parameter."),
+        ));
+        out.push(("zh-CN", description.to_owned(), Text("类型化统计参数。")));
     }
 }
