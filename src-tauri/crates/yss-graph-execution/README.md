@@ -23,7 +23,7 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 
 执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
 
-`RunRegistry` 通过 `RunState` 记录运行状态和终态。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
+`RunRegistry` 通过 `RunState` 记录运行状态和终态。按完成顺序保留最近 1024 个终态，超过上限时淘汰最早完成者；Admitted、Running 和 Finalizing 不参与淘汰。保留期内取消请求仍区分 AlreadyCancelled / AlreadyTerminal，淘汰后返回 NotFound。该策略只作用于运行元数据，结果仍由 ResultStore 的租约规则管理。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。实际函数子计划 lowering/execution 尚未接入，缺少实现时编辑解析明确阻断。Execution 不携带始终为空的函数包、另一套 FunctionPlanAbi 或未使用的 recursion_limit；通用执行包只持有实际计划、参数与来源依据。
 
