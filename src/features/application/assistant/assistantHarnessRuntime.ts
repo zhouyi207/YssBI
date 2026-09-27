@@ -12,7 +12,7 @@ import {
 } from "@assistant-ui/react";
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
-import { getSettingsSnapshot, useSettingsRead } from "@/features/core/settings/read";
+import { useSettingsRead } from "@/features/core/settings/read";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { getActiveGraphContext } from "@/features/application/editor/editorGroupContext";
@@ -109,6 +109,7 @@ class AssistantHarnessProjection {
   private subscription: HarnessEventSubscription | null = null;
   private generation = 0;
   private streamGeneration = 0;
+  private providerRequest = 0;
   private recovering = false;
   private submitting = false;
   private readonly citationsByTurn = new Map<string, HarnessKnowledgeCitation[]>();
@@ -130,29 +131,11 @@ class AssistantHarnessProjection {
     this.toolsByTurn.clear();
     this.update({ ...INITIAL_SNAPSHOT, status: "initializing" });
     try {
-      const settings = getSettingsSnapshot();
-      if (!settings.isLoading) {
-        await HarnessService.configureProvider(
-          settings.ai.openAiModel,
-          settings.ai.openAiBaseUrl,
-          settings.ai.openAiApiKey,
-        ).catch((error: unknown) => {
-          if (generation === this.generation)
-            this.update({
-              ...this.snapshot,
-              error: toErrorReference(error, "assistant_provider_configuration_invalid"),
-            });
-        });
-      }
-      if (generation !== this.generation) return;
-      const runtime = await HarnessService.runtimeStatus();
-      if (generation !== this.generation) return;
       const conversations = await HarnessService.listSessions();
       if (generation !== this.generation) return;
       this.update({
         ...this.snapshot,
         conversations,
-        providerConfigured: runtime.providerConfigured,
       });
       const session =
         conversations.length > 0
@@ -263,11 +246,17 @@ class AssistantHarnessProjection {
     }
   }
 
+  readonly invalidateProvider = (): void => {
+    this.providerRequest += 1;
+    this.update({ ...this.snapshot, providerConfigured: false });
+  };
+
   readonly syncProvider = async (model: string, baseUrl: string, apiKey: string): Promise<void> => {
     const generation = this.generation;
+    const request = ++this.providerRequest;
     try {
       const runtime = await HarnessService.configureProvider(model, baseUrl, apiKey);
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || request !== this.providerRequest) return;
       this.update({
         ...this.snapshot,
         providerConfigured: runtime.providerConfigured,
@@ -283,7 +272,7 @@ class AssistantHarnessProjection {
               : "provider-unavailable",
       });
     } catch (error) {
-      if (generation !== this.generation) return;
+      if (generation !== this.generation || request !== this.providerRequest) return;
       this.update({
         ...this.snapshot,
         providerConfigured: false,
@@ -732,12 +721,23 @@ export function useAssistantHarnessRuntime() {
     return projection.stop;
   }, [projection, projectInstanceId]);
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !snapshot.sessionId) return;
+    projection.invalidateProvider();
     const timer = window.setTimeout(() => {
       void projection.syncProvider(ai.openAiModel, ai.openAiBaseUrl, ai.openAiApiKey);
     }, 300);
-    return () => window.clearTimeout(timer);
-  }, [ai.openAiApiKey, ai.openAiBaseUrl, ai.openAiModel, isLoading, projection]);
+    return () => {
+      window.clearTimeout(timer);
+      projection.invalidateProvider();
+    };
+  }, [
+    ai.openAiApiKey,
+    ai.openAiBaseUrl,
+    ai.openAiModel,
+    isLoading,
+    projection,
+    snapshot.sessionId,
+  ]);
   const runtime = useExternalStoreRuntime({
     messages: snapshot.messages,
     convertMessage: convertProjectionMessage,

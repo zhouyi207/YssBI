@@ -226,6 +226,8 @@ Provider 请求有连接/总时限，完整 model turn 也有独立时限；模�
 
 有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。`src/features/application/assistant/assistantHarnessRuntime.ts` 维护可重建的 projection、last sequence 和 reconnect；assistant-ui ExternalStore 只渲染 messages、plan、tool cards、memory 和 composer actions。
 
+Provider 初始化和设置变更统一由 Assistant 的 300ms 防抖 effect 配置，事件订阅建立前不开放发送。每次设置变化立即使旧配置回执失效；成功和失败回执都必须匹配当前 projection generation 和配置请求序号，迟到回执不能覆盖较新状态。
+
 提交携带 active graph reference。模型上下文由 Harness Core 的 `conversation` 从本会话的完整持久事件流和工具账本重建，以当前 TurnStarted 为边界；当前用户消息只加入一次。不限制最近轮数，不按条截断用户或 assistant 文本，也不将失败/取消轮次排除。相邻 TextDelta 合并，工具事件保留其间的顺序；已有流式正文时不重复追加 TurnCompleted.finalText。
 
 AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和统计计划变体。工具参数与成功/失败结果读取本会话中对应 invocation 的原始记录，Rig 映射为成对的原生 tool-call/tool-result 消息，不将工具证据降为 assistant 摘要。恢复后的成功 receipt 保留成功，失败保留结构化 failure，缺少确定终态的调用标记 outcome_unknown；取消或失败的 turn 附带明确状态，不暗示已经提交的操作被回滚。事件缺口或缺失的工具记录会明确失败，不静默发送不完整历史。
