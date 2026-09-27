@@ -3,7 +3,7 @@
 Backend-neutral scientific contracts shared by application workflows, Execution,
 the scientific runtime and numerical models.
 
-- `scientific`: OLS/ACF requests/results, `ScientificExecutionControl`, shared
+- `scientific`: linear regression (OLS/WLS/GLS) and ACF/PACF requests/results, `ScientificExecutionControl`, shared
   cancellation and computation errors. These types contain no execution-plan or
   project identities, and define no backend trait.
 - `regression`: the single OLS configuration/default and covariance selection.

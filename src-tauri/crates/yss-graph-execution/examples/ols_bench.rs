@@ -1,7 +1,8 @@
 //! OLS measurement using the first 100,000 rows of the data-engine benchmark fixture.
 use std::time::{Duration, Instant};
 use yss_sci_contract::scientific::{
-    OlsRequest, ScientificCancellationToken, ScientificExecutionControl,
+    LinearRegressionMethod, LinearRegressionRequest, ScientificCancellationToken,
+    ScientificExecutionControl,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,8 +14,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|x| 3.0 + 2.0 * x + (x * 0.2).sin())
         .collect();
     let start = Instant::now();
-    let result = yss_sci_runtime::ols(
-        OlsRequest {
+    let result = yss_sci_runtime::linear_regression(
+        LinearRegressionRequest {
+            method: LinearRegressionMethod::Ols,
             response,
             predictors: vec![predictor],
             options: Default::default(),

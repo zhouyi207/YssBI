@@ -60,13 +60,6 @@ pub struct AcfPacfResult {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct OlsRequest {
-    pub response: Vec<f64>,
-    pub predictors: Vec<Vec<f64>>,
-    pub options: OlsOptions,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum LinearRegressionMethod {
     Ols,
     Wls {

@@ -9,21 +9,6 @@ use yss_sci_contract::scientific::{
 };
 use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
-pub fn ols(
-    request: yss_sci_contract::scientific::OlsRequest,
-    control: &ScientificExecutionControl,
-) -> Result<yss_sci_contract::scientific::LinearRegressionResult, ScientificComputationError> {
-    linear_regression(
-        yss_sci_contract::scientific::LinearRegressionRequest {
-            response: request.response,
-            predictors: request.predictors,
-            options: request.options,
-            method: yss_sci_contract::scientific::LinearRegressionMethod::Ols,
-        },
-        control,
-    )
-}
-
 pub fn linear_regression(
     request: yss_sci_contract::scientific::LinearRegressionRequest,
     control: &ScientificExecutionControl,

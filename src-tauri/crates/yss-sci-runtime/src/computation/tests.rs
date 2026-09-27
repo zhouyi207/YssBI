@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use super::{acf_pacf, map_sci_error, ols};
+use super::{acf_pacf, linear_regression, map_sci_error};
 use yss_sci_contract::scientific::{
     AcfPacfRequest, ScientificCancellationToken, ScientificComputationError,
     ScientificExecutionControl, ScientificInputViolation,
@@ -94,15 +94,16 @@ fn computations_reject_cancelled_or_expired_calls_at_admission() {
 #[test]
 fn shared_ols_options_reach_the_model_and_typed_report() {
     use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
-    use yss_sci_contract::scientific::OlsRequest;
+    use yss_sci_contract::scientific::{LinearRegressionMethod, LinearRegressionRequest};
     let response = vec![1.1, 2.2, 2.8, 4.1, 5.3, 5.7, 7.2, 8.4];
     let predictors = vec![(1..=8).map(f64::from).collect::<Vec<_>>()];
     let options = OlsOptions {
         constant: false,
         covariance: OlsCovariance::Hc3,
     };
-    let result = ols(
-        OlsRequest {
+    let result = linear_regression(
+        LinearRegressionRequest {
+            method: LinearRegressionMethod::Ols,
             response: response.clone(),
             predictors: predictors.clone(),
             options: options.clone(),
@@ -139,8 +140,9 @@ fn shared_ols_options_reach_the_model_and_typed_report() {
     );
     assert_eq!(result.report.coefficients.len(), 1);
     assert_eq!(result.report.coefficients[0].variable, "x1");
-    let nonrobust = ols(
-        OlsRequest {
+    let nonrobust = linear_regression(
+        LinearRegressionRequest {
+            method: LinearRegressionMethod::Ols,
             response,
             predictors,
             options: OlsOptions {
