@@ -12,29 +12,40 @@ use yss_sci_contract::scientific::{
 };
 
 #[tauri::command]
-pub fn compute_acf_pacf(
-    application: State<ApplicationState>,
+pub async fn compute_acf_pacf(
+    application: State<'_, ApplicationState>,
     req: AcfPacfRequestDto,
 ) -> Result<AcfPacfResponseDto, CommandError> {
-    let _session = application.capture_session().map_err(|error| {
+    let session = application.capture_session().map_err(|error| {
         CommandError::expected(match error {
             SessionCaptureError::Inactive => "stale_project_lifecycle",
             SessionCaptureError::Replacing => "project_lifecycle_admission_closed",
             SessionCaptureError::Recovering => "project_recovery_required",
         })
     })?;
-    yss_sci_runtime::acf_pacf(
-        AcfPacfRequest {
-            values: req.residuals,
-            max_lag: req.max_lag,
-        },
-        &ScientificExecutionControl {
-            cancellation: ScientificCancellationToken::new(),
-            deadline: Instant::now() + Duration::from_secs(60),
-        },
-    )
-    .map(acf_pacf_response)
-    .map_err(acf_pacf_command_error)
+    // Queue time consumes the same budget as numerical work.
+    let control = ScientificExecutionControl {
+        cancellation: ScientificCancellationToken::new(),
+        deadline: Instant::now() + Duration::from_secs(60),
+    };
+    let worker_control = control.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        yss_sci_runtime::acf_pacf(
+            AcfPacfRequest {
+                values: req.residuals,
+                max_lag: req.max_lag,
+            },
+            &worker_control,
+        )
+    })
+    .await
+    .map_err(CommandError::internal)?
+    .map_err(acf_pacf_command_error)?;
+    application
+        .revalidate_captured_session(&session)
+        .map_err(|_| CommandError::expected("stale_project_lifecycle"))?;
+    control.check().map_err(acf_pacf_command_error)?;
+    Ok(acf_pacf_response(result))
 }
 
 fn acf_pacf_response(result: AcfPacfResult) -> AcfPacfResponseDto {

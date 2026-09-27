@@ -28,16 +28,28 @@ impl ScientificCancellationToken {
     }
 }
 
-/// Admission control for a synchronous scientific computation.
+/// Cooperative control for a synchronous scientific computation.
 ///
-/// Runtime functions sample cancellation and the deadline before dispatch. This
-/// contract does not claim cooperative interruption after computation starts.
+/// Callers own scheduling and budgets. ACF/PACF samples this control during input
+/// scans and numerical loops, and before returning. Linear regression checks at
+/// stage boundaries; a running matrix decomposition is not interruptible.
+#[derive(Clone)]
 pub struct ScientificExecutionControl {
     pub cancellation: ScientificCancellationToken,
     pub deadline: Instant,
 }
 
 impl ScientificExecutionControl {
+    pub fn check(&self) -> Result<(), ScientificComputationError> {
+        if self.cancellation.is_cancelled() {
+            return Err(ScientificComputationError::Cancelled);
+        }
+        if self.deadline <= Instant::now() {
+            return Err(ScientificComputationError::DeadlineExceeded);
+        }
+        Ok(())
+    }
+
     pub fn from_shared(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
         Self {
             cancellation: ScientificCancellationToken::from_shared(cancellation),

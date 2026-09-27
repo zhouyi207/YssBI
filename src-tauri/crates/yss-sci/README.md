@@ -22,6 +22,16 @@ matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `stats::linear_test`.
 Project/result identity checks and report retrieval remain in Application.
 
+## ACF/PACF
+
+`ts::acf_pacf::compute_acf_pacf` validates finite numerical input and computes ACF
+once for the joint result, then uses the same correlations for Durbin-Levinson PACF.
+Independent `acf` and `pacf` reuse these numerical helpers. Controlled computation
+checks cancellation/deadlines at stage boundaries and every 1024 loop elements;
+callers retain worker scheduling and product lag budgets. The numerical lag bound
+is `n - 1`, independent of the runtime report policy. Constant series preserve the
+existing lag-zero-only ACF and empty PACF result.
+
 ## OLS model boundary
 
 `regression::linear_model::ols` owns the model, its fitted result and its errors:

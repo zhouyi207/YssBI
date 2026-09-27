@@ -25,3 +25,8 @@ policy. There is no global approximate-equality tolerance configuration.
 
 Bayesian plugin inputs and cancellation controls belong to the plugin's
 `yss-bayes-worker`; plugins do not depend on this crate.
+
+`ScientificExecutionControl::check` gives cancellation priority over deadline expiry.
+ACF/PACF checks during input scans, ACF accumulation and PACF recursion; linear
+regression checks between stages, without interrupting a running decomposition.
+Scheduling, concurrency and the budget remain caller-owned.

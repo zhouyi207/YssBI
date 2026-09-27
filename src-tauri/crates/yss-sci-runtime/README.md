@@ -19,7 +19,15 @@ panel preparation share the checked numeric-grid helpers in `data::time_series::
 
 `linear_regression` and `acf_pacf` accept neutral requests and `ScientificExecutionControl` from
 `yss-sci-contract`. Fit and Summary kernels forward the execution cancellation and deadline;
-standalone IPC ACF/PACF uses a 60-second deadline.
+standalone IPC ACF/PACF uses a blocking worker with a 60-second deadline that includes queue time.
+
+`acf_pacf` applies the report policy (at least four observations and a positive requested
+lag, capped at `min(n / 2 - 1, 40)`), then passes slices and the same control to
+`yss-sci::ts::acf_pacf::compute_acf_pacf`. SCI owns finite-input validation and the
+joint numerical calculation: one ACF feeds the PACF recursion. It checks cancellation
+and deadlines throughout input/numerical loops and before returning. The runtime
+rechecks before delivering the shared `AcfPacfResult`; no duplicate runtime request/result
+records are maintained. SCI itself permits lags through `n - 1`; 40 is a report budget.
 Application declares this dependency for its IPC commands. Desktop composition
 and other application modules do not call it or construct/inject a backend object.
 The runtime has no Execution dependency.

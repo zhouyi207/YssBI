@@ -519,7 +519,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                         | series::SeriesKernel::InverseStandardize,
                     ) => 3,
                     Boolean(_) => 3,
-                    Statistical(Summary) => 5,
+                    Statistical(Summary) => 6,
                     Statistical(Predict) => 4,
                     Convert => 6,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 3,

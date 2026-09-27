@@ -1,8 +1,5 @@
 //! Synchronous scientific computation entry points.
 
-use std::time::Instant;
-
-use crate::time_series::acf_pacf::{AcfPacfInput, compute_acf_pacf as compute_acf_pacf_api};
 use yss_sci_contract::scientific::{
     AcfPacfRequest, AcfPacfResult, ScientificComputationError, ScientificExecutionControl,
     ScientificInputViolation,
@@ -14,7 +11,7 @@ pub fn linear_regression(
     control: &ScientificExecutionControl,
 ) -> Result<yss_sci_contract::scientific::LinearRegressionResult, ScientificComputationError> {
     use yss_sci_contract::scientific::LinearRegressionResult;
-    admit(control)?;
+    control.check()?;
     let observations = request.response.len();
     if request.predictors.is_empty()
         || observations <= request.predictors.len() + usize::from(request.options.constant)
@@ -35,7 +32,7 @@ pub fn linear_regression(
         .enumerate()
     {
         if index % 1024 == 0 {
-            admit(control)?;
+            control.check()?;
         }
         if !value.is_finite() {
             return Err(invalid(ScientificInputViolation::NonFiniteInput));
@@ -50,7 +47,7 @@ pub fn linear_regression(
         missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
     };
     let constant = request.options.constant;
-    admit(control)?;
+    control.check()?;
     let fit = yss_sci::regression::fit::fit_linear_regression(
         request.response,
         &request.predictors,
@@ -59,14 +56,14 @@ pub fn linear_regression(
         metadata,
     )
     .map_err(map_sci_error)?;
-    admit(control)?;
+    control.check()?;
     let report = crate::regression::report::linear_regression_report(&fit)
         .map_err(|_| ScientificComputationError::ComputationFailed)?;
     let mut design = request.predictors;
     if constant {
         design.insert(0, vec![1.0; observations]);
     }
-    admit(control)?;
+    control.check()?;
     Ok(LinearRegressionResult {
         constant,
         coefficients: fit.coefficients,
@@ -80,41 +77,18 @@ pub fn acf_pacf(
     request: AcfPacfRequest,
     control: &ScientificExecutionControl,
 ) -> Result<AcfPacfResult, ScientificComputationError> {
-    admit(control)?;
-    validate_acf_pacf_request(&request)?;
-    let output = compute_acf_pacf_api(AcfPacfInput {
-        residuals: request.values,
-        max_lag: request.max_lag,
-    })
-    .map_err(map_sci_error)?;
-    Ok(AcfPacfResult {
-        acf: output.acf,
-        pacf: output.pacf,
-        n: output.n,
-    })
-}
-
-fn admit(control: &ScientificExecutionControl) -> Result<(), ScientificComputationError> {
-    if control.cancellation.is_cancelled() {
-        return Err(ScientificComputationError::Cancelled);
-    }
-    if control.deadline <= Instant::now() {
-        return Err(ScientificComputationError::DeadlineExceeded);
-    }
-    Ok(())
-}
-
-fn validate_acf_pacf_request(request: &AcfPacfRequest) -> Result<(), ScientificComputationError> {
+    control.check()?;
     if request.values.len() < 4 {
         return Err(invalid(ScientificInputViolation::EmptyInput));
-    }
-    if request.values.iter().any(|value| !value.is_finite()) {
-        return Err(invalid(ScientificInputViolation::NonFiniteInput));
     }
     if request.max_lag == 0 {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }
-    Ok(())
+    // Report budget, not an algorithmic limit: preserve the existing lag policy.
+    let max_lag = request.max_lag.min(request.values.len() / 2 - 1).min(40);
+    let result = yss_sci::ts::acf_pacf::compute_acf_pacf(&request.values, max_lag, control)?;
+    control.check()?;
+    Ok(result)
 }
 
 const fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {

@@ -1,5 +1,9 @@
 use serde::Deserialize;
-use yss_sci_runtime::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput, compute_acf_pacf};
+use std::time::{Duration, Instant};
+use yss_sci_contract::scientific::{
+    AcfPacfRequest, AcfPacfResult, ScientificCancellationToken, ScientificExecutionControl,
+};
+use yss_sci_runtime::acf_pacf;
 
 const SIMPLE_EXPONENTIAL: &str =
     include_str!("fixtures/time_series/acf_pacf/simple_exponential.json");
@@ -8,9 +12,22 @@ const SIMPLE_EXPONENTIAL: &str =
 #[serde(rename_all = "camelCase")]
 struct AcfPacfGoldenFixture {
     name: String,
-    input: AcfPacfInput,
-    expected: AcfPacfOutput,
+    input: FixtureInput,
+    expected: ExpectedOutput,
     tolerance: Tolerance,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct FixtureInput {
+    residuals: Vec<f64>,
+    max_lag: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedOutput {
+    acf: Vec<f64>,
+    pacf: Vec<f64>,
+    n: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -21,8 +38,17 @@ struct Tolerance {
 #[test]
 fn rust_acf_pacf_matches_golden_fixtures() {
     for fixture in fixtures() {
-        let result = compute_acf_pacf(fixture.input.clone())
-            .unwrap_or_else(|error| panic!("{} rust acf/pacf failed: {error}", fixture.name));
+        let result = acf_pacf(
+            AcfPacfRequest {
+                values: fixture.input.residuals.clone(),
+                max_lag: fixture.input.max_lag,
+            },
+            &ScientificExecutionControl {
+                cancellation: ScientificCancellationToken::new(),
+                deadline: Instant::now() + Duration::from_secs(5),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{} rust acf/pacf failed: {error}", fixture.name));
 
         assert_output_close(
             &fixture.name,
@@ -43,8 +69,8 @@ fn parse_fixture(contents: &str) -> AcfPacfGoldenFixture {
 
 fn assert_output_close(
     name: &str,
-    actual: &AcfPacfOutput,
-    expected: &AcfPacfOutput,
+    actual: &AcfPacfResult,
+    expected: &ExpectedOutput,
     tolerance: f64,
 ) {
     assert_eq!(actual.n, expected.n, "{name} n");

@@ -27,6 +27,16 @@ fn acf_pacf_maps_results_and_rejects_invalid_requests() {
     assert_eq!(result.acf.len(), 3);
     assert_eq!(result.pacf.len(), 2);
     assert_eq!(result.n, 6);
+    let bounded = acf_pacf(
+        AcfPacfRequest {
+            values: (0..200).map(|value| (value % 13) as f64).collect(),
+            max_lag: usize::MAX,
+        },
+        &active_control(),
+    )
+    .unwrap();
+    assert_eq!(bounded.acf.len(), 41);
+    assert_eq!(bounded.pacf.len(), 40);
 
     assert_eq!(
         acf_pacf(
