@@ -135,7 +135,7 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
           {t("detail.nodeDoc.documentation")}
         </h3>
         {item.documentation ? (
-          <div className={markdownProseClass}>
+          <div className={`${markdownProseClass} prose-sm`}>
             <MarkdownRenderer markdown={item.documentation} />
           </div>
         ) : (

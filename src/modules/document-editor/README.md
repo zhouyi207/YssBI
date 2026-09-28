@@ -57,8 +57,40 @@ are not exposed by this editor.
 
 Doc starts with a full-width Markdown textarea. A floating top-right button overlays
 the content without reserving space and switches between editing and a rendered preview
-using the shared `MarkdownRenderer`. Preview reads the
-current input buffer; the textarea stays mounted while hidden to retain editing state.
+using the shared `MarkdownRenderer`, which supports GitHub Flavored Markdown
+(including tables) and KaTeX math. Preview reads the current input buffer; the
+textarea stays mounted while hidden to retain editing state.
+Single tildes stay literal for regression model notation such as `y ~ x1 + x2`;
+strikethrough uses double tildes (`~~text~~`) in the shared Markdown pipeline.
+Parser options live in `src/shared/ui/markdownRendering.tsx` and are shared with
+Assistant output. Context-sensitive statistical writing rules belong to the
+[report-writing skill](../../../src-tauri/crates/yss-harness-core/skills/statistical-report-writing/SKILL.md),
+which the Harness Host loads into Assistant requests. The renderer does not guess
+or rewrite currency, significance markers, programming identifiers, or table pipes.
+Single-dollar `$...$` formulas stay inline at a size close to surrounding text;
+paragraphs, lists and table cells containing math use a comfortable line height.
+Double-dollar `$$...$$` formulas display on their own centered line, whether their
+delimiters are written on the same line or separate lines. Formula layout is
+selected from parsed math nodes, leaving code examples and escaped dollars literal.
+The host and Julia UI pin KaTeX to a version supported by both `rehype-katex` and
+`micromark-extension-math`, so all consumers resolve consistently without dependency
+overrides. Formula markup and CSS come from the same package, including fraction
+and subscript height calculations; direct imports use its bundled TypeScript
+declarations. Keep this version alignment when updating math dependencies.
+Preview uses Tailwind Typography's type scale in a centered column that fills the
+editor pane's available width, with responsive side padding instead of a fixed
+character-width cap. Node documentation uses the same typography with the compact
+scale. Shared prose colors and code-block
+surfaces follow application theme tokens; Shiki token colors switch with the app's
+light/dark mode, including OLED. The highlighter is loaded lazily and shared across
+views, with explicit language imports for common web, scripting and data languages.
+Code remains readable before loading, and unsupported languages remain plain text.
+Inline code keeps Typography's code styling without decorative backticks;
+literal backticks inside code remain part of the content.
+Wide tables, code blocks and display formulas scroll within the reading column.
+Tables size to their content and stay centered within the available column width.
+Table scroll containers have no decorative frame; spacing belongs outside the
+container, with the table's vertical margins reset so no blank bands appear inside it.
 Saving is available through Ctrl+S / Cmd+S and the File menu in both modes.
 Doc's Details always shows its file information, including while switching between
 editing and preview. Tab activation, close and rename follow the common resource policy.
@@ -120,6 +152,23 @@ Manual acceptance on the desktop:
 3. In Doc, verify the floating top-right button reserves no content space, remains
    available while scrolling and switches between full-width editing and preview,
    renders current input and preserves text and native undo when returning to editing.
+   Verify Markdown tables render with their header, cells and column alignment,
+   including inline math in cells and display math outside tables.
+   Check `$x^2$` and `$\frac{a}{b}$` within prose and table cells: formulas stay inline,
+   with enough line height for fractions and subscripts. Compare same-line
+   `$$x^2$$` with multiline double-dollar formulas: both are centered independently
+   of surrounding text. Dollar delimiters inside code examples or escaped in prose
+   must remain literal.
+   Check heading spacing, ordered/nested lists, links, quotes and code blocks in both
+   the reading preview and compact node documentation. Switch Light Modern, Dark
+   Modern and OLED while viewing highlighted SQL, Python, Rust and JavaScript;
+   verify colors update without changing content. Check unknown/unlabelled code
+   fences, narrow split panes and horizontal scrolling of wide tables and formulas.
+   Resize the window and split panes; verify the centered preview expands and shrinks
+   with its pane. Check tables alone and between paragraphs: no enclosing frame or
+   blank bands above/below their content, while normal paragraph spacing remains.
+   Verify short tables fit their content and remain centered; wide tables shrink
+   or scroll within narrow panes without clipping their first or last column.
    Use Ctrl+S before blurring and Save from the File menu in both modes. Verify saved
    text, tab dirty indicators and Save/Discard/Cancel when closing the last tab or project.
 4. Edit a file externally while its buffer is dirty. Verify a stale edit/save is

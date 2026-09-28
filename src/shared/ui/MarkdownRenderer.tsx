@@ -1,15 +1,21 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+import {
+  markdownComponents,
+  markdownRemarkPlugins,
+  useMarkdownRehypePlugins,
+} from "./markdownRendering";
 
-const REMARK_PLUGINS = [remarkMath];
-const REHYPE_PLUGINS = [rehypeKatex];
+export const MarkdownRenderer = memo(function MarkdownRenderer({ markdown }: { markdown: string }) {
+  const rehypePlugins = useMarkdownRehypePlugins();
 
-export function MarkdownRenderer({ markdown }: { markdown: string }) {
   return (
-    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
+    <ReactMarkdown
+      remarkPlugins={markdownRemarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={markdownComponents}
+    >
       {markdown}
     </ReactMarkdown>
   );
-}
+});

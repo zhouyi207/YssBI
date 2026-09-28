@@ -6,12 +6,14 @@ import {
 } from "@assistant-ui/react-markdown";
 import { useTranslation } from "react-i18next";
 import { VscCheck, VscCopy } from "react-icons/vsc";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
 import { Button } from "@/components/ui/button";
 import { openExternalUrlWithDialog } from "@/features/application/window/openExternalUrlWithDialog";
-import "katex/dist/katex.min.css";
+import { markdownProseClass } from "@/shared/ui/markdownProseClass";
+import {
+  markdownComponents,
+  markdownRemarkPlugins,
+  useMarkdownRehypePlugins,
+} from "@/shared/ui/markdownRendering";
 import "./assistant.css";
 
 function CodeHeader({ language, code }: CodeHeaderProps) {
@@ -25,7 +27,7 @@ function CodeHeader({ language, code }: CodeHeaderProps) {
         : "panel.assistantCopyCode",
   );
   return (
-    <div className="assistant-code-header">
+    <div className="assistant-code-header not-prose">
       <span>{language || t("panel.assistantCode")}</span>
       <Button
         type="button"
@@ -66,18 +68,19 @@ function MarkdownLink({ children, href }: { children?: ReactNode; href?: string 
 }
 
 const components = {
+  ...markdownComponents,
   CodeHeader,
   a: MarkdownLink,
 };
-const remarkPlugins = [remarkGfm, remarkMath];
-const rehypePlugins = [rehypeKatex];
 
 export function AssistantMarkdown() {
+  const rehypePlugins = useMarkdownRehypePlugins();
+
   return (
     <MarkdownTextPrimitive
-      className="assistant-markdown"
+      className={`${markdownProseClass} assistant-markdown w-full max-w-full prose-sm`}
       components={components}
-      remarkPlugins={remarkPlugins}
+      remarkPlugins={markdownRemarkPlugins}
       rehypePlugins={rehypePlugins}
       preprocess={normalizeMathDelimiters}
       smooth

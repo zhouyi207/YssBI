@@ -49,9 +49,11 @@ function MarkdownEditor({
         <article
           aria-label={t("documents.preview")}
           tabIndex={0}
-          className={`min-h-0 flex-1 overflow-auto p-6 pt-2 ${markdownProseClass}`}
+          className="min-h-0 min-w-0 flex-1 overflow-auto px-[clamp(1.5rem,4%,5rem)] py-10"
         >
-          <MarkdownRenderer markdown={input.value} />
+          <div className={`${markdownProseClass} mx-auto w-full max-w-full prose-base`}>
+            <MarkdownRenderer markdown={input.value} />
+          </div>
         </article>
       )}
     </div>

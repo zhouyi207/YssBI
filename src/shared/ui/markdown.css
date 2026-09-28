@@ -1,0 +1,111 @@
+@utility prose-app {
+  /* Typography's prose and size utilities can be emitted after this utility. */
+  &.prose {
+    /* Application tokens already follow the selected light, dark or OLED theme. */
+    --tw-prose-body: var(--foreground);
+    --tw-prose-headings: var(--foreground);
+    --tw-prose-lead: var(--muted-foreground);
+    --tw-prose-links: var(--primary);
+    --tw-prose-bold: var(--foreground);
+    --tw-prose-counters: var(--muted-foreground);
+    --tw-prose-bullets: var(--muted-foreground);
+    --tw-prose-hr: var(--border);
+    --tw-prose-quotes: var(--foreground);
+    --tw-prose-quote-borders: var(--border);
+    --tw-prose-captions: var(--muted-foreground);
+    --tw-prose-kbd: var(--foreground);
+    --tw-prose-kbd-shadows: var(--border);
+    --tw-prose-code: var(--foreground);
+    --tw-prose-pre-code: var(--foreground);
+    --tw-prose-pre-bg: var(--muted);
+    --tw-prose-th-borders: var(--border);
+    --tw-prose-td-borders: var(--border);
+    overflow-wrap: anywhere;
+
+    /* Typography adds decorative backticks; display only the actual code text. */
+    & :where(code):not(:where(.not-prose, .not-prose *))::before,
+    & :where(code):not(:where(.not-prose, .not-prose *))::after {
+      content: none;
+    }
+
+    & :where(pre) {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-wrap: normal;
+    }
+
+    /* Shiki emits both token palettes; changing the app theme needs no reparse. */
+    & :where(.shiki span) {
+      color: var(--shiki-light);
+    }
+
+    @variant dark {
+      & :where(.shiki span) {
+        color: var(--shiki-dark);
+      }
+    }
+
+    & :where(.markdown-table-scroll) {
+      max-width: 100%;
+      margin-block: 1.25em;
+      overflow-x: auto;
+
+      &:first-child {
+        margin-block-start: 0;
+      }
+
+      &:last-child {
+        margin-block-end: 0;
+      }
+    }
+
+    & :where(.markdown-table-scroll > table) {
+      width: auto;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    & :where(th, td) {
+      padding-inline: 1.25em;
+    }
+
+    & :where(thead) {
+      background-color: var(--muted);
+    }
+
+    & :where(p, li, th, td):has(.katex) {
+      line-height: 1.8;
+    }
+
+    & :where(.contains-task-list) {
+      list-style: none;
+      padding-inline-start: 0;
+    }
+
+    & :where(.task-list-item input) {
+      margin-inline-end: 0.5em;
+    }
+  }
+}
+
+/* KaTeX ships unlayered CSS, so its scoped overrides must also be unlayered. */
+.prose-app.prose .katex:not(.katex-display > .katex) {
+  font-size: 1.05em;
+}
+
+.prose-app.prose .katex-display {
+  display: block;
+  max-width: 100%;
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+  text-align: center;
+}
+
+.prose-app.prose .katex-display > .katex {
+  /* Center short equations while keeping the start of wide equations scrollable. */
+  width: max-content;
+  min-width: 100%;
+  text-align: center;
+}
