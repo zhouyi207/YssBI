@@ -4,8 +4,8 @@ use crate::ipc::error::CommandError;
 use crate::ipc::schema::statistics::{
     DurbinWatsonResultDto, SerialTestWithLagDto, SerialTestsRequestDto, SerialTestsResponseDto,
 };
-use yss_sci_contract::serial_tests::SerialTestsInput;
-use yss_sci_runtime::time_series::serial_tests::compute_serial_tests as compute_serial_tests_runtime;
+use yss_sci_contract::diagnostics::serial_correlation::SerialTestsInput;
+use yss_sci_runtime::diagnostics::serial_correlation::compute_serial_tests as compute_serial_tests_runtime;
 
 #[tauri::command]
 pub fn compute_serial_tests(

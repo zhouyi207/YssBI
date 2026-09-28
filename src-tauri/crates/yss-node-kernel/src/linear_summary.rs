@@ -1,13 +1,12 @@
 //! A fitted model and bounded, model-owned memoization of its selected analyses.
 
 use std::sync::{Arc, Mutex};
+use yss_sci_contract::diagnostics::serial_correlation::{SerialTestsInput, SerialTestsOutput};
+use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 use yss_sci_contract::hypothesis::{HypothesisTestInput, HypothesisTestOutput};
+use yss_sci_contract::regression::linear::LinearRegressionResult;
 use yss_sci_contract::regression::summary::LinearSummaryOptions;
-use yss_sci_contract::scientific::{
-    AcfPacfRequest, AcfPacfResult, LinearRegressionResult, ScientificComputationError,
-    ScientificExecutionControl,
-};
-use yss_sci_contract::serial_tests::{SerialTestsInput, SerialTestsOutput};
+use yss_sci_contract::time_series::acf_pacf::{AcfPacfRequest, AcfPacfResult};
 
 use crate::{KernelControl, KernelError};
 
@@ -99,7 +98,7 @@ impl LinearRegressionValue {
                 value
             } else {
                 let value = Arc::new(
-                    yss_sci_runtime::acf_pacf(
+                    yss_sci_runtime::time_series::acf_pacf(
                         AcfPacfRequest {
                             values: self.residuals.clone(),
                             max_lag: lag,
@@ -137,7 +136,7 @@ impl LinearRegressionValue {
                 value
             } else {
                 let value = Arc::new(
-                    yss_sci_runtime::time_series::serial_tests::compute_serial_tests(
+                    yss_sci_runtime::diagnostics::serial_correlation::compute_serial_tests(
                         SerialTestsInput {
                             residuals: self.residuals.clone(),
                             exog: Some(
@@ -210,7 +209,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::AtomicBool;
     use std::time::{Duration, Instant};
-    use yss_sci_contract::scientific::{LinearRegressionMethod, LinearRegressionRequest};
+    use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
 
     #[test]
     fn selected_analyses_reuse_only_matching_model_and_parameters() {
@@ -218,7 +217,7 @@ mod tests {
             Arc::new(AtomicBool::new(false)),
             Instant::now() + Duration::from_secs(30),
         );
-        let model: LinearRegressionValue = yss_sci_runtime::linear_regression(
+        let model: LinearRegressionValue = yss_sci_runtime::regression::linear::linear_regression(
             LinearRegressionRequest {
                 response: (0..48)
                     .map(|i| 2.0 + i as f64 * 0.4 + (i % 7) as f64 * 0.05)

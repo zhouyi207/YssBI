@@ -2,11 +2,11 @@ use super::numeric_input;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::sync::Arc;
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
-use yss_sci_contract::scientific::{
-    LinearRegressionMethod, LinearRegressionRequest, ScientificComputationError,
-    ScientificExecutionControl, ScientificInputViolation,
+use yss_sci_contract::execution::{
+    ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
+use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
+use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 
 #[derive(Clone, Copy)]
 pub(crate) enum LinearKernel {
@@ -134,7 +134,7 @@ pub(crate) fn execute(
                 _ => return Err(KernelError::InvalidParameter),
             };
             let response = prepared.remove(0);
-            let result = yss_sci_runtime::linear_regression(
+            let result = yss_sci_runtime::regression::linear::linear_regression(
                 LinearRegressionRequest {
                     response,
                     predictors: prepared,

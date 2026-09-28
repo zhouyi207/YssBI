@@ -6,10 +6,10 @@ use crate::ipc::error::CommandError;
 use crate::ipc::schema::statistics::{AcfPacfRequestDto, AcfPacfResponseDto};
 use crate::session::{ApplicationState, SessionCaptureError};
 use tauri::State;
-use yss_sci_contract::scientific::{
-    AcfPacfRequest, AcfPacfResult, ScientificCancellationToken, ScientificComputationError,
-    ScientificExecutionControl,
+use yss_sci_contract::execution::{
+    ScientificCancellationToken, ScientificComputationError, ScientificExecutionControl,
 };
+use yss_sci_contract::time_series::acf_pacf::{AcfPacfRequest, AcfPacfResult};
 
 #[tauri::command]
 pub async fn compute_acf_pacf(
@@ -30,7 +30,7 @@ pub async fn compute_acf_pacf(
     };
     let worker_control = control.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        yss_sci_runtime::acf_pacf(
+        yss_sci_runtime::time_series::acf_pacf(
             AcfPacfRequest {
                 values: req.residuals,
                 max_lag: req.max_lag,

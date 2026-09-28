@@ -1,7 +1,7 @@
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
-use yss_sci_contract::scientific::{ScientificComputationError, ScientificExecutionControl};
+use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 
 #[derive(Clone, Copy)]
 pub(crate) enum DistributionKernel {

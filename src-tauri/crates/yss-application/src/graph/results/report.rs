@@ -3,14 +3,15 @@ use yss_data_contract::TabularScalar;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::{LinearSummary, RuntimeValue};
 use yss_relational_contract::RelationColumn;
+use yss_sci_contract::regression::linear::LinearRegressionResult;
 use yss_sci_contract::regression::report::LinearModelSummary;
 use yss_sci_contract::regression::summary::LinearSummaryOptions;
-use yss_sci_contract::scientific::{AcfPacfResult, LinearRegressionResult};
+use yss_sci_contract::time_series::acf_pacf::AcfPacfResult;
 
 use super::{MAX_RESULT_PAGE_ROWS, ResultPageKind, ResultPageProjection};
 use crate::session::{ApplicationState, SessionCaptureError};
+use yss_sci_contract::diagnostics::serial_correlation::SerialTestsOutput;
 use yss_sci_contract::hypothesis::HypothesisTestOutput;
-use yss_sci_contract::serial_tests::SerialTestsOutput;
 
 pub(crate) mod presentation;
 

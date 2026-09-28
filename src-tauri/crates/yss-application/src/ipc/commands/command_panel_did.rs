@@ -1,8 +1,8 @@
 //! Panel DID 结果页按需调用：虚构处理组置换检验
 
 use crate::ipc::error::CommandError;
-use yss_sci_contract::panel::{ComputeDidFakeGroupRequest, DidPlaceboFakeGroupBlock};
-use yss_sci_runtime::panel::did::compute_fake_group_ri;
+use yss_sci_contract::causal::did::{ComputeDidFakeGroupRequest, DidPlaceboFakeGroupBlock};
+use yss_sci_runtime::causal::did::compute_fake_group_ri;
 
 fn compute_panel_did_fake_group_ri_request(
     req: ComputeDidFakeGroupRequest,
@@ -20,7 +20,7 @@ pub fn compute_panel_did_fake_group_ri(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_sci_contract::panel::{DidFakeGroupEnginePayload, ExogLabelEntry};
+    use yss_sci_contract::causal::did::{DidFakeGroupEnginePayload, ExogLabelEntry};
 
     fn malformed_request() -> ComputeDidFakeGroupRequest {
         ComputeDidFakeGroupRequest {
