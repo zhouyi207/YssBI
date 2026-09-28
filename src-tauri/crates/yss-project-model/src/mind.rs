@@ -4,13 +4,6 @@ use std::collections::{HashMap, HashSet};
 pub const MAX_MIND_NODES: usize = 5_000;
 pub type MindPath = FilePath<MindDocument>;
 pub type MindState = FileState<MindDocument>;
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MindPosition {
-    pub x: f64,
-    pub y: f64,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MindReference {
@@ -36,8 +29,6 @@ pub struct MindNode {
     pub parent_id: Option<String>,
     pub content: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub position: Option<MindPosition>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<MindReference>,
 }
 
@@ -58,13 +49,6 @@ impl MindDocument {
         for node in &self.nodes {
             if node.id.is_empty() || node.id.len() > 128 || by_id.insert(&node.id, node).is_some() {
                 return Err("invalid or duplicate mind node id".into());
-            }
-            if node
-                .position
-                .as_ref()
-                .is_some_and(|p| !p.x.is_finite() || !p.y.is_finite())
-            {
-                return Err("invalid mind position".into());
             }
         }
         let root = by_id.get(&self.root_id).ok_or("missing mind root")?;
@@ -104,7 +88,6 @@ impl FileContent for MindDocument {
                 id: root_id,
                 parent_id: None,
                 content: title.into(),
-                position: None,
                 reference: None,
             }],
         }
@@ -141,9 +124,6 @@ impl FileContent for MindDocument {
             MindEdit::AddNode { node } => mind.nodes.push(node),
             MindEdit::SetContent { node_id, content } => {
                 node_mut(mind, &node_id)?.content = content
-            }
-            MindEdit::SetPosition { node_id, position } => {
-                node_mut(mind, &node_id)?.position = position
             }
             MindEdit::SetReference { node_id, reference } => {
                 node_mut(mind, &node_id)?.reference = reference
@@ -219,10 +199,6 @@ pub enum MindEdit {
         node_id: String,
         content: String,
     },
-    SetPosition {
-        node_id: String,
-        position: Option<MindPosition>,
-    },
     SetReference {
         node_id: String,
         reference: Option<MindReference>,
@@ -250,7 +226,6 @@ mod tests {
                     id: "child".into(),
                     parent_id: Some("root".into()),
                     content: "OLS".into(),
-                    position: None,
                     reference: None,
                 },
             })
@@ -268,9 +243,14 @@ mod tests {
         invalid = valid.clone();
         invalid.nodes.push(valid.nodes[1].clone());
         assert!(invalid.validate().is_err());
-        let mut wire = serde_json::to_value(&valid).unwrap();
-        wire["nodes"][0]["selected"] = serde_json::json!(true);
-        assert!(MindDocument::decode(&serde_json::to_vec(&wire).unwrap()).is_err());
+        for (key, value) in [
+            ("selected", serde_json::json!(true)),
+            ("position", serde_json::json!({"x": 10, "y": 20})),
+        ] {
+            let mut wire = serde_json::to_value(&valid).unwrap();
+            wire["nodes"][0][key] = value;
+            assert!(MindDocument::decode(&serde_json::to_vec(&wire).unwrap()).is_err());
+        }
         assert!(crate::doc::DocPath::parse("docs/../escape.md").is_err());
         assert!(MindPath::parse("minds/nested/Map.yssbi-mind").is_err());
     }

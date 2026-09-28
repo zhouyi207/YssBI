@@ -42,17 +42,12 @@ function parseMind(value: unknown): MindDocument {
   for (const node of mind.nodes) {
     if (
       !record(node) ||
-      !exact(node, ["id", "parentId", "content"], ["position", "reference"]) ||
+      !exact(node, ["id", "parentId", "content"], ["reference"]) ||
       typeof node.id !== "string" ||
       !node.id ||
       ids.has(node.id) ||
       (node.parentId !== null && typeof node.parentId !== "string") ||
       typeof node.content !== "string" ||
-      (node.position !== undefined &&
-        (!record(node.position) ||
-          !exact(node.position, ["x", "y"]) ||
-          !Number.isFinite(node.position.x) ||
-          !Number.isFinite(node.position.y))) ||
       (node.reference !== undefined && !reference(node.reference))
     )
       throw new Error("Invalid mind node");

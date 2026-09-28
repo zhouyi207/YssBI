@@ -7,7 +7,6 @@ export interface MindNode {
   id: string;
   parentId: string | null;
   content: string;
-  position?: { x: number; y: number };
   reference?: MindReference;
 }
 export interface MindDocument {
@@ -17,7 +16,6 @@ export interface MindDocument {
 export type MindEdit =
   | { op: "add_node"; node: MindNode }
   | { op: "set_content"; nodeId: string; content: string }
-  | { op: "set_position"; nodeId: string; position: { x: number; y: number } | null }
   | { op: "set_reference"; nodeId: string; reference: MindReference | null }
   | { op: "move_node"; nodeId: string; parentId: string; beforeId: string | null }
   | { op: "remove_node"; nodeId: string };

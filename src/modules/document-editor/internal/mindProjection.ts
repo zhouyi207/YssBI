@@ -52,7 +52,7 @@ export function projectMindMap(
     nodes.push({
       id,
       type: "mind",
-      position: node.position ?? { x: depth * 280, y: (start + (heights.get(id) ?? 1) / 2) * 100 },
+      position: { x: depth * 280, y: (start + (heights.get(id) ?? 1) / 2) * 100 },
       data: { label: node.content, collapsed: collapsed.has(id), hasChildren: children.has(id) },
     });
     if (node.parentId !== null)

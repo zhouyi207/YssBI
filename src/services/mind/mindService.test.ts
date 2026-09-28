@@ -17,9 +17,11 @@ describe("authored document transport", () => {
   it("accepts domain documents and rejects renderer state or mismatched file kinds", () => {
     expect(parseMindSnapshot(snapshot)).toEqual(snapshot);
     expect(() => parseMindSnapshot({ ...snapshot, path: "docs/Plan.md" })).toThrow();
-    const rendererState = structuredClone(snapshot);
-    Object.assign(rendererState.content.nodes[0], { measured: { width: 200 } });
-    expect(() => parseMindSnapshot(rendererState)).toThrow();
+    for (const field of [{ measured: { width: 200 } }, { position: { x: 10, y: 20 } }]) {
+      const rendererState = structuredClone(snapshot);
+      Object.assign(rendererState.content.nodes[0], field);
+      expect(() => parseMindSnapshot(rendererState)).toThrow();
+    }
   });
 
   it("parses a revisioned document edit receipt through the shared resource publication contract", async () => {

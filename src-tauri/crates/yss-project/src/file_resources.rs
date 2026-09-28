@@ -774,7 +774,6 @@ mod tests {
                                     id: "bad".into(),
                                     parent_id: Some("absent".into()),
                                     content: "bad".into(),
-                                    position: None,
                                     reference: None
                                 }
                             }

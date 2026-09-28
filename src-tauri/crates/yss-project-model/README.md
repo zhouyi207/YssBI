@@ -18,8 +18,7 @@ These models do not depend on a renderer, IPC or the filesystem. Existing graph
 and chart bodies retain their dedicated model owners.
 
 Mind files use `minds/<name>.yssbi-mind`, containing UTF-8 JSON with `rootId` and
-`nodes`. Each node has `id`, `parentId` and `content`; optional `position` expresses
-a manually authored layout hint, and optional `reference` identifies a project
+`nodes`. Each node has `id`, `parentId` and `content`; optional `reference` identifies a project
 file, graph node or database without copying its contents. References use existing
 project paths/database identities; they do not introduce a second resource ID scheme.
 References are preserved as authored, including references whose target no longer
@@ -27,8 +26,9 @@ exists; their existence is not a tree-validity constraint.
 
 There is exactly one root, every other node has an existing parent, IDs are unique,
 and every node reaches the root without a cycle. Array order determines sibling
-order. Reparenting and subtree deletion are domain operations. Edges, automatic
-layout results, selection, collapsed branches and renderer measurements are not
+order. Reparenting and subtree deletion are domain operations. Node coordinates are
+derived entirely by the renderer's tree layout and have no document field or edit command.
+Edges, layout results, selection, collapsed branches and renderer measurements are not
 persisted. File names own resource display names; root content is the mind's topic.
 
 Doc files use `docs/<name>.md` and contain plain UTF-8 Markdown, including normal
