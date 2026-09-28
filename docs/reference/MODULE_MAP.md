@@ -71,7 +71,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-project-history` | `src-tauri/crates/yss-project-history` | [Cargo.toml](../../src-tauri/crates/yss-project-history/Cargo.toml) | — |
 | `yss-project-identity` | `src-tauri/crates/yss-project-identity` | [Cargo.toml](../../src-tauri/crates/yss-project-identity/Cargo.toml) | — |
 | `yss-project-layout` | `src-tauri/crates/yss-project-layout` | [Cargo.toml](../../src-tauri/crates/yss-project-layout/Cargo.toml) | — |
-| `yss-project-model` | `src-tauri/crates/yss-project-model` | [Cargo.toml](../../src-tauri/crates/yss-project-model/Cargo.toml) | — |
+| `yss-project-model` | `src-tauri/crates/yss-project-model` | [Cargo.toml](../../src-tauri/crates/yss-project-model/Cargo.toml) | [README](../../src-tauri/crates/yss-project-model/README.md) |
 | `yss-project-operation` | `src-tauri/crates/yss-project-operation` | [Cargo.toml](../../src-tauri/crates/yss-project-operation/Cargo.toml) | — |
 | `yss-project-progress` | `src-tauri/crates/yss-project-progress` | [Cargo.toml](../../src-tauri/crates/yss-project-progress/Cargo.toml) | — |
 | `yss-project-registry` | `src-tauri/crates/yss-project-registry` | [Cargo.toml](../../src-tauri/crates/yss-project-registry/Cargo.toml) | — |
@@ -99,6 +99,7 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | `data-explorer` | `src/modules/data-explorer` | [public.ts](../../src/modules/data-explorer/public.ts) |
 | `database-editor` | `src/modules/database-editor` | [public.ts](../../src/modules/database-editor/public.ts) |
 | `details` | `src/modules/details` | [public.ts](../../src/modules/details/public.ts) |
+| `document-editor` | `src/modules/document-editor` | [public.ts](../../src/modules/document-editor/public.ts) |
 | `graph-editor` | `src/modules/graph-editor` | [public.ts](../../src/modules/graph-editor/public.ts) |
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |

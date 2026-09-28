@@ -28,6 +28,7 @@
 | 项目生命周期与数据用例       | [Project application](../src-tauri/crates/yss-application/src/project/README.md)、[Database application](../src-tauri/crates/yss-application/src/database/README.md)                                                                   |
 | 图编辑、保存和投影编排       | [Graph application](../src-tauri/crates/yss-application/src/graph/README.md)                                                                                                                                                           |
 | 图表资源、预览与保存         | [Chart application](../src-tauri/crates/yss-application/src/chart/README.md)                                                                                                                                                           |
+| Mind / Markdown 文件和编辑器 | [Project model](../src-tauri/crates/yss-project-model/README.md)、[Document editors](../src/modules/document-editor/README.md)                                                                                                         |
 | 图语义与解析缓存             | [Graph analysis](../src-tauri/crates/yss-graph-analysis/README.md)、[Graph runtime](../src-tauri/crates/yss-graph-runtime/README.md)                                                                                                   |
 | 执行、运行状态和 ResultStore | [Graph execution](../src-tauri/crates/yss-graph-execution/README.md)                                                                                                                                                                   |
 | 共享语义与内核适配           | [Data contracts](../src-tauri/crates/yss-data-contract/README.md)、[Node kernel](../src-tauri/crates/yss-node-kernel/README.md)                                                                                                        |
@@ -43,6 +44,8 @@
 | 插件体系                     | [插件目标契约](../plugins/README.md)；当前实现另见 [Plugin runtime](../src-tauri/crates/yss-plugin-runtime/README.md)、[Plugin protocol](../src-tauri/crates/yss-plugin-protocol/README.md)与 [Julia 插件](../plugins/julia/README.md) |
 
 更多 Project、Database、SCI 与插件内部模块见[实现参考](reference/README.md)和[生成的模块索引](reference/MODULE_MAP.md)。
+
+项目文件类型、各类型处理器与菜单/侧栏的共同入口见 [File operations](../src/features/application/resource/README.md)。
 
 ## 开发与交付
 
