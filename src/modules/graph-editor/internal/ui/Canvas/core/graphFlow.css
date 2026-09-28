@@ -4,12 +4,6 @@
   --xy-selection-border: 1px solid var(--accent-color);
 }
 
-/* Preserve the group-drag hit target; only the in-progress marquee should be painted. */
-.yss-flow .react-flow__nodesselection-rect {
-  border: 0;
-  background: transparent;
-}
-
 .yss-flow .react-flow__node-graph {
   border: 0;
   background: transparent;

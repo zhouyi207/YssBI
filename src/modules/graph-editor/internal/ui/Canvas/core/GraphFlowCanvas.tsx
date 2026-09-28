@@ -58,7 +58,6 @@ type NodeMeasurement = { width: number; height: number };
 type SelectionPointerSnapshot = {
   nodeIds: string[];
   connectionIds: string[];
-  nodesSelectionActive: boolean;
   shiftKey: boolean;
 };
 
@@ -267,16 +266,13 @@ function GraphFlowRuntime({
     drag.current = lease ? { lease, owner } : null;
   }, [interaction.beginGesture, clearPositions]);
 
-  const resetSelectionOverlay = useCallback(
-    (snapshot: SelectionPointerSnapshot | null) => {
-      flowStore.setState({
-        userSelectionActive: false,
-        userSelectionRect: null,
-        nodesSelectionActive: snapshot?.nodesSelectionActive ?? false,
-      });
-    },
-    [flowStore],
-  );
+  const resetSelectionOverlay = useCallback(() => {
+    flowStore.setState({
+      userSelectionActive: false,
+      userSelectionRect: null,
+      nodesSelectionActive: false,
+    });
+  }, [flowStore]);
   const stopNodeDrag = useCallback(() => {
     const current = drag.current;
     drag.current = null;
@@ -567,28 +563,41 @@ function GraphFlowRuntime({
           }}
           onNodeDragStart={startNodeDrag}
           onNodeDragStop={stopNodeDrag}
-          onSelectionDragStart={startNodeDrag}
-          onSelectionDragStop={stopNodeDrag}
           onSelectionStart={() => {
             const snapshot = selectionPointer.current ?? {
               nodeIds: [...workspace.selectedNodeIds],
               connectionIds: [...workspace.selectedConnectionIds],
-              nodesSelectionActive: false,
               shiftKey: false,
             };
             selectionPointer.current = snapshot;
             selectionGesture.current = interaction.beginGesture("selecting", () => {
               suppressClick.current = true;
-              resetSelectionOverlay(snapshot);
+              resetSelectionOverlay();
               if (snapshot.connectionIds.length)
                 commands.setSelectedConnectionIds(snapshot.connectionIds, groupId);
               else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
             });
           }}
-          onSelectionEnd={() => {
+          onPointerUp={() => {
+            // React Flow enables its group overlay after onSelectionEnd, before pointerup bubbles here.
+            resetSelectionOverlay();
             selectionGesture.current?.finish();
             selectionGesture.current = null;
             selectionPointer.current = null;
+          }}
+          onPointerCancel={() => {
+            const current = selectionGesture.current;
+            const snapshot = current?.isCurrent() ? selectionPointer.current : null;
+            current?.finish();
+            resetSelectionOverlay();
+            selectionGesture.current = null;
+            selectionPointer.current = null;
+            if (snapshot) {
+              suppressClick.current = true;
+              if (snapshot.connectionIds.length)
+                commands.setSelectedConnectionIds(snapshot.connectionIds, groupId);
+              else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
+            }
           }}
           onPaneClick={(event) => {
             if (!event.shiftKey && !suppressClick.current && interaction.isInteractive())
@@ -700,7 +709,6 @@ function GraphFlowRuntime({
                 ? {
                     nodeIds: [...workspace.selectedNodeIds],
                     connectionIds: [...workspace.selectedConnectionIds],
-                    nodesSelectionActive: flowStore.getState().nodesSelectionActive,
                     shiftKey: event.shiftKey,
                   }
                 : null;
@@ -745,7 +753,7 @@ function GraphFlowRuntime({
               (!cancelled && !additiveClick)
             )
               return;
-            resetSelectionOverlay(snapshot);
+            resetSelectionOverlay();
             current?.finish();
             selectionGesture.current = null;
             selectionPointer.current = null;
