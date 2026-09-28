@@ -40,7 +40,7 @@ fn fixture_with_method(
     fixture_with_options(n, method, LinearSummaryOptions::default())
 }
 
-fn fixture_with_options(
+pub(crate) fn fixture_with_options(
     n: usize,
     method: &str,
     summary_options: LinearSummaryOptions,

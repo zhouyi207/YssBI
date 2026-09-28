@@ -717,7 +717,15 @@ mod tests {
 
     #[test]
     fn ai_reads_the_shared_result_json_and_follows_table_references() {
-        let (application, reference, model) = crate::graph::results::report::tests::fixture(1_000);
+        let (application, reference, model) =
+            crate::graph::results::report::tests::fixture_with_options(
+                1_000,
+                "OLS",
+                yss_sci_contract::regression::summary::LinearSummaryOptions {
+                    observations: true,
+                    ..Default::default()
+                },
+            );
         let captured = application.capture_session().unwrap();
         let control = CapabilityControl::new(
             yss_harness_contract::CancellationToken::default(),
@@ -763,8 +771,10 @@ mod tests {
                 .unwrap()
                 .unwrap()
         );
-        assert_eq!(json["model_basic_info"]["num_observation"], 1_000);
-        assert!(json["model_basic_info"]["f_statistic"].is_number());
+        let metrics = json["presentation"]["summary"]["items"].as_array().unwrap();
+        let metric = |id: &str| &metrics.iter().find(|metric| metric["id"] == id).unwrap()["value"];
+        assert_eq!(metric("numObservations"), 1_000);
+        assert!(metric("fStatistic").is_number());
         assert_eq!(json["coefficients"]["kind"], "tableRef");
         assert_eq!(json["observations"]["rowCount"], 1_000);
         assert!(json.get("design").is_none());
