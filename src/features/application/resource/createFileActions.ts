@@ -31,6 +31,7 @@ export function createFileActions<S extends FileSnapshot<FileResourceKind, unkno
   },
 ) {
   const queues = new Map<string, Promise<unknown>>();
+  const reads = new Map<string, { isCurrent(): boolean; promise: Promise<S> }>();
   function releaseDocumentProjection(path: string): void {
     releaseDocumentInputs(path);
     removeProjection(path);
@@ -49,18 +50,34 @@ export function createFileActions<S extends FileSnapshot<FileResourceKind, unkno
   }
   async function loadDocument(path: string): Promise<S> {
     const context = captureProjectCommandContext();
+    const key = JSON.stringify([
+      context.projectInstanceId,
+      context.projectEpoch,
+      context.publicationRevision,
+      path,
+    ]);
+    const pending = reads.get(key);
+    if (pending?.isCurrent()) return pending.promise;
     const isCurrentRead = projection.beginRead(path);
-    const snapshot = await service.read(context.projectInstanceId, path);
-    context.assertCurrent();
-    if (snapshot.projectInstanceId !== context.projectInstanceId || snapshot.path !== path)
-      throw new Error("Document identity mismatch");
-    if (!isCurrentRead()) {
-      const current = projection.store.getState().documents[path];
-      if (current?.projectInstanceId === context.projectInstanceId) return current;
-      throw new Error("Document read lifecycle ended");
-    }
-    install(snapshot);
-    return projection.store.getState().documents[path];
+    const promise = service
+      .read(context.projectInstanceId, path)
+      .then((snapshot) => {
+        context.assertCurrent();
+        if (snapshot.projectInstanceId !== context.projectInstanceId || snapshot.path !== path)
+          throw new Error("Document identity mismatch");
+        if (!isCurrentRead()) {
+          const current = projection.store.getState().documents[path];
+          if (current?.projectInstanceId === context.projectInstanceId) return current;
+          throw new Error("Document read lifecycle ended");
+        }
+        install(snapshot);
+        return projection.store.getState().documents[path];
+      })
+      .finally(() => {
+        if (reads.get(key)?.promise === promise) reads.delete(key);
+      });
+    reads.set(key, { isCurrent: isCurrentRead, promise });
+    return promise;
   }
 
   async function submit(

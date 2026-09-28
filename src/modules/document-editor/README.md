@@ -79,6 +79,9 @@ results prevent late reads from restoring stale projections. Resource publicatio
 remaps editor paths and refreshes changed open documents. The editing queue is keyed
 by project and file; split panels observe the same Rust document. Concurrent text
 buffers keep their captured version and report conflicts rather than merging them.
+Initial loading belongs to the editor view. Split panes share an in-flight read for
+the same project and file; a view with a matching resource revision reuses its snapshot.
+Opening an existing tab and installing an edit response do not trigger another read.
 
 External removal keeps an editor's unfinished text available instead of closing it.
 An explicit delete receipt authorizes removal. Explicitly discarding a missing file

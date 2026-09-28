@@ -90,6 +90,13 @@ details, while no selection or multiple nodes show file information. Doc, Chart 
 Data always show the current resource. Tab activation reads the owning pane's selection
 through that same resolver; it never carries another pane's node into the newly active tab.
 
+Opening Chart, Mind and Doc only opens the panel; their views own initial loading.
+Chart views share `loadChartDocumentForView` requests and reuse the existing document
+draft. A response is installed only for its captured project, resource revision and
+read lifecycle; closing the last panel invalidates unfinished reads. Editor and Details
+share the loading/retry hook. Mind and Doc similarly share pending reads and skip
+refreshes when their snapshot already matches the resource revision.
+
 `setInspectionContext` accepts an explicit resource/pane scope and only publishes for
 the native active editor. Node selection and clearing selection use this entry, including
 Escape. `setDetailContext` deduplicates equivalent targets. Close and rename share the

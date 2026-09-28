@@ -17,7 +17,7 @@ import {
   workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import { clearDetailFocusForClosedPanel } from "@/features/application/editor/clearDetailFocusForClosedPanel";
-import { clearResourceDocumentState, isResourceDocumentDirty } from "@/features/core/resource";
+import { isResourceDocumentDirty } from "@/features/core/resource";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
 import {
   captureProjectIdentity,
@@ -212,16 +212,6 @@ function isCloseSnapshotCurrent(snapshot: CloseSnapshot): boolean {
   return !snapshot.projectIdentity || isCurrentProjectIdentity(snapshot.projectIdentity);
 }
 
-function evictChartDocument(chartPath: string): void {
-  useChartDocumentStore.setState((state) => {
-    if (!Object.prototype.hasOwnProperty.call(state.documents, chartPath)) return {};
-    const documents = { ...state.documents };
-    delete documents[chartPath];
-    return { documents };
-  });
-  clearResourceDocumentState({ id: chartPath, kind: "chart" });
-}
-
 function finalizeClosedPanels(
   snapshot: CloseSnapshot,
   closedPanels: readonly WorkbenchPanelInfo[] = snapshot.panels,
@@ -277,7 +267,7 @@ function finalizeClosedPanels(
       continue;
     }
     if (metadata.resourceKind === "chart") {
-      evictChartDocument(metadata.resourceRef);
+      useChartDocumentStore.getState().removeDocument(metadata.resourceRef);
       continue;
     }
 

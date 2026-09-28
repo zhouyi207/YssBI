@@ -33,6 +33,8 @@ export function FileEditor<S extends FileSnapshot<FileResourceKind, unknown>>({
     [t],
   );
   useEffect(() => {
+    const loaded = store.getState().documents[resourceRef];
+    if (loaded && (revision === undefined || loaded.version.revision === revision)) return;
     let current = true;
     void actions.load(resourceRef).catch((error) => {
       if (current) reportError(error);
@@ -40,7 +42,7 @@ export function FileEditor<S extends FileSnapshot<FileResourceKind, unknown>>({
     return () => {
       current = false;
     };
-  }, [resourceRef, revision, reportError, actions]);
+  }, [resourceRef, revision, reportError, actions, store]);
   const save = () => {
     setError(null);
     void actions.save(resourceRef).catch(reportError);

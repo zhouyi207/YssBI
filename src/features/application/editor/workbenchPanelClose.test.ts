@@ -46,7 +46,6 @@ const mocks = vi.hoisted(() => {
   const dirty = new Set<string>();
   const project = { projectInstanceId: "project-a", epoch: 1, available: true };
   const chartState = {
-    index: [] as Array<Record<string, unknown>>,
     documents: {} as Record<string, unknown>,
   };
   let fifo: Promise<unknown> = Promise.resolve();
@@ -73,14 +72,6 @@ const mocks = vi.hoisted(() => {
   const deactivateGraphPanelSession = vi.fn();
   const unloadGraphDocument = vi.fn();
   const resolveResourceDisplayName = vi.fn();
-  const applyChartState = (update: unknown) => {
-    const patch =
-      typeof update === "function"
-        ? (update as (state: typeof chartState) => Partial<typeof chartState>)(chartState)
-        : (update as Partial<typeof chartState>);
-    Object.assign(chartState, patch);
-  };
-  const setChartState = vi.fn(applyChartState);
 
   const isAuthorized = (authorize?: () => boolean): boolean => {
     if (!authorize) return true;
@@ -123,7 +114,6 @@ const mocks = vi.hoisted(() => {
     project.projectInstanceId = "project-a";
     project.epoch = 1;
     project.available = true;
-    chartState.index = [];
     chartState.documents = {};
     fifo = Promise.resolve();
 
@@ -140,7 +130,6 @@ const mocks = vi.hoisted(() => {
       deactivateGraphPanelSession,
       unloadGraphDocument,
       resolveResourceDisplayName,
-      setChartState,
       commitRemove,
       runPublicationTransaction,
     ]) {
@@ -151,7 +140,6 @@ const mocks = vi.hoisted(() => {
     saveGraph.mockResolvedValue(true);
     saveChart.mockResolvedValue(true);
     unloadGraphDocument.mockResolvedValue(undefined);
-    setChartState.mockImplementation(applyChartState);
     resolveResourceDisplayName.mockImplementation((_ref: unknown, fallback: string) => {
       const segments = fallback.split("/");
       const leaf = segments[segments.length - 1] ?? fallback;
@@ -201,7 +189,6 @@ const mocks = vi.hoisted(() => {
     deactivateGraphPanelSession,
     unloadGraphDocument,
     resolveResourceDisplayName,
-    setChartState,
     commitRemove,
     runPublicationTransaction,
     reset,
@@ -290,9 +277,11 @@ vi.mock("@/features/core/chart/chartDocumentStore", () => ({
   useChartDocumentStore: {
     getState: () => ({
       ...mocks.chartState,
-      saveDocument: mocks.saveChart,
+      removeDocument: (chartPath: string) => {
+        delete mocks.chartState.documents[chartPath];
+        mocks.clearResourceDocumentState({ id: chartPath, kind: "chart" });
+      },
     }),
-    setState: mocks.setChartState,
   },
 }));
 
@@ -791,11 +780,9 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.panels).toHaveLength(1);
   });
 
-  it("evicts the last discarded chart document while preserving its index entry", async () => {
+  it("releases the last discarded chart document and its document state", async () => {
     const chartPath = "charts/Summary.yssbi-chart";
-    const indexEntry = { chartPath, name: "Summary" };
     const document = { revision: 7, chartType: "scatter" };
-    mocks.chartState.index = [indexEntry];
     mocks.chartState.documents = { [chartPath]: document };
     seedPanels([editorPanel("chart-a", chartPath, "chart")]);
     markDirty(chartPath, "chart");
@@ -804,7 +791,6 @@ describe("workbench panel close coordinator", () => {
     await expect(requestCloseWorkbenchPanel("chart-a")).resolves.toBe(true);
 
     expect(mocks.chartState.documents).not.toHaveProperty(chartPath);
-    expect(mocks.chartState.index).toEqual([indexEntry]);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
       id: chartPath,
       kind: "chart",
