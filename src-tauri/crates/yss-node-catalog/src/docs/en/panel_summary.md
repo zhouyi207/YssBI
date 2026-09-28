@@ -1,5 +1,5 @@
 # Panel Summary
 
-Consumes the fitted `model` produced by `yssbi.statistics.panel.fit`. Outputs `result` and `report` from that model. It does not accept raw data or estimation parameters and does not refit.
+Connect the fitted `model` from Panel Fit. Configure controls `model_summary`, `coefficient_table`, `effects_statistics` and `estimator_statistics`; all four are enabled by default. Estimator statistics follow the fitted method, including RE Wald or MLE likelihood statistics where applicable.
 
-This node has a catalog contract; its execution kernel is not yet registered.
+Outputs `result` and `report` containing the selected sections. Reuses the fitted coefficients, covariance and group statistics without refitting or requiring raw inputs.

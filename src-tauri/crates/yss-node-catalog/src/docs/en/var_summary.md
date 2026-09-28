@@ -1,5 +1,5 @@
 # VAR Summary
 
-Consumes the fitted `model` produced by `yssbi.statistics.var.fit`. Outputs `result` and `report` from that model. It does not accept raw data or estimation parameters and does not refit.
+Connect the fitted `model` from VAR Fit. Configure selects model overview and coefficient inference by default. Enable `lag_exclusion`, `serial_tests` or `stability` for the corresponding analyses. Residual LM tests use `serial_lags` (1–40, default 2) when enabled.
 
-This node has a catalog contract; its execution kernel is not yet registered.
+Outputs `result` and `report` containing the selected sections. Optional analyses are computed from the retained fit without refitting it. Use the separate Granger, IRF and FEVD nodes for those analyses.

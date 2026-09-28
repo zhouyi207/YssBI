@@ -1,5 +1,5 @@
-# DF & ADF
+# DF / ADF
 
-输入 `series` 为按时间顺序排列的数值序列。参数 `lags` 和 `regression` 指定滞后阶数与确定性项。一次检验输出 `result`（`statistics.result.adf`）和 `report`，不输出已拟合模型。结果契约要求包含检验统计量、p 值、临界值、实际滞后阶数、有效样本数及所用配置。
+连接按时间顺序排列的有限数值序列。lags 可为 0（DF）或正整数（ADF），regression 可选 none、constant、trend。
 
-原假设为序列存在单位根。当前已定义目录契约，执行内核尚未注册。
+原假设为存在单位根。result 和 report 来自同一次计算，包含检验统计量、p 值、临界值、实际滞后阶数与样本数，不输出已拟合模型。样本不足或估计失败会报错。

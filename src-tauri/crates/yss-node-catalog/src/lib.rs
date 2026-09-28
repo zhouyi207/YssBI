@@ -34,9 +34,7 @@ pub(crate) const REROUTE_NODE_TYPE: &str = "yssbi.core.reroute";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use core_nodes::reroute::validate_reroute_protocol_contract;
-pub use dataframe::{
-    DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_PANEL_SCHEMA_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER,
-};
+pub use dataframe::{DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER};
 pub use project::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
     FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
@@ -112,7 +110,15 @@ mod tests {
                 .collect();
             assert_eq!(inputs.len(), 1, "{id}");
             assert_eq!(inputs[0].key.as_str(), "model", "{id}");
-            if id.as_str() == "yssbi.statistics.linear.summary" {
+            if matches!(
+                id.as_str(),
+                "yssbi.statistics.linear.summary"
+                    | "yssbi.statistics.iv.2sls.summary"
+                    | "yssbi.statistics.iv.liml.summary"
+                    | "yssbi.statistics.panel.summary"
+                    | "yssbi.statistics.var.summary"
+                    | "yssbi.statistics.vec.summary"
+            ) {
                 assert!(
                     summary
                         .parameters

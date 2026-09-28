@@ -6,6 +6,7 @@
 
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
+mod analyses;
 mod families;
 mod inventory;
 
@@ -39,6 +40,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ..ProviderFragment::default()
     };
     inventory::append(&mut fragment)?;
+    analyses::append(&mut fragment)?;
     Ok(fragment)
 }
 
@@ -71,7 +73,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                         source,
                     }
                 })?
-            } else if spec.family == Family::Linear && spec.stage == Stage::Summary {
+            } else if spec.stage == Stage::Summary && !parameters.is_empty() {
                 Parameters::new([ParameterGroup::new("configure", parameters)]).map_err(
                     |source| BuiltinAssemblyError::InvalidParameterSchema {
                         node_type: spec.id.into(),
@@ -117,14 +119,14 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
             "Endogenous",
             series_type()?,
             1,
-            Some(1),
+            None,
         )?);
         ports.push(bounded_user_data_input(
             "instruments",
             "Instruments",
             series_type()?,
             1,
-            Some(1),
+            None,
         )?);
     }
     if spec.family == Family::PanelDid {
@@ -145,9 +147,23 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
             0,
         )?);
     }
+    if spec.family == Family::Linear {
+        ports.push(bounded_user_data_input(
+            "clusters",
+            "Cluster IDs",
+            series_type()?,
+            0,
+            Some(1),
+        )?);
+    }
     ports.push(data_output("model", "Model", model_type(spec)?)?);
-    ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
-    ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
+    if !matches!(
+        spec.family,
+        Family::Panel | Family::PanelDid | Family::Var | Family::Vec
+    ) {
+        ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
+        ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
+    }
     if spec.family == Family::PanelDid {
         ports.push(data_output("report", "Report", report_type()?)?);
     }
@@ -173,6 +189,11 @@ fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErro
 fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let mut ports = Vec::new();
     match family {
+        Family::PanelDid => {
+            ports.extend(regression_inputs(family)?);
+            ports.push(data_input("treat", "Treated group (0/1)", series_type()?)?);
+            ports.push(data_input("post", "Post period (0/1)", series_type()?)?);
+        }
         Family::Adf => ports.push(data_input("series", "DataSeries", series_type()?)?),
         Family::Var | Family::VecRank => ports.push(user_data_input(
             "variables",
@@ -183,7 +204,7 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         _ => ports.push(data_input("series", "DataSeries", series_type()?)?),
     }
     ports.push(data_output("result", "Result", result_type(family)?)?);
-    if family == Family::Adf {
+    if matches!(family, Family::Adf | Family::PanelDid) {
         ports.push(data_output("report", "Report", report_type()?)?);
     }
     Ok(ports)
@@ -192,7 +213,16 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let mut ports = vec![
         data_input("response", "Response", series_type()?)?,
-        user_data_input("predictors", "Predictors", series_type()?, 1)?,
+        user_data_input(
+            "predictors",
+            "Predictors",
+            series_type()?,
+            if matches!(family, Family::Iv2sls | Family::IvLiml | Family::PanelDid) {
+                0
+            } else {
+                1
+            },
+        )?,
     ];
     if matches!(family, Family::Panel | Family::PanelDid) {
         ports.push(data_input("entity", "Entity", series_type()?)?);
@@ -206,31 +236,34 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
         return if spec.family == Family::Linear {
             linear_summary_parameters()
         } else {
-            Ok(vec![])
+            model_summary_parameters(spec.family)
         };
     }
     let mut parameters = match spec.stage {
-        Stage::Test if spec.family == Family::Adf => vec![
-            positive_integer_parameter("lags", 1)?,
-            select_parameter("regression", "constant")?,
+        Stage::Test if spec.family == Family::PanelDid => vec![
+            bounded_integer_parameter("repetitions", 100, 10, 2000)?,
+            nonnegative_integer_parameter("seed", 42)?,
         ],
-        Stage::Test if matches!(spec.family, Family::Var | Family::VecRank) => vec![
-            positive_integer_parameter("max_lags", 4)?,
-            select_parameter("trend", "constant")?,
+        Stage::Test if spec.family == Family::Adf => vec![
+            bounded_integer_parameter("lags", 1, 0, 1000)?,
+            choice_parameter("regression", "constant", &["none", "constant", "trend"])?,
+        ],
+        Stage::Test if spec.family == Family::Var => {
+            vec![bounded_integer_parameter("max_lags", 4, 1, 1000)?]
+        }
+        Stage::Test if spec.family == Family::VecRank => vec![
+            bounded_integer_parameter("max_lags", 4, 1, 1000)?,
+            choice_parameter("trend", "constant", &["none", "constant", "trend"])?,
         ],
         Stage::Fit if spec.family == Family::Vec => vec![
             positive_integer_parameter("rank", 1)?,
-            positive_integer_parameter("lags", 1)?,
-            select_parameter("trend", "constant")?,
+            bounded_integer_parameter("lags", 1, 1, 1000)?,
+            choice_parameter("trend", "constant", &["none", "constant", "trend"])?,
         ],
-        Stage::Fit if spec.family == Family::Var => vec![
-            positive_integer_parameter("lags", 1)?,
-            select_parameter("trend", "constant")?,
-        ],
-        Stage::Fit if spec.family == Family::PanelDid => vec![
-            toggle_parameter("event_study", false)?,
-            positive_integer_parameter("placebo_repetitions", 100)?,
-        ],
+        Stage::Fit if spec.family == Family::Var => {
+            vec![bounded_integer_parameter("lags", 1, 1, 1000)?]
+        }
+        Stage::Fit if spec.family == Family::PanelDid => vec![],
         _ => vec![],
     };
     if spec.stage == Stage::Fit
@@ -251,6 +284,76 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
             configure_parameters(spec.family)?
         };
         parameters.extend(schema);
+    }
+    Ok(parameters)
+}
+
+fn model_summary_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
+    let toggles = match family {
+        Family::Iv2sls | Family::IvLiml => {
+            let defaults = yss_sci_contract::causal::iv::IvSummaryOptions::default();
+            let mut toggles = vec![
+                ("model_summary", defaults.model_summary),
+                ("coefficient_table", defaults.coefficient_table),
+                ("first_stage", defaults.first_stage),
+                ("overidentification", defaults.overidentification),
+            ];
+            if family == Family::Iv2sls {
+                toggles.push(("endogeneity", defaults.endogeneity));
+            }
+            toggles
+        }
+        Family::Panel => {
+            let defaults = yss_sci_contract::panel::PanelSummaryOptions::default();
+            vec![
+                ("model_summary", defaults.model_summary),
+                ("coefficient_table", defaults.coefficient_table),
+                ("effects_statistics", defaults.effects_statistics),
+                ("estimator_statistics", defaults.estimator_statistics),
+            ]
+        }
+        Family::Var => {
+            let defaults = yss_sci_contract::time_series::var::VarSummaryOptions::default();
+            vec![
+                ("model_summary", defaults.model_summary),
+                ("coefficient_table", defaults.coefficient_table),
+                ("lag_exclusion", defaults.lag_exclusion),
+                ("serial_tests", defaults.serial_tests),
+                ("stability", defaults.stability),
+            ]
+        }
+        Family::Vec => {
+            let defaults = yss_sci_contract::time_series::vec::VecSummaryOptions::default();
+            vec![
+                ("model_summary", defaults.model_summary),
+                ("coefficient_table", defaults.coefficient_table),
+                ("cointegration", defaults.cointegration),
+                ("serial_tests", defaults.serial_tests),
+                ("stability", defaults.stability),
+            ]
+        }
+        _ => return Ok(vec![]),
+    };
+    let mut parameters = toggles
+        .into_iter()
+        .map(|(key, default)| toggle_parameter(key, default))
+        .collect::<Result<Vec<_>, _>>()?;
+    let serial_lags = match family {
+        Family::Var => {
+            Some(yss_sci_contract::time_series::var::VarSummaryOptions::default().serial_lags)
+        }
+        Family::Vec => {
+            Some(yss_sci_contract::time_series::vec::VecSummaryOptions::default().serial_lags)
+        }
+        _ => None,
+    };
+    if let Some(lags) = serial_lags {
+        parameters.push(bounded_integer_parameter(
+            "serial_lags",
+            lags as i64,
+            1,
+            40,
+        )?);
     }
     Ok(parameters)
 }
@@ -315,17 +418,50 @@ fn configure_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAssembl
     let mut parameters = vec![toggle_parameter("constant", true)?];
     match family {
         Family::Logit | Family::Probit => {
-            parameters.push(positive_integer_parameter("max_iterations", 100)?);
-            parameters.push(decimal_parameter("tolerance", "0.000001")?);
+            parameters.push(bounded_integer_parameter("max_iterations", 100, 1, 10000)?);
+            parameters.push(tolerance_parameter("0.00000001")?);
         }
         Family::Iv2sls | Family::IvLiml => {
-            parameters.push(select_parameter("covariance", "non_robust")?)
+            parameters.push(choice_parameter(
+                "covariance",
+                "nonrobust",
+                &["nonrobust", "HC0", "HC1", "HC2", "HC3"],
+            )?);
+            parameters.push(toggle_parameter("small", false)?);
         }
         Family::Panel => {
-            parameters.push(select_parameter("estimator", "fixed_effects")?);
-            parameters.push(select_parameter("effects", "entity")?);
+            parameters.push(choice_parameter(
+                "estimator",
+                "fixed_effects",
+                &[
+                    "fixed_effects",
+                    "lsdv",
+                    "first_difference",
+                    "random_effects",
+                    "maximum_likelihood",
+                    "between",
+                ],
+            )?);
+            parameters.push(choice_parameter(
+                "effects",
+                "entity",
+                &["entity", "time", "two_way"],
+            )?);
+            parameters.push(choice_parameter(
+                "covariance",
+                "nonrobust",
+                &["nonrobust", "HC0", "HC1", "HC2", "HC3", "cluster"],
+            )?);
         }
-        Family::Prais => parameters.push(select_parameter("transform", "prais_winsten")?),
+        Family::Prais => {
+            parameters.push(choice_parameter(
+                "transform",
+                "prais_winsten",
+                &["prais_winsten", "cochrane_orcutt"],
+            )?);
+            parameters.push(bounded_integer_parameter("max_iterations", 100, 1, 10000)?);
+            parameters.push(tolerance_parameter("0.000001")?);
+        }
         _ => {}
     }
     Ok(parameters)
@@ -367,6 +503,7 @@ fn linear_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
                 "HAC",
                 "newey",
                 "fixed scale",
+                "cluster",
             ],
         )?,
         conditional(
@@ -464,6 +601,52 @@ fn data_port(
         editor: PortEditorSpec::Default,
         schema: None,
     })
+}
+
+fn choice_parameter(
+    key: &'static str,
+    default: &'static str,
+    choices: &[&str],
+) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut parameter = select_parameter(key, default)?;
+    parameter.constraints.push(ParameterConstraint::OneOf(
+        choices
+            .iter()
+            .map(|v| DataValue::String((*v).into()))
+            .collect(),
+    ));
+    Ok(parameter)
+}
+fn nonnegative_integer_parameter(
+    key: &'static str,
+    default: i64,
+) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut p = positive_integer_parameter(key, default)?;
+    p.constraints = vec![ParameterConstraint::IntegerRange {
+        min: Some(0),
+        max: None,
+    }];
+    Ok(p)
+}
+
+fn bounded_integer_parameter(
+    key: &'static str,
+    default: i64,
+    min: i64,
+    max: i64,
+) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut parameter = positive_integer_parameter(key, default)?;
+    parameter.constraints = vec![ParameterConstraint::IntegerRange {
+        min: Some(min),
+        max: Some(max),
+    }];
+    Ok(parameter)
+}
+
+fn tolerance_parameter(default: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut parameter = decimal_parameter("tolerance", default)?;
+    parameter.constraints.push(ParameterConstraint::Positive);
+    Ok(parameter)
 }
 
 fn positive_integer_parameter(
@@ -827,7 +1010,24 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         ("acf_pacf", "ACF / PACF", "自相关与偏自相关"),
         ("acf_max_lag", "ACF / PACF lags", "自相关滞后阶数"),
         ("serial_tests", "Serial correlation tests", "序列相关检验"),
-        ("serial_lags", "BG / Q lags", "BG / Q 滞后阶数"),
+        ("serial_lags", "Serial test lags", "序列检验滞后阶数"),
+        ("first_stage", "First-stage analysis", "第一阶段分析"),
+        (
+            "overidentification",
+            "Overidentification test",
+            "过度识别检验",
+        ),
+        ("endogeneity", "Endogeneity tests", "内生性检验"),
+        ("effects_statistics", "Panel effects", "面板效应统计"),
+        (
+            "estimator_statistics",
+            "Estimator statistics",
+            "估计方法统计",
+        ),
+        ("lag_exclusion", "Lag-exclusion tests", "滞后排除检验"),
+        ("stability", "Stability roots", "稳定性特征根"),
+        ("cointegration", "Cointegrating equations", "协整方程"),
+        ("steps", "Response horizon", "响应期数"),
         (
             "bg_nomiss0",
             "BG: fill initial residual lags with zero",
@@ -949,8 +1149,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         "max_lags",
         "trend",
         "rank",
-        "event_study",
-        "placebo_repetitions",
+        "small",
+        "repetitions",
+        "seed",
+        "rhs",
+        "koenker",
     ] {
         let title = format!("parameters.statistics.{key}.title");
         let description = format!("parameters.statistics.{key}.description");
@@ -965,6 +1168,20 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "bandwidth" => ("Bandwidth", "带宽"),
             "lag" => ("Lag order", "滞后阶数"),
             "scale" => ("Variance scale", "方差尺度"),
+            "small" => ("Small-sample adjustment", "小样本修正"),
+            "repetitions" => ("Permutations (10–2000)", "置换次数（10–2000）"),
+            "seed" => ("Random seed", "随机种子"),
+            "rhs" => ("Use explanatory variables", "使用解释变量扩展"),
+            "koenker" => ("Koenker variant", "Koenker 变体"),
+            "max_iterations" => ("Maximum iterations", "最大迭代次数"),
+            "tolerance" => ("Convergence tolerance", "收敛容差"),
+            "estimator" => ("Panel estimator", "面板估计器"),
+            "effects" => ("Effect dimension", "效应维度"),
+            "transform" => ("AR(1) transformation", "AR(1) 变换"),
+            "lags" => ("Lag order", "滞后阶数"),
+            "max_lags" => ("Maximum lag order", "最大滞后阶数"),
+            "trend" | "regression" => ("Deterministic terms", "确定性项"),
+            "rank" => ("Cointegration rank", "协整秩"),
             _ => (key, key),
         };
         out.push(("en-US", title.to_owned(), Text(en)));

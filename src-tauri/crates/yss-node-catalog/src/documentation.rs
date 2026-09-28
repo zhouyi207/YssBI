@@ -125,6 +125,7 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.statistics.panel.fit" => markdown!("panel_fit"),
         "yssbi.statistics.panel.summary" => markdown!("panel_summary"),
         "yssbi.statistics.panel.did.twfe" => markdown!("panel_did"),
+        "yssbi.statistics.panel.did.randomization" => markdown!("did_randomization"),
         "yssbi.statistics.prais.fit" => markdown!("prais"),
         "yssbi.statistics.prais.summary" => markdown!("prais_summary"),
         "yssbi.statistics.linear.predict" => markdown!("predict"),
@@ -135,6 +136,7 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.statistics.var.fit" => markdown!("var_fit"),
         "yssbi.statistics.var.summary" => markdown!("var_summary"),
         "yssbi.statistics.vec.fit" => markdown!("vec"),
+        "yssbi.statistics.vec.summary" => markdown!("vec_summary"),
         "yssbi.statistics.vec.rank_test" => markdown!("vecrank"),
         _ => return None,
     })

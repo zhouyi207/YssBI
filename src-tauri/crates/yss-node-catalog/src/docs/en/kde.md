@@ -1,7 +1,5 @@
-# KDE
+# Kernel Density Estimate
 
-Kernel density estimate on numeric **Values** (Gaussian kernel, Silverman bandwidth $h = 1.06\,\sigma\, n^{-1/5}$), evaluated on a 256-point grid.
+Connect at least two finite numeric values. Computes a Gaussian KDE using Silverman's bandwidth, h = 1.06 × sample standard deviation × n^(-1/5), on 256 grid points. Zero variance uses bandwidth 1.
 
-## Usage
-
-Running the graph opens the **Plot** window with the KDE curve. Requires at least 2 valid values; bandwidth falls back to 1.0 when sample variance is zero.
+The result output contains method and points; each point has x and density. Inspect it in Results. This node does not currently open an interactive plot window.

@@ -1,5 +1,7 @@
 # VAR Fit
 
-Consumes `variables` and estimation parameters `lags, trend`. Outputs the fitted `model`, `fitted` values and `residuals`. Connect `model` to the corresponding Summary.
+Connect at least two aligned finite series in time order. The input order determines equation, shock and response ordering. Parameter lags selects consecutive lags 1 through p; the fitted model includes an intercept.
 
-This node has a catalog contract; its execution kernel is not yet registered.
+Output model retains coefficients, covariance, equation statistics, design and residuals. VAR Summary computes selected lag-exclusion, residual LM and stability analyses. Granger, IRF and FEVD have separate nodes; IRF/FEVD provide a configurable horizon. These analyses reuse the fitted model and are not computed during Fit.
+
+No single-series fitted/residual output is provided for this multivariate model.

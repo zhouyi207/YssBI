@@ -1,5 +1,5 @@
 # IV LIML Summary
 
-Consumes the fitted `model` produced by `yssbi.statistics.iv.liml.fit`. Outputs `result` and `report` from that model. It does not accept raw data or estimation parameters and does not refit.
+Connect the fitted `model` from IV LIML Fit. Configure selects model overview and coefficient inference by default. Enable `first_stage` or `overidentification` to compute those analyses from the same fitted sample and specification.
 
-This node has a catalog contract; its execution kernel is not yet registered.
+Outputs `result` and `report` containing the selected sections. No raw data or estimation parameters are required, and the LIML model is not refitted. Overidentification requires extra instruments and nonrobust covariance; unavailable statistics are reported as null.

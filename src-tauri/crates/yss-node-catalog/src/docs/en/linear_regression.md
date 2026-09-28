@@ -8,6 +8,6 @@ Fit **Response** against ordered **Predictors**. Choose **OLS** (default), **WLS
 
 Add only the auxiliary inputs required by the selected method; remove inapplicable inputs when switching methods. Response, predictors, and WLS weights must share a proven relational row domain. In-memory series are aligned by position and must have equal lengths. Missing and non-finite values are rejected; filter the common sample upstream.
 
-Estimation and standard error methods are separate. OLS/WLS accept conventional, HC0–HC3, HAC, Newey–West, and fixed-scale errors. GLS currently accepts **nonrobust** only; other choices are rejected during execution.
+Estimation and standard error methods are separate. OLS/WLS accept conventional, HC0–HC3, HAC, Newey–West, fixed-scale and cluster errors. Cluster covariance requires exactly one aligned numeric **clusters** input identifying groups; remove that input for other covariance choices. GLS currently accepts **nonrobust** only; other choices are rejected during execution.
 
 **Model** contains the immutable fitted linear regression result, reusable by **Linear Regression Summary** and **Linear Prediction** in the same run. **Fitted** and **Residuals** remain in original observation units, not weighted or whitened units.

@@ -1,5 +1,3 @@
-# VAR Lag Order (varsoc)
+# VAR Lag Order
 
-Lag-order selection for VAR (Stata `varsoc varlist, maxlag(#)`).
-
-Reports LL, LR, FPE, AIC, HQIC, SBIC for lags $0,\ldots,p_{\max}$ to help choose $p$ before **VAR Summary**.
+Connect at least two aligned finite series in time order. max_lags selects the largest candidate lag. Reports LL, LR, FPE, AIC, HQIC and SBIC for candidate orders 0 through max_lags on the estimator's common sample. Use the result to configure VAR Fit.

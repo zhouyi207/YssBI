@@ -1,5 +1,5 @@
 # IV LIML Summary
 
-接收 `yssbi.statistics.iv.liml.fit` 产生的已拟合 `model`，基于该模型输出 `result` 和 `report`。不接收原始数据或估计配置，不重新拟合。
+连接 IV LIML Fit 产生的 `model`。Configure 默认选择模型概览和系数推断；开启 `first_stage` 或 `overidentification` 后，复用同一拟合样本和模型设定计算相应分析。
 
-当前已定义目录契约，执行内核尚未注册。
+`result` 和 `report` 只包含所选内容。不接收原始数据或估计配置，不重新拟合 LIML 模型。过度识别检验需要额外工具变量及 nonrobust 协方差；不可用统计量显示为 null。

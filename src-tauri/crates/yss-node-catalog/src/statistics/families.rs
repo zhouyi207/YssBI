@@ -39,6 +39,15 @@ pub(super) struct NodeSpec {
 
 pub(super) const NODES: &[NodeSpec] = &[
     node(
+        "yssbi.statistics.panel.did.randomization",
+        "DID fake-group randomization",
+        "DID 伪处理组随机化检验",
+        &["DID", "placebo", "randomization inference"],
+        &["安慰剂", "随机化推断"],
+        Family::PanelDid,
+        Stage::Test,
+    ),
+    node(
         "yssbi.statistics.adf.test",
         "Dickey–Fuller / Augmented Dickey–Fuller",
         "DF / ADF 单位根检验",
@@ -159,13 +168,8 @@ pub(super) const NODES: &[NodeSpec] = &[
         "yssbi.statistics.panel.did.twfe",
         "Panel DID (TWFE)",
         "面板双重差分（双向固定效应）",
-        &[
-            "difference in differences",
-            "TWFE",
-            "event study",
-            "parallel trends",
-        ],
-        &["双重差分", "双向固定效应", "事件研究", "平行趋势"],
+        &["difference in differences", "TWFE"],
+        &["双重差分", "双向固定效应"],
         Family::PanelDid,
         Stage::Fit,
     ),
@@ -267,6 +271,15 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["向量误差修正", "协整", "误差修正"],
         Family::Vec,
         Stage::Fit,
+    ),
+    node(
+        "yssbi.statistics.vec.summary",
+        "VEC Summary",
+        "VEC 汇总",
+        &["VECM report", "LM test", "stability"],
+        &["VECM"],
+        Family::Vec,
+        Stage::Summary,
     ),
     node(
         "yssbi.statistics.vec.rank_test",

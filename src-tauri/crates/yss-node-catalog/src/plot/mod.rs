@@ -203,7 +203,11 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         "result",
         "Result",
         PortDirection::Output,
-        concrete("core.text")?,
+        concrete(if spec.id == "yssbi.plot.kde.view" {
+            "statistics.report"
+        } else {
+            "core.text"
+        })?,
         PortCardinality::Declared,
         None,
     )?);

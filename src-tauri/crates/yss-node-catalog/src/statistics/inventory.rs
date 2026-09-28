@@ -7,10 +7,24 @@ mod entries;
 use entries::ENTRIES;
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    catalog_entry::append(ENTRIES, fragment, "builtin.statistics", "builtin.dataframe")
+    for entry in ENTRIES
+        .iter()
+        .filter(|entry| !super::analyses::implemented(entry.id))
+    {
+        catalog_entry::append(
+            std::slice::from_ref(entry),
+            fragment,
+            "builtin.statistics",
+            "builtin.dataframe",
+        )?;
+    }
+    Ok(())
 }
 
 pub(crate) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
+    if super::analyses::implemented(id) {
+        return super::analyses::documentation(id, locale);
+    }
     catalog_entry::documentation(ENTRIES, id, locale)
 }
 
@@ -42,6 +56,10 @@ mod tests {
                 entry.id
             );
             let protocol = registered.protocol();
+            if super::super::analyses::implemented(entry.id) {
+                assert!(!protocol.interface.ports.is_empty());
+                continue;
+            }
             assert!(
                 protocol.interface.ports.is_empty(),
                 "{} needs an explicit interface review",

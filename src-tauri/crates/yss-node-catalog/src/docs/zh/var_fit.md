@@ -1,5 +1,7 @@
 # VAR Fit
 
-接收 `variables` 和估计参数 `lags, trend`，输出已拟合的 `model`、拟合值 `fitted` 与残差 `residuals`。将 `model` 连接到对应的 Summary。
+按时间顺序连接至少两条对齐、等长、有限的数值序列。输入顺序决定方程、冲击与响应的顺序。lags 参数选用 1 到 p 的连续滞后，模型包含截距。
 
-当前已定义目录契约，执行内核尚未注册。
+唯一输出 model 保留系数、协方差、方程统计量、设计及残差。VAR Summary 按选择计算滞后排除、残差 LM 和稳定性分析；Granger、IRF、FEVD 使用独立节点，IRF/FEVD 可配置分析期数。这些分析复用已有模型，不在 Fit 阶段计算。
+
+多变量模型不提供单条 fitted/residuals 数列。

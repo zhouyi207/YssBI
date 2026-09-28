@@ -1,5 +1,7 @@
 # IV LIML Fit
 
-连接 `response, predictors, endogenous, instruments`，在 Detail → 参数中设置估计参数。输出已拟合的 `model`、拟合值 `fitted` 与残差 `residuals`。将 `model` 连接到对应的 Summary。
+连接一个因变量、可选的有序外生自变量、一个或多个内生变量，以及一个或多个排除工具变量。各列须对齐、等长且数值有限；常数项由参数控制，不要自行添加。
 
-当前已定义目录契约，执行内核尚未注册。
+参数包括截距、标准误（nonrobust 或 HC0–HC3）及小样本修正。无法识别或秩不足时明确报错。
+
+输出 model、fitted 和结构残差 residuals。模型保留系数、推断统计、kappa 及拟合设计。连接 IV LIML Summary，可选择第一阶段或过度识别分析，这些分析仅在选中后计算。拟合值使用观测到的内生变量。

@@ -1,9 +1,7 @@
-# XT Align
+# Panel Alignment
 
-Aligns a panel **DataFrame** on the full $(entity \times time)$ grid; missing cells become null.
+Connect a DataFrame and select entity_column and time_column. Time must be Int64, UInt64 (at most i64::MAX) or Date32. Keys cannot be null, and entity-time pairs must be unique.
 
-Entity column: **Categorical**, **Int64**, or **String**. Time column: **Int64** or **Date**.
+The sorted union of observed times defines a shared ordinal grid. Positive interval is a step in that grid, not a calendar duration. Each entity is filled only between its own first and last observed positions. Times absent from every entity are not introduced. Off-grid observations are rejected.
 
-## Usage
-
-Standard step before panel models or **XT Diff**. Output keeps the input schema; rows expand to the entity–time Cartesian product.
+Output groups entities in first-seen order and sorts time within each group. Original column order, types and metadata are retained; inserted non-key values are null. Output expansion is bounded by the execution memory budget.

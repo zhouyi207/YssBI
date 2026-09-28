@@ -23,7 +23,6 @@ pub const DATAFRAME_DROP_NA_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.drop
 
 pub const DATAFRAME_COLUMNS_RESOLVER: &str = "yssbi.dataframe.interface.columns";
 pub const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
-pub const DATAFRAME_PANEL_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.panel";
 pub const DATAFRAME_COMPOSITION_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.composition";
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
@@ -44,7 +43,6 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         schema_resolvers: vec![
             sid(DATAFRAME_DROP_NA_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, SchemaResolverId::new)?,
-            sid(DATAFRAME_PANEL_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_COMPOSITION_SCHEMA_RESOLVER, SchemaResolverId::new)?,
         ],
         nodes,
@@ -68,11 +66,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         | InterfaceKind::SeriesCount
         | InterfaceKind::DummyInfo
         | InterfaceKind::TimeLag => vec![sid("element", TypeParameterId::new)?],
-        InterfaceKind::TimeAlign => vec![sid("time", TypeParameterId::new)?],
-        InterfaceKind::PanelAlign => vec![
-            sid("entity", TypeParameterId::new)?,
-            sid("time", TypeParameterId::new)?,
-        ],
         _ => vec![],
     };
     Ok(NodeProtocol {
@@ -418,7 +411,6 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         TimeAlign => Ok((
             vec![
                 data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
-                data_input("time", "Time", generic_series_type("time")?, None)?,
                 data_output(
                     "aligned",
                     "Aligned",
@@ -426,7 +418,10 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
                     Some(SchemaExpr::Input(port_key("dataframe")?)),
                 )?,
             ],
-            vec![select_parameter("frequency")?],
+            vec![
+                column_parameter("time_column")?,
+                positive_integer_parameter("interval", 1)?,
+            ],
         )),
         TimeUnary => Ok((
             vec![
@@ -457,19 +452,18 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         PanelAlign => Ok((
             vec![
                 data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
-                data_input("entity", "Entity", generic_series_type("entity")?, None)?,
-                data_input("time", "Time", generic_series_type("time")?, None)?,
                 data_output(
                     "aligned",
                     "Aligned",
                     dataframe_type()?,
-                    Some(derived_schema(
-                        DATAFRAME_PANEL_SCHEMA_RESOLVER,
-                        vec![SchemaDependency::Port(port_key("dataframe")?)],
-                    )?),
+                    Some(SchemaExpr::Input(port_key("dataframe")?)),
                 )?,
             ],
-            vec![],
+            vec![
+                column_parameter("entity_column")?,
+                column_parameter("time_column")?,
+                positive_integer_parameter("interval", 1)?,
+            ],
         )),
         PanelDifference => Ok((
             vec![
@@ -690,16 +684,6 @@ fn required_text_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemb
         key,
         concrete("core.text")?,
         ParameterEditorSpec::Text { multiline: false },
-        None,
-        vec![ParameterConstraint::Required],
-    )
-}
-
-fn select_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
-    parameter(
-        key,
-        concrete("core.text")?,
-        ParameterEditorSpec::Select,
         None,
         vec![ParameterConstraint::Required],
     )
@@ -992,7 +976,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         "dataframe",
         "column",
         "base_level",
-        "frequency",
         "order",
         "window",
         "rows",
@@ -1010,11 +993,18 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
         (
+            "interval",
+            "Grid interval",
+            "网格间隔",
+            "Positive step: time units for time-series alignment; shared observed-time positions for panel alignment.",
+            "正整数步长：时间序列按时间单位，面板按共享已观测时间序列的位置补齐。",
+        ),
+        (
             "entity_column",
             "Entity Column",
             "实体列",
-            "Groups panel differences by this column; missing keys are rejected.",
-            "按此列分组计算面板差分，键不允许缺失。",
+            "Groups panel alignment or differences by this column; missing keys are rejected.",
+            "按此列分组对齐面板或计算差分，键不允许缺失。",
         ),
         (
             "time_column",
