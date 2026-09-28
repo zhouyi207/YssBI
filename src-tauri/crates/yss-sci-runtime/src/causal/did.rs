@@ -1,4 +1,13 @@
 //! Runtime entry point for DID randomization inference.
+pub fn randomization_test(
+    input: yss_sci_contract::causal::did::DidRandomizationInput,
+    control: &yss_sci_contract::execution::ScientificExecutionControl,
+) -> Result<
+    yss_sci_contract::causal::did::DidPlaceboFakeGroupBlock,
+    yss_sci_contract::causal::did::DidFakeGroupError,
+> {
+    yss_sci::causal::did::randomization_test(input, control)
+}
 use yss_sci_contract::causal::did::{
     DidFakeGroupEnginePayload, DidFakeGroupError, DidPlaceboFakeGroupBlock,
 };

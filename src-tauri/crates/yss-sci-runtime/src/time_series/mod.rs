@@ -3,3 +3,7 @@ pub use acf_pacf::acf_pacf;
 
 mod models;
 pub use models::{augmented_dickey_fuller, var_fit, var_lag_order, vec_fit, vec_rank_test};
+mod report;
+pub use report::{
+    var_granger, var_impulse_responses, var_summary, var_variance_decomposition, vec_summary,
+};

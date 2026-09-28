@@ -2,7 +2,6 @@
 pub mod discrete;
 pub mod linear;
 pub mod report;
-pub mod types;
 use yss_sci_contract::regression::fit::{RegressionFit, RegressionKind};
 use yss_sci_contract::{SciError, StatisticalObservationMetadata};
 

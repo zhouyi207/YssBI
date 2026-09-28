@@ -20,6 +20,14 @@ pub(crate) fn time_numbers(values: &dyn Array) -> Result<Vec<i64>, PreparationEr
             .ok_or(PreparationError::TimeType)?
             .values()
             .to_vec()),
+        DataType::UInt64 => values
+            .as_any()
+            .downcast_ref::<UInt64Array>()
+            .ok_or(PreparationError::TimeType)?
+            .values()
+            .iter()
+            .map(|value| i64::try_from(*value).map_err(|_| PreparationError::Overflow))
+            .collect(),
         DataType::Date32 => Ok(values
             .as_any()
             .downcast_ref::<Date32Array>()
@@ -38,6 +46,12 @@ pub(crate) fn time_array(
 ) -> Result<ArrayRef, PreparationError> {
     match data_type {
         DataType::Int64 => Ok(Arc::new(Int64Array::from(values))),
+        DataType::UInt64 => Ok(Arc::new(UInt64Array::from(
+            values
+                .into_iter()
+                .map(|value| u64::try_from(value).map_err(|_| PreparationError::Overflow))
+                .collect::<Result<Vec<_>, _>>()?,
+        ))),
         DataType::Date32 => Ok(Arc::new(Date32Array::from(
             values
                 .into_iter()
@@ -101,6 +115,15 @@ pub fn align_batch(
     time_column: &str,
     interval: i64,
 ) -> Result<RecordBatch, PreparationError> {
+    align_batch_with_limit(batch, time_column, interval, MAX_PREPARED_BYTES)
+}
+
+pub(crate) fn align_batch_with_limit(
+    batch: &RecordBatch,
+    time_column: &str,
+    interval: i64,
+    max_bytes: usize,
+) -> Result<RecordBatch, PreparationError> {
     if interval <= 0 {
         return Err(PreparationError::Interval);
     }
@@ -119,21 +142,15 @@ pub fn align_batch(
     }
     let lo = *indexed.first_key_value().ok_or(PreparationError::Empty)?.0;
     let hi = *indexed.last_key_value().ok_or(PreparationError::Empty)?.0;
+    if times
+        .iter()
+        .any(|time| (i128::from(*time) - i128::from(lo)) % i128::from(interval) != 0)
+    {
+        return Err(PreparationError::Interval);
+    }
     let rows = usize::try_from((i128::from(hi) - i128::from(lo)) / i128::from(interval) + 1)
         .map_err(|_| PreparationError::MemoryLimit)?;
-    let output_bytes = rows
-        .checked_mul(
-            batch
-                .num_columns()
-                .checked_mul(8)
-                .and_then(|value| value.checked_add(32))
-                .ok_or(PreparationError::MemoryLimit)?,
-        )
-        .and_then(|bytes| bytes.checked_add(batch.get_array_memory_size()))
-        .ok_or(PreparationError::MemoryLimit)?;
-    if output_bytes > MAX_PREPARED_BYTES {
-        return Err(PreparationError::MemoryLimit);
-    }
+    crate::preprocessing::check_alignment_size(batch, rows, max_bytes)?;
     let grid = (0..rows)
         .map(|index| {
             i64::try_from(i128::from(lo) + index as i128 * i128::from(interval))

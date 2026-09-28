@@ -1,4 +1,3 @@
-use super::linear::types::PraisInfo;
 use crate::error::computation_failed;
 use serde::Serialize;
 use yss_sci_contract::regression::fit::{
@@ -9,6 +8,17 @@ use yss_sci_contract::regression::report::{
     LinearDiagnostics, LinearModelSummary, LinearRegressionSummary, RegressionCoefficient,
 };
 use yss_sci_contract::{SciError, SciOperationCode};
+
+/// Prais-Winsten / Cochrane-Orcutt 特有诊断信息
+#[derive(Serialize)]
+struct PraisInfo {
+    pub rho: f64,
+    pub dw_original: f64,
+    pub dw_transformed: f64,
+    pub iterations: usize,
+    /// Iteration log: "Prais iteration N: rho = X.XXXX" for each step
+    pub iteration_log: Vec<String>,
+}
 
 fn stable_report_number(value: f64) -> f64 {
     (value * 1e12).round() / 1e12
@@ -93,7 +103,7 @@ fn binary_model_basic_info(
 ) -> serde_json::Value {
     let observations = fit.metadata.used_observation_count;
     let parameters = fit.coefficients.len();
-    let df_model = parameters.saturating_sub(1);
+    let df_model = parameters.saturating_sub(usize::from(fit.constant));
     let df_residual = observations.saturating_sub(parameters);
     serde_json::json!({
         "model_type": match link {
@@ -116,7 +126,7 @@ fn binary_model_basic_info(
 }
 
 pub fn regression_report(fit: &RegressionFit) -> Result<serde_json::Value, SciError> {
-    if matches!(fit.family, "ols" | "wls" | "gls") {
+    if matches!(fit.family.as_str(), "ols" | "wls" | "gls") {
         return serde_json::to_value(linear_regression_report(fit)?)
             .map_err(|_| computation_failed(SciOperationCode::Regression));
     }
@@ -146,7 +156,7 @@ pub fn regression_report(fit: &RegressionFit) -> Result<serde_json::Value, SciEr
     let coefficients = report_coefficients(fit);
     let (model_basic_info, condition_number, model_statistics, prais_info) = match &fit.statistics {
         RegressionStatistics::Linear { model, .. } => (
-            linear_model_basic_info(fit.family, observations, model),
+            linear_model_basic_info(&fit.family, observations, model),
             model.condition_number,
             None,
             None,
@@ -158,7 +168,7 @@ pub fn regression_report(fit: &RegressionFit) -> Result<serde_json::Value, SciEr
             None,
         ),
         RegressionStatistics::Prais { model, .. } => (
-            linear_model_basic_info(fit.family, observations, &model.linear),
+            linear_model_basic_info(&fit.family, observations, &model.linear),
             model.linear.condition_number,
             None,
             Some(PraisInfo {
@@ -197,7 +207,7 @@ pub fn linear_regression_report(fit: &RegressionFit) -> Result<LinearRegressionS
         endog_name: "response".into(),
         model_basic_info: LinearModelSummary {
             model_type: fit.family.to_uppercase(),
-            method: match fit.family {
+            method: match fit.family.as_str() {
                 "ols" => "Ordinary Least Squares",
                 "wls" => "Weighted Least Squares",
                 "gls" => "Generalized Least Squares",

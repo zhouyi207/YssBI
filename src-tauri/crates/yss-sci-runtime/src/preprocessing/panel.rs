@@ -339,14 +339,69 @@ pub fn align_batch(
     time: &str,
     interval: Option<i64>,
 ) -> Result<RecordBatch, PreparationError> {
+    align_batch_with_limit(batch, entity, time, interval, MAX_PREPARED_BYTES)
+}
+
+pub(super) fn align_batch_with_limit(
+    batch: &RecordBatch,
+    entity: &str,
+    time: &str,
+    interval: Option<i64>,
+    max_bytes: usize,
+) -> Result<RecordBatch, PreparationError> {
     let interval =
         usize::try_from(interval.unwrap_or(1)).map_err(|_| PreparationError::Interval)?;
     if interval == 0 {
         return Err(PreparationError::Interval);
     }
-    let input = prepare_panel(batch, entity, time)?;
-    let mut bounds: HashMap<usize, (usize, usize)> = HashMap::new();
-    for (&entity, &time) in input.panel.entity_id.iter().zip(&input.panel.time_id) {
+    let schema = batch.schema();
+    let entity_index = schema
+        .index_of(entity)
+        .map_err(|_| PreparationError::Column)?;
+    let time_index = schema
+        .index_of(time)
+        .map_err(|_| PreparationError::Column)?;
+    if entity_index == time_index {
+        return Err(PreparationError::Column);
+    }
+    let names = arrow::compute::cast(batch.column(entity_index).as_ref(), &DataType::Utf8)?;
+    let names = names
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or(PreparationError::ValueType)?;
+    if names.null_count() != 0 {
+        return Err(PreparationError::ValueType);
+    }
+    let times = time_numbers(batch.column(time_index).as_ref())?;
+    let mut unique_times = times.clone();
+    unique_times.sort_unstable();
+    unique_times.dedup();
+    if unique_times.is_empty() {
+        return Err(PreparationError::Empty);
+    }
+    let mut levels = HashMap::new();
+    let mut entity_rows = Vec::new();
+    let entities = names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            *levels.entry(name).or_insert_with(|| {
+                let id = entity_rows.len();
+                entity_rows.push(i as u64);
+                id
+            })
+        })
+        .collect::<Vec<_>>();
+    let time_ids = times
+        .iter()
+        .map(|t| unique_times.binary_search(t).expect("observed time"))
+        .collect::<Vec<_>>();
+    let mut bounds = HashMap::<usize, (usize, usize)>::new();
+    let mut keys = std::collections::HashSet::new();
+    for (&entity, &time) in entities.iter().zip(&time_ids) {
+        if !keys.insert((entity, time)) {
+            return Err(PreparationError::DuplicateTime);
+        }
         bounds
             .entry(entity)
             .and_modify(|(lo, hi)| {
@@ -355,26 +410,50 @@ pub fn align_batch(
             })
             .or_insert((time, time));
     }
+    if entities
+        .iter()
+        .zip(&time_ids)
+        .any(|(entity, time)| !(time - bounds[entity].0).is_multiple_of(interval))
+    {
+        return Err(PreparationError::Interval);
+    }
     let rows = bounds.values().try_fold(0usize, |rows, (lo, hi)| {
         rows.checked_add((hi - lo) / interval + 1)
             .ok_or(PreparationError::MemoryLimit)
     })?;
-    check_size(
-        rows,
-        batch
-            .num_columns()
-            .checked_mul(24)
-            .and_then(|width| width.checked_add(32))
-            .ok_or(PreparationError::MemoryLimit)?,
-    )?;
-    let aligned = align_panel(
-        &input.panel.entity_id,
-        &input.panel.time_id,
-        &input.panel.columns,
-        Some(interval),
-    )
-    .map_err(|_| PreparationError::Panel)?;
-    panel_batch(batch, &input, &aligned)
+    super::check_alignment_size(batch, rows, max_bytes)?;
+    let row_numbers = (0..batch.num_rows()).map(|i| i as f64).collect();
+    let aligned = align_panel(&entities, &time_ids, &[row_numbers], Some(interval))
+        .map_err(|_| PreparationError::Panel)?;
+    let indices = UInt64Array::from_iter(
+        aligned.columns[0]
+            .iter()
+            .map(|v| v.is_finite().then_some(*v as u64)),
+    );
+    let entity_indices =
+        UInt64Array::from_iter_values(aligned.entity_id.iter().map(|id| entity_rows[*id]));
+    let aligned_times: Vec<_> = aligned.time_id.iter().map(|id| unique_times[*id]).collect();
+    let mut arrays = Vec::new();
+    let mut fields = Vec::new();
+    for (i, array) in batch.columns().iter().enumerate() {
+        arrays.push(if i == entity_index {
+            arrow::compute::take(array.as_ref(), &entity_indices, None)?
+        } else if i == time_index {
+            time_array(aligned_times.clone(), array.data_type())?
+        } else {
+            arrow::compute::take(array.as_ref(), &indices, None)?
+        });
+        fields.push(
+            schema
+                .field(i)
+                .clone()
+                .with_nullable(i != entity_index && i != time_index),
+        );
+    }
+    Ok(RecordBatch::try_new(
+        Arc::new(Schema::new_with_metadata(fields, schema.metadata().clone())),
+        arrays,
+    )?)
 }
 
 /// The existing panel difference routine owns the treatment of gaps and valid observations.

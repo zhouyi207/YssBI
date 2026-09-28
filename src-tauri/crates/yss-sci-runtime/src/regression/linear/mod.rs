@@ -1,5 +1,5 @@
 //! Linear regression entry points with admission and execution-control checks.
-pub mod types;
+pub mod prais;
 use crate::error::{invalid, map_sci_error};
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
@@ -49,6 +49,12 @@ pub fn linear_regression(
         dropped_nan_count: 0,
         missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
     };
+    let weights = match &request.method {
+        yss_sci_contract::regression::linear::LinearRegressionMethod::Wls { weights } => {
+            Some(weights.clone())
+        }
+        _ => None,
+    };
     let constant = request.options.constant;
     control.check()?;
     let fit = yss_sci::regression::linear::fit::fit_linear_regression(
@@ -68,6 +74,7 @@ pub fn linear_regression(
     }
     control.check()?;
     Ok(LinearRegressionResult {
+        weights,
         constant,
         coefficients: fit.coefficients,
         fitted: fit.fitted,

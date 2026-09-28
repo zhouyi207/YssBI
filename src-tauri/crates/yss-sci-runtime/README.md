@@ -14,7 +14,7 @@ faer or `yss-sci-linalg` dependency and does not construct numerical matrices or
 estimators. Arrow remains the tabular exchange representation; SCI converts
 numeric inputs into Linalg matrices and returns computed results.
 
-Time alignment consumes Arrow `Int64` and `Date32` arrays directly. Alignment and
+Time alignment consumes Arrow `Int64`, `UInt64` (within `i64::MAX`) and `Date32` arrays directly. Alignment and
 panel preparation share the checked numeric-grid helpers in `preprocessing::time_series::align`.
 
 `regression::linear::linear_regression` and `time_series::acf_pacf` accept neutral requests and `ScientificExecutionControl` from
@@ -40,25 +40,26 @@ these checks do not promise cooperative interruption of a running matrix decompo
 Domain names follow [SCI's category mapping](../yss-sci/README.md#domain-organization).
 Entry points and method-specific report records live in their owning domains.
 
-| Module                 | Responsibility                                                               |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| `regression`           | Regression-family dispatch and result serialization                          |
-| `regression::linear`   | Controlled OLS/WLS/GLS computation, OLS entry point and linear model records |
-| `regression::discrete` | Binary-response model records                                                |
-| `regression::report`   | Report labels, fields and serialization                                      |
-| `regression::types`    | Shared variable declarations and composed regression report records          |
-| `hypothesis`           | Neutral hypothesis and margins `at()` entry points into SCI                  |
-| `time_series`          | ACF/PACF, ADF, VAR and VEC entry points                                      |
-| `diagnostics`          | Serial-correlation entry points and diagnostic report records                |
-| `panel`                | Panel fitting and panel-specific report records                              |
-| `causal::iv`           | IV fitting and IV-specific report records                                    |
-| `causal::did`          | TWFE DID fitting and randomization inference                                 |
-| `preprocessing`        | Arrow panel/time alignment and tabular transformations                       |
-| `density`              | Density computation entry point                                              |
-| `distribution`         | Probability distribution sampling entry point                                |
+| Module                 | Responsibility                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `regression`           | Regression-family dispatch and result serialization                             |
+| `regression::linear`   | Controlled OLS/WLS/GLS and configurable Prais computation, linear model records |
+| `regression::discrete` | Configurable Logit/Probit fits and prediction from existing coefficients        |
+| `regression::report`   | Report labels, fields and serialization                                         |
+| `hypothesis`           | Neutral hypothesis and margins `at()` entry points into SCI                     |
+| `time_series`          | ACF/PACF, ADF, VAR and VEC entry points                                         |
+| `diagnostics`          | Residual/model and serial-correlation tests, neutral diagnostic records         |
+| `panel`                | Panel fitting and selected report projections                                   |
+| `causal::iv`           | IV fitting, selected diagnostics and report projections                         |
+| `causal::did`          | TWFE DID fitting and randomization inference                                    |
+| `preprocessing`        | Arrow panel/time alignment and tabular transformations                          |
+| `density`              | Density computation entry point                                                 |
+| `distribution`         | Probability distribution sampling entry point                                   |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
 entry points call the corresponding SCI owner; report encoding stays here.
+Fit contracts come from `yss-sci-contract`; Runtime does not maintain a second
+hierarchy of regression, panel or diagnostic result types.
 
 ## Linear regression data flow
 
@@ -70,19 +71,40 @@ an intermediate configuration mirror.
 SCI's `regression::linear::fit::fit_linear_regression` selects OLS/WLS/GLS and projects the fit, including its already-computed fitted
 values and residuals. `regression::report::linear_regression_report` returns typed model and
 coefficient statistics without duplicating observation arrays. The `linear_regression` function
-returns these statistics alongside ordinary fitted/residual vectors and the fitted
-design columns. The Summary kernel computes the selected ACF/PACF, serial-test and
+returns these statistics alongside ordinary fitted/residual vectors, fitted
+design columns and the original optional WLS weights. Residual diagnostics reuse
+these weights; they never silently substitute an unweighted fit. The Summary kernel computes the selected ACF/PACF, serial-test and
 hypothesis analyses from that model. Execution retains the shared model and immutable
 summary; Application validates result identity and reads those computed analyses.
 Serial-test input/output
 records belong to `yss-sci-contract::diagnostics::serial_correlation`. No opaque JSON report crosses
 this boundary.
 
-Tabular preparation accepts Arrow arrays and `RecordBatch` values. Time alignment preserves
-Int64/Date32 and column metadata, fills gaps with nulls, and checks duplicate/null times and
+Binary and Prais entry points accept their shared options instead of rebuilding defaults.
+IV accepts separate exogenous, endogenous and instrument column collections, preserving
+fitted values, residuals, coefficient inference and the design needed for later analyses.
+`causal::iv::summary` requests first-stage, overidentification and endogeneity analyses
+only when selected. Panel accepts `PanelOptions`; SCI selects the estimator/effect
+combination and owns all matrix construction. Panel Summary projects the selected
+model, coefficient, effect and estimator statistics from the shared fit contract.
+VAR/VEC Summary likewise selects report contents and calls SCI for requested
+serial tests, lag exclusion or stability. Granger, IRF and FEVD are independent
+postestimation calls; IRF/FEVD take their horizon at that stage. Summaries reuse the
+fitted model without refitting it, and fits do not cache full reports.
+`causal::did::randomization_test` accepts observed data and execution control, fits the
+observed TWFE specification once and checks cancellation between permutations.
+
+Tabular preparation accepts Arrow arrays and `RecordBatch` values. `align_batches` checks
+retained-input and estimated output memory before concatenating or expanding the grid.
+Time alignment preserves
+Int64/UInt64/Date32 and column metadata, fills gaps with nulls, and checks duplicate/null times and
 the bounded output size before allocating a complete grid. Lag, difference, percentage change,
-and rolling means retain their numeric/null policies. Panel batch adapters reuse the existing
-`align_panel` and `panel_diff` routines; they preserve entity/date types at the Arrow boundary.
+and rolling means retain their numeric/null policies. Off-grid observations are rejected.
+Panel alignment uses positions in the shared sorted observed-time grid, filling only each
+entity's own start-to-end range; it does not generate unobserved calendar dates or a full
+entity-time Cartesian product. Arrow take preserves all original column types, order and
+metadata. Repeated entity-time keys fail. Panel differences retain their existing numerical
+and gap policies through `panel_diff`.
 These routines prepare already admitted inputs and do not own relational plans or project data.
 
 The crate does not own project/database state, graph scheduling, result storage,
