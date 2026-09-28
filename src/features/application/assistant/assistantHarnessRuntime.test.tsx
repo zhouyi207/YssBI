@@ -15,7 +15,7 @@ vi.mock("@assistant-ui/react", async (importOriginal) => {
 });
 vi.mock("@/features/core/settings/read", () => {
   const settings = {
-    isLoading: true,
+    isLoading: false,
     ai: { openAiModel: "test", openAiBaseUrl: "https://example.test/v1", openAiApiKey: "test" },
   };
   return {
@@ -25,7 +25,6 @@ vi.mock("@/features/core/settings/read", () => {
 });
 vi.mock("@/services/assistant/harnessService", () => ({
   HarnessService: {
-    runtimeStatus: vi.fn(),
     configureProvider: vi.fn(),
     createSession: vi.fn(),
     listSessions: vi.fn(),
@@ -37,11 +36,16 @@ vi.mock("@/services/assistant/harnessService", () => ({
 }));
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  vi.mocked(HarnessService.configureProvider).mockResolvedValue({ providerConfigured: true });
   vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
   vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
 });
 
-afterEach(() => vi.resetAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.resetAllMocks();
+});
 
 it("retains the safe provider failure and accepts a subsequent successful turn", async () => {
   const host = document.createElement("div");
@@ -51,7 +55,6 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
   let emit!: Parameters<typeof HarnessService.subscribeEvents>[2];
   vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
   vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
-  vi.mocked(HarnessService.runtimeStatus).mockResolvedValue({ providerConfigured: true });
   vi.mocked(HarnessService.createSession).mockResolvedValue({
     sessionId: "session-1",
     projectInstanceId: "project-1",
@@ -140,6 +143,7 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
   });
   try {
     await act(async () => root.render(createElement(Harness)));
+    await act(async () => vi.runOnlyPendingTimersAsync());
     expect(adapter().isSendDisabled).toBe(false);
     await act(async () => {
       await adapter().onNew!(message("First request"));
@@ -206,7 +210,6 @@ it("replays a missing tool failure and ignores callbacks from the replaced subsc
     });
   vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
   vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
-  vi.mocked(HarnessService.runtimeStatus).mockResolvedValue({ providerConfigured: true });
   vi.mocked(HarnessService.createSession).mockResolvedValue({
     sessionId: "session-1",
     projectInstanceId: "project-1",
@@ -238,6 +241,7 @@ it("replays a missing tool failure and ignores callbacks from the replaced subsc
   }
   try {
     await act(async () => root.render(createElement(Harness)));
+    await act(async () => vi.runOnlyPendingTimersAsync());
     await act(async () => {
       callbacks[0].event(event(2, "turn_started", { userMessage: "Profile" }));
       callbacks[0].event(
@@ -268,7 +272,6 @@ it("ignores a session response arriving after the panel unmounts", async () => {
   let resolve!: (session: Awaited<ReturnType<typeof HarnessService.createSession>>) => void;
   vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
   vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
-  vi.mocked(HarnessService.runtimeStatus).mockResolvedValue({ providerConfigured: true });
   vi.mocked(HarnessService.createSession).mockImplementation(
     () =>
       new Promise((done) => {
