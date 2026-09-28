@@ -311,6 +311,14 @@ input[type="number"] {
   * {
     @apply border-border outline-ring/50;
   }
+  /* Apply the app-wide focus policy to native outlines and Tailwind rings. */
+  :focus,
+  :focus-visible {
+    outline: none !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    --tw-inset-ring-shadow: 0 0 #0000 !important;
+  }
   body {
     @apply bg-background text-foreground;
   }
