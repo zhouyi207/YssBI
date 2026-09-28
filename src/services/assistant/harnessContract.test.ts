@@ -3,9 +3,27 @@ import {
   InvalidHarnessPayloadError,
   parseHarnessRuntimeStatus,
   parseHarnessSessions,
+  parseHarnessEvent,
 } from "./harnessContract";
 
 describe("Harness wire contract", () => {
+  it("accepts resource edit lifecycle events without accepting unknown capabilities", () => {
+    const event = {
+      sequence: 1,
+      sessionId: "session",
+      turnId: "turn",
+      occurredAt: 1,
+      type: "tool_invocation_completed",
+      payload: { invocationId: "invocation", capabilityId: "edit_resource" },
+    };
+    expect(parseHarnessEvent(event)).toEqual(event);
+    expect(() =>
+      parseHarnessEvent({
+        ...event,
+        payload: { ...event.payload, capabilityId: "execute_arbitrary_code" },
+      }),
+    ).toThrow(InvalidHarnessPayloadError);
+  });
   it("requires an explicit provider status", () => {
     expect(parseHarnessRuntimeStatus({ providerConfigured: true })).toEqual({
       providerConfigured: true,

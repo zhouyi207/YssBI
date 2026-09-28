@@ -8,6 +8,10 @@ export const FILE_RESOURCE_KINDS = [
 export type FileResourceKind = (typeof FILE_RESOURCE_KINDS)[number];
 export const RESOURCE_KINDS = [...FILE_RESOURCE_KINDS, "database"] as const;
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
+export interface ResourceRef {
+  kind: ResourceKind;
+  id: string;
+}
 
 export type ResourceUri = `yssbi://${ResourceKind}/${string}`;
 /** File kinds are independent namespaces; IDs are opaque and never classified by filename. */

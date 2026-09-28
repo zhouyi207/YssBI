@@ -285,6 +285,10 @@ export const zhCN = {
     assistantToolArguments: "调用参数",
     assistantToolArgumentsUnavailable: "此调用记录未提供参数",
     assistantToolNames: {
+      inspect_resource: "查看资源内容",
+      manage_resource: "管理项目资源",
+      edit_resource: "编辑资源内容",
+      export_dataset: "导出数据",
       inspect_ui: "检查界面",
       update_ui: "更新界面",
       request_ui_intent: "请求界面操作",

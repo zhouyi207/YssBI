@@ -303,6 +303,10 @@ export const enUS = {
     assistantToolArguments: "Arguments",
     assistantToolArgumentsUnavailable: "Arguments were not provided for this call",
     assistantToolNames: {
+      inspect_resource: "Inspect resource contents",
+      manage_resource: "Manage project resources",
+      edit_resource: "Edit resource contents",
+      export_dataset: "Export dataset",
       inspect_ui: "Inspect UI",
       update_ui: "Update UI",
       request_ui_intent: "Request UI action",

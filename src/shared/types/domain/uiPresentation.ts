@@ -1,6 +1,7 @@
 import { isResultReference, resultReferenceKey, type ResultReference } from "./result";
 import { isRecord } from "@/shared/types/report/guards";
 import { isUuid } from "./editorProjectionGuards";
+import { RESOURCE_KINDS, type ResourceRef } from "./resource";
 
 export const UI_PANELS = [
   "project",
@@ -13,7 +14,11 @@ export const UI_PANELS = [
   "logs",
 ] as const;
 export type UiIntent =
-  | { readonly kind: "openGraph"; readonly graphPath: string; readonly nodeId: string | null }
+  | {
+      readonly kind: "openResource";
+      readonly resource: Readonly<ResourceRef>;
+      readonly nodeId: string | null;
+    }
   | { readonly kind: "openResult"; readonly source: ResultReference }
   | { readonly kind: "showPanel"; readonly panel: (typeof UI_PANELS)[number] };
 export type UiComponent =
@@ -123,11 +128,20 @@ function revision(value: unknown): asserts value is number {
 export function parseUiIntent(value: unknown): UiIntent {
   if (!isRecord(value)) return fail();
   switch (value.kind) {
-    case "openGraph":
-      record(value, ["kind", "graphPath", "nodeId"]);
-      text(value.graphPath, 4096);
-      if (!value.graphPath || (value.nodeId !== null && !isUuid(value.nodeId))) fail();
+    case "openResource": {
+      record(value, ["kind", "resource", "nodeId"]);
+      const resource = record(value.resource, ["kind", "id"]);
+      text(resource.id, 4096);
+      if (
+        !resource.id ||
+        !RESOURCE_KINDS.includes(resource.kind as never) ||
+        (value.nodeId !== null &&
+          (!isUuid(value.nodeId) ||
+            (resource.kind !== "event_graph" && resource.kind !== "function_graph")))
+      )
+        fail();
       break;
+    }
     case "openResult":
       record(value, ["kind", "source"]);
       source(value.source);

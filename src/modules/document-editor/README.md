@@ -93,8 +93,11 @@ and Doc input buffers, including text entered while the command was in flight.
 Markdown and tree edits. Current synchronization uses command snapshots and the existing Project resource
 publication notifications. There is no additional document channel, frontend
 document authority, automatic save or independent renderer persistence format.
-Native undo/redo within a text input is available; document-level Mind history and
-Harness tool registration are not part of the current editor.
+Native undo/redo within a text input is available; document-level Mind history is not
+part of the current editor. Harness reads and edits these resources through the same
+typed Application owners: Mind batches preserve tree constraints and Doc range edits
+preserve text outside the requested Unicode character range. Resource publication
+updates open editors; version checks retain conflicts with unfinished UI inputs.
 
 Manual acceptance on the desktop:
 
@@ -123,3 +126,6 @@ Manual acceptance on the desktop:
    rejected, input remains available and Discard in the close confirmation reloads the saved file.
 5. Open split panes, switch projects during a pending read, and rename an open file.
    Verify late results cannot restore an old path or overwrite the new project.
+6. Create, read, edit, save and open Mind/Doc through Assistant; verify the project tree,
+   editor contents and Details refresh from committed resource events. Repeat with a
+   pending UI text buffer and verify a stale edit cannot silently overwrite it.

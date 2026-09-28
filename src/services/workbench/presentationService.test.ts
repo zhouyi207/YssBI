@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { subscribeUi } from "./presentationService";
+import { parseUiIntent } from "@/shared/types/domain/uiPresentation";
 
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({
@@ -12,6 +13,28 @@ vi.mock("@/services/devHmrIpc", () => ({
   trackChannel: (channel: unknown) => channel,
   untrackChannel: vi.fn(),
 }));
+
+it("validates typed resource opening and restricts node focus to node graphs", () => {
+  const intent = {
+    kind: "openResource",
+    resource: { kind: "doc", id: "docs/Report.md" },
+    nodeId: null,
+  };
+  expect(parseUiIntent(intent)).toEqual(intent);
+  expect(() =>
+    parseUiIntent({ ...intent, resource: { ...intent.resource, kind: "unknown" } }),
+  ).toThrow();
+  expect(() =>
+    parseUiIntent({ ...intent, nodeId: "00000000-0000-0000-0000-000000000001" }),
+  ).toThrow();
+  expect(
+    parseUiIntent({
+      ...intent,
+      resource: { kind: "function_graph", id: "functions/F.yssbi-function" },
+      nodeId: "00000000-0000-0000-0000-000000000001",
+    }),
+  ).toMatchObject({ kind: "openResource" });
+});
 
 it("shares one project stream, recovers a late listener and releases only after the final listener", async () => {
   invoke.mockResolvedValue("subscription");

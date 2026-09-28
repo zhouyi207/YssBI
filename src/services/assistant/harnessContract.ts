@@ -1,18 +1,24 @@
-export type HarnessCapabilityId =
-  | "inspect_ui"
-  | "update_ui"
-  | "request_ui_intent"
-  | "inspect_graph"
-  | "search_node_catalog"
-  | "inspect_dataset_schema"
-  | "inspect_dataset_profile"
-  | "inspect_result"
-  | "inspect_project"
-  | "apply_graph_edit"
-  | "validate_graph"
-  | "execute_graph"
-  | "save_graph"
-  | "list_graph_results";
+const HARNESS_CAPABILITY_IDS = [
+  "inspect_resource",
+  "manage_resource",
+  "edit_resource",
+  "export_dataset",
+  "inspect_ui",
+  "update_ui",
+  "request_ui_intent",
+  "inspect_graph",
+  "search_node_catalog",
+  "inspect_dataset_schema",
+  "inspect_dataset_profile",
+  "inspect_result",
+  "inspect_project",
+  "apply_graph_edit",
+  "validate_graph",
+  "execute_graph",
+  "save_graph",
+  "list_graph_results",
+] as const;
+export type HarnessCapabilityId = (typeof HARNESS_CAPABILITY_IDS)[number];
 
 export interface HarnessKnowledgeCitation {
   readonly sourceId: string;
@@ -112,22 +118,7 @@ export class InvalidHarnessPayloadError extends Error {
   }
 }
 
-const CAPABILITY_IDS = new Set<HarnessCapabilityId>([
-  "inspect_ui",
-  "update_ui",
-  "request_ui_intent",
-  "inspect_graph",
-  "search_node_catalog",
-  "inspect_dataset_schema",
-  "inspect_dataset_profile",
-  "inspect_result",
-  "inspect_project",
-  "apply_graph_edit",
-  "validate_graph",
-  "execute_graph",
-  "save_graph",
-  "list_graph_results",
-]);
+const CAPABILITY_IDS = new Set<HarnessCapabilityId>(HARNESS_CAPABILITY_IDS);
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)

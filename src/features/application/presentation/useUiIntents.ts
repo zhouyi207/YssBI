@@ -10,14 +10,16 @@ import {
   captureProjectLifecycleState,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { openGraphInEditor } from "@/features/application/editor/openGraphInEditor";
-import { resolveGraphResourceMeta } from "@/features/application/editor/openGraphResource";
+import { openFileInEditor } from "@/features/application/editor/openFileInEditor";
+import { openDatabaseInEditor } from "@/features/application/editor/openDatabaseInEditor";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { revealGraphProblem } from "@/features/application/editor/revealGraphProblem";
 import { hydrateGraphProjection } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
-import { revealWorkbenchView } from "@/modules/workbench/public";
+import { revealWorkbenchView, workbenchLayoutRead } from "@/modules/workbench/public";
 import { logger } from "@/features/application/observability/appLogger";
 
 async function execute(intent: UiIntent, current: () => boolean): Promise<boolean> {
@@ -27,23 +29,31 @@ async function execute(intent: UiIntent, current: () => boolean): Promise<boolea
       return (await revealWorkbenchView(intent.panel)) !== null && current();
     case "openResult":
       return openInspectableResult(resultRef(intent.source));
-    case "openGraph": {
-      const meta = resolveGraphResourceMeta(intent.graphPath);
-      if (!meta) return false;
-      const panel = await openGraphInEditor(intent.graphPath, meta.name, meta.type);
-      if (!panel || !current()) return false;
-      if (!(await useProjectIOStore.getState().loadGraph(intent.graphPath)) || !current())
-        return false;
-      // A Harness edit notification can still be in flight when its focus request arrives.
+    case "openResource": {
+      const { resource } = intent;
+      const key = resourceKey(resource);
+      if (!useResourceStore.getState().resources[key]?.exists) {
+        await projectPublicationCoordinator.refreshIndex();
+      }
+      if (!current() || !useResourceStore.getState().resources[key]?.exists) return false;
+      if (resource.kind === "database") await openDatabaseInEditor(resource.id);
+      else await openFileInEditor(resource.id, resource.kind);
+      const panel = workbenchLayoutRead.getActiveEditorPanel();
       if (
-        !(await hydrateGraphProjection(intent.graphPath, currentProjectionLocale())) ||
-        !current()
+        !current() ||
+        panel?.metadata.resourceRef !== resource.id ||
+        panel.metadata.resourceKind !== resource.kind
       )
+        return false;
+      if (resource.kind !== "event_graph" && resource.kind !== "function_graph") return true;
+      if (!(await useProjectIOStore.getState().loadGraph(resource.id)) || !current()) return false;
+      // A Harness edit notification can still be in flight when its focus request arrives.
+      if (!(await hydrateGraphProjection(resource.id, currentProjectionLocale())) || !current())
         return false;
       return (
         !intent.nodeId ||
         (await revealGraphProblem(
-          intent.graphPath,
+          resource.id,
           { kind: "node", nodeId: intent.nodeId },
           panel.groupId,
         ))

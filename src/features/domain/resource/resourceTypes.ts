@@ -1,13 +1,8 @@
 import type { ResourceKind } from "@/shared/types/domain/resource";
-export type { ResourceKind } from "@/shared/types/domain/resource";
+export type { ResourceKind, ResourceRef } from "@/shared/types/domain/resource";
 
 /** Canonical store key — always equals `ProjectResourceMeta.uri`. */
 export type ResourceKey = string;
-
-export interface ResourceRef {
-  kind: ResourceKind;
-  id: string;
-}
 
 export interface ProjectResourceMeta {
   id: string;
