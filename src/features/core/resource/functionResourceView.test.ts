@@ -29,7 +29,7 @@ describe("functionResourceView", () => {
       "fn-1": {
         path: "fn-1",
         name: "Add",
-        type: "function" as const,
+        type: "function_graph" as const,
         functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
         functionOutputs: [],
       },

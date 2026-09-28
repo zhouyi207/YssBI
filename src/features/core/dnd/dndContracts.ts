@@ -24,7 +24,7 @@ export type NodeSpawnTemplate = {
 export type GraphResourceDragData = {
   id: string;
   name: string;
-  type: "event" | "function";
+  type: "event_graph" | "function_graph";
 };
 
 export type NodeTemplateDragData = {
@@ -79,7 +79,7 @@ export function isGraphResourceDragPayload(data: unknown): data is GraphResource
   const resource = data.sidebarResource;
   if (!isRecord(resource)) return false;
   if (typeof resource.id !== "string" || typeof resource.name !== "string") return false;
-  return resource.type === "event" || resource.type === "function";
+  return resource.type === "event_graph" || resource.type === "function_graph";
 }
 
 export function parseCanvasDragPayload(data: unknown): CanvasDragPayload | null {

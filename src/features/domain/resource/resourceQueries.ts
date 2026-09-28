@@ -1,23 +1,21 @@
-import {
-  toGraphResourceUri,
-  type GraphResourceKind,
-} from "@/shared/types/domain/graphResourcePath";
+import { toResourceUri } from "@/shared/types/domain/resource";
+import { type NodeFileKind } from "@/shared/types/domain/resource";
 import type { ProjectResourceMeta, ResourceKey } from "./resourceTypes";
 
-export function lookupGraphResource(
+export function lookupNodeFileResource(
   resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   graphPath: string,
 ): ProjectResourceMeta | undefined {
   return (
-    resources[toGraphResourceUri("event", graphPath)] ??
-    resources[toGraphResourceUri("function", graphPath)]
+    resources[toResourceUri("event_graph", graphPath)] ??
+    resources[toResourceUri("function_graph", graphPath)]
   );
 }
 
-export function lookupGraphResourceByKind(
+export function lookupNodeFileResourceByKind(
   resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   graphPath: string,
-  kind: GraphResourceKind,
+  kind: NodeFileKind,
 ): ProjectResourceMeta | undefined {
-  return resources[toGraphResourceUri(kind, graphPath)];
+  return resources[toResourceUri(kind, graphPath)];
 }

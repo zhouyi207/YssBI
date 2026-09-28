@@ -7,7 +7,7 @@ import { markResourceLoaded, clearResourceDocumentState } from "@/features/core/
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 import { releaseGraphViewport } from "@/features/core/viewport";
-import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
+import { getNodeFileKind } from "@/features/core/resource/resourceSelectors";
 import { GraphService } from "@/services/graph/graphService";
 import { logger } from "@/features/application/observability/appLogger";
 import { shouldRetainGraphDocument } from "./graphDocumentRetention";
@@ -31,7 +31,7 @@ export async function unloadGraphDocument(
   const lifecycleToken = beginGraphUnloadLifecycle(graphPath);
   invalidateGraphLoadOwnership(graphPath);
 
-  const kind = getGraphResourceKind(graphPath);
+  const kind = getNodeFileKind(graphPath);
   if (kind) {
     markResourceLoaded({ id: graphPath, kind }, false);
   }

@@ -11,7 +11,7 @@ import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
+import { buildFileResourceMeta, useResourceStore } from "@/features/core/resource";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
@@ -27,16 +27,13 @@ vi.mock("@dnd-kit/core", () => ({
 }));
 
 const actions = {
-  onAddEvent: vi.fn(),
-  onAddFunction: vi.fn(),
-  onAddChart: vi.fn(),
+  onCreateFile: vi.fn(),
+  onOpenFile: vi.fn(),
+  onFileContextMenu: vi.fn(),
   onImportData: vi.fn(),
 
   onCategoryContextMenu: vi.fn(),
-  onGraphContextMenu: vi.fn(),
 
-  onChartContextMenu: vi.fn(),
-  onOpenChart: vi.fn(),
   onDatabaseContextMenu: vi.fn(),
 };
 
@@ -76,9 +73,9 @@ describe("SidebarProjectTab", () => {
   }
 
   function installGraphs() {
-    const first = buildGraphResourceMeta("event", "events/First.yssbi-event", "First Event");
-    const second = buildGraphResourceMeta(
-      "function",
+    const first = buildFileResourceMeta("event_graph", "events/First.yssbi-event", "First Event");
+    const second = buildFileResourceMeta(
+      "function_graph",
       "functions/Second.yssbi-function",
       "Second Function",
     );
@@ -90,19 +87,19 @@ describe("SidebarProjectTab", () => {
         snapshot: {
           cursor: "graphs",
           document: activityPanelFixture("project", [
-            categoryFixture(PROJECT_TREE_CATEGORY_IDS.events, "Events", 0, true),
+            categoryFixture(PROJECT_TREE_CATEGORY_IDS.eventGraphs, "Events", 0, true),
             {
               id: first.uri,
               kind: "item",
               depth: 1,
-              item: { kind: "graph", path: first.id, name: first.name, graphType: "event" },
+              item: { kind: "event_graph", path: first.id, name: first.name },
             },
-            categoryFixture(PROJECT_TREE_CATEGORY_IDS.functions, "Functions", 0, true),
+            categoryFixture(PROJECT_TREE_CATEGORY_IDS.functionGraphs, "Functions", 0, true),
             {
               id: second.uri,
               kind: "item",
               depth: 1,
-              item: { kind: "graph", path: second.id, name: second.name, graphType: "function" },
+              item: { kind: "function_graph", path: second.id, name: second.name },
             },
           ]),
         },
@@ -115,11 +112,11 @@ describe("SidebarProjectTab", () => {
       title: first.name,
       active: true,
       location: { type: "grid" },
-      metadata: { role: "editor", resourceRef: first.id, resourceKind: "event" },
+      metadata: { role: "editor", resourceRef: first.id, resourceKind: "event_graph" },
     };
     groupEditors.set(activeEditor.groupId, activeEditor);
     useGraphSessionStore.getState().setFocusedSession(activeEditor.groupId, first.id);
-    useEditorStore.getState().setDetailFocus({ kind: "event", path: first.id });
+    useEditorStore.getState().setDetailFocus({ kind: "event_graph", path: first.id });
     return { first, second };
   }
 
@@ -134,6 +131,11 @@ describe("SidebarProjectTab", () => {
       groupEditors.get(groupId),
     );
     vi.spyOn(workbenchLayoutRead, "getSnapshot").mockImplementation(() => flexlayoutSnapshot);
+    vi.spyOn(workbenchLayoutRead, "getActiveSnapshot").mockImplementation(() => flexlayoutSnapshot);
+    vi.spyOn(workbenchLayoutRead, "subscribeActivePanel").mockImplementation((listener) => {
+      flexlayoutListeners.add(listener);
+      return () => flexlayoutListeners.delete(listener);
+    });
     vi.spyOn(workbenchLayoutRead, "subscribe").mockImplementation((listener) => {
       flexlayoutListeners.add(listener);
       return () => {
@@ -186,7 +188,7 @@ describe("SidebarProjectTab", () => {
     expect(useEditorStore.getState().detailFocus).toMatchObject({ kind: "node", id: "node-1" });
     expect(graphRowSelected(first.name)).toBe(true);
     act(() => setInspectionContext(first.id, ["node-1", "node-2"]));
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: "event", path: first.id });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: "event_graph", path: first.id });
     expect(graphRowSelected(first.name)).toBe(true);
     act(() => setInspectionContext(first.id, ["node-2"]));
     expect(graphRowSelected(first.name)).toBe(true);

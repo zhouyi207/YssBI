@@ -60,12 +60,12 @@ describe("synchronizeVisibleGraphPanel", () => {
       {
         groupId: "group-a",
         visible: true,
-        metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event" },
+        metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event_graph" },
       },
       {
         groupId: "group-b",
         visible: true,
-        metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event" },
+        metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event_graph" },
       },
       {
         groupId: "group-hidden",
@@ -73,7 +73,7 @@ describe("synchronizeVisibleGraphPanel", () => {
         metadata: {
           role: "editor",
           resourceRef: "functions/Hidden.yssbi-function",
-          resourceKind: "function",
+          resourceKind: "function_graph",
         },
       },
     ]);

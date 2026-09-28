@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import {
   VscClose,
+  VscFileText,
+  VscTypeHierarchy,
   VscDatabase,
   VscError,
   VscExtensions,
@@ -95,9 +97,11 @@ export function RootPanelTabRenderer({
           ? VscExtensions
           : (
               {
-                event: VscSymbolEvent,
-                function: VscSymbolMethod,
+                event_graph: VscSymbolEvent,
+                function_graph: VscSymbolMethod,
                 chart: VscGraphLine,
+                mind: VscTypeHierarchy,
+                doc: VscFileText,
                 database: VscDatabase,
               } as const
             )[metadata.resourceKind];

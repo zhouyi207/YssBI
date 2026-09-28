@@ -1,5 +1,5 @@
 import { areResourceDeltasValid } from "./resourceMutationWireValidator";
-import { validateResourceMutationWireResult } from "./resourceMutationResultValidator";
+import { validateResourceMutationResult } from "@/shared/types/domain/resourceMutationValidation";
 
 import type {
   ProjectionStatusDto,
@@ -269,6 +269,10 @@ function hasExactResourceDeltaShape(value: unknown): boolean {
 
 function cloneResourceKey(resource: ResourceKeyDto): ResourceKeyDto {
   switch (resource.kind) {
+    case "mind":
+      return { kind: "mind", key: resource.key };
+    case "doc":
+      return { kind: "doc", key: resource.key };
     case "graph":
       return { kind: "graph", key: resource.key };
     case "function":
@@ -322,7 +326,11 @@ function parseMoves(value: unknown): ResourceMoveDto[] {
       !hasExactKeys(move, ["from", "to", "kind", "name"]) ||
       typeof move.from !== "string" ||
       typeof move.to !== "string" ||
-      (move.kind !== "event" && move.kind !== "function" && move.kind !== "chart") ||
+      (move.kind !== "event_graph" &&
+        move.kind !== "function_graph" &&
+        move.kind !== "chart" &&
+        move.kind !== "mind" &&
+        move.kind !== "doc") ||
       typeof move.name !== "string"
     )
       throw new Error("resource moves are malformed");
@@ -394,7 +402,7 @@ export function parseResourceMutationResultDto(value: unknown): ResourceMutation
     projectionStatus: parseProjectionStatus(value.projectionStatus),
   };
 
-  const validationError = validateResourceMutationWireResult(result);
+  const validationError = validateResourceMutationResult(result);
   if (validationError) throw new Error(validationError);
   return result;
 }

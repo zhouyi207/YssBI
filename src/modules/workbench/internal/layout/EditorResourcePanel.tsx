@@ -1,10 +1,18 @@
-import type { ReactNode } from "react";
+import type { ComponentType } from "react";
 import type { RootPanelProps } from "./panelContribution";
-import type { EditorRendererRegistry } from "./editorRenderer";
+import type { EditorPanelScope, EditorRendererRegistry } from "./editorRenderer";
 
 type EditorResourcePanelProps = RootPanelProps & {
   readonly rendererRegistry: EditorRendererRegistry;
 };
+
+function renderEditor<Kind extends EditorPanelScope["resourceKind"]>(
+  rendererRegistry: EditorRendererRegistry,
+  scope: EditorPanelScope<Kind>,
+) {
+  const Editor: ComponentType<EditorPanelScope<Kind>> = rendererRegistry[scope.resourceKind];
+  return <Editor key={`${scope.resourceKind}:${scope.resourceRef}`} {...scope} />;
+}
 
 export function EditorResourcePanel({ rendererRegistry, ...props }: EditorResourcePanelProps) {
   const groupId = props.groupId;
@@ -16,33 +24,9 @@ export function EditorResourcePanel({ rendererRegistry, ...props }: EditorResour
     panelInstanceId: props.panelInstanceId,
     groupId,
     resourceRef: metadata.resourceRef,
+    resourceKind: metadata.resourceKind,
     isVisible,
   };
-  const editorKey = `${metadata.resourceKind}:${metadata.resourceRef}`;
-
-  let editor: ReactNode;
-  switch (metadata.resourceKind) {
-    case "event": {
-      const Editor = rendererRegistry.event;
-      editor = <Editor key={editorKey} {...editorScope} resourceKind="event" />;
-      break;
-    }
-    case "function": {
-      const Editor = rendererRegistry.function;
-      editor = <Editor key={editorKey} {...editorScope} resourceKind="function" />;
-      break;
-    }
-    case "chart": {
-      const Editor = rendererRegistry.chart;
-      editor = <Editor key={editorKey} {...editorScope} resourceKind="chart" />;
-      break;
-    }
-    case "database": {
-      const Editor = rendererRegistry.database;
-      editor = <Editor key={editorKey} {...editorScope} resourceKind="database" />;
-      break;
-    }
-  }
 
   return (
     <div
@@ -50,7 +34,7 @@ export function EditorResourcePanel({ rendererRegistry, ...props }: EditorResour
       data-workbench-editor-panel
       data-panel-instance-id={props.panelInstanceId}
     >
-      {editor}
+      {renderEditor(rendererRegistry, editorScope)}
     </div>
   );
 }

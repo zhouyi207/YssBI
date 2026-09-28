@@ -55,7 +55,7 @@ function editorPanel(overrides: Partial<WorkbenchPanelInfo> = {}): WorkbenchPane
     metadata: {
       role: "editor",
       resourceRef: "events/Main.yssbi-event",
-      resourceKind: "event",
+      resourceKind: "event_graph",
     },
     active: true,
     location: { type: "grid" },
@@ -128,7 +128,7 @@ describe("editor command focus", () => {
       panelInstanceId: "editor-a",
       groupId: "group-a",
       resourceRef: "events/Main.yssbi-event",
-      resourceKind: "event",
+      resourceKind: "event_graph",
     });
     expect(target && Object.keys(target)).toEqual([
       "panelInstanceId",
@@ -170,7 +170,7 @@ describe("editor command focus", () => {
           metadata: {
             role: "editor",
             resourceRef: "events/Other.yssbi-event",
-            resourceKind: "event",
+            resourceKind: "event_graph",
           },
         });
       },
@@ -182,7 +182,7 @@ describe("editor command focus", () => {
           metadata: {
             role: "editor",
             resourceRef: "events/Main.yssbi-event",
-            resourceKind: "function",
+            resourceKind: "function_graph",
           },
         });
       },

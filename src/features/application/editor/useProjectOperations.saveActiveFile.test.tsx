@@ -10,7 +10,7 @@ const target: EditorCommandTarget = Object.freeze({
   panelInstanceId: "panel-main",
   groupId: "group-main",
   resourceRef: "events/Main.yssbi-event",
-  resourceKind: "event",
+  resourceKind: "event_graph",
 });
 
 const mocks = vi.hoisted(() => ({
@@ -95,7 +95,7 @@ describe("useProjectOperations saveGraph target authority", () => {
 
   it("saves the captured target resource instead of a later active layout tab", async () => {
     await act(async () => {
-      await operations.saveGraph(target);
+      await operations.saveActiveFile(target);
     });
 
     expect(mocks.saveGraph).toHaveBeenCalledWith(target.resourceRef, target.resourceKind);
@@ -108,7 +108,7 @@ describe("useProjectOperations saveGraph target authority", () => {
     });
 
     await act(async () => {
-      await operations.saveGraph(target);
+      await operations.saveActiveFile(target);
     });
 
     expect(mocks.saveGraph).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe("useProjectOperations saveGraph target authority", () => {
     });
 
     await act(async () => {
-      await operations.saveGraph(target);
+      await operations.saveActiveFile(target);
     });
 
     expect(mocks.saveGraph).toHaveBeenCalledOnce();
@@ -141,7 +141,7 @@ describe("useProjectOperations saveGraph target authority", () => {
     });
 
     await act(async () => {
-      await operations.saveGraph(chartTarget);
+      await operations.saveActiveFile(chartTarget);
     });
 
     expect(mocks.saveChart).toHaveBeenCalledWith(chartTarget.resourceRef);

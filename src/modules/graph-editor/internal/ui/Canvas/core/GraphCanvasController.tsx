@@ -22,7 +22,7 @@ export interface GraphCanvasControllerProps {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: "event" | "function";
+  graphKind: "event_graph" | "function_graph";
   catalogRowRenderer: NodePaletteCatalogRowRenderer;
 }
 
@@ -123,9 +123,9 @@ export function GraphCanvasController({
         ? {
             kind: "graph",
             graphPath: activeGraph.graphPath,
-            canExecute: activeGraph.kind === "event" && projectionAllowsExecution,
+            canExecute: activeGraph.kind === "event_graph" && projectionAllowsExecution,
             executeUnavailableReason:
-              activeGraph.kind === "function"
+              activeGraph.kind === "function_graph"
                 ? "functionGraph"
                 : projectionAllowsExecution
                   ? null

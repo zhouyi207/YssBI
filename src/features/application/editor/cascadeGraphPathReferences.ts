@@ -8,18 +8,20 @@ function remapEditorGraphPaths(from: string, to: string): void {
   const store = useEditorStore.getState();
   const focus = store.detailFocus;
 
-  if (focus?.kind === "event" || focus?.kind === "function") {
+  if (focus?.kind === "event_graph" || focus?.kind === "function_graph") {
     if (focus.path === from) store.setDetailFocus({ ...focus, path: to });
   } else if (focus?.kind === "node" && focus.graphPath === from) {
     store.setDetailFocus({ ...focus, graphPath: to });
   }
 }
 
-export function remapChartNonViewportUiState(from: string, to: string): void {
+export function remapFileNonViewportUiState(from: string, to: string): void {
   if (from === to) return;
   const store = useEditorStore.getState();
   if (store.detailFocus?.kind === "chart" && store.detailFocus.chartPath === from) {
     store.setDetailFocus({ kind: "chart", chartPath: to });
+  } else if (store.detailFocus?.kind === "mind" && store.detailFocus.path === from) {
+    store.setDetailFocus({ ...store.detailFocus, path: to });
   }
 }
 

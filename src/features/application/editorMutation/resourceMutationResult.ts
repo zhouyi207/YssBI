@@ -27,7 +27,8 @@ export function collectResourceMutationGraphPaths(
   if (!isRecord(result)) return paths;
   const moves = Array.isArray(result.moves) ? result.moves : [result.moves];
   for (const move of moves) {
-    if (!isRecord(move) || (move.kind !== "event" && move.kind !== "function")) continue;
+    if (!isRecord(move) || (move.kind !== "event_graph" && move.kind !== "function_graph"))
+      continue;
     if (isGraphResourcePath(move.from)) paths.add(move.from);
     if (isGraphResourcePath(move.to)) paths.add(move.to);
   }

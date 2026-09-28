@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -30,6 +37,18 @@ interface DetailCommitInputProps {
   onCommit: (value: string) => void | Promise<void>;
   className?: string;
   type?: string;
+}
+
+export function DetailTextarea({ className, ...props }: ComponentProps<"textarea">) {
+  return (
+    <textarea
+      {...props}
+      className={cn(
+        "min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-left text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      )}
+    />
+  );
 }
 
 export function DetailCommitInput({

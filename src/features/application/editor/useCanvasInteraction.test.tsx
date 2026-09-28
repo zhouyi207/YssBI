@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
     panelInstanceId: string;
     groupId: string;
     resourceRef: string;
-    resourceKind: "event";
+    resourceKind: "event_graph";
   },
   focusGroup: vi.fn(),
   selection: { nodeIds: new Set<string>(), connectionIds: new Set<string>() },
@@ -37,7 +37,7 @@ const scope: EditorCanvasScope = {
   panelInstanceId: "first",
   groupId: "a",
   graphPath: "graph",
-  graphKind: "event",
+  graphKind: "event_graph",
 };
 let root: Root;
 let host: HTMLDivElement;
@@ -59,7 +59,7 @@ beforeEach(() => {
     panelInstanceId: "first",
     groupId: "a",
     resourceRef: "graph",
-    resourceKind: "event",
+    resourceKind: "event_graph",
   };
   setNodes = vi.fn<(ids: string[], groupId?: string) => void>();
   handlers = {

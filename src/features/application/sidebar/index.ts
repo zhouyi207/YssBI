@@ -1,3 +1,3 @@
 export { buildSidebarDragData } from "./buildSidebarDragData";
-export { useActiveProjectGraph } from "./useActiveProjectGraph";
+export { useActiveProjectResource } from "./useActiveProjectResource";
 export type { RevealProjectResourceRequest } from "./sidebarResourceActions";

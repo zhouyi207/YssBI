@@ -7,9 +7,9 @@ import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type { LogRecordDto } from "@/shared/types/domain/log";
 
 export interface DetailCatalogSnapshot {
-  events: GraphResourceRecord;
+  eventGraphs: GraphResourceRecord;
   /** 已合并名称 + 签名（`useFunctionCatalog` / `FunctionResourceView`） */
-  functions: Record<string, FunctionResourceView>;
+  functionGraphs: Record<string, FunctionResourceView>;
   dataframes: Record<string, DatabaseRecord>;
 }
 
@@ -30,14 +30,15 @@ export type DetailPanelModel =
   | { kind: "log"; log: LogRecordDto }
   | { kind: "node"; nodeId: string; graphPath: string }
   | { kind: "nodeDefinition"; nodeType: string }
-  | { kind: "event"; path: string; event: { name: string } }
-  | { kind: "function"; path: string; fn: FunctionDetailModel }
+  | { kind: "event_graph"; path: string; event: { name: string } }
+  | { kind: "function_graph"; path: string; fn: FunctionDetailModel }
   | { kind: "chart"; document: ChartDocument }
+  | { kind: "mind"; path: string; panelInstanceId: string }
   | { kind: "data"; id: string; dataframe: DatabaseRecord };
 
 /** target + 目录快照 → Detail 面板判别联合（无回调，纯数据） */
 export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailPanelModel {
-  const { target, selectedLog, events, functions, dataframes, chartDocument } = input;
+  const { target, selectedLog, eventGraphs, functionGraphs, dataframes, chartDocument } = input;
 
   if (!target) return { kind: "empty" };
 
@@ -48,17 +49,17 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
       return { kind: "node", nodeId: target.id, graphPath: target.graphPath };
     case "nodeDefinition":
       return { kind: "nodeDefinition", nodeType: target.nodeType };
-    case "event": {
-      const event = events[target.path];
+    case "event_graph": {
+      const event = eventGraphs[target.path];
       return event
-        ? { kind: "event", path: target.path, event: { name: event.name } }
+        ? { kind: "event_graph", path: target.path, event: { name: event.name } }
         : { kind: "empty" };
     }
-    case "function": {
-      const fnRecord = functions[target.path];
+    case "function_graph": {
+      const fnRecord = functionGraphs[target.path];
       if (!fnRecord) return { kind: "empty" };
       return {
-        kind: "function",
+        kind: "function_graph",
         path: target.path,
         fn: {
           name: fnRecord.name,
@@ -69,6 +70,8 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
     }
     case "chart":
       return chartDocument ? { kind: "chart", document: chartDocument } : { kind: "empty" };
+    case "mind":
+      return { kind: "mind", path: target.path, panelInstanceId: target.panelInstanceId };
     case "data": {
       const dataframe = dataframes[target.id];
       return dataframe ? { kind: "data", id: target.id, dataframe } : { kind: "empty" };

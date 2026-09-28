@@ -90,23 +90,26 @@ export function buildFileMenuItems(
     editorCommandAuthorized: boolean;
   },
   actions: {
-    addEvent: () => void;
-    addFunction: () => void;
-    addChart: () => void;
+    createFile: (kind: import("@/shared/types/domain/resource").FileResourceKind) => void;
     openProject: () => void;
     closeProject: () => void;
-    saveGraph: () => void;
-    saveGraphAs: () => void;
+    saveActiveFile: () => void;
+    saveProjectAs: () => void;
   },
 ): MenuItem[] {
   return [
     {
       label: translate("menubar.newEventGraph"),
       shortcut: "Ctrl+N",
-      onClick: actions.addEvent,
+      onClick: () => actions.createFile("event_graph"),
     },
-    { label: translate("menubar.newFunctionGraph"), onClick: actions.addFunction },
-    { label: translate("menubar.newChart"), onClick: actions.addChart },
+    {
+      label: translate("menubar.newFunctionGraph"),
+      onClick: () => actions.createFile("function_graph"),
+    },
+    { label: translate("menubar.newChart"), onClick: () => actions.createFile("chart") },
+    { label: translate("documents.newMind"), onClick: () => actions.createFile("mind") },
+    { label: translate("documents.newDoc"), onClick: () => actions.createFile("doc") },
     { label: "-", type: "separator" },
     {
       label: translate("menubar.openProject"),
@@ -119,12 +122,14 @@ export function buildFileMenuItems(
       label: translate("common.save"),
       shortcut: "Ctrl+S",
       onClick:
-        state.projectAvailable && state.editorCommandAuthorized ? actions.saveGraph : undefined,
+        state.projectAvailable && state.editorCommandAuthorized
+          ? actions.saveActiveFile
+          : undefined,
     },
     {
       label: translate("menubar.saveProjectAs"),
       shortcut: "Ctrl+Shift+S",
-      onClick: state.projectAvailable ? actions.saveGraphAs : undefined,
+      onClick: state.projectAvailable ? actions.saveProjectAs : undefined,
     },
   ];
 }
@@ -165,18 +170,16 @@ export function WorkbenchMenuContribution({
   const location = useLocation();
   const [aboutOpen, setAboutOpen] = useState(false);
   const {
-    importGraph,
-    saveGraph,
-    saveGraphAs,
+    openProject,
+    saveActiveFile,
+    saveProjectAs,
     undo,
     redo,
     copy,
     paste,
     cut,
     deleteSelected,
-    addEvent,
-    addFunction,
-    addChart,
+    createFile,
   } = commands;
   const { canUndo, canRedo, activeResourceRef } = useEditorHistoryAvailability();
   const {
@@ -212,17 +215,15 @@ export function WorkbenchMenuContribution({
     t,
     { projectAvailable, editorCommandAuthorized },
     {
-      addEvent: () => void addEvent(undefined, { openAfterCreate: true }),
-      addFunction: () => void addFunction(undefined, { openAfterCreate: true }),
-      addChart: () => void addChart(),
-      openProject: () => void importGraph(),
+      createFile: (kind) => void createFile(kind),
+      openProject: () => void openProject(),
       closeProject: () => {
         void requestCloseProject().then((closed) => {
           if (closed) navigate("/projects", { replace: true });
         });
       },
-      saveGraph: () => void saveGraph(),
-      saveGraphAs: () => void saveGraphAs(),
+      saveActiveFile: () => void saveActiveFile(),
+      saveProjectAs: () => void saveProjectAs(),
     },
   );
 

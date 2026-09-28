@@ -84,7 +84,7 @@ describe("Pin result View", () => {
   it("routes output View through the current Pin result", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     installGraphProjectionFixture(graphPath, fixture.projection);
-    markResourceLoaded({ id: graphPath, kind: "event" });
+    markResourceLoaded({ id: graphPath, kind: "event_graph" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
@@ -194,7 +194,7 @@ describe("Pin result View", () => {
     const functionPath = "functions/Helper.yssbi-function";
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
     installGraphProjectionFixture(functionPath, fixture.projection);
-    markResourceLoaded({ id: functionPath, kind: "function" });
+    markResourceLoaded({ id: functionPath, kind: "function_graph" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", functionPath);
     const pin = useGraphProjectionStore.getState().getGraphPin(functionPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected function output pin");

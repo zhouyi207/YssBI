@@ -11,7 +11,6 @@ import {
   ReactFlow,
   ReactFlowProvider,
   ConnectionMode,
-  SelectionMode,
   useStoreApi,
   useConnection,
   type Connection,
@@ -48,12 +47,11 @@ import {
   type GraphFlowModel,
 } from "./graphFlowModel";
 import "@xyflow/react/dist/base.css";
+import { flowCanvasInteractionProps } from "@/shared/ui/flowCanvasInteraction";
 import "./graphFlow.css";
 
 const nodeTypes = { graph: GraphFlowNode };
 const edgeTypes = { graph: GraphFlowEdge };
-const multiSelectionKeys = ["Shift", "Control", "Meta"];
-const panButtons = [1, 2];
 type GestureLease = NonNullable<ReturnType<EditorCanvasSession["interaction"]["beginGesture"]>>;
 type PositionPreview = { position: { x: number; y: number }; dragging: boolean; owner: object };
 type NodeMeasurement = { width: number; height: number };
@@ -770,24 +768,9 @@ function GraphFlowRuntime({
           connectionLineComponent={GraphFlowConnection}
           connectionRadius={18}
           connectOnClick={false}
-          nodesDraggable={interactive}
+          {...flowCanvasInteractionProps(interactive)}
           nodesConnectable={interactive}
-          elementsSelectable={interactive}
           edgesReconnectable={false}
-          deleteKeyCode={null}
-          disableKeyboardA11y
-          selectionOnDrag={interactive}
-          selectionMode={SelectionMode.Partial}
-          selectionKeyCode={null}
-          multiSelectionKeyCode={multiSelectionKeys}
-          panOnDrag={interactive ? panButtons : false}
-          panActivationKeyCode={interactive ? "Alt" : null}
-          zoomOnScroll={interactive}
-          zoomOnPinch={interactive}
-          zoomOnDoubleClick={false}
-          autoPanOnNodeDrag={false}
-          autoPanOnConnect={false}
-          autoPanOnSelection={false}
           proOptions={{ hideAttribution: true }}
         >
           {pendingSource && interaction.contextMenu ? (

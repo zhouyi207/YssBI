@@ -28,7 +28,7 @@ export function findSidebarDropCanvasAtPointer(
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: "event" | "function";
+  graphKind: "event_graph" | "function_graph";
   bounds: DOMRect;
 } | null {
   const canvas = findEditorCanvasAtPointer(clientX, clientY);
@@ -40,7 +40,7 @@ export function findSidebarDropCanvasAtPointer(
     panelInstanceId &&
     groupId &&
     graphPath &&
-    (graphKind === "event" || graphKind === "function")
+    (graphKind === "event_graph" || graphKind === "function_graph")
     ? { panelInstanceId, groupId, graphPath, graphKind, bounds: canvas.getBoundingClientRect() }
     : null;
 }

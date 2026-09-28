@@ -32,7 +32,9 @@ export const useResourceStore = create<ResourceStore>((set) => ({
       graphOrder:
         graphOrder ??
         resources
-          .filter((resource) => resource.kind === "event" || resource.kind === "function")
+          .filter(
+            (resource) => resource.kind === "event_graph" || resource.kind === "function_graph",
+          )
           .map((resource) => resource.id),
     })),
 
@@ -51,7 +53,7 @@ export const useResourceStore = create<ResourceStore>((set) => ({
       },
       graphOrder: state.graphOrder.includes(resource.id)
         ? state.graphOrder
-        : resource.kind === "event" || resource.kind === "function"
+        : resource.kind === "event_graph" || resource.kind === "function_graph"
           ? [...state.graphOrder, resource.id]
           : state.graphOrder,
     })),

@@ -10,7 +10,7 @@ import { setNodeParameters } from "@/features/application/editor/setNodeParamete
 import type { ValueType } from "@/shared/types/domain/valueType";
 import type { DiagnosticDto, ParameterEditorDto } from "@/shared/types/domain/editorProjection";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
-import { DetailReadonlyField } from "../../shared/DetailForm";
+import { DetailReadonlyField, DetailTextarea } from "../../shared/DetailForm";
 import { DetailFieldRow } from "../../shared/DetailFieldRow";
 import { detailInlineInputClass } from "../../shared/detailStyles";
 import { FilterPredicateEditor, ProjectColumnsEditor } from "./RelationalParameterEditors";
@@ -387,10 +387,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryV
     <DetailFieldRow label={parameter.display.title}>
       <div className="space-y-1">
         {parameter.editor === "text" && parameter.multiline ? (
-          <textarea
-            {...sharedProps}
-            className="min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-left text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
-          />
+          <DetailTextarea {...sharedProps} />
         ) : (
           <Input
             {...sharedProps}

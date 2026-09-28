@@ -14,7 +14,7 @@ describe("workbench panel metadata", () => {
     const metadata = {
       role: "editor",
       resourceRef: "events/Main.yssbi-event",
-      resourceKind: "event",
+      resourceKind: "event_graph",
     } as const;
 
     expect(isWorkbenchPanelMetadata(metadata)).toBe(true);
@@ -82,7 +82,7 @@ describe("workbench panel metadata", () => {
       {
         role: "editor",
         resourceRef: "",
-        resourceKind: "event",
+        resourceKind: "event_graph",
       },
       {
         role: "editor",
@@ -97,13 +97,13 @@ describe("workbench panel metadata", () => {
       {
         role: "editor",
         resourceRef: "events/Main.yssbi-event",
-        resourceKind: "event",
+        resourceKind: "event_graph",
         legacyId: "old",
       },
       {
         role: "editor",
         resourceRef: "events/Main.yssbi-event",
-        resourceKind: "event",
+        resourceKind: "event_graph",
         pinned: true,
       },
       { role: "view", viewId: "result" },

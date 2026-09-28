@@ -94,12 +94,16 @@ export function useCanvasDrop({
       let template = isNodeTemplateDragState(dragState) ? dragState.template : null;
       if (isGraphResourceDragState(dragState)) {
         if (
-          dragState.sidebarResource.type !== "function" ||
+          dragState.sidebarResource.type !== "function_graph" ||
           dragState.sidebarResource.id === graphPath
         )
           return false;
         template = catalog
-          ? findResourceNodeSpawnTemplate(catalog.items, dragState.sidebarResource.id, "function")
+          ? findResourceNodeSpawnTemplate(
+              catalog.items,
+              dragState.sidebarResource.id,
+              "function_graph",
+            )
           : null;
         if (!template) {
           refreshCatalog();

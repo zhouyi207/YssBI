@@ -17,10 +17,10 @@ import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creat
 export function buildSidebarDragData(
   id: string,
   name: string,
-  type: "function" | "event" | "data",
+  type: "function_graph" | "event_graph" | "data",
   descriptor?: NodeCreationDescriptor,
 ): SidebarDragPayload | null {
-  if (type === "event" || type === "function") {
+  if (type === "event_graph" || type === "function_graph") {
     return {
       type: DRAG_TYPES.GRAPH_RESOURCE,
       sidebarResource: { id, name, type },

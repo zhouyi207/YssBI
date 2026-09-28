@@ -10,7 +10,7 @@ import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGr
 import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
-export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function"> & {
+export type GraphDocumentEditorProps = EditorPanelScope<"event_graph" | "function_graph"> & {
   readonly catalogRowRenderer: NodePaletteCatalogRowRenderer;
 };
 

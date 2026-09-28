@@ -1623,6 +1623,12 @@
     "manifest": "src-tauri/crates/yss-project-model/Cargo.toml",
     "dependencies": [
       {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-chart-document",
         "kind": "normal",
         "optional": false,
@@ -1648,6 +1654,18 @@
       },
       {
         "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-naming",
         "kind": "normal",
         "optional": false,
         "target": null

@@ -10,7 +10,7 @@ export type ClipboardNodeCreationDto =
       createArgs: ClipboardResourceBoundCreateArgsDto;
     };
 
-export type ClipboardResourceBoundCreateArgsDto = { kind: "function" } | { kind: "database" };
+export type ClipboardResourceBoundCreateArgsDto = { kind: "function_graph" } | { kind: "database" };
 
 export type ClipboardPortRefDto =
   | { kind: "declared"; key: string }

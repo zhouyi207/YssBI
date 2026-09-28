@@ -246,7 +246,7 @@
       "categoryId": "project",
       "creation": {
         "createArgs": {
-          "kind": "function"
+          "kind": "function_graph"
         },
         "kind": "resourceBound",
         "nodeTypeId": "yssbi.project.function.call",

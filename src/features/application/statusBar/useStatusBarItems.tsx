@@ -68,7 +68,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       const target = captureActiveEditorCommandTarget();
       return target &&
         isEditorCommandTargetCurrent(target) &&
-        (target.resourceKind === "event" || target.resourceKind === "function")
+        (target.resourceKind === "event_graph" || target.resourceKind === "function_graph")
         ? target
         : null;
     }),

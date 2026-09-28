@@ -35,7 +35,13 @@ export function prepareResourceProjectionSnapshot(
     let hasStaleDocument = doc?.stale ?? false;
     let hasConflictDocument = doc?.conflict ?? false;
 
-    if (previous && doc?.loaded && !doc.missing) {
+    if (
+      previous &&
+      doc?.loaded &&
+      !doc.missing &&
+      resource.kind !== "mind" &&
+      resource.kind !== "doc"
+    ) {
       const metaChanged = snapshotMetaFingerprint(previous) !== snapshotMetaFingerprint(resource);
       if (metaChanged) {
         if (doc.dirty) {

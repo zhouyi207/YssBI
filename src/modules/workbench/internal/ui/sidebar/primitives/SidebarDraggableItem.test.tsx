@@ -29,7 +29,7 @@ const dragData = {
   sidebarResource: {
     id: "functions/Revenue.yssbi-function",
     name: "Revenue",
-    type: "function",
+    type: "function_graph",
   },
 } satisfies SidebarDragPayload;
 

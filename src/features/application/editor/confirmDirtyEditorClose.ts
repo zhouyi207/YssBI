@@ -1,17 +1,31 @@
 import { i18n } from "@/app/i18n";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { collectDirtyEditorPanels } from "./editorPanelDirty";
-import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
+import { saveAllDirtyDocuments } from "./saveAllDirtyDocuments";
+import { settleEditorFileEdits } from "./settleEditorFileEdits";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { showBlockingIpcError } from "./blockingErrorDialog";
 
 /** Shared save/discard/cancel decision for leaving a project or closing its window. */
 export async function confirmDirtyEditorClose(): Promise<boolean> {
+  const identity = captureProjectLifecycleState();
+  try {
+    await settleEditorFileEdits();
+  } catch (error) {
+    showBlockingIpcError(error, () => i18n.t("editor.close.failed"));
+    return false;
+  }
+  if (!isProjectLifecycleStateCurrent(identity)) return false;
   const dirty = collectDirtyEditorPanels();
   if (dirty.length > 0) {
     const titles = dirty.map((tab) => `• ${tab.title}`).join("\n");
     const choice = await uiStore.confirm3({
       title: i18n.t("editor.unsavedTitle", { defaultValue: "保存更改？" }),
       message: i18n.t("editor.unsavedMessage", {
-        defaultValue: `以下 {{count}} 个图存在未保存修改：\n{{titles}}\n\n关闭前是否保存？`,
+        defaultValue: `以下 {{count}} 个文件存在未保存修改：\n{{titles}}\n\n关闭前是否保存？`,
         count: dirty.length,
         titles,
       }),
@@ -21,17 +35,17 @@ export async function confirmDirtyEditorClose(): Promise<boolean> {
       type: "info",
     });
 
-    if (choice === "cancel") {
+    if (choice === "cancel" || !isProjectLifecycleStateCurrent(identity)) {
       return false;
     }
 
     if (choice === "confirm") {
-      const saved = await saveAllDirtyGraphs();
+      const saved = await saveAllDirtyDocuments();
       if (!saved) {
         return false;
       }
     }
   }
 
-  return true;
+  return isProjectLifecycleStateCurrent(identity);
 }

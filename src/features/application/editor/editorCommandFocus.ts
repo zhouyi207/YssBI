@@ -11,7 +11,7 @@ export interface EditorCommandTarget {
   readonly panelInstanceId: string;
   readonly groupId: string;
   readonly resourceRef: string;
-  readonly resourceKind: "event" | "function" | "chart";
+  readonly resourceKind: import("@/shared/types/domain/resource").FileResourceKind;
 }
 
 const targetOwnership = new WeakMap<

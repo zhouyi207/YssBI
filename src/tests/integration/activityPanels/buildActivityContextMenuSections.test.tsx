@@ -7,17 +7,11 @@ const t = ((key: string) => key) as TFunction;
 
 function projectActions() {
   return {
-    openGraph: vi.fn(),
-    createGraph: vi.fn(),
-    renameGraphItem: vi.fn(),
-    deleteGraphItem: vi.fn(),
-    duplicateGraphItem: vi.fn(),
-
-    openChart: vi.fn(),
-    renameChartItem: vi.fn(),
-    duplicateChart: vi.fn(),
-    deleteChart: vi.fn(),
-    addChart: vi.fn(),
+    createFile: vi.fn(),
+    openFile: vi.fn(),
+    renameFile: vi.fn(),
+    duplicateFile: vi.fn(),
+    deleteFile: vi.fn(),
     openDatabase: vi.fn(),
     renameDatabaseItem: vi.fn(),
     deleteDatabaseItem: vi.fn(),
@@ -34,8 +28,9 @@ describe("activity context menu sections", () => {
         x: 10,
         y: 20,
         target: {
-          type: "chart",
-          chartPath: "charts/Report.yssbi-chart",
+          type: "file",
+          kind: "chart",
+          id: "charts/Report.yssbi-chart",
           name: "Report",
         },
       },
@@ -53,7 +48,10 @@ describe("activity context menu sections", () => {
     ]);
 
     items.find((item) => item.id === "rename")?.onClick?.();
-    expect(actions.renameChartItem).toHaveBeenCalledWith("charts/Report.yssbi-chart", "Report");
+    expect(actions.renameFile).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "charts/Report.yssbi-chart", kind: "chart" }),
+      "Report",
+    );
   });
 
   it("routes data import and resource management through the Project contribution", () => {

@@ -32,7 +32,8 @@ interface ActiveGraphCanvas extends ActiveGraphContext {
 
 function activeGraphContext(target: EditorCommandTarget): ActiveGraphContext | null {
   if (!isEditorCommandTargetCurrent(target)) return null;
-  if (target.resourceKind !== "event" && target.resourceKind !== "function") return null;
+  if (target.resourceKind !== "event_graph" && target.resourceKind !== "function_graph")
+    return null;
   const graphPath = target.resourceRef;
   if (!getDocumentState({ id: graphPath, kind: target.resourceKind })?.loaded) return null;
   if (!useGraphProjectionStore.getState().graphEntities[graphPath]) return null;

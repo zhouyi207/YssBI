@@ -6,7 +6,7 @@ import { DRAG_TYPES } from "@/features/core/dnd";
 
 const mocks = vi.hoisted(() => ({
   listItemProps: [] as Array<Record<string, unknown>>,
-  openGraphInEditor: vi.fn(),
+  openFileInEditor: vi.fn(),
   revealDetails: vi.fn(),
 }));
 
@@ -23,8 +23,8 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => children,
   TooltipContent: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock("@/features/application/editor/openGraphInEditor", () => ({
-  openGraphInEditor: mocks.openGraphInEditor,
+vi.mock("@/features/application/editor/openFileInEditor", () => ({
+  openFileInEditor: mocks.openFileInEditor,
 }));
 vi.mock("@/features/application/editor/rightSidebarActions", () => ({
   revealDetails: mocks.revealDetails,
@@ -33,11 +33,11 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { SidebarGraphRow } from "./SidebarGraphRow";
+import { SidebarFileRow } from "./SidebarFileRow";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe("SidebarGraphRow", () => {
+describe("SidebarFileRow", () => {
   let host: HTMLDivElement;
   let root: Root;
 
@@ -59,15 +59,15 @@ describe("SidebarGraphRow", () => {
     const functionResource = {
       id: "functions/Revenue.yssbi-function",
       name: "Revenue",
-      type: "function" as const,
+      type: "function_graph" as const,
     };
 
     act(() =>
       root.render(
-        <SidebarGraphRow
+        <SidebarFileRow
           id={functionResource.id}
           name={functionResource.name}
-          graphType={functionResource.type}
+          kind={functionResource.type}
           onContextMenu={vi.fn()}
         />,
       ),
@@ -84,10 +84,10 @@ describe("SidebarGraphRow", () => {
   it("explicitly reveals graph Details before completing the row click action", async () => {
     act(() =>
       root.render(
-        <SidebarGraphRow
+        <SidebarFileRow
           id="events/Main.yssbi-event"
           name="Main"
-          graphType="event"
+          kind="event_graph"
           onContextMenu={vi.fn()}
         />,
       ),
@@ -103,13 +103,9 @@ describe("SidebarGraphRow", () => {
 
     expect(stopPropagation).toHaveBeenCalledOnce();
     expect(mocks.revealDetails).toHaveBeenCalledWith({
-      kind: "event",
+      kind: "event_graph",
       path: "events/Main.yssbi-event",
     });
-    expect(mocks.openGraphInEditor).toHaveBeenCalledWith(
-      "events/Main.yssbi-event",
-      "Main",
-      "event",
-    );
+    expect(mocks.openFileInEditor).toHaveBeenCalledWith("events/Main.yssbi-event", "event_graph");
   });
 });

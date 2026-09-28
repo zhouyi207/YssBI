@@ -8,7 +8,7 @@ import {
 import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { clearGraphSyncBaselines } from "@/services/nodeSystem/graphEditorSync";
-import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
+import { getNodeFileKind } from "@/features/core/resource/resourceSelectors";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import type { GraphEditingStateDto } from "@/shared/types/domain/editorMutation";
 import { ensureGraphActivity, resetGraphActivity } from "./graphActivity";
@@ -39,7 +39,7 @@ function startGraphLifecycle(graphPath: string): number {
 }
 
 function setGraphProjectionStale(graphPath: string, stale: boolean): void {
-  const kind = getGraphResourceKind(graphPath);
+  const kind = getNodeFileKind(graphPath);
   if (kind) markResourceStale({ id: graphPath, kind }, stale);
 }
 

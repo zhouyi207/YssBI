@@ -61,24 +61,24 @@ export interface CleanupInvalidProjectsResult {
   removed: number;
 }
 
-interface ProjectGraphIndexRowBase {
+interface ProjectNodeFileIndexRowBase {
   path: string;
   name: string;
   revision: number;
 }
 
-export interface ProjectEventGraphIndexRow extends ProjectGraphIndexRowBase {
-  type: "event";
+export interface ProjectEventGraphIndexRow extends ProjectNodeFileIndexRowBase {
+  type: "event_graph";
 }
 
-export interface ProjectFunctionGraphIndexRow extends ProjectGraphIndexRowBase {
-  type: "function";
+export interface ProjectFunctionGraphIndexRow extends ProjectNodeFileIndexRowBase {
+  type: "function_graph";
   functionRevision: number;
   functionSignature: FunctionSignatureDto;
   functionEditorProjection: FunctionEditorProjectionDto;
 }
 
-export type ProjectGraphIndexRow = ProjectEventGraphIndexRow | ProjectFunctionGraphIndexRow;
+export type ProjectNodeFileIndexRow = ProjectEventGraphIndexRow | ProjectFunctionGraphIndexRow;
 
 export interface ProjectChartIndexRow {
   chartPath: string;
@@ -99,11 +99,14 @@ export interface ProjectDatabaseIndexRow {
 }
 
 export interface ProjectIndexRow {
+  minds: import("./mind").MindIndexEntry[];
+  docs: import("./doc").DocIndexEntry[];
   projectInstanceId: string;
   projectName: string;
   exportTime: string;
   publicationRevision: number;
-  graphs: ProjectGraphIndexRow[];
+  eventGraphs: ProjectEventGraphIndexRow[];
+  functionGraphs: ProjectFunctionGraphIndexRow[];
   charts: ProjectChartIndexRow[];
   databases: ProjectDatabaseIndexRow[];
 }
@@ -111,4 +114,11 @@ export interface ProjectIndexRow {
 export interface ProjectIndexSnapshot {
   readonly index: ProjectIndexRow;
   readonly activityPanels: Readonly<Record<ProjectActivityPanelId, ActivityPanelSnapshot>>;
+}
+
+/** Shared node-editor consumers derive this view; project files retain their individual kinds. */
+export function nodeFileEntries(
+  index: Pick<ProjectIndexRow, "eventGraphs" | "functionGraphs">,
+): ProjectNodeFileIndexRow[] {
+  return [...index.eventGraphs, ...index.functionGraphs];
 }

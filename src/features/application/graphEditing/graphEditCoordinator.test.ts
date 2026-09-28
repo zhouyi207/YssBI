@@ -135,7 +135,7 @@ describe("Graph draft task ordering", () => {
       projection: session.projection,
       editing: makeGraphEditingState(),
     });
-    const saving = saveGraph(graphPath, "event");
+    const saving = saveGraph(graphPath, "event_graph");
     const failedSave = expect(saving).rejects.toThrow("save failed");
     await vi.waitFor(() => expect(GraphEditingService.save).toHaveBeenCalledOnce());
     const refreshing = hydrateGraphProjection(graphPath, "en-US");

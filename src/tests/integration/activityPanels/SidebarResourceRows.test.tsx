@@ -166,14 +166,11 @@ describe("resource sidebar rows", () => {
       root.render(
         <SidebarProjectTab
           actions={{
-            onAddEvent: vi.fn(),
-            onAddFunction: vi.fn(),
-            onAddChart: vi.fn(),
+            onCreateFile: vi.fn(),
+            onOpenFile: vi.fn(),
+            onFileContextMenu: vi.fn(),
             onImportData: vi.fn(),
             onCategoryContextMenu: vi.fn(),
-            onGraphContextMenu: vi.fn(),
-            onChartContextMenu: vi.fn(),
-            onOpenChart: vi.fn(),
             onDatabaseContextMenu: vi.fn(),
           }}
         />,

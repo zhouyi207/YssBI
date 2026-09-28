@@ -1,9 +1,10 @@
+import { nodeFileEntries } from "@/shared/types/domain/project";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
-import type { ProjectGraphIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
+import type { ProjectIndexRow } from "@/shared/types/domain/project";
 
 import {
-  buildGraphResourceMeta,
+  buildFileResourceMeta,
   resourceKey,
   type ProjectResourceMeta,
   type ResourceKey,
@@ -45,27 +46,33 @@ export interface AuthoritativeProjectLoadPlanDependencies {
     raw: Record<string, unknown>,
     current: Record<string, DatabaseRecord>,
   ): Record<string, DatabaseRecord>;
-  prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta>;
+  prepareFunctionState(
+    functionGraphs: ProjectIndexRow["functionGraphs"],
+  ): Record<string, GraphMeta>;
   prepareResourceState(input: {
-    graphs: ProjectGraphIndexRow[];
+    eventGraphs: ProjectIndexRow["eventGraphs"];
+    functionGraphs: ProjectIndexRow["functionGraphs"];
     charts: ProjectIndexRow["charts"];
+    minds: ProjectIndexRow["minds"];
+    docs: ProjectIndexRow["docs"];
     databases: Record<string, DatabaseRecord>;
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
 
   validateCoordinatorStart(projectInstanceId: string, publicationRevision: number): void;
 }
 
-function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta> {
+function prepareFunctionState(
+  functionGraphs: ProjectIndexRow["functionGraphs"],
+): Record<string, GraphMeta> {
   return Object.fromEntries(
-    graphs.flatMap((graph) => {
-      if (graph.type !== "function") return [];
+    functionGraphs.flatMap((graph) => {
       return [
         [
           graph.path,
           {
             path: graph.path,
             name: graph.name,
-            type: "function" as const,
+            type: "function_graph" as const,
             functionRevision: graph.functionEditorProjection.functionRevision,
             functionSignature: structuredClone(graph.functionSignature),
             functionInputs: structuredClone(graph.functionEditorProjection.inputs),
@@ -78,20 +85,37 @@ function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, Gr
 }
 
 export function buildProjectResourceState(input: {
-  graphs: ProjectGraphIndexRow[];
+  eventGraphs: ProjectIndexRow["eventGraphs"];
+  functionGraphs: ProjectIndexRow["functionGraphs"];
   charts: ProjectIndexRow["charts"];
+  minds: ProjectIndexRow["minds"];
+  docs: ProjectIndexRow["docs"];
   databases: Record<string, DatabaseRecord>;
   loadedChartPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
-  const resources: ProjectResourceMeta[] = input.graphs.map((graph) =>
-    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }),
+  const resources: ProjectResourceMeta[] = nodeFileEntries(input).map((graph) =>
+    buildFileResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }),
   );
+  for (const document of [...input.minds, ...input.docs]) {
+    resources.push({
+      id: document.path,
+      kind: document.kind,
+      name: document.name,
+      uri: resourceKey({ id: document.path, kind: document.kind }),
+      revision: document.revision,
+      exists: true,
+      loaded: false,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+  }
   for (const chart of input.charts) {
     resources.push({
       id: chart.chartPath,
       kind: "chart",
       name: chart.name,
-      uri: `yssbi://chart/${chart.chartPath}`,
+      uri: resourceKey({ id: chart.chartPath, kind: "chart" }),
       revision: chart.revision,
       exists: true,
       loaded: input.loadedChartPaths?.has(chart.chartPath) ?? false,
@@ -105,7 +129,7 @@ export function buildProjectResourceState(input: {
       id,
       kind: "database",
       name: typeof database.name === "string" ? database.name : id,
-      uri: `yssbi://database/${id}`,
+      uri: resourceKey({ id, kind: "database" }),
       resourcePath: database.resourcePath,
       exists: true,
       loaded: true,
@@ -118,7 +142,7 @@ export function buildProjectResourceState(input: {
     resources: Object.fromEntries(
       resources.map((resource) => [resourceKey(resource), resource]),
     ) as Record<ResourceKey, ProjectResourceMeta>,
-    graphOrder: input.graphs.map((graph) => graph.path),
+    graphOrder: nodeFileEntries(input).map((graph) => graph.path),
   };
 }
 
@@ -148,18 +172,22 @@ export function buildAuthoritativeProjectLoadPlan(
       { ...database, resourcePath: databaseResourcePaths[id] },
     ]),
   );
-  const graphMeta = dependencies.prepareFunctionState(source.index.graphs);
+  const graphMeta = dependencies.prepareFunctionState(source.index.functionGraphs);
   const resourceState = dependencies.prepareResourceState({
-    graphs: source.index.graphs,
+    eventGraphs: source.index.eventGraphs,
+    functionGraphs: source.index.functionGraphs,
     charts: source.index.charts,
+    minds: source.index.minds,
+    docs: source.index.docs,
     databases,
   });
   const authoritativeChartPaths = new Set(source.index.charts.map((chart) => chart.chartPath));
 
+  const focus = context.detailFocus;
   const detailFocus =
-    context.detailFocus?.kind === "chart" &&
-    authoritativeChartPaths.has(context.detailFocus.chartPath)
-      ? structuredClone(context.detailFocus)
+    (focus?.kind === "chart" && authoritativeChartPaths.has(focus.chartPath)) ||
+    (focus?.kind === "mind" && source.index.minds.some((mind) => mind.path === focus.path))
+      ? structuredClone(focus)
       : null;
   dependencies.validateCoordinatorStart(
     source.index.projectInstanceId,

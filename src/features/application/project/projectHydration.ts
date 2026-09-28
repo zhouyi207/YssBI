@@ -1,3 +1,5 @@
+import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
+import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { PROJECT_ACTIVITY_PANEL_IDS } from "@/shared/types/domain/activityPanel";
 import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
@@ -181,6 +183,10 @@ export async function commitPreparedAuthoritativeProjectLoad(
     }),
   );
   commitProjectLoadStep("chart", () => useChartDocumentStore.getState().clear());
+  commitProjectLoadStep("documents", () => {
+    useMindProjectionStore.getState().clear();
+    useDocProjectionStore.getState().clear();
+  });
   commitProjectLoadStep("documents", () => useDocumentStateStore.setState({ documents: {} }));
   commitProjectLoadStep("resources", () =>
     useResourceStore.getState().setSnapshot({

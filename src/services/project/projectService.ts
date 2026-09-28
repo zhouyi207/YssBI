@@ -1,3 +1,5 @@
+import { isMindPath, type MindIndexEntry } from "@/shared/types/domain/mind";
+import { isDocPath, type DocIndexEntry } from "@/shared/types/domain/doc";
 import {
   PROJECT_ACTIVITY_PANEL_IDS,
   type ActivityPanelSnapshot,
@@ -15,7 +17,6 @@ import type {
   ProjectDatabaseIndexRow,
   ProjectEventGraphIndexRow,
   ProjectFunctionGraphIndexRow,
-  ProjectGraphIndexRow,
   ProjectIndexRow,
   ProjectChartIndexRow,
 } from "@/shared/types/domain/project";
@@ -103,23 +104,29 @@ function isFunctionSignature(value: unknown): value is FunctionSignatureDto {
   );
 }
 
-export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow {
-  if (!isRecord(value) || Array.isArray(value)) {
-    throw new Error("Invalid project graph index row");
-  }
-  const path = isGraphResourcePath(value.path) ? value.path : null;
-  const common = path !== null && typeof value.name === "string" && isSafeRevision(value.revision);
+function isNodeFileIndexBase(value: Record<string, unknown>): boolean {
+  return (
+    isGraphResourcePath(value.path) &&
+    typeof value.name === "string" &&
+    isSafeRevision(value.revision)
+  );
+}
+export function parseProjectEventGraphIndexRow(value: unknown): ProjectEventGraphIndexRow {
   if (
-    value.type === "event" &&
-    common &&
-    hasExactKeys(value, ["path", "name", "type", "revision"])
-  ) {
-    return value as unknown as ProjectEventGraphIndexRow;
-  }
+    !isRecord(value) ||
+    value.type !== "event_graph" ||
+    !isNodeFileIndexBase(value) ||
+    !hasExactKeys(value, ["path", "name", "type", "revision"])
+  )
+    throw new Error("Invalid project event index row");
+  return value as unknown as ProjectEventGraphIndexRow;
+}
+export function parseProjectFunctionGraphIndexRow(value: unknown): ProjectFunctionGraphIndexRow {
   if (
-    value.type === "function" &&
-    common &&
-    hasExactKeys(value, [
+    !isRecord(value) ||
+    value.type !== "function_graph" ||
+    !isNodeFileIndexBase(value) ||
+    !hasExactKeys(value, [
       "path",
       "name",
       "type",
@@ -127,15 +134,14 @@ export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow 
       "functionRevision",
       "functionSignature",
       "functionEditorProjection",
-    ]) &&
-    isSafeRevision(value.functionRevision) &&
-    isFunctionSignature(value.functionSignature) &&
-    isFunctionEditorProjectionDto(value.functionEditorProjection) &&
-    value.functionEditorProjection.functionRevision === value.functionRevision
-  ) {
-    return value as unknown as ProjectFunctionGraphIndexRow;
-  }
-  throw new Error("Invalid project graph index row");
+    ]) ||
+    !isSafeRevision(value.functionRevision) ||
+    !isFunctionSignature(value.functionSignature) ||
+    !isFunctionEditorProjectionDto(value.functionEditorProjection) ||
+    value.functionEditorProjection.functionRevision !== value.functionRevision
+  )
+    throw new Error("Invalid project function index row");
+  return value as unknown as ProjectFunctionGraphIndexRow;
 }
 
 function isChartType(value: unknown): value is ChartType {
@@ -160,6 +166,23 @@ function parseProjectChartIndexRow(value: unknown): ProjectChartIndexRow {
   return value as unknown as ProjectChartIndexRow;
 }
 
+function parseFileIndexEntry<K extends "mind" | "doc">(
+  value: unknown,
+  kind: K,
+): Extract<MindIndexEntry | DocIndexEntry, { kind: K }> {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["path", "kind", "name", "revision"]) ||
+    value.kind !== kind ||
+    !(kind === "mind" ? isMindPath(value.path) : isDocPath(value.path)) ||
+    typeof value.name !== "string" ||
+    !value.name ||
+    !isSafeRevision(value.revision)
+  )
+    throw new Error("Invalid document index entry");
+  return value as unknown as Extract<MindIndexEntry | DocIndexEntry, { kind: K }>;
+}
+
 export function parseProjectIndexRow(value: unknown): ProjectIndexRow {
   if (
     !isRecord(value) ||
@@ -169,26 +192,38 @@ export function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       "publicationRevision",
       "projectName",
       "exportTime",
-      "graphs",
+      "eventGraphs",
+      "functionGraphs",
       "charts",
+      "minds",
+      "docs",
       "databases",
     ]) ||
     typeof value.projectInstanceId !== "string" ||
     !isSafeRevision(value.publicationRevision) ||
     typeof value.projectName !== "string" ||
     typeof value.exportTime !== "string" ||
-    !Array.isArray(value.graphs) ||
+    !Array.isArray(value.eventGraphs) ||
+    !Array.isArray(value.functionGraphs) ||
     !Array.isArray(value.charts) ||
+    !Array.isArray(value.minds) ||
+    !Array.isArray(value.docs) ||
     !Array.isArray(value.databases) ||
     !value.databases.every(isProjectDatabaseIndexRow)
   ) {
     throw new Error("Invalid project index response");
   }
   try {
-    const graphs = value.graphs.map(parseProjectGraphIndexRow);
+    const eventGraphs = value.eventGraphs.map(parseProjectEventGraphIndexRow);
+    const functionGraphs = value.functionGraphs.map(parseProjectFunctionGraphIndexRow);
     const charts = value.charts.map(parseProjectChartIndexRow);
+    const minds = value.minds.map((value) => parseFileIndexEntry(value, "mind"));
+    const docs = value.docs.map((value) => parseFileIndexEntry(value, "doc"));
     if (
-      new Set(graphs.map((graph) => graph.path)).size !== graphs.length ||
+      new Set(minds.map((file) => file.path)).size !== minds.length ||
+      new Set(docs.map((file) => file.path)).size !== docs.length ||
+      new Set(eventGraphs.map((file) => file.path)).size !== eventGraphs.length ||
+      new Set(functionGraphs.map((file) => file.path)).size !== functionGraphs.length ||
       new Set(charts.map((chart) => chart.chartPath)).size !== charts.length ||
       new Set(value.databases.map((database) => database.id)).size !== value.databases.length
     )
@@ -198,8 +233,11 @@ export function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       publicationRevision: value.publicationRevision,
       projectName: value.projectName,
       exportTime: value.exportTime,
-      graphs,
+      eventGraphs,
+      functionGraphs,
       charts,
+      minds,
+      docs,
       databases: value.databases,
     };
   } catch {
@@ -254,7 +292,7 @@ export interface ProjectActivationResult {
 // ==================== 项目状态管理 API ====================
 
 export type RevealProjectResourceRequest = {
-  kind: "graph" | "database" | "chart";
+  kind: import("@/shared/types/domain/resource").ResourceKind;
   resourceId: string;
 };
 
@@ -457,7 +495,7 @@ export class ProjectService {
       operationId,
     });
   }
-  /** Execute one graph document and drain its streamed run events. */
+  /** Execute one graph document and drain its streamed run eventGraphs. */
   static async executeGraph({
     projectInstanceId,
     graphPath,

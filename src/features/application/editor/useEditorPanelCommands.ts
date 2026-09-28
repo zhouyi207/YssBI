@@ -9,7 +9,7 @@ export function useEditorPanelCommands() {
     async (
       id: string,
       name: string,
-      type: "event" | "function",
+      type: "event_graph" | "function_graph",
       options?: { targetGroupId?: string },
     ): Promise<void> => {
       await openGraphInEditor(id, name, type, options?.targetGroupId);

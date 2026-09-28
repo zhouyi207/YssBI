@@ -16,7 +16,8 @@ export function useProjectionLocaleSync(): void {
     const loadedGraphPaths = Object.values(useResourceStore.getState().resources)
       .filter(
         (resource) =>
-          resource.loaded && (resource.kind === "event" || resource.kind === "function"),
+          resource.loaded &&
+          (resource.kind === "event_graph" || resource.kind === "function_graph"),
       )
       .map((resource) => resource.id);
 

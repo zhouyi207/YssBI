@@ -10,7 +10,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { ProjectService } from "@/services/project/projectService";
 import { openPathDialog } from "@/services/platform/pathDialog";
-import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
+import { saveAllDirtyDocuments } from "./saveAllDirtyDocuments";
 import { cancelActiveGraphRun } from "./cancelActiveGraphRun";
 import { installGraphRunEvent } from "./observeGraphRunEvent";
 import { recoverGraphExecution } from "@/features/application/graphProjection/graphActivity";
@@ -31,14 +31,13 @@ import {
   type PendingProjectLifecycleOperation,
 } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
-import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
+import { saveFileResource } from "@/features/application/resource/resourceActions";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
 } from "./editorCommandFocus";
-import { saveGraph as saveCurrentGraph } from "@/features/application/graphEditing/saveGraph";
 
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
@@ -57,7 +56,7 @@ function projectParentDirectory(metadataOrRootPath: string): string {
 export function useProjectOperations() {
   const { t } = useTranslation();
 
-  const saveGraphAs = useCallback(async () => {
+  const saveProjectAs = useCallback(async () => {
     let pending: PendingProjectLifecycleOperation | undefined;
     try {
       pending = registerPendingProjectLifecycleOperation({ kind: "saveAs" });
@@ -71,7 +70,7 @@ export function useProjectOperations() {
         showBlockingMessage(t("notifications.project.notLoaded"));
         return;
       }
-      const dirtySaved = await saveAllDirtyGraphs();
+      const dirtySaved = await saveAllDirtyDocuments();
       if (!pending.isCurrent()) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
         return;
@@ -139,7 +138,7 @@ export function useProjectOperations() {
     }
   }, [t]);
 
-  const saveGraph = useCallback(
+  const saveActiveFile = useCallback(
     async (requestedTarget?: EditorCommandTarget) => {
       const target = requestedTarget ?? captureActiveEditorCommandTarget();
       if (!target) {
@@ -156,24 +155,11 @@ export function useProjectOperations() {
           return;
         }
 
-        if (target.resourceKind === "chart") {
-          const saved = await saveChartDocument(target.resourceRef);
-          if (!isEditorCommandTargetCurrent(target)) return;
-          if (!saved) {
-            showBlockingMessage(
-              t("notifications.project.saveFailed", {
-                error: "chart_save_not_committed",
-              }),
-            );
-          }
-          return;
-        }
-
-        const saved = await saveCurrentGraph(target.resourceRef, target.resourceKind);
+        const saved = await saveFileResource(target.resourceRef, target.resourceKind);
         if (!isEditorCommandTargetCurrent(target)) return;
         if (!saved) {
           showBlockingMessage(
-            t("notifications.project.saveFailed", { error: "graph_save_not_committed" }),
+            t("notifications.project.saveFailed", { error: "file_save_not_committed" }),
           );
         }
       } catch (e) {
@@ -185,7 +171,7 @@ export function useProjectOperations() {
     [t],
   );
 
-  const importGraph = useCallback(async () => {
+  const openProject = useCallback(async () => {
     try {
       const selection = await openPathDialog({
         multiple: false,
@@ -323,9 +309,9 @@ export function useProjectOperations() {
   }, []);
 
   return {
-    saveGraph,
-    saveGraphAs,
-    importGraph,
+    saveActiveFile,
+    saveProjectAs,
+    openProject,
     executeGraph,
     cancelGraphExecution,
     clearGraphArtifacts,

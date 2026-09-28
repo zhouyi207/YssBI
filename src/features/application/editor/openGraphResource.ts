@@ -1,27 +1,27 @@
-import type { GraphResourceKind } from "@/shared/types/domain/graphResourcePath";
-import { lookupGraphResource } from "@/features/core/resource/resourceSelectors";
+import type { NodeFileKind } from "@/shared/types/domain/resource";
+import { lookupNodeFileResource } from "@/features/core/resource/resourceSelectors";
 import { useResourceStore } from "@/features/core/resource";
 import { openGraphInEditor } from "./openGraphInEditor";
 
 export function resolveGraphResourceMeta(
   path: string,
-): { name: string; type: GraphResourceKind } | null {
+): { name: string; type: NodeFileKind } | null {
   const resources = useResourceStore.getState().resources;
-  const functionMeta = lookupGraphResource(resources, path, "function");
+  const functionMeta = lookupNodeFileResource(resources, path, "function_graph");
   if (functionMeta?.exists) {
-    return { name: functionMeta.name, type: "function" };
+    return { name: functionMeta.name, type: "function_graph" };
   }
-  const eventMeta = lookupGraphResource(resources, path, "event");
+  const eventMeta = lookupNodeFileResource(resources, path, "event_graph");
   if (eventMeta?.exists) {
-    return { name: eventMeta.name, type: "event" };
+    return { name: eventMeta.name, type: "event_graph" };
   }
   return null;
 }
 
-export async function openGraphResource(path: string, kind?: GraphResourceKind): Promise<void> {
+export async function openGraphResource(path: string, kind?: NodeFileKind): Promise<void> {
   const meta = kind
     ? (() => {
-        const resource = lookupGraphResource(useResourceStore.getState().resources, path, kind);
+        const resource = lookupNodeFileResource(useResourceStore.getState().resources, path, kind);
         if (!resource?.exists) return null;
         return { name: resource.name, type: kind };
       })()

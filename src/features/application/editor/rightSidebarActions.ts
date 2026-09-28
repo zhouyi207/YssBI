@@ -8,7 +8,10 @@ import type { EditorResourceKind } from "@/modules/workbench/public";
 export function detailFocusForEditorResource(
   resourceKind: EditorResourceKind,
   resourceRef: string,
-): DetailFocus {
+  panelInstanceId: string,
+): DetailFocus | null {
+  if (resourceKind === "doc") return null;
+  if (resourceKind === "mind") return { kind: "mind", path: resourceRef, panelInstanceId };
   if (resourceKind === "chart") {
     return { kind: "chart", chartPath: resourceRef };
   }
@@ -23,10 +26,10 @@ export function setDetailContext(focus: DetailFocus | null): void {
 }
 
 /** Apply tab-derived context without replacing an explicit node inspection in the same graph. */
-export function setPassiveDetailContext(focus: DetailFocus): void {
+export function setPassiveDetailContext(focus: DetailFocus | null): void {
   const current = useEditorStore.getState().detailFocus;
   const preservesNodeFocus =
-    (focus.kind === "event" || focus.kind === "function") &&
+    (focus?.kind === "event_graph" || focus?.kind === "function_graph") &&
     current?.kind === "node" &&
     current.graphPath === focus.path;
   if (preservesNodeFocus || shallow(current, focus)) {
@@ -43,9 +46,10 @@ export function setInspectionContext(graphPath: string, selectedNodeIds: readonl
   } else if (store.detailFocus?.kind === "node") {
     const resource = Object.values(useResourceStore.getState().resources).find(
       (resource) =>
-        resource.id === graphPath && (resource.kind === "event" || resource.kind === "function"),
+        resource.id === graphPath &&
+        (resource.kind === "event_graph" || resource.kind === "function_graph"),
     );
-    if (resource?.kind === "event" || resource?.kind === "function")
+    if (resource?.kind === "event_graph" || resource?.kind === "function_graph")
       store.setDetailFocus({ kind: resource.kind, path: graphPath });
     else store.clearDetailFocus();
   }

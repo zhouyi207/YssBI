@@ -21,7 +21,7 @@ vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
 
 vi.mock("@/features/core/editor/stores/useEditorStore", () => ({
   useEditorStore: {
-    getState: () => ({ detailFocus: { kind: "event", path: "events/Main.yssbi-event" } }),
+    getState: () => ({ detailFocus: { kind: "event_graph", path: "events/Main.yssbi-event" } }),
   },
 }));
 
@@ -35,7 +35,7 @@ vi.mock("./editorGroupCommands", () => ({
 
 vi.mock("./rightSidebarActions", () => ({
   detailFocusForEditorResource: (
-    resourceKind: "event" | "function" | "chart",
+    resourceKind: "event_graph" | "function_graph" | "chart",
     resourceRef: string,
   ) =>
     resourceKind === "chart"
@@ -59,7 +59,7 @@ function editorPanel(panelInstanceId: string, resourceRef: string): WorkbenchPan
     metadata: {
       role: "editor",
       resourceRef,
-      resourceKind: "event",
+      resourceKind: "event_graph",
     },
     active: panelInstanceId === "panel-a",
     location: { type: "grid" },

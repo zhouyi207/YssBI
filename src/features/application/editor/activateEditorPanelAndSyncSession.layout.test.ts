@@ -57,7 +57,7 @@ vi.mock("./graphPanelSession", () => ({
 }));
 vi.mock("./rightSidebarActions", () => ({
   detailFocusForEditorResource: (
-    resourceKind: "event" | "function" | "chart",
+    resourceKind: "event_graph" | "function_graph" | "chart",
     resourceRef: string,
   ) =>
     resourceKind === "chart"
@@ -76,7 +76,7 @@ function editorPanel(
   panelInstanceId: string,
   resourceRef: string,
   active = false,
-  resourceKind: "event" | "function" | "chart" = "event",
+  resourceKind: "event_graph" | "function_graph" | "chart" = "event_graph",
 ): WorkbenchEditorPanelInfo {
   return {
     panelInstanceId,
@@ -114,7 +114,7 @@ describe("editor panel FlexLayout synchronization", () => {
 
     expect(mocks.activate).not.toHaveBeenCalled();
     expect(mocks.setDetailContext).toHaveBeenCalledWith({
-      kind: "event",
+      kind: "event_graph",
       path: "events/A",
     });
   });
@@ -139,7 +139,7 @@ describe("editor panel FlexLayout synchronization", () => {
     expect(mocks.activate).toHaveBeenCalledTimes(1);
     expect(mocks.activate).toHaveBeenCalledWith("panel-b");
     expect(mocks.setDetailContext).toHaveBeenLastCalledWith({
-      kind: "event",
+      kind: "event_graph",
       path: "events/B",
     });
   });

@@ -24,9 +24,13 @@ export function synchronizeActiveEditorPanel(panel: ActiveEditorPanelTarget): bo
     return false;
   const { metadata, groupId } = current;
   setPassiveDetailContext(
-    detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
+    detailFocusForEditorResource(
+      metadata.resourceKind,
+      metadata.resourceRef,
+      panel.panelInstanceId,
+    ),
   );
-  if (metadata.resourceKind === "event" || metadata.resourceKind === "function")
+  if (metadata.resourceKind === "event_graph" || metadata.resourceKind === "function_graph")
     focusGraphPanelSession(metadata.resourceRef, groupId);
   else {
     const sessions = useGraphSessionStore.getState();

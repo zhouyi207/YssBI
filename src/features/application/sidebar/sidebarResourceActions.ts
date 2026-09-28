@@ -8,7 +8,7 @@ import { captureProjectCommandContext } from "@/features/application/projectComm
 import { renameResource } from "@/features/application/resource/resourceActions";
 
 export type RevealProjectResourceRequest = {
-  readonly kind: "graph" | "database" | "chart";
+  readonly kind: import("@/shared/types/domain/resource").ResourceKind;
   readonly resourceId: string;
 };
 

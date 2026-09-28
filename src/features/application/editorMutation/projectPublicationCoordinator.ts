@@ -1,3 +1,4 @@
+import { nodeFileEntries } from "@/shared/types/domain/project";
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import {
   PROJECT_ACTIVITY_PANEL_IDS,
@@ -54,13 +55,14 @@ import {
   collectResourceMutationGraphPaths,
   fingerprintResourceMutationResult,
 } from "./resourceMutationResult";
-import { validateResourceMutationResult } from "@/features/domain/resource/resourceMutationValidation";
+import { validateResourceMutationResult } from "@/shared/types/domain/resourceMutationValidation";
 import {
   buildProjectSnapshotPathRemaps,
-  buildProjectSnapshotChartPathRemaps,
+  buildProjectSnapshotFilePathRemaps,
   commitPreparedProjectSnapshot,
   prepareProjectSnapshotCommit,
   validateProjectSnapshotIndex,
+  collectDeletedResourceKeys,
 } from "./projectPublicationSnapshot";
 
 export type ProjectPublicationSuccess = {
@@ -96,7 +98,8 @@ export interface ProjectSnapshotPreparation {
   readonly graphSessions: ReadonlyMap<string, GraphEditorSessionDto>;
   readonly chartDocuments: ReadonlyMap<string, ChartDocument>;
   readonly pathRemaps: ReadonlyMap<string, string>;
-  readonly chartPathRemaps: ReadonlyMap<string, string>;
+  readonly filePathRemaps: ReadonlyMap<string, string>;
+  readonly deletedResources: ReadonlySet<ResourceKey>;
 }
 export interface PreparedProjectSnapshotStoreState {
   readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
@@ -159,7 +162,12 @@ function staleLifecycleError(): ProjectPublicationError {
   );
 }
 function indexSignature(index: ProjectIndexRow): string {
-  return JSON.stringify([index.graphs, index.charts, index.databases]);
+  return JSON.stringify([
+    nodeFileEntries(index),
+    index.charts,
+    [...index.minds, ...index.docs],
+    index.databases,
+  ]);
 }
 
 /** The only installer for resource receipts and index invalidations. */
@@ -263,8 +271,18 @@ export class ProjectPublicationCoordinator {
         fingerprint !== this.appliedFingerprint
       )
         return Promise.reject(protocolError("conflicting receipt for the installed publication"));
-      // An installed authoritative snapshot covers late command/event copies as well.
-      return Promise.resolve({ status: "duplicate", affectedGraphPaths });
+      // An index-only refresh may have retained dirty content before deletion authorization arrived.
+      const needsDeletion = input.result.deltas.some((delta) => {
+        if (delta.payload.kind !== "resource_lifecycle") return false;
+        const { before, after } = delta.payload.patch;
+        if (!before || after) return false;
+        const resource =
+          useResourceStore.getState().resources[
+            resourceKey({ id: before.path, kind: before.kind })
+          ];
+        return resource?.exists === false && resource.revision === before.revision;
+      });
+      if (!needsDeletion) return Promise.resolve({ status: "duplicate", affectedGraphPaths });
     }
     const pending = existing ?? { input, fingerprint, affectedGraphPaths, waiters: [] };
     this.pending.set(revision, pending);
@@ -399,17 +417,22 @@ export class ProjectPublicationCoordinator {
           const receipts = covered.map((p) => p.input.result);
           const signature = indexSignature(index);
           const changed = signature !== this.publishedIndexSignature;
+          const deletedResources = collectDeletedResourceKeys(index, receipts);
           if (
             changed ||
+            deletedResources.size > 0 ||
             receipts.some((r) => r.projectionReplacements.length > 0 || r.moves.length > 0)
           ) {
-            const graphPaths = new Set(index.graphs.map((g) => g.path));
-            const chartPaths = new Set(index.charts.map((c) => c.chartPath));
+            const graphPaths = new Set(nodeFileEntries(index).map((g) => g.path));
+            const filePaths = new Set([
+              ...index.charts.map((c) => c.chartPath),
+              ...[...index.minds, ...index.docs].map((d) => d.path),
+            ]);
             const pathRemaps = buildProjectSnapshotPathRemaps(graphPaths, receipts);
-            const chartPathRemaps = buildProjectSnapshotChartPathRemaps(chartPaths, receipts);
+            const filePathRemaps = buildProjectSnapshotFilePathRemaps(filePaths, receipts);
             const affected = new Set(covered.flatMap((p) => [...p.affectedGraphPaths]));
             const loaded = this.dependencies.captureLoadedGraphPaths();
-            for (const graph of index.graphs) {
+            for (const graph of nodeFileEntries(index)) {
               const previousPath =
                 [...pathRemaps].find(([, to]) => to === graph.path)?.[0] ?? graph.path;
               if (
@@ -444,7 +467,7 @@ export class ProjectPublicationCoordinator {
             }
             for (const chart of index.charts) {
               const previousPath =
-                [...chartPathRemaps].find(([, to]) => to === chart.chartPath)?.[0] ??
+                [...filePathRemaps].find(([, to]) => to === chart.chartPath)?.[0] ??
                 chart.chartPath;
               const cached = useChartDocumentStore.getState().documents[previousPath];
               const previous =
@@ -498,7 +521,8 @@ export class ProjectPublicationCoordinator {
               graphSessions,
               chartDocuments,
               pathRemaps,
-              chartPathRemaps,
+              filePathRemaps,
+              deletedResources,
             });
             this.assertCurrent(identity);
             await this.dependencies.commitSnapshot(plan);

@@ -43,7 +43,8 @@
       "resourceNames": [],
       "styleId": "builtin.default",
       "technicalTerms": ["plus", "sum", "+"],
-      "title": "Add"
+      "title": "Add",
+      "available": true
     },
     {
       "aliases": ["call", "invoke", "function"],
@@ -51,7 +52,7 @@
       "categoryId": "project",
       "creation": {
         "createArgs": {
-          "kind": "function"
+          "kind": "function_graph"
         },
         "kind": "resourceBound",
         "nodeTypeId": "yssbi.project.function.call",
@@ -85,7 +86,8 @@
       "resourceRevision": 23,
       "styleId": "builtin.default",
       "technicalTerms": ["Maße_Valué", "call", "function", "invoke", "技术_Term"],
-      "title": "Straße_Data Café 数据"
+      "title": "Straße_Data Café 数据",
+      "available": true
     }
   ],
   "locale": "en-US",

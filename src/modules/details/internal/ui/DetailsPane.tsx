@@ -9,6 +9,7 @@ import { LogDetailPanel } from "./panels/LogDetailPanel";
 import { NodeDefinitionDetailPanel } from "./panels/NodeDefinitionDetailPanel";
 import { NodeDetailPanel } from "./panels/NodeDetailPanel";
 import { ChartDetailPanel } from "./panels/ChartDetailPanel";
+import { MindDetailPanel } from "./panels/MindDetailPanel";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 export function DetailsPane() {
@@ -26,9 +27,9 @@ export function DetailsPane() {
       return <NodeDetailPanel graphPath={model.graphPath} nodeId={model.nodeId} />;
     case "nodeDefinition":
       return <NodeDefinitionDetailPanel nodeType={model.nodeType} />;
-    case "event":
+    case "event_graph":
       return <EventDetailPanel event={model.event} graphPath={model.path} />;
-    case "function":
+    case "function_graph":
       return (
         <FunctionDetailPanel
           graphPath={model.path}
@@ -44,6 +45,14 @@ export function DetailsPane() {
       );
     case "data":
       return <DataDetailPanel dataframe={model.dataframe} />;
+    case "mind":
+      return (
+        <MindDetailPanel
+          key={`${model.path}:${model.panelInstanceId}`}
+          path={model.path}
+          panelInstanceId={model.panelInstanceId}
+        />
+      );
     case "empty":
       return (
         <div className="flex h-full min-h-0 flex-col bg-background">

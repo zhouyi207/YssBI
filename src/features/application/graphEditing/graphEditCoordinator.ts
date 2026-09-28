@@ -1,7 +1,7 @@
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { reconcileGraphResultQueries } from "@/features/application/results/runtime";
 import { markResourceDirty, markResourceStale, useResourceStore } from "@/features/core/resource";
-import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
+import { getNodeFileKind } from "@/features/core/resource/resourceSelectors";
 import type {
   EditorGraphMutationDto,
   GraphEditResultDto,
@@ -62,7 +62,7 @@ const graphTaskQueues = new Map<string, { tail: Promise<void>; pending: number }
 let coordinatorEpoch = 0;
 
 function publishGraphEditingState(graphPath: string, editing: GraphEditingStateDto): void {
-  const kind = getGraphResourceKind(graphPath);
+  const kind = getNodeFileKind(graphPath);
   if (!kind) return;
   const revision = Number(editing.version.revision);
   if (Number.isSafeInteger(revision))
@@ -84,7 +84,7 @@ export function installGraphSession(
       .hydrate(graphPath, result, mode === "save" ? false : undefined);
   reconcileGraphResultQueries(graphPath, previous);
   publishGraphEditingState(graphPath, result.editing);
-  const kind = getGraphResourceKind(graphPath);
+  const kind = getNodeFileKind(graphPath);
   if (kind) markResourceStale({ id: graphPath, kind }, false);
   return true;
 }

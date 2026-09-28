@@ -83,7 +83,7 @@ describe("createNodeFromDescriptor", () => {
       nodeTypeId: "functions.call",
       resourcePath: "functions/Helper.yssbi-function",
       resourceRevision: 4,
-      createArgs: { kind: "function" },
+      createArgs: { kind: "function_graph" },
     };
 
     await expect(

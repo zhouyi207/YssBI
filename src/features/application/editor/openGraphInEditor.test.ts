@@ -14,7 +14,7 @@ const openedPanel: WorkbenchEditorPanelInfo = {
   metadata: {
     role: "editor",
     resourceRef: "events/Main.yssbi-event",
-    resourceKind: "event",
+    resourceKind: "event_graph",
   },
   active: true,
   location: { type: "grid" },
@@ -46,13 +46,13 @@ describe("openGraphInEditor", () => {
 
   it("uses the authoritative panel and group returned by the awaited editor open", async () => {
     await expect(
-      openGraphInEditor("events/Main.yssbi-event", "Main", "event", "requested-group"),
+      openGraphInEditor("events/Main.yssbi-event", "Main", "event_graph", "requested-group"),
     ).resolves.toBe(openedPanel);
 
     expect(openEditorPanel).toHaveBeenCalledWith(
       {
         resourceRef: "events/Main.yssbi-event",
-        resourceKind: "event",
+        resourceKind: "event_graph",
       },
       {
         targetGroupId: "requested-group",

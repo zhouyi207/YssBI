@@ -44,7 +44,7 @@
     "name": "Forecast",
     "path": "functions/forecast.yssbi-function",
     "revision": 1,
-    "type": "function"
+    "type": "function_graph"
   },
   "replacement": {
     "functionEditorProjection": {

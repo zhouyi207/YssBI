@@ -1,3 +1,6 @@
+import { hasValidResourceDeltaRevisions } from "@/shared/types/domain/resourceMutationValidation";
+import { isMindPath } from "@/shared/types/domain/mind";
+import { isDocPath } from "@/shared/types/domain/doc";
 import type { ResourceDeltaDto } from "@/shared/types/dto/editorMutation";
 import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuards";
 import { isTypedLiteralWire, isTypeExprWire } from "@/shared/types/dto/editorMutationWireParser";
@@ -209,7 +212,10 @@ function isNonEmptyPath(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function isResourcePathMovePatch(value: unknown, graphPath: boolean): boolean {
+function isResourcePathMovePatch(
+  value: unknown,
+  graphPath: boolean,
+): value is { from: string; to: string } {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["from", "to"]) &&
@@ -245,7 +251,7 @@ function isChartPatch(value: unknown): boolean {
 function isResourceLifecycleState(
   value: unknown,
   path: string,
-  resourceKind: "graph" | "chart",
+  resourceKind: "graph" | "chart" | "mind" | "doc",
 ): boolean {
   if (
     !isRecord(value) ||
@@ -257,22 +263,30 @@ function isResourceLifecycleState(
     value.name.length === 0
   )
     return false;
+  if (resourceKind === "mind") return value.kind === "mind" && isMindPath(path);
+  if (resourceKind === "doc") return value.kind === "doc" && isDocPath(path);
   return resourceKind === "chart"
     ? value.kind === "chart"
-    : value.kind === "event" || value.kind === "function";
+    : value.kind === "event_graph" || value.kind === "function_graph";
 }
 
 function isResourceLifecyclePatch(
   value: unknown,
   path: string,
-  resourceKind: "graph" | "chart",
+  resourceKind: "graph" | "chart" | "mind" | "doc",
 ): boolean {
   if (!isRecord(value) || !hasExactKeys(value, ["before", "after"])) return false;
   const beforeValid =
     value.before === null || isResourceLifecycleState(value.before, path, resourceKind);
   const afterValid =
     value.after === null || isResourceLifecycleState(value.after, path, resourceKind);
-  return beforeValid && afterValid && (value.before === null) !== (value.after === null);
+  return (
+    beforeValid &&
+    afterValid &&
+    (resourceKind === "mind" || resourceKind === "doc"
+      ? value.before !== null || value.after !== null
+      : (value.before === null) !== (value.after === null))
+  );
 }
 
 function isOperationCorrelation(value: unknown): value is string | null {
@@ -303,6 +317,20 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
       isGraphResourcePath(key) &&
       value.payload.kind === "function" &&
       isFunctionPatch(value.payload.patch)
+    );
+  }
+  if (kind === "mind" || kind === "doc") {
+    const isPath = kind === "mind" ? isMindPath : isDocPath;
+    if (!isPath(key)) return false;
+    return (
+      (value.payload.kind === "resource_lifecycle" &&
+        isResourceLifecyclePatch(value.payload.patch, key, kind)) ||
+      (value.payload.kind === "resource_move" &&
+        isResourcePathMovePatch(value.payload.patch, false) &&
+        isRecord(value.payload.patch) &&
+        isPath(value.payload.patch.from) &&
+        isPath(value.payload.patch.to) &&
+        value.payload.patch.to === key)
     );
   }
   if (kind === "chart") {
@@ -339,22 +367,13 @@ function isResourceDelta(value: unknown): value is ResourceDeltaDto {
     !isOperationCorrelation(value.causedBy)
   )
     return false;
-  if (isRecord(value.payload) && value.payload.kind === "resource_lifecycle") {
-    const patch = value.payload.patch as UnknownRecord;
-    if (!isUuid(value.causedBy)) return false;
-    if (isRecord(patch.after)) {
-      return (
-        patch.after.revision === value.toRevision &&
-        (value.fromRevision as number) <= (value.toRevision as number)
-      );
-    }
-    return (
-      isRecord(patch.before) &&
-      patch.before.revision === value.fromRevision &&
-      value.toRevision === (value.fromRevision as number) + 1
-    );
-  }
-  return value.toRevision === (value.fromRevision as number) + 1;
+  if (
+    isRecord(value.payload) &&
+    value.payload.kind === "resource_lifecycle" &&
+    !isUuid(value.causedBy)
+  )
+    return false;
+  return hasValidResourceDeltaRevisions(value as unknown as ResourceDeltaDto);
 }
 
 function deltaTarget(delta: ResourceDeltaDto): string {

@@ -10,6 +10,8 @@ import type {
 } from "@/shared/types/domain/editorProjection";
 
 export type ResourceKeyDto =
+  | { kind: "mind"; key: string }
+  | { kind: "doc"; key: string }
   | { kind: "graph"; key: string }
   | { kind: "function"; key: string }
   | { kind: "database"; key: string }
@@ -224,7 +226,7 @@ export interface ResourcePathMovePatchDto {
   to: string;
 }
 
-export type ResourceLifecycleKindDto = "event" | "function" | "chart";
+export type ResourceLifecycleKindDto = import("./resource").FileResourceKind;
 
 export interface ResourceLifecycleStateDto {
   revision: number;

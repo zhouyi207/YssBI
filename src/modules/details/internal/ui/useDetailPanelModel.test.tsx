@@ -12,7 +12,7 @@ import type { ChartDocument } from "@/shared/types/domain/chart";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 vi.mock("@/features/application/editor", () => {
-  const resources = { events: {}, functions: {}, dataframes: {} };
+  const resources = { eventGraphs: {}, functionGraphs: {}, dataframes: {} };
   return { useDetailResourceProjection: () => resources };
 });
 vi.mock("@/features/application/log", () => ({

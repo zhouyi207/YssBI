@@ -205,7 +205,7 @@ function editorPanel(
   return panel(
     panelInstanceId,
     groupId,
-    { role: "editor", resourceRef, resourceKind: "event" },
+    { role: "editor", resourceRef, resourceKind: "event_graph" },
     location,
     active,
   );

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
-  buildGraphResourceMeta,
+  buildFileResourceMeta,
   getDocumentState,
   markResourceLoaded,
   useDocumentStateStore,
@@ -73,7 +73,7 @@ describe("graph document lifecycle ownership", () => {
     useResourceStore.getState().clear();
     useDocumentStateStore.getState().clear();
     useResourceStore.getState().setSnapshot({
-      resources: [buildGraphResourceMeta("event", graphPath, "Main")],
+      resources: [buildFileResourceMeta("event_graph", graphPath, "Main")],
       graphOrder: [graphPath],
     });
     vi.mocked(GraphService.unloadProjectGraph).mockResolvedValue(true);
@@ -114,7 +114,7 @@ describe("graph document lifecycle ownership", () => {
     const current = makeEditorProjectionFixture({ graphPath, title: "Current" });
     const reopened = makeEditorProjectionFixture({ graphPath, title: "Reopened" });
     installGraphProjectionFixture(graphPath, current.projection);
-    markResourceLoaded({ id: graphPath, kind: "event" });
+    markResourceLoaded({ id: graphPath, kind: "event_graph" });
     const pendingUnload = deferred<boolean>();
     vi.mocked(GraphService.unloadProjectGraph).mockReturnValue(pendingUnload.promise);
     vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(
@@ -126,12 +126,12 @@ describe("graph document lifecycle ownership", () => {
     const loading = useProjectIOStore.getState().loadGraph(graphPath);
     pendingUnload.resolve(true);
     await expect(loading).resolves.toBe(true);
-    markResourceLoaded({ id: graphPath, kind: "event" });
-    expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).toBe(true);
+    markResourceLoaded({ id: graphPath, kind: "event_graph" });
+    expect(getDocumentState({ id: graphPath, kind: "event_graph" })?.loaded).toBe(true);
 
     await unloading;
 
-    expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).toBe(true);
+    expect(getDocumentState({ id: graphPath, kind: "event_graph" })?.loaded).toBe(true);
     expect(
       useGraphProjectionStore.getState().graphEntities[graphPath]?.nodes["local-node"].display
         .title,

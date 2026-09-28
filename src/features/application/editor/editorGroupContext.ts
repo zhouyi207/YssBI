@@ -5,7 +5,7 @@ import { workbenchLayoutRead } from "@/modules/workbench/public";
 export function getActiveGraphContext() {
   const panel = workbenchLayoutRead.getActiveEditorPanel();
   const kind = panel?.metadata.resourceKind;
-  if (!panel || (kind !== "event" && kind !== "function")) return null;
+  if (!panel || (kind !== "event_graph" && kind !== "function_graph")) return null;
   return { groupId: panel.groupId, graphPath: panel.metadata.resourceRef, kind };
 }
 

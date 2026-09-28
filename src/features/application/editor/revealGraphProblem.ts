@@ -42,7 +42,7 @@ export async function revealGraphProblem(
           (resource.kind === "database" && `databases/${resource.id}` === location.identity)),
     );
     if (!resource) return false;
-    if (resource.kind === "event" || resource.kind === "function")
+    if (resource.kind === "event_graph" || resource.kind === "function_graph")
       await openGraphResource(resource.id, resource.kind);
     else if (resource.kind === "database") await revealDetails({ kind: "data", id: resource.id });
     return isCurrentProjectIdentity(identity);

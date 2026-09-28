@@ -129,7 +129,7 @@ export async function executeFunctionSignatureMutation(
   const { context, captured: meta } = captureRevisionedProjectCommandSnapshot(
     () => useGraphMetaStore.getState().graphs[input.functionPath],
   );
-  if (meta?.type !== "function" || meta.functionRevision == null || !meta.functionSignature) {
+  if (meta?.type !== "function_graph" || meta.functionRevision == null || !meta.functionSignature) {
     throw new Error(`function signature resource '${input.functionPath}' is not hydrated`);
   }
 

@@ -1,3 +1,7 @@
+import type { FileVersion } from "@/shared/types/domain/fileDocument";
+import { mindActions } from "@/features/application/resource/mindActions";
+import { docActions } from "@/features/application/resource/docActions";
+const fileActions = { mind: mindActions, doc: docActions };
 import i18n from "i18next";
 
 import {
@@ -25,13 +29,12 @@ import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore"
 import { editorViewportScope, releaseEditorViewport } from "@/features/core/viewport";
 import { logger } from "@/features/application/observability/appLogger";
 
-import { saveChartDocument as saveChartDraft } from "@/features/application/chart/saveChartDocument";
+import { saveFileResource } from "@/features/application/resource/resourceActions";
 import { deactivateGraphPanelSession } from "./graphPanelSession";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
-import { saveGraph } from "@/features/application/graphEditing/saveGraph";
-import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
+import { settleEditorFileEdits } from "./settleEditorFileEdits";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 
@@ -42,6 +45,7 @@ type EditorDocument = {
   readonly name: string;
   readonly dirty: boolean;
   readonly version?: GraphEditVersionDto;
+  readonly documentVersion?: FileVersion;
 };
 
 type CloseSnapshot = {
@@ -149,8 +153,14 @@ function documentsThatLoseTheirLastPanel(snapshot: CloseSnapshot): EditorDocumen
       resourceKind: metadata.resourceKind,
       name: resolveResourceDisplayName(ref, panel.title ?? metadata.resourceRef),
       dirty: isResourceDocumentDirty(ref),
+      documentVersion:
+        metadata.resourceKind === "mind" || metadata.resourceKind === "doc"
+          ? fileActions[metadata.resourceKind].getSnapshot(metadata.resourceRef)?.version
+          : undefined,
       version:
-        metadata.resourceKind === "chart"
+        metadata.resourceKind === "chart" ||
+        metadata.resourceKind === "mind" ||
+        metadata.resourceKind === "doc"
           ? undefined
           : useGraphProjectionStore.getState().sessions[metadata.resourceRef]?.version,
     });
@@ -169,41 +179,23 @@ function closeDialogOptions(document: EditorDocument) {
   };
 }
 
-async function saveChartDocument(
+async function saveEditorDocument(
   document: EditorDocument,
   identity: ProjectIdentitySnapshot,
 ): Promise<boolean> {
-  if (!isCurrentProjectIdentity(identity)) return false;
+  if (document.resourceKind === "database" || !isCurrentProjectIdentity(identity)) return false;
   try {
-    const saved = await saveChartDraft(document.resourceRef);
+    const saved = await saveFileResource(document.resourceRef, document.resourceKind);
     if (!isCurrentProjectIdentity(identity)) return false;
-    if (saved) return true;
-    showBlockingMessage(
-      i18n.t("notifications.editor.documentSaveFailed", {
-        title: document.name,
-        error: "chart_save_not_committed",
-      }),
-    );
-  } catch (error) {
-    if (!isCurrentProjectIdentity(identity)) return false;
-    showBlockingIpcError(error, (code) =>
-      i18n.t("notifications.editor.documentSaveFailed", {
-        title: document.name,
-        error: code,
-      }),
-    );
-  }
-  return false;
-}
-
-async function saveGraphDocument(
-  document: EditorDocument & { readonly resourceKind: "event" | "function" },
-  identity: ProjectIdentitySnapshot,
-): Promise<boolean> {
-  if (!isCurrentProjectIdentity(identity)) return false;
-  try {
-    const saved = await saveGraph(document.resourceRef, document.resourceKind);
-    return saved && isCurrentProjectIdentity(identity);
+    if (!saved && document.resourceKind === "chart") {
+      showBlockingMessage(
+        i18n.t("notifications.editor.documentSaveFailed", {
+          title: document.name,
+          error: "chart_save_not_committed",
+        }),
+      );
+    }
+    return saved;
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
     showBlockingIpcError(error, (code) =>
@@ -214,18 +206,6 @@ async function saveGraphDocument(
     );
     return false;
   }
-}
-
-function saveEditorDocument(
-  document: EditorDocument,
-  identity: ProjectIdentitySnapshot,
-): Promise<boolean> {
-  return document.resourceKind === "chart"
-    ? saveChartDocument(document, identity)
-    : saveGraphDocument(
-        document as EditorDocument & { readonly resourceKind: "event" | "function" },
-        identity,
-      );
 }
 
 function isCloseSnapshotCurrent(snapshot: CloseSnapshot): boolean {
@@ -257,6 +237,8 @@ function finalizeClosedPanels(
   for (const panel of closedPanels) {
     const metadata = panel.metadata;
     if (metadata.role !== "editor") continue;
+    if (metadata.resourceKind === "mind")
+      clearDetailFocusForClosedPanel(metadata.resourceRef, panel.panelInstanceId);
     releaseEditorPaneState(panel.panelInstanceId);
 
     if (metadata.resourceKind === "database") {
@@ -267,7 +249,7 @@ function finalizeClosedPanels(
       continue;
     }
 
-    if (metadata.resourceKind !== "chart") {
+    if (metadata.resourceKind === "event_graph" || metadata.resourceKind === "function_graph") {
       const hasSameScope = remainingEditors.some(
         (candidate: EditorPanelInfo) =>
           candidate.groupId === panel.groupId &&
@@ -290,6 +272,10 @@ function finalizeClosedPanels(
     }
     finalizedDocuments.add(key);
     clearDetailFocusForClosedPanel(metadata.resourceRef);
+    if (metadata.resourceKind === "mind" || metadata.resourceKind === "doc") {
+      fileActions[metadata.resourceKind].release(metadata.resourceRef);
+      continue;
+    }
     if (metadata.resourceKind === "chart") {
       evictChartDocument(metadata.resourceRef);
       continue;
@@ -336,13 +322,14 @@ async function requestCloseWorkbenchPanelsNow(
   if (!snapshot) return false;
 
   try {
-    const graphs = documentsThatLoseTheirLastPanel(snapshot).filter(
-      (document) => document.resourceKind !== "chart",
+    await settleEditorFileEdits(
+      documentsThatLoseTheirLastPanel(snapshot).flatMap((document) =>
+        document.resourceKind === "database"
+          ? []
+          : [{ id: document.resourceRef, kind: document.resourceKind }],
+      ),
     );
-    const settled = await Promise.all(
-      graphs.map((document) => enqueueGraphTask(document.resourceRef, async () => true, false)),
-    );
-    if (settled.some((current) => !current) || !isCloseSnapshotCurrent(snapshot)) return false;
+    if (!isCloseSnapshotCurrent(snapshot)) return false;
   } catch {
     showCloseFailedMessage();
     return false;
@@ -355,7 +342,26 @@ async function requestCloseWorkbenchPanelsNow(
     if (!document.dirty) continue;
     const decision = await uiStore.confirm3(closeDialogOptions(document));
     if (!isCloseSnapshotCurrent(snapshot) || decision === "cancel") return false;
-    if (decision === "discard" && document.resourceKind !== "chart") {
+    if (
+      decision === "discard" &&
+      (document.resourceKind === "mind" || document.resourceKind === "doc")
+    ) {
+      if (!document.documentVersion) return false;
+      try {
+        await fileActions[document.resourceKind].discard(
+          document.resourceRef,
+          document.documentVersion,
+        );
+      } catch (error) {
+        showBlockingIpcError(error, () => i18n.t("editor.close.failed"));
+        return false;
+      }
+      if (!isCloseSnapshotCurrent(snapshot)) return false;
+    }
+    if (
+      decision === "discard" &&
+      (document.resourceKind === "event_graph" || document.resourceKind === "function_graph")
+    ) {
       if (!document.version) return false;
       discarded.set(document.resourceRef, document.version);
     }
@@ -367,6 +373,14 @@ async function requestCloseWorkbenchPanelsNow(
   }
 
   let outcome: "committed" | "stale";
+  if (
+    documentsThatLoseTheirLastPanel(snapshot).some(
+      (document) =>
+        (document.resourceKind === "mind" || document.resourceKind === "doc") &&
+        isResourceDocumentDirty({ id: document.resourceRef, kind: document.resourceKind }),
+    )
+  )
+    return false;
   try {
     const identity = snapshot.projectIdentity;
     outcome = identity

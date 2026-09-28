@@ -8,7 +8,7 @@ import {
 
 /** 函数 palette / Detail / 右键菜单：名称 ResourceStore + 签名 graphMetaStore。 */
 export function useFunctionCatalog(): Record<string, FunctionResourceView> {
-  const resources = useGraphResourcesByKind("function");
+  const resources = useGraphResourcesByKind("function_graph");
   const metaGraphs = useGraphMetaStore((s) => s.graphs);
 
   return useMemo(

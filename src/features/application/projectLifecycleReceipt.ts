@@ -24,7 +24,7 @@ export interface ProjectLifecycleReceiptDependencies {
   markProjectStale(): void;
 }
 
-export type ProjectLifecycleReceiptSource = "direct" | "event";
+export type ProjectLifecycleReceiptSource = "direct" | "event_graph";
 export type ProjectLifecycleReceiptStatus = "applied" | "duplicate" | "stale";
 
 export interface ProjectLifecycleReceiptSettlement {
@@ -309,7 +309,7 @@ export async function applyProjectLifecycleReceipt(
   sweepLifecycleRegistry();
   const entry = pendingOperations.get(result.operationId);
   if (!entry) return { status: "stale", result };
-  if (source === "event" && entry.registrationGeneration > 1 && !entry.fingerprint) {
+  if (source === "event_graph" && entry.registrationGeneration > 1 && !entry.fingerprint) {
     return { status: "stale", result };
   }
   validateReceipt(entry, result);
@@ -323,7 +323,7 @@ export async function applyProjectLifecycleReceipt(
       const settled = await entry.processing;
       return { ...settled, status: "duplicate" };
     } catch (error) {
-      if (source === "event") throw error;
+      if (source === "event_graph") throw error;
     }
     if (!entryIsCurrent(entry)) return { status: "stale", result };
   }

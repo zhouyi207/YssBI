@@ -7,7 +7,7 @@ import { logger } from "@/features/core/observability/logger";
 export interface GraphMeta {
   path: GraphPath;
   name: string;
-  type: "event" | "function";
+  type: "event_graph" | "function_graph";
   entryNodeId?: NodeId;
   functionRevision?: number;
   functionSignature?: FunctionSignatureDto;

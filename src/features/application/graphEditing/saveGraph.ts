@@ -14,7 +14,7 @@ import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
 
 export async function saveGraph(
   graphPath: string,
-  graphKind: Extract<ResourceKind, "event" | "function">,
+  graphKind: Extract<ResourceKind, "event_graph" | "function_graph">,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
   const drafts = useGraphProjectionStore.getState();

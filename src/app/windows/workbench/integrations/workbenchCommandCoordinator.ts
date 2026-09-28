@@ -1,13 +1,11 @@
 import { useMemo } from "react";
+import { useFileManagement } from "@/features/application/resource/useFileManagement";
 
-import { useGraphManagement } from "@/features/application/dataManagement";
 import {
   useEditorOperations,
   useEditorPanelCommands,
   useGraphCanvasCommands,
   useProjectOperations,
-  useChartManagement,
-  useOpenChart,
   type WorkbenchCommandCapability,
 } from "@/features/application/editor";
 
@@ -16,9 +14,7 @@ export function useWorkbenchCommandCoordinator(): WorkbenchCommandCapability {
   const canvas = useGraphCanvasCommands();
   const project = useProjectOperations();
   const panels = useEditorPanelCommands();
-  const graphs = useGraphManagement(panels.openGraph);
-  const openChart = useOpenChart();
-  const charts = useChartManagement(openChart);
+  const files = useFileManagement();
 
   return useMemo(
     () => ({
@@ -32,19 +28,17 @@ export function useWorkbenchCommandCoordinator(): WorkbenchCommandCapability {
       selectAllNodes: canvas.selectAllNodes,
       focusSelectedNodes: canvas.focusSelectedNodes,
       fitCompleteGraph: canvas.fitCompleteGraph,
-      saveGraph: project.saveGraph,
-      saveGraphAs: project.saveGraphAs,
-      importGraph: project.importGraph,
+      saveActiveFile: project.saveActiveFile,
+      saveProjectAs: project.saveProjectAs,
+      openProject: project.openProject,
       splitEditorRight: panels.splitEditorRight,
-      addEvent: graphs.addEvent,
-      addFunction: graphs.addFunction,
-      addChart: charts.addChart,
+      createFile: files.createFile,
     }),
     [
       canvas.fitCompleteGraph,
       canvas.focusSelectedNodes,
       canvas.selectAllNodes,
-      charts.addChart,
+      files.createFile,
       editor.copy,
       editor.cut,
       editor.deleteSelected,
@@ -52,12 +46,10 @@ export function useWorkbenchCommandCoordinator(): WorkbenchCommandCapability {
       editor.paste,
       editor.redo,
       editor.undo,
-      graphs.addEvent,
-      graphs.addFunction,
       panels.splitEditorRight,
-      project.importGraph,
-      project.saveGraph,
-      project.saveGraphAs,
+      project.openProject,
+      project.saveActiveFile,
+      project.saveProjectAs,
     ],
   );
 }

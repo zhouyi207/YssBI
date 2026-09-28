@@ -32,11 +32,12 @@ function projectIndex(): Record<string, unknown> {
     publicationRevision: 4,
     projectName: "Projection contract",
     exportTime: "2026-08-07T00:00:00",
-    graphs: [
+    eventGraphs: [],
+    functionGraphs: [
       {
         path: "functions/forecast.yssbi-function",
         name: "Forecast",
-        type: "function",
+        type: "function_graph",
         revision: 11,
         functionRevision: 11,
         functionSignature: {
@@ -62,13 +63,15 @@ function projectIndex(): Record<string, unknown> {
         },
       },
     ],
+    minds: [],
+    docs: [],
     charts: [],
     databases: [],
   };
 }
 
 function functionRow(index: Record<string, unknown>): Record<string, unknown> {
-  return (index.graphs as Array<Record<string, unknown>>)[0];
+  return (index.functionGraphs as Array<Record<string, unknown>>)[0];
 }
 
 function chartRow(): Record<string, unknown> {
@@ -101,9 +104,9 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
   it("preserves the exact Rust-resolved output name and structured pin types", async () => {
     const { index } = await ProjectService.getProjectIndex("project-a");
 
-    const functionRow = index.graphs[0];
-    expect(functionRow.type).toBe("function");
-    if (functionRow.type !== "function") throw new Error("expected function row");
+    const functionRow = index.functionGraphs[0];
+    expect(functionRow.type).toBe("function_graph");
+    if (functionRow.type !== "function_graph") throw new Error("expected function row");
     expect(functionRow.functionEditorProjection).toEqual({
       functionRevision: 11,
       inputs: [
@@ -127,31 +130,31 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     const index = projectIndex();
     const row = functionRow(index);
     row.path = "functions/Sales Report 销售预测.yssbi-function";
-    (index.graphs as unknown[]).unshift({
+    (index.eventGraphs as unknown[]).unshift({
       path: "events/每日 Sales Report.yssbi-event",
       name: "Daily report",
-      type: "event",
+      type: "event_graph",
       revision: 3,
     });
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
       index: {
-        graphs: [
-          { path: "events/每日 Sales Report.yssbi-event", type: "event" },
-          { path: "functions/Sales Report 销售预测.yssbi-function", type: "function" },
+        eventGraphs: [{ path: "events/每日 Sales Report.yssbi-event", type: "event_graph" }],
+        functionGraphs: [
+          { path: "functions/Sales Report 销售预测.yssbi-function", type: "function_graph" },
         ],
       },
     });
   });
 
-  it("uses the explicit graph type while preserving an opaque path", async () => {
+  it("uses the explicit file type while preserving an opaque path", async () => {
     const index = projectIndex();
     functionRow(index).path = "events/opaque-function-identity";
     ipc.response = index;
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
       index: {
-        graphs: [{ path: "events/opaque-function-identity", type: "function" }],
+        functionGraphs: [{ path: "events/opaque-function-identity", type: "function_graph" }],
       },
     });
     functionRow(index).path = "";
@@ -215,6 +218,8 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
 
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
       index: {
+        minds: [],
+        docs: [],
         charts: [
           {
             chartPath: "charts/Opaque Path With Spaces.yssbi-chart",

@@ -5,8 +5,9 @@ export type DetailTarget =
   | { kind: "nodeDefinition"; nodeType: string }
   | { kind: "data"; id: string }
   | { kind: "log" }
-  | { kind: "event"; path: string }
-  | { kind: "function"; path: string }
+  | { kind: "event_graph"; path: string }
+  | { kind: "function_graph"; path: string }
+  | { kind: "mind"; path: string; panelInstanceId: string }
   | { kind: "chart"; chartPath: string };
 
 /** Explicit user selection for the Detail panel — no derived priority chain. */

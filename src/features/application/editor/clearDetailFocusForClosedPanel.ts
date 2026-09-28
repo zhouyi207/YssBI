@@ -1,18 +1,29 @@
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 
-export function clearDetailFocusForClosedPanel(resourceRef: string): void {
+export function clearDetailFocusForClosedPanel(
+  resourceRef: string,
+  panelInstanceId?: string,
+): void {
   const focus = useEditorStore.getState().detailFocus;
   if (!focus) return;
 
-  if (shouldClearFocus(focus, resourceRef)) {
+  if (shouldClearFocus(focus, resourceRef, panelInstanceId)) {
     useEditorStore.getState().clearDetailFocus();
   }
 }
 
-function shouldClearFocus(focus: DetailFocus, resourceRef: string): boolean {
+function shouldClearFocus(
+  focus: DetailFocus,
+  resourceRef: string,
+  panelInstanceId?: string,
+): boolean {
+  if (focus.kind === "mind")
+    return (
+      focus.path === resourceRef && (!panelInstanceId || focus.panelInstanceId === panelInstanceId)
+    );
   if (focus.kind === "node" && focus.graphPath === resourceRef) return true;
-  if (focus.kind === "event" || focus.kind === "function") {
+  if (focus.kind === "event_graph" || focus.kind === "function_graph") {
     return focus.path === resourceRef;
   }
   if (focus.kind === "chart") {

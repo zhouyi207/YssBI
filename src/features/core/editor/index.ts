@@ -3,6 +3,6 @@ export * from "./hooks";
 export type {
   EditorCollections,
   EditorDataframes,
-  EditorEvents,
-  EditorFunctions,
+  EditorEventGraphs,
+  EditorFunctionGraphs,
 } from "./editorCollections";

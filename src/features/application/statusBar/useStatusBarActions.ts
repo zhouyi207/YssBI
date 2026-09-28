@@ -14,7 +14,7 @@ export function useStatusBarActions() {
   const resetCanvasViewport = useCallback(() => {
     const target = captureActiveEditorCommandTarget();
     if (!target || !isEditorCommandTargetCurrent(target)) return;
-    if (target.resourceKind !== "event" && target.resourceKind !== "function") return;
+    if (target.resourceKind !== "event_graph" && target.resourceKind !== "function_graph") return;
     setViewportLive(editorViewportScope(target.groupId, target.resourceRef), {
       ...DEFAULT_VIEWPORT,
     });

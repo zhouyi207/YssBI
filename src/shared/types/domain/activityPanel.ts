@@ -1,3 +1,4 @@
+import { FILE_RESOURCE_KINDS, type FileResourceKind } from "./resource";
 import type { NodeCreationDescriptorDto } from "./nodeCreationDescriptor";
 
 export type ActivityPanelId = "project" | "nodes" | "commands" | "plugins";
@@ -5,9 +6,11 @@ export const PROJECT_ACTIVITY_PANEL_IDS = ["project", "nodes"] as const;
 export type ProjectActivityPanelId = (typeof PROJECT_ACTIVITY_PANEL_IDS)[number];
 export type ActivityText = { readonly key: string } | { readonly text: string };
 export type ActivityActionId =
-  | "newEvent"
-  | "newFunction"
+  | "newEventGraph"
+  | "newFunctionGraph"
   | "newChart"
+  | "newMind"
+  | "newDoc"
   | "importData"
   | "install"
   | "refresh";
@@ -16,14 +19,16 @@ export interface ActivityTool {
   readonly label: ActivityText;
   readonly icon: "add" | "install" | "refresh";
 }
+export type ActivityFileItem = {
+  readonly kind: FileResourceKind;
+  readonly path: string;
+  readonly name: string;
+};
+export function isActivityFileItem(item: ActivityItem): item is ActivityFileItem {
+  return (FILE_RESOURCE_KINDS as readonly string[]).includes(item.kind);
+}
 export type ActivityItem =
-  | {
-      readonly kind: "graph";
-      readonly path: string;
-      readonly name: string;
-      readonly graphType: "event" | "function";
-    }
-  | { readonly kind: "chart"; readonly path: string; readonly name: string }
+  | ActivityFileItem
   | {
       readonly kind: "database";
       readonly id: string;

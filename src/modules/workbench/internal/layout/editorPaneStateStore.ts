@@ -14,8 +14,10 @@ export const EMPTY_EDITOR_PANE_SELECTION: EditorPaneSelection = {
 
 interface EditorPaneState {
   selections: Record<EditorPanePanelId, EditorPaneSelection>;
+  collapsedNodeIds: Record<EditorPanePanelId, string[]>;
   setSelectedNodeIds(panelInstanceId: EditorPanePanelId, ids: string[]): void;
   setSelectedConnectionIds(panelInstanceId: EditorPanePanelId, ids: string[]): void;
+  setNodeCollapsed(panelInstanceId: EditorPanePanelId, nodeId: string, collapsed: boolean): void;
   clearSelection(panelInstanceId: EditorPanePanelId): void;
   release(panelInstanceId: EditorPanePanelId): void;
   reset(): void;
@@ -26,6 +28,7 @@ const unique = (ids: readonly string[]): string[] => [...new Set(ids)];
 /** Pane-local UI state only; FlexLayout remains authoritative for panel placement. */
 export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
   selections: {},
+  collapsedNodeIds: {},
   setSelectedNodeIds: (panelInstanceId, ids) =>
     set((state) => ({
       selections: {
@@ -40,6 +43,13 @@ export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
         [panelInstanceId]: { selectedNodeIds: [], selectedConnectionIds: unique(ids) },
       },
     })),
+  setNodeCollapsed: (panelInstanceId, nodeId, collapsed) =>
+    set((state) => {
+      const ids = new Set(state.collapsedNodeIds[panelInstanceId]);
+      if (collapsed) ids.add(nodeId);
+      else ids.delete(nodeId);
+      return { collapsedNodeIds: { ...state.collapsedNodeIds, [panelInstanceId]: [...ids] } };
+    }),
   clearSelection: (panelInstanceId) =>
     set((state) => ({
       selections: { ...state.selections, [panelInstanceId]: { ...EMPTY_EDITOR_PANE_SELECTION } },
@@ -47,10 +57,12 @@ export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
   release: (panelInstanceId) =>
     set((state) => {
       const selections = { ...state.selections };
+      const collapsedNodeIds = { ...state.collapsedNodeIds };
       delete selections[panelInstanceId];
-      return { selections };
+      delete collapsedNodeIds[panelInstanceId];
+      return { selections, collapsedNodeIds };
     }),
-  reset: () => set({ selections: {} }),
+  reset: () => set({ selections: {}, collapsedNodeIds: {} }),
 }));
 
 export function getPaneSelection(

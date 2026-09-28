@@ -17,7 +17,7 @@ const completeSnapshot = {
         kind: "resourceBound",
         nodeTypeId: "yssbi.project.function.call",
         resourcePath: "functions/example",
-        createArgs: { kind: "function" },
+        createArgs: { kind: "function_graph" },
       },
       parameters: {},
       userLabel: null,

@@ -17,7 +17,14 @@ function isSafeRevision(value: unknown): value is number {
 }
 
 function isResourceKind(value: unknown): value is ResourceDeltaDto["resource"]["kind"] {
-  return value === "graph" || value === "function" || value === "database" || value === "chart";
+  return (
+    value === "graph" ||
+    value === "function" ||
+    value === "database" ||
+    value === "chart" ||
+    value === "mind" ||
+    value === "doc"
+  );
 }
 
 function isPayloadKind(value: unknown): value is ResourceDocumentPatchDto["kind"] {
@@ -47,7 +54,24 @@ function isResourceDelta(value: unknown): value is ResourceDeltaDto {
   ) {
     return false;
   }
-  return value.toRevision >= value.fromRevision;
+  return hasValidResourceDeltaRevisions(value as unknown as ResourceDeltaDto);
+}
+
+/** Revision semantics shared by wire parsing and typed application receipts. */
+export function hasValidResourceDeltaRevisions(delta: ResourceDeltaDto): boolean {
+  if (delta.payload.kind === "resource_lifecycle") {
+    const patch = delta.payload.patch;
+    if (!isRecord(patch)) return false;
+    if (isRecord(patch.after)) {
+      return patch.after.revision === delta.toRevision && delta.fromRevision <= delta.toRevision;
+    }
+    return (
+      isRecord(patch.before) &&
+      patch.before.revision === delta.fromRevision &&
+      delta.toRevision === delta.fromRevision + 1
+    );
+  }
+  return delta.toRevision === delta.fromRevision + 1;
 }
 
 function graphPathFromDelta(delta: ResourceDeltaDto): string | undefined {
@@ -119,8 +143,8 @@ export function validateResourceMutationResult(
         move.name.trim().length === 0
       )
         return true;
-      if (move.kind === "chart") return false;
-      if (move.kind !== "event" && move.kind !== "function") return true;
+      if (move.kind === "chart" || move.kind === "mind" || move.kind === "doc") return false;
+      if (move.kind !== "event_graph" && move.kind !== "function_graph") return true;
       return !isGraphResourcePath(move.from) || !isGraphResourcePath(move.to);
     })
   )

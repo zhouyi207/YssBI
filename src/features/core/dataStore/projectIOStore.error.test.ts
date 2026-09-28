@@ -77,7 +77,11 @@ describe("projectIOStore error references", () => {
         projectInstanceId,
         publicationRevision: 0,
         projectName: "Initial project",
-        graphs: [],
+        eventGraphs: [],
+        functionGraphs: [],
+
+        minds: [],
+        docs: [],
 
         charts: [],
         databases: [],

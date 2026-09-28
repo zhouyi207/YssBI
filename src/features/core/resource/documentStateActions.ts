@@ -11,7 +11,6 @@ function emptyDocumentState(key: ResourceKey): DocumentState {
     stale: false,
     missing: false,
     conflict: false,
-    version: 0,
   };
 }
 
@@ -25,7 +24,6 @@ function updateDocumentState(
   useDocumentStateStore.getState().upsertDocument(next);
   useResourceStore.getState().patchResource(ref, {
     loaded: next.loaded,
-    exists: !next.missing,
     hasDirtyDocument: next.dirty,
     hasStaleDocument: next.stale,
     hasConflictDocument: next.conflict,
@@ -37,9 +35,7 @@ export function markResourceLoaded(ref: ResourceRef, loaded = true): void {
   updateDocumentState(ref, (previous) => ({
     ...previous,
     loaded,
-    missing: false,
-    version: previous.version + (loaded ? 1 : 0),
-    lastLoadedAt: loaded ? Date.now() : previous.lastLoadedAt,
+    missing: useResourceStore.getState().resources[resourceKey(ref)]?.exists === false,
   }));
 }
 
@@ -48,8 +44,6 @@ export function markResourceStale(ref: ResourceRef, stale = true): void {
     ...previous,
     stale,
     conflict: stale ? previous.conflict : false,
-    missing: false,
-    version: previous.version + 1,
   }));
 }
 
@@ -60,9 +54,6 @@ export function markResourceDirty(ref: ResourceRef, dirty: boolean): void {
     dirty,
     stale: dirty ? previous.stale : false,
     conflict: dirty ? previous.conflict : false,
-    missing: false,
-    version: previous.version + 1,
-    lastSavedAt: dirty ? previous.lastSavedAt : Date.now(),
   }));
 }
 
@@ -71,7 +62,6 @@ export function clearResourceDocumentState(ref: ResourceRef): void {
   useDocumentStateStore.getState().removeDocument(key);
   useResourceStore.getState().patchResource(ref, {
     loaded: false,
-    exists: true,
     hasDirtyDocument: false,
     hasStaleDocument: false,
     hasConflictDocument: false,

@@ -77,8 +77,8 @@ function resolveCanvasDropTarget(
     typeof (overData as { panelInstanceId?: unknown }).panelInstanceId === "string" &&
     typeof (overData as { groupId?: unknown }).groupId === "string" &&
     typeof (overData as { graphPath?: unknown }).graphPath === "string" &&
-    ((overData as { graphKind?: unknown }).graphKind === "event" ||
-      (overData as { graphKind?: unknown }).graphKind === "function")
+    ((overData as { graphKind?: unknown }).graphKind === "event_graph" ||
+      (overData as { graphKind?: unknown }).graphKind === "function_graph")
   ) {
     return overData as CanvasDropTarget;
   }
@@ -116,7 +116,7 @@ async function executeSidebarSpawnDragEnd(
       dropPointer,
       capturedSidebarDrag,
     );
-    if (target && dropState && sidebarResource.type === "function") {
+    if (target && dropState && sidebarResource.type === "function_graph") {
       const handled = await tryDropFunctionIntoCanvas(target, dropState, modifiers);
       if (handled) {
         return;

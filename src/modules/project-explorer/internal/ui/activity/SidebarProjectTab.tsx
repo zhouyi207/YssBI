@@ -1,7 +1,6 @@
 import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
 import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
-import { useActiveProjectGraph } from "@/features/application/sidebar/useActiveProjectGraph";
-import { useDetailTarget } from "@/features/application/editor";
+import { useActiveProjectResource } from "@/features/application/sidebar/useActiveProjectResource";
 import { ActivityPanelDocumentView } from "@/modules/workbench/public";
 import {
   PROJECT_TREE_CATEGORY_IDS,
@@ -11,8 +10,7 @@ import { SidebarProjectTreeRow, type SidebarProjectTreeActions } from "./Sidebar
 
 export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActions }) {
   const query = useActivityPanelDocument("project");
-  const detailTarget = useDetailTarget();
-  const activeGraph = useActiveProjectGraph();
+  const activeResource = useActiveProjectResource();
   const graphDiagnosticCounts = useGraphDiagnosticCounts();
   return (
     <ActivityPanelDocumentView
@@ -23,9 +21,11 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
       expanded={query.expanded}
       onExpandedChange={query.setExpanded}
       actions={{
-        newEvent: actions.onAddEvent,
-        newFunction: actions.onAddFunction,
-        newChart: actions.onAddChart,
+        newEventGraph: () => actions.onCreateFile("event_graph"),
+        newFunctionGraph: () => actions.onCreateFile("function_graph"),
+        newChart: () => actions.onCreateFile("chart"),
+        newMind: () => actions.onCreateFile("mind"),
+        newDoc: () => actions.onCreateFile("doc"),
         importData: actions.onImportData,
       }}
       onContextMenu={(event, row) => {
@@ -37,8 +37,7 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
           item={item}
           depth={depth}
           actions={actions}
-          detailTarget={detailTarget}
-          activeGraph={activeGraph}
+          activeResource={activeResource}
           graphDiagnosticCounts={graphDiagnosticCounts}
         />
       )}

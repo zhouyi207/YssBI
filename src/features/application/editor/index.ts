@@ -2,7 +2,6 @@ export type { EditorCanvasMode, EditorCanvasScope, EditorCanvasSession } from ".
 export { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 export { useEditorOperations } from "./useEditorOperations";
 export { useGraphCanvasCommands } from "./useGraphCanvasCommands";
-export { useChartManagement, useOpenChart } from "./useChartManagement";
 export { useDetailResourceProjection } from "./useDetailResourceProjection";
 export type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 export { disconnectConnectionsById, insertRerouteAtConnection } from "./edgeOperations";
@@ -32,4 +31,4 @@ export { useCanvasViewport } from "./useCanvasViewport";
 export { useCanvasDrop } from "./useCanvasDrop";
 export { useCanvasOverlayHandlers } from "./useCanvasOverlayHandlers";
 export { revealDetails, setDetailContext, setInspectionContext } from "./rightSidebarActions";
-export { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
+export { saveAllDirtyDocuments } from "./saveAllDirtyDocuments";

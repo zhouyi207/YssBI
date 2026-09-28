@@ -117,7 +117,7 @@ function openEditor(resourceRef: string): WorkbenchPanelInfo {
   const created = panel(`editor-${lifecycleMocks.state.nextPanelId}`, {
     role: "editor",
     resourceRef,
-    resourceKind: "event",
+    resourceKind: "event_graph",
   });
   lifecycleMocks.state.panels.push(created);
   return created;

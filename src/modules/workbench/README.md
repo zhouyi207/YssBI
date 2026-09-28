@@ -32,16 +32,19 @@ FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和活动�
 
 中央 group 的最后一个 tab 关闭或移走后，由 FlexLayout 删除空组并回收分屏空间；空 border 自动隐藏，底部仅保留承载状态信息的条带，空的内容面板仍消失。只有中央工作区没有非空 group 时才显示一份 watermark，侧栏和底部工具面板不影响该判断。FlexLayout 内部保留的最后一个空投放容器用于接收新 tab，不计入 Workbench 的 group 查询，也不显示分组标签栏。恢复旧布局时移除阻止空组删除的节点配置，由原生模型清理空组；不逐帧扫描或重建布局。
 
-Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，内容与分类来自 Rust 生成的 ActivityPanelDocument，展开状态由前端保存。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
+Project sidebar 按 Events → Functions → Charts → Minds → Docs → Data 展示同级资源分类，内容与分类来自 Rust 生成的 ActivityPanelDocument，展开状态由前端保存。Event、Function、Chart、Mind、Doc 分别以具体文件种类交付，菜单与侧栏统一调用对应文件处理器，见 [File operations](../../features/application/resource/README.md)。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
 
-Graph 分类与 Chart、Data 使用同一打开语义：单击即在当前 central grid 打开并固定资源标签，同一资源复用已有标签。Graph 不再区分侧栏预览与双击固定，也不再通过替换旧预览标签来控制标签数量。
+各文件类型使用同一打开语义：单击即在当前 central grid 打开并固定资源标签，同一资源复用已有标签，不区分侧栏预览与双击固定。
 
-Graph 条目的选中背景由现有编辑器资源上下文决定，不使用 Details 的查看对象。
-高亮直接来自顶部活动资源编辑器；侧栏获得输入焦点不改变顶部选择，顶部选中工具或非 Graph 标签时清除图高亮。
-切换到另一张图时跟随切换，切换到非图编辑器或已无对应图标签时清除旧高亮。
+文件条目的选中背景由原生工作台活动资源决定，不使用 Details 的查看对象。
+侧栏获得输入焦点不改变顶部选择，切换资源或关闭标签时高亮随原生选择更新。
 画布内单选、多选、框选和清空节点选择只改变节点选择及 Details，不改变所属 Graph 条目的背景。
 
-Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSession`，保持资源编辑器为物理活动面板，并被动同步 Details 上下文。打开资源不额外激活 Details 或 Project sidebar，避免 `Ctrl+W` 的目标从编辑器转移到固定面板；Project 分类展开不改变活动面板。
+Event、Function、Chart、Mind、Doc、Data 打开后共用 `activateEditorPanelAndSyncSession`，保持资源编辑器为物理活动面板，并被动同步 Details 上下文；Project 分类展开不改变活动面板。
+
+Mind 的主题编辑操作由现有 Details 面板承载。Details 上下文包含文件路径和所属面板 ID，
+节点选择与折叠状态复用 `EditorPaneState`，关闭面板或重置项目时一并清理；分屏间各自保留。
+Mind 画布不再内嵌属性侧栏，详情表单复用 Details 的公共样式与控件，见 [Document editors](../document-editor/README.md)。
 
 数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 在工作台与独立数据库窗口间复用数据表格、分页、选择及导出；嵌入模式不执行窗口初始化或窗口控制，键盘选择仅处理表格容器内的事件。独立窗口仍由菜单入口打开。数据标签没有本地文档草稿，不参与图/图表编辑与保存命令；关闭标签只释放面板状态，不卸载图文档或清除共享数据库投影。
 
@@ -65,8 +68,9 @@ React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路�
 连接配置的丢弃确认归属连接窗口；弹窗关闭必须指定 ID，直接移除或随父窗口移除的未决确认以取消结算。示例及外部数据导入成功后，统一由 Application 关闭所属流程，界面不再执行第二次关闭。模态及导入进度期间拦截工作台编辑快捷键。
 
 `src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
-`editorRendererRegistry.ts` 是唯一把 event/function/chart/database 映射到具体 editor 的位置。Workbench module
+`editorRendererRegistry.ts` 是唯一把 event/function/chart/mind/doc/database 映射到具体 editor 的位置。Workbench module
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
+资源面板直接按 `resourceKind` 从该注册表渲染编辑器；类型检查保证注册完整，不另维护文件类型分支。
 当前 registry 分别从 `src/modules/logs/public.ts`、`src/modules/output/public.ts` 和
 `src/modules/problems/public.ts` 组合三个独立 panel contribution；Workbench 只拥有它们的位置和
 生命周期。Problems、Results 与运行失败的业务语义见 [Graph 与 Execution](../../../src-tauri/crates/yss-application/src/graph/README.md)，
@@ -96,8 +100,9 @@ Project 文档是传入 ProjectIndex 的纯投影，不独立扫描文件。Proj
 Global Plugins/Commands 与无活动项目时的空文档使用独立 Activity 查询，但共享相同的协议、缓存与渲染入口。
 后端决定分类、工具、默认展开、空提示和固定条目类型；不存在前端 Project 文档生成分支。
 
-文档只有 category、item、message 三种行；item 限于 graph、chart、database、node、
-command 和 plugin 六种。文本使用本地化 key 或字面值；资源路径是 opaque identity。
+文档只有 category、item、message 三种行。Project 的 item 使用共享资源类型定义中的
+event_graph、function_graph、chart、mind、doc、database；Nodes、Commands、Plugins 分别只接受
+node、command、plugin。快照和增量共用此校验。文本使用本地化 key 或字面值；资源路径是 opaque identity。
 Workbench 模板只接收文档、展开状态、格式化错误与有限操作回调，不订阅业务 store。
 已有资源打开、拖拽、详情和右键操作继续由对应 module/application owner 执行。
 数据行直接使用文档中必填的 resourcePath，不再反查前端索引补路径；可用的 loadFailed
@@ -108,7 +113,7 @@ Workbench 模板只接收文档、展开状态、格式化错误与有限操作�
 不降低整行透明度或将整行标记为 aria-disabled。目录加载完成、取消选中或关闭标签
 不会通过拖拽状态改变普通行的亮度。
 
-Event、Function、Chart、Data 的 mutation 回执与 watcher 索引失效共用项目发布协调器的串行队列。
+Event、Function、Chart、Mind、Doc、Data 的 mutation 回执与 watcher 索引失效共用项目发布协调器的串行队列。
 回执提供相关性校验、受影响路径与 move 信息，不再先写一套 delta Store、随后又用索引覆盖。
 正常更新和恢复均由 `projectPublicationSnapshot` 安装同次响应中的权威 ProjectIndex 与 Activity 增量；Chart 文档和已加载的干净 Graph
 会话在提交前准备，UI 不预写入临时 Chart。快照可以覆盖较晚才到达的命令/事件回执，同一版本只结算一次。
@@ -163,7 +168,8 @@ Commands 的可用性来自本地草稿历史，数据库运行状态和选中�
 外部文件变化先在 watcher 中合并为有界 rescan 信号，再由 Project 同步磁盘与驻留资源并触发索引刷新。
 索引的文件成员关系以磁盘为准；驻留 revision 不得重新添加磁盘已删除的 chart。
 缺失但已加载的资源记录可保留为 `exists: false`，用于保留本地文档意图；它不表示文件仍存在。
-tab 清理检查 exists，并在 FlexLayout 提交前重验项目身份和资源仍然缺失，只释放面板状态，
+tab 清理检查 exists 与 dirty，保留缺失但有未保存内容的编辑器。明确的删除回执允许清理；
+其余清理在 FlexLayout 提交前重验项目身份、资源仍然缺失且没有未保存内容，只释放面板状态，
 不因异步删除清理用户切换后的项目或重新出现的文件。
 
 ## 2. Root panel 角色与默认 home

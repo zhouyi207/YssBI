@@ -21,7 +21,7 @@ beforeEach(() => {
 describe("right sidebar context actions", () => {
   it("keeps explicit node focus when passive graph hydration reports the same tab", () => {
     setInspectionContext("events/Main.yssbi-event", ["node-1"]);
-    setPassiveDetailContext({ kind: "event", path: "events/Main.yssbi-event" });
+    setPassiveDetailContext({ kind: "event_graph", path: "events/Main.yssbi-event" });
     expect(useEditorStore.getState().detailFocus).toEqual({
       kind: "node",
       id: "node-1",

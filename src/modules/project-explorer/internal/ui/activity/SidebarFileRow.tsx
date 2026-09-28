@@ -1,8 +1,14 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscSymbolEvent, VscSymbolMethod } from "react-icons/vsc";
+import {
+  VscSymbolEvent,
+  VscSymbolMethod,
+  VscGraphLine,
+  VscTypeHierarchy,
+  VscFileText,
+} from "react-icons/vsc";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { openGraphInEditor } from "@/features/application/editor/openGraphInEditor";
+import { openFileInEditor } from "@/features/application/editor/openFileInEditor";
 import { buildSidebarDragData } from "@/features/application/sidebar";
 import { revealDetails } from "@/features/application/editor/rightSidebarActions";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
@@ -11,46 +17,66 @@ import {
   SidebarRowActionButton,
   SIDEBAR_ROW_ICON_SIZE,
 } from "@/modules/workbench/public";
-import type { GraphResourceType } from "./projectSidebarTypes";
+import type { FileResourceKind } from "@/shared/types/domain/resource";
+import type { FileResourceRef } from "@/features/application/resource/resourceActions";
 
-export const SidebarGraphRow = memo(function SidebarGraphRow({
+export const SidebarFileRow = memo(function SidebarFileRow({
   id,
   name,
-  graphType,
+  kind,
   indentDepth = 0,
   isSelected = false,
   diagnosticCount = 0,
   onContextMenu,
+  onOpen,
 }: {
   id: string;
   name: string;
-  graphType: GraphResourceType;
+  kind: FileResourceKind;
   indentDepth?: number;
   isSelected?: boolean;
   diagnosticCount?: number;
   onContextMenu: (e: React.MouseEvent) => void;
+  onOpen?: (ref: FileResourceRef) => void;
 }) {
   const { t } = useTranslation();
-  const iconColor = graphType === "event" ? TYPE_ICON_COLORS.event : TYPE_ICON_COLORS.function;
-  const icon =
-    graphType === "event" ? (
-      <VscSymbolEvent size={SIDEBAR_ROW_ICON_SIZE} style={{ color: iconColor }} />
-    ) : (
-      <VscSymbolMethod size={SIDEBAR_ROW_ICON_SIZE} style={{ color: iconColor }} />
-    );
+  const Icon = {
+    event_graph: VscSymbolEvent,
+    function_graph: VscSymbolMethod,
+    chart: VscGraphLine,
+    mind: VscTypeHierarchy,
+    doc: VscFileText,
+  }[kind];
+  const dragBuilders: Partial<
+    Record<FileResourceKind, () => ReturnType<typeof buildSidebarDragData>>
+  > = {
+    event_graph: () => buildSidebarDragData(id, name, "event_graph"),
+    function_graph: () => buildSidebarDragData(id, name, "function_graph"),
+  };
+  const inspect: Partial<Record<FileResourceKind, () => Promise<void>>> = {
+    event_graph: () => revealDetails({ kind: "event_graph", path: id }),
+    function_graph: () => revealDetails({ kind: "function_graph", path: id }),
+  };
+  const open = () => (onOpen ? onOpen({ id, kind }) : void openFileInEditor(id, kind));
+  const icon = (
+    <Icon
+      size={SIDEBAR_ROW_ICON_SIZE}
+      style={{ color: (TYPE_ICON_COLORS as Record<string, string>)[kind] }}
+    />
+  );
 
   return (
     <SidebarListItem
       id={id}
-      dragData={buildSidebarDragData(id, name, graphType)}
+      dragData={dragBuilders[kind]?.()}
       isSelected={isSelected}
       indentDepth={indentDepth}
       icon={icon}
       label={name}
       onClick={async (e) => {
         e.stopPropagation();
-        const revealing = revealDetails({ kind: graphType, path: id });
-        void openGraphInEditor(id, name, graphType);
+        const revealing = inspect[kind]?.();
+        open();
         await revealing;
       }}
       onContextMenu={onContextMenu}
@@ -71,7 +97,7 @@ export const SidebarGraphRow = memo(function SidebarGraphRow({
             tooltip={t("sidebar.open")}
             onClick={(e) => {
               e.stopPropagation();
-              void openGraphInEditor(id, name, graphType);
+              open();
             }}
           />
         </>

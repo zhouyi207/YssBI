@@ -1,5 +1,5 @@
 import { useResourceStore } from "@/features/core/resource/resourceStore";
-import { lookupGraphResourceByKind } from "@/features/domain/resource/resourceQueries";
+import { lookupNodeFileResourceByKind } from "@/features/domain/resource/resourceQueries";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
@@ -12,10 +12,10 @@ export function resolveExecutionGraphPath(targetGraphPath?: string): string | un
 export function getExecutionEventTarget(targetGraphPath?: string) {
   const graphPath = resolveExecutionGraphPath(targetGraphPath);
   if (!graphPath) return null;
-  const resource = lookupGraphResourceByKind(
+  const resource = lookupNodeFileResourceByKind(
     useResourceStore.getState().resources,
     graphPath,
-    "event",
+    "event_graph",
   );
   if (!resource?.exists) return null;
   return { graphPath, name: resource.name };

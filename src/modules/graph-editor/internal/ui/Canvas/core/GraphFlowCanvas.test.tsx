@@ -74,7 +74,7 @@ function session(): EditorCanvasSession {
   return {
     workspace: {
       groupId: "group-a",
-      activeGraph: { graphPath: FLOW_GRAPH_PATH, kind: "event" },
+      activeGraph: { graphPath: FLOW_GRAPH_PATH, kind: "event_graph" },
       selectedNodeIds: [],
       selectedConnectionIds: [],
     },

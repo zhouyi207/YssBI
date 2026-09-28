@@ -4,24 +4,21 @@ import {
   workbenchLayoutRead,
   type WorkbenchPanelCommitToken,
 } from "@/modules/workbench/public";
-import { resourceKey, useResourceStore } from "@/features/core/resource";
+import { shouldRetainResourceEditor } from "@/features/core/resource";
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
-/** Remove editors for absent resources, including retained loaded-but-missing records. */
+/** Missing resources retain their editor until unfinished work is saved or discarded. */
 export async function pruneEditorPanelsForMissingResources(): Promise<void> {
   const identity = captureProjectLifecycleState();
-  const resources = useResourceStore.getState().resources;
   const stalePanels = workbenchLayoutRead.listPanels().filter((panel) => {
     if (panel.metadata.role !== "editor") return false;
-    return !resources[
-      resourceKey({
-        id: panel.metadata.resourceRef,
-        kind: panel.metadata.resourceKind,
-      })
-    ]?.exists;
+    return !shouldRetainResourceEditor({
+      id: panel.metadata.resourceRef,
+      kind: panel.metadata.resourceKind,
+    });
   });
   if (stalePanels.length === 0) return;
 
@@ -37,9 +34,7 @@ export async function pruneEditorPanelsForMissingResources(): Promise<void> {
       tokens.every(
         ({ metadata }) =>
           metadata.role === "editor" &&
-          !useResourceStore.getState().resources[
-            resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
-          ]?.exists,
+          !shouldRetainResourceEditor({ id: metadata.resourceRef, kind: metadata.resourceKind }),
       ),
   );
   if (outcome !== "committed") return;

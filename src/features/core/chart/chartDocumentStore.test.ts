@@ -43,7 +43,7 @@ function registerChartResource(): void {
     id: chartPath,
     kind: "chart",
     name: "Report",
-    uri: `yssbi://chart/${chartPath}`,
+    uri: resourceKey({ id: chartPath, kind: "chart" }),
     exists: true,
     loaded: true,
     revision: committedRevision,
@@ -108,7 +108,10 @@ describe("chart authoritative mutation results", () => {
         projectName: "Project",
         exportTime: "",
         publicationRevision,
-        graphs: [],
+        eventGraphs: [],
+        functionGraphs: [],
+        minds: [],
+        docs: [],
         charts: [
           {
             chartPath,

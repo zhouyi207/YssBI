@@ -12,6 +12,8 @@
 可见性负责调用唯一的 `loadGraph` 用例，项目恢复复用同一入口确保可见图就绪。活动标签只同步焦点和 Details，不触发加载、重试或卸载。需要等待数据的显式用例（例如 Assistant 定位节点）直接等待该加载入口，然后执行定位。
 
 节点画布使用 React Flow，每个 FlexLayout panel/group/resource 挂载独立 provider。
+鼠标选择、平移、缩放和原生键盘配置与 Mind 共用 `shared/ui/flowCanvasInteraction.ts`；
+基础快捷键映射共用 `features/core/keyboard/canvasShortcut.ts`，文档修改仍由各自的应用操作负责。
 节点、连线及稳定 handle ID 单向派生自现有 editor projection；React Flow 的测量、
 临时坐标和连接手势只是 UI 状态，不参与 Graph document 序列化，不创建第二套草稿或历史。
 节点标题、端口、参数输入、执行状态和诊断仍由项目自己的 React 组件展示。

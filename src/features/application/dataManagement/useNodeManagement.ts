@@ -22,7 +22,8 @@ export function useNodeManagement() {
       const currentTarget = target ?? captureActiveEditorCommandTarget();
       if (
         !currentTarget ||
-        (currentTarget.resourceKind !== "event" && currentTarget.resourceKind !== "function") ||
+        (currentTarget.resourceKind !== "event_graph" &&
+          currentTarget.resourceKind !== "function_graph") ||
         !isEditorCommandTargetCurrent(currentTarget)
       )
         return false;

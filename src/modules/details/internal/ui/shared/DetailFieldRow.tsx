@@ -9,6 +9,7 @@ interface DetailFieldRowProps {
   labelClassName?: string;
   valueClassName?: string;
   rowClassName?: string;
+  htmlFor?: string;
 }
 
 export function DetailFieldRow({
@@ -17,6 +18,7 @@ export function DetailFieldRow({
   labelClassName,
   valueClassName,
   rowClassName,
+  htmlFor,
 }: DetailFieldRowProps) {
   return (
     <div
@@ -26,6 +28,7 @@ export function DetailFieldRow({
       )}
     >
       <Label
+        htmlFor={htmlFor}
         title={typeof label === "string" ? label : undefined}
         className={cn(
           detailLabelCellClass,

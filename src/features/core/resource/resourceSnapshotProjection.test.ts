@@ -2,15 +2,19 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   useDocumentStateStore,
   useResourceStore,
-  buildGraphResourceMeta,
+  buildFileResourceMeta,
   type ProjectResourceMeta,
 } from "@/features/core/resource";
 import { prepareResourceProjectionSnapshot } from "./resourceSnapshotProjection";
 import { selectGraphResourcesByKind } from "./resourceSelectors";
 import { resourceKey } from "./resourceTypes";
 
-function graphResource(id: string, kind: "event" | "function", name: string): ProjectResourceMeta {
-  return buildGraphResourceMeta(kind, id, name);
+function graphResource(
+  id: string,
+  kind: "event_graph" | "function_graph",
+  name: string,
+): ProjectResourceMeta {
+  return buildFileResourceMeta(kind, id, name);
 }
 
 describe("resource projection snapshot preparation", () => {
@@ -20,7 +24,7 @@ describe("resource projection snapshot preparation", () => {
   });
 
   it("marks loaded clean resources stale when snapshot metadata changes", () => {
-    const previous = graphResource("g1", "event", "Old Name");
+    const previous = graphResource("g1", "event_graph", "Old Name");
     previous.loaded = true;
     useDocumentStateStore.getState().upsertDocument({
       resourceKey: resourceKey(previous),
@@ -29,10 +33,9 @@ describe("resource projection snapshot preparation", () => {
       stale: false,
       missing: false,
       conflict: false,
-      version: 1,
     });
 
-    const incoming = [graphResource("g1", "event", "New Name")];
+    const incoming = [graphResource("g1", "event_graph", "New Name")];
     const { resources, documentPatches } = prepareResourceProjectionSnapshot(incoming, {
       [resourceKey(previous)]: previous,
     });
@@ -48,7 +51,7 @@ describe("resource projection snapshot preparation", () => {
   });
 
   it("retains missing loaded resources absent from the snapshot", () => {
-    const previous = graphResource("g1", "event", "Removed");
+    const previous = graphResource("g1", "event_graph", "Removed");
     previous.loaded = true;
     useDocumentStateStore.getState().upsertDocument({
       resourceKey: resourceKey(previous),
@@ -57,7 +60,6 @@ describe("resource projection snapshot preparation", () => {
       stale: false,
       missing: false,
       conflict: false,
-      version: 1,
     });
 
     const { resources, documentPatches } = prepareResourceProjectionSnapshot([], {
@@ -80,14 +82,14 @@ describe("resource selectors", () => {
   it("derives event/function lists and first graph from ResourceStore", () => {
     useResourceStore.getState().setSnapshot({
       resources: [
-        graphResource("e1", "event", "Event A"),
-        graphResource("f1", "function", "Function A"),
+        graphResource("e1", "event_graph", "Event A"),
+        graphResource("f1", "function_graph", "Function A"),
       ],
       graphOrder: ["e1", "f1"],
     });
 
     const resources = useResourceStore.getState().resources;
-    expect(selectGraphResourcesByKind(resources, "event")).toEqual({
+    expect(selectGraphResourcesByKind(resources, "event_graph")).toEqual({
       e1: { id: "e1", name: "Event A" },
     });
   });

@@ -28,7 +28,7 @@ const DUPLICATE_SUBGRAPH_OFFSET = { x: 40, y: 40 } as const;
 const EDITOR_OPERATIONS_LOG_SOURCE = "EditorOperations";
 
 type GraphEditorCommandTarget = EditorCommandTarget & {
-  readonly resourceKind: "event" | "function";
+  readonly resourceKind: "event_graph" | "function_graph";
 };
 
 interface EditorOperationContext {
@@ -46,7 +46,8 @@ function captureEditorOperationContext(
 ): EditorOperationContext | null {
   const target = suppliedTarget ?? captureActiveEditorCommandTarget();
   if (!target || !isEditorCommandTargetCurrent(target)) return null;
-  if (target.resourceKind !== "event" && target.resourceKind !== "function") return null;
+  if (target.resourceKind !== "event_graph" && target.resourceKind !== "function_graph")
+    return null;
   return {
     target: target as GraphEditorCommandTarget,
     groupId: target.groupId,
@@ -108,8 +109,8 @@ export function useEditorOperations() {
       if (!update) return;
       const active = workbenchLayoutRead.getActiveEditorPanelInGroup(update.groupId);
       if (
-        active?.metadata.resourceKind === "event" ||
-        active?.metadata.resourceKind === "function"
+        active?.metadata.resourceKind === "event_graph" ||
+        active?.metadata.resourceKind === "function_graph"
       ) {
         setInspectionContext(active.metadata.resourceRef, []);
       }
@@ -123,8 +124,8 @@ export function useEditorOperations() {
       if (!update) return;
       const active = workbenchLayoutRead.getActiveEditorPanelInGroup(update.groupId);
       if (
-        active?.metadata.resourceKind === "event" ||
-        active?.metadata.resourceKind === "function"
+        active?.metadata.resourceKind === "event_graph" ||
+        active?.metadata.resourceKind === "function_graph"
       ) {
         setInspectionContext(active.metadata.resourceRef, update.nodeIds);
       }

@@ -28,7 +28,7 @@ export function buildFunctionGraphResourceDragState(
 ): GraphResourceDragState {
   return {
     type: DRAG_TYPES.GRAPH_RESOURCE,
-    sidebarResource: { id: functionPath, name, type: "function" },
+    sidebarResource: { id: functionPath, name, type: "function_graph" },
     x: clientX,
     y: clientY,
   };
@@ -46,7 +46,7 @@ export interface CanvasDropTarget {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: "event" | "function";
+  graphKind: "event_graph" | "function_graph";
 }
 
 export async function tryDropFunctionIntoCanvas(

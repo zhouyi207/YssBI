@@ -1,5 +1,5 @@
 /**
- * 获取 events、functions、dataframes 集合
+ * 获取 eventGraphs、functionGraphs、dataframes 集合
  * Explorer 图列表来自 ResourceStore 快照。
  */
 
@@ -10,9 +10,12 @@ import { useFunctionCatalog } from "./useFunctionCatalog";
 import type { EditorCollections } from "../editorCollections";
 
 export function useEditorCollections(): EditorCollections {
-  const events = useGraphResourcesByKind("event");
-  const functions = useFunctionCatalog();
+  const eventGraphs = useGraphResourcesByKind("event_graph");
+  const functionGraphs = useFunctionCatalog();
   const dataframes = useDatabaseStore((s) => s.databases);
 
-  return useMemo(() => ({ events, functions, dataframes }), [events, functions, dataframes]);
+  return useMemo(
+    () => ({ eventGraphs, functionGraphs, dataframes }),
+    [eventGraphs, functionGraphs, dataframes],
+  );
 }

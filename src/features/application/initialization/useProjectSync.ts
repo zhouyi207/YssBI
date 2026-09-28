@@ -44,7 +44,7 @@ function createConsumer(): ProjectEventConsumer {
     publishLifecycleCommitted: async (result) => {
       await applyProjectLifecycleReceipt(
         result,
-        "event",
+        "event_graph",
         createProjectLifecycleReceiptDependencies(),
       );
       if (result.invalidation.project) resetResultQueryProject();

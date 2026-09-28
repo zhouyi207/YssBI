@@ -72,7 +72,7 @@ function deliverLifecycleEvent(
   result: LifecycleMutationResultDto,
   dependencies: ProjectLifecycleReceiptDependencies,
 ): Promise<Awaited<ReturnType<typeof applyProjectLifecycleReceipt>>> {
-  return applyProjectLifecycleReceipt(result, "event", dependencies);
+  return applyProjectLifecycleReceipt(result, "event_graph", dependencies);
 }
 
 describe("project lifecycle pending receipt registry", () => {
@@ -341,7 +341,9 @@ describe("project lifecycle pending receipt registry", () => {
       expect(claimProjectLifecycleInitiatorSettlement(pending.operationId)).toBeDefined();
 
       const late = dependencies();
-      await expect(applyProjectLifecycleReceipt(result, "event", late)).resolves.toMatchObject({
+      await expect(
+        applyProjectLifecycleReceipt(result, "event_graph", late),
+      ).resolves.toMatchObject({
         status: "stale",
       });
       expect(late.refreshRegistry).not.toHaveBeenCalled();
@@ -417,7 +419,7 @@ describe("project lifecycle pending receipt registry", () => {
         phase: "registryCommitted",
         invalidation: { project: false, registry: true },
       }),
-      "event",
+      "event_graph",
       dependencies(),
     );
     for (let index = 0; index < 127; index += 1) {
@@ -496,7 +498,7 @@ describe("project lifecycle pending receipt registry", () => {
     now += PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS + 1;
 
     await expect(
-      applyProjectLifecycleReceipt(receipt(pending.operationId), "event", deps),
+      applyProjectLifecycleReceipt(receipt(pending.operationId), "event_graph", deps),
     ).resolves.toMatchObject({ status: "stale" });
 
     expect(deps.prepareProjectTransition).not.toHaveBeenCalled();
@@ -517,7 +519,7 @@ describe("project lifecycle pending receipt registry", () => {
         phase: "registryCommitted",
         invalidation: { project: false, registry: true },
       }),
-      "event",
+      "event_graph",
       dependencies(),
     );
 
@@ -539,11 +541,11 @@ describe("project lifecycle pending receipt registry", () => {
       invalidation: { project: false, registry: true },
     });
     const first = dependencies();
-    await applyProjectLifecycleReceipt(result, "event", first);
+    await applyProjectLifecycleReceipt(result, "event_graph", first);
     now += PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS + 1;
     const late = dependencies();
 
-    await expect(applyProjectLifecycleReceipt(result, "event", late)).resolves.toMatchObject({
+    await expect(applyProjectLifecycleReceipt(result, "event_graph", late)).resolves.toMatchObject({
       status: "stale",
     });
 

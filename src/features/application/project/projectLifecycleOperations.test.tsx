@@ -25,7 +25,7 @@ import type {
 
 import { useProjectOperations } from "@/features/application/editor/useProjectOperations";
 import { useProjectPicker } from "./useProjectPicker";
-import { saveAllDirtyGraphs } from "@/features/application/editor/saveAllDirtyGraphs";
+import { saveAllDirtyDocuments } from "@/features/application/editor/saveAllDirtyDocuments";
 import { logger } from "@/features/application/observability/appLogger";
 import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
@@ -33,7 +33,11 @@ import { removeProjectScopedWorkbenchPanels } from "./projectWorkbenchLifecycle"
 import * as projectWorkbenchLifecycle from "./projectWorkbenchLifecycle";
 
 function deliverLifecycleEvent(result: LifecycleMutationResultDto): void {
-  void applyProjectLifecycleReceipt(result, "event", createProjectLifecycleReceiptDependencies());
+  void applyProjectLifecycleReceipt(
+    result,
+    "event_graph",
+    createProjectLifecycleReceiptDependencies(),
+  );
 }
 
 const navigate = vi.fn();
@@ -47,8 +51,8 @@ vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock("@/features/application/editor/saveAllDirtyGraphs", () => ({
-  saveAllDirtyGraphs: vi.fn(async () => true),
+vi.mock("@/features/application/editor/saveAllDirtyDocuments", () => ({
+  saveAllDirtyDocuments: vi.fn(async () => true),
 }));
 vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog }));
 
@@ -136,7 +140,11 @@ function mockProjectBHydration(): void {
       projectInstanceId: "project-b",
       publicationRevision: 0,
       projectName: "Project B",
-      graphs: [],
+      eventGraphs: [],
+      functionGraphs: [],
+
+      minds: [],
+      docs: [],
 
       charts: [],
       databases: [],
@@ -186,7 +194,7 @@ describe("project lifecycle initiating operations", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     resetProjectLifecycleReceiptHandlerForTests();
-    vi.mocked(saveAllDirtyGraphs).mockResolvedValue(true);
+    vi.mocked(saveAllDirtyDocuments).mockResolvedValue(true);
     openPathDialog.mockResolvedValue({
       ok: true,
       value: "C:/project-destination",
@@ -234,7 +242,11 @@ describe("project lifecycle initiating operations", () => {
         projectInstanceId: "project-b",
         publicationRevision: 0,
         projectName: "Project B",
-        graphs: [],
+        eventGraphs: [],
+        functionGraphs: [],
+
+        minds: [],
+        docs: [],
 
         charts: [],
         databases: [],
@@ -252,7 +264,7 @@ describe("project lifecycle initiating operations", () => {
 
     let completion!: Promise<void>;
     await act(async () => {
-      completion = operations.saveGraphAs();
+      completion = operations.saveProjectAs();
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
@@ -288,7 +300,7 @@ describe("project lifecycle initiating operations", () => {
 
     let completion!: Promise<void>;
     await act(async () => {
-      completion = operations.saveGraphAs();
+      completion = operations.saveProjectAs();
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
@@ -339,7 +351,7 @@ describe("project lifecycle initiating operations", () => {
 
     let completion!: Promise<void>;
     await act(async () => {
-      completion = operations.saveGraphAs();
+      completion = operations.saveProjectAs();
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
@@ -372,7 +384,11 @@ describe("project lifecycle initiating operations", () => {
         projectInstanceId: "project-b",
         publicationRevision: 0,
         projectName: "Project B",
-        graphs: [],
+        eventGraphs: [],
+        functionGraphs: [],
+
+        minds: [],
+        docs: [],
 
         charts: [],
         databases: [],
@@ -382,7 +398,7 @@ describe("project lifecycle initiating operations", () => {
 
     let completion!: Promise<void>;
     await act(async () => {
-      completion = operations.saveGraphAs();
+      completion = operations.saveProjectAs();
       await Promise.resolve();
     });
     await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
@@ -455,7 +471,7 @@ describe("project lifecycle initiating operations", () => {
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     await act(async () => {
-      await operations.saveGraphAs();
+      await operations.saveProjectAs();
     });
 
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
@@ -652,14 +668,18 @@ describe("project lifecycle initiating operations", () => {
         projectInstanceId: "project-b",
         publicationRevision: 0,
         projectName: "Project B",
-        graphs: [
+        eventGraphs: [
           {
             path: "events/ProjectB.yssbi-event",
             name: "Project B graph",
-            type: "event",
+            type: "event_graph",
             revision: 1,
           },
         ],
+        functionGraphs: [],
+
+        minds: [],
+        docs: [],
 
         charts: [],
         databases: [],

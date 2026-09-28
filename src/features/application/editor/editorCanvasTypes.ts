@@ -24,7 +24,7 @@ export interface EditorCanvasScope {
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: "event" | "function";
+  graphKind: "event_graph" | "function_graph";
 }
 
 export type EditorCanvasCommandsSlice = Pick<
@@ -53,7 +53,7 @@ export interface EditorCanvasWorkspaceSlice {
   groupId: string;
   activeGraph: {
     graphPath: string;
-    kind: "event" | "function";
+    kind: "event_graph" | "function_graph";
   } | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];

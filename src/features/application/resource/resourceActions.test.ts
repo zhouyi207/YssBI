@@ -7,12 +7,12 @@ import {
 } from "@/features/core/dataStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useResourceStore } from "@/features/core/resource";
+import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { DatabaseService } from "@/services/database/databaseService";
-import { GraphService } from "@/services/graph/graphService";
+import { EventGraphService, FunctionGraphService } from "@/services/project/fileResourceService";
 import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
-import { deleteResource, renameResource } from "./resourceActions";
+import { createFileResource, deleteResource, renameResource } from "./resourceActions";
 
 vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", () => ({
   projectPublicationCoordinator: {
@@ -71,7 +71,7 @@ function deleteResult(projectInstanceId: string) {
           patch: {
             before: {
               path: "events/Old.yssbi-event",
-              kind: "event" as const,
+              kind: "event_graph" as const,
               name: "Old",
               revision: 0,
             },
@@ -133,7 +133,7 @@ function renameResult(projectInstanceId: string, publicationRevision = 1) {
       {
         from: "events/Old.yssbi-event",
         to: "events/New.yssbi-event",
-        kind: "event" as const,
+        kind: "event_graph" as const,
         name: "New",
       },
     ],
@@ -170,9 +170,9 @@ describe("renameResource project ownership", () => {
       resources: [
         {
           id: "events/Old.yssbi-event",
-          kind: "event",
+          kind: "event_graph",
           name: "Old",
-          uri: "yssbi://event/events/Old.yssbi-event",
+          uri: resourceKey({ id: "events/Old.yssbi-event", kind: "event_graph" }),
           revision: 0,
           exists: true,
           loaded: false,
@@ -184,7 +184,7 @@ describe("renameResource project ownership", () => {
           id: "charts/Report.yssbi-chart",
           kind: "chart",
           name: "Report",
-          uri: "yssbi://chart/charts/Report.yssbi-chart",
+          uri: resourceKey({ id: "charts/Report.yssbi-chart", kind: "chart" }),
           revision: 4,
           exists: true,
           loaded: true,
@@ -243,17 +243,58 @@ describe("renameResource project ownership", () => {
     });
   });
 
+  it("creates Event and Function through their own file transports", async () => {
+    const created =
+      (kind: "event_graph" | "function_graph", path: string) =>
+      async (projectInstanceId: string, operationId: string, name: string) => ({
+        operationId,
+        projectInstanceId,
+        publicationRevision: 1,
+        moves: [],
+        projectionReplacements: [],
+        projectionStatus: { status: "complete" as const, expectedGraphPaths: [] },
+        deltas: [
+          {
+            resource: { kind: "graph" as const, key: path },
+            fromRevision: 0,
+            toRevision: 0,
+            causedBy: operationId,
+            payload: {
+              kind: "resource_lifecycle" as const,
+              patch: { before: null, after: { kind, path, name, revision: 0 } },
+            },
+          },
+        ],
+      });
+    const event = vi
+      .spyOn(EventGraphService, "create")
+      .mockImplementation(created("event_graph", "events/Created.yssbi-event"));
+    const fn = vi
+      .spyOn(FunctionGraphService, "create")
+      .mockImplementation(created("function_graph", "functions/Created.yssbi-function"));
+    await expect(createFileResource("event_graph", "Created")).resolves.toBe(
+      "events/Created.yssbi-event",
+    );
+    expect(event).toHaveBeenCalledWith("project-instance-current", expect.any(String), "Created");
+    expect(fn).not.toHaveBeenCalled();
+    await expect(createFileResource("function_graph", "Created")).resolves.toBe(
+      "functions/Created.yssbi-function",
+    );
+    expect(fn).toHaveBeenCalledWith("project-instance-current", expect.any(String), "Created");
+    expect(event).toHaveBeenCalledOnce();
+  });
+
   it("submits the authoritative delete publication", async () => {
     const committed = deleteResult("project-instance-current");
-    vi.spyOn(GraphService, "removeGraph").mockResolvedValue(committed);
+    vi.spyOn(EventGraphService, "remove").mockResolvedValue(committed);
 
-    await deleteResource({ id: "events/Old.yssbi-event", kind: "event" });
+    await deleteResource({ id: "events/Old.yssbi-event", kind: "event_graph" });
 
-    expect(GraphService.removeGraph).toHaveBeenCalledWith(
+    expect(EventGraphService.remove).toHaveBeenCalledWith(
       "project-instance-current",
+      expect.any(String),
       "events/Old.yssbi-event",
       0,
-      expect.any(String),
     );
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
     expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
@@ -301,28 +342,24 @@ describe("renameResource project ownership", () => {
   });
 
   it("rejects a stale rename receipt before coordinator submission", async () => {
-    vi.spyOn(GraphService, "renameGraphResource").mockResolvedValue(
-      renameResult("project-instance-stale"),
-    );
+    vi.spyOn(EventGraphService, "rename").mockResolvedValue(renameResult("project-instance-stale"));
 
     await expect(
-      renameResource({ id: "events/Old.yssbi-event", kind: "event" }, "New"),
+      renameResource({ id: "events/Old.yssbi-event", kind: "event_graph" }, "New"),
     ).rejects.toThrow("stale project lifecycle");
 
     expect(projectPublicationCoordinator.submit).not.toHaveBeenCalled();
   });
 
   it("rejects a matching receipt when project ownership changes in flight", async () => {
-    let resolveRename!: (
-      value: Awaited<ReturnType<typeof GraphService.renameGraphResource>>,
-    ) => void;
-    vi.spyOn(GraphService, "renameGraphResource").mockReturnValue(
+    let resolveRename!: (value: Awaited<ReturnType<typeof EventGraphService.rename>>) => void;
+    vi.spyOn(EventGraphService, "rename").mockReturnValue(
       new Promise((resolve) => {
         resolveRename = resolve;
       }),
     );
 
-    const pending = renameResource({ id: "events/Old.yssbi-event", kind: "event" }, "New");
+    const pending = renameResource({ id: "events/Old.yssbi-event", kind: "event_graph" }, "New");
     useProjectIOStore.setState({ projectInstanceId: "project-instance-replacement" });
     startProjectLifecycle("project-instance-replacement");
     resolveRename(renameResult("project-instance-current"));

@@ -1,5 +1,6 @@
+import { resourceKey } from "@/features/core/resource";
 import { afterEach, expect, it, vi } from "vitest";
-import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
+import { buildFileResourceMeta, useResourceStore } from "@/features/core/resource";
 import {
   startProjectLifecycle,
   clearProjectLifecycle,
@@ -33,7 +34,7 @@ vi.mock("@/modules/workbench/public", () => ({
         groupId: "top",
         metadata: {
           role: "editor",
-          resourceKind: "event",
+          resourceKind: "event_graph",
           resourceRef: "events/Event.yssbi-event",
         },
       },
@@ -47,17 +48,17 @@ afterEach(() => {
   mocks.beforeCommit = () => {};
 });
 
-it("closes retained missing resources but rejects a queued close after the resource reappears", async () => {
+it("retains dirty missing resources and rejects a queued clean close after the resource reappears", async () => {
   startProjectLifecycle("project-a");
   const path = "charts/Chart.yssbi-chart";
   useResourceStore.getState().setSnapshot({
     resources: [
-      buildGraphResourceMeta("event", "events/Event.yssbi-event", "Event"),
+      buildFileResourceMeta("event_graph", "events/Event.yssbi-event", "Event"),
       {
         id: path,
         kind: "chart",
         name: "Chart",
-        uri: `yssbi://chart/${path}`,
+        uri: resourceKey({ id: path, kind: "chart" }),
         exists: false,
         loaded: true,
         hasDirtyDocument: true,
@@ -67,14 +68,20 @@ it("closes retained missing resources but rejects a queued close after the resou
     ],
   });
   await pruneEditorPanelsForMissingResources();
+  expect(mocks.remove).not.toHaveBeenCalled();
+  useResourceStore
+    .getState()
+    .patchResource({ id: path, kind: "chart" }, { hasDirtyDocument: false });
+  await pruneEditorPanelsForMissingResources();
   expect(mocks.remove).toHaveBeenCalledWith(
     [expect.objectContaining({ panelInstanceId: "missing" })],
     expect.any(Function),
   );
   expect(mocks.release).toHaveBeenCalledExactlyOnceWith("missing");
-  expect(useResourceStore.getState().resources[`yssbi://chart/${path}`].hasDirtyDocument).toBe(
-    true,
-  );
+  expect(
+    useResourceStore.getState().resources[resourceKey({ id: path, kind: "chart" })]
+      .hasDirtyDocument,
+  ).toBe(false);
   mocks.release.mockClear();
   mocks.beforeCommit = () =>
     useResourceStore.getState().patchResource({ id: path, kind: "chart" }, { exists: true });

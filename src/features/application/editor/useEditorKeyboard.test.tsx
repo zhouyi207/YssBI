@@ -10,7 +10,11 @@ type TestPanel = {
   panelInstanceId: string;
   groupId: string;
   metadata:
-    | { role: "editor"; resourceRef: string; resourceKind: "event" | "function" | "chart" }
+    | {
+        role: "editor";
+        resourceRef: string;
+        resourceKind: "event_graph" | "function_graph" | "chart";
+      }
     | { role: "result"; resultId: string }
     | { role: "view"; viewId: string };
 };
@@ -38,12 +42,10 @@ const mocks = vi.hoisted(() => ({
     cut: vi.fn(),
     paste: vi.fn(),
     duplicateSelected: vi.fn(),
-    saveGraph: vi.fn(),
-    saveGraphAs: vi.fn(),
-    importGraph: vi.fn(),
-    addEvent: vi.fn(),
-    addFunction: vi.fn(),
-    addChart: vi.fn(),
+    saveActiveFile: vi.fn(),
+    saveProjectAs: vi.fn(),
+    openProject: vi.fn(),
+    createFile: vi.fn(async () => {}),
     splitEditorRight: vi.fn(),
     selectAllNodes: vi.fn(async () => true),
     focusSelectedNodes: vi.fn(() => true),
@@ -152,7 +154,7 @@ const editorPanel = (): TestPanel => ({
   metadata: {
     role: "editor",
     resourceRef: "events/main.yssbi-event",
-    resourceKind: "event",
+    resourceKind: "event_graph",
   },
 });
 const resultPanel = (): TestPanel => ({
@@ -299,7 +301,7 @@ describe("useEditorKeyboard", () => {
     expect(callbacks.cut).not.toHaveBeenCalled();
     expect(callbacks.paste).not.toHaveBeenCalled();
     expect(callbacks.duplicateSelected).not.toHaveBeenCalled();
-    expect(callbacks.saveGraph).not.toHaveBeenCalled();
+    expect(callbacks.saveActiveFile).not.toHaveBeenCalled();
     expect(callbacks.splitEditorRight).not.toHaveBeenCalled();
   });
 
@@ -329,13 +331,13 @@ describe("useEditorKeyboard", () => {
     const saveEvent = keydown("s", { ctrlKey: true });
     const saveAsEvent = keydown("s", { ctrlKey: true, shiftKey: true });
 
-    expect(callbacks.saveGraph).toHaveBeenCalledWith({
+    expect(callbacks.saveActiveFile).toHaveBeenCalledWith({
       panelInstanceId: "editor-a",
       groupId: "group-a",
       resourceRef: "events/main.yssbi-event",
-      resourceKind: "event",
+      resourceKind: "event_graph",
     });
-    expect(callbacks.saveGraphAs).toHaveBeenCalledWith();
+    expect(callbacks.saveProjectAs).toHaveBeenCalledWith();
     expect(saveEvent.defaultPrevented).toBe(true);
     expect(saveAsEvent.defaultPrevented).toBe(true);
   });
@@ -345,8 +347,8 @@ describe("useEditorKeyboard", () => {
 
     const event = keydown("s", { ctrlKey: true, shiftKey: true });
 
-    expect(callbacks.saveGraphAs).toHaveBeenCalledOnce();
-    expect(callbacks.saveGraph).not.toHaveBeenCalled();
+    expect(callbacks.saveProjectAs).toHaveBeenCalledOnce();
+    expect(callbacks.saveActiveFile).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(true);
   });
 

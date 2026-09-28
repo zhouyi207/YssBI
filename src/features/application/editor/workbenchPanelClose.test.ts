@@ -1,3 +1,21 @@
+vi.mock("@/features/application/resource/mindActions", () => ({
+  mindActions: {
+    save: vi.fn(),
+    discard: vi.fn(),
+    barrier: vi.fn(),
+    release: vi.fn(),
+    getSnapshot: vi.fn(),
+  },
+}));
+vi.mock("@/features/application/resource/docActions", () => ({
+  docActions: {
+    save: vi.fn(),
+    discard: vi.fn(),
+    barrier: vi.fn(),
+    release: vi.fn(),
+    getSnapshot: vi.fn(),
+  },
+}));
 import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -228,8 +246,44 @@ vi.mock("@/features/core/resource", () => ({
   clearResourceDocumentState: mocks.clearResourceDocumentState,
 }));
 
-vi.mock("@/features/application/graphEditing/saveGraph", () => ({
-  saveGraph: mocks.saveGraph,
+vi.mock("@/features/application/resource/resourceActions", () => ({
+  fileResourceHandlers: {
+    event_graph: {
+      settle: async (path: string) => {
+        const { enqueueGraphTask } =
+          await import("@/features/application/graphEditing/graphEditCoordinator");
+        return enqueueGraphTask(path, async () => true, false);
+      },
+    },
+    function_graph: {
+      settle: async (path: string) => {
+        const { enqueueGraphTask } =
+          await import("@/features/application/graphEditing/graphEditCoordinator");
+        return enqueueGraphTask(path, async () => true, false);
+      },
+    },
+    chart: { settle: async () => {} },
+    mind: {
+      settle: async (path: string) =>
+        (await import("@/features/application/resource/mindActions")).mindActions.barrier(path),
+    },
+    doc: {
+      settle: async (path: string) =>
+        (await import("@/features/application/resource/docActions")).docActions.barrier(path),
+    },
+  },
+  saveFileResource: async (path: string, kind: string) => {
+    if (kind === "chart") return mocks.saveChart(path);
+    if (kind === "mind") {
+      const { mindActions } = await import("@/features/application/resource/mindActions");
+      return mindActions.save(path);
+    }
+    if (kind === "doc") {
+      const { docActions } = await import("@/features/application/resource/docActions");
+      return docActions.save(path);
+    }
+    return mocks.saveGraph(path, kind);
+  },
 }));
 
 vi.mock("@/features/core/chart/chartDocumentStore", () => ({
@@ -240,10 +294,6 @@ vi.mock("@/features/core/chart/chartDocumentStore", () => ({
     }),
     setState: mocks.setChartState,
   },
-}));
-
-vi.mock("@/features/application/chart/saveChartDocument", () => ({
-  saveChartDocument: mocks.saveChart,
 }));
 
 vi.mock("@/features/core/projectLifecycle/projectLifecycleAuthority", () => ({
@@ -301,7 +351,7 @@ import { requestCloseWorkbenchPanel, requestCloseWorkbenchPanels } from "./workb
 function editorPanel(
   panelInstanceId: string,
   resourceRef: string,
-  resourceKind: EditorResourceKind = "event",
+  resourceKind: EditorResourceKind = "event_graph",
   groupId = "group-a",
 ): WorkbenchPanelInfo {
   return {
@@ -367,7 +417,7 @@ function seedPanels(panels: readonly WorkbenchPanelInfo[]): void {
     const metadata = panel.metadata;
     if (
       metadata.role === "editor" &&
-      (metadata.resourceKind === "event" || metadata.resourceKind === "function")
+      (metadata.resourceKind === "event_graph" || metadata.resourceKind === "function_graph")
     ) {
       useGraphProjectionStore.setState((state) => ({
         sessions: {
@@ -406,7 +456,7 @@ describe("workbench panel close coordinator", () => {
   it("removes nothing when a dirty editor cancels a mixed Close Group", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([editorPanel("editor-a", graphPath), viewPanel("logs-a"), resultPanel("result-a")]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
     mocks.confirm3.mockResolvedValueOnce("cancel");
 
     await expect(requestCloseWorkbenchPanels(["editor-a", "logs-a", "result-a"])).resolves.toBe(
@@ -435,14 +485,14 @@ describe("workbench panel close coordinator", () => {
     const graphPath = "events/Main.yssbi-event";
     const chartPath = "charts/Summary.yssbi-chart";
     seedPanels([
-      editorPanel("editor-a", graphPath, "event", "group-a"),
-      editorPanel("editor-b", graphPath, "event", "group-b"),
+      editorPanel("editor-a", graphPath, "event_graph", "group-a"),
+      editorPanel("editor-b", graphPath, "event_graph", "group-b"),
       editorPanel("chart-a", chartPath, "chart", "group-b"),
       editorPanel("database-a", "sales", "database", "group-b"),
       viewPanel("logs-a", "logs", "group-b"),
       resultPanel("result-a", "group-b"),
     ]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
     mocks.confirm3.mockResolvedValueOnce("discard");
 
     await expect(
@@ -502,10 +552,10 @@ describe("workbench panel close coordinator", () => {
   it("does not preflight or release shared state when another editor for the resource remains", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([
-      editorPanel("editor-a", graphPath, "event", "group-a"),
-      editorPanel("editor-b", graphPath, "event", "group-a"),
+      editorPanel("editor-a", graphPath, "event_graph", "group-a"),
+      editorPanel("editor-b", graphPath, "event_graph", "group-a"),
     ]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
 
     await expect(requestCloseWorkbenchPanel("editor-a")).resolves.toBe(true);
 
@@ -521,10 +571,10 @@ describe("workbench panel close coordinator", () => {
   it("releases a closed graph scope while another group keeps the document open", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([
-      editorPanel("editor-a", graphPath, "event", "group-a"),
-      editorPanel("editor-b", graphPath, "event", "group-b"),
+      editorPanel("editor-a", graphPath, "event_graph", "group-a"),
+      editorPanel("editor-b", graphPath, "event_graph", "group-b"),
     ]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
 
     await expect(requestCloseWorkbenchPanel("editor-a")).resolves.toBe(true);
 
@@ -546,10 +596,10 @@ describe("workbench panel close coordinator", () => {
   it("serializes concurrent duplicate closes so only the true-last request prompts", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([
-      editorPanel("editor-a", graphPath, "event", "group-a"),
-      editorPanel("editor-b", graphPath, "event", "group-b"),
+      editorPanel("editor-a", graphPath, "event_graph", "group-a"),
+      editorPanel("editor-b", graphPath, "event_graph", "group-b"),
     ]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
     mocks.confirm3.mockResolvedValueOnce("cancel");
 
     const outcomes = await Promise.all([
@@ -596,7 +646,7 @@ describe("workbench panel close coordinator", () => {
   it("stops before commit when the project changes during dirty confirmation", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([editorPanel("editor-a", graphPath)]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
     let resolveDecision!: (decision: "discard") => void;
     let markPrompted!: () => void;
     const prompted = new Promise<void>((resolve) => {
@@ -622,7 +672,7 @@ describe("workbench panel close coordinator", () => {
   it("suppresses stale-project feedback when Graph save rejects", async () => {
     const graphPath = "events/Main.yssbi-event";
     seedPanels([editorPanel("editor-a", graphPath)]);
-    markDirty(graphPath, "event");
+    markDirty(graphPath, "event_graph");
     mocks.confirm3.mockResolvedValueOnce("confirm");
     mocks.saveGraph.mockImplementationOnce(async () => {
       mocks.project.epoch += 1;
@@ -668,8 +718,8 @@ describe("workbench panel close coordinator", () => {
     const firstPath = "events/First.yssbi-event";
     const secondPath = "functions/Second.yssbi-function";
     seedPanels([
-      editorPanel("editor-a", firstPath, "event", "group-a"),
-      editorPanel("editor-b", secondPath, "function", "group-b"),
+      editorPanel("editor-a", firstPath, "event_graph", "group-a"),
+      editorPanel("editor-b", secondPath, "function_graph", "group-b"),
     ]);
     mocks.commitRemove.mockImplementationOnce(async (tokens, authorize) => {
       if (authorize && !authorize()) return "stale" as const;
@@ -708,17 +758,17 @@ describe("workbench panel close coordinator", () => {
     const firstPath = "events/First.yssbi-event";
     const secondPath = "functions/Second.yssbi-function";
     seedPanels([
-      editorPanel("editor-a", firstPath, "event", "group-a"),
-      editorPanel("editor-b", secondPath, "function", "group-b"),
+      editorPanel("editor-a", firstPath, "event_graph", "group-a"),
+      editorPanel("editor-b", secondPath, "function_graph", "group-b"),
     ]);
-    markDirty(firstPath, "event");
-    markDirty(secondPath, "function");
+    markDirty(firstPath, "event_graph");
+    markDirty(secondPath, "function_graph");
     mocks.confirm3.mockResolvedValueOnce("confirm").mockResolvedValueOnce("cancel");
 
     await expect(requestCloseWorkbenchPanels(["editor-a", "editor-b"])).resolves.toBe(false);
 
     expect(mocks.saveGraph).toHaveBeenCalledOnce();
-    expect(mocks.saveGraph).toHaveBeenCalledWith(firstPath, "event");
+    expect(mocks.saveGraph).toHaveBeenCalledWith(firstPath, "event_graph");
     expect(mocks.commitRemove).not.toHaveBeenCalled();
     expect(mocks.panels).toHaveLength(2);
   });
@@ -768,7 +818,7 @@ describe("workbench panel close coordinator", () => {
     async (caseName) => {
       const graphPath = "events/Main.yssbi-event";
       seedPanels([editorPanel("editor-a", graphPath)]);
-      markDirty(graphPath, "event");
+      markDirty(graphPath, "event_graph");
       if (caseName === "invalid") {
         mocks.panels.push({
           ...viewPanel("invalid-a"),

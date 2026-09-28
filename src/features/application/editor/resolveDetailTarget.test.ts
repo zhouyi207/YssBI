@@ -27,10 +27,10 @@ describe("resolveDetailTarget", () => {
   it("returns event detail focus from sidebar click", () => {
     expect(
       resolveDetailTarget({
-        detailFocus: { kind: "event", path: "g1" },
+        detailFocus: { kind: "event_graph", path: "g1" },
         selectedLog: null,
       }),
-    ).toEqual({ kind: "event", path: "g1" });
+    ).toEqual({ kind: "event_graph", path: "g1" });
   });
 
   it("returns log detail when focus is log and a log is selected", () => {

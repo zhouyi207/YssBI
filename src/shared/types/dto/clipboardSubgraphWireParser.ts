@@ -67,7 +67,7 @@ function isCreateArgs(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["kind"]) &&
-    ["function", "database"].includes(value.kind as string)
+    ["function_graph", "database"].includes(value.kind as string)
   );
 }
 

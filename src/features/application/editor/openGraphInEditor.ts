@@ -13,7 +13,7 @@ export interface OpenGraphInEditorOptions {
 export async function openGraphInEditor(
   graphPath: string,
   name: string,
-  type: "event" | "function",
+  type: "event_graph" | "function_graph",
   targetGroupId?: string,
   options?: OpenGraphInEditorOptions,
 ): Promise<WorkbenchEditorPanelInfo | null> {

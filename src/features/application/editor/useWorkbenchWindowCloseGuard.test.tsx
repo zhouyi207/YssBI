@@ -27,7 +27,7 @@ function createDeferred<T>(): Deferred<T> {
 const mocks = vi.hoisted(() => ({
   dirty: [] as Array<{ title: string }>,
   confirm3: vi.fn(async (): Promise<"confirm" | "discard" | "cancel"> => "discard"),
-  saveAllDirtyGraphs: vi.fn(async () => true),
+  saveAllDirtyDocuments: vi.fn(async () => true),
   flushBeforeWindowClose: vi.fn(async (): Promise<void> => undefined),
   showWorkbenchLayoutError: vi.fn(),
   logError: vi.fn(),
@@ -38,13 +38,14 @@ vi.mock("@/services/platform/appWindow", () => ({
   currentAppWindow: vi.fn(),
 }));
 vi.mock("./editorPanelDirty", () => ({
+  collectEditorFiles: () => [],
   collectDirtyEditorPanels: () => mocks.dirty,
 }));
 vi.mock("@/features/core/ui/UIStore", () => ({
   uiStore: { confirm3: mocks.confirm3 },
 }));
-vi.mock("./saveAllDirtyGraphs", () => ({
-  saveAllDirtyGraphs: mocks.saveAllDirtyGraphs,
+vi.mock("./saveAllDirtyDocuments", () => ({
+  saveAllDirtyDocuments: mocks.saveAllDirtyDocuments,
 }));
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutController", () => ({
   workbenchLayoutController: {
@@ -130,8 +131,8 @@ describe("useWorkbenchWindowCloseGuard", () => {
     });
 
     expect(mocks.confirm3).toHaveBeenCalledOnce();
-    expect(mocks.saveAllDirtyGraphs).not.toHaveBeenCalled();
-    expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
+    expect(mocks.saveAllDirtyDocuments).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce());
     expect(appWindow.close).toHaveBeenCalledOnce();
     expect(appWindow.getRecursiveDecision()).toBe("allow");
 
@@ -155,7 +156,7 @@ describe("useWorkbenchWindowCloseGuard", () => {
     await Promise.resolve();
 
     expect(mocks.confirm3).not.toHaveBeenCalled();
-    expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce());
     expect(appWindow.close).not.toHaveBeenCalled();
 
     hydrationAndFlush.resolve(undefined);
@@ -210,7 +211,7 @@ describe("useWorkbenchWindowCloseGuard", () => {
     await firstCloseRequest;
 
     expect(mocks.confirm3).toHaveBeenCalledOnce();
-    expect(mocks.saveAllDirtyGraphs).toHaveBeenCalledOnce();
+    expect(mocks.saveAllDirtyDocuments).toHaveBeenCalledOnce();
     expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
     expect(closeCallsWhileFlushPending).toBe(0);
     expect(appWindow.close).toHaveBeenCalledOnce();

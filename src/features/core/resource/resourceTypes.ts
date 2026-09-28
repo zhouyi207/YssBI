@@ -1,7 +1,4 @@
-import {
-  toGraphResourceUri,
-  type GraphResourceKind,
-} from "@/shared/types/domain/graphResourcePath";
+import { toResourceUri, type FileResourceKind } from "@/shared/types/domain/resource";
 import type {
   ProjectResourceMeta,
   ResourceKey,
@@ -21,23 +18,11 @@ export function resourceKey(input: ResourceKeyInput): ResourceKey {
   if ("uri" in input && input.uri) {
     return input.uri;
   }
-  return resourceKeyFromRef(input as ResourceRef);
+  return toResourceUri(input.kind, input.id);
 }
 
-function resourceKeyFromRef(ref: ResourceRef): ResourceKey {
-  switch (ref.kind) {
-    case "event":
-    case "function":
-      return toGraphResourceUri(ref.kind, ref.id);
-    case "chart":
-      return `yssbi://chart/${ref.id}`;
-    case "database":
-      return `yssbi://database/${ref.id}`;
-  }
-}
-
-export function buildGraphResourceMeta(
-  kind: GraphResourceKind,
+export function buildFileResourceMeta(
+  kind: FileResourceKind,
   path: string,
   name: string,
   overrides?: Partial<Omit<ProjectResourceMeta, "id" | "kind" | "name" | "uri">>,
@@ -46,7 +31,7 @@ export function buildGraphResourceMeta(
     id: path,
     kind,
     name,
-    uri: toGraphResourceUri(kind, path),
+    uri: toResourceUri(kind, path),
     exists: true,
     loaded: false,
     hasDirtyDocument: false,

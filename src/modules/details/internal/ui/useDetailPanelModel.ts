@@ -15,7 +15,7 @@ export function useDetailPanelModel(): {
   chartName: string | null;
   chartDocument: ChartDocument | null;
 } {
-  const { events, functions, dataframes } = useDetailResourceProjection();
+  const { eventGraphs, functionGraphs, dataframes } = useDetailResourceProjection();
   const target = useEditorUi((snapshot) => snapshot.detailFocus);
   const selectedLog = useLogStore((s) => s.selectedLog);
 
@@ -35,12 +35,12 @@ export function useDetailPanelModel(): {
       resolveDetailPanelModel({
         target,
         selectedLog,
-        events,
-        functions,
+        eventGraphs,
+        functionGraphs,
         dataframes,
         chartDocument,
       }),
-    [target, selectedLog, events, functions, dataframes, chartDocument],
+    [target, selectedLog, eventGraphs, functionGraphs, dataframes, chartDocument],
   );
 
   return { model, chartPath, chartName, chartDocument };

@@ -1,7 +1,9 @@
 export const PROJECT_TREE_CATEGORY_IDS = {
-  events: "project.events",
-  functions: "project.functions",
+  eventGraphs: "project.eventGraphs",
+  functionGraphs: "project.functionGraphs",
   charts: "project.charts",
+  minds: "project.minds",
+  docs: "project.docs",
   data: "project.data",
 } as const;
 

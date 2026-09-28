@@ -32,7 +32,7 @@ const helperCreation: NodeCreationDescriptorDto = {
   nodeTypeId: "function.call",
   resourcePath: "functions/Helper",
   resourceRevision: 1,
-  createArgs: { kind: "function" },
+  createArgs: { kind: "function_graph" },
 };
 const otherCreation: NodeCreationDescriptorDto = {
   ...helperCreation,

@@ -22,7 +22,22 @@ export function buildProjectSidebarContextMenuSections(
   if (!contextMenu) return [];
   const target = contextMenu.target;
 
-  if (target.type === "graph") {
+  if (target.type === "fileSection")
+    return [
+      {
+        items: [
+          {
+            id: "new-file",
+            label: t("documents.newFile"),
+            icon: <VscAdd size={12} />,
+            onClick: () => {
+              actions.createFile(target.kind);
+            },
+          },
+        ],
+      },
+    ];
+  if (target.type === "file")
     return [
       {
         items: [
@@ -30,25 +45,33 @@ export function buildProjectSidebarContextMenuSections(
             id: "open",
             label: t("contextMenu.sidebar.open"),
             icon: <VscChevronRight size={12} />,
-            onClick: () => actions.openGraph(target.id, target.name, target.graphType),
+            onClick: () => {
+              actions.openFile(target);
+            },
           },
           {
             id: "reveal-in-explorer",
             label: t("contextMenu.sidebar.revealInExplorer"),
             icon: <VscFolderOpened size={12} />,
-            onClick: () => void actions.revealInExplorer({ kind: "graph", resourceId: target.id }),
+            onClick: () => {
+              actions.revealInExplorer({ kind: target.kind, resourceId: target.id });
+            },
           },
           {
             id: "rename",
             label: t("contextMenu.sidebar.rename"),
             icon: <VscEdit size={12} />,
-            onClick: () => actions.renameGraphItem(target.id, target.name, target.graphType),
+            onClick: () => {
+              actions.renameFile(target, target.name);
+            },
           },
           {
             id: "duplicate",
             label: t("contextMenu.sidebar.duplicate"),
             icon: <VscCopy size={12} />,
-            onClick: () => void actions.duplicateGraphItem(target.id),
+            onClick: () => {
+              actions.duplicateFile(target);
+            },
           },
         ],
       },
@@ -59,90 +82,13 @@ export function buildProjectSidebarContextMenuSections(
             label: t("contextMenu.sidebar.delete"),
             icon: <VscTrash size={12} />,
             danger: true,
-            onClick: () => void actions.deleteGraphItem(target.id, target.graphType),
+            onClick: () => {
+              actions.deleteFile(target);
+            },
           },
         ],
       },
     ];
-  }
-
-  if (target.type === "section") {
-    return [
-      {
-        items: [
-          {
-            id: "new-graph",
-            label:
-              target.graphType === "event"
-                ? t("canvas.newEventGraph")
-                : t("canvas.newFunctionGraph"),
-            icon: <VscAdd size={12} />,
-            onClick: () => void actions.createGraph(target.graphType),
-          },
-        ],
-      },
-    ];
-  }
-
-  if (target.type === "chartSection") {
-    return [
-      {
-        items: [
-          {
-            id: "new-chart",
-            label: t("contextMenu.sidebar.newChart"),
-            icon: <VscAdd size={12} />,
-            onClick: () => void actions.addChart(),
-          },
-        ],
-      },
-    ];
-  }
-
-  if (target.type === "chart") {
-    return [
-      {
-        items: [
-          {
-            id: "open",
-            label: t("contextMenu.sidebar.open"),
-            icon: <VscChevronRight size={12} />,
-            onClick: () => actions.openChart(target.chartPath),
-          },
-          {
-            id: "reveal-in-explorer",
-            label: t("contextMenu.sidebar.revealInExplorer"),
-            icon: <VscFolderOpened size={12} />,
-            onClick: () =>
-              void actions.revealInExplorer({ kind: "chart", resourceId: target.chartPath }),
-          },
-          {
-            id: "rename",
-            label: t("contextMenu.sidebar.rename"),
-            icon: <VscEdit size={12} />,
-            onClick: () => actions.renameChartItem(target.chartPath, target.name),
-          },
-          {
-            id: "duplicate",
-            label: t("contextMenu.sidebar.duplicate"),
-            icon: <VscCopy size={12} />,
-            onClick: () => void actions.duplicateChart(target.chartPath),
-          },
-        ],
-      },
-      {
-        items: [
-          {
-            id: "delete",
-            label: t("contextMenu.sidebar.delete"),
-            icon: <VscTrash size={12} />,
-            danger: true,
-            onClick: () => void actions.deleteChart(target.chartPath),
-          },
-        ],
-      },
-    ];
-  }
 
   if (target.type === "database") {
     return [

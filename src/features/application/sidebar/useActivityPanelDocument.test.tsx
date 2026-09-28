@@ -18,7 +18,8 @@ import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
 vi.mock("@/features/application/graphProjection/projectionLocale", () => ({
   currentProjectionLocale: () => "en-US",
 }));
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ i18n: { language: "en-US" }, t: (key: string) => key }),
 }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,7 +38,10 @@ it("shares project sync, retains the visible document and ignores resource-field
       publicationRevision,
       projectName: "Project",
       exportTime: "",
-      graphs: [],
+      eventGraphs: [],
+      functionGraphs: [],
+      minds: [],
+      docs: [],
       charts: [],
       databases: [],
     });

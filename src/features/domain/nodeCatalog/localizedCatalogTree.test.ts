@@ -89,21 +89,21 @@ describe("buildLocalizedCatalogTree", () => {
       nodeTypeId: "function.call",
       resourcePath: "functions/First",
       resourceRevision: 1,
-      createArgs: { kind: "function" },
+      createArgs: { kind: "function_graph" },
     });
     const second = item("function.call", "output", {
       kind: "resourceBound",
       nodeTypeId: "function.call",
       resourcePath: "functions/Second",
       resourceRevision: 2,
-      createArgs: { kind: "function" },
+      createArgs: { kind: "function_graph" },
     });
     const refreshed = item("function.call", "output", {
       kind: "resourceBound",
       nodeTypeId: "function.call",
       resourcePath: "functions/First",
       resourceRevision: 3,
-      createArgs: { kind: "function" },
+      createArgs: { kind: "function_graph" },
     });
 
     expect(catalogItemKey(first)).not.toBe(catalogItemKey(second));
@@ -116,7 +116,7 @@ describe("buildLocalizedCatalogTree", () => {
       nodeTypeId: "function.call",
       resourcePath: "functions/Second",
       resourceRevision: 1,
-      createArgs: { kind: "function" },
+      createArgs: { kind: "function_graph" },
     });
     const first = {
       ...item("function.call", "output", {
@@ -124,7 +124,7 @@ describe("buildLocalizedCatalogTree", () => {
         nodeTypeId: "function.call",
         resourcePath: "functions/First",
         resourceRevision: 1,
-        createArgs: { kind: "function" },
+        createArgs: { kind: "function_graph" },
       }),
       title: second.title,
     };

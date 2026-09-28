@@ -15,7 +15,15 @@ import {
 } from "./projectPublicationSnapshot";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
-import { useResourceStore, useDocumentStateStore } from "@/features/core/resource";
+import {
+  useResourceStore,
+  useDocumentStateStore,
+  buildFileResourceMeta,
+  markResourceLoaded,
+  markResourceDirty,
+  resourceKey,
+} from "@/features/core/resource";
+import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
@@ -31,7 +39,10 @@ function index(revision: number): ProjectIndexRow {
     projectName: "Project",
     exportTime: "",
     publicationRevision: revision,
-    graphs: [],
+    eventGraphs: [],
+    functionGraphs: [],
+    minds: [],
+    docs: [],
     charts: [],
     databases: [],
   };
@@ -39,7 +50,7 @@ function index(revision: number): ProjectIndexRow {
 function receipt(
   revision: number,
   path = eventPath,
-  kind: "event" | "chart" = "event",
+  kind: "event_graph" | "chart" = "event_graph",
 ): ResourceMutationResultDto {
   const operationId = `00000000-0000-0000-0000-${String(revision).padStart(12, "0")}`;
   return {
@@ -49,7 +60,7 @@ function receipt(
     moves: [],
     deltas: [
       {
-        resource: { kind: kind === "event" ? "graph" : "chart", key: path },
+        resource: { kind: kind === "event_graph" ? "graph" : "chart", key: path },
         fromRevision: 0,
         toRevision: 0,
         causedBy: operationId,
@@ -99,6 +110,50 @@ beforeEach(() => {
 });
 afterEach(() => coordinator?.cancelProject());
 
+it("applies late delete authorization to retained dirty content after an index-only refresh", async () => {
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(index(1))),
+  });
+  const path = "docs/Report.md";
+  const ref = { id: path, kind: "doc" as const };
+  useResourceStore
+    .getState()
+    .upsertResource(buildFileResourceMeta("doc", path, "Report", { revision: 0 }));
+  markResourceLoaded(ref);
+  markResourceDirty(ref, true);
+  useDocProjectionStore.getState().install({
+    projectInstanceId: "project-a",
+    path,
+    kind: "doc",
+    content: "unsaved",
+    dirty: true,
+    version: { sessionId: "doc-a", revision: 0 },
+  });
+  await coordinator.refreshIndex();
+  expect(useResourceStore.getState().resources[resourceKey(ref)]).toMatchObject({
+    exists: false,
+    hasDirtyDocument: true,
+  });
+  const deletion = receipt(1);
+  deletion.deltas = [
+    {
+      resource: { kind: "doc", key: path },
+      fromRevision: 0,
+      toRevision: 1,
+      causedBy: deletion.operationId,
+      payload: {
+        kind: "resource_lifecycle",
+        patch: { before: { path, kind: "doc", name: "Report", revision: 0 }, after: null },
+      },
+    },
+  ];
+  await coordinator.submit({ result: deletion });
+  expect(useResourceStore.getState().resources[resourceKey(ref)]).toBeUndefined();
+  expect(useDocProjectionStore.getState().documents[path]).toBeUndefined();
+  expect((await coordinator.submit({ result: deletion })).status).toBe("duplicate");
+  expect(dependencies.loadProjectIndex).toHaveBeenCalledTimes(2);
+});
+
 it("coalesces command, event and index refreshes, including a snapshot ahead of a late receipt", async () => {
   const pendingIndex = deferred<ProjectIndexRow>();
   const dependencies = setup({
@@ -113,10 +168,10 @@ it("coalesces command, event and index refreshes, including a snapshot ahead of 
   await Promise.resolve();
   expect(dependencies.commitSnapshot).not.toHaveBeenCalled();
   const snapshot = index(2);
-  snapshot.graphs = [eventPath, "events/Later.yssbi-event"].map((path) => ({
+  snapshot.eventGraphs = [eventPath, "events/Later.yssbi-event"].map((path) => ({
     path,
     name: path,
-    type: "event",
+    type: "event_graph",
     revision: 0,
   }));
   pendingIndex.resolve(snapshot);
@@ -129,7 +184,7 @@ it("coalesces command, event and index refreshes, including a snapshot ahead of 
   expect(dependencies.loadProjectIndex).toHaveBeenCalledOnce();
   expect(dependencies.commitSnapshot).toHaveBeenCalledOnce();
   expect(useResourceStore.getState().graphOrder).toEqual(
-    snapshot.graphs.map((graph) => graph.path),
+    snapshot.eventGraphs.map((graph) => graph.path),
   );
   expect(coordinator.capturePublicationRevision()).toBe(2);
   expect(captureProjectLifecycleState()).toEqual(identity);
@@ -154,10 +209,10 @@ it("includes move receipts delivered while another graph session is being prepar
   const source = "events/Old.yssbi-event";
   const target = "events/New.yssbi-event";
   const snapshot = index(2);
-  snapshot.graphs = [eventPath, target].map((path) => ({
+  snapshot.eventGraphs = [eventPath, target].map((path) => ({
     path,
     name: path,
-    type: "event",
+    type: "event_graph",
     revision: 1,
   }));
   const pending = deferred<ReturnType<typeof makeGraphEditorSession>>();
@@ -178,7 +233,7 @@ it("includes move receipts delivered while another graph session is being prepar
   const first = coordinator.submit({ result: receipt(1) });
   await vi.waitFor(() => expect(prepareGraphSession).toHaveBeenCalledOnce());
   const moved = receipt(2, target);
-  moved.moves = [{ from: source, to: target, name: "New", kind: "event" }];
+  moved.moves = [{ from: source, to: target, name: "New", kind: "event_graph" }];
   const second = coordinator.submit({ result: moved });
   pending.resolve(
     makeGraphEditorSession(makeEditorProjectionFixture({ graphPath: eventPath }).projection),

@@ -1,3 +1,5 @@
+import { FILE_RESOURCE_KINDS } from "@/shared/types/domain/resource";
+import { fileResourceHandlers } from "@/features/application/resource/resourceActions";
 import { useCallback, useMemo, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -13,7 +15,7 @@ import {
 import { ActionMenu } from "@/shared/ui/actionMenu";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { buildProjectSidebarContextMenuSections } from "./buildProjectSidebarContextMenuSections";
-import type { GraphResourceType, ProjectSidebarContextMenuTarget } from "./projectSidebarTypes";
+import type { ProjectSidebarContextMenuTarget } from "./projectSidebarTypes";
 import type { SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
 import { SidebarProjectTab } from "./SidebarProjectTab";
 import { useProjectActivityActions } from "./useProjectActivityActions";
@@ -38,16 +40,11 @@ function ProjectActivityPanelController() {
       buildProjectSidebarContextMenuSections(
         contextMenu,
         {
-          openGraph: actions.openGraph,
-          createGraph: actions.createGraph,
-          renameGraphItem: actions.renameGraphItem,
-          deleteGraphItem: actions.deleteGraphItem,
-          duplicateGraphItem: actions.duplicateGraphItem,
-          openChart: actions.openChart,
-          renameChartItem: actions.renameChartItem,
-          duplicateChart: actions.duplicateChart,
-          deleteChart: actions.deleteChartItem,
-          addChart: actions.addChart,
+          createFile: actions.createFile,
+          openFile: actions.openFile,
+          renameFile: actions.renameFile,
+          duplicateFile: actions.duplicateFile,
+          deleteFile: actions.deleteFile,
           openDatabase: actions.openDatabaseInEditor,
           renameDatabaseItem: actions.renameDatabaseItem,
           deleteDatabaseItem: actions.deleteDatabaseItem,
@@ -59,61 +56,29 @@ function ProjectActivityPanelController() {
     [actions, contextMenu, t],
   );
 
-  const openGraphContextMenu = useCallback(
-    (
-      event: MouseEvent,
-      target: { type: "graph"; id: string; name: string; graphType: GraphResourceType },
-    ) => openActionMenu(event, target),
-    [openActionMenu],
-  );
-
-  const openChartContextMenu = useCallback(
-    (event: MouseEvent, chartPath: string, name: string) => {
-      openActionMenu(event, { type: "chart", chartPath, name });
-    },
-    [openActionMenu],
-  );
-
   const openProjectCategoryContextMenu = useCallback(
     (event: MouseEvent, categoryId: ProjectTreeCategoryId) => {
-      switch (categoryId) {
-        case PROJECT_TREE_CATEGORY_IDS.events:
-          openActionMenu(event, { type: "section", graphType: "event" });
-          return;
-        case PROJECT_TREE_CATEGORY_IDS.functions:
-          openActionMenu(event, { type: "section", graphType: "function" });
-          return;
-        case PROJECT_TREE_CATEGORY_IDS.charts:
-          openActionMenu(event, { type: "chartSection" });
-          return;
-        case PROJECT_TREE_CATEGORY_IDS.data:
-          openActionMenu(event, { type: "dataSection" });
-          return;
-      }
+      const kind = FILE_RESOURCE_KINDS.find(
+        (kind) => fileResourceHandlers[kind].categoryId === categoryId,
+      );
+      if (kind) openActionMenu(event, { type: "fileSection", kind });
+      else if (categoryId === PROJECT_TREE_CATEGORY_IDS.data)
+        openActionMenu(event, { type: "dataSection" });
     },
     [openActionMenu],
   );
 
   const projectTreeActions = useMemo<SidebarProjectTreeActions>(
     () => ({
-      onAddEvent: () => void actions.addEvent(),
-      onAddFunction: () => void actions.addFunction(),
-      onAddChart: () => void actions.addChart(),
+      onCreateFile: (kind) => void actions.createFile(kind),
+      onOpenFile: actions.openFile,
+      onFileContextMenu: (event, ref) => openActionMenu(event, { type: "file", ...ref }),
       onImportData: actions.triggerImportData,
       onCategoryContextMenu: openProjectCategoryContextMenu,
-      onGraphContextMenu: openGraphContextMenu,
-      onChartContextMenu: openChartContextMenu,
-      onOpenChart: actions.openChart,
       onDatabaseContextMenu: (event, id, name) =>
         openActionMenu(event, { type: "database", id, name }),
     }),
-    [
-      actions,
-      openActionMenu,
-      openChartContextMenu,
-      openGraphContextMenu,
-      openProjectCategoryContextMenu,
-    ],
+    [actions, openActionMenu, openProjectCategoryContextMenu],
   );
 
   return (

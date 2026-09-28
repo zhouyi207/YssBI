@@ -15,7 +15,7 @@ import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProje
 import { isParameterEditor } from "@/shared/types/domain/editorProjectionGuards";
 import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
 import { parseProjectEvent } from "@/services/project/projectEventParser";
-import { parseProjectGraphIndexRow } from "@/services/project/projectService";
+import { parseProjectFunctionGraphIndexRow } from "@/services/project/projectService";
 import { parseGraphProjectionReplacementDto } from "@/shared/types/dto/editorMutationWireParser";
 import { parseRunEvent } from "@/shared/types/dto/runEventParser";
 
@@ -59,11 +59,11 @@ describe("Rust-generated node-system golden contracts", () => {
   });
   it("consumes one real Rust function editor projection shape across index and replacement", () => {
     expect(functionEditorProjection.format).toBe("yssbi.function-editor-projection.v1");
-    const row = parseProjectGraphIndexRow(functionEditorProjection.indexRow);
+    const row = parseProjectFunctionGraphIndexRow(functionEditorProjection.indexRow);
     const replacement = parseGraphProjectionReplacementDto(functionEditorProjection.replacement);
 
-    expect(row.type).toBe("function");
-    if (row.type !== "function") throw new Error("expected function row");
+    expect(row.type).toBe("function_graph");
+    if (row.type !== "function_graph") throw new Error("expected function row");
     expect(replacement).toHaveProperty("functionEditorProjection");
     if (!("functionEditorProjection" in replacement)) {
       throw new Error("expected function replacement");

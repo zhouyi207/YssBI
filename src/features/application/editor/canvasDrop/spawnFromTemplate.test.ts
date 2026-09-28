@@ -9,13 +9,13 @@ describe("spawnNodeFromTemplate", () => {
       descriptor: { kind: "static", nodeTypeId: "math.add" },
     },
     {
-      label: "function",
+      label: "function_graph",
       descriptor: {
         kind: "resourceBound",
         nodeTypeId: "yssbi.project.function.call",
         resourcePath: "functions/Helper.yssbi-function",
         resourceRevision: 4,
-        createArgs: { kind: "function" },
+        createArgs: { kind: "function_graph" },
       },
     },
     {
@@ -58,7 +58,7 @@ describe("spawnNodeFromTemplate", () => {
       nodeTypeId: "yssbi.project.function.call",
       resourcePath: "functions/opaque / . # 数据",
       resourceRevision: 9,
-      createArgs: { kind: "function" },
+      createArgs: { kind: "function_graph" },
     };
     const items = [
       {
@@ -67,7 +67,7 @@ describe("spawnNodeFromTemplate", () => {
         available: true,
         documentation: null,
         categoryId: "functions",
-        iconId: "function",
+        iconId: "function_graph",
         styleId: "call",
         aliases: [],
         technicalTerms: [],
@@ -85,7 +85,7 @@ describe("spawnNodeFromTemplate", () => {
       findResourceNodeSpawnTemplate(
         items,
         descriptor.resourcePath,
-        "function",
+        "function_graph",
         "yssbi.project.function.call",
       ),
     ).toEqual({ title: "Opaque", descriptor });
@@ -93,13 +93,15 @@ describe("spawnNodeFromTemplate", () => {
       findResourceNodeSpawnTemplate(
         items,
         descriptor.resourcePath,
-        "function",
+        "function_graph",
         "yssbi.project.database.get",
       ),
     ).toBeNull();
-    expect(findResourceNodeSpawnTemplate(items, "functions/opaque", "function")).toBeNull();
+    expect(findResourceNodeSpawnTemplate(items, "functions/opaque", "function_graph")).toBeNull();
     expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "database")).toBeNull();
     items[0].available = false;
-    expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "function")).toBeNull();
+    expect(
+      findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "function_graph"),
+    ).toBeNull();
   });
 });

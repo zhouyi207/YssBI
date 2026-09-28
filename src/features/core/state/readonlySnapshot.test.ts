@@ -10,7 +10,7 @@ import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
-import { buildGraphResourceMeta, resourceKey } from "@/features/core/resource/resourceTypes";
+import { buildFileResourceMeta, resourceKey } from "@/features/core/resource/resourceTypes";
 
 afterEach(() => {
   useGraphProjectionStore.getState().clear();
@@ -31,19 +31,19 @@ it("keeps unrelated graph and resource snapshots stable and freezes published st
   );
   expect(Object.isFrozen(graphBefore.graphEntities["events/A"].nodes)).toBe(true);
   const graphs = getGraphSnapshot().graphEntities;
-  useGraphMetaStore.getState().addGraph({ path: "events/B", name: "B", type: "event" });
+  useGraphMetaStore.getState().addGraph({ path: "events/B", name: "B", type: "event_graph" });
   expect(getGraphSnapshot().graphEntities).toBe(graphs);
 
   useResourceStore
     .getState()
     .setResources([
-      buildGraphResourceMeta("event", "events/A", "A"),
-      buildGraphResourceMeta("event", "events/B", "B"),
+      buildFileResourceMeta("event_graph", "events/A", "A"),
+      buildFileResourceMeta("event_graph", "events/B", "B"),
     ]);
-  const refA = { id: "events/A", kind: "event" } as const;
+  const refA = { id: "events/A", kind: "event_graph" } as const;
   markResourceLoaded(refA);
   const resourceBefore = getResourceSnapshot();
-  markResourceLoaded({ id: "events/B", kind: "event" });
+  markResourceLoaded({ id: "events/B", kind: "event_graph" });
   expect(getResourceSnapshot().documents[resourceKey(refA)]).toBe(
     resourceBefore.documents[resourceKey(refA)],
   );

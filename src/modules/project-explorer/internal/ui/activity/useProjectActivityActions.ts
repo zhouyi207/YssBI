@@ -1,20 +1,20 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-
-import { useDatabaseManagement, useGraphManagement } from "@/features/application/dataManagement";
-import { deleteChartWithConfirm } from "@/features/application/editor/chartDelete";
+import { useDatabaseManagement } from "@/features/application/dataManagement";
+import { revealProjectResourceInExplorer } from "@/features/application/sidebar/sidebarResourceActions";
 import {
-  useChartManagement,
-  useEditorPanelCommands,
-  useOpenChart,
-} from "@/features/application/editor";
+  renameResource,
+  type FileResourceRef,
+} from "@/features/application/resource/resourceActions";
 import {
-  renameChartResource,
-  revealProjectResourceInExplorer,
-} from "@/features/application/sidebar/sidebarResourceActions";
-import type { GraphResourceType } from "./projectSidebarTypes";
-import { renameResource } from "@/features/application/resource/resourceActions";
+  duplicateFile,
+  deleteFileWithConfirm,
+} from "@/features/application/resource/fileManagement";
+import { useFileManagement } from "@/features/application/resource/useFileManagement";
+import { openFileInEditor } from "@/features/application/editor/openFileInEditor";
 import { openDatabaseInEditor } from "@/features/application/editor/openDatabaseInEditor";
+import { showBlockingIpcError } from "@/features/application/editor/blockingErrorDialog";
+import { isEditorOpenRejectionHandled } from "@/features/application/editor/openEditorPanel";
 import { ui } from "@/features/core/ui/ui";
 
 type OpenInputDialog = (
@@ -23,37 +23,34 @@ type OpenInputDialog = (
   onSubmit: (value: string) => void | Promise<void>,
   submitLabel?: string,
 ) => void;
-
 export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
-  const { openGraph } = useEditorPanelCommands();
-  const {
-    renameGraph,
-    duplicateGraph,
-    deleteEvent,
-    deleteFunction,
-    addEvent,
-    addFunction,
-    createGraph,
-  } = useGraphManagement(openGraph);
-  const openChart = useOpenChart();
-  const { duplicateChart, addChart } = useChartManagement(openChart);
+  const { createFile } = useFileManagement();
   const { deleteDataFrame, triggerImportData } = useDatabaseManagement();
-
+  const perform = (operation: () => Promise<unknown>) => {
+    void operation().catch((error) => {
+      if (!isEditorOpenRejectionHandled(error))
+        showBlockingIpcError(error, (code) => t("documents.operationFailed", { error: code }));
+    });
+  };
+  const renameFile = (ref: FileResourceRef, name: string) =>
+    openInputDialog(
+      t("documents.rename"),
+      name,
+      (nextName) => renameResource(ref, nextName),
+      t("contextMenu.dialog.renameSubmit"),
+    );
   const renameDatabaseItem = useCallback(
     (id: string, name: string) => {
       openInputDialog(
         t("contextMenu.dialog.renameDataTitle"),
         name,
-        async (nextName) => {
-          await renameResource({ id, kind: "database" }, nextName);
-        },
+        (nextName) => renameResource({ id, kind: "database" }, nextName),
         t("contextMenu.dialog.renameSubmit"),
       );
     },
     [openInputDialog, t],
   );
-
   const deleteDatabaseItem = useCallback(
     async (id: string, name: string) => {
       const confirmed = await ui.confirm({
@@ -63,83 +60,18 @@ export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
         cancelText: t("common.cancel"),
         type: "danger",
       });
-      if (!confirmed) return;
-      await deleteDataFrame(id);
+      if (confirmed) await deleteDataFrame(id);
     },
     [deleteDataFrame, t],
   );
-
-  const renameGraphItem = useCallback(
-    (id: string, name: string, type: GraphResourceType) => {
-      openInputDialog(
-        t("contextMenu.dialog.renameGraphTitle"),
-        name,
-        async (nextName) => {
-          await renameGraph(id, nextName, type);
-        },
-        t("contextMenu.dialog.renameSubmit"),
-      );
-    },
-    [openInputDialog, renameGraph, t],
-  );
-
-  const deleteGraphItem = useCallback(
-    async (id: string, type: GraphResourceType) => {
-      if (type === "event") {
-        await deleteEvent(id);
-        return;
-      }
-      await deleteFunction(id);
-    },
-    [deleteEvent, deleteFunction],
-  );
-
-  const duplicateGraphItem = useCallback(
-    async (id: string) => {
-      await duplicateGraph(id);
-    },
-    [duplicateGraph],
-  );
-
-  const renameChartItem = useCallback(
-    (chartPath: string, name: string) => {
-      openInputDialog(
-        t("contextMenu.dialog.renameChartTitle"),
-        name,
-        async (nextName) => {
-          await renameChartResource(chartPath, nextName);
-        },
-        t("contextMenu.dialog.renameSubmit"),
-      );
-    },
-    [openInputDialog, t],
-  );
-
-  const deleteChartItem = useCallback(async (chartPath: string) => {
-    await deleteChartWithConfirm(chartPath);
-  }, []);
-
-  const revealInExplorer = useCallback(
-    async (request: Parameters<typeof revealProjectResourceInExplorer>[0]) => {
-      await revealProjectResourceInExplorer(request);
-    },
-    [],
-  );
-
   return {
-    renameGraphItem,
-    deleteGraphItem,
-    duplicateGraphItem,
-    renameChartItem,
-    deleteChartItem,
-    revealInExplorer,
-    addEvent,
-    addFunction,
-    createGraph,
-    openGraph,
-    openChart,
-    duplicateChart,
-    addChart,
+    createFile,
+    openFile: (ref: FileResourceRef) => perform(() => openFileInEditor(ref.id, ref.kind)),
+    renameFile,
+    duplicateFile: (ref: FileResourceRef) => perform(() => duplicateFile(ref)),
+    deleteFile: (ref: FileResourceRef) => perform(() => deleteFileWithConfirm(ref)),
+    revealInExplorer: (request: Parameters<typeof revealProjectResourceInExplorer>[0]) =>
+      perform(() => revealProjectResourceInExplorer(request)),
     renameDatabaseItem,
     deleteDatabaseItem,
     triggerImportData,

@@ -7,8 +7,8 @@ import { PinResultSearch } from "./PinResultSearchPalette";
 import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
 
 export type CanvasOverlayGraphModel =
-  | { kind: "event"; graphPath: string }
-  | { kind: "function"; graphPath: string }
+  | { kind: "event_graph"; graphPath: string }
+  | { kind: "function_graph"; graphPath: string }
   | { kind: "unavailable" };
 
 export type CanvasPaletteOverlayModel =
@@ -52,7 +52,7 @@ export default function CanvasOverlays({
 
   return (
     <>
-      {graph.kind === "event" ? (
+      {graph.kind === "event_graph" ? (
         <div className="absolute left-3 top-3 z-40">
           <PinResultSearch graphPath={graph.graphPath} />
         </div>

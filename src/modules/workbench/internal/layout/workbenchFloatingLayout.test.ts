@@ -28,13 +28,13 @@ describe("workbench floating panels", () => {
       await workbenchLayoutController.whenHydrated();
       const ops = new WorkbenchModelOperations(binding.getModel());
       const first = ops.openEditor({
-        resourceKind: "event",
+        resourceKind: "event_graph",
         resourceRef: "events/A",
         title: "A",
         mode: "reuse-resource",
       });
       const second = ops.openEditor({
-        resourceKind: "event",
+        resourceKind: "event_graph",
         resourceRef: "events/B",
         title: "B",
         mode: "reuse-resource",
@@ -64,7 +64,7 @@ describe("workbench floating panels", () => {
     const model = binding.getModel();
     const ops = new WorkbenchModelOperations(model);
     const floating = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/Float",
       title: "Float",
       mode: "reuse-resource",
@@ -99,13 +99,13 @@ describe("workbench floating panels", () => {
     configureWorkbenchModel(model);
     const ops = new WorkbenchModelOperations(model);
     const first = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/Main",
       title: "Main",
       mode: "reuse-resource",
     });
     const editor = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/Float",
       title: "Float",
       mode: "reuse-resource",
@@ -151,7 +151,7 @@ describe("workbench floating panels", () => {
     configureWorkbenchModel(model);
     const ops = new WorkbenchModelOperations(model);
     const floating = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/Float",
       title: "Float",
       mode: "reuse-resource",
@@ -159,7 +159,7 @@ describe("workbench floating panels", () => {
     const layoutId = floatEditor(model, floating.panelInstanceId);
     const floatingGroup = ops.getPanel(floating.panelInstanceId)!.groupId;
     const editor = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/Main",
       title: "Main",
       mode: "reuse-resource",

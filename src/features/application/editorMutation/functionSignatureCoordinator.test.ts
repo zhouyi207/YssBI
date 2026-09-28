@@ -7,7 +7,7 @@ import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixtur
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
-import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
+import { buildFileResourceMeta, useResourceStore } from "@/features/core/resource";
 import type {
   FunctionSignatureDto,
   ResourceMutationResultDto,
@@ -64,7 +64,9 @@ function installState(): void {
   useResourceStore.getState().clear();
   useResourceStore
     .getState()
-    .upsertResource(buildGraphResourceMeta("function", functionPath, "Compute", { revision: 2 }));
+    .upsertResource(
+      buildFileResourceMeta("function_graph", functionPath, "Compute", { revision: 2 }),
+    );
   installGraphProjectionFixture(
     functionPath,
     makeEditorProjectionFixture({
@@ -77,7 +79,7 @@ function installState(): void {
       [functionPath]: {
         path: functionPath,
         name: "Compute",
-        type: "function",
+        type: "function_graph",
         functionRevision: 2,
         functionSignature: beforeSignature,
         functionInputs: [
@@ -235,17 +237,20 @@ describe("executeFunctionSignatureMutation", () => {
         projectName: "Project",
         exportTime: "",
         publicationRevision: 1,
-        graphs: [
+        eventGraphs: [],
+        functionGraphs: [
           {
             path: functionPath,
             name: "Compute",
-            type: "function",
+            type: "function_graph",
             revision: 3,
             functionRevision: 3,
             functionSignature: afterSignature,
             functionEditorProjection: authoritativeFunctionProjection,
           },
         ],
+        minds: [],
+        docs: [],
         charts: [],
         databases: [],
       }),
@@ -336,11 +341,12 @@ describe("executeFunctionSignatureMutation", () => {
 
         exportTime: "2026-08-07",
         publicationRevision: 1,
-        graphs: [
+        eventGraphs: [],
+        functionGraphs: [
           {
             path: functionPath,
             name: "Compute",
-            type: "function",
+            type: "function_graph",
             revision: 7,
             functionRevision: 3,
             functionSignature: afterSignature,
@@ -348,6 +354,9 @@ describe("executeFunctionSignatureMutation", () => {
           },
         ],
         databases: [],
+
+        minds: [],
+        docs: [],
 
         charts: [],
       }),

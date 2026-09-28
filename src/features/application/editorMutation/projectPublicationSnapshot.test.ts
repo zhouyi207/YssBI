@@ -7,7 +7,7 @@ import {
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
-import { buildGraphResourceMeta } from "@/features/core/resource";
+import { buildFileResourceMeta } from "@/features/core/resource";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 import {
@@ -124,7 +124,10 @@ describe("project snapshot projection replacement", () => {
         projectName: "Project",
         exportTime: "",
         publicationRevision: 2,
-        graphs: [{ path: caller, name: "Caller", type: "event", revision: 2 }],
+        eventGraphs: [{ path: caller, name: "Caller", type: "event_graph", revision: 2 }],
+        functionGraphs: [],
+        minds: [],
+        docs: [],
         charts: [],
         databases: [],
       },
@@ -142,7 +145,8 @@ describe("project snapshot projection replacement", () => {
       ]),
       chartDocuments: new Map(),
       pathRemaps: new Map(),
-      chartPathRemaps: new Map(),
+      filePathRemaps: new Map(),
+      deletedResources: new Set(),
     });
 
     expect(plan.graphProjectionPlan.graphPaths).toEqual([]);
@@ -163,7 +167,7 @@ function editorPanel(panelInstanceId: string, resourceRef: string): WorkbenchPan
     groupId: "editor-group",
     component: "EditorResource",
     title: resourceRef,
-    metadata: { role: "editor", resourceRef, resourceKind: "function" },
+    metadata: { role: "editor", resourceRef, resourceKind: "function_graph" },
     active: false,
     location: { type: "grid" },
   };
@@ -196,12 +200,13 @@ describe("editor FlexLayout publication commit", () => {
 
   it("commits shadow remap/removal and business stores before releasing stale pane state", async () => {
     const movedPath = "functions/New.yssbi-function";
-    const movedResource = buildGraphResourceMeta("function", movedPath, "New");
+    const movedResource = buildFileResourceMeta("function_graph", movedPath, "New");
     const commitBusinessStores = vi.fn();
 
     await commitEditorLayoutPublication(
       [{ from: "functions/Old.yssbi-function", to: movedPath }],
       { [movedResource.uri]: movedResource },
+      new Set(),
       commitBusinessStores,
     );
 

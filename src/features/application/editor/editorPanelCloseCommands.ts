@@ -15,7 +15,7 @@ function applyPassiveCloseFallback(): void {
   if (active?.metadata.role !== "editor") return;
 
   const { resourceKind, resourceRef } = active.metadata;
-  setDetailContext(detailFocusForEditorResource(resourceKind, resourceRef));
+  setDetailContext(detailFocusForEditorResource(resourceKind, resourceRef, active.panelInstanceId));
 }
 
 async function requestClosePanelsAndApplyFallback(

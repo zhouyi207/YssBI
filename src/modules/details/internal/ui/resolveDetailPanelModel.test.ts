@@ -16,8 +16,8 @@ const logEntry = {
 } satisfies LogRecordDto;
 
 const catalog = {
-  events: { "evt-1": { id: "evt-1", name: "Main" } },
-  functions: { "fn-1": { id: "fn-1", name: "Add", functionInputs: [], functionOutputs: [] } },
+  eventGraphs: { "evt-1": { id: "evt-1", name: "Main" } },
+  functionGraphs: { "fn-1": { id: "fn-1", name: "Add", functionInputs: [], functionOutputs: [] } },
   dataframes: {
     "df-1": { id: "df-1", name: "Sales", rowCount: 10 },
   },
@@ -63,11 +63,11 @@ describe("resolveDetailPanelModel", () => {
 
   it("merges function signature pins into function panel model", () => {
     const model = resolveDetailPanelModel({
-      target: { kind: "function", path: "fn-1" },
+      target: { kind: "function_graph", path: "fn-1" },
       selectedLog: null,
       chartDocument: null,
       ...catalog,
-      functions: {
+      functionGraphs: {
         "fn-1": {
           id: "fn-1",
           name: "Add",
@@ -82,7 +82,7 @@ describe("resolveDetailPanelModel", () => {
     });
 
     expect(model).toEqual({
-      kind: "function",
+      kind: "function_graph",
       path: "fn-1",
       fn: {
         name: "Add",
@@ -95,7 +95,7 @@ describe("resolveDetailPanelModel", () => {
   it("returns empty when catalog entry is missing or log is not selected", () => {
     expect(
       resolveDetailPanelModel({
-        target: { kind: "event", path: "missing" },
+        target: { kind: "event_graph", path: "missing" },
         selectedLog: null,
         chartDocument: null,
         ...catalog,

@@ -19,13 +19,13 @@ describe("workbench notification boundaries", () => {
   it("routes committed geometry, panel data, selection and membership to their actual consumers", () => {
     const { binding, read, internal, ops } = createRuntime();
     const first = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/A",
       title: "A",
       mode: "reuse-resource",
     });
     const second = ops.openEditor({
-      resourceKind: "event",
+      resourceKind: "event_graph",
       resourceRef: "events/B",
       title: "B",
       mode: "reuse-resource",

@@ -1,3 +1,6 @@
+import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
+import { resetDocumentInputs } from "@/features/application/resource/documentInputs";
+import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import type { ProjectLifecycleStateSnapshot } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { isProjectLifecycleStateCurrent } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
@@ -49,6 +52,14 @@ export async function resetClientProjectState(
   if (!runOwnedReset(owner, () => useGraphProjectionStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useGraphInteractionStore.setState({ interactions: {} }))) return;
   if (!runOwnedReset(owner, () => useChartDocumentStore.getState().clear())) return;
+  if (!runOwnedReset(owner, resetDocumentInputs)) return;
+  if (
+    !runOwnedReset(owner, () => {
+      useMindProjectionStore.getState().clear();
+      useDocProjectionStore.getState().clear();
+    })
+  )
+    return;
   if (!runOwnedReset(owner, () => useResourceStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useDocumentStateStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useGraphMetaStore.getState().clear())) return;

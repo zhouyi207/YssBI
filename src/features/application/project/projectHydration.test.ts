@@ -1,6 +1,6 @@
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { afterEach, expect, it, vi } from "vitest";
-import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
+import { buildFileResourceMeta, useResourceStore } from "@/features/core/resource";
 import { ProjectService } from "@/services/project/projectService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { refreshProjectResourceIndex } from "./projectHydration";
@@ -14,13 +14,16 @@ afterEach(() => {
 it("never publishes an index older than a committed resource revision", async () => {
   projectPublicationCoordinator.startProject("project-a", 2);
   useResourceStore.getState().setSnapshot({ resources: [], publicationRevision: 2 });
-  const graph = buildGraphResourceMeta("event", "events/Deleted.yssbi-event", "Deleted");
+  const graph = buildFileResourceMeta("event_graph", "events/Deleted.yssbi-event", "Deleted");
   const index = {
     projectInstanceId: "project-a",
     projectName: "Project",
     exportTime: "",
     publicationRevision: 2,
-    graphs: [],
+    eventGraphs: [],
+    functionGraphs: [],
+    minds: [],
+    docs: [],
     charts: [],
     databases: [],
   };
@@ -30,7 +33,8 @@ it("never publishes an index older than a committed resource revision", async ()
       projectIndexSnapshotFixture({
         ...index,
         publicationRevision: 1,
-        graphs: [{ path: graph.id, name: graph.name, type: "event", revision: 0 }],
+        eventGraphs: [{ path: graph.id, name: graph.name, type: "event_graph", revision: 0 }],
+        functionGraphs: [],
       }),
     )
     .mockResolvedValueOnce(projectIndexSnapshotFixture(index));

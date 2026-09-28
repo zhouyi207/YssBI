@@ -38,7 +38,7 @@ vi.mock("./editorCommandFocus", () => ({
       panelInstanceId: `editor-${groupId}`,
       groupId,
       resourceRef,
-      resourceKind: "event" as const,
+      resourceKind: "event_graph" as const,
     };
   },
   isEditorCommandTargetCurrent: (target: {
@@ -77,7 +77,11 @@ vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
             panelInstanceId: `editor-${groupId}`,
             groupId,
             component: "EditorResource" as const,
-            metadata: { role: "editor" as const, resourceRef, resourceKind: "event" as const },
+            metadata: {
+              role: "editor" as const,
+              resourceRef,
+              resourceKind: "event_graph" as const,
+            },
             active: true,
             location: { type: "grid" as const },
           }

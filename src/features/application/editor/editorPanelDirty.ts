@@ -1,40 +1,44 @@
 import { workbenchLayoutRead } from "@/modules/workbench/public";
-import {
-  isGraphResourceDirty,
-  resourceKey,
-  useResourceStore,
-  type ResourceRef,
-} from "@/features/core/resource";
+import { isResourceDocumentDirty, resourceKey } from "@/features/core/resource";
+import type { FileResourceKind } from "@/shared/types/domain/resource";
+import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 
-function resolveResourceDisplayName(ref: ResourceRef, fallbackId: string): string {
-  const resource = useResourceStore.getState().resources[resourceKey(ref)];
-  return resource?.name ?? fallbackId;
-}
-
-export interface DirtyEditorPanelSnapshot {
+interface EditorFileSnapshot {
   /** FlexLayout group that owns the editor panel. */
   groupId: string;
-  /** Opaque graph or chart resource reference. */
+  /** Opaque file resource reference. */
   resourceRef: string;
+  resourceKind: FileResourceKind;
   /** Display title for prompts. */
   title: string;
 }
 
-/** Collect dirty editor documents once, even when a resource has multiple panels. */
-export function collectDirtyEditorPanels(): DirtyEditorPanelSnapshot[] {
+/** Collect each open file once, even when it has multiple panels. */
+export function collectEditorFiles(): EditorFileSnapshot[] {
   const seen = new Set<string>();
-  const dirty: DirtyEditorPanelSnapshot[] = [];
+  const files: EditorFileSnapshot[] = [];
   for (const panel of workbenchLayoutRead.listPanels()) {
     if (panel.metadata.role !== "editor") continue;
     const { resourceKind, resourceRef } = panel.metadata;
     if (resourceKind === "database") continue;
-    if (seen.has(resourceRef) || !isGraphResourceDirty(resourceRef, resourceKind)) continue;
-    seen.add(resourceRef);
-    dirty.push({
+    const key = resourceKey({ id: resourceRef, kind: resourceKind });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    files.push({
       groupId: panel.groupId,
       resourceRef,
-      title: resolveResourceDisplayName({ id: resourceRef, kind: resourceKind }, resourceRef),
+      resourceKind,
+      title: resolveResourceDisplayName(
+        { id: resourceRef, kind: resourceKind },
+        panel.title ?? resourceRef,
+      ),
     });
   }
-  return dirty;
+  return files;
+}
+
+export function collectDirtyEditorPanels(): EditorFileSnapshot[] {
+  return collectEditorFiles().filter((file) =>
+    isResourceDocumentDirty({ id: file.resourceRef, kind: file.resourceKind }),
+  );
 }

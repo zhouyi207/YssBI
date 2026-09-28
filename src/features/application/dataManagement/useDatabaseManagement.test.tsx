@@ -25,7 +25,10 @@ function aggregate(afterName: string | null, operationId: string) {
       projectName: "Test",
       exportTime: "",
       publicationRevision: 1,
-      graphs: [],
+      eventGraphs: [],
+      functionGraphs: [],
+      minds: [],
+      docs: [],
       charts: [],
       databases:
         afterName === null

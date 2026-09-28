@@ -86,6 +86,15 @@ the controller and must not assemble application commands.
 
 Node selection synchronizes the existing Details context without opening another panel. Details owns node parameters, configuration, ports, diagnostics and documentation; explicit node-details commands reveal that same fixed panel. History availability subscribes to the active Graph. Node creation validates its captured target when invoked, without subscribing every mounted canvas to global tab selection; an unavailable canvas target cannot fall back to another panel.
 
+Mind activation publishes its file path and owning panel ID to that same Details
+context. Its topic selection and collapsed branches use the existing pane state;
+the Details form follows that selection and uses the shared detail controls.
+Both canvases use the same basic shortcut resolver and viewport fitting rules.
+Mind handles its shortcuts within the owning canvas, using the existing DOM target
+and input/modal guards; Graph retains the workbench command dispatcher.
+Rename remaps the context and closing its owning pane clears it. Topic input
+retention and commands are owned by [File operations](../resource/README.md).
+
 Activating a cached graph reuses its ready loading status and loaded document state instead of publishing duplicate updates. Graph panels subscribe to their own loading status; UI intent delivery subscribes only to project identity, without a broader project-state aggregate.
 
 Focus synchronization is synchronous and never loads, retries or unloads graphs. Canvas gestures call the same focus coordinator directly. Visible panels and explicit data-dependent use cases call the same `ProjectIOStore.loadGraph` entry, which deduplicates in-flight loads and reuses cached graphs. Project restoration first ensures visible graphs, then synchronizes the active editor's focus. Cache cleanup follows successful loads and panel closure instead of every focus switch; the old activation/suspension queue and bootstrap retries are removed.
@@ -99,7 +108,7 @@ const { constants, loaded, saving } = useGraphConstants(graphPath);
 ```
 
 Project Explorer obtains its active resource through
-`features/application/sidebar/useActiveProjectGraph.ts`.
+`features/application/sidebar/useActiveProjectResource.ts`.
 
 ## Interface rules
 
@@ -117,5 +126,7 @@ Repository-wide dependency direction and FlexLayout authority rules are defined 
 
 ## Related modules
 
-- Graph CRUD UI: `features/application/dataManagement/useGraphManagement.ts`
+- File resource operations: `features/application/resource/fileManagement.ts` and `resourceActions.ts`
 - Canvas cancellation, mutation contracts, and navigation bounds: `features/core/canvas/`
+
+`collectEditorFiles` owns open-file enumeration and deduplication for queue barriers and dirty-file collection. `collectDirtyEditorPanels` filters that current list for close prompts and save-all. Window/project close, panel close and save-all await the file handlers through `settleEditorFileEdits` before collecting dirty state. `saveAllDirtyDocuments` and panel-close saves dispatch through the typed file-resource registry. Closing retains project identity checks and captured discard versions. Publication, panel pruning and file projection cleanup share `shouldRetainResourceEditor`; explicit deletion receipts authorize removal separately. Mind and Markdown use Rust-owned document snapshots; see [Document editors](../../../modules/document-editor/README.md).

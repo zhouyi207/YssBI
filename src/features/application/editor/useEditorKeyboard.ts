@@ -6,6 +6,7 @@ import {
 } from "@/modules/workbench/public";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
+import { resolveCanvasShortcut } from "@/features/core/keyboard/canvasShortcut";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import {
@@ -37,7 +38,11 @@ import {
 
 function currentEditorCommandTarget(event: KeyboardEvent): EditorCommandTarget | null {
   const target = captureEditorShortcutTarget(event);
-  return target && isEditorCommandTargetCurrent(target) ? target : null;
+  return target &&
+    (target.resourceKind === "event_graph" || target.resourceKind === "function_graph") &&
+    isEditorCommandTargetCurrent(target)
+    ? target
+    : null;
 }
 
 function getActiveCanvasLocalPoint(target: EditorCommandTarget, clientX: number, clientY: number) {
@@ -98,8 +103,9 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       const isControlKey = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
+      const canvasShortcut = resolveCanvasShortcut(event);
 
-      if (event.key === "Escape") {
+      if (canvasShortcut === "cancel") {
         const target = currentEditorCommandTarget(event);
         if (!target || target.resourceKind === "chart") return;
         const interaction = getCanvasInteraction(
@@ -135,7 +141,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
         return;
       }
 
-      if (!event.repeat && isControlKey && key === "a") {
+      if (canvasShortcut === "selectAll") {
         const target = currentEditorCommandTarget(event);
         if (!target) return;
         event.preventDefault();
@@ -143,25 +149,19 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
         return;
       }
 
-      if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && key === "f") {
+      if (canvasShortcut === "focusSelection") {
         const target = currentEditorCommandTarget(event);
         if (target && commands.focusSelectedNodes(target)) event.preventDefault();
         return;
       }
 
-      if (
-        !event.repeat &&
-        !isControlKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        event.key === "Home"
-      ) {
+      if (canvasShortcut === "fitAll") {
         const target = currentEditorCommandTarget(event);
         if (target && commands.fitCompleteGraph(target)) event.preventDefault();
         return;
       }
 
-      if (event.key === "Delete" || event.key === "Backspace") {
+      if (canvasShortcut === "deleteSelection") {
         const target = currentEditorCommandTarget(event);
         if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
@@ -238,25 +238,25 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "s") {
         if (event.shiftKey) {
           event.preventDefault();
-          void commands.saveGraphAs();
+          void commands.saveProjectAs();
           return;
         }
         const target = captureActiveEditorCommandTarget();
         if (!target || !isEditorCommandTargetCurrent(target)) return;
         event.preventDefault();
-        void commands.saveGraph(target);
+        void commands.saveActiveFile(target);
         return;
       }
 
       if (isControlKey && key === "o") {
         event.preventDefault();
-        void commands.importGraph();
+        void commands.openProject();
         return;
       }
 
       if (isControlKey && key === "n") {
         event.preventDefault();
-        void commands.addEvent(undefined, { openAfterCreate: true });
+        void commands.createFile("event_graph");
         return;
       }
 

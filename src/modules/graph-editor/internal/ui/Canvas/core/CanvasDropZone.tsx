@@ -15,7 +15,7 @@ export function CanvasDropZone({
   panelInstanceId: string;
   groupId: string;
   graphPath: string;
-  graphKind: "event" | "function";
+  graphKind: "event_graph" | "function_graph";
   mode: "interactive" | "preview";
   children: React.ReactNode;
 }) {

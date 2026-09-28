@@ -4,7 +4,7 @@ export interface GraphCanvasViewProps {
   canvasElementRef: RefObject<HTMLDivElement | null>;
   panelInstanceId: string;
   graphPath?: string;
-  graphKind: "event" | "function";
+  graphKind: "event_graph" | "function_graph";
   viewportGridSlot: ReactNode;
   graphContentSlot: ReactNode;
   overlaySlot?: ReactNode;

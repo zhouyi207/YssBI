@@ -6,7 +6,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { useGraphProjectionStore } from "./graphProjectionStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import {
-  buildGraphResourceMeta,
+  buildFileResourceMeta,
   markResourceLoaded,
   resourceKey,
   useResourceStore,
@@ -15,12 +15,14 @@ import { isGraphCachedInMemory } from "./graphDocumentLoadPolicy";
 
 describe("graphDocumentLoadPolicy", () => {
   const graphPath = "opaque graph resource";
-  const docKey = resourceKey({ id: graphPath, kind: "event" });
+  const docKey = resourceKey({ id: graphPath, kind: "event_graph" });
 
   beforeEach(() => {
     useGraphProjectionStore.getState().clear();
     useDocumentStateStore.getState().clear();
-    useResourceStore.getState().setResources([buildGraphResourceMeta("event", graphPath, "Main")]);
+    useResourceStore
+      .getState()
+      .setResources([buildFileResourceMeta("event_graph", graphPath, "Main")]);
   });
 
   it("returns false when graph is not in memory", () => {
@@ -43,7 +45,7 @@ describe("graphDocumentLoadPolicy", () => {
   it("returns true when graph is cached and document is clean", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     installGraphProjectionFixture(graphPath, fixture.projection);
-    markResourceLoaded({ id: graphPath, kind: "event" });
+    markResourceLoaded({ id: graphPath, kind: "event_graph" });
 
     expect(isGraphCachedInMemory(graphPath)).toBe(true);
   });
@@ -51,7 +53,7 @@ describe("graphDocumentLoadPolicy", () => {
   it("returns false when graph is stale", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     installGraphProjectionFixture(graphPath, fixture.projection);
-    markResourceLoaded({ id: graphPath, kind: "event" });
+    markResourceLoaded({ id: graphPath, kind: "event_graph" });
     useDocumentStateStore.getState().patchDocument(docKey, { stale: true });
 
     expect(isGraphCachedInMemory(graphPath)).toBe(false);

@@ -1,3 +1,4 @@
+import { RESOURCE_KINDS } from "@/shared/types/domain/resource";
 import {
   isResultPlotKind,
   isResultReference,
@@ -20,7 +21,7 @@ export const WORKBENCH_VIEW_IDS = [
 ] as const;
 
 export type WorkbenchViewId = (typeof WORKBENCH_VIEW_IDS)[number];
-export type EditorResourceKind = "event" | "function" | "chart" | "database";
+export type EditorResourceKind = import("@/shared/types/domain/resource").ResourceKind;
 export interface EditorResourceTarget {
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
@@ -73,12 +74,7 @@ export interface WorkbenchPanelParams extends Record<string, unknown> {
   readonly metadata: WorkbenchPanelMetadata;
 }
 
-const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>([
-  "event",
-  "function",
-  "chart",
-  "database",
-]);
+const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>(RESOURCE_KINDS);
 const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
   WORKBENCH_ACTIVITY_VIEW_IDS,
 );

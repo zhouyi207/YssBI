@@ -27,17 +27,17 @@ describe("parseCanvasDragPayload", () => {
   });
 
   it("accepts event graph-resource payload", () => {
-    const payload = buildSidebarDragData("e1", "Main", "event");
+    const payload = buildSidebarDragData("e1", "Main", "event_graph");
     expect(isGraphResourceDragPayload(payload)).toBe(true);
     expect(isSidebarSpawnDrag(payload)).toBe(true);
   });
 
   it("accepts function graph-resource payload (same as event — open tab, not spawn node)", () => {
-    const payload = buildSidebarDragData("functions/A.yssbi-function", "MyFunc", "function");
+    const payload = buildSidebarDragData("functions/A.yssbi-function", "MyFunc", "function_graph");
     expect(isGraphResourceDragPayload(payload)).toBe(true);
     expect(isNodeTemplateDragData(payload)).toBe(false);
     if (isGraphResourceDragPayload(payload)) {
-      expect(payload.sidebarResource.type).toBe("function");
+      expect(payload.sidebarResource.type).toBe("function_graph");
     }
   });
 
@@ -88,9 +88,9 @@ describe("buildSidebarDragState", () => {
   });
 
   it("builds graph-resource drag state for event and function", () => {
-    for (const kind of ["event", "function"] as const) {
+    for (const kind of ["event_graph", "function_graph"] as const) {
       const payload = buildSidebarDragData(
-        kind === "event" ? "events/Main.yssbi-event" : "functions/A.yssbi-function",
+        kind === "event_graph" ? "events/Main.yssbi-event" : "functions/A.yssbi-function",
         "Main",
         kind,
       );

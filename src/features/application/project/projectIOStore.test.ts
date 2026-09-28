@@ -10,7 +10,7 @@ import {
 import { captureProjectReadContext, useProjectIOStore } from "./projectIOStore";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
-import { buildGraphResourceMeta } from "@/features/core/resource/resourceTypes";
+import { buildFileResourceMeta } from "@/features/core/resource/resourceTypes";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
@@ -23,9 +23,11 @@ describe("project read context", () => {
   it("reuses a ready cached graph without publishing another loading-state update", async () => {
     const path = "events/Cached";
     const fixture = makeEditorProjectionFixture({ graphPath: path });
-    useResourceStore.getState().setResources([buildGraphResourceMeta("event", path, "Cached")]);
+    useResourceStore
+      .getState()
+      .setResources([buildFileResourceMeta("event_graph", path, "Cached")]);
     installGraphProjectionFixture(path, fixture.projection);
-    markResourceLoaded({ id: path, kind: "event" });
+    markResourceLoaded({ id: path, kind: "event_graph" });
     useProjectIOStore.setState({ graphLoadStatus: { [path]: "ready" } });
     const state = useProjectIOStore.getState();
     let notifications = 0;

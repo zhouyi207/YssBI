@@ -20,13 +20,11 @@ function menuActions() {
 
 function fileActions() {
   return {
-    addEvent: vi.fn(),
-    addFunction: vi.fn(),
-    addChart: vi.fn(),
+    createFile: vi.fn(async () => {}),
     openProject: vi.fn(),
     closeProject: vi.fn(),
-    saveGraph: vi.fn(),
-    saveGraphAs: vi.fn(),
+    saveActiveFile: vi.fn(),
+    saveProjectAs: vi.fn(),
   };
 }
 
@@ -64,10 +62,10 @@ describe("Menubar editor command authorization", () => {
     );
 
     const save = items.find((item) => item.label === "common.save");
-    expect(save).toMatchObject({ shortcut: "Ctrl+S", onClick: actions.saveGraph });
+    expect(save).toMatchObject({ shortcut: "Ctrl+S", onClick: actions.saveActiveFile });
     save?.onClick?.();
-    expect(actions.saveGraph).toHaveBeenCalledOnce();
-    expect(actions.saveGraphAs).not.toHaveBeenCalled();
+    expect(actions.saveActiveFile).toHaveBeenCalledOnce();
+    expect(actions.saveProjectAs).not.toHaveBeenCalled();
 
     const withoutProject = buildFileMenuItems(
       translate,
@@ -102,7 +100,7 @@ describe("Menubar editor command authorization", () => {
       onClick: undefined,
     });
     expect(fileItems.find((item) => item.label === "menubar.saveProjectAs")?.onClick).toBe(
-      actions.saveGraphAs,
+      actions.saveProjectAs,
     );
     expect(
       windowItems.find((item) => item.label === "menubar.splitEditorRight")?.onClick,

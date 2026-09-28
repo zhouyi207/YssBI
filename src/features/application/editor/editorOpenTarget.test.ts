@@ -48,7 +48,7 @@ function editorPanel(
     metadata: {
       role: "editor",
       resourceRef,
-      resourceKind: "event",
+      resourceKind: "event_graph",
     },
     active: false,
     location: { type: "grid" },

@@ -1,10 +1,19 @@
 import type {
+  ActivityItem,
   ActivityPanelDocument,
   ActivityPanelRow,
   ActivityPanelSnapshot,
   ActivityPanelId,
 } from "../domain/activityPanel";
 import { isNodeCreationDescriptorDto } from "../domain/nodeCreationDescriptor";
+import { RESOURCE_KINDS } from "../domain/resource";
+
+const PANEL_ITEM_KINDS: Record<ActivityPanelId, readonly ActivityItem["kind"][]> = {
+  project: RESOURCE_KINDS,
+  nodes: ["node"],
+  commands: ["command"],
+  plugins: ["plugin"],
+};
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -25,7 +34,16 @@ function text(value: unknown): boolean {
 function integer(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
-const actions = ["newEvent", "newFunction", "newChart", "importData", "install", "refresh"];
+const actions = [
+  "newEventGraph",
+  "newFunctionGraph",
+  "newChart",
+  "newMind",
+  "newDoc",
+  "importData",
+  "install",
+  "refresh",
+];
 function tools(value: unknown): boolean {
   return (
     Array.isArray(value) &&
@@ -41,18 +59,15 @@ function tools(value: unknown): boolean {
     )
   );
 }
-function item(value: unknown): boolean {
+function item(value: unknown): value is ActivityItem {
   if (!record(value)) return false;
   const strings = (keys: string[]) => keys.every((key) => typeof value[key] === "string");
   switch (value.kind) {
-    case "graph":
-      return (
-        exact(value, ["kind", "path", "name", "graphType"]) &&
-        strings(["path", "name"]) &&
-        Boolean(value.path) &&
-        ["event", "function"].includes(value.graphType as string)
-      );
+    case "event_graph":
+    case "function_graph":
     case "chart":
+    case "mind":
+    case "doc":
       return (
         exact(value, ["kind", "path", "name"]) && strings(["path", "name"]) && Boolean(value.path)
       );
@@ -149,15 +164,7 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
         break;
       case "item":
         if (!exact(row, ["id", "depth", "kind", "item"]) || !item(row.item)) return null;
-        if (
-          !record(row.item) ||
-          !{
-            project: ["graph", "chart", "database"],
-            nodes: ["node"],
-            commands: ["command"],
-            plugins: ["plugin"],
-          }[value.panelId as ActivityPanelId].includes(row.item.kind as string)
-        )
+        if (!PANEL_ITEM_KINDS[value.panelId as ActivityPanelId].includes(row.item.kind))
           return null;
         break;
       case "message":

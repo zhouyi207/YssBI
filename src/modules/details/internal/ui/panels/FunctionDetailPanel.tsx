@@ -32,7 +32,7 @@ export function FunctionDetailPanel({
           {fn.name}
         </DetailReadonlyField>
         <DetailReadonlyField label={t("detail.fields.type")} className="italic">
-          {t("detail.typeLabels.function")}
+          {t("detail.typeLabels.function_graph")}
         </DetailReadonlyField>
       </DetailForm>
       <GraphConstantsPanel key={graphPath} graphPath={graphPath} />

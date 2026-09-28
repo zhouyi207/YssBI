@@ -73,7 +73,7 @@ describe("GraphProblemsPanel", () => {
       panelInstanceId: "graph-panel",
       groupId: "group-1",
       component: "EditorResource",
-      metadata: { role: "editor", resourceKind: "event", resourceRef: graphPath },
+      metadata: { role: "editor", resourceKind: "event_graph", resourceRef: graphPath },
       active: true,
       visible: true,
       location: { type: "grid" },
