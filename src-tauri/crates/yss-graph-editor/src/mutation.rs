@@ -854,7 +854,7 @@ pub(super) fn validate_node_scope(
 ) -> Result<(), MutationConflict> {
     let allowed = match protocol.scope {
         NodeScope::Any => true,
-        NodeScope::Function => graph_path.kind() == GraphResourceKind::Function,
+        NodeScope::Function => graph_path.kind() == GraphResourceKind::FunctionGraph,
     };
     if !allowed {
         Err(invalid_editor_mutation(format!(

@@ -153,19 +153,48 @@ fn inspect_project(
         .project()
         .read_project_index(captured.project_instance_id())
         .map_err(map_project_inspection_error)?;
-    let mut resources =
-        Vec::with_capacity(project.graphs.len() + project.databases.len() + project.charts.len());
+    let mut resources = Vec::with_capacity(
+        project.event_graphs.len()
+            + project.function_graphs.len()
+            + project.databases.len()
+            + project.charts.len()
+            + project.minds.len()
+            + project.docs.len(),
+    );
     resources.extend(
         project
-            .graphs
+            .event_graphs
             .iter()
-            .map(|graph| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::Graph,
-                resource_id: graph.path.clone(),
-                display_name: graph.name.clone(),
+            .map(|file| ProjectResourceInspection {
+                kind: ProjectResourceKindInspection::EventGraph,
+                resource_id: file.path.clone(),
+                display_name: file.name.clone(),
                 revision: None,
             }),
     );
+    resources.extend(
+        project
+            .function_graphs
+            .iter()
+            .map(|file| ProjectResourceInspection {
+                kind: ProjectResourceKindInspection::FunctionGraph,
+                resource_id: file.path.clone(),
+                display_name: file.name.clone(),
+                revision: None,
+            }),
+    );
+    resources.extend(project.minds.iter().map(|file| ProjectResourceInspection {
+        kind: ProjectResourceKindInspection::Mind,
+        resource_id: file.path.as_str().into(),
+        display_name: file.name.clone(),
+        revision: None,
+    }));
+    resources.extend(project.docs.iter().map(|file| ProjectResourceInspection {
+        kind: ProjectResourceKindInspection::Doc,
+        resource_id: file.path.as_str().into(),
+        display_name: file.name.clone(),
+        revision: None,
+    }));
     resources.extend(
         project
             .databases

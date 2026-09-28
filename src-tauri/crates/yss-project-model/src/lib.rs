@@ -4,6 +4,9 @@
 //! remain owned by their dedicated crates and Project I/O adapters. This model
 //! deliberately does not read the clock or expose monolithic JSON persistence.
 
+pub mod doc;
+pub mod file;
+pub mod mind;
 mod patch;
 
 pub use patch::ProjectDataPatch;
@@ -42,7 +45,7 @@ impl GraphResourceDocument {
             name: name.into(),
             kind,
             document: GraphDocument::default(),
-            function: matches!(kind, GraphResourceKind::Function)
+            function: matches!(kind, GraphResourceKind::FunctionGraph)
                 .then(|| FunctionDocument::new(FunctionSignature::default())),
         }
     }
@@ -65,6 +68,8 @@ impl Default for ProjectMetadata {
 
 #[derive(Debug, Default, Clone)]
 pub struct ProjectData {
+    pub minds: HashMap<mind::MindPath, mind::MindState>,
+    pub docs: HashMap<doc::DocPath, doc::DocState>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
     pub charts: HashMap<ChartResourcePath, ChartDocument>,
     pub databases: HashMap<String, DatabaseDecl>,
@@ -83,8 +88,8 @@ mod tests {
 
     #[test]
     fn graph_constructor_matches_function_shape_to_kind() {
-        let event = GraphResourceDocument::new("Event", GraphResourceKind::Event);
-        let function = GraphResourceDocument::new("Function", GraphResourceKind::Function);
+        let event = GraphResourceDocument::new("Event", GraphResourceKind::EventGraph);
+        let function = GraphResourceDocument::new("Function", GraphResourceKind::FunctionGraph);
 
         assert!(event.function.is_none());
         assert!(function.function.is_some());
@@ -92,10 +97,10 @@ mod tests {
 
     #[test]
     fn graph_history_payload_wire_keeps_kind_and_optional_function_stable() {
-        let event = GraphResourceDocument::new("Event", GraphResourceKind::Event);
+        let event = GraphResourceDocument::new("Event", GraphResourceKind::EventGraph);
         let value = serde_json::to_value(&event).unwrap();
 
-        assert_eq!(value["kind"], serde_json::json!("event"));
+        assert_eq!(value["kind"], serde_json::json!("event_graph"));
         assert!(value.get("function").is_none());
         assert_eq!(
             serde_json::from_value::<GraphResourceDocument>(value).unwrap(),

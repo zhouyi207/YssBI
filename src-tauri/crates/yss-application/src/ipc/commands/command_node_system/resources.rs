@@ -12,20 +12,15 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 
 #[tauri::command]
-pub fn create_event(
+pub fn create_event_graph(
     app: AppHandle,
     application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
-    graph_name: String,
+    name: String,
     operation_id: OperationId,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
-        .create_graph_resource(
-            project_instance_id,
-            graph_name,
-            yss_graph_document::GraphResourceKind::Event,
-            operation_id,
-        )
+        .create_event_graph(project_instance_id, name, operation_id)
         .map_err(map_resource_mutation_error)?;
     let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
@@ -33,25 +28,138 @@ pub fn create_event(
 }
 
 #[tauri::command]
-pub fn create_function(
+pub fn create_function_graph(
     app: AppHandle,
     application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
-    graph_name: String,
+    name: String,
     operation_id: OperationId,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
-        .create_graph_resource(
-            project_instance_id,
-            graph_name,
-            yss_graph_document::GraphResourceKind::Function,
-            operation_id,
-        )
+        .create_function_graph(project_instance_id, name, operation_id)
         .map_err(map_resource_mutation_error)?;
     let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
     emit_application_resource_result(&app, &result)?;
     Ok(result)
 }
+
+fn parse_file_path(
+    path: String,
+    expected: yss_graph_document::GraphResourceKind,
+) -> Result<yss_graph_document::GraphResourcePath, CommandError> {
+    let path = parse_graph_path(path)?;
+    if path.kind() != expected {
+        return Err(CommandError::expected("invalid_project_format"));
+    }
+    Ok(path)
+}
+
+#[cfg(test)]
+mod file_command_tests {
+    use super::parse_file_path;
+    use yss_graph_document::GraphResourceKind;
+
+    #[test]
+    fn file_commands_reject_paths_owned_by_another_file_kind() {
+        let event = "events/Main.yssbi-event";
+        let function = "functions/Compute.yssbi-function";
+        assert!(parse_file_path(event.into(), GraphResourceKind::EventGraph).is_ok());
+        assert!(parse_file_path(function.into(), GraphResourceKind::FunctionGraph).is_ok());
+        assert!(parse_file_path(function.into(), GraphResourceKind::EventGraph).is_err());
+        assert!(parse_file_path(event.into(), GraphResourceKind::FunctionGraph).is_err());
+    }
+}
+
+macro_rules! file_lifecycle_commands {
+    ($duplicate:ident, $remove:ident, $rename:ident, $kind:expr) => {
+        #[tauri::command]
+        pub fn $duplicate(
+            app: AppHandle,
+            application: State<'_, crate::session::ApplicationState>,
+            project_instance_id: ProjectInstanceId,
+            operation_id: OperationId,
+            path: String,
+            expected_revision: ResourceRevision,
+        ) -> Result<ResourceMutationResultDto, CommandError> {
+            let result = application
+                .duplicate_graph_resource(
+                    project_instance_id,
+                    parse_file_path(path, $kind)?,
+                    expected_revision,
+                    operation_id,
+                )
+                .map_err(map_resource_mutation_error)?;
+            let result =
+                crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
+            emit_application_resource_result(&app, &result)?;
+            Ok(result)
+        }
+        #[tauri::command]
+        pub fn $remove(
+            app: AppHandle,
+            application: State<'_, crate::session::ApplicationState>,
+            project_instance_id: ProjectInstanceId,
+            operation_id: OperationId,
+            path: String,
+            expected_revision: ResourceRevision,
+        ) -> Result<ResourceMutationResultDto, CommandError> {
+            let result = application
+                .remove_graph_resource(
+                    project_instance_id,
+                    parse_file_path(path, $kind)?,
+                    expected_revision,
+                    operation_id,
+                )
+                .map_err(map_resource_mutation_error)?;
+            let result =
+                crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
+            emit_application_resource_result(&app, &result)?;
+            Ok(result)
+        }
+        #[tauri::command]
+        #[expect(
+            clippy::too_many_arguments,
+            reason = "Tauri injects state into revision-checked file commands"
+        )]
+        pub fn $rename(
+            app: AppHandle,
+            application: State<'_, crate::session::ApplicationState>,
+            project_instance_id: ProjectInstanceId,
+            operation_id: OperationId,
+            path: String,
+            expected_revision: ResourceRevision,
+            name: String,
+            lifecycle_token: u64,
+        ) -> Result<ResourceMutationResultDto, CommandError> {
+            let result = application
+                .rename_graph_resource(
+                    project_instance_id,
+                    parse_file_path(path, $kind)?,
+                    expected_revision,
+                    name,
+                    lifecycle_token,
+                    operation_id,
+                )
+                .map_err(map_resource_mutation_error)?;
+            let result =
+                crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
+            emit_application_resource_result(&app, &result)?;
+            Ok(result)
+        }
+    };
+}
+file_lifecycle_commands!(
+    duplicate_event_graph,
+    remove_event_graph,
+    rename_event_graph,
+    yss_graph_document::GraphResourceKind::EventGraph
+);
+file_lifecycle_commands!(
+    duplicate_function_graph,
+    remove_function_graph,
+    rename_function_graph,
+    yss_graph_document::GraphResourceKind::FunctionGraph
+);
 
 #[tauri::command]
 pub fn unload_project_graph(
@@ -122,80 +230,6 @@ pub async fn save_project_graph(
     })
     .await
     .map_err(CommandError::internal)?
-}
-
-#[tauri::command]
-pub fn duplicate_graph(
-    app: AppHandle,
-    application: State<'_, crate::session::ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    graph_path: String,
-    expected_revision: ResourceRevision,
-    operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = application
-        .duplicate_graph_resource(
-            project_instance_id,
-            parse_graph_path(graph_path)?,
-            expected_revision,
-            operation_id,
-        )
-        .map_err(map_resource_mutation_error)?;
-    let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
-    emit_application_resource_result(&app, &result)?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub fn remove_graph(
-    app: AppHandle,
-    application: State<'_, crate::session::ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    graph_path: String,
-    expected_revision: ResourceRevision,
-    operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = application
-        .remove_graph_resource(
-            project_instance_id,
-            parse_graph_path(graph_path)?,
-            expected_revision,
-            operation_id,
-        )
-        .map_err(map_resource_mutation_error)?;
-    let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
-    emit_application_resource_result(&app, &result)?;
-    Ok(result)
-}
-
-#[tauri::command]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Tauri injects app/state into the flat revision-checked command wire"
-)]
-pub fn rename_graph_resource(
-    app: AppHandle,
-    application: State<'_, crate::session::ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    graph_path: String,
-    expected_revision: ResourceRevision,
-    new_name: String,
-    lifecycle_token: u64,
-    operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, CommandError> {
-    let result = application
-        .rename_graph_resource(
-            project_instance_id,
-            parse_graph_path(graph_path)?,
-            expected_revision,
-            new_name,
-            lifecycle_token,
-            operation_id,
-        )
-        .map_err(map_resource_mutation_error)?;
-    let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
-    emit_application_resource_result(&app, &result)?;
-    Ok(result)
 }
 
 #[tauri::command]

@@ -555,7 +555,7 @@ mod tests {
     fn fixture() -> (crate::fixtures::TempProject, GraphResourcePath, NodeId) {
         let path = GraphResourcePath::new("events/Current.yssbi-event").unwrap();
         let id = NodeId::new();
-        let mut graph = GraphResourceDocument::new("Current", GraphResourceKind::Event);
+        let mut graph = GraphResourceDocument::new("Current", GraphResourceKind::EventGraph);
         graph.document.nodes.insert(
             id,
             DocumentNode {

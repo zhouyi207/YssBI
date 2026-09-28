@@ -216,7 +216,7 @@ mod tests {
         let id = yss_graph_document::ConstantId::new();
         let mut graph = yss_project_model::GraphResourceDocument::new(
             "Main",
-            yss_graph_document::GraphResourceKind::Event,
+            yss_graph_document::GraphResourceKind::EventGraph,
         );
         graph.document.constants.insert(
             id,

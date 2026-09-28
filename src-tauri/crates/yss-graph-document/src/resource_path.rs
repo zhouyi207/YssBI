@@ -1,14 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use yss_project_layout::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR};
+use yss_project_layout::{
+    EVENT_GRAPH_EXTENSION, EVENT_GRAPHS_DIR, FUNCTION_GRAPH_EXTENSION, FUNCTION_GRAPHS_DIR,
+};
 use yss_resource_naming::validate_resource_name;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum GraphResourceKind {
-    Event,
-    Function,
+    EventGraph,
+    FunctionGraph,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,9 +58,9 @@ impl GraphResourcePath {
 
     pub fn kind(&self) -> GraphResourceKind {
         if self.0.starts_with("events/") {
-            GraphResourceKind::Event
+            GraphResourceKind::EventGraph
         } else {
-            GraphResourceKind::Function
+            GraphResourceKind::FunctionGraph
         }
     }
 
@@ -122,10 +124,10 @@ fn validate_graph_resource_path(path: &str) -> Result<(), GraphResourcePathError
     if path.split('/').count() != 2 {
         return Err(GraphResourcePathError::Nested);
     }
-    let stem = if let Some(file) = path.strip_prefix(&format!("{EVENTS_DIR}/")) {
-        file.strip_suffix(&format!(".{EVENT_EXTENSION}"))
-    } else if let Some(file) = path.strip_prefix(&format!("{FUNCTIONS_DIR}/")) {
-        file.strip_suffix(&format!(".{FUNCTION_EXTENSION}"))
+    let stem = if let Some(file) = path.strip_prefix(&format!("{EVENT_GRAPHS_DIR}/")) {
+        file.strip_suffix(&format!(".{EVENT_GRAPH_EXTENSION}"))
+    } else if let Some(file) = path.strip_prefix(&format!("{FUNCTION_GRAPHS_DIR}/")) {
+        file.strip_suffix(&format!(".{FUNCTION_GRAPH_EXTENSION}"))
     } else {
         return Err(GraphResourcePathError::WrongDirectoryOrExtension);
     }

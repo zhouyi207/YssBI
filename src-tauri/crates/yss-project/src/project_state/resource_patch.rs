@@ -101,6 +101,15 @@ impl ProjectState {
             let mut deltas =
                 canonical_resource_lifecycle_events(context, &patch, &graph_resource_revisions)?;
             deltas.extend(chart_deltas);
+            match &patch {
+                ProjectDataPatch::Mind(patch) => deltas.extend(
+                    crate::file_resources::publication_deltas(context.operation_id, patch, &data)?,
+                ),
+                ProjectDataPatch::Doc(patch) => deltas.extend(
+                    crate::file_resources::publication_deltas(context.operation_id, patch, &data)?,
+                ),
+                _ => {}
+            }
             let moves = match &patch {
                 ProjectDataPatch::MoveGraph {
                     from, to, moved, ..
@@ -108,11 +117,11 @@ impl ProjectState {
                     from: from.as_str().into(),
                     to: to.as_str().into(),
                     kind: match moved.kind {
-                        yss_graph_document::GraphResourceKind::Event => {
-                            yss_project_history::ResourceLifecycleKind::Event
+                        yss_graph_document::GraphResourceKind::EventGraph => {
+                            yss_project_history::ResourceLifecycleKind::EventGraph
                         }
-                        yss_graph_document::GraphResourceKind::Function => {
-                            yss_project_history::ResourceLifecycleKind::Function
+                        yss_graph_document::GraphResourceKind::FunctionGraph => {
+                            yss_project_history::ResourceLifecycleKind::FunctionGraph
                         }
                     },
                     name: moved.name.clone().into_boxed_str(),
@@ -125,6 +134,8 @@ impl ProjectState {
                         name: to.display_name().as_str().into(),
                     }]
                 }
+                ProjectDataPatch::Mind(patch) => crate::file_resources::moves(patch),
+                ProjectDataPatch::Doc(patch) => crate::file_resources::moves(patch),
                 _ => Vec::new(),
             };
             let projection_paths = patch_projection_paths(&patch, &data);
@@ -133,6 +144,12 @@ impl ProjectState {
             }
 
             match patch {
+                ProjectDataPatch::Mind(patch) => {
+                    crate::file_resources::apply_patch(&mut data, patch)
+                }
+                ProjectDataPatch::Doc(patch) => {
+                    crate::file_resources::apply_patch(&mut data, patch)
+                }
                 ProjectDataPatch::InsertGraph { path, resource } => {
                     self.graph_editing.lock().unwrap().remove(&path);
                     let revision = graph_resource_revisions

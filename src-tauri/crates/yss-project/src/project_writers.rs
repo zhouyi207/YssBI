@@ -132,6 +132,16 @@ pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), Stri
         Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
+        Some(yss_project_layout::MIND_EXTENSION) => {
+            use yss_project_model::file::FileContent;
+            yss_project_model::mind::MindPath::parse(&path.to_string_lossy().replace('\\', "/"))?;
+            yss_project_model::mind::MindDocument::decode(contents).map(|_| ())
+        }
+        Some(yss_project_layout::DOC_EXTENSION) => {
+            use yss_project_model::file::FileContent;
+            yss_project_model::doc::DocPath::parse(&path.to_string_lossy().replace('\\', "/"))?;
+            yss_project_model::doc::DocDocument::decode(contents).map(|_| ())
+        }
         _ if path == Path::new(PROJECT_METADATA_FILE) => {
             serde_json::from_slice::<ProjectManifest>(contents)
                 .map(|_| ())
@@ -175,7 +185,7 @@ impl ProjectState {
         Ok(snapshot)
     }
 
-    pub(crate) fn validate_writer_context(
+    pub(crate) fn validate_writer_authority(
         &self,
         context: &ProjectTransactionContext,
         authority_generation: u64,
@@ -202,6 +212,15 @@ impl ProjectState {
         drop(graph_resource_revisions);
         drop(data);
         drop(publication);
+        Ok(())
+    }
+
+    pub(crate) fn validate_writer_context(
+        &self,
+        context: &ProjectTransactionContext,
+        authority_generation: u64,
+    ) -> Result<(), ProjectOperationError> {
+        self.validate_writer_authority(context, authority_generation)?;
         for (resource, must_exist) in context
             .affected_resources
             .iter()
@@ -216,6 +235,8 @@ impl ProjectState {
             let path = match resource {
                 ResourceKey::Graph(path) => Path::new(path.as_str()),
                 ResourceKey::Chart(path) => Path::new(path.0.as_ref()),
+                ResourceKey::Mind(path) => Path::new(path.0.as_ref()),
+                ResourceKey::Doc(path) => Path::new(path.0.as_ref()),
                 _ => continue,
             };
             let present = match std::fs::symlink_metadata(context.session.root.as_path().join(path))

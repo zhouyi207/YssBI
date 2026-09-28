@@ -10,6 +10,8 @@ pub enum ResourceKind {
     Function,
     Database,
     Chart,
+    Mind,
+    Doc,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -19,6 +21,8 @@ pub enum ResourceKey {
     Function(FunctionResourceKey),
     Database(DatabaseResourceKey),
     Chart(ChartResourceKey),
+    Mind(MindResourceKey),
+    Doc(DocResourceKey),
 }
 
 impl ResourceKey {
@@ -27,6 +31,8 @@ impl ResourceKey {
             Self::Graph(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
             Self::Chart(_) => ResourceKind::Chart,
+            Self::Mind(_) => ResourceKind::Mind,
+            Self::Doc(_) => ResourceKind::Doc,
             Self::Database(_) => ResourceKind::Database,
         }
     }
@@ -71,6 +77,8 @@ macro_rules! opaque_resource_type {
 opaque_resource_type!(FunctionResourceKey);
 opaque_resource_type!(DatabaseResourceKey);
 opaque_resource_type!(ChartResourceKey);
+opaque_resource_type!(MindResourceKey);
+opaque_resource_type!(DocResourceKey);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionParameter {
@@ -119,9 +127,11 @@ impl FunctionDocumentPatch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceLifecycleKind {
-    Event,
-    Function,
+    EventGraph,
+    FunctionGraph,
     Chart,
+    Mind,
+    Doc,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

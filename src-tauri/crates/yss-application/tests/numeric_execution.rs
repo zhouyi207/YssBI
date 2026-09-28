@@ -2753,7 +2753,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     }
     let path = GraphResourcePath::new("events/relational.yssbi-event").unwrap();
     let file = GraphResourceFile {
-        kind: yss_graph_document::GraphResourceKind::Event,
+        kind: yss_graph_document::GraphResourceKind::EventGraph,
         name: "Relational".into(),
         document: document.clone(),
         function: None,

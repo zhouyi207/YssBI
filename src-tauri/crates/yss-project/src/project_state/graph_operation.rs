@@ -616,7 +616,7 @@ mod tests {
         let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
         let node_id = NodeId::new();
         let mut resource =
-            GraphResourceDocument::new("Main", yss_graph_document::GraphResourceKind::Event);
+            GraphResourceDocument::new("Main", yss_graph_document::GraphResourceKind::EventGraph);
         resource.document.nodes.insert(
             node_id,
             DocumentNode {

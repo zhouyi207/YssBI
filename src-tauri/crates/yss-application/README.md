@@ -39,6 +39,10 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 
 项目生命周期见 [project](src/project/README.md)，数据用例见 [database](src/database/README.md)，图用例见 [graph](src/graph/README.md)，IPC 见 [ipc](src/ipc/README.md)。
 
+Mind/Markdown 的 Application 用例分别位于 `src/minds.rs` 和 `src/docs.rs`，负责捕获和重验应用会话；
+正文编辑、路径校验和文件事务由 [Project](../yss-project/README.md) 与
+[Project model](../yss-project-model/README.md) 承担。
+
 ## 主要职责与源码入口
 
 | 工作                 | Application 负责的部分                                                           | 源码入口                                                                                                                                                   |

@@ -8,7 +8,7 @@ use yss_project_identity::OperationId;
 use yss_project_model::ProjectData;
 
 fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
-    let mut graph = GraphResourceDocument::new("Caller", GraphResourceKind::Event);
+    let mut graph = GraphResourceDocument::new("Caller", GraphResourceKind::EventGraph);
     let call = NodeId::new();
     let text = NodeId::new();
     for (id, kind, key) in [
@@ -105,7 +105,7 @@ fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identit
     let mut data = ProjectData::new();
     data.graphs.insert(
         source.clone(),
-        GraphResourceDocument::new("F", GraphResourceKind::Function),
+        GraphResourceDocument::new("F", GraphResourceKind::FunctionGraph),
     );
     data.graphs.insert(path.clone(), original.clone());
     let fixture = crate::fixtures::TempProject::activate("rename-unloaded-reference", data);
@@ -168,7 +168,7 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
     let mut data = ProjectData::new();
     data.graphs.insert(
         source.clone(),
-        GraphResourceDocument::new("F", GraphResourceKind::Function),
+        GraphResourceDocument::new("F", GraphResourceKind::FunctionGraph),
     );
     data.graphs.insert(path.clone(), original.clone());
     let fixture = crate::fixtures::TempProject::activate("rename-history-reference", data);

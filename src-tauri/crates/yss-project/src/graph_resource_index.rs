@@ -3,7 +3,9 @@ use std::path::Path;
 
 use super::project_error::ProjectError;
 use yss_graph_document::{GraphResourceKind, GraphResourcePath, normalize_graph_resource_path};
-use yss_project_layout::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR};
+use yss_project_layout::{
+    EVENT_GRAPH_EXTENSION, EVENT_GRAPHS_DIR, FUNCTION_GRAPH_EXTENSION, FUNCTION_GRAPHS_DIR,
+};
 use yss_resource_naming::ResourceName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,16 +73,16 @@ fn collect_graph_resource_files(
     let mut files = Vec::new();
     collect_kind_files(
         root,
-        EVENTS_DIR,
-        EVENT_EXTENSION,
-        GraphResourceKind::Event,
+        EVENT_GRAPHS_DIR,
+        EVENT_GRAPH_EXTENSION,
+        GraphResourceKind::EventGraph,
         &mut files,
     )?;
     collect_kind_files(
         root,
-        FUNCTIONS_DIR,
-        FUNCTION_EXTENSION,
-        GraphResourceKind::Function,
+        FUNCTION_GRAPHS_DIR,
+        FUNCTION_GRAPH_EXTENSION,
+        GraphResourceKind::FunctionGraph,
         &mut files,
     )?;
     files.sort_by(|a, b| a.0.cmp(&b.0));

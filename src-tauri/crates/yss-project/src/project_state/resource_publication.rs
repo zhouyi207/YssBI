@@ -29,6 +29,14 @@ pub(crate) fn validate_context_revisions(
                 .and_then(|resource| resource.function.as_ref())
                 .map(|function| function.revision),
             ResourceKey::Database(_) => None,
+            ResourceKey::Mind(path) => yss_project_model::mind::MindPath::parse(&path.0)
+                .ok()
+                .and_then(|path| data.minds.get(&path))
+                .map(|doc| doc.version.revision),
+            ResourceKey::Doc(path) => yss_project_model::doc::DocPath::parse(&path.0)
+                .ok()
+                .and_then(|path| data.docs.get(&path))
+                .map(|doc| doc.version.revision),
             ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
                 .ok()
                 .and_then(|path| chart_revisions.get(&path).copied()),
@@ -58,6 +66,12 @@ pub(crate) fn validate_context_revisions(
                 .0
                 .strip_prefix("databases/")
                 .is_some_and(|id| data.databases.contains_key(id)),
+            ResourceKey::Mind(path) => yss_project_model::mind::MindPath::parse(&path.0)
+                .ok()
+                .is_some_and(|path| data.minds.contains_key(&path)),
+            ResourceKey::Doc(path) => yss_project_model::doc::DocPath::parse(&path.0)
+                .ok()
+                .is_some_and(|path| data.docs.contains_key(&path)),
             ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
                 .ok()
                 .is_some_and(|path| data.charts.contains_key(&path)),
@@ -118,7 +132,7 @@ pub(crate) fn normalize_function_resource_revision(
     resource: &mut GraphResourceDocument,
     retained: Option<ResourceRevision>,
 ) -> Result<ResourceRevision, ProjectOperationError> {
-    if resource.kind != yss_graph_document::GraphResourceKind::Function {
+    if resource.kind != yss_graph_document::GraphResourceKind::FunctionGraph {
         return Ok(retained.unwrap_or(ResourceRevision::INITIAL));
     }
     let incoming = resource
@@ -147,7 +161,7 @@ pub(super) fn normalize_function_patch_revisions(
             )?;
         }
         ProjectDataPatch::DeclareGraph { path, revision } => {
-            if path.kind() == yss_graph_document::GraphResourceKind::Function {
+            if path.kind() == yss_graph_document::GraphResourceKind::FunctionGraph {
                 let canonical = authoritative_function_revision(
                     path,
                     *revision,
@@ -165,7 +179,7 @@ pub(super) fn normalize_function_patch_revisions(
         }
         ProjectDataPatch::RemoveGraph { path, revision } => {
             if data.graphs.get(path).is_some_and(|resource| {
-                resource.kind == yss_graph_document::GraphResourceKind::Function
+                resource.kind == yss_graph_document::GraphResourceKind::FunctionGraph
             }) {
                 authoritative_function_revision(
                     path,
@@ -181,7 +195,7 @@ pub(super) fn normalize_function_patch_revisions(
             referenced_graphs,
             ..
         } => {
-            if moved.kind == yss_graph_document::GraphResourceKind::Function {
+            if moved.kind == yss_graph_document::GraphResourceKind::FunctionGraph {
                 let incoming = moved
                     .function
                     .as_ref()
@@ -206,7 +220,9 @@ pub(super) fn normalize_function_patch_revisions(
                 )?;
             }
         }
-        ProjectDataPatch::UpsertChart { .. }
+        ProjectDataPatch::Mind(_)
+        | ProjectDataPatch::Doc(_)
+        | ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
     }
@@ -345,11 +361,11 @@ pub(super) fn canonical_resource_lifecycle_events(
             revision,
             path: path.as_str().into(),
             kind: match path.kind() {
-                yss_graph_document::GraphResourceKind::Event => {
-                    yss_project_history::ResourceLifecycleKind::Event
+                yss_graph_document::GraphResourceKind::EventGraph => {
+                    yss_project_history::ResourceLifecycleKind::EventGraph
                 }
-                yss_graph_document::GraphResourceKind::Function => {
-                    yss_project_history::ResourceLifecycleKind::Function
+                yss_graph_document::GraphResourceKind::FunctionGraph => {
+                    yss_project_history::ResourceLifecycleKind::FunctionGraph
                 }
             },
             name: path.display_name().to_string(),
@@ -407,7 +423,9 @@ pub(super) fn canonical_resource_lifecycle_events(
             )]);
         }
         ProjectDataPatch::MoveGraph { .. } => {}
-        ProjectDataPatch::UpsertChart { .. }
+        ProjectDataPatch::Mind(_)
+        | ProjectDataPatch::Doc(_)
+        | ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => return Ok(Vec::new()),
     }
@@ -485,7 +503,9 @@ pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectDat
                     .map(|path| path.as_str().to_string()),
             );
         }
-        ProjectDataPatch::UpsertChart { .. }
+        ProjectDataPatch::Mind(_)
+        | ProjectDataPatch::Doc(_)
+        | ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
     }
@@ -509,7 +529,9 @@ pub(super) fn affected_projection_paths(
             yss_project_history::ResourceKey::Graph(path) => Some(path.as_str().to_owned()),
             yss_project_history::ResourceKey::Function(path) => Some(path.0.to_string()),
             yss_project_history::ResourceKey::Database(_)
-            | yss_project_history::ResourceKey::Chart(_) => None,
+            | yss_project_history::ResourceKey::Chart(_)
+            | yss_project_history::ResourceKey::Mind(_)
+            | yss_project_history::ResourceKey::Doc(_) => None,
         })
         .collect::<std::collections::BTreeSet<_>>();
     if !changed_functions.is_empty() {

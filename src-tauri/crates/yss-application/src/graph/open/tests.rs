@@ -143,7 +143,7 @@ fn graph_project(path: &GraphResourcePath) -> ProjectData {
         .map_or(path.display_name(), |(name, _)| name);
     data.graphs.insert(
         path.clone(),
-        GraphResourceDocument::new(name, GraphResourceKind::Event),
+        GraphResourceDocument::new(name, GraphResourceKind::EventGraph),
     );
     data
 }

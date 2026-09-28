@@ -216,7 +216,7 @@ mod tests {
             moves: vec![ResourceMove {
                 from: "events/Before.yssbi-event".into(),
                 to: "events/After.yssbi-event".into(),
-                kind: ResourceLifecycleKind::Event,
+                kind: ResourceLifecycleKind::EventGraph,
                 name: "After".into(),
             }],
             deltas: Vec::new(),
@@ -246,7 +246,7 @@ mod tests {
                 "moves": [{
                     "from": "events/Before.yssbi-event",
                     "to": "events/After.yssbi-event",
-                    "kind": "event",
+                    "kind": "event_graph",
                     "name": "After",
                 }],
                 "deltas": [],

@@ -7,6 +7,11 @@
 
 `yss-project` 是项目运行期权威状态的唯一 owner。它负责 `ProjectState`、项目会话与实例身份、资源 revision、持久化事务，以及磁盘提交后的 publication。
 
+项目索引分别发布 `events` 与 `functions`。Event 条目包含文件身份和资源版本；Function
+条目还必需包含函数签名、签名版本和编辑投影。调用目录直接消费 Function 索引。
+节点图的驻留正文、历史、解析及执行继续使用共享 Graph 基础设施；Graph 不作为项目文件分类。
+文件定位接口按 Event、Function、Chart、Mind、Doc 的具体种类校验路径。
+
 该 crate 组合 `yss-project-model`、`yss-project-history`、`yss-project-operation`、`yss-resource-lifecycle` 与 `yss-filesystem` 等更低层 crate，但不依赖 Tauri、Commands、IPC schema、Application 工作流或 Database runtime。
 
 边界约束：
@@ -16,6 +21,8 @@
 - `yss-filesystem` 只拥有安全文件系统原语，`yss-project` 拥有 session/revision 校验与 publication；
 - 对外返回 Project-owned typed facts，由 Application 和 API 层投影为事件与 DTO；
 - `test-support` 只暴露跨 crate 测试所需的 fixture 与故障注入 seam。
+
+Graph 索引头读取复用 `GraphResourceIndex` 已扫描的路径，不再次枚举目录。测试夹具使用正式 Graph 序列化入口，按资源路径写入，不根据显示名称重命名或自动生成避重路径。
 
 项目元数据的 `exportTime` 使用不带时区的本机钟面时间。Manifest 构造与读取时遇到
 旧的带偏移日期时间会保留其原日期、钟面和小数精度并去掉偏移，不换算到另一个时区。
@@ -35,7 +42,7 @@ Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑�
 
 ## Graph resource revisions
 
-项目格式版本以 [`CURRENT_PROJECT_SCHEMA_VERSION`](src/manifest.rs) 为准。命名常量随 Event/Function 的 `GraphDocument.constants` 保存，属于 Graph 资源事务，不再维护全局变量、变量 revision、作用域迁移或 `variables.yssbi-vars` 的日常读写。
+项目格式版本以 [`CURRENT_PROJECT_SCHEMA_VERSION`](src/manifest.rs) 为准。命名常量随 Event Graph/Function Graph 的 `GraphDocument.constants` 保存，属于 Graph 资源事务，不再维护全局变量、变量 revision、作用域迁移或 `variables.yssbi-vars` 的日常读写。
 
 项目尚未发布，只支持当前格式。打开其他格式版本的项目会在 manifest 校验时失败，不执行旧变量资源或节点的兼容转换，也不改写原文件。新建和保存项目继续写入当前 `schemaVersion`。
 
@@ -58,7 +65,7 @@ Graph 编辑、Save 和 Execute 的当前流程见 [Graph 与 Execution](../yss-
 
 ## Resource publication and external files
 
-Event/Function 创建、复制、删除、重命名复用标准 ProjectDataPatch 的提交与 lifecycle/move delta；资源操作推进
+Event Graph/Function Graph 创建、复制、删除、重命名复用标准 ProjectDataPatch 的提交与 lifecycle/move delta；资源操作推进
 publication revision，而不仅是 authority generation。纯生命周期增删不伪造缺失的图投影，
 重命名回执保留真实 move delta、递增发布版本及受影响图的恢复声明。
 
@@ -78,6 +85,24 @@ writer 不再重复构造 delta。刷新文档时可绑定 Project publication r
 图表文件采用 `yss-chart-document::CURRENT_CHART_SCHEMA_VERSION` 定义的严格格式，不读取含旧文档版本字段的格式，也不自动迁移。
 
 ## 当前文档编辑
+
+Mind 与 Doc 的当前正文分别驻留在 `ProjectData.minds`、`ProjectData.docs`，项目索引也分别提供
+`minds`、`docs`。格式和树约束由 [Project model](../yss-project-model/README.md) 拥有。
+`minds.rs`、`docs.rs` 各自提供强类型查询和命令入口；`file_resources.rs` 通过泛型复用
+Create/Edit/Save/Discard/Rename/Duplicate/Delete 的文件 lease、WriterSnapshot、
+ProjectDataPatch、文件事务回滚和 resource publication，不使用混合文档枚举分派编辑。
+普通编辑只更新 Rust 当前正文，Save 写入捕获版本并更新保存指纹；重命名只移动
+已有文件并保留当前未保存内容。复制 Mind 会重新分配内部节点 ID。
+
+读取和编辑回执携带项目身份、文档路径、编辑会话与资源 revision。新建资源与重开项目
+创建新的文档会话，旧提交不能授权同路径的新资源。Watcher 更新干净文档，保留脏文档；
+Save 还会比较磁盘正文与保存指纹，拒绝覆盖未处理的外部修改。Discard 按捕获的编辑版本
+重新读取磁盘；文件已被外部删除时，Discard 放弃其脏驻留内容并发布移除回执，不重新创建文件。
+文件成员仍由目录扫描决定；文档按项目加载并受单文件大小和节点数限制。
+
+两类资源事件分别使用 `ResourceKey::Mind`、`ResourceKey::Doc`，生命周期种类与各自身份一致。
+生命周期 patch 的 before/after 同时存在时表示文档版本更新；正文由对应读快照交付。
+UI 与其他 Application 调用者使用同一个 typed command API，新增类型无须另建文件系统层。
 
 图文件通过 `GraphResourceFile` 直接序列化、反序列化当前类型契约。项目尚未发布，不提供旧类型
 声明迁移或兼容转换，也不维护单独的类型迁移版本字段。

@@ -28,6 +28,12 @@ impl ProjectState {
         let charts =
             crate::chart_io::load_charts_from_root(session.root.as_path()).map_err(read_error)?;
         let current = self.get_data()?;
+        let mind_changes = crate::file_resources::external_changes::<
+            yss_project_model::mind::MindDocument,
+        >(session.root.as_path(), &current)?;
+        let doc_changes = crate::file_resources::external_changes::<
+            yss_project_model::doc::DocDocument,
+        >(session.root.as_path(), &current)?;
         let mut graph_changes = Vec::new();
         for (path, previous) in &current.graphs {
             let Some(entry) = index.get_by_path(path.as_str()) else {
@@ -67,7 +73,11 @@ impl ProjectState {
             chart_changes.push((path.clone(), None));
         }
         self.validate_project_session(&session)?;
-        if !graph_changes.is_empty() || !chart_changes.is_empty() {
+        if !graph_changes.is_empty()
+            || !chart_changes.is_empty()
+            || !mind_changes.is_empty()
+            || !doc_changes.is_empty()
+        {
             let mut publication = self.mutation_publication.lock().unwrap();
             if publication.project_instance_id != project.as_str() {
                 return Err(ProjectOperationError::StaleProjectLifecycle {
@@ -77,7 +87,11 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             // File notifications must not replace edits that have not been explicitly saved.
             graph_changes.retain(|(path, _)| !self.is_graph_modified(path));
-            if graph_changes.is_empty() && chart_changes.is_empty() {
+            if graph_changes.is_empty()
+                && chart_changes.is_empty()
+                && mind_changes.is_empty()
+                && doc_changes.is_empty()
+            {
                 return Ok(Some(ProjectIndexInvalidation::new(project.clone())));
             }
             let mut graph_revisions = self.graph_resource_revisions.write().unwrap();
@@ -92,6 +106,12 @@ impl ProjectState {
                 .map(|(path, _)| next_revision(path.as_str(), chart_revisions.get(path).copied()))
                 .collect::<Result<Vec<_>, _>>()?;
             let advance = publication.prepare_resource_revision()?;
+            for patch in mind_changes {
+                crate::file_resources::apply_patch(&mut data, patch);
+            }
+            for patch in doc_changes {
+                crate::file_resources::apply_patch(&mut data, patch);
+            }
             for ((path, incoming), revision) in graph_changes.into_iter().zip(next_graph_revisions)
             {
                 self.graph_editing.lock().unwrap().remove(&path);
@@ -190,7 +210,7 @@ mod tests {
             graph.clone(),
             yss_project_model::GraphResourceDocument::new(
                 "Event",
-                yss_graph_document::GraphResourceKind::Event,
+                yss_graph_document::GraphResourceKind::EventGraph,
             ),
         );
         let (chart, document) = fixtures::chart("Chart", "data");
@@ -202,7 +222,11 @@ mod tests {
         std::fs::remove_file(session.root.as_path().join(chart.relative_path())).unwrap();
         // Index queries must reflect disk membership even before the watcher drains.
         let index = state.read_project_index(&session.instance_id).unwrap();
-        assert!(index.graphs.is_empty() && index.charts.is_empty());
+        assert!(
+            index.event_graphs.is_empty()
+                && index.function_graphs.is_empty()
+                && index.charts.is_empty()
+        );
         state
             .reconcile_project_change(&session.instance_id, FilesystemChange::rescan_required())
             .unwrap();

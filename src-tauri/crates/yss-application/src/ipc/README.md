@@ -22,6 +22,35 @@ Result JSON encoding is shared by the desktop and Harness adapters in [result_en
 
 ## Public surface
 
+Frontend wire parsing and application publication share receipt correlation,
+revision and replacement invariants in `src/shared/types/domain/resourceMutationValidation.ts`.
+Wire adapters additionally validate exact payload shapes; they do not maintain a
+second copy of the receipt's semantic rules.
+
+Event Graph and Function Graph file creation have separate application entry points and IPC
+commands. Creation receives `name`; rename/duplicate/remove commands receive
+`path` and are registered separately for Event Graph and Function Graph. Each validates the
+expected path kind. Their commands are `create_event_graph` / `create_function_graph`,
+`rename_event_graph` / `rename_function_graph`, `duplicate_event_graph` /
+`duplicate_function_graph` and `remove_event_graph` / `remove_function_graph`.
+Resource kinds serialize as `event_graph` / `function_graph`. Project index publishes `eventGraphs` and `functionGraphs` collections;
+sidebar rows use concrete `event_graph`, `function_graph`, `chart`, `mind` and `doc` kinds.
+The shared node-editor Save/Edit/Run protocol continues to describe Graph content.
+See [File operations](../../../../../src/features/application/resource/README.md).
+
+`read_project_mind` / `edit_project_mind` and `read_project_doc` / `edit_project_doc`
+expose independent Mind and Markdown application use cases. Each command accepts
+only its own path and editing operations; Create takes a name without a kind selector.
+Edits carry a project instance, operation ID, validated file
+path and document editing version. Commands return an optional document snapshot
+plus the shared resource mutation receipt, and publish the same committed resource
+notification used by existing file types. Snapshots contain `kind` and typed `content`
+alongside project identity, path, version and dirty state. Project indexes expose
+separate `minds` and `docs` arrays. Snapshots are bounded by the domain's
+document limits. The current transport returns full document snapshots; tree edges
+and renderer/session state are derived locally. See [Project model](../../../yss-project-model/README.md)
+and [Document editors](../../../../../src/modules/document-editor/README.md).
+
 Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initialize(app)`. The desktop entry connects these two functions directly to Tauri. Commands, schemas, response caches and diagnosed errors remain private to the IPC module.
 
 `get_project_path` and `get_project_databases` take no wire arguments and query the active Application session. Frontend hydration rechecks its captured project lifecycle identity before publishing either response; these queries do not accept a caller-supplied project identity.
@@ -111,7 +140,7 @@ declarations. Changing only a constant's Semantic preserves its physical value a
 snapshot; incompatible choices are rejected by Rust. Project files and live IPC use the current
 type contract directly, without migration or compatibility conversion for legacy declarations.
 
-Project queries use `get_project_databases` for database declarations. Variable commands, variable resource deltas and variable collections are removed; Project index contains graph, chart and database resources.
+Project queries use `get_project_databases` for database declarations. Variable commands, variable resource deltas and variable collections are removed; Project index contains graph, chart, authored-document and database resources.
 
 Node parameter editors carry one effective `value`, display/editor metadata, and optional schema-aware `configuration`. Rust resolves that value from the node document or its protocol default. The wire has no project-setting inheritance source or override options; parameter edits update the Graph draft document directly.
 

@@ -494,13 +494,13 @@ impl ProjectState {
         let requested = ResourceName::parse(name)?;
         let allocated = allocate_unique_resource_name(&requested, existing.iter());
         let (directory, extension) = match kind {
-            yss_graph_document::GraphResourceKind::Event => (
-                yss_project_layout::EVENTS_DIR,
-                yss_project_layout::EVENT_EXTENSION,
+            yss_graph_document::GraphResourceKind::EventGraph => (
+                yss_project_layout::EVENT_GRAPHS_DIR,
+                yss_project_layout::EVENT_GRAPH_EXTENSION,
             ),
-            yss_graph_document::GraphResourceKind::Function => (
-                yss_project_layout::FUNCTIONS_DIR,
-                yss_project_layout::FUNCTION_EXTENSION,
+            yss_graph_document::GraphResourceKind::FunctionGraph => (
+                yss_project_layout::FUNCTION_GRAPHS_DIR,
+                yss_project_layout::FUNCTION_GRAPH_EXTENSION,
             ),
         };
         let path =
@@ -811,13 +811,13 @@ fn renamed_graph_path(
     kind: yss_graph_document::GraphResourceKind,
 ) -> Result<GraphResourcePath, ProjectOperationError> {
     let (directory, extension) = match kind {
-        yss_graph_document::GraphResourceKind::Event => (
-            yss_project_layout::EVENTS_DIR,
-            yss_project_layout::EVENT_EXTENSION,
+        yss_graph_document::GraphResourceKind::EventGraph => (
+            yss_project_layout::EVENT_GRAPHS_DIR,
+            yss_project_layout::EVENT_GRAPH_EXTENSION,
         ),
-        yss_graph_document::GraphResourceKind::Function => (
-            yss_project_layout::FUNCTIONS_DIR,
-            yss_project_layout::FUNCTION_EXTENSION,
+        yss_graph_document::GraphResourceKind::FunctionGraph => (
+            yss_project_layout::FUNCTION_GRAPHS_DIR,
+            yss_project_layout::FUNCTION_GRAPH_EXTENSION,
         ),
     };
     GraphResourcePath::new(format!("{directory}/{}.{extension}", name.as_str())).map_err(|error| {
@@ -979,7 +979,7 @@ mod tests {
             state.create_graph_resource(
                 &session.instance_id,
                 "Event",
-                GraphResourceDocument::new("Event", GraphResourceKind::Event),
+                GraphResourceDocument::new("Event", GraphResourceKind::EventGraph),
                 yss_project_identity::OperationId::new(),
             )
         };
@@ -1045,8 +1045,8 @@ mod tests {
         let event = GraphResourcePath::new("events/Event.yssbi-event").unwrap();
         let function = GraphResourcePath::new("functions/Function.yssbi-function").unwrap();
         for (revision, name, kind) in [
-            (1, "Event", GraphResourceKind::Event),
-            (2, "Function", GraphResourceKind::Function),
+            (1, "Event", GraphResourceKind::EventGraph),
+            (2, "Function", GraphResourceKind::FunctionGraph),
         ] {
             let result = state
                 .create_graph_resource(

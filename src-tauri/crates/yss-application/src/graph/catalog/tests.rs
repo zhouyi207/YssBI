@@ -137,13 +137,13 @@ fn compatible_project(path: &GraphResourcePath) -> ProjectData {
     let mut project = ProjectData::new();
     project.graphs.insert(
         path.clone(),
-        GraphResourceDocument::new("Main", GraphResourceKind::Event),
+        GraphResourceDocument::new("Main", GraphResourceKind::EventGraph),
     );
     project
 }
 
 fn compatible_draft(source_node: NodeId) -> GraphDocument {
-    let mut graph = GraphResourceDocument::new("Main", GraphResourceKind::Event);
+    let mut graph = GraphResourceDocument::new("Main", GraphResourceKind::EventGraph);
     graph.document.nodes.insert(
         source_node,
         DocumentNode {
@@ -223,7 +223,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
             }),
         },
     );
-    let mut definition = GraphResourceDocument::new("F", GraphResourceKind::Function);
+    let mut definition = GraphResourceDocument::new("F", GraphResourceKind::FunctionGraph);
     definition.function.as_mut().unwrap().signature.parameters = (0..2)
         .map(|i| yss_project_history::FunctionParameter {
             id: FunctionParameterId::new(format!("p{i}")),
@@ -231,7 +231,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
             type_name: "Numeric".into(),
         })
         .collect();
-    let mut resource = GraphResourceDocument::new("Caller", GraphResourceKind::Event);
+    let mut resource = GraphResourceDocument::new("Caller", GraphResourceKind::EventGraph);
     resource.document = document.clone();
     let mut project = ProjectData::new();
     project.graphs.insert(function.clone(), definition);
@@ -320,7 +320,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     let mut project = ProjectData::new();
     project.graphs.insert(
         function_path.clone(),
-        GraphResourceDocument::new("Sales Report", GraphResourceKind::Function),
+        GraphResourceDocument::new("Sales Report", GraphResourceKind::FunctionGraph),
     );
     let session = staged_session(
         project,
@@ -416,7 +416,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     }
     assert!(snapshot.activity_panels[0].rows.iter().any(|row| matches!(
         &row.content,
-        crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Graph { path, name, .. })
+        crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::FunctionGraph { path, name })
         if path == function_path.as_str() && name == "Sales Report"
     )));
     assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(

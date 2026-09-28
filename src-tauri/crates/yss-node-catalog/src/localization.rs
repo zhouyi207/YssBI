@@ -119,7 +119,8 @@ pub enum NodeCreation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ResourceBoundCreateArgs {
-    Function,
+    #[serde(rename = "function_graph")]
+    FunctionGraph,
     Database,
 }
 
@@ -135,11 +136,11 @@ impl<'de> Deserialize<'de> for ResourceBoundCreateArgs {
         }
 
         match Wire::deserialize(deserializer)?.kind.as_ref() {
-            "function" => Ok(Self::Function),
+            "function_graph" => Ok(Self::FunctionGraph),
             "database" => Ok(Self::Database),
             kind => Err(serde::de::Error::unknown_variant(
                 kind,
-                &["function", "database"],
+                &["function_graph", "database"],
             )),
         }
     }

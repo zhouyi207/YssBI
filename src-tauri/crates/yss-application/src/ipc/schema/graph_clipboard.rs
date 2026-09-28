@@ -229,7 +229,7 @@ impl From<ClipboardNodeCreation> for ClipboardNodeCreationDto {
 impl From<yss_node_catalog::ResourceBoundCreateArgs> for ClipboardResourceBoundCreateArgsDto {
     fn from(value: yss_node_catalog::ResourceBoundCreateArgs) -> Self {
         match value {
-            yss_node_catalog::ResourceBoundCreateArgs::Function => Self::Function,
+            yss_node_catalog::ResourceBoundCreateArgs::FunctionGraph => Self::Function,
             yss_node_catalog::ResourceBoundCreateArgs::Database => Self::Database,
         }
     }

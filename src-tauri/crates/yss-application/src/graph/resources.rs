@@ -54,50 +54,38 @@ impl From<super::inputs::GraphInputError> for ResourceMutationApplicationError {
     }
 }
 
-fn build_graph_shell(
+fn build_function_graph(
     path: &GraphResourcePath,
     name: String,
-    kind: GraphResourceKind,
 ) -> Result<GraphResourceDocument, ResourceMutationApplicationError> {
-    let mut resource = GraphResourceDocument::new(name, kind);
-    let shell_types: &[(&str, f64)] = match kind {
-        GraphResourceKind::Event => &[],
-        GraphResourceKind::Function => &[
-            ("yssbi.project.function.entry", 120.0),
-            ("yssbi.project.function.return", 560.0),
-        ],
-    };
-    for (node_type, x) in shell_types {
+    let mut resource = GraphResourceDocument::new(name, GraphResourceKind::FunctionGraph);
+    for (node_type, x) in [
+        ("yssbi.project.function.entry", 120.0),
+        ("yssbi.project.function.return", 560.0),
+    ] {
         let id = yss_graph_document::NodeId::new();
-        let parameters = if kind == GraphResourceKind::Function {
-            [(
-                yss_node_protocol::ParameterKey::new("function").map_err(|error| {
-                    ResourceMutationApplicationError::Project(
-                        ProjectOperationError::TransactionPrepareFailed {
-                            message: error.to_string(),
-                        },
-                    )
-                })?,
-                serde_json::Value::String(path.as_str().to_owned()),
-            )]
-            .into_iter()
-            .collect()
-        } else {
-            Default::default()
-        };
+        let parameter = yss_node_protocol::ParameterKey::new("function").map_err(|error| {
+            ResourceMutationApplicationError::Project(
+                ProjectOperationError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                },
+            )
+        })?;
         resource.document.nodes.insert(
             id,
             yss_graph_document::DocumentNode {
                 id,
-                node_type: yss_node_protocol::NodeTypeId::new(*node_type).map_err(|error| {
+                node_type: yss_node_protocol::NodeTypeId::new(node_type).map_err(|error| {
                     ResourceMutationApplicationError::Project(
                         ProjectOperationError::TransactionPrepareFailed {
                             message: error.to_string(),
                         },
                     )
                 })?,
-                position: yss_graph_document::NodePosition { x: *x, y: 160.0 },
-                parameters,
+                position: yss_graph_document::NodePosition { x, y: 160.0 },
+                parameters: [(parameter, serde_json::Value::String(path.as_str().into()))]
+                    .into_iter()
+                    .collect(),
                 user_label: None,
             },
         );
@@ -106,23 +94,59 @@ fn build_graph_shell(
 }
 
 impl ApplicationState {
-    pub fn create_graph_resource(
+    pub fn create_event_graph(
         &self,
         project_instance_id: ProjectInstanceId,
         name: String,
-        kind: GraphResourceKind,
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
+        self.create_node_file(
+            project_instance_id,
+            name,
+            operation_id,
+            GraphResourceKind::EventGraph,
+            |_, name| {
+                Ok(GraphResourceDocument::new(
+                    name,
+                    GraphResourceKind::EventGraph,
+                ))
+            },
+        )
+    }
+    pub fn create_function_graph(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        name: String,
+        operation_id: OperationId,
+    ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
+        self.create_node_file(
+            project_instance_id,
+            name,
+            operation_id,
+            GraphResourceKind::FunctionGraph,
+            build_function_graph,
+        )
+    }
+    fn create_node_file(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        name: String,
+        operation_id: OperationId,
+        kind: GraphResourceKind,
+        build: impl FnOnce(
+            &GraphResourcePath,
+            String,
+        ) -> Result<GraphResourceDocument, ResourceMutationApplicationError>,
+    ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let (path, unique_name) =
+        let (path, name) =
             captured
                 .project()
                 .allocate_graph_path(&project_instance_id, &name, kind)?;
-        let resource = build_graph_shell(&path, unique_name, kind)?;
-        let resource_name = resource.name.clone();
+        let resource = build(&path, name)?;
         let result = captured.project().create_graph_resource(
             &project_instance_id,
-            &resource_name,
+            &resource.name.clone(),
             resource,
             operation_id,
         )?;

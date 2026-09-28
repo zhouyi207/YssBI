@@ -171,7 +171,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                 protocol,
                 parameters,
                 function.as_str(),
-                ResourceBoundCreateArgs::Function,
+                ResourceBoundCreateArgs::FunctionGraph,
                 catalog,
             )?;
             let crate::compatibility::CatalogMutationResource::Function { signature, .. } =

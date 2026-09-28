@@ -64,6 +64,9 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 ## 4. Registered capabilities
 
+`inspect_project` 的文件条目使用 `event`、`function`、`chart`、`mind`、`doc`，数据库继续使用
+`database`。Event 和 Function 的文件身份独立呈现；图内容编辑与运行能力共用节点图协议。
+
 桌面默认使用 `ToolRegistry::graph_assistant`；只读 foundation 仍可供独立检查型调用方使用：
 
 | Capability                | 作用                                                                  |

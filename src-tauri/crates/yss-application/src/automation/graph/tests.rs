@@ -11,6 +11,53 @@ struct Fixture {
     revision: u64,
     dataset: String,
 }
+
+#[test]
+fn independent_file_factories_publish_distinct_event_and_function_documents() {
+    let fixture = Fixture::new();
+    let application = fixture.application.as_ref().unwrap();
+    let session = application.capture_session().unwrap();
+    application
+        .create_function_graph(
+            session.project_instance_id().clone(),
+            "Compute".into(),
+            OperationId::new(),
+        )
+        .unwrap();
+    let index = session
+        .project()
+        .read_project_index(session.project_instance_id())
+        .unwrap();
+    assert_eq!(index.event_graphs.len(), 1);
+    assert_eq!(index.function_graphs.len(), 1);
+    let data = session.project().get_data().unwrap();
+    let event = &data.graphs[&GraphResourcePath::new(&index.event_graphs[0].path).unwrap()];
+    assert!(event.document.nodes.is_empty());
+    assert!(event.function.is_none());
+    let function = &data.graphs[&GraphResourcePath::new(&index.function_graphs[0].path).unwrap()];
+    assert!(function.function.is_some());
+    let mut node_types = function
+        .document
+        .nodes
+        .values()
+        .map(|node| node.node_type.as_str())
+        .collect::<Vec<_>>();
+    node_types.sort();
+    assert_eq!(
+        node_types,
+        [
+            "yssbi.project.function.entry",
+            "yssbi.project.function.return"
+        ]
+    );
+    for node in function.document.nodes.values() {
+        assert!(
+            node.parameters
+                .values()
+                .any(|value| value.as_str() == Some(index.function_graphs[0].path.as_str()))
+        );
+    }
+}
 impl Drop for Fixture {
     fn drop(&mut self) {
         self.application.take();
@@ -50,12 +97,7 @@ impl Fixture {
             ProjectSessionBinding::new(instance.clone(), session.project_session_id().clone()),
         );
         application
-            .create_graph_resource(
-                instance.clone(),
-                "Main".into(),
-                yss_graph_document::GraphResourceKind::Event,
-                OperationId::new(),
-            )
+            .create_event_graph(instance.clone(), "Main".into(), OperationId::new())
             .unwrap();
         let path = session
             .project()
@@ -209,7 +251,7 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
         panic!("project inspection");
     };
     assert!(inspection.resources.iter().any(|resource| {
-        resource.kind == ProjectResourceKindInspection::Graph && resource.resource_id == f.path
+        resource.kind == ProjectResourceKindInspection::EventGraph && resource.resource_id == f.path
     }));
     assert!(inspection.resources.iter().any(|resource| {
         resource.kind == ProjectResourceKindInspection::Database

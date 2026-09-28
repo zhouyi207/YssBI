@@ -34,13 +34,6 @@ pub struct ActivityPanelRequest {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ActivityGraphKindDto {
-    Event,
-    Function,
-}
-
-#[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum ActivityTextDto {
     Key { key: &'static str },
@@ -78,12 +71,25 @@ impl From<app::ActivityTool> for ActivityToolDto {
     rename_all_fields = "camelCase"
 )]
 pub enum ActivityItemDto {
-    Graph {
+    #[serde(rename = "event_graph")]
+    EventGraph {
         path: String,
         name: String,
-        graph_type: ActivityGraphKindDto,
+    },
+    #[serde(rename = "function_graph")]
+    FunctionGraph {
+        path: String,
+        name: String,
     },
     Chart {
+        path: String,
+        name: String,
+    },
+    Mind {
+        path: String,
+        name: String,
+    },
+    Doc {
         path: String,
         name: String,
     },
@@ -113,21 +119,11 @@ pub enum ActivityItemDto {
 impl From<app::ActivityItem> for ActivityItemDto {
     fn from(item: app::ActivityItem) -> Self {
         match item {
-            app::ActivityItem::Graph {
-                path,
-                name,
-                graph_type,
-            } => Self::Graph {
-                path,
-                name,
-                graph_type: match graph_type {
-                    yss_graph_document::GraphResourceKind::Event => ActivityGraphKindDto::Event,
-                    yss_graph_document::GraphResourceKind::Function => {
-                        ActivityGraphKindDto::Function
-                    }
-                },
-            },
+            app::ActivityItem::EventGraph { path, name } => Self::EventGraph { path, name },
+            app::ActivityItem::FunctionGraph { path, name } => Self::FunctionGraph { path, name },
             app::ActivityItem::Chart { path, name } => Self::Chart { path, name },
+            app::ActivityItem::Mind { path, name } => Self::Mind { path, name },
+            app::ActivityItem::Doc { path, name } => Self::Doc { path, name },
             app::ActivityItem::Database {
                 id,
                 name,

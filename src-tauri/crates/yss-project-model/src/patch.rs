@@ -11,6 +11,8 @@ use yss_project_identity::ResourceRevision;
 /// resource deltas rather than the complete state transition being committed.
 #[derive(Clone, Debug)]
 pub enum ProjectDataPatch {
+    Mind(crate::file::FilePatch<crate::mind::MindDocument>),
+    Doc(crate::file::FilePatch<crate::doc::DocDocument>),
     InsertGraph {
         path: GraphResourcePath,
         resource: GraphResourceDocument,

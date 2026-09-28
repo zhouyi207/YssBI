@@ -213,33 +213,48 @@ fn overlay_authoritative_project_index(
         .databases
         .sort_by(|left, right| left.id.cmp(&right.id));
     // Disk owns membership; resident revision overrides must never resurrect a deleted file.
+    for entry in &mut index.minds {
+        if let Some(document) = data.minds.get(&entry.path) {
+            entry.revision = document.version.revision;
+        }
+    }
+    for entry in &mut index.docs {
+        if let Some(document) = data.docs.get(&entry.path) {
+            entry.revision = document.version.revision;
+        }
+    }
     for chart in &mut index.charts {
         chart.revision = chart_revisions
             .get(&chart.chart_path)
             .copied()
             .unwrap_or(ResourceRevision::INITIAL);
     }
-    for entry in &mut index.graphs {
-        let Ok(path) = yss_graph_document::GraphResourcePath::new(&entry.path) else {
-            continue;
-        };
+    for entry in &mut index.event_graphs {
+        let path = yss_graph_document::GraphResourcePath::new(&entry.path)
+            .map_err(|error| stale_catalog(error.to_string()))?;
         entry.revision = graph_resource_revisions
             .get(&path)
             .copied()
             .unwrap_or(ResourceRevision::INITIAL);
-        let Some(resource) = data.graphs.get(&path) else {
-            continue;
-        };
-        if let Some(function) = resource.function.as_ref() {
-            entry.function_revision = Some(function.revision);
-            entry.function_signature = Some(function.signature.clone());
-            entry.function_editor_projection = Some(
-                FunctionEditorProjection::try_from(function).map_err(|message| {
-                    ProjectOperationError::TransactionPrepareFailed {
-                        message: message.to_string(),
-                    }
-                })?,
-            );
+    }
+    for entry in &mut index.function_graphs {
+        let path = yss_graph_document::GraphResourcePath::new(&entry.path)
+            .map_err(|error| stale_catalog(error.to_string()))?;
+        entry.revision = graph_resource_revisions
+            .get(&path)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
+        if let Some(resource) = data.graphs.get(&path) {
+            let function = resource
+                .function
+                .as_ref()
+                .ok_or_else(|| stale_catalog("function file has no signature"))?;
+            entry.function_revision = function.revision;
+            entry.function_signature = function.signature.clone();
+            entry.function_editor_projection = FunctionEditorProjection::try_from(function)
+                .map_err(|message| ProjectOperationError::TransactionPrepareFailed {
+                    message: message.to_string(),
+                })?;
         }
     }
     Ok(())

@@ -62,7 +62,7 @@ pub enum CatalogMutationResource {
 impl CatalogMutationResource {
     pub(crate) fn create_args(&self) -> ResourceBoundCreateArgs {
         match self {
-            Self::Function { .. } => ResourceBoundCreateArgs::Function,
+            Self::Function { .. } => ResourceBoundCreateArgs::FunctionGraph,
             Self::Database { .. } => ResourceBoundCreateArgs::Database,
         }
     }
@@ -83,7 +83,7 @@ impl CatalogMutationResource {
 
 fn resource_display_kind(create_args: ResourceBoundCreateArgs) -> ResourceDisplayKind {
     match create_args {
-        ResourceBoundCreateArgs::Function => ResourceDisplayKind::Function,
+        ResourceBoundCreateArgs::FunctionGraph => ResourceDisplayKind::Function,
         ResourceBoundCreateArgs::Database => ResourceDisplayKind::Database,
     }
 }
@@ -94,9 +94,11 @@ pub(crate) fn resource_path_is_valid(
 ) -> bool {
     let path = resource_path.as_str();
     match create_args {
-        ResourceBoundCreateArgs::Function => GraphResourcePath::new(path).is_ok_and(|canonical| {
-            canonical.as_str() == path && canonical.as_str().starts_with("functions/")
-        }),
+        ResourceBoundCreateArgs::FunctionGraph => {
+            GraphResourcePath::new(path).is_ok_and(|canonical| {
+                canonical.as_str() == path && canonical.as_str().starts_with("functions/")
+            })
+        }
         ResourceBoundCreateArgs::Database => path
             .strip_prefix("databases/")
             .is_some_and(|id| !id.is_empty()),
@@ -538,7 +540,7 @@ fn catalog_query_candidate_ports(
                 yss_graph_type_mapping::type_expr_from_data_type(&ValueType::DataFrame).ok()?;
             override_data_candidate_types(&mut candidates, value_type);
         }
-        ResourceBoundCreateArgs::Function => {
+        ResourceBoundCreateArgs::FunctionGraph => {
             let function_path = GraphResourcePath::new(resource.resource_path.as_str()).ok()?;
             let signature = catalog.function_signature(&function_path)?;
             let arguments = protocol
@@ -792,7 +794,9 @@ fn editor_type_expr(data_type: &ValueType) -> Result<TypeExpr, String> {
 fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Result<(), String> {
     let allowed = match protocol.scope {
         yss_node_protocol::NodeScope::Any => true,
-        yss_node_protocol::NodeScope::Function => graph_path.kind() == GraphResourceKind::Function,
+        yss_node_protocol::NodeScope::Function => {
+            graph_path.kind() == GraphResourceKind::FunctionGraph
+        }
     };
     if !allowed {
         Err(format!(

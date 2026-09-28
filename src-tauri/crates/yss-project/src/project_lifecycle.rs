@@ -428,7 +428,13 @@ fn validate_project_copy_staged_file(relative: &Path, staged: &Path) -> Result<(
             relative
                 .extension()
                 .and_then(|extension| extension.to_str()),
-            Some("yssbi-event" | "yssbi-function" | CHART_EXTENSION)
+            Some(
+                "yssbi-event"
+                    | "yssbi-function"
+                    | CHART_EXTENSION
+                    | yss_project_layout::MIND_EXTENSION
+                    | yss_project_layout::DOC_EXTENSION
+            )
         )
     {
         let contents = std::fs::read(staged).map_err(|error| error.to_string())?;
@@ -439,10 +445,18 @@ fn validate_project_copy_staged_file(relative: &Path, staged: &Path) -> Result<(
 }
 
 fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {
+    use yss_project_model::file::FileContent;
     if path == Path::new(PROJECT_METADATA_FILE) {
         return serde_json::from_slice::<ProjectManifest>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string());
+    }
+    let relative = path.to_string_lossy().replace('\\', "/");
+    if yss_project_model::mind::MindPath::parse(&relative).is_ok() {
+        return yss_project_model::mind::MindDocument::decode(contents).map(|_| ());
+    }
+    if yss_project_model::doc::DocPath::parse(&relative).is_ok() {
+        return yss_project_model::doc::DocDocument::decode(contents).map(|_| ());
     }
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("yssbi-event" | "yssbi-function") => {

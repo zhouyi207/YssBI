@@ -16,10 +16,7 @@ use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_identity::ProjectResourcePath;
 #[cfg(any(test, feature = "test-support"))]
 use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
-use yss_project_layout::{
-    DATABASE_DIR, EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR,
-    PROJECT_DATASET_CATALOG_FILE, PROJECT_METADATA_FILE,
-};
+use yss_project_layout::{DATABASE_DIR, PROJECT_DATASET_CATALOG_FILE, PROJECT_METADATA_FILE};
 use yss_project_model::{GraphResourceDocument, ProjectData};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,18 +30,30 @@ pub struct GraphResourceFile {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProjectGraphIndexEntry {
+pub struct ProjectEventGraphIndexEntry {
     pub path: String,
     pub name: String,
     #[serde(rename = "type")]
-    pub graph_type: GraphResourceKind,
+    file_kind: GraphResourceKind,
     pub revision: yss_project_identity::ResourceRevision,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_revision: Option<yss_project_identity::ResourceRevision>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_signature: Option<yss_project_history::FunctionSignature>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_editor_projection: Option<FunctionEditorProjection>,
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFunctionGraphIndexEntry {
+    pub path: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    file_kind: GraphResourceKind,
+    pub revision: yss_project_identity::ResourceRevision,
+    pub function_revision: yss_project_identity::ResourceRevision,
+    pub function_signature: yss_project_history::FunctionSignature,
+    pub function_editor_projection: FunctionEditorProjection,
+}
+
+struct ScannedNodeFileHeader {
+    path: String,
+    name: String,
+    function: Option<yss_project_history::FunctionDocument>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,6 +71,8 @@ pub struct ProjectDatabaseIndexEntry {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectIndex {
+    pub minds: Vec<crate::minds::MindIndexEntry>,
+    pub docs: Vec<crate::docs::DocIndexEntry>,
     pub project_instance_id: String,
     #[serde(default)]
     pub publication_revision: u64,
@@ -70,7 +81,8 @@ pub struct ProjectIndex {
     #[serde(default)]
     pub project_name: String,
     pub export_time: String,
-    pub graphs: Vec<ProjectGraphIndexEntry>,
+    pub event_graphs: Vec<ProjectEventGraphIndexEntry>,
+    pub function_graphs: Vec<ProjectFunctionGraphIndexEntry>,
     #[serde(default)]
     pub charts: Vec<ProjectChartIndexEntry>,
     #[serde(default)]
@@ -78,6 +90,10 @@ pub struct ProjectIndex {
 }
 
 impl ProjectIndex {
+    pub fn contains_node_file(&self, path: &str) -> bool {
+        self.event_graphs.iter().any(|file| file.path == path)
+            || self.function_graphs.iter().any(|file| file.path == path)
+    }
     pub const fn authority_generation(&self) -> u64 {
         self.authority_generation
     }
@@ -142,26 +158,14 @@ fn write_loaded_graph_document(
     project_data: &ProjectData,
     root: &Path,
     graph_path: &GraphResourcePath,
-) -> Result<String, ProjectError> {
-    let graph = project_data.graphs.get(graph_path).ok_or_else(|| {
-        ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
-    })?;
-    let (dir, extension) = match graph.kind {
-        GraphResourceKind::Event => (EVENTS_DIR, EVENT_EXTENSION),
-        GraphResourceKind::Function => (FUNCTIONS_DIR, FUNCTION_EXTENSION),
-    };
-    let relative_path =
-        graph_relative_path_for_save(root, dir, extension, &graph.name, graph_path)?;
-    write_json(
-        root.join(&relative_path).as_path(),
-        &GraphResourceFile {
-            kind: graph.kind,
-            name: graph.name.clone(),
-            document: graph.document.clone(),
-            function: graph.function.clone(),
-        },
-    )?;
-    Ok(relative_path)
+) -> Result<(), ProjectError> {
+    let (relative_path, contents) = serialize_graph_document(project_data, graph_path)?;
+    let path = root.join(relative_path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, contents)?;
+    Ok(())
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -189,6 +193,26 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         }
         std::fs::write(target, contents)?;
     }
+    for (path, document) in &project_data.minds {
+        use yss_project_model::file::FileContent;
+        std::fs::write(
+            root.join(path.as_str()),
+            document
+                .document
+                .encode()
+                .map_err(ProjectError::InvalidProjectFormat)?,
+        )?;
+    }
+    for (path, document) in &project_data.docs {
+        use yss_project_model::file::FileContent;
+        std::fs::write(
+            root.join(path.as_str()),
+            document
+                .document
+                .encode()
+                .map_err(ProjectError::InvalidProjectFormat)?,
+        )?;
+    }
 
     let manifest = project_manifest_from_data(project_data)?;
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
@@ -205,6 +229,8 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     project_data.metadata.export_time = export_time;
     project_data.databases = discover_databases_from_root(root.as_path())?;
     project_data.charts = load_charts_from_root(root.as_path())?;
+    project_data.minds = crate::file_resources::load_files(root.as_path())?;
+    project_data.docs = crate::file_resources::load_files(root.as_path())?;
 
     Ok(project_data)
 }
@@ -217,31 +243,49 @@ pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
 pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, ProjectError> {
     let manifest = read_project_manifest_from_root(root)?;
     let graph_resources = load_graph_resource_index(root)?;
-    let mut graphs = Vec::new();
-    graphs.extend(read_graph_index_entries(
-        root,
-        EVENTS_DIR,
-        EVENT_EXTENSION,
-        GraphResourceKind::Event,
-        &graph_resources,
-    )?);
-    graphs.extend(read_graph_index_entries(
-        root,
-        FUNCTIONS_DIR,
-        FUNCTION_EXTENSION,
-        GraphResourceKind::Function,
-        &graph_resources,
-    )?);
+    let event_graphs =
+        read_node_file_headers(root, GraphResourceKind::EventGraph, &graph_resources)?
+            .into_iter()
+            .map(|file| ProjectEventGraphIndexEntry {
+                path: file.path,
+                name: file.name,
+                file_kind: GraphResourceKind::EventGraph,
+                revision: yss_project_identity::ResourceRevision::INITIAL,
+            })
+            .collect();
+    let function_graphs =
+        read_node_file_headers(root, GraphResourceKind::FunctionGraph, &graph_resources)?
+            .into_iter()
+            .map(|file| {
+                let function = file.function.ok_or_else(|| {
+                    ProjectError::InvalidProjectFormat("function file has no signature".into())
+                })?;
+                let projection = FunctionEditorProjection::try_from(&function)
+                    .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+                Ok(ProjectFunctionGraphIndexEntry {
+                    path: file.path,
+                    name: file.name,
+                    file_kind: GraphResourceKind::FunctionGraph,
+                    revision: yss_project_identity::ResourceRevision::INITIAL,
+                    function_revision: function.revision,
+                    function_signature: function.signature,
+                    function_editor_projection: projection,
+                })
+            })
+            .collect::<Result<Vec<_>, ProjectError>>()?;
     let charts = read_chart_index_entries(root)?;
 
     let (project_name, export_time) = manifest.into_parts();
     Ok(ProjectIndex {
+        minds: crate::file_resources::file_index(root)?,
+        docs: crate::file_resources::file_index(root)?,
         project_instance_id: String::new(),
         publication_revision: 0,
         authority_generation: 0,
         project_name,
         export_time,
-        graphs,
+        event_graphs,
+        function_graphs,
         charts,
         databases: Vec::new(),
     })
@@ -323,7 +367,9 @@ pub(crate) fn read_graph_document(
 #[serde(rename_all = "camelCase")]
 struct GraphFileHeader {
     kind: GraphResourceKind,
-    name: String,
+    // Validate the persisted field even though display names come from resource paths.
+    #[serde(rename = "name")]
+    _name: String,
     function: Option<yss_project_history::FunctionDocument>,
 }
 
@@ -339,14 +385,18 @@ fn validate_function_shape(
     function: Option<&yss_project_history::FunctionDocument>,
 ) -> Result<(), ProjectError> {
     match (kind, function) {
-        (GraphResourceKind::Function, None) => Err(ProjectError::InvalidProjectFormat(format!(
-            "function graph file '{}' is missing its function document",
-            path.display()
-        ))),
-        (GraphResourceKind::Event, Some(_)) => Err(ProjectError::InvalidProjectFormat(format!(
-            "event graph file '{}' must not contain a function document",
-            path.display()
-        ))),
+        (GraphResourceKind::FunctionGraph, None) => {
+            Err(ProjectError::InvalidProjectFormat(format!(
+                "function graph file '{}' is missing its function document",
+                path.display()
+            )))
+        }
+        (GraphResourceKind::EventGraph, Some(_)) => {
+            Err(ProjectError::InvalidProjectFormat(format!(
+                "event graph file '{}' must not contain a function document",
+                path.display()
+            )))
+        }
         _ => Ok(()),
     }
 }
@@ -358,133 +408,35 @@ fn graph_name_from_file_path(path: &Path) -> Option<String> {
         .filter(|stem| !stem.is_empty())
 }
 
-fn read_graph_index_entries(
+fn read_node_file_headers(
     root: &Path,
-    dir: &str,
-    extension: &str,
     expected_kind: GraphResourceKind,
     graph_resources: &GraphResourceIndex,
-) -> Result<Vec<ProjectGraphIndexEntry>, ProjectError> {
-    let mut entries = Vec::new();
-    for path in list_graph_files(root, dir, extension)? {
-        let header = read_graph_file_header(path.as_path())?;
-        let relative_path = path_to_slash_string(
-            path.strip_prefix(root)
-                .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?,
-        );
-        let Some(resource) = graph_resources.get_by_path(&relative_path) else {
-            continue;
-        };
-        if header.kind != expected_kind {
-            return Err(ProjectError::InvalidProjectFormat(format!(
-                "graph file '{}' kind does not match its resource directory",
-                path.display()
-            )));
-        }
-        let name = graph_name_from_file_path(path.as_path()).unwrap_or(header.name);
-        let function_editor_projection = header
-            .function
-            .as_ref()
-            .map(FunctionEditorProjection::try_from)
-            .transpose()
-            .map_err(|error| {
-                ProjectError::InvalidProjectFormat(format!(
-                    "function graph file '{}' has an invalid editor projection: {error}",
+) -> Result<Vec<ScannedNodeFileHeader>, ProjectError> {
+    let mut resources: Vec<_> = graph_resources
+        .entries()
+        .iter()
+        .filter(|entry| entry.kind == expected_kind)
+        .collect();
+    resources.sort_by_key(|entry| entry.path.as_str().to_lowercase());
+    resources
+        .into_iter()
+        .map(|resource| {
+            let path = root.join(resource.path.as_str());
+            let header = read_graph_file_header(&path)?;
+            if header.kind != expected_kind {
+                return Err(ProjectError::InvalidProjectFormat(format!(
+                    "graph file '{}' kind does not match its resource directory",
                     path.display()
-                ))
-            })?;
-        let (function_revision, function_signature) = header
-            .function
-            .map(|function| (Some(function.revision), Some(function.signature)))
-            .unwrap_or((None, None));
-        entries.push(ProjectGraphIndexEntry {
-            path: resource.path.as_str().to_string(),
-            name,
-            graph_type: expected_kind,
-            revision: yss_project_identity::ResourceRevision::INITIAL,
-            function_revision,
-            function_signature,
-            function_editor_projection,
-        });
-    }
-    Ok(entries)
-}
-
-fn list_graph_files(root: &Path, dir: &str, extension: &str) -> Result<Vec<PathBuf>, ProjectError> {
-    let graph_dir = root.join(dir);
-    if !graph_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut paths = Vec::new();
-    for entry in std::fs::read_dir(&graph_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file()
-            && path
-                .extension()
-                .and_then(|value| value.to_str())
-                .map(|value| value.eq_ignore_ascii_case(extension))
-                .unwrap_or(false)
-        {
-            paths.push(path);
-        }
-    }
-    paths.sort_by_key(|path| {
-        path.file_name()
-            .map(|name| name.to_string_lossy().to_lowercase())
-            .unwrap_or_default()
-    });
-    Ok(paths)
-}
-
-#[cfg(any(test, feature = "test-support"))]
-fn graph_relative_path_for_save(
-    root: &Path,
-    dir: &str,
-    extension: &str,
-    graph_name: &str,
-    graph_path: &GraphResourcePath,
-) -> Result<String, ProjectError> {
-    let target_dir = root.join(dir);
-    std::fs::create_dir_all(&target_dir)?;
-    let existing_path = find_graph_file_path(root, dir, graph_path)?;
-    let file_name = unique_graph_file_name(
-        target_dir.as_path(),
-        graph_name,
-        extension,
-        existing_path.as_deref(),
-    );
-    let next_path = target_dir.join(&file_name);
-    if let Some(existing_path) = existing_path
-        && existing_path != next_path
-        && existing_path.exists()
-    {
-        std::fs::remove_file(existing_path)?;
-    }
-    next_path
-        .strip_prefix(root)
-        .map(path_to_slash_string)
-        .map_err(|e| ProjectError::InvalidProjectFormat(e.to_string()))
-}
-
-#[cfg(any(test, feature = "test-support"))]
-fn find_graph_file_path(
-    root: &Path,
-    dir: &str,
-    graph_path: &GraphResourcePath,
-) -> Result<Option<PathBuf>, ProjectError> {
-    let graph_resources = match load_graph_resource_index(root) {
-        Ok(index) => index,
-        Err(ProjectError::FileNotFound(_)) => return Ok(None),
-        Err(error) => return Err(error),
-    };
-    if let Some(resource) = graph_resources.get_by_path(graph_path.as_str())
-        && resource.path.as_str().starts_with(&format!("{dir}/"))
-    {
-        return Ok(Some(root.join(resource.path.as_str())));
-    }
-    Ok(None)
+                )));
+            }
+            Ok(ScannedNodeFileHeader {
+                path: resource.path.as_str().to_owned(),
+                name: resource.path.display_name().to_owned(),
+                function: header.function,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn find_graph_document_path(
@@ -497,58 +449,6 @@ pub(crate) fn find_graph_document_path(
         return Ok(Some((path, resource.kind, document)));
     }
     Ok(None)
-}
-
-#[cfg(any(test, feature = "test-support"))]
-fn unique_graph_file_name(
-    dir: &Path,
-    graph_name: &str,
-    extension: &str,
-    existing_path: Option<&Path>,
-) -> String {
-    let stem = sanitize_file_stem(graph_name);
-    for index in 0.. {
-        let candidate = if index == 0 {
-            format!("{stem}.{extension}")
-        } else {
-            format!("{stem} {index}.{extension}")
-        };
-        let candidate_path = dir.join(&candidate);
-        if existing_path
-            .map(|path| path == candidate_path.as_path())
-            .unwrap_or(false)
-            || !candidate_path.exists()
-        {
-            return candidate;
-        }
-    }
-    unreachable!("unique file name loop should always return")
-}
-
-#[cfg(any(test, feature = "test-support"))]
-fn sanitize_file_stem(name: &str) -> String {
-    let sanitized: String = name
-        .trim()
-        .chars()
-        .map(|ch| {
-            if ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
-            {
-                '_'
-            } else {
-                ch
-            }
-        })
-        .collect();
-    let sanitized = sanitized.trim_matches([' ', '.']).trim();
-    if sanitized.is_empty() {
-        "Untitled".to_string()
-    } else {
-        sanitized.to_string()
-    }
-}
-
-fn path_to_slash_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, ProjectError> {
@@ -600,6 +500,39 @@ pub fn discover_databases_from_root(
 mod project_manifest_adapter_tests {
     use super::{ProjectManifest, serialize_project_manifest};
     use yss_project_model::ProjectData;
+
+    #[test]
+    fn fixture_writes_graph_identity_without_renaming_from_display_name() {
+        use yss_graph_document::{GraphResourceKind, GraphResourcePath};
+        use yss_project_model::GraphResourceDocument;
+
+        let mut data = ProjectData::new();
+        for path in ["events/First.yssbi-event", "events/Second.yssbi-event"] {
+            data.graphs.insert(
+                GraphResourcePath::new(path).unwrap(),
+                GraphResourceDocument::new("Shared display name", GraphResourceKind::EventGraph),
+            );
+        }
+        let fixture = crate::fixtures::TempProject::activate("fixture-resource-paths", data);
+        let session = fixture.state().capture_project_session().unwrap();
+        let index = super::read_project_index_from_root(session.root.as_path()).unwrap();
+        assert_eq!(
+            index
+                .event_graphs
+                .iter()
+                .map(|event| event.path.as_str())
+                .collect::<Vec<_>>(),
+            ["events/First.yssbi-event", "events/Second.yssbi-event"]
+        );
+        assert_eq!(
+            index
+                .event_graphs
+                .iter()
+                .map(|event| event.name.as_str())
+                .collect::<Vec<_>>(),
+            ["First", "Second"]
+        );
+    }
 
     #[test]
     fn project_manifest_serialization_uses_the_canonical_validated_contract() {

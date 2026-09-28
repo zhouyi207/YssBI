@@ -269,11 +269,9 @@ impl ProjectCatalogResources {
         let mut databases = BTreeMap::new();
         let mut entries = Vec::new();
 
-        for graph in index.graphs {
-            let Some(signature) = graph.function_signature else {
-                continue;
-            };
-            let path = GraphResourcePath::new(graph.path.clone())
+        for function in index.function_graphs {
+            let signature = function.function_signature;
+            let path = GraphResourcePath::new(function.path.clone())
                 .map_err(ProjectCatalogReadSource::invalid_graph_path)?;
             let signature = graph_signature(signature)
                 .map_err(|_| ProjectCatalogReadSource::invalid_function_type())?;
@@ -281,11 +279,11 @@ impl ProjectCatalogResources {
                 return Err(ProjectCatalogReadSource::invalid_declaration_facts());
             }
             entries.push(CatalogResourceEntry {
-                name: graph.name.into_boxed_str(),
+                name: function.name.into_boxed_str(),
                 node_type_id: node_type("yssbi.project.function.call")?,
-                resource_path: CatalogResourcePath::new(graph.path),
-                resource_revision: graph.function_revision.unwrap_or(graph.revision).get(),
-                create_args: ResourceBoundCreateArgs::Function,
+                resource_path: CatalogResourcePath::new(function.path),
+                resource_revision: function.function_revision.get(),
+                create_args: ResourceBoundCreateArgs::FunctionGraph,
                 technical_terms: vec!["call".into(), "function".into()],
             });
         }

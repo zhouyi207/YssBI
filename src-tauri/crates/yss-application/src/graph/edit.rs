@@ -30,14 +30,12 @@ fn build_catalog_mutation_validation_snapshot(
 ) -> CatalogMutationValidationSnapshot {
     let mut resources = BTreeMap::new();
 
-    for graph in &index.graphs {
-        let Some(signature) = graph.function_signature.clone() else {
-            continue;
-        };
+    for function in &index.function_graphs {
+        let signature = function.function_signature.clone();
         resources.insert(
-            CatalogResourcePath::new(graph.path.clone()),
+            CatalogResourcePath::new(function.path.clone()),
             CatalogMutationResource::Function {
-                revision: graph.function_revision.unwrap_or(graph.revision).get(),
+                revision: function.function_revision.get(),
                 signature: CatalogFunctionSignature {
                     parameters: signature
                         .parameters

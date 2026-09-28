@@ -248,7 +248,7 @@ fn save_as_activation_failure_and_success_return_exact_direct_receipts() {
                             "authority drift",
                             yss_project_model::GraphResourceDocument::new(
                                 "authority drift",
-                                yss_graph_document::GraphResourceKind::Event,
+                                yss_graph_document::GraphResourceKind::EventGraph,
                             ),
                             OperationId::new(),
                         )

@@ -247,7 +247,7 @@ mod tests {
 
     fn function_project(revision: ResourceRevision) -> (TempProject, GraphResourcePath) {
         let path = GraphResourcePath::new("functions/Compute.yssbi-function").unwrap();
-        let mut graph = GraphResourceDocument::new("Compute", GraphResourceKind::Function);
+        let mut graph = GraphResourceDocument::new("Compute", GraphResourceKind::FunctionGraph);
         graph.function = Some(FunctionDocument {
             revision,
             signature: FunctionSignature::default(),
@@ -313,7 +313,7 @@ mod tests {
         );
         state.unload_graph_resource(&path).unwrap();
         assert_eq!(
-            state.read_project_index(&project).unwrap().graphs[0].revision,
+            state.read_project_index(&project).unwrap().function_graphs[0].revision,
             next_revision
         );
         state

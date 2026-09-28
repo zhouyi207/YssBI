@@ -29,7 +29,10 @@ pub mod project_writers;
 pub mod project_store;
 
 pub mod chart_io;
+pub mod docs;
 pub mod external_resources;
+pub mod file_resources;
+pub mod minds;
 pub mod resource_reveal;
 
 pub use graph_resource_index::*;

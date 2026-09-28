@@ -946,9 +946,12 @@ pub struct ResultInspection {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectResourceKindInspection {
-    Graph,
-    Database,
+    EventGraph,
+    FunctionGraph,
     Chart,
+    Mind,
+    Doc,
+    Database,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]

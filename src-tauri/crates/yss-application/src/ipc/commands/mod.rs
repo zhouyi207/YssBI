@@ -11,6 +11,11 @@ pub mod command_project;
 pub(crate) mod execution_dto;
 
 pub mod command_chart;
+pub mod command_doc;
+pub mod command_mind;
+mod file_resource;
+pub use command_doc::*;
+pub use command_mind::*;
 pub mod command_sci;
 pub mod command_serial_tests;
 pub(crate) mod project_failure;

@@ -72,7 +72,7 @@ mod tests {
         let mut project_a = ProjectData::new();
         project_a.graphs.insert(
             graph_path.clone(),
-            GraphResourceDocument::new("Shared", GraphResourceKind::Event),
+            GraphResourceDocument::new("Shared", GraphResourceKind::EventGraph),
         );
         fixtures::write_project(&project_a, root.to_string_lossy().as_ref()).unwrap();
         fixtures::write_graph(&project_a, root.to_string_lossy().as_ref(), &graph_path).unwrap();

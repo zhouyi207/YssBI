@@ -429,7 +429,7 @@ impl ApplicationState {
                     .project()
                     .read_project_index(project)
                     .map_err(|_| UiError::Unavailable)?;
-                if !index.graphs.iter().any(|graph| &graph.path == graph_path)
+                if !index.contains_node_file(graph_path)
                     || node_id
                         .as_ref()
                         .is_some_and(|id| uuid::Uuid::parse_str(id).is_err())

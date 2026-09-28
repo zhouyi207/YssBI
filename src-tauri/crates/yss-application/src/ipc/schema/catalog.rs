@@ -101,7 +101,8 @@ pub enum NodeCreationDescriptorDto {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ResourceBoundCreateArgsDto {
-    Function,
+    #[serde(rename = "function_graph")]
+    FunctionGraph,
     Database,
 }
 
@@ -233,7 +234,7 @@ impl From<DomainCreationDescriptor> for NodeCreationDescriptorDto {
 impl From<DomainCreateArgs> for ResourceBoundCreateArgsDto {
     fn from(value: DomainCreateArgs) -> Self {
         match value {
-            DomainCreateArgs::Function => Self::Function,
+            DomainCreateArgs::FunctionGraph => Self::FunctionGraph,
             DomainCreateArgs::Database => Self::Database,
         }
     }
@@ -287,8 +288,8 @@ impl TryFrom<NodeCreationDescriptorDto> for yss_node_catalog::NodeCreation {
                 resource_path: yss_node_catalog::CatalogResourcePath::new(resource_path),
                 resource_revision,
                 create_args: match create_args {
-                    ResourceBoundCreateArgsDto::Function => {
-                        yss_node_catalog::ResourceBoundCreateArgs::Function
+                    ResourceBoundCreateArgsDto::FunctionGraph => {
+                        yss_node_catalog::ResourceBoundCreateArgs::FunctionGraph
                     }
                     ResourceBoundCreateArgsDto::Database => {
                         yss_node_catalog::ResourceBoundCreateArgs::Database
@@ -331,7 +332,7 @@ mod tests {
             path.clone(),
             yss_project_model::GraphResourceDocument::new(
                 "Opaque Function",
-                GraphResourceKind::Function,
+                GraphResourceKind::FunctionGraph,
             ),
         );
         let fixture =
@@ -428,7 +429,7 @@ mod tests {
             .unwrap();
         assert_eq!(unavailable["available"], false);
         assert_eq!(item["creation"]["kind"], "resourceBound");
-        assert_eq!(item["creation"]["createArgs"]["kind"], "function");
+        assert_eq!(item["creation"]["createArgs"]["kind"], "function_graph");
         assert!(
             item["ports"]
                 .as_array()

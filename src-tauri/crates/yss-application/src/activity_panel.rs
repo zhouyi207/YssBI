@@ -23,12 +23,23 @@ pub struct ActivityTool {
 
 #[derive(Debug)]
 pub enum ActivityItem {
-    Graph {
+    EventGraph {
         path: String,
         name: String,
-        graph_type: yss_graph_document::GraphResourceKind,
+    },
+    FunctionGraph {
+        path: String,
+        name: String,
     },
     Chart {
+        path: String,
+        name: String,
+    },
+    Mind {
+        path: String,
+        name: String,
+    },
+    Doc {
         path: String,
         name: String,
     },
@@ -112,22 +123,22 @@ pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> Acti
     }
     for (kind, id, label, expanded, action, action_label, empty) in [
         (
-            "event",
-            "project.events",
-            "sidebar.projectTree.categories.events",
+            "event_graph",
+            "project.eventGraphs",
+            "sidebar.projectTree.categories.eventGraphs",
             true,
-            "newEvent",
+            "newEventGraph",
             "canvas.newEventGraph",
-            "sidebar.noEvents",
+            "sidebar.noEventGraphs",
         ),
         (
-            "function",
-            "project.functions",
-            "sidebar.projectTree.categories.functions",
+            "function_graph",
+            "project.functionGraphs",
+            "sidebar.projectTree.categories.functionGraphs",
             false,
-            "newFunction",
+            "newFunctionGraph",
             "canvas.newFunctionGraph",
-            "sidebar.noFunctions",
+            "sidebar.noFunctionGraphs",
         ),
         (
             "chart",
@@ -137,6 +148,24 @@ pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> Acti
             "newChart",
             "contextMenu.sidebar.newChart",
             "chartsSidebar.noCharts",
+        ),
+        (
+            "mind",
+            "project.minds",
+            "documents.minds",
+            true,
+            "newMind",
+            "documents.newMind",
+            "documents.noMinds",
+        ),
+        (
+            "doc",
+            "project.docs",
+            "documents.docs",
+            true,
+            "newDoc",
+            "documents.newDoc",
+            "documents.noDocs",
         ),
         (
             "database",
@@ -165,28 +194,50 @@ pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> Acti
         let start = document.rows.len();
         if let Some(index) = index {
             match kind {
-                "event" | "function" => {
-                    let graph_kind = if kind == "event" {
-                        yss_graph_document::GraphResourceKind::Event
-                    } else {
-                        yss_graph_document::GraphResourceKind::Function
-                    };
-                    document.rows.extend(
-                        index
-                            .graphs
-                            .iter()
-                            .filter(|graph| graph.graph_type == graph_kind)
-                            .map(|graph| ActivityRow {
-                                id: format!("{kind}:{}", graph.path),
-                                depth: 1,
-                                content: ActivityRowContent::Item(ActivityItem::Graph {
-                                    path: graph.path.clone(),
-                                    name: graph.name.clone(),
-                                    graph_type: graph.graph_type,
-                                }),
+                "event_graph" => {
+                    document
+                        .rows
+                        .extend(index.event_graphs.iter().map(|file| ActivityRow {
+                            id: format!("event_graph:{}", file.path),
+                            depth: 1,
+                            content: ActivityRowContent::Item(ActivityItem::EventGraph {
+                                path: file.path.clone(),
+                                name: file.name.clone(),
                             }),
-                    );
+                        }))
                 }
+                "function_graph" => {
+                    document
+                        .rows
+                        .extend(index.function_graphs.iter().map(|file| ActivityRow {
+                            id: format!("function_graph:{}", file.path),
+                            depth: 1,
+                            content: ActivityRowContent::Item(ActivityItem::FunctionGraph {
+                                path: file.path.clone(),
+                                name: file.name.clone(),
+                            }),
+                        }))
+                }
+                "mind" => document
+                    .rows
+                    .extend(index.minds.iter().map(|file| ActivityRow {
+                        id: format!("mind:{}", file.path.as_str()),
+                        depth: 1,
+                        content: ActivityRowContent::Item(ActivityItem::Mind {
+                            path: file.path.as_str().into(),
+                            name: file.name.clone(),
+                        }),
+                    })),
+                "doc" => document
+                    .rows
+                    .extend(index.docs.iter().map(|file| ActivityRow {
+                        id: format!("doc:{}", file.path.as_str()),
+                        depth: 1,
+                        content: ActivityRowContent::Item(ActivityItem::Doc {
+                            path: file.path.as_str().into(),
+                            name: file.name.clone(),
+                        }),
+                    })),
                 "chart" => document
                     .rows
                     .extend(index.charts.iter().map(|chart| ActivityRow {
