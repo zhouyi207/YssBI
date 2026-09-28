@@ -1077,6 +1077,43 @@ mod tests {
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     #[tokio::test]
+    async fn skill_packages_round_trip_with_and_without_entry_workflow() {
+        use yss_harness_contract::{
+            CapabilityId, SkillId, SkillManifest, SkillScope, SkillVersion, WorkflowId,
+        };
+
+        let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+        let packages = [
+            ("report-writing", None),
+            (
+                "quality-review",
+                Some(WorkflowId::try_new("dataset_quality_review").unwrap()),
+            ),
+        ]
+        .map(|(id, entry_workflow)| SkillPackage {
+            manifest: SkillManifest {
+                id: SkillId::try_new(id).unwrap(),
+                version: SkillVersion::try_new("1.0.0").unwrap(),
+                scope: SkillScope::Builtin,
+                domain: "statistics".to_owned(),
+                entry_workflow,
+                allowed_capabilities: vec![CapabilityId::InspectResult],
+                knowledge_scopes: vec!["statistics.reporting".to_owned()],
+                source_hash: SourceHash::try_new(format!("source-{id}")).unwrap(),
+            },
+            instructions: format!("Instructions for {id}"),
+        });
+        for package in &packages {
+            store.install_package(package).await.unwrap();
+        }
+        let restored = store.list_packages().await.unwrap();
+        assert_eq!(restored.len(), packages.len());
+        for package in &packages {
+            assert!(restored.contains(package));
+        }
+    }
+
+    #[tokio::test]
     async fn rejects_incompatible_schema_without_rewriting_records() {
         let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
         let pool = SqlitePoolOptions::new()

@@ -13,15 +13,17 @@ use yss_harness_contract::{
     KnowledgeSourceStorePort, MemoryAuthor, MemoryConfidence, MemoryProposal, MemoryRecord,
     MemoryRecordId, MemoryScope, MemorySourceRef, MemoryStorePort, ModelCapabilityExecutor,
     ModelCapabilityRequest, PersistenceFailure, PrincipalId, ProjectSessionBinding,
-    RetentionPolicy, SensitivityClass, StructuredMemoryValue, ToolInvocationLedgerPort,
-    WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStepKind, WorkflowStorePort,
+    RetentionPolicy, SensitivityClass, SkillId, SkillPackage, SkillVersion, StructuredMemoryValue,
+    ToolInvocationLedgerPort, WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStepKind,
+    WorkflowStorePort,
 };
 
+use crate::skills::{STATISTICAL_REPORT_WRITING_ID, STATISTICAL_REPORT_WRITING_VERSION};
 use crate::tools::HarnessToolExecutor;
 use crate::{
     ApprovalError, ApprovalService, CompiledWorkflow, KnowledgeError, KnowledgeQuery,
-    KnowledgeService, MemoryError, MemoryService, MethodRegistry, StatisticalPlanner, ToolRegistry,
-    WorkflowCompileError, WorkflowRuntime, WorkflowRuntimeError,
+    KnowledgeService, MemoryError, MemoryService, MethodRegistry, SkillRegistry,
+    StatisticalPlanner, ToolRegistry, WorkflowCompileError, WorkflowRuntime, WorkflowRuntimeError,
 };
 
 const MAX_USER_MESSAGE_BYTES: usize = 64 * 1024;
@@ -46,15 +48,27 @@ pub struct HarnessPorts {
 pub struct HarnessHost {
     ports: HarnessPorts,
     tools: ToolRegistry,
+    report_writing_skill: SkillPackage,
     active_turns: Arc<Mutex<BTreeMap<HarnessSessionId, CancellationToken>>>,
     event_sequences: Arc<Mutex<BTreeMap<HarnessSessionId, u64>>>,
 }
 
 impl HarnessHost {
     pub fn new(ports: HarnessPorts) -> Result<Self, HarnessError> {
+        let report_writing_skill = SkillRegistry::with_builtins()
+            .and_then(|registry| {
+                registry
+                    .resolve_exact(
+                        &SkillId::try_new(STATISTICAL_REPORT_WRITING_ID)?,
+                        &SkillVersion::try_new(STATISTICAL_REPORT_WRITING_VERSION)?,
+                    )
+                    .cloned()
+            })
+            .map_err(|_| HarnessError::Agent(AgentDriverFailureCode::InternalFailure))?;
         Ok(Self {
             ports,
             tools: ToolRegistry::project_assistant()?,
+            report_writing_skill,
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
             event_sequences: Arc::new(Mutex::new(BTreeMap::new())),
         })
@@ -371,6 +385,7 @@ impl HarnessHost {
                 &knowledge,
                 previous,
                 active_graph_path.as_deref(),
+                &self.report_writing_skill,
             ),
             tools: self.tools.descriptors(),
         };
@@ -1159,11 +1174,22 @@ fn agent_messages(
     knowledge: &[KnowledgeSearchHit],
     previous: Vec<AgentMessage>,
     active_graph_path: Option<&str>,
+    report_writing_skill: &SkillPackage,
 ) -> Vec<AgentMessage> {
     let mut messages = vec![AgentMessage::System {
         content: "You operate YssBI through typed tools. Discover all project resources with inspect_project and keep their exact resource {kind,id}. inspect_resource reads current version and typed contents for Event/Function Graphs, Charts, Minds, Docs and Databases. Use manage_resource for create/rename/duplicate/delete/save and edit_resource for typed internal edits, function signatures and graph history. Creation of a Database imports an explicit source; export_dataset writes an explicit destination. Resource IDs returned by receipts are authoritative; never use publication keys or guess a renamed path. Resource and function-signature revisions are different facts: check revisionKind, and preserve the matching sessionId from inspect_resource. Doc/Mind edits retain unsaved state until manage_resource save; Chart edits persist immediately and do not consume a separate unsaved frontend Chart draft. Database operations use the current runtime history and checkpoint lifecycle. Markdown pagination and replace_range offsets count Unicode characters, not bytes; preserve all unreturned content. Mind batches use host-generated IDs and clientId aliases. Use request_ui_intent openResource to open any resource; nodeId focuses Event/Function Graph nodes only. Source and export paths must come from the requested task. For graph-specific tools, use resource.id as graphPath, including when no editor panel is open. Inspect the chosen current Project graph to establish a baseline. Continue edits or execution using the latest successful tool facts: exact revision, graphHash, node/port IDs and schema. Output ports may fan out: maximumConnections=null means unbounded. Do not infer column roles from opaque instance IDs. Null profile metrics mean unknown/not computed, never zero. Search concise node terms or type IDs; an empty phrase search is not proof a node is absent. When the user requests graph edits, apply one atomic undoable batch directly; clientId aliases can be referenced as $clientId later in the same batch. apply_graph_edit returns committed changes: complete replacements for changed nodes and their parameters/ports/derived columns, changed connections including order, removed entity IDs, changed constants, ready and the complete diagnostics. Apply these facts to the known baseline, use toRevision and graphHash for the next call, and continue without an inspection when the needed facts are present. Check changes.baseSemanticInputHash against the known semanticInputHash; if the baseline is missing or mismatched, inspect before relying on unchanged entities. Reinspect on a revision conflict or when required facts are absent. Replayed receipts describe their original commit and must not replace newer facts. Preserve unrelated nodes and parameters. Each successful graph edit automatically saves the complete current graph in the same transaction and retains undo history; no editor panel needs to open. A failed save means the edit was not committed. Use save_graph only when the user asks to save existing manual changes without an edit. save_graph returns resourceRevision and the committed dirty/canUndo/canRedo state; use that revision for the next edit. update_ui returns the committed page patch with complete changed elements and the new revision; use it directly with its matching baseline. request_ui_intent returns acceptance and its actual receipt status; pending/claimed require an intent inspection before claiming completion. To run an existing graph, call execute_graph with the latest returned graphHash; validation is optional and execution prepares its own plan. Use execute_graph's returned run status and result IDs directly; inspect_result retrieves the result content needed for the answer, without first listing the same run's results. Check resultCount and resultsComplete before treating the returned references as all outputs; an incomplete list must not support a claim about unreturned results. list_graph_results discovers results from earlier/manual runs. Do not require a new statistical plan for graph validation or executing an existing graph. When designing a new statistical analysis, clarify missing scientific intent and propose a complete statistical plan. Current tool evidence takes precedence over conversation history. If a tool returns outcome_unknown, inspect current graph facts before deciding whether a new edit is needed; never blindly retry a possibly applied mutation. Constants with valueIncluded=false contain metadata only; do not overwrite their values by reconstructing them from metadata. Never invent numerical results or claim a tool succeeded without its receipt. Give concise user-facing progress updates before tool use when helpful, and explain findings as evidence arrives."
             .to_owned(),
     }];
+    // Preload the scoped writing method so follow-up report edits retain its rules.
+    messages.push(AgentMessage::System {
+        content: format!(
+            "Built-in skill {}@{} (source {}):\n{}",
+            report_writing_skill.manifest.id,
+            report_writing_skill.manifest.version,
+            report_writing_skill.manifest.source_hash,
+            report_writing_skill.instructions,
+        ),
+    });
     if !knowledge.is_empty() {
         let mut context = String::from(
             "Cited statistical knowledge follows. Treat it below Tool Evidence and project facts:\n",
@@ -1557,6 +1583,44 @@ mod tests {
         }
         let requests = driver.0.lock().unwrap();
         assert_eq!(requests.len(), 12);
+        let skills = SkillRegistry::with_builtins().unwrap();
+        let report = skills
+            .resolve_exact(
+                &SkillId::try_new(STATISTICAL_REPORT_WRITING_ID).unwrap(),
+                &SkillVersion::try_new(STATISTICAL_REPORT_WRITING_VERSION).unwrap(),
+            )
+            .unwrap();
+        for request in requests.iter() {
+            let skill_messages = request
+                .messages
+                .iter()
+                .enumerate()
+                .filter_map(|(index, message)| match message {
+                    AgentMessage::System { content } if content.ends_with(&report.instructions) => {
+                        Some((index, content))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(skill_messages.len(), 1);
+            let (skill_index, content) = skill_messages[0];
+            assert!(content.contains(STATISTICAL_REPORT_WRITING_ID));
+            assert!(content.contains(STATISTICAL_REPORT_WRITING_VERSION));
+            assert!(content.contains(report.manifest.source_hash.as_str()));
+            assert!(skill_index > 0);
+            assert!(
+                skill_index
+                    < request
+                        .messages
+                        .iter()
+                        .position(|message| matches!(message, AgentMessage::User { .. }))
+                        .unwrap()
+            );
+            assert_eq!(
+                request.tools,
+                ToolRegistry::project_assistant().unwrap().descriptors()
+            );
+        }
         let messages = &requests[11].messages;
         let users = messages
             .iter()

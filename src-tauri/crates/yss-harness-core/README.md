@@ -222,6 +222,10 @@ Workflow run 绑定 exact definition ID/version 和 Project session。恢复或�
 
 Skill 是允许 tools、knowledge scope 和 workflow policy 的版本化方法包，不是任意脚本。Knowledge source 是 authority，search index 可以重建。Memory 是结构化、scoped、带 source/project/sensitivity/retention 的 record，不等同于 transcript 或 vector index。
 
+`SkillManifest.entryWorkflow` 可为空：`dataset-quality-review` 绑定现有质量检查 workflow；[statistical-report-writing](skills/statistical-report-writing/SKILL.md) 是不执行 workflow 的报告写作规范。后者拥有统计证据、公式、表格竖线、显著性标记、金额转义及交付检查规则；Markdown 解析选项和布局仍由共享前端渲染器负责。
+
+Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本、source hash 和原始规范作为独立 System 消息预加载到每次 Assistant 请求，位于基础工具策略之后、知识和对话历史之前。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。当前没有独立报告 Agent 或模型侧 `load_skill` 工具；这是 Host 加载内置方法包，不改变现有工具注册、授权与资源保存流程。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
+
 当前 Assistant 自动使用的持久记忆范围是 Session Memory。Persistent User Memory、portable Project Memory、hybrid/vector retrieval、remote Skill trust 和完整治理 UI 尚未成为 current production contract。
 
 ## 8. Rig adapter

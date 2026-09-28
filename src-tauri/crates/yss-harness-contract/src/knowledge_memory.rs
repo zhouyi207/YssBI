@@ -22,7 +22,8 @@ pub struct SkillManifest {
     pub version: SkillVersion,
     pub scope: SkillScope,
     pub domain: String,
-    pub entry_workflow: WorkflowId,
+    /// Instruction-only skills do not require an executable workflow.
+    pub entry_workflow: Option<WorkflowId>,
     pub allowed_capabilities: Vec<CapabilityId>,
     pub knowledge_scopes: Vec<String>,
     pub source_hash: SourceHash,
