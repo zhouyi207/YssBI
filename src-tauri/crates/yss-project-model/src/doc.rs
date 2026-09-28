@@ -15,8 +15,8 @@ impl FileContent for DocDocument {
     const KIND: &'static str = "doc";
     const DIRECTORY: &'static str = yss_project_layout::DOCS_DIR;
     const EXTENSION: &'static str = yss_project_layout::DOC_EXTENSION;
-    fn new(title: &str, _next_id: &mut dyn FnMut() -> String) -> Self {
-        Self(format!("# {title}\n\n"))
+    fn new(_title: &str, _next_id: &mut dyn FnMut() -> String) -> Self {
+        Self(String::new())
     }
     fn decode(bytes: &[u8]) -> Result<Self, String> {
         String::from_utf8(bounded(bytes.to_vec())?)

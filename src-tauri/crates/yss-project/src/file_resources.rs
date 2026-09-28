@@ -648,6 +648,7 @@ mod tests {
                 name: "Report".into(),
             },
         );
+        assert!(created.content.0.is_empty());
         let edited = apply(
             state,
             project,
@@ -662,7 +663,7 @@ mod tests {
         assert!(edited.dirty);
         assert_eq!(
             std::fs::read_to_string(session.root.as_path().join(created.path.as_str())).unwrap(),
-            "# Report\n\n"
+            ""
         );
         assert!(
             state
@@ -688,7 +689,7 @@ mod tests {
         assert!(moved.dirty);
         assert_eq!(
             std::fs::read_to_string(session.root.as_path().join(moved.path.as_str())).unwrap(),
-            "# Report\n\n"
+            ""
         );
         assert!(!session.root.as_path().join(created.path.as_str()).exists());
         let saved = apply(
