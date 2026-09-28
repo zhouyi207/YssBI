@@ -12,7 +12,7 @@ GUI 的排序、显隐、重置、JSON 导入和 Harness 的页面修改调用�
 
 Summary 内容和检验参数属于图节点参数。默认页面只生成本次结果已选择的绑定；布局 replace/patch/reset 同样受该结果能力约束，不能通过 JSON 加入未计算的分析。Report 的“添加并计算”调用 Results 的节点编辑与定向执行流程，成功后切换到新结果及其默认页面，不改写旧结果的统计快照。
 
-Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态仍由 FlexLayout Model 拥有。后端可以请求打开图、定位节点、打开结果和显示登记过的面板，由前端调用已有的面板与编辑器操作。输入草稿、选择、视口、拖拽和悬停保留在前端；拖拽过程不往返 IPC。
+Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态仍由 FlexLayout Model 拥有。后端可以请求打开六类项目资源、定位图节点、打开结果和显示登记过的面板，由前端调用已有的面板与编辑器操作。输入草稿、选择、视口、拖拽和悬停保留在前端；拖拽过程不往返 IPC。
 
 ```mermaid
 flowchart LR
@@ -103,7 +103,11 @@ Application 只发布中立 observer 通知，Tokio 缓冲与任务归 IPC；取
 
 ## 意图与回执
 
-GUI 页面按钮和 Harness `request_ui_intent` 共用 Application。意图仅包括打开已有图及可选节点定位、打开保留结果、显示白名单面板。
+GUI 页面按钮和 Harness `request_ui_intent` 共用 Application。`openResource` 使用
+`yss-project-identity::ProjectResourceRef { kind, id }` 打开已有事件图、函数图、图表、思维导图、
+文档或数据；可选 `nodeId` 只用于事件图和函数图的节点定位。其他意图为打开保留结果、显示白名单面板。
+前端复用文件/数据库打开入口；新资源的索引通知尚未到达时先刷新索引，并检查原生活动面板的真实身份。
+按钮渲染仍只提交元素 ID，由后端从当前页面解析意图；不在 renderer 复制资源命令。
 后端验证项目、资源成员关系、结果会话和请求大小；只有 `main` 工作台订阅能认领意图，其他报告窗口可以发起但不能执行工作台操作。
 
 请求携带 `clientKey`，在调用者与 Application session 内去重。相同 key 和内容返回原回执，不同内容拒绝；回执缓存有界，跨会话或淘汰后不承诺重放。

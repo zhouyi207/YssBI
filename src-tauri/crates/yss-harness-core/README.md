@@ -64,27 +64,33 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 ## 4. Registered capabilities
 
-`inspect_project` 的文件条目使用 `event`、`function`、`chart`、`mind`、`doc`，数据库继续使用
-`database`。Event 和 Function 的文件身份独立呈现；图内容编辑与运行能力共用节点图协议。
+项目工具和打开资源的界面意图共用 `yss-project-identity::ProjectResourceRef { kind, id }`。
+种类为 `event_graph`、`function_graph`、`chart`、`mind`、`doc`、`database`；ID 是各 owner 的
+不透明标识。数据库声明中的 DatabaseId 与 publication key 不可互换。图内部编辑与运行继续
+共用节点图协议，传入对应的 `resource.id` 作为 `graphPath`。
 
-桌面默认使用 `ToolRegistry::graph_assistant`；只读 foundation 仍可供独立检查型调用方使用：
+桌面默认使用 `ToolRegistry::project_assistant`；只读 foundation 仍可供独立检查型调用方使用：
 
-| Capability                | 作用                                                                  |
-| ------------------------- | --------------------------------------------------------------------- |
-| `inspect_project`         | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                  |
-| `inspect_graph`           | 读取当前图文档、版本/hash、参数、列绑定、端口约束和诊断               |
-| `search_node_catalog`     | 查询 localized node catalog                                           |
-| `inspect_dataset_schema`  | 读取 schema 和 current revision facts                                 |
-| `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                               |
-| `inspect_result`          | 读取完整结果 JSON；数列、表格及 JSON 中的 tableRef 按需分页           |
-| `apply_graph_edit`        | 原子应用并自动保存可撤销的图编辑批次                                  |
-| `validate_graph`          | 只读校验匹配 hash 的当前图，返回可运行性与阻断诊断                    |
-| `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs |
-| `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                            |
-| `save_graph`              | 用户要求保存时调用正常的独立 Save                                     |
-| `inspect_ui`              | 读取组件 Schema、当前结果页面或界面意图回执                           |
-| `update_ui`               | 按页面修订原子替换、局部修改、排序、显隐或重置展示                    |
-| `request_ui_intent`       | 请求打开图/结果、定位节点或显示允许的面板，返回待执行回执             |
+| Capability                | 作用                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `inspect_project`         | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                                     |
+| `inspect_resource`        | 按统一资源标识读取版本、正文或分页数据，包含图表设置、Mind 树、Markdown、数据行和列语义  |
+| `manage_resource`         | 创建、重命名、复制、删除和保存；数据通过明确的 CSV、Parquet、Excel 或 SQL 来源创建       |
+| `edit_resource`           | 图表设置、Mind 树批次、Markdown 文本/范围、数据行列/类型/语义/历史、函数签名及图撤销重做 |
+| `export_dataset`          | 将指定版本的数据导出为 CSV 或 Parquet，返回真实目标路径                                  |
+| `inspect_graph`           | 读取当前图文档、版本/hash、参数、列绑定、端口约束和诊断                                  |
+| `search_node_catalog`     | 查询 localized node catalog                                                              |
+| `inspect_dataset_schema`  | 读取 schema 和 current revision facts                                                    |
+| `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                                                  |
+| `inspect_result`          | 读取完整结果 JSON；数列、表格及 JSON 中的 tableRef 按需分页                              |
+| `apply_graph_edit`        | 原子应用并自动保存可撤销的图编辑批次                                                     |
+| `validate_graph`          | 只读校验匹配 hash 的当前图，返回可运行性与阻断诊断                                       |
+| `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs                    |
+| `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                                               |
+| `save_graph`              | 用户要求保存时调用正常的独立 Save                                                        |
+| `inspect_ui`              | 读取组件 Schema、当前结果页面或界面意图回执                                              |
+| `update_ui`               | 按页面修订原子替换、局部修改、排序、显隐或重置展示                                       |
+| `request_ui_intent`       | 请求打开六类资源/结果、定位图节点或显示允许的面板，返回待执行回执                        |
 
 页面与动作契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
 页面变更不写入 Project；模型必须区分意图被接受与前端已完成操作，具体校验、回执、恢复与会话边界见 [JSON 页面与界面意图](../yss-ui-contract/README.md)。
@@ -97,8 +103,27 @@ Model-facing schema 来自 typed capability contract；Harness 内部不以任�
 
 `inspect_project` 复用 Project 的 `read_project_index`，与左侧项目树使用同一资源成员来源，
 不从内存中已加载的 GraphDocument 集合推断项目有哪些图。列举资源不改变图的加载状态；返回前重验索引版本，
-读取失败或版本变化返回 typed failure。模型使用返回的图 `resourceId` 作为 `graphPath`，
+读取失败或版本变化返回 typed failure。每个条目包含 `resource`、显示名称和实际资源 revision；
+结果同时携带 Project publication revision。模型使用返回的图 `resource.id` 作为 `graphPath`，
 再通过 `inspect_graph` 按需读取当前文档；图编辑和执行均不要求先打开编辑器面板。
+
+资源命令由 Application 的 `automation/resources` 统一分发，调用现有 Graph、Chart、Mind、Doc
+和 Database 用例。名称、路径、类型、树约束与持久化仍由这些 owner 校验；不另建 Harness 文档。
+`inspect_resource` 返回 `ResourceVersion`，保留文档编辑会话和资源 revision。写入拒绝过期版本；
+函数签名另有自己的 revision，回执用 `revisionKind` 区分，不能拿签名版本代替图资源版本。
+图表基于读取版本的修改在 Project writer 内重验，GUI 独立 Save 保留原来的覆盖语义。
+
+Mind 添加主题由宿主分配真实 ID，批次内可用 `$clientId` 引用；非法树操作整批不提交。
+Markdown 的分页和范围修改按 Unicode 字符计数，允许修改已读片段并保留未读取正文。
+数据读取按行分页并返回稳定 row IDs、物理类型、列语义及历史状态；复制通过既有导出/导入 owner
+保留数据和 Schema，产生新的数据库身份。导出在替换目标前重验版本，发布结果不确定时不自动重试。
+
+Doc/Mind 修改保留现有 Edit/Save 生命周期；图历史与数据库历史也沿用各自 owner。
+图表设置修改立即持久化。Chart 没有 Rust 未保存缓冲区，`manage_resource` 的 Chart Save
+确认已持久化版本，不读取或保存独立的前端配置草稿；后续发布继续保留前端未提交的修改。
+资源回执返回实际变化、删除标识、移动和创建的节点 ID，不猜测新名称对应的路径。
+Gateway 将真实提交送入既有 Project 事件发布入口，使侧栏和编辑器通过同一发布协调器刷新。
+通知交付失败不会把已提交写操作改写为未提交；模型仍根据实际回执继续。
 
 Application 的 `invoke_automation_capability` 是同步业务入口。`yss-application::ipc` 的 `ApplicationCapabilityGateway` 使用 blocking worker 调用它，避免在 Tokio async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
 

@@ -48,8 +48,8 @@ pub enum UiPanel {
     deny_unknown_fields
 )]
 pub enum UiIntent {
-    OpenGraph {
-        graph_path: String,
+    OpenResource {
+        resource: yss_project_identity::ProjectResourceRef,
         node_id: Option<String>,
     },
     OpenResult {
@@ -216,13 +216,17 @@ impl UiSource {
 impl UiIntent {
     pub fn validate(&self) -> Result<(), InvalidUiSpec> {
         match self {
-            Self::OpenGraph {
-                graph_path,
-                node_id,
-            } => {
-                if graph_path.is_empty()
-                    || graph_path.len() > 4096
-                    || node_id.as_ref().is_some_and(|id| !valid_uuid(id))
+            Self::OpenResource { resource, node_id } => {
+                if resource.id.is_empty()
+                    || resource.id.len() > 4096
+                    || node_id.as_ref().is_some_and(|id| {
+                        !valid_uuid(id)
+                            || !matches!(
+                                resource.kind,
+                                yss_project_identity::ProjectResourceKind::EventGraph
+                                    | yss_project_identity::ProjectResourceKind::FunctionGraph
+                            )
+                    })
                 {
                     return Err(InvalidUiSpec);
                 }
@@ -518,8 +522,11 @@ mod tests {
         orphan.elements.get_mut("report").unwrap().children.pop();
         assert!(orphan.validate().is_err());
         assert!(
-            UiIntent::OpenGraph {
-                graph_path: "events/test.yssbi-event".into(),
+            UiIntent::OpenResource {
+                resource: yss_project_identity::ProjectResourceRef {
+                    kind: yss_project_identity::ProjectResourceKind::EventGraph,
+                    id: "events/test.yssbi-event".into()
+                },
                 node_id: Some("x".repeat(36))
             }
             .validate()

@@ -22,9 +22,12 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
-    pub fn graph_assistant() -> Result<Self, AutomationIdentityError> {
+    pub fn project_assistant() -> Result<Self, AutomationIdentityError> {
         let mut registry = Self::read_only_foundation()?;
         for capability in [
+            CapabilityId::ManageResource,
+            CapabilityId::EditResource,
+            CapabilityId::ExportDataset,
             CapabilityId::InspectUi,
             CapabilityId::UpdateUi,
             CapabilityId::RequestUiIntent,
@@ -42,6 +45,7 @@ impl ToolRegistry {
     }
     pub fn read_only_foundation() -> Result<Self, AutomationIdentityError> {
         let descriptors = [
+            CapabilityId::InspectResource,
             CapabilityId::InspectGraph,
             CapabilityId::SearchNodeCatalog,
             CapabilityId::InspectDatasetSchema,
@@ -603,9 +607,15 @@ mod tests {
         let registry = ToolRegistry::read_only_foundation().unwrap();
 
         assert!(registry.descriptor(CapabilityId::InspectGraph).is_some());
+        assert!(registry.descriptor(CapabilityId::InspectResource).is_some());
+        assert!(registry.descriptor(CapabilityId::ManageResource).is_none());
         assert!(registry.descriptor(CapabilityId::ApplyGraphEdit).is_none());
-        let editor = ToolRegistry::graph_assistant().unwrap();
+        let editor = ToolRegistry::project_assistant().unwrap();
         for id in [
+            CapabilityId::InspectResource,
+            CapabilityId::ManageResource,
+            CapabilityId::EditResource,
+            CapabilityId::ExportDataset,
             CapabilityId::InspectUi,
             CapabilityId::UpdateUi,
             CapabilityId::RequestUiIntent,
@@ -741,7 +751,7 @@ mod tests {
         });
         let store = Arc::new(InMemoryHarnessStore::default());
         let executor = HarnessToolExecutor::new(
-            ToolRegistry::graph_assistant().unwrap(),
+            ToolRegistry::project_assistant().unwrap(),
             gateway.clone(),
             Arc::new(FailFirstFinish(store.clone(), AtomicBool::new(true))),
             Arc::new(FixedClock::new(1000)),

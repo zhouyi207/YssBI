@@ -13,8 +13,7 @@ use yss_harness_contract::{
     CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
     DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
     InspectDatasetSchemaRequest, InspectProjectRequest, InspectResultRequest, NodeCatalogMatch,
-    NodeCatalogSearchResult, ProjectInspection, ProjectResourceInspection,
-    ProjectResourceKindInspection, ResultCategoryInspection, ResultInspection,
+    NodeCatalogSearchResult, ProjectInspection, ResultCategoryInspection, ResultInspection,
     ResultValueInspection, SearchNodeCatalogRequest,
 };
 use yss_node_catalog::LocalizedCatalogItem;
@@ -27,6 +26,7 @@ use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 mod graph;
+mod resources;
 pub use graph::invoke_graph_capability;
 
 impl ApplicationState {
@@ -36,8 +36,9 @@ impl ApplicationState {
         context: CapabilityInvocationContext,
         request: AutomationCapabilityRequest,
         control: &CapabilityControl,
+        publish: &mut dyn FnMut(&crate::events::CommittedResourceMutation),
     ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
-        invoke_capability(self, context, request, control)
+        invoke_capability(self, context, request, control, publish)
     }
 }
 
@@ -46,6 +47,7 @@ fn invoke_capability(
     context: CapabilityInvocationContext,
     request: AutomationCapabilityRequest,
     control: &CapabilityControl,
+    publish: &mut dyn FnMut(&crate::events::CommittedResourceMutation),
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
     control.check()?;
     let read_only =
@@ -59,6 +61,22 @@ fn invoke_capability(
     ensure_project_binding(&captured, &context)?;
 
     let result = match request {
+        AutomationCapabilityRequest::InspectResource(request) => {
+            resources::inspect_resource(application, &captured, &context, request, control)
+                .map(AutomationCapabilityResult::ResourceInspection)
+        }
+        AutomationCapabilityRequest::ManageResource(request) => {
+            return resources::manage_resource(application, &captured, request, control, publish)
+                .map(AutomationCapabilityResult::ResourceManaged);
+        }
+        AutomationCapabilityRequest::EditResource(request) => {
+            return resources::edit_resource(application, &captured, request, control, publish)
+                .map(AutomationCapabilityResult::ResourceEdited);
+        }
+        AutomationCapabilityRequest::ExportDataset(request) => {
+            return resources::export_dataset(application, &captured, request, control)
+                .map(AutomationCapabilityResult::DatasetExported);
+        }
         AutomationCapabilityRequest::InspectUi(request) => application
             .inspect_ui(captured.project_instance_id(), request)
             .map(AutomationCapabilityResult::UiInspection)
@@ -149,92 +167,9 @@ fn inspect_project(
     captured: &ApplicationSession,
     _request: InspectProjectRequest,
 ) -> Result<ProjectInspection, CapabilityFailure> {
-    let project = captured
-        .project()
-        .read_project_index(captured.project_instance_id())
-        .map_err(map_project_inspection_error)?;
-    let mut resources = Vec::with_capacity(
-        project.event_graphs.len()
-            + project.function_graphs.len()
-            + project.databases.len()
-            + project.charts.len()
-            + project.minds.len()
-            + project.docs.len(),
-    );
-    resources.extend(
-        project
-            .event_graphs
-            .iter()
-            .map(|file| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::EventGraph,
-                resource_id: file.path.clone(),
-                display_name: file.name.clone(),
-                revision: None,
-            }),
-    );
-    resources.extend(
-        project
-            .function_graphs
-            .iter()
-            .map(|file| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::FunctionGraph,
-                resource_id: file.path.clone(),
-                display_name: file.name.clone(),
-                revision: None,
-            }),
-    );
-    resources.extend(project.minds.iter().map(|file| ProjectResourceInspection {
-        kind: ProjectResourceKindInspection::Mind,
-        resource_id: file.path.as_str().into(),
-        display_name: file.name.clone(),
-        revision: None,
-    }));
-    resources.extend(project.docs.iter().map(|file| ProjectResourceInspection {
-        kind: ProjectResourceKindInspection::Doc,
-        resource_id: file.path.as_str().into(),
-        display_name: file.name.clone(),
-        revision: None,
-    }));
-    resources.extend(
-        project
-            .databases
-            .iter()
-            .map(|database| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::Database,
-                resource_id: database.id.clone(),
-                display_name: database.name.clone().unwrap_or_else(|| database.id.clone()),
-                revision: None,
-            }),
-    );
-    resources.extend(
-        project
-            .charts
-            .iter()
-            .map(|chart| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::Chart,
-                resource_id: chart.chart_path.as_str().to_owned(),
-                display_name: chart.name.clone(),
-                revision: None,
-            }),
-    );
-    enforce_result_bound(CapabilityId::InspectProject, resources.len())?;
-    resources.sort_by(|left, right| {
-        left.kind
-            .cmp(&right.kind)
-            .then_with(|| left.resource_id.cmp(&right.resource_id))
-    });
-    captured
-        .project()
-        .validate_project_index_version(
-            captured.project_instance_id(),
-            project.publication_revision,
-            project.authority_generation(),
-        )
-        .map_err(map_project_inspection_error)?;
-    Ok(ProjectInspection {
-        project_name: project.project_name,
-        resources,
-    })
+    let project = resources::project_inspection(captured)?;
+    enforce_result_bound(CapabilityId::InspectProject, project.resources.len())?;
+    Ok(project)
 }
 
 fn inspect_port(address: &PortAddress) -> GraphPortInspection {
@@ -378,6 +313,8 @@ fn inspect_dataset_schema(
             .map(|column| DatasetColumnSchema {
                 name: column.name().as_str().to_owned(),
                 data_type: column.data_type().to_string(),
+                physical_type: column.physical_type().to_owned(),
+                semantic: column.semantic().map(resources::semantic_to_contract),
                 nullable: column.nullable(),
             })
             .collect(),

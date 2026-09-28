@@ -421,15 +421,36 @@ impl ApplicationState {
         let session = self.ui_session(project)?;
         match &request.intent {
             UiIntent::OpenResult { source } => validate_source(&session, source, false)?,
-            UiIntent::OpenGraph {
-                graph_path,
-                node_id,
-            } => {
+            UiIntent::OpenResource { resource, node_id } => {
                 let index = session
                     .project()
                     .read_project_index(project)
                     .map_err(|_| UiError::Unavailable)?;
-                if !index.contains_node_file(graph_path)
+                use yss_project_identity::ProjectResourceKind as Kind;
+                let present = match resource.kind {
+                    Kind::EventGraph => index
+                        .event_graphs
+                        .iter()
+                        .any(|entry| entry.path == resource.id),
+                    Kind::FunctionGraph => index
+                        .function_graphs
+                        .iter()
+                        .any(|entry| entry.path == resource.id),
+                    Kind::Chart => index
+                        .charts
+                        .iter()
+                        .any(|entry| entry.chart_path.as_str() == resource.id),
+                    Kind::Mind => index
+                        .minds
+                        .iter()
+                        .any(|entry| entry.path.as_str() == resource.id),
+                    Kind::Doc => index
+                        .docs
+                        .iter()
+                        .any(|entry| entry.path.as_str() == resource.id),
+                    Kind::Database => index.databases.iter().any(|entry| entry.id == resource.id),
+                };
+                if !present
                     || node_id
                         .as_ref()
                         .is_some_and(|id| uuid::Uuid::parse_str(id).is_err())
@@ -657,6 +678,7 @@ mod tests {
                     source: source.clone(),
                 }),
                 &control,
+                &mut |_| {},
             )
             .unwrap();
         let AutomationCapabilityResult::UiInspection(UiInspection::Page { page }) = result else {
@@ -674,6 +696,7 @@ mod tests {
                     action: UiAction::Reset,
                 }),
                 &control,
+                &mut |_| {},
             )
             .unwrap();
         assert!(matches!(

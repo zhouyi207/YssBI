@@ -1,0 +1,574 @@
+//! Resource identity, lifecycle dispatch and receipts shared by every Harness resource tool.
+use super::{map_session_capture_error, map_session_revalidation_error};
+use crate::events::CommittedResourceMutation;
+use crate::session::{ApplicationSession, ApplicationState};
+use std::collections::BTreeMap;
+use yss_chart_document::ChartResourcePath;
+use yss_graph_document::{GraphResourceKind, GraphResourcePath};
+use yss_harness_contract::*;
+use yss_project::file_resources::FileCommand;
+use yss_project_history::{ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind};
+use yss_project_identity::{OperationId, ResourceRevision};
+use yss_project_model::{
+    doc::{DocDocument, DocPath},
+    file::FileVersion,
+    mind::{MindDocument, MindPath},
+};
+
+mod content;
+mod database;
+#[cfg(test)]
+mod tests;
+pub(super) use content::{edit_resource, inspect_resource};
+pub(super) use database::export_dataset;
+pub(super) use database::semantic_to_contract;
+
+type Publication<'a> = &'a mut dyn FnMut(&CommittedResourceMutation);
+type Result<T> = std::result::Result<T, CapabilityFailure>;
+
+fn invalid(field: &str) -> CapabilityFailure {
+    CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
+}
+fn conflict() -> CapabilityFailure {
+    CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+}
+fn unavailable() -> CapabilityFailure {
+    CapabilityFailure::new(CapabilityFailureCode::ResourceUnavailable)
+}
+fn reference(kind: ProjectResourceKind, id: impl Into<String>) -> ProjectResourceRef {
+    ProjectResourceRef {
+        kind,
+        id: id.into(),
+    }
+}
+
+fn resource_entries(index: &yss_project::ProjectIndex) -> Vec<ProjectResourceInspection> {
+    let mut entries = Vec::new();
+    let mut add = |kind, id: String, display_name: String, revision: ResourceRevision| {
+        entries.push(ProjectResourceInspection {
+            resource: reference(kind, id),
+            display_name,
+            revision: revision.get(),
+        });
+    };
+    for item in &index.event_graphs {
+        add(
+            ProjectResourceKind::EventGraph,
+            item.path.clone(),
+            item.name.clone(),
+            item.revision,
+        );
+    }
+    for item in &index.function_graphs {
+        add(
+            ProjectResourceKind::FunctionGraph,
+            item.path.clone(),
+            item.name.clone(),
+            item.revision,
+        );
+    }
+    for item in &index.charts {
+        add(
+            ProjectResourceKind::Chart,
+            item.chart_path.as_str().into(),
+            item.name.clone(),
+            item.revision,
+        );
+    }
+    for item in &index.minds {
+        add(
+            ProjectResourceKind::Mind,
+            item.path.as_str().into(),
+            item.name.clone(),
+            item.revision,
+        );
+    }
+    for item in &index.docs {
+        add(
+            ProjectResourceKind::Doc,
+            item.path.as_str().into(),
+            item.name.clone(),
+            item.revision,
+        );
+    }
+    for item in &index.databases {
+        add(
+            ProjectResourceKind::Database,
+            item.id.clone(),
+            item.name.clone().unwrap_or_else(|| item.id.clone()),
+            item.revision,
+        );
+    }
+    entries.sort_by(|left, right| left.resource.cmp(&right.resource));
+    entries
+}
+
+fn read_index(session: &ApplicationSession) -> Result<yss_project::ProjectIndex> {
+    session
+        .project()
+        .read_project_index(session.project_instance_id())
+        .map_err(super::map_project_inspection_error)
+}
+pub(super) fn project_inspection(session: &ApplicationSession) -> Result<ProjectInspection> {
+    let index = read_index(session)?;
+    let resources = resource_entries(&index);
+    session
+        .project()
+        .validate_project_index_version(
+            session.project_instance_id(),
+            index.publication_revision,
+            index.authority_generation(),
+        )
+        .map_err(project_error)?;
+    Ok(ProjectInspection {
+        project_name: index.project_name,
+        publication_revision: index.publication_revision,
+        resources,
+    })
+}
+fn metadata(
+    index: &yss_project::ProjectIndex,
+    resource: &ProjectResourceRef,
+) -> Result<ProjectResourceInspection> {
+    resource_entries(index)
+        .into_iter()
+        .find(|entry| entry.resource == *resource)
+        .ok_or_else(unavailable)
+}
+fn check_version(
+    session: &ApplicationSession,
+    resource: &ProjectResourceRef,
+    version: &ResourceVersion,
+) -> Result<()> {
+    let current = metadata(&read_index(session)?, resource)?;
+    if current.revision != version.revision {
+        return Err(conflict());
+    }
+    match resource.kind {
+        ProjectResourceKind::Mind => {
+            let current = session
+                .project()
+                .read_mind(session.project_instance_id(), &mind_path(resource)?)
+                .map_err(project_error)?;
+            if version.session_id.as_deref() != Some(&current.version.session_id) {
+                return Err(conflict());
+            }
+        }
+        ProjectResourceKind::Doc => {
+            let current = session
+                .project()
+                .read_doc(session.project_instance_id(), &doc_path(resource)?)
+                .map_err(project_error)?;
+            if version.session_id.as_deref() != Some(&current.version.session_id) {
+                return Err(conflict());
+            }
+        }
+        ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
+            if version.session_id.is_some() =>
+        {
+            let current = session
+                .project()
+                .read_graph_editing(session.project_instance_id(), &graph_path(resource)?)
+                .map_err(project_error)?;
+            if version.session_id.as_deref()
+                != Some(current.state.version.session_id.to_string().as_str())
+            {
+                return Err(conflict());
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+fn graph_path(resource: &ProjectResourceRef) -> Result<GraphResourcePath> {
+    let path = GraphResourcePath::new(&resource.id).map_err(|_| invalid("resource.id"))?;
+    let kind = match path.kind() {
+        GraphResourceKind::EventGraph => ProjectResourceKind::EventGraph,
+        GraphResourceKind::FunctionGraph => ProjectResourceKind::FunctionGraph,
+    };
+    if resource.kind != kind {
+        return Err(invalid("resource.kind"));
+    }
+    Ok(path)
+}
+fn chart_path(resource: &ProjectResourceRef) -> Result<ChartResourcePath> {
+    ChartResourcePath::parse(&resource.id).map_err(|_| invalid("resource.id"))
+}
+fn mind_path(resource: &ProjectResourceRef) -> Result<MindPath> {
+    MindPath::parse(&resource.id).map_err(|_| invalid("resource.id"))
+}
+fn doc_path(resource: &ProjectResourceRef) -> Result<DocPath> {
+    DocPath::parse(&resource.id).map_err(|_| invalid("resource.id"))
+}
+fn file_version(version: &ResourceVersion) -> Result<FileVersion> {
+    Ok(FileVersion {
+        session_id: version
+            .session_id
+            .clone()
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| invalid("version.sessionId"))?,
+        revision: ResourceRevision::new(version.revision),
+    })
+}
+fn file_resource_kind(kind: ResourceLifecycleKind) -> ProjectResourceKind {
+    match kind {
+        ResourceLifecycleKind::EventGraph => ProjectResourceKind::EventGraph,
+        ResourceLifecycleKind::FunctionGraph => ProjectResourceKind::FunctionGraph,
+        ResourceLifecycleKind::Chart => ProjectResourceKind::Chart,
+        ResourceLifecycleKind::Mind => ProjectResourceKind::Mind,
+        ResourceLifecycleKind::Doc => ProjectResourceKind::Doc,
+    }
+}
+fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMutationReceipt> {
+    let changes = mutation
+        .deltas
+        .iter()
+        .map(|delta| {
+            let (resource, revision_kind) = match &delta.resource {
+                ResourceKey::Graph(path) => (
+                    reference(
+                        match path.kind() {
+                            GraphResourceKind::EventGraph => ProjectResourceKind::EventGraph,
+                            GraphResourceKind::FunctionGraph => ProjectResourceKind::FunctionGraph,
+                        },
+                        path.as_str(),
+                    ),
+                    ResourceRevisionKind::Resource,
+                ),
+                ResourceKey::Function(key) => (
+                    reference(ProjectResourceKind::FunctionGraph, key.0.to_string()),
+                    ResourceRevisionKind::FunctionSignature,
+                ),
+                ResourceKey::Chart(key) => (
+                    reference(ProjectResourceKind::Chart, key.0.to_string()),
+                    ResourceRevisionKind::Resource,
+                ),
+                ResourceKey::Mind(key) => (
+                    reference(ProjectResourceKind::Mind, key.0.to_string()),
+                    ResourceRevisionKind::Resource,
+                ),
+                ResourceKey::Doc(key) => (
+                    reference(ProjectResourceKind::Doc, key.0.to_string()),
+                    ResourceRevisionKind::Resource,
+                ),
+                ResourceKey::Database(_) => {
+                    // A publication key is not a DatabaseId; the committed declaration owns the ID.
+                    let ResourceDocumentPatch::Database(patch) = &delta.payload else {
+                        return Err(CapabilityFailure::new(
+                            CapabilityFailureCode::OutcomeUnknown,
+                        ));
+                    };
+                    let declaration =
+                        patch
+                            .after
+                            .as_ref()
+                            .or(patch.before.as_ref())
+                            .ok_or_else(|| {
+                                CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+                            })?;
+                    (
+                        reference(ProjectResourceKind::Database, declaration.id.as_str()),
+                        ResourceRevisionKind::Resource,
+                    )
+                }
+            };
+            let deleted = match &delta.payload {
+                ResourceDocumentPatch::ResourceLifecycle(patch) => patch.after.is_none(),
+                ResourceDocumentPatch::Database(patch) => patch.after.is_none(),
+                _ => false,
+            };
+            Ok(ResourceChange {
+                resource,
+                revision: delta.to_revision.get(),
+                revision_kind,
+                deleted,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(ResourceMutationReceipt {
+        publication_revision: Some(mutation.publication_revision),
+        changes,
+        moves: mutation
+            .moves
+            .iter()
+            .map(|item| ResourceMove {
+                from: reference(file_resource_kind(item.kind), item.from.to_string()),
+                to: reference(file_resource_kind(item.kind), item.to.to_string()),
+            })
+            .collect(),
+        created_nodes: BTreeMap::new(),
+    })
+}
+fn committed(
+    mutation: CommittedResourceMutation,
+    publish: Publication<'_>,
+) -> Result<ResourceMutationReceipt> {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publish(&mutation))).is_err() {
+        tracing::warn!(
+            domain = "Application",
+            event = "harness_resource_publication_panicked",
+            "Resource committed but its publication callback panicked"
+        );
+    }
+    mutation_receipt(&mutation)
+}
+
+pub(super) fn manage_resource(
+    application: &ApplicationState,
+    session: &ApplicationSession,
+    request: ManageResourceRequest,
+    control: &CapabilityControl,
+    publish: Publication<'_>,
+) -> Result<ResourceMutationReceipt> {
+    let project = session.project_instance_id().clone();
+    let operation = OperationId::new();
+    if let ManageResourceRequest::Create { specification } = request {
+        control.check()?;
+        let mutation = match specification {
+            ResourceCreation::EventGraph { name } => application
+                .create_event_graph(project, name, operation)
+                .map_err(graph_error)?,
+            ResourceCreation::FunctionGraph { name } => application
+                .create_function_graph(project, name, operation)
+                .map_err(graph_error)?,
+            ResourceCreation::Chart { name } => application
+                .create_chart_resource(project, operation, name, None)
+                .map_err(chart_error)?,
+            ResourceCreation::Mind { name } => {
+                application
+                    .apply_mind_command(
+                        project,
+                        operation,
+                        FileCommand::<MindDocument>::Create { name },
+                    )
+                    .map_err(file_error)?
+                    .mutation
+            }
+            ResourceCreation::Doc { name } => {
+                application
+                    .apply_doc_command(
+                        project,
+                        operation,
+                        FileCommand::<DocDocument>::Create { name },
+                    )
+                    .map_err(file_error)?
+                    .mutation
+            }
+            ResourceCreation::Database { source } => {
+                application
+                    .load_database_for_application(
+                        project,
+                        operation,
+                        database::import_source(source),
+                    )
+                    .map_err(database_error)?
+                    .mutation
+            }
+        };
+        return committed(mutation, publish);
+    }
+    let (resource, version) = match &request {
+        ManageResourceRequest::Rename {
+            resource, version, ..
+        }
+        | ManageResourceRequest::Duplicate { resource, version }
+        | ManageResourceRequest::Delete { resource, version }
+        | ManageResourceRequest::Save { resource, version } => (resource, version),
+        ManageResourceRequest::Create { .. } => unreachable!(),
+    };
+    check_version(session, resource, version)?;
+    control.check()?;
+    let expected = ResourceRevision::new(version.revision);
+    let mutation = match resource.kind {
+        ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph => {
+            let path = graph_path(resource)?;
+            match request {
+                ManageResourceRequest::Rename { name, .. } => application
+                    .rename_graph_resource(project, path, expected, name, 0, operation)
+                    .map_err(graph_error)?,
+                ManageResourceRequest::Duplicate { .. } => application
+                    .duplicate_graph_resource(project, path, expected, operation)
+                    .map_err(graph_error)?,
+                ManageResourceRequest::Delete { .. } => application
+                    .remove_graph_resource(project, path, expected, operation)
+                    .map_err(graph_error)?,
+                ManageResourceRequest::Save { .. } => {
+                    return content::save_graph(application, session, resource, version);
+                }
+                _ => unreachable!(),
+            }
+        }
+        ProjectResourceKind::Chart => {
+            let path = chart_path(resource)?;
+            match request {
+                ManageResourceRequest::Rename { name, .. } => application
+                    .rename_chart_resource(project, operation, path, expected, name, 0)
+                    .map_err(chart_error)?,
+                ManageResourceRequest::Duplicate { .. } => application
+                    .duplicate_chart_resource(project, operation, path, expected)
+                    .map_err(chart_error)?,
+                ManageResourceRequest::Delete { .. } => application
+                    .remove_chart_resource(project, operation, path, expected)
+                    .map_err(chart_error)?,
+                ManageResourceRequest::Save { .. } => {
+                    // Charts have no Rust editing buffer; saving the current persisted version is a no-op.
+                    return Ok(ResourceMutationReceipt {
+                        publication_revision: None,
+                        changes: vec![ResourceChange {
+                            resource: resource.clone(),
+                            revision: version.revision,
+                            revision_kind: ResourceRevisionKind::Resource,
+                            deleted: false,
+                        }],
+                        moves: vec![],
+                        created_nodes: BTreeMap::new(),
+                    });
+                }
+                _ => unreachable!(),
+            }
+        }
+        ProjectResourceKind::Mind => {
+            let path = mind_path(resource)?;
+            let version = file_version(version)?;
+            let command = match request {
+                ManageResourceRequest::Rename { name, .. } => FileCommand::Rename {
+                    path,
+                    version,
+                    name,
+                },
+                ManageResourceRequest::Duplicate { .. } => FileCommand::Duplicate { path, version },
+                ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
+                ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
+                _ => unreachable!(),
+            };
+            application
+                .apply_mind_command(project, operation, command)
+                .map_err(file_error)?
+                .mutation
+        }
+        ProjectResourceKind::Doc => {
+            let path = doc_path(resource)?;
+            let version = file_version(version)?;
+            let command = match request {
+                ManageResourceRequest::Rename { name, .. } => FileCommand::Rename {
+                    path,
+                    version,
+                    name,
+                },
+                ManageResourceRequest::Duplicate { .. } => FileCommand::Duplicate { path, version },
+                ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
+                ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
+                _ => unreachable!(),
+            };
+            application
+                .apply_doc_command(project, operation, command)
+                .map_err(file_error)?
+                .mutation
+        }
+        ProjectResourceKind::Database => {
+            let id = resource.id.clone();
+            match request {
+                ManageResourceRequest::Rename { name, .. } => {
+                    application
+                        .rename_database_for_application(project, id, expected, name, operation)
+                        .map_err(database_error)?
+                        .mutation
+                }
+                ManageResourceRequest::Delete { .. } => {
+                    application
+                        .delete_database_for_application(project, id, expected, operation)
+                        .map_err(database_error)?
+                        .mutation
+                }
+                ManageResourceRequest::Duplicate { .. } => {
+                    application
+                        .duplicate_database_for_application(project, id, expected, operation)
+                        .map_err(database_error)?
+                        .mutation
+                }
+                ManageResourceRequest::Save { .. } => {
+                    application
+                        .save_database_for_application(project, id, expected, operation)
+                        .map_err(database_error)?
+                        .mutation
+                }
+                _ => unreachable!(),
+            }
+        }
+    };
+    committed(mutation, publish)
+}
+
+fn project_error(error: yss_project::ProjectOperationError) -> CapabilityFailure {
+    use yss_project::ProjectOperationError as E;
+    let code = match &error {
+        E::StaleProjectLifecycle { .. } => CapabilityFailureCode::ProjectSessionChanged,
+        E::StaleResourceLifecycle { .. }
+        | E::CatalogResourceStale { .. }
+        | E::ResourceRevisionConflict { .. } => CapabilityFailureCode::RevisionConflict,
+        E::ProjectLifecycleAdmissionClosed { .. } | E::ProjectRecoveryRequired { .. } => {
+            CapabilityFailureCode::ProjectSessionUnavailable
+        }
+        E::ChartNotFound { .. } => CapabilityFailureCode::ResourceUnavailable,
+        E::TransactionCommitFailed { .. } | E::TransactionRollbackFailed { .. } => {
+            CapabilityFailureCode::OutcomeUnknown
+        }
+        _ => CapabilityFailureCode::MutationRejected,
+    };
+    CapabilityFailure::new(code).with_detail("reason", error.code())
+}
+fn file_error(error: crate::file_resources::FileApplicationError) -> CapabilityFailure {
+    match error {
+        crate::file_resources::FileApplicationError::Project(error) => project_error(error),
+        crate::file_resources::FileApplicationError::SessionCapture(error) => {
+            map_session_capture_error(error)
+        }
+        crate::file_resources::FileApplicationError::SessionChanged(error) => {
+            map_session_revalidation_error(error)
+        }
+    }
+}
+fn chart_error(error: crate::chart::ChartApplicationError) -> CapabilityFailure {
+    match error {
+        crate::chart::ChartApplicationError::Project(error) => project_error(error),
+        crate::chart::ChartApplicationError::SessionCapture(error) => {
+            map_session_capture_error(error)
+        }
+        crate::chart::ChartApplicationError::SessionChanged(error) => {
+            map_session_revalidation_error(error)
+        }
+    }
+}
+fn graph_error(
+    error: crate::graph::resources::ResourceMutationApplicationError,
+) -> CapabilityFailure {
+    use crate::graph::resources::ResourceMutationApplicationError as E;
+    match error {
+        E::Project(error) => project_error(error),
+        E::SessionCapture(error) => map_session_capture_error(error),
+        E::SessionChanged(error) => map_session_revalidation_error(error),
+        E::Resource(yss_project_history::ProjectResourceMutationError::StaleRevision {
+            ..
+        }) => conflict(),
+        E::EditingBusy => CapabilityFailure::new(CapabilityFailureCode::InvocationConflict),
+        _ => CapabilityFailure::new(CapabilityFailureCode::MutationRejected),
+    }
+}
+fn database_error(error: crate::database::DatabaseUseCaseError) -> CapabilityFailure {
+    use crate::database::{DatabaseOperationError as D, DatabaseUseCaseError as E};
+    match error {
+        E::SessionCapture(error) => map_session_capture_error(error),
+        E::SessionChanged(error) => map_session_revalidation_error(error),
+        E::Database(D::StaleRevision { .. }) => conflict(),
+        E::Database(D::NotFound { .. }) => unavailable(),
+        E::Database(D::Project { source, .. }) => project_error(source),
+        E::SessionRefresh(_) => CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown),
+        E::Database(D::Internal(error))
+            if error.operation()
+                == crate::database::DatabaseApplicationOperation::ExportPublicationUncertain =>
+        {
+            CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+        }
+        _ => CapabilityFailure::new(CapabilityFailureCode::MutationRejected),
+    }
+}

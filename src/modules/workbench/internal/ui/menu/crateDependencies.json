@@ -1863,7 +1863,14 @@
   {
     "name": "yss-ui-contract",
     "manifest": "src-tauri/crates/yss-ui-contract/Cargo.toml",
-    "dependencies": []
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
   },
   {
     "name": "yssbi",

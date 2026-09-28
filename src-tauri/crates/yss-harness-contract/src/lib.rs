@@ -6,12 +6,14 @@ mod graph;
 mod harness;
 mod knowledge_memory;
 mod persistence;
+mod resources;
 mod statistics;
 
 pub use graph::*;
 pub use harness::*;
 pub use knowledge_memory::*;
 pub use persistence::*;
+pub use resources::*;
 pub use statistics::*;
 
 use std::sync::{
@@ -173,6 +175,10 @@ impl CapabilityInvocationContext {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityId {
+    InspectResource,
+    ManageResource,
+    EditResource,
+    ExportDataset,
     InspectUi,
     UpdateUi,
     RequestUiIntent,
@@ -192,6 +198,10 @@ pub enum CapabilityId {
 impl CapabilityId {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::InspectResource => "inspect_resource",
+            Self::ManageResource => "manage_resource",
+            Self::EditResource => "edit_resource",
+            Self::ExportDataset => "export_dataset",
             Self::InspectUi => "inspect_ui",
             Self::UpdateUi => "update_ui",
             Self::RequestUiIntent => "request_ui_intent",
@@ -211,6 +221,10 @@ impl CapabilityId {
 
     pub const fn descriptor(self) -> &'static CapabilityDescriptor {
         match self {
+            Self::InspectResource => &CAPABILITY_DESCRIPTORS[14],
+            Self::ManageResource => &CAPABILITY_DESCRIPTORS[15],
+            Self::EditResource => &CAPABILITY_DESCRIPTORS[16],
+            Self::ExportDataset => &CAPABILITY_DESCRIPTORS[17],
             Self::InspectUi => &CAPABILITY_DESCRIPTORS[11],
             Self::UpdateUi => &CAPABILITY_DESCRIPTORS[12],
             Self::RequestUiIntent => &CAPABILITY_DESCRIPTORS[13],
@@ -255,7 +269,7 @@ pub struct CapabilityDescriptor {
     pub maximum_results: u16,
 }
 
-pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 14] = [
+pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 18] = [
     CapabilityDescriptor {
         id: CapabilityId::InspectGraph,
         effect: ToolEffect::Inspect,
@@ -336,6 +350,30 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 14] = [
     },
     CapabilityDescriptor {
         id: CapabilityId::RequestUiIntent,
+        effect: ToolEffect::Mutate,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 1,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::InspectResource,
+        effect: ToolEffect::Inspect,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 500,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::ManageResource,
+        effect: ToolEffect::Mutate,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 2_000,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::EditResource,
+        effect: ToolEffect::Mutate,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 500,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::ExportDataset,
         effect: ToolEffect::Mutate,
         approval: ApprovalPolicy::Automatic,
         maximum_results: 1,
@@ -509,6 +547,10 @@ pub struct ApplyGraphEditRequest {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AutomationCapabilityRequest {
+    InspectResource(InspectResourceRequest),
+    ManageResource(ManageResourceRequest),
+    EditResource(EditResourceRequest),
+    ExportDataset(ExportDatasetRequest),
     InspectUi(yss_ui_contract::InspectUiRequest),
     UpdateUi(yss_ui_contract::UpdateUiRequest),
     RequestUiIntent(yss_ui_contract::RequestUiIntent),
@@ -528,6 +570,10 @@ pub enum AutomationCapabilityRequest {
 impl AutomationCapabilityRequest {
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
+            Self::InspectResource(_) => CapabilityId::InspectResource,
+            Self::ManageResource(_) => CapabilityId::ManageResource,
+            Self::EditResource(_) => CapabilityId::EditResource,
+            Self::ExportDataset(_) => CapabilityId::ExportDataset,
             Self::InspectUi(_) => CapabilityId::InspectUi,
             Self::UpdateUi(_) => CapabilityId::UpdateUi,
             Self::RequestUiIntent(_) => CapabilityId::RequestUiIntent,
@@ -547,6 +593,10 @@ impl AutomationCapabilityRequest {
 
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
         match self {
+            Self::InspectResource(request) => request.validate(),
+            Self::ManageResource(request) => request.validate(),
+            Self::EditResource(request) => request.validate(),
+            Self::ExportDataset(request) => request.validate(),
             Self::InspectUi(request) => match request {
                 yss_ui_contract::InspectUiRequest::Page { source } => source
                     .validate()
@@ -876,6 +926,8 @@ pub struct NodeCatalogSearchResult {
 pub struct DatasetColumnSchema {
     pub name: String,
     pub data_type: String,
+    pub physical_type: String,
+    pub semantic: Option<DatasetColumnSemantic>,
     pub nullable: bool,
 }
 
@@ -941,32 +993,19 @@ pub struct ResultInspection {
     pub value: ResultValueInspection,
 }
 
-#[derive(
-    Clone, Copy, Debug, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum ProjectResourceKindInspection {
-    EventGraph,
-    FunctionGraph,
-    Chart,
-    Mind,
-    Doc,
-    Database,
-}
-
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectResourceInspection {
-    pub kind: ProjectResourceKindInspection,
-    pub resource_id: String,
+    pub resource: ProjectResourceRef,
     pub display_name: String,
-    pub revision: Option<u64>,
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectInspection {
     pub project_name: String,
+    pub publication_revision: u64,
     pub resources: Vec<ProjectResourceInspection>,
 }
 
@@ -986,6 +1025,10 @@ pub struct GraphEditReceipt {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AutomationCapabilityResult {
+    ResourceInspection(ResourceInspection),
+    ResourceManaged(ResourceMutationReceipt),
+    ResourceEdited(ResourceMutationReceipt),
+    DatasetExported(DatasetExported),
     UiInspection(yss_ui_contract::UiInspection),
     UiUpdate(yss_ui_contract::UiUpdate),
     UiIntentReceipt(yss_ui_contract::UiIntentReceipt),
@@ -1025,6 +1068,10 @@ impl AutomationCapabilityResult {
     }
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
+            Self::ResourceInspection(_) => CapabilityId::InspectResource,
+            Self::ResourceManaged(_) => CapabilityId::ManageResource,
+            Self::ResourceEdited(_) => CapabilityId::EditResource,
+            Self::DatasetExported(_) => CapabilityId::ExportDataset,
             Self::GraphInspection(_) => CapabilityId::InspectGraph,
             Self::NodeCatalogSearch(_) => CapabilityId::SearchNodeCatalog,
             Self::DatasetSchemaInspection(_) => CapabilityId::InspectDatasetSchema,
@@ -1058,6 +1105,8 @@ pub enum CapabilityFailureCode {
     ProjectSessionChanged,
     #[error("graph_unavailable")]
     GraphUnavailable,
+    #[error("resource_unavailable")]
+    ResourceUnavailable,
     #[error("database_unavailable")]
     DatabaseUnavailable,
     #[error("catalog_unavailable")]
@@ -1180,6 +1229,10 @@ pub trait CapabilityGatewayPort: Send + Sync {
 
 pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema {
     let mut schema = match capability_id {
+        CapabilityId::InspectResource => schemars::schema_for!(InspectResourceRequest),
+        CapabilityId::ManageResource => schemars::schema_for!(ManageResourceRequest),
+        CapabilityId::EditResource => schemars::schema_for!(EditResourceRequest),
+        CapabilityId::ExportDataset => schemars::schema_for!(ExportDatasetRequest),
         CapabilityId::InspectUi => schemars::schema_for!(yss_ui_contract::InspectUiRequest),
         CapabilityId::UpdateUi => schemars::schema_for!(yss_ui_contract::UpdateUiRequest),
         CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::RequestUiIntent),
@@ -1207,6 +1260,11 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
 
 pub fn capability_output_schema(capability_id: CapabilityId) -> schemars::Schema {
     match capability_id {
+        CapabilityId::InspectResource => schemars::schema_for!(ResourceInspection),
+        CapabilityId::ManageResource | CapabilityId::EditResource => {
+            schemars::schema_for!(ResourceMutationReceipt)
+        }
+        CapabilityId::ExportDataset => schemars::schema_for!(DatasetExported),
         CapabilityId::InspectUi => schemars::schema_for!(yss_ui_contract::UiInspection),
         CapabilityId::UpdateUi => schemars::schema_for!(yss_ui_contract::UiUpdate),
         CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::UiIntentReceipt),

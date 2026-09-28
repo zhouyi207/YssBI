@@ -9,6 +9,7 @@ mod project_instance_id;
 mod project_registration_id;
 mod project_root_identity;
 mod project_session_id;
+mod resource;
 
 pub use identity::{
     OperationId, ProjectResourcePath, ProjectRevision, ResourceRevision, RevisionExhausted,
@@ -17,6 +18,7 @@ pub use project_instance_id::ProjectInstanceId;
 pub use project_registration_id::ProjectRegistrationId;
 pub use project_root_identity::ProjectRootIdentity;
 pub use project_session_id::ProjectSessionId;
+pub use resource::{ProjectResourceKind, ProjectResourceRef};
 
 #[cfg(test)]
 mod tests {

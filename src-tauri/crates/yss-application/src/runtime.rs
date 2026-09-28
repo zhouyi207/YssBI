@@ -87,7 +87,7 @@ pub fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>
                 .path()
                 .resolve("resources/samples", tauri::path::BaseDirectory::Resource)?,
         },
-        |application| ipc.harness_ports(application),
+        |application| ipc.harness_ports(application, app.handle()),
     ))?;
     app.manage(services.application);
     app.manage(services.samples);

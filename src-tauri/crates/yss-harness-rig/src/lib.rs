@@ -471,9 +471,10 @@ fn fatal_capability_failure(code: CapabilityFailureCode) -> Option<AgentDriverFa
         }
         DeadlineElapsed => Some(AgentDriverFailureCode::DeadlineElapsed),
         PersistenceUnavailable | InternalFailure => Some(AgentDriverFailureCode::InternalFailure),
-        InvalidRequest | GraphUnavailable | DatabaseUnavailable | CatalogUnavailable
-        | ResultUnavailable | ApprovalRequired | RevisionConflict | MutationRejected
-        | ResultTooLarge | InvocationConflict | GraphDraftChanged | OutcomeUnknown => None,
+        InvalidRequest | GraphUnavailable | ResourceUnavailable | DatabaseUnavailable
+        | CatalogUnavailable | ResultUnavailable | ApprovalRequired | RevisionConflict
+        | MutationRejected | ResultTooLarge | InvocationConflict | GraphDraftChanged
+        | OutcomeUnknown => None,
     }
 }
 
@@ -667,6 +668,18 @@ fn decode_request(
     schema: &serde_json::Value,
 ) -> Result<AutomationCapabilityRequest, CapabilityFailure> {
     match capability_id {
+        CapabilityId::InspectResource => {
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::InspectResource)
+        }
+        CapabilityId::ManageResource => {
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::ManageResource)
+        }
+        CapabilityId::EditResource => {
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::EditResource)
+        }
+        CapabilityId::ExportDataset => {
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::ExportDataset)
+        }
         CapabilityId::InspectGraph => arguments::decode::<InspectGraphRequest>(arguments, schema)
             .map(AutomationCapabilityRequest::InspectGraph),
         CapabilityId::SearchNodeCatalog => {
@@ -721,6 +734,18 @@ fn decode_request(
 
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
+        CapabilityId::InspectResource => {
+            "Read a project resource using its exact {kind,id} reference. Returns current version and typed contents: a graph and function signature, chart settings, paged mind topics, paged Markdown characters, or paged database rows with stable row IDs/schema/history state. offset/limit apply to characters for Doc, topics for Mind and rows for Database. Preserve content outside the returned page. Use the returned version for resource commands and edits."
+        }
+        CapabilityId::ManageResource => {
+            "Manage all project resources through one typed entry: create, rename, duplicate, delete or save. Creation of Database resources imports the specified CSV, Parquet, Excel or SQL source. Other resources are created by name. Existing-resource operations require the exact {kind,id} and version from inspect_resource or current committed facts. Only delete resources the user requested to remove. Returns committed changes, moves and actual new IDs; use them instead of guessing paths. Chart edits persist immediately; saving a Chart does not reach a separate unsaved GUI draft. Doc/Mind and database edits use their existing edit/save lifecycle."
+        }
+        CapabilityId::EditResource => {
+            "Edit typed resource contents using its current version: replace Chart settings and persist, apply an atomic Mind tree batch, change Markdown by complete replacement or character-range edits, apply one Database row/column/history operation, update Function signature, or undo/redo Graph history. Mind add_node declares clientId; later operations can refer to $clientId. IDs for new nodes/parameters are allocated by the host. Doc/Mind edits remain unsaved until manage_resource save; database operations retain their normal history/checkpoint behavior. Reinspect after version conflicts; do not reconstruct unseen Markdown/tree/data pages."
+        }
+        CapabilityId::ExportDataset => {
+            "Export the current version of a project Database to the user-specified CSV or Parquet file using the normal database export owner. Requires a Database reference and current version. Returns the actual destination after successful publication. Do not claim success or blindly retry if publication outcome is uncertain."
+        }
         CapabilityId::InspectUi => {
             "Inspect the closed UI catalog/schema, a retained linear regression result's current page and revision, or an intent receipt by ID. UI pages contain presentation only; report sections bind to actual Results. Page state lasts for the current project execution session."
         }
@@ -728,7 +753,7 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "Update a result page using the revision from inspect_ui or the latest successful update_ui. Replace the spec or apply one atomic batch of stable-element patches, change visibility, move an element within its parent, or reset. Only catalog components/actions are accepted. Send complete valid batches, never partial JSON text. Returns the committed patch with complete changed elements, removals and revision; continue from it without rereading the page when its baseRevision matches your known page. Conflicts or a missing baseline require a fresh inspection; numerical facts remain in Results."
         }
         CapabilityId::RequestUiIntent => {
-            "Request opening an existing graph, focusing its node, opening a retained result, or revealing an allowed panel. Use a unique clientKey, reused only for the identical request. Pending is acceptance, not success: inspect the receipt ID until applied/failed/expired. Requires the workbench to be attached; does not edit/save project data or own FlexLayout."
+            "Request opening any existing project resource with openResource and its exact {kind,id}; nodeId is optional for Event/Function Graph node focus only. Also supports opening a retained result or revealing an allowed panel. Use a unique clientKey, reused only for the identical request. Pending is acceptance, not success: inspect the receipt ID until applied/failed/expired. Requires the workbench to be attached; does not edit/save project data or own FlexLayout."
         }
         CapabilityId::InspectGraph => {
             "Inspect the current Project graph by graphPath, whether or not an editor panel is open: revision, graphHash, semanticInputHash, ready, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Establish a baseline before editing or running; later successful edit/save receipts provide fresh facts and revisions. Inspect again when required facts are missing, the semantic baseline differs or a version conflict occurs."
@@ -746,7 +771,7 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "Read the complete result JSON produced by YssBI, including all nested fields and data references. DataFrame/DataSeries values are paged, never expanded in full. To read a tableRef from the JSON, call inspect_result with its resultRef.executionSessionId, resultRef.resultId and part. Execution sessions change on project restart; rediscover current result references instead of reusing stale IDs. offset and limit paginate rows; use nextOffset only when hasMore is true."
         }
         CapabilityId::InspectProject => {
-            "List bounded project metadata and resource identities, including graph files with no open editor panel. Use a graph resourceId as graphPath for inspect_graph and graph edits. Does not read raw dataset rows."
+            "List all six project resource kinds with exact resource {kind,id}, displayName and current resource revision, including closed files. Reuse resource for inspect_resource/manage_resource/edit_resource and UI openResource. For graph-specific tools use resource.id as graphPath. Project membership comes from the project index; listing does not read resource contents or dataset rows."
         }
         CapabilityId::ApplyGraphEdit => {
             "Apply one atomic, undoable batch to the current Project graph after the user requests edits. No editor panel is required. Use baseRevision and graphHash from the latest inspection or committed receipt (toRevision for edits, resourceRevision for saves); use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters atomically merges supplied keys with current parameters; null resets a field to its protocol default. Conditional fields are resolved by the host. Each successful batch automatically persists the complete current graph and retains undo history. File, document, history and receipt commit together; a save failure does not apply the batch. Returns toRevision, graphHash and changes with complete changed nodes/parameters/ports/derived columns, changed connections and order, removals, constants, ready and complete diagnostics. Reuse the returned facts for subsequent edits or execution without inspecting again; apply the changes only to a matching fromRevision and baseSemanticInputHash. Unchanged entities are omitted. Replayed receipts retain the original facts. Oversized receipts are rejected before commit; use smaller batches."
@@ -763,6 +788,56 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
         CapabilityId::ListGraphResults => {
             "List currently retained result IDs, run IDs and output ports for a graph, including manual runs. Use these IDs with inspect_result; do not ask the user to invent or locate an ID."
         }
+    }
+}
+
+#[cfg(test)]
+mod resource_tool_contract_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn provider_arguments_decode_through_the_registered_resource_schemas() {
+        let schema = serde_json::to_value(yss_harness_contract::capability_input_schema(
+            CapabilityId::ManageResource,
+        ))
+        .unwrap();
+        let request = decode_request(
+            CapabilityId::ManageResource,
+            json!({
+                "operation": "create", "specification": {"kind": "doc", "name": "Report"}
+            }),
+            &schema,
+        )
+        .unwrap();
+        request.validate().unwrap();
+        assert!(matches!(
+            request,
+            AutomationCapabilityRequest::ManageResource(
+                yss_harness_contract::ManageResourceRequest::Create {
+                    specification: yss_harness_contract::ResourceCreation::Doc { .. }
+                }
+            )
+        ));
+
+        let schema = serde_json::to_value(yss_harness_contract::capability_input_schema(
+            CapabilityId::EditResource,
+        ))
+        .unwrap();
+        let mut input = json!({
+            "resource": {"kind": "doc", "id": "docs/Report.md"},
+            "version": {"revision": 2, "sessionId": "doc-session"},
+            "edit": {"kind": "doc", "operations": [{"op": "replace_range", "start": 0, "end": 2, "markdown": "正文"}]}
+        });
+        let request = decode_request(CapabilityId::EditResource, input.clone(), &schema).unwrap();
+        request.validate().unwrap();
+        input["resource"]["kind"] = json!("mind");
+        assert!(
+            decode_request(CapabilityId::EditResource, input, &schema)
+                .unwrap()
+                .validate()
+                .is_err()
+        );
     }
 }
 

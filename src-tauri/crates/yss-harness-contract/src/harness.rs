@@ -227,10 +227,12 @@ impl ToolDescriptor {
         let capability = capability_id.descriptor();
         Ok(Self {
             id: ToolId::try_new(capability_id.as_str())?,
-            version: ToolVersion::try_new(if capability_id == CapabilityId::InspectResult {
-                "3.0.0"
-            } else {
-                "1.0.0"
+            version: ToolVersion::try_new(match capability_id {
+                CapabilityId::InspectResult => "3.0.0",
+                CapabilityId::InspectProject
+                | CapabilityId::InspectDatasetSchema
+                | CapabilityId::RequestUiIntent => "2.0.0",
+                _ => "1.0.0",
             })?,
             capability_id,
             input_schema: capability_input_schema(capability_id),
@@ -238,8 +240,10 @@ impl ToolDescriptor {
             effect: capability.effect,
             approval: capability.approval,
             data_access: if capability.effect == ToolEffect::Mutate
-                || capability_id == CapabilityId::InspectResult
-            {
+                || matches!(
+                    capability_id,
+                    CapabilityId::InspectResult | CapabilityId::InspectResource
+                ) {
                 DataAccessPolicy::BoundedRecords
             } else {
                 DataAccessPolicy::MetadataOnly

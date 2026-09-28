@@ -148,6 +148,7 @@ impl Fixture {
                 self.context.clone(),
                 request,
                 &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
+                &mut |_| {},
             )?;
         let captured = self
             .application
@@ -245,17 +246,17 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
             f.context.clone(),
             AutomationCapabilityRequest::InspectProject(InspectProjectRequest {}),
             &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
+            &mut |_| {},
         )
         .unwrap()
     else {
         panic!("project inspection");
     };
     assert!(inspection.resources.iter().any(|resource| {
-        resource.kind == ProjectResourceKindInspection::EventGraph && resource.resource_id == f.path
+        resource.resource.kind == ProjectResourceKind::EventGraph && resource.resource.id == f.path
     }));
     assert!(inspection.resources.iter().any(|resource| {
-        resource.kind == ProjectResourceKindInspection::Database
-            && resource.resource_id == f.dataset
+        resource.resource.kind == ProjectResourceKind::Database && resource.resource.id == f.dataset
     }));
     assert!(!captured.project().has_resident_graph(&path).unwrap());
 
@@ -568,6 +569,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
                 limit: 20,
             }),
             &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(5)),
+            &mut |_| {},
         )
         .unwrap()
     else {
@@ -1152,6 +1154,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
                     limit: 20,
                 }),
                 &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(5)),
+                &mut |_| {},
             )
             .unwrap();
         assert!(
@@ -1318,6 +1321,7 @@ fn gui_and_harness_retries_recover_original_commits_without_overwriting_later_ed
                     f.context.clone(),
                     AutomationCapabilityRequest::ApplyGraphEdit(concurrent_edit),
                     &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
+                    &mut |_| {},
                 )
                 .is_ok()
         });

@@ -43,6 +43,10 @@ Mind/Markdown 的 Application 用例分别位于 `src/minds.rs` 和 `src/docs.rs
 正文编辑、路径校验和文件事务由 [Project](../yss-project/README.md) 与
 [Project model](../yss-project-model/README.md) 承担。
 
+`automation/resources` 将六类项目资源的检查、生命周期和内部编辑统一映射到上述既有用例。
+Harness 与界面意图共用 `ProjectResourceRef`；提交通过 IPC gateway 的中立发布回调交付给
+现有 Project 事件流，Application 不依赖事件传输来确定写操作是否成功。
+
 ## 主要职责与源码入口
 
 | 工作                 | Application 负责的部分                                                           | 源码入口                                                                                                                                                   |

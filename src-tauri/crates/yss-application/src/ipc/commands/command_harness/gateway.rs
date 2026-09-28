@@ -7,11 +7,18 @@ use yss_harness_contract::{
 /// Scheduling adapter for the synchronous Application capability boundary.
 pub struct ApplicationCapabilityGateway {
     application: ApplicationState,
+    publish: std::sync::Arc<dyn Fn(&crate::events::CommittedResourceMutation) + Send + Sync>,
 }
 
 impl ApplicationCapabilityGateway {
-    pub fn new(application: ApplicationState) -> Self {
-        Self { application }
+    pub fn new(
+        application: ApplicationState,
+        publish: std::sync::Arc<dyn Fn(&crate::events::CommittedResourceMutation) + Send + Sync>,
+    ) -> Self {
+        Self {
+            application,
+            publish,
+        }
     }
 }
 
@@ -55,8 +62,11 @@ impl CapabilityGatewayPort for ApplicationCapabilityGateway {
     ) -> CapabilityFuture<'a> {
         let application = self.application.clone();
         let read_only = request.capability_id().descriptor().effect == ToolEffect::Inspect;
+        let publish = self.publish.clone();
         Box::pin(run_on_blocking_pool(control, read_only, move |control| {
-            application.invoke_automation_capability(context, request, &control)
+            application.invoke_automation_capability(context, request, &control, &mut |mutation| {
+                publish(mutation)
+            })
         }))
     }
 }
@@ -215,7 +225,7 @@ mod tests {
             ),
         );
         drop(session);
-        let gateway = ApplicationCapabilityGateway::new(application);
+        let gateway = ApplicationCapabilityGateway::new(application, Arc::new(|_| {}));
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()

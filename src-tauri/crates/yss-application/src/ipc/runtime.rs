@@ -15,9 +15,32 @@ pub(crate) struct CommandRuntime {
 }
 
 impl CommandRuntime {
-    pub(crate) fn harness_ports(&self, application: ApplicationState) -> HarnessTransportPorts {
+    pub(crate) fn harness_ports(
+        &self,
+        application: ApplicationState,
+        app: &tauri::AppHandle,
+    ) -> HarnessTransportPorts {
+        let app = app.clone();
         HarnessTransportPorts {
-            capability_gateway: Arc::new(ApplicationCapabilityGateway::new(application)),
+            capability_gateway: Arc::new(ApplicationCapabilityGateway::new(
+                application,
+                Arc::new(move |mutation| {
+                    let result =
+                        crate::ipc::schema::application_event::resource_mutation_to_transport(
+                            mutation,
+                        );
+                    if let Err(error) = yss_ipc_event::emit_project_event_result(
+                        &app,
+                        &yss_ipc_contract::event::Event::Project(Box::new(
+                            yss_ipc_contract::event::EventProject::ResourceMutationCommitted {
+                                result,
+                            },
+                        )),
+                    ) {
+                        tracing::warn!(domain = "Application", event = "harness_resource_publication_failed", error = ?error, "Resource committed but its UI notification failed");
+                    }
+                }),
+            )),
             event_sink: self.channels.clone(),
         }
     }
