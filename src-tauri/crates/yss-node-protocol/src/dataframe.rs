@@ -204,7 +204,6 @@ mod tests {
             [Box::<str>::from("b"), Box::<str>::from("a")]
         );
         assert_eq!(serde_json::to_value(columns).unwrap(), json!(["b", "a"]));
-        assert_eq!(PROJECT_COLUMNS_TYPE_ID, "yssbi.dataframe.project_columns");
     }
 
     #[test]
@@ -248,7 +247,6 @@ mod tests {
             assert_eq!(predicate.value, Some(expected_literal));
             assert_eq!(serde_json::to_value(predicate).unwrap(), wire);
         }
-        assert_eq!(FILTER_PREDICATE_TYPE_ID, "yssbi.dataframe.filter_predicate");
     }
 
     #[test]

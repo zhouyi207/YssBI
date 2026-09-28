@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NodeData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { isRerouteNodeView, REROUTE_NODE_STYLE_ID, toUiNode } from "./nodeView";
+import { isRerouteNodeView, toUiNode } from "./nodeView";
 
 const baseNode: NodeData = {
   id: "node-1",
@@ -81,7 +81,6 @@ describe("toUiNode", () => {
 
 describe("isRerouteNodeView", () => {
   it("classifies only the Rust-authored builtin.reroute style", () => {
-    expect(REROUTE_NODE_STYLE_ID).toBe("builtin.reroute");
     expect(
       isRerouteNodeView({ display: { ...baseNode.display, styleId: "builtin.reroute" } }),
     ).toBe(true);

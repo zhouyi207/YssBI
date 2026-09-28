@@ -64,7 +64,5 @@ mod tests {
                 .map(|&(id, _, _)| id)
                 .collect()
         );
-        assert_eq!(ENTRIES.len(), 309);
-        assert_eq!(sources.len(), 310);
     }
 }

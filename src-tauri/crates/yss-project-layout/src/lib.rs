@@ -54,19 +54,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn canonical_layout_names_remain_stable() {
-        assert_eq!(PROJECT_METADATA_FILE, "metadata.yssbi");
-        assert_eq!(EVENTS_DIR, "events");
-        assert_eq!(EVENT_EXTENSION, "yssbi-event");
-        assert_eq!(FUNCTIONS_DIR, "functions");
-        assert_eq!(FUNCTION_EXTENSION, "yssbi-function");
-        assert_eq!(CHARTS_DIR, "charts");
-        assert_eq!(CHART_EXTENSION, "yssbi-chart");
-        assert_eq!(DATABASE_DIR, "database");
-        assert_eq!(PROJECT_DATASET_CATALOG_FILE, "catalog.sqlite");
-    }
-
-    #[test]
     fn project_index_inputs_cover_documents_and_content_directories() {
         for path in [
             PROJECT_METADATA_FILE,

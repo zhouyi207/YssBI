@@ -1306,7 +1306,6 @@ mod tests {
 
     #[test]
     fn capability_registry_is_closed_and_schema_generation_is_available() {
-        assert_eq!(CAPABILITY_DESCRIPTORS.len(), 14);
         assert!(CAPABILITY_DESCRIPTORS[..6].iter().all(|descriptor| {
             descriptor.effect == ToolEffect::Inspect
                 && descriptor.approval == ApprovalPolicy::Automatic

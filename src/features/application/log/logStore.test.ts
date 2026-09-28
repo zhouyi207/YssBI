@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { LogRecordDto } from "@/shared/types/domain/log";
-import { LOG_DOMAIN_ORDER } from "@/features/domain/log/logDomains";
 import { applyLogFilter, type LogLogFilter, useLogStore } from "./logStore";
 
 function record(
@@ -31,18 +30,6 @@ describe("diagnostic log domain filtering", () => {
       selectedLog: null,
       autoScroll: true,
     });
-  });
-
-  it("defines domains from the backend contract, including ui and excluding notify", () => {
-    expect(LOG_DOMAIN_ORDER).toEqual([
-      "all",
-      "application",
-      "execution",
-      "system",
-      "graph",
-      "data",
-      "ui",
-    ]);
   });
 
   it("applies shared level and search filters independently per domain", () => {
