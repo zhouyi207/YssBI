@@ -19,30 +19,39 @@ gestures, without floating zoom/fit controls or the React Flow attribution badge
 Mind and the node graph share `flowCanvasInteractionProps`, canvas shortcut mapping
 and viewport limits/fitting. Left drag selects intersecting nodes; Shift/Ctrl/Cmd
 adds or toggles selection. Middle/right drag or Alt+drag pans; wheel/pinch zooms.
+Only the active selection gesture shows a rectangle. After release, selected nodes
+are indicated by their own highlights. Ending or cancelling selection clears the
+library's rectangle and group-overlay state without clearing the selected node IDs.
 Plain node clicks reveal Details, while modified clicks only update selection.
-Selected nodes drag together and commit positions in one typed edit batch. Escape
-cancels a drag, pan or selection rectangle and restores its starting state; without
-an active gesture it clears selection. Shift-clicking empty space retains selection.
+New Mind panes start without a selected topic. The common editor Details policy
+resolves the selected topic or file-level fallback on activation and selection changes.
+Mind disables individual and group node dragging. Escape cancels a pan or selection
+rectangle and restores its starting state; without
+an active gesture it clears selection. A plain empty-space click clears selection
+and returns Details to the current Mind file's information, as in the node graph.
+Shift-clicking empty space retains selection.
 Ctrl/Cmd+A selects the currently expanded nodes, F fits the selection, Home fits the
 visible tree, and Delete/Backspace removes selected branches while protecting the
 root. A selected ancestor covers its descendants in the deletion batch. Input
 fields and modal dialogs keep their native shortcuts. Hiding a pane cancels its
-unfinished gestures, and late drag completions cannot clear a newer drag preview.
+unfinished gestures.
 The workbench Details panel
-owns the selected topic's text, parent, add/delete, ordering, collapse and position
+owns the selected topic's text, parent, add/delete, ordering and collapse
 controls, reusing `DetailPanelShell`, `DetailForm`, `DetailFieldRow`, `DetailTextarea`
 and the existing Select and Button controls. `DetailTextarea` is also used by node
 parameter details. Only a single selected topic has editable details; empty or
-multiple selections show the existing Details empty state. Mind has no separate
+multiple selections use `FileDetailPanel`, which also serves Doc and resource
+loading/error states and reuses `DetailForm` and `DetailReadonlyField`. Mind has no separate
 properties sidebar inside its editor.
-`mindProjection.ts` derives edges and a deterministic horizontal layout from parent
-links and sibling order. Adding topics,
-editing text, reparenting, ordering siblings, deleting a branch and committing a
-manual position all use Rust typed edits. Collapse, selection and drag previews are
-local presentation state. Selection and collapsed node IDs use the existing
-panel-scoped `EditorPaneState`; drag previews stay in the canvas. Details captures
+`mindProjection.ts` derives edges and a deterministic horizontal tree layout from
+parent links, sibling order and collapsed branches. Depth determines each column;
+subtree spans determine vertical spacing and center parents over their branches.
+Structure or collapse changes recompute all positions. Coordinates are rendering
+results and are neither editable nor persisted in Mind documents.
+Adding topics, editing text, reparenting, ordering siblings and deleting a branch
+use Rust typed edits. Selection and collapsed node IDs use the existing
+panel-scoped `EditorPaneState`. Details captures
 the owning panel ID, so split panes keep independent selections and collapse state.
-Resetting a node's position restores automatic layout.
 The domain can retain resource references; a reference picker and Mermaid import/export
 are not exposed by this editor.
 
@@ -51,6 +60,8 @@ the content without reserving space and switches between editing and a rendered 
 using the shared `MarkdownRenderer`. Preview reads the
 current input buffer; the textarea stays mounted while hidden to retain editing state.
 Saving is available through Ctrl+S / Cmd+S and the File menu in both modes.
+Doc's Details always shows its file information, including while switching between
+editing and preview. Tab activation, close and rename follow the common resource policy.
 Input buffers only represent ongoing text composition. They capture their base
 editing version, flush on blur or explicit Save, and never silently overwrite a
 newer backend version. Project save-all flushes through the same resource handler.
@@ -87,15 +98,18 @@ Manual acceptance on the desktop:
 1. Create Mind and Doc files from both the File menu and sidebar; verify tab reuse,
    rename, duplicate, delete and reopening the project.
 2. In Mind, select topics and use the existing Details panel to add sibling/child
-   topics, edit labels, reparent, reorder, collapse and reset positions. Verify the
+   topics, edit labels, reparent, reorder and collapse branches. Verify the
    canvas fills its editor without file controls or save status, split panes retain
    independent selection/collapse state,
    switching files retains unfinished text, and renaming/closing updates Details.
-   Drag nodes, save with Ctrl+S from Details, and reopen; verify text, tree structure
-   and manual positions.
-   Compare left-drag selection, modifier multi-selection, group dragging, wheel/pinch
+   Click empty space to clear node highlights and show the Mind file name in Details;
+   verify Shift-click keeps the selection and selecting a topic restores its fields.
+   Verify that individual and selected groups of nodes cannot be dragged, and that
+   structural edits and collapse/expand automatically rearrange the tree. Save with
+   Ctrl+S from Details and reopen; verify text, structure and the resulting layout.
+   Compare left-drag selection, modifier multi-selection, wheel/pinch
    zoom and middle/right/Alt panning with the node graph. Check Ctrl/Cmd+A, F, Home,
-   Delete/Backspace and Escape, including Escape before releasing a drag or selection
+   Delete/Backspace and Escape, including Escape before releasing a pan or selection
    rectangle and switching panes mid-gesture. Text fields retain native editing keys.
 3. In Doc, verify the floating top-right button reserves no content space, remains
    available while scrolling and switches between full-width editing and preview,

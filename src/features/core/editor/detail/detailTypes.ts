@@ -7,7 +7,8 @@ export type DetailTarget =
   | { kind: "log" }
   | { kind: "event_graph"; path: string }
   | { kind: "function_graph"; path: string }
-  | { kind: "mind"; path: string; panelInstanceId: string }
+  | { kind: "mind"; path: string; panelInstanceId: string; nodeId: string | null }
+  | { kind: "doc"; path: string }
   | { kind: "chart"; chartPath: string };
 
 /** Explicit user selection for the Detail panel — no derived priority chain. */

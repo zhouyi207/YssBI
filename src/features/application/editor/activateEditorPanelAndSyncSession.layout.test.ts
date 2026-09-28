@@ -63,7 +63,7 @@ vi.mock("./rightSidebarActions", () => ({
     resourceKind === "chart"
       ? { kind: "chart", chartPath: resourceRef }
       : { kind: resourceKind, path: resourceRef },
-  setPassiveDetailContext: mocks.setDetailContext,
+  setDetailContext: mocks.setDetailContext,
 }));
 
 import {

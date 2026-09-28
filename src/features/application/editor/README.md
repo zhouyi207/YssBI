@@ -84,11 +84,30 @@ the controller and must not assemble application commands.
 
 `editorGroupContext` owns the shared native active Graph read. Problems, Output, Project sidebar and Assistant consume it; graph-session focus bookkeeping is not a UI selection authority. Session path remapping is committed by `projectPublicationSnapshot` with the authoritative resource snapshot.
 
-Node selection synchronizes the existing Details context without opening another panel. Details owns node parameters, configuration, ports, diagnostics and documentation; explicit node-details commands reveal that same fixed panel. History availability subscribes to the active Graph. Node creation validates its captured target when invoked, without subscribing every mounted canvas to global tab selection; an unavailable canvas target cannot fall back to another panel.
+`features/core/editor/detail/editorDetailPolicy.ts` owns the two resource-tab Details
+policies. Event Graph, Function Graph and Mind follow selection: one node shows node
+details, while no selection or multiple nodes show file information. Doc, Chart and
+Data always show the current resource. Tab activation reads the owning pane's selection
+through that same resolver; it never carries another pane's node into the newly active tab.
 
-Mind activation publishes its file path and owning panel ID to that same Details
-context. Its topic selection and collapsed branches use the existing pane state;
-the Details form follows that selection and uses the shared detail controls.
+`setInspectionContext` accepts an explicit resource/pane scope and only publishes for
+the native active editor. Node selection and clearing selection use this entry, including
+Escape. `setDetailContext` deduplicates equivalent targets. Close and rename share the
+policy module's resource identity helpers; publication and hydration retain Details by
+the same resource ownership rules used by editors. Explicit log, catalog and problem
+inspection keep their own existing targets.
+
+Details owns node parameters, configuration, ports, diagnostics and documentation;
+explicit node-details commands reveal that same fixed panel. A missing resource and a
+chart that is loading or failed retain file identity and show a status instead of the
+no-selection state. Chart loading can be retried. History availability subscribes to the
+active Graph. Node creation validates its captured target when invoked, without subscribing
+every mounted canvas to global tab selection; an unavailable canvas target cannot fall back
+to another panel.
+
+Mind activation publishes its file path, owning panel ID and resolved topic ID to that
+same Details context. Its topic selection and collapsed branches use the existing pane
+state; the Details form consumes the policy's target and uses the shared detail controls.
 Both canvases use the same basic shortcut resolver and viewport fitting rules.
 Mind handles its shortcuts within the owning canvas, using the existing DOM target
 and input/modal guards; Graph retains the workbench command dispatcher.

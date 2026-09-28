@@ -36,6 +36,11 @@ export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
         <DetailReadonlyField label={t("detail.fields.name")} tone="body">
           {dataframe.name}
         </DetailReadonlyField>
+        {dataframe.loadFailed && (
+          <p role="alert" className="text-xs text-destructive">
+            {t("detail.loadFailed")}
+          </p>
+        )}
         <DetailReadonlyField label={t("detail.fields.columns")}>
           {t("detail.counts.columns", { count: columnCount })}
         </DetailReadonlyField>

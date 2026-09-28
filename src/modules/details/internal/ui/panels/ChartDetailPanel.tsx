@@ -1,9 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useDatabaseRead } from "@/features/core/database/read";
 import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
 import { chartUi } from "@/features/core/chart/ui";
+import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { Select } from "@/shared/ui";
 import type { ChartType, ChartDocument } from "@/shared/types/domain/chart";
 import type { ColumnInfo } from "@/shared/types/domain/database";
@@ -12,6 +14,7 @@ import { DetailFieldRow } from "../shared/DetailFieldRow";
 import { DetailColumnList } from "../shared/DetailColumnList";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 import { DetailSectionHeader } from "../shared/DetailText";
+import { FileDetailPanel } from "./FileDetailPanel";
 
 const CHART_TYPES: ChartType[] = ["histogram", "scatter", "line"];
 
@@ -33,7 +36,41 @@ interface ChartDetailPanelProps {
   document: ChartDocument;
 }
 
-export function ChartDetailPanel({ chartPath, name, document }: ChartDetailPanelProps) {
+export function ChartDetailPanel(
+  props: Omit<ChartDetailPanelProps, "document"> & { document: ChartDocument | null },
+) {
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
+  const { chartPath, document } = props;
+  useEffect(() => {
+    if (document) return;
+    let current = true;
+    setFailed(false);
+    void loadChartDocumentForView(chartPath)
+      .then((result) => {
+        if (current && !result) setFailed(true);
+      })
+      .catch(() => {
+        if (current) setFailed(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [chartPath, document, attempt, projectInstanceId]);
+  if (!document)
+    return (
+      <FileDetailPanel
+        resourceKind="chart"
+        resourceRef={chartPath}
+        status={failed ? "error" : "loading"}
+        onRetry={() => setAttempt((value) => value + 1)}
+      />
+    );
+  return <ChartDetailForm {...props} document={document} />;
+}
+
+function ChartDetailForm({ chartPath, name, document }: ChartDetailPanelProps) {
   const { t } = useTranslation();
   const dataframes = useDatabaseRead((snapshot) => snapshot.databases);
   const databases = dataframes ?? {};

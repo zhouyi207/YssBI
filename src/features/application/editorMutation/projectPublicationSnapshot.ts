@@ -1,5 +1,9 @@
 import { nodeFileEntries } from "@/shared/types/domain/project";
 import {
+  detailResource,
+  detailResourceRef,
+} from "@/features/core/editor/detail/editorDetailPolicy";
+import {
   hasPendingDocumentInput,
   remapDocumentInputs,
 } from "@/features/application/resource/documentInputs";
@@ -536,14 +540,11 @@ export function commitPreparedProjectSnapshot(
         if (!plan.index.charts.some((chart) => chart.chartPath === to)) continue;
         invalidateChartPreviewCacheForMove(plan.projectInstanceId, from, to);
       }
-      const detailFocus = useEditorStore.getState().detailFocus;
+      const focus = useEditorStore.getState().detailFocus;
+      const focusedResource = detailResource(focus, plan.storeState.resources);
       if (
-        (detailFocus?.kind === "chart" &&
-          !plan.index.charts.some((chart) => chart.chartPath === detailFocus.chartPath) &&
-          !useChartDocumentStore.getState().documents[detailFocus.chartPath]) ||
-        (detailFocus?.kind === "mind" &&
-          !plan.index.minds.some((file) => file.path === detailFocus.path) &&
-          !useMindProjectionStore.getState().documents[detailFocus.path])
+        detailResourceRef(focus) &&
+        (!focusedResource || !shouldRetainResourceEditor(focusedResource))
       ) {
         useEditorStore.getState().clearDetailFocus();
       }

@@ -92,7 +92,7 @@ describe("resolveDetailPanelModel", () => {
     });
   });
 
-  it("returns empty when catalog entry is missing or log is not selected", () => {
+  it("distinguishes unavailable resource details from no selected log", () => {
     expect(
       resolveDetailPanelModel({
         target: { kind: "event_graph", path: "missing" },
@@ -100,7 +100,7 @@ describe("resolveDetailPanelModel", () => {
         chartDocument: null,
         ...catalog,
       }),
-    ).toEqual({ kind: "empty" });
+    ).toEqual({ kind: "unavailable", resourceKind: "event_graph", resourceRef: "missing" });
 
     expect(
       resolveDetailPanelModel({

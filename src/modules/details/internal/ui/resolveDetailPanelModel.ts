@@ -1,4 +1,5 @@
 import type { DetailTarget } from "@/features/core/editor/detail/detailTypes";
+import type { ResourceKind } from "@/shared/types/domain/resource";
 import type { FunctionResourceView } from "@/features/core/resource/functionResourceView";
 import type { GraphResourceRecord } from "@/features/core/resource/resourceSelectors";
 import type { FunctionPinSpec } from "@/shared/types/domain/graph";
@@ -32,8 +33,10 @@ export type DetailPanelModel =
   | { kind: "nodeDefinition"; nodeType: string }
   | { kind: "event_graph"; path: string; event: { name: string } }
   | { kind: "function_graph"; path: string; fn: FunctionDetailModel }
-  | { kind: "chart"; document: ChartDocument }
-  | { kind: "mind"; path: string; panelInstanceId: string }
+  | { kind: "chart"; document: ChartDocument | null }
+  | { kind: "mind"; path: string; panelInstanceId: string; nodeId: string | null }
+  | { kind: "doc"; path: string }
+  | { kind: "unavailable"; resourceKind: ResourceKind; resourceRef: string }
   | { kind: "data"; id: string; dataframe: DatabaseRecord };
 
 /** target + 目录快照 → Detail 面板判别联合（无回调，纯数据） */
@@ -53,11 +56,12 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
       const event = eventGraphs[target.path];
       return event
         ? { kind: "event_graph", path: target.path, event: { name: event.name } }
-        : { kind: "empty" };
+        : { kind: "unavailable", resourceKind: "event_graph", resourceRef: target.path };
     }
     case "function_graph": {
       const fnRecord = functionGraphs[target.path];
-      if (!fnRecord) return { kind: "empty" };
+      if (!fnRecord)
+        return { kind: "unavailable", resourceKind: "function_graph", resourceRef: target.path };
       return {
         kind: "function_graph",
         path: target.path,
@@ -69,12 +73,21 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
       };
     }
     case "chart":
-      return chartDocument ? { kind: "chart", document: chartDocument } : { kind: "empty" };
+      return { kind: "chart", document: chartDocument };
     case "mind":
-      return { kind: "mind", path: target.path, panelInstanceId: target.panelInstanceId };
+      return {
+        kind: "mind",
+        path: target.path,
+        panelInstanceId: target.panelInstanceId,
+        nodeId: target.nodeId,
+      };
+    case "doc":
+      return { kind: "doc", path: target.path };
     case "data": {
       const dataframe = dataframes[target.id];
-      return dataframe ? { kind: "data", id: target.id, dataframe } : { kind: "empty" };
+      return dataframe
+        ? { kind: "data", id: target.id, dataframe }
+        : { kind: "unavailable", resourceKind: "database", resourceRef: target.id };
     }
     default: {
       const exhaustive: never = target;

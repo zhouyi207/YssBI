@@ -9,11 +9,7 @@ import {
 } from "@/modules/workbench/public";
 import { revealDetails, setInspectionContext } from "./rightSidebarActions";
 import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
-import {
-  captureActiveEditorCommandTarget,
-  captureEditorCommandTarget,
-  type EditorCommandTarget,
-} from "./editorCommandFocus";
+import { captureEditorCommandTarget, type EditorCommandTarget } from "./editorCommandFocus";
 import type {
   EditorCanvasCommandsSlice,
   EditorCanvasInteractionSlice,
@@ -53,15 +49,16 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   }, [scope.panelInstanceId, scope.groupId, scope.graphPath]);
   const syncInspection = useCallback(
     (nodeIds: string[]) => {
-      const target = captureActiveEditorCommandTarget();
-      if (
-        target?.panelInstanceId === scope.panelInstanceId &&
-        target.resourceRef === scope.graphPath
-      ) {
-        setInspectionContext(scope.graphPath, nodeIds);
-      }
+      setInspectionContext(
+        {
+          resourceKind: scope.graphKind,
+          resourceRef: scope.graphPath,
+          panelInstanceId: scope.panelInstanceId,
+        },
+        nodeIds,
+      );
     },
-    [scope.graphPath, scope.panelInstanceId],
+    [scope.graphPath, scope.graphKind, scope.panelInstanceId],
   );
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -71,12 +68,11 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       const next = typeof updater === "function" ? updater(current) : updater;
       const nodeIds = [...new Set(next)];
       if (
-        !selection.selectedConnectionIds.length &&
-        current.length === nodeIds.length &&
-        current.every((id, index) => id === nodeIds[index])
+        selection.selectedConnectionIds.length ||
+        current.length !== nodeIds.length ||
+        current.some((id, index) => id !== nodeIds[index])
       )
-        return;
-      useEditorPaneStateStore.getState().setSelectedNodeIds(scope.panelInstanceId, nodeIds);
+        useEditorPaneStateStore.getState().setSelectedNodeIds(scope.panelInstanceId, nodeIds);
       syncInspection(nodeIds);
     },
     [scope.groupId, scope.panelInstanceId, paneStillMatches, syncInspection],
@@ -89,12 +85,11 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       const current = selection.selectedConnectionIds;
       const next = typeof updater === "function" ? updater(current) : updater;
       if (
-        !selection.selectedNodeIds.length &&
-        current.length === next.length &&
-        current.every((id, index) => id === next[index])
+        selection.selectedNodeIds.length ||
+        current.length !== next.length ||
+        current.some((id, index) => id !== next[index])
       )
-        return;
-      useEditorPaneStateStore.getState().setSelectedConnectionIds(scope.panelInstanceId, next);
+        useEditorPaneStateStore.getState().setSelectedConnectionIds(scope.panelInstanceId, next);
       syncInspection([]);
     },
     [scope.groupId, scope.panelInstanceId, paneStillMatches, syncInspection],

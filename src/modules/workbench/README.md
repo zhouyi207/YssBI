@@ -42,6 +42,11 @@ Project sidebar 按 Events → Functions → Charts → Minds → Docs → Data 
 
 Event、Function、Chart、Mind、Doc、Data 打开后共用 `activateEditorPanelAndSyncSession`，保持资源编辑器为物理活动面板，并被动同步 Details 上下文；Project 分类展开不改变活动面板。
 
+资源标签的详情策略由 `features/core/editor/detail/editorDetailPolicy.ts` 集中定义：
+事件图、函数图和思维导图随所属面板的单节点选择显示节点详情，无选择或多选回到文件信息；
+Doc、Chart 和 Data 始终显示资源信息。激活标签读取该面板自己的选择，关闭和重命名复用统一的
+详情资源标识处理。加载中、失败和资源不可用与“未选择”分别呈现，不将策略或输入焦点写入布局模型。
+
 Mind 的主题编辑操作由现有 Details 面板承载。Details 上下文包含文件路径和所属面板 ID，
 节点选择与折叠状态复用 `EditorPaneState`，关闭面板或重置项目时一并清理；分屏间各自保留。
 Mind 画布不再内嵌属性侧栏，详情表单复用 Details 的公共样式与控件，见 [Document editors](../document-editor/README.md)。

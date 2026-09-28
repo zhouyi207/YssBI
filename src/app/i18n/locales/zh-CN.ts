@@ -23,7 +23,6 @@ export const zhCN = {
     parent: "父主题",
     moveUp: "上移",
     moveDown: "下移",
-    resetPosition: "重置为自动定位",
     deleteBranch: "删除分支",
   },
   tableComposition: {
@@ -1995,6 +1994,8 @@ export const zhCN = {
     },
     noSelection: "未选择",
     noSelectionHint: "从侧栏或画布中选择一项",
+    loadFailed: "无法加载文件详情。",
+    unavailable: "此文件的详情暂不可用。",
     nodeNotFound: "图中未找到该节点。",
     sections: {
       diagnostics: "问题",

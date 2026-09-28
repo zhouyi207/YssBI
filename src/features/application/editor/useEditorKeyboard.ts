@@ -31,6 +31,7 @@ import {
 import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
+import { setInspectionContext } from "./rightSidebarActions";
 import {
   toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,
@@ -125,6 +126,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
         if (selection.connectionIds.size > 0 || selection.nodeIds.size > 0) {
           event.preventDefault();
           clearEditorGroupGraphSelection(target.groupId);
+          setInspectionContext(target, []);
         }
         return;
       }

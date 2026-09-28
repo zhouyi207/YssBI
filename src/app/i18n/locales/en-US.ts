@@ -23,7 +23,6 @@ export const enUS = {
     parent: "Parent topic",
     moveUp: "Move up",
     moveDown: "Move down",
-    resetPosition: "Reset automatic position",
     deleteBranch: "Delete branch",
   },
   tableComposition: {
@@ -2172,6 +2171,8 @@ export const enUS = {
     },
     noSelection: "No selection",
     noSelectionHint: "Select an item from the sidebar or canvas",
+    loadFailed: "Could not load file details.",
+    unavailable: "Details for this file are currently unavailable.",
     nodeNotFound: "Node not found in graph.",
     sections: {
       diagnostics: "Problems",

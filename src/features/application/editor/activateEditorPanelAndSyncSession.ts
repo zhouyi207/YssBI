@@ -5,7 +5,7 @@ import {
 } from "@/modules/workbench/public";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { focusGraphPanelSession } from "./graphPanelSession";
-import { detailFocusForEditorResource, setPassiveDetailContext } from "./rightSidebarActions";
+import { detailFocusForEditorResource, setDetailContext } from "./rightSidebarActions";
 
 let latestPanelActivationRequest = 0;
 type ActiveEditorPanelTarget = Pick<
@@ -23,7 +23,7 @@ export function synchronizeActiveEditorPanel(panel: ActiveEditorPanelTarget): bo
   )
     return false;
   const { metadata, groupId } = current;
-  setPassiveDetailContext(
+  setDetailContext(
     detailFocusForEditorResource(
       metadata.resourceKind,
       metadata.resourceRef,

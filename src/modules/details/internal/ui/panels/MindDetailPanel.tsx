@@ -9,10 +9,11 @@ import { mindActions, applyMindEdits } from "@/features/application/resource/min
 import { useFileTextInput } from "@/features/application/resource/useFileTextInput";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { useEditorPaneStateStore } from "@/modules/workbench/public";
+import { setInspectionContext } from "@/features/application/editor/rightSidebarActions";
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { DetailForm, DetailTextarea } from "../shared/DetailForm";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
-import { DetailEmptyState } from "../DetailEmptyState";
+import { FileDetailPanel } from "./FileDetailPanel";
 
 function MindNodeDetailForm({
   snapshot,
@@ -64,15 +65,16 @@ function MindNodeDetailForm({
   };
   const selectAfterEdit = (nodeId: string) => {
     const focus = editorUi.getSnapshot().detailFocus;
-    const ids = useEditorPaneStateStore.getState().selections[panelInstanceId]?.selectedNodeIds;
-    const selected = ids ? (ids.length === 1 ? ids[0] : null) : mind.rootId;
     if (
       focus?.kind === "mind" &&
       focus.path === snapshot.path &&
       focus.panelInstanceId === panelInstanceId &&
-      selected === node.id
+      focus.nodeId === node.id
     ) {
       useEditorPaneStateStore.getState().setSelectedNodeIds(panelInstanceId, [nodeId]);
+      setInspectionContext({ resourceKind: "mind", resourceRef: snapshot.path, panelInstanceId }, [
+        nodeId,
+      ]);
       return true;
     }
     return false;
@@ -210,19 +212,6 @@ function MindNodeDetailForm({
         </Button>
         <Button
           size="sm"
-          variant="outline"
-          className="mt-1"
-          disabled={disabled || node.position === undefined}
-          onClick={() =>
-            run(() =>
-              applyMindEdits(snapshot, [{ op: "set_position", nodeId: node.id, position: null }]),
-            )
-          }
-        >
-          {t("documents.resetPosition")}
-        </Button>
-        <Button
-          size="sm"
           variant="destructive"
           className="mt-1"
           disabled={disabled || node.id === mind.rootId}
@@ -245,31 +234,26 @@ function MindNodeDetailForm({
 export function MindDetailPanel({
   path,
   panelInstanceId,
+  nodeId,
 }: {
   path: string;
   panelInstanceId: string;
+  nodeId: string | null;
 }) {
-  const { t } = useTranslation();
   const snapshot = useMindProjectionStore((state) => state.documents[path]);
-  const selected = useEditorPaneStateStore(
-    (state) => state.selections[panelInstanceId]?.selectedNodeIds,
-  );
-  const nodeId = selected ? (selected.length === 1 ? selected[0] : null) : snapshot?.content.rootId;
   const node = snapshot?.content.nodes.find((item) => item.id === nodeId);
+  if (!nodeId || (snapshot && !node))
+    return <FileDetailPanel resourceKind="mind" resourceRef={path} />;
+  if (!snapshot || !node)
+    return <FileDetailPanel resourceKind="mind" resourceRef={path} status="loading" />;
   return (
     <DetailPanelShell>
-      {snapshot && node ? (
-        <MindNodeDetailForm
-          key={`${snapshot.version.sessionId}:${node.id}`}
-          snapshot={snapshot}
-          node={node}
-          panelInstanceId={panelInstanceId}
-        />
-      ) : snapshot ? (
-        <DetailEmptyState />
-      ) : (
-        <p className="p-3 text-sm text-muted-foreground">{t("common.loading")}</p>
-      )}
+      <MindNodeDetailForm
+        key={`${snapshot.version.sessionId}:${node.id}`}
+        snapshot={snapshot}
+        node={node}
+        panelInstanceId={panelInstanceId}
+      />
     </DetailPanelShell>
   );
 }

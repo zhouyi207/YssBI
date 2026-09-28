@@ -11,6 +11,7 @@ import {
 } from "@/features/core/resource";
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
+import { detailResource } from "@/features/core/editor/detail/editorDetailPolicy";
 import { LoadStatus } from "@/shared/types/ui/common";
 
 export interface AuthoritativeProjectLoadSource {
@@ -181,12 +182,10 @@ export function buildAuthoritativeProjectLoadPlan(
     docs: source.index.docs,
     databases,
   });
-  const authoritativeChartPaths = new Set(source.index.charts.map((chart) => chart.chartPath));
-
   const focus = context.detailFocus;
+  const focusedResource = detailResource(focus, resourceState.resources);
   const detailFocus =
-    (focus?.kind === "chart" && authoritativeChartPaths.has(focus.chartPath)) ||
-    (focus?.kind === "mind" && source.index.minds.some((mind) => mind.path === focus.path))
+    focusedResource && resourceState.resources[resourceKey(focusedResource)]?.exists
       ? structuredClone(focus)
       : null;
   dependencies.validateCoordinatorStart(

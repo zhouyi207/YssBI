@@ -184,15 +184,20 @@ describe("SidebarProjectTab", () => {
     const { first } = installGraphs();
     renderProjectTab();
     expect(graphRowSelected(first.name)).toBe(true);
-    act(() => setInspectionContext(first.id, ["node-1"]));
+    const scope = {
+      resourceKind: first.kind,
+      resourceRef: first.id,
+      panelInstanceId: activeEditor!.panelInstanceId,
+    };
+    act(() => setInspectionContext(scope, ["node-1"]));
     expect(useEditorStore.getState().detailFocus).toMatchObject({ kind: "node", id: "node-1" });
     expect(graphRowSelected(first.name)).toBe(true);
-    act(() => setInspectionContext(first.id, ["node-1", "node-2"]));
+    act(() => setInspectionContext(scope, ["node-1", "node-2"]));
     expect(useEditorStore.getState().detailFocus).toEqual({ kind: "event_graph", path: first.id });
     expect(graphRowSelected(first.name)).toBe(true);
-    act(() => setInspectionContext(first.id, ["node-2"]));
+    act(() => setInspectionContext(scope, ["node-2"]));
     expect(graphRowSelected(first.name)).toBe(true);
-    act(() => setInspectionContext(first.id, []));
+    act(() => setInspectionContext(scope, []));
     expect(graphRowSelected(first.name)).toBe(true);
     act(() => {
       activeEditor = undefined;

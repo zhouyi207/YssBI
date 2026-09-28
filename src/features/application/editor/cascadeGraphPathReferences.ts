@@ -1,34 +1,26 @@
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { remapEditorViewStateGraphPath } from "@/features/core/viewport/editorViewStateMemento";
+import { remapDetailResource } from "@/features/core/editor/detail/editorDetailPolicy";
 
-function remapEditorGraphPaths(from: string, to: string): void {
+function remapEditorDetailResource(from: string, to: string): void {
   if (from === to) return;
 
   const store = useEditorStore.getState();
   const focus = store.detailFocus;
 
-  if (focus?.kind === "event_graph" || focus?.kind === "function_graph") {
-    if (focus.path === from) store.setDetailFocus({ ...focus, path: to });
-  } else if (focus?.kind === "node" && focus.graphPath === from) {
-    store.setDetailFocus({ ...focus, graphPath: to });
-  }
+  const remapped = remapDetailResource(focus, from, to);
+  if (remapped && remapped !== focus) store.setDetailFocus(remapped);
 }
 
 export function remapFileNonViewportUiState(from: string, to: string): void {
-  if (from === to) return;
-  const store = useEditorStore.getState();
-  if (store.detailFocus?.kind === "chart" && store.detailFocus.chartPath === from) {
-    store.setDetailFocus({ kind: "chart", chartPath: to });
-  } else if (store.detailFocus?.kind === "mind" && store.detailFocus.path === from) {
-    store.setDetailFocus({ ...store.detailFocus, path: to });
-  }
+  remapEditorDetailResource(from, to);
 }
 
 /** Migrate non-viewport editor UI state after the prepared viewport snapshot commits. */
 export function remapGraphNonViewportUiState(from: string, to: string): void {
   if (from === to) return;
-  remapEditorGraphPaths(from, to);
+  remapEditorDetailResource(from, to);
   const projectPath = useProjectIOStore.getState().currentPath;
   if (projectPath) remapEditorViewStateGraphPath(projectPath, from, to);
 }

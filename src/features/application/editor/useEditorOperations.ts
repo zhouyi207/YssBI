@@ -112,7 +112,7 @@ export function useEditorOperations() {
         active?.metadata.resourceKind === "event_graph" ||
         active?.metadata.resourceKind === "function_graph"
       ) {
-        setInspectionContext(active.metadata.resourceRef, []);
+        setInspectionContext({ ...active.metadata, panelInstanceId: active.panelInstanceId }, []);
       }
     },
     [],
@@ -127,7 +127,10 @@ export function useEditorOperations() {
         active?.metadata.resourceKind === "event_graph" ||
         active?.metadata.resourceKind === "function_graph"
       ) {
-        setInspectionContext(active.metadata.resourceRef, update.nodeIds);
+        setInspectionContext(
+          { ...active.metadata, panelInstanceId: active.panelInstanceId },
+          update.nodeIds,
+        );
       }
     },
     [],
@@ -253,7 +256,7 @@ export function useEditorOperations() {
     if (!isEditorOperationContextCurrent(context)) return false;
     const update = updateEditorGroupSelectedNodeIds([...linked], context.groupId);
     if (!update || !isEditorOperationContextCurrent(context)) return false;
-    setInspectionContext(context.graphPath, update.nodeIds);
+    setInspectionContext(context.target, update.nodeIds);
     return true;
   }, []);
 

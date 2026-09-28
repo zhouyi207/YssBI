@@ -15,17 +15,18 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   useEditorPaneStateStore,
+  EMPTY_EDITOR_PANE_SELECTION,
   workbenchLayoutRead,
   type EditorPanelScope,
 } from "@/modules/workbench/public";
 import type { MindSnapshot } from "@/shared/types/domain/mind";
 import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
+import { mindActions, deleteMindNodes } from "@/features/application/resource/mindActions";
 import {
-  mindActions,
-  applyMindEdits,
-  deleteMindNodes,
-} from "@/features/application/resource/mindActions";
-import { revealDetails, setDetailContext } from "@/features/application/editor/rightSidebarActions";
+  revealDetails,
+  setInspectionContext,
+  detailFocusForEditorResource,
+} from "@/features/application/editor/rightSidebarActions";
 import {
   captureEditorCommandTarget,
   captureEditorShortcutTarget,
@@ -55,8 +56,7 @@ function MindNodeView({ data, selected }: NodeProps) {
 const nodeTypes = { mind: MindNodeView };
 
 type Gesture = { target: EditorCommandTarget; cancelled: boolean };
-type PositionPreview = { position: { x: number; y: number }; dragging: boolean; owner: object };
-type SelectionSnapshot = { nodeIds: string[]; nodesSelectionActive: boolean; shiftKey: boolean };
+type SelectionSnapshot = { nodeIds: string[]; shiftKey: boolean };
 const edgeOptions = { selectable: false, focusable: false };
 
 function MindEditor({
@@ -77,20 +77,17 @@ function MindEditor({
   const mounted = useRef(true);
   const paneSelection = useEditorPaneStateStore((state) => state.selections[panelInstanceId]);
   const selectedIds = useMemo(
-    () => paneSelection?.selectedNodeIds ?? [mind.rootId],
-    [paneSelection, mind.rootId],
+    () => paneSelection?.selectedNodeIds ?? EMPTY_EDITOR_PANE_SELECTION.selectedNodeIds,
+    [paneSelection],
   );
   const collapsedIds = useEditorPaneStateStore((state) => state.collapsedNodeIds[panelInstanceId]);
   const collapsed = useMemo(() => new Set(collapsedIds), [collapsedIds]);
   const projection = useMemo(() => projectMindMap(mind, collapsed), [mind, collapsed]);
-  const [positions, setPositions] = useState<Record<string, PositionPreview>>({});
-  const positionsRef = useRef(positions);
   const [measurements, setMeasurements] = useState<
     Record<string, { width: number; height: number }>
   >({});
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const viewportRef = useRef(viewport);
-  const drag = useRef<(Gesture & { owner: object }) | null>(null);
   const pan = useRef<(Gesture & { start: Viewport }) | null>(null);
   const selection = useRef<(Gesture & { before: SelectionSnapshot }) | null>(null);
   const selectionPointer = useRef<SelectionSnapshot | null>(null);
@@ -101,16 +98,13 @@ function MindEditor({
     return projection.nodes.map((item) => ({
       ...item,
       selected: selected.has(item.id),
-      position: positions[item.id]?.position ?? item.position,
-      dragging: positions[item.id]?.dragging ?? false,
       measured: measurements[item.id],
     }));
-  }, [projection.nodes, positions, measurements, selectedIds]);
+  }, [projection.nodes, measurements, selectedIds]);
 
   const readSelection = () =>
-    useEditorPaneStateStore.getState().selections[panelInstanceId]?.selectedNodeIds ?? [
-      mind.rootId,
-    ];
+    useEditorPaneStateStore.getState().selections[panelInstanceId]?.selectedNodeIds ??
+    EMPTY_EDITOR_PANE_SELECTION.selectedNodeIds;
   const captureTarget = () => {
     if (!isVisible) return null;
     const target = captureEditorCommandTarget(panelInstanceId);
@@ -122,45 +116,32 @@ function MindEditor({
   };
   const setSelection = (ids: string[]) => {
     const current = readSelection();
-    if (current.length === ids.length && current.every((id, index) => id === ids[index])) return;
-    useEditorPaneStateStore.getState().setSelectedNodeIds(panelInstanceId, ids);
-    if (workbenchLayoutRead.getActiveEditorPanel()?.panelInstanceId === panelInstanceId)
-      setDetailContext({ kind: "mind", path: snapshot.path, panelInstanceId });
+    if (current.length !== ids.length || current.some((id, index) => id !== ids[index]))
+      useEditorPaneStateStore.getState().setSelectedNodeIds(panelInstanceId, ids);
+    setInspectionContext(
+      { resourceKind: "mind", resourceRef: snapshot.path, panelInstanceId },
+      ids,
+    );
   };
   const run = (operation: () => Promise<unknown>) => {
     void operation().catch((error) => {
       if (mounted.current) reportError(error);
     });
   };
-  const updatePositions = (next: Record<string, PositionPreview>) => {
-    positionsRef.current = next;
-    if (mounted.current) setPositions(next);
-  };
-  const clearPositions = (owner: object) =>
-    updatePositions(
-      Object.fromEntries(
-        Object.entries(positionsRef.current).filter(([, item]) => item.owner !== owner),
-      ),
-    );
   const restoreViewport = (next: Viewport) => {
     viewportRef.current = next;
     setViewport(next);
     flowStore.getState().panZoom?.syncViewport(next);
   };
-  const resetSelectionOverlay = (before: SelectionSnapshot | null) => {
+  const resetSelectionOverlay = () => {
     flowStore.setState({
       userSelectionActive: false,
       userSelectionRect: null,
-      nodesSelectionActive: before?.nodesSelectionActive ?? false,
+      nodesSelectionActive: false,
     });
   };
   const cancelGesture = () => {
     let cancelled = false;
-    if (drag.current && !drag.current.cancelled) {
-      drag.current.cancelled = true;
-      clearPositions(drag.current.owner);
-      cancelled = true;
-    }
     if (pan.current && !pan.current.cancelled) {
       pan.current.cancelled = true;
       flowStore.setState({ paneDragging: false });
@@ -170,7 +151,7 @@ function MindEditor({
     if (selection.current && !selection.current.cancelled) {
       selection.current.cancelled = true;
       const before = selection.current.before;
-      resetSelectionOverlay(before);
+      resetSelectionOverlay();
       const panel = workbenchLayoutRead.getPanel(panelInstanceId);
       if (panel?.metadata.role === "editor" && panel.metadata.resourceRef === snapshot.path)
         setSelection(before.nodeIds);
@@ -190,46 +171,6 @@ function MindEditor({
     };
   }, []);
 
-  const startDrag = () => {
-    const target = captureTarget();
-    if (!target || (drag.current && !drag.current.cancelled)) return;
-    drag.current = { target, owner: {}, cancelled: false };
-  };
-  const stopDrag = () => {
-    const current = drag.current;
-    drag.current = null;
-    if (!current) return;
-    if (current.cancelled || !isEditorCommandTargetCurrent(current.target)) {
-      clearPositions(current.owner);
-      return;
-    }
-    const moved = Object.entries(positionsRef.current).filter(
-      ([, item]) => item.owner === current.owner,
-    );
-    if (!moved.length) return;
-    updatePositions(
-      Object.fromEntries(
-        Object.entries(positionsRef.current).map(([id, item]) => [
-          id,
-          item.owner === current.owner ? { ...item, dragging: false } : item,
-        ]),
-      ),
-    );
-    run(async () => {
-      try {
-        await applyMindEdits(
-          snapshot,
-          moved.map(([nodeId, item]) => ({
-            op: "set_position",
-            nodeId,
-            position: item.position,
-          })),
-        );
-      } finally {
-        clearPositions(current.owner);
-      }
-    });
-  };
   const onNodesChange = (changes: NodeChange[]) => {
     const dimensions = changes.filter((change) => change.type === "dimensions");
     if (dimensions.length)
@@ -257,7 +198,7 @@ function MindEditor({
       });
     if (!captureTarget()) return;
     const selectionChanges = changes.filter((change) => change.type === "select");
-    if (selectionChanges.length && !selection.current?.cancelled && !drag.current?.cancelled) {
+    if (selectionChanges.length && !selection.current?.cancelled) {
       const ids = new Set(readSelection());
       for (const change of selectionChanges) {
         if (change.selected) ids.add(change.id);
@@ -265,26 +206,6 @@ function MindEditor({
       }
       setSelection([...ids]);
     }
-    const current = drag.current;
-    if (!current || current.cancelled || !isEditorCommandTargetCurrent(current.target)) return;
-    const next = { ...positionsRef.current };
-    let changed = false;
-    for (const change of changes) {
-      if (
-        change.type !== "position" ||
-        !change.position ||
-        !Number.isFinite(change.position.x) ||
-        !Number.isFinite(change.position.y)
-      )
-        continue;
-      next[change.id] = {
-        position: change.position,
-        dragging: change.dragging ?? true,
-        owner: current.owner,
-      };
-      changed = true;
-    }
-    if (changed) updatePositions(next);
   };
   const fitNodes = (ids?: readonly string[]) => {
     const selected = ids ? new Set(ids) : null;
@@ -347,6 +268,7 @@ function MindEditor({
       <ReactFlow
         id={panelInstanceId}
         {...flowCanvasInteractionProps(isVisible)}
+        nodesDraggable={false}
         nodes={nodes}
         edges={projection.edges}
         nodeTypes={nodeTypes}
@@ -368,23 +290,28 @@ function MindEditor({
             !captureTarget()
           )
             return;
-          run(() => revealDetails({ kind: "mind", path: snapshot.path, panelInstanceId }));
+          run(() =>
+            revealDetails(detailFocusForEditorResource("mind", snapshot.path, panelInstanceId)),
+          );
         }}
-        onNodeDragStart={startDrag}
-        onNodeDragStop={stopDrag}
-        onSelectionDragStart={startDrag}
-        onSelectionDragStop={stopDrag}
         onSelectionStart={() => {
           const target = captureTarget();
           if (!target) return;
           const before = selectionPointer.current ?? {
             nodeIds: [...readSelection()],
-            nodesSelectionActive: flowStore.getState().nodesSelectionActive,
             shiftKey: false,
           };
           selection.current = { target, before, cancelled: false };
         }}
-        onSelectionEnd={() => {
+        onPointerUp={() => {
+          // React Flow enables its group overlay after onSelectionEnd, before pointerup bubbles here.
+          resetSelectionOverlay();
+          selection.current = null;
+          selectionPointer.current = null;
+        }}
+        onPointerCancel={() => {
+          cancelGesture();
+          resetSelectionOverlay();
           selection.current = null;
           selectionPointer.current = null;
         }}
@@ -394,7 +321,6 @@ function MindEditor({
         onContextMenuCapture={(event) => event.preventDefault()}
         onPointerDownCapture={(event) => {
           suppressClick.current = false;
-          if (drag.current?.cancelled) drag.current = null;
           if (pan.current?.cancelled) {
             pan.current = null;
             restoreViewport(viewportRef.current);
@@ -405,7 +331,6 @@ function MindEditor({
             event.button === 0 && target?.classList.contains("react-flow__pane")
               ? {
                   nodeIds: [...readSelection()],
-                  nodesSelectionActive: flowStore.getState().nodesSelectionActive,
                   shiftKey: event.shiftKey,
                 }
               : null;
@@ -419,7 +344,7 @@ function MindEditor({
             (!selection.current?.cancelled && (selection.current || !before?.shiftKey))
           )
             return;
-          resetSelectionOverlay(before);
+          resetSelectionOverlay();
           selection.current = null;
           selectionPointer.current = null;
           suppressClick.current = true;
@@ -436,7 +361,6 @@ function MindEditor({
           if (
             !event ||
             typeof event.type !== "string" ||
-            (drag.current && !drag.current.cancelled) ||
             (selection.current && !selection.current.cancelled)
           )
             return;

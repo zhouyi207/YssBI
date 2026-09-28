@@ -1,5 +1,5 @@
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
-import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
+import { detailResourceRef } from "@/features/core/editor/detail/editorDetailPolicy";
 
 export function clearDetailFocusForClosedPanel(
   resourceRef: string,
@@ -8,27 +8,10 @@ export function clearDetailFocusForClosedPanel(
   const focus = useEditorStore.getState().detailFocus;
   if (!focus) return;
 
-  if (shouldClearFocus(focus, resourceRef, panelInstanceId)) {
+  if (
+    detailResourceRef(focus) === resourceRef &&
+    (!panelInstanceId || !("panelInstanceId" in focus) || focus.panelInstanceId === panelInstanceId)
+  ) {
     useEditorStore.getState().clearDetailFocus();
   }
-}
-
-function shouldClearFocus(
-  focus: DetailFocus,
-  resourceRef: string,
-  panelInstanceId?: string,
-): boolean {
-  if (focus.kind === "mind")
-    return (
-      focus.path === resourceRef && (!panelInstanceId || focus.panelInstanceId === panelInstanceId)
-    );
-  if (focus.kind === "node" && focus.graphPath === resourceRef) return true;
-  if (focus.kind === "event_graph" || focus.kind === "function_graph") {
-    return focus.path === resourceRef;
-  }
-  if (focus.kind === "chart") {
-    return focus.chartPath === resourceRef;
-  }
-  if (focus.kind === "data") return focus.id === resourceRef;
-  return false;
 }

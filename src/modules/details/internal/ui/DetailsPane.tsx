@@ -1,6 +1,4 @@
-import { useEffect } from "react";
 import { updateFunctionSignature } from "@/features/application/graphDocument/graphDocumentActions";
-import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
 import { DetailEmptyState } from "./DetailEmptyState";
 import { DataDetailPanel } from "./panels/DataDetailPanel";
 import { EventDetailPanel } from "./panels/EventDetailPanel";
@@ -10,15 +8,11 @@ import { NodeDefinitionDetailPanel } from "./panels/NodeDefinitionDetailPanel";
 import { NodeDetailPanel } from "./panels/NodeDetailPanel";
 import { ChartDetailPanel } from "./panels/ChartDetailPanel";
 import { MindDetailPanel } from "./panels/MindDetailPanel";
+import { FileDetailPanel } from "./panels/FileDetailPanel";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 export function DetailsPane() {
-  const { model, chartPath, chartName, chartDocument } = useDetailPanelModel();
-
-  useEffect(() => {
-    if (!chartPath || chartDocument) return;
-    void loadChartDocumentForView(chartPath);
-  }, [chartPath, chartDocument]);
+  const { model, chartPath, chartName } = useDetailPanelModel();
 
   switch (model.kind) {
     case "log":
@@ -41,7 +35,12 @@ export function DetailsPane() {
       );
     case "chart":
       return (
-        <ChartDetailPanel chartPath={chartPath!} name={chartName ?? ""} document={model.document} />
+        <ChartDetailPanel
+          key={chartPath}
+          chartPath={chartPath!}
+          name={chartName ?? ""}
+          document={model.document}
+        />
       );
     case "data":
       return <DataDetailPanel dataframe={model.dataframe} />;
@@ -51,6 +50,17 @@ export function DetailsPane() {
           key={`${model.path}:${model.panelInstanceId}`}
           path={model.path}
           panelInstanceId={model.panelInstanceId}
+          nodeId={model.nodeId}
+        />
+      );
+    case "doc":
+      return <FileDetailPanel resourceKind="doc" resourceRef={model.path} />;
+    case "unavailable":
+      return (
+        <FileDetailPanel
+          resourceKind={model.resourceKind}
+          resourceRef={model.resourceRef}
+          status="unavailable"
         />
       );
     case "empty":
