@@ -4,7 +4,7 @@
 //! Stata equivalence: reg D.y D.x, nocons (after xtset id time).
 //! D. = first difference = current - L. (previous period within panel).
 
-use yss_sci::regression::panel::{fit_panel_fd, fit_panel_fe, fit_panel_lsdv};
+use yss_sci::panel::{fit_panel_fd, fit_panel_fe, fit_panel_lsdv};
 use yss_sci_linalg::{Col, MatRef};
 
 #[test]

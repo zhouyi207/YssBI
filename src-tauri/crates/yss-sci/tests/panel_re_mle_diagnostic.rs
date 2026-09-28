@@ -5,7 +5,7 @@
 //! Expected: Log likelihood = 334.64947, sigma_e = 0.1056, sigma_u = 0.2166
 
 use std::io::Write;
-use yss_sci::regression::panel::fit_panel_re_mle;
+use yss_sci::panel::fit_panel_re_mle;
 use yss_sci_linalg::{Col, Mat};
 
 type PanelSample = (Col<f64>, Mat<f64>, Vec<usize>);

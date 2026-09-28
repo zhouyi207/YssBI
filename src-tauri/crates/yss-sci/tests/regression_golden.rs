@@ -3,8 +3,9 @@
 //! 使用当前已验证正确的计算结果作为参考，重构后若计算不一致则测试失败
 
 use std::f64::consts::PI;
-use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{IV2SLS, IV2SLSConfig, OLS, WLS, WLSConfig};
+use yss_sci::causal::iv::iv2sls::{IV2SLS, IV2SLSConfig};
+use yss_sci::diagnostics;
+use yss_sci::regression::linear::{OLS, WLS, WLSConfig};
 use yss_sci_linalg::{Col, Mat};
 
 const TOL: f64 = 1e-10;
@@ -223,10 +224,10 @@ fn test_ols_golden() {
         .map(|row| row.iter().zip(o.betas.iter()).map(|(x, b)| x * b).sum())
         .collect();
     let resid = &endog - &fitted;
-    let bp_s = diagnostics::breusch_pagan_stata(&resid, &fitted).unwrap();
-    let bp_k = diagnostics::breusch_pagan_koenker(&resid, &fitted).unwrap();
-    let bp_sr = diagnostics::breusch_pagan_stata_rhs(&exog, &resid).unwrap();
-    let bp_kr = diagnostics::breusch_pagan_koenker_rhs(&exog, &resid).unwrap();
+    let bp_s = diagnostics::breusch_pagan::breusch_pagan_stata(&resid, &fitted).unwrap();
+    let bp_k = diagnostics::breusch_pagan::breusch_pagan_koenker(&resid, &fitted).unwrap();
+    let bp_sr = diagnostics::breusch_pagan::breusch_pagan_stata_rhs(&exog, &resid).unwrap();
+    let bp_kr = diagnostics::breusch_pagan::breusch_pagan_koenker_rhs(&exog, &resid).unwrap();
     assert!(
         approx_eq(bp_s.lm_stat, 4.693183923613674, TOL, TOL_REL),
         "BP stata lm: got {}",
@@ -269,7 +270,7 @@ fn test_ols_golden() {
     );
 
     // Cameron & Trivedi IM-test
-    let im = diagnostics::im_test(&exog, &resid).unwrap();
+    let im = diagnostics::im_test::im_test(&exog, &resid).unwrap();
     assert!(
         approx_eq(im.heteroskedasticity.chi2, 10.68721848919021, TOL, TOL_REL),
         "IM hetero chi2: got {}",
@@ -407,7 +408,7 @@ fn test_ols_golden() {
     );
 
     // 正态性检验（原始残差）
-    let nt = diagnostics::normality_tests(&resid).unwrap();
+    let nt = diagnostics::normality::normality_tests(&resid).unwrap();
     assert!(
         approx_eq(nt.skewness, 2.876525278040253e-3, TOL, TOL_REL),
         "skewness: got {}",
@@ -534,10 +535,15 @@ fn test_wls_golden() {
         .collect();
     let resid_w = &endog - &fitted_w;
     let w_norm: Col<f64> = Col::from_fn(n, |i| weights[i] * n as f64 / sum_w);
-    let bp_ws = diagnostics::breusch_pagan_stata_weighted(&resid_w, &fitted_w, &w_norm).unwrap();
-    let bp_wk = diagnostics::breusch_pagan_koenker_weighted(&resid_w, &fitted_w, &w_norm).unwrap();
-    let bp_wsr = diagnostics::breusch_pagan_stata_rhs_weighted(&exog, &resid_w, &w_norm).unwrap();
-    let bp_wkr = diagnostics::breusch_pagan_koenker_rhs_weighted(&exog, &resid_w, &w_norm).unwrap();
+    let bp_ws =
+        diagnostics::weighted::breusch_pagan_stata_weighted(&resid_w, &fitted_w, &w_norm).unwrap();
+    let bp_wk = diagnostics::weighted::breusch_pagan_koenker_weighted(&resid_w, &fitted_w, &w_norm)
+        .unwrap();
+    let bp_wsr =
+        diagnostics::weighted::breusch_pagan_stata_rhs_weighted(&exog, &resid_w, &w_norm).unwrap();
+    let bp_wkr =
+        diagnostics::weighted::breusch_pagan_koenker_rhs_weighted(&exog, &resid_w, &w_norm)
+            .unwrap();
     assert!(
         approx_eq(bp_ws.lm_stat, 4.614451696082235, TOL, TOL_REL),
         "BP stata lm: got {}",
@@ -580,7 +586,7 @@ fn test_wls_golden() {
     );
 
     // IM-test 加权
-    let im_w = diagnostics::im_test_weighted(&exog, &resid_w, &w_norm).unwrap();
+    let im_w = diagnostics::im_test::im_test_weighted(&exog, &resid_w, &w_norm).unwrap();
     assert!(
         approx_eq(
             im_w.heteroskedasticity.chi2,
@@ -728,7 +734,7 @@ fn test_wls_golden() {
         .zip(weights.iter())
         .map(|(r, w)| r * w.sqrt())
         .collect();
-    let nt = diagnostics::normality_tests(&wresid).unwrap();
+    let nt = diagnostics::normality::normality_tests(&wresid).unwrap();
     assert!(
         approx_eq(nt.skewness, 3.332968103051957e-2, TOL, TOL_REL),
         "skewness: got {}",
@@ -781,24 +787,24 @@ fn test_diagnostics_direct_helpers() {
         .collect();
     let resid = &endog - &fitted;
 
-    let white = diagnostics::white_test(&exog, &resid).unwrap();
+    let white = diagnostics::white::white_test(&exog, &resid).unwrap();
     assert_eq!(white.df, 9);
     assert!(white.lm_stat > 0.0);
     assert!((0.0..=1.0).contains(&white.p_value));
 
-    let reset = diagnostics::reset_test(&endog, &exog, &fitted, None).unwrap();
+    let reset = diagnostics::reset::reset_test(&endog, &exog, &fitted, None).unwrap();
     assert_eq!(reset.df1, 3);
     assert_eq!(reset.df2, 143);
     assert!(reset.f_stat.is_finite());
     assert!((0.0..=1.0).contains(&reset.p_value));
 
-    let reset_rhs = diagnostics::reset_test_rhs(&endog, &exog, None).unwrap();
+    let reset_rhs = diagnostics::reset::reset_test_rhs(&endog, &exog, None).unwrap();
     assert_eq!(reset_rhs.df1, 9);
     assert_eq!(reset_rhs.df2, 137);
     assert!(reset_rhs.f_stat.is_finite());
     assert!((0.0..=1.0).contains(&reset_rhs.p_value));
 
-    let vif = diagnostics::vif_centered(&exog, true).unwrap();
+    let vif = diagnostics::vif::vif_centered(&exog, true).unwrap();
     assert_eq!(vif.len(), 4);
     assert!(vif[0].vif.is_nan());
     assert!(
@@ -807,7 +813,7 @@ fn test_diagnostics_direct_helpers() {
             .all(|entry| entry.vif >= 1.0 || entry.vif.is_infinite())
     );
 
-    let leverage = diagnostics::leverage(&exog).unwrap();
+    let leverage = diagnostics::leverage::leverage(&exog).unwrap();
     assert_eq!(leverage.len(), exog.nrows());
     assert!(leverage.iter().all(|v| *v >= 0.0 && *v <= 1.0));
     assert!(approx_eq(

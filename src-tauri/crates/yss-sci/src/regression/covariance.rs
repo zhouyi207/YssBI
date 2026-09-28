@@ -436,7 +436,7 @@ fn cov_cluster(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::regression::linear_model::OLS;
+    use crate::regression::linear::OLS;
 
     #[test]
     fn test_hac_bartlett_bw1_equals_hc0() {

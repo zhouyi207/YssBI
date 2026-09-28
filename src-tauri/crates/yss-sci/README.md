@@ -1,30 +1,64 @@
 # yss-sci
 
+> Status: Current
+> Scope: 按统计领域和方法族组织的数值算法，以及 SCI 模块分类约定
+> Canonical owners: 本 crate 源码拥有算法；节点目录拥有导航分类，SCI Contract 拥有中立契约
+> Update when: 数值算法归属、领域模块或计算契约改变时
+
 Statistical models and numerical algorithms over `yss-sci-linalg` matrices, vectors
 and numeric slices. Matrix arithmetic, checked factorizations and rank conventions
 use `yss-sci-linalg`; this crate does not depend on faer. Public computation contracts
 use `yss-sci-contract`. The crate has no Arrow, Polars or chrono dependency.
-Tabular input alignment and transformations belong to `yss-sci-runtime::data`.
+Tabular input alignment and transformations belong to `yss-sci-runtime::preprocessing`.
 
-`regression::fit` prepares numerical designs and projects model fits into neutral
-results. `ts::models` prepares ADF/VAR/VEC computations. DID randomization inference
-belongs to `regression::panel::did`, and kernel density estimation to `stats::density`.
+## Domain organization
 
-Residual normality tests are owned by `regression::diagnostics::normality`;
-Durbin-Watson and other serial correlation tests by `ts::serial_correlation`.
+SCI, Runtime and Contract use the same domain names for capabilities they own.
+The domains follow the [node catalog](../yss-node-catalog/README.md)'s main
+categories; a category gets a module when it has an implementation or contract.
+SCI does not depend on the catalog or use node IDs to select algorithms.
+
+| Node category / capability               | SCI module                                   | Responsibility                                                                |
+| ---------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
+| Regression                               | `regression::linear`, `regression::discrete` | OLS/WLS/GLS/Prais and Logit/Probit, including their numerical fit projections |
+| Panel models                             | `panel`                                      | Fixed/random effects, between and difference estimators, panel fit projection |
+| Econometric and causal analysis          | `causal::iv`, `causal::did`                  | 2SLS/LIML, TWFE DID and DID randomization inference                           |
+| Time series                              | `time_series`                                | ACF/PACF, ADF, VAR, VEC and cointegration rank                                |
+| Hypothesis tests                         | `hypothesis`                                 | Constraint parsing, linearization and t/Wald tests                            |
+| Model diagnostics                        | `diagnostics`                                | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation    |
+| Probability distributions                | `distribution`                               | Sampling                                                                      |
+| Density estimation used by visualization | `density`                                    | Kernel-density numerical computation                                          |
+| Data preprocessing                       | `preprocessing`                              | Numerical standardization; Arrow preparation stays in Runtime                 |
+
+Each method keeps its fitting and inference together. A node's Fit/Summary/Predict
+stage or navigation placement does not create a second algorithm owner. Runtime
+owns report encoding; Contract owns neutral options and results. Linalg remains a
+shared numerical foundation, independent of node categories.
+
+`regression::fit` only dispatches regression methods. Numerical entry points live
+in `regression::linear::fit`, `regression::discrete::fit`, `panel::fit` and
+`causal::iv::fit`. `time_series::models` prepares ADF/VAR/VEC computations.
+`regression::design`, covariance and collinearity calculations are reused by
+the estimators that need them. DID calls the existing panel estimator, which
+continues to reuse OLS. `causal::did::fit_did` takes an explicit treatment vector;
+`panel::fit::fit_panel` owns ordinary panel fitting.
+
+Diagnostics use ordinary Rust submodules with explicit imports for shared
+helpers. Residual normality belongs to `diagnostics::normality`; Durbin-Watson
+and other serial correlation tests belong to `diagnostics::serial_correlation`.
 
 Panel first differences take entity IDs and original time values; they do not
 require a second time-ID vector. First-stage IV summaries derive dimensions from
 their matrices and receive covariance/estimator choices through `FirstStageOptions`.
 
-`stats::linear_hypothesis` owns constraint parsing, linearization, parameter order,
+`hypothesis::linear_hypothesis` owns constraint parsing, linearization, parameter order,
 matrix construction, test selection and `at()` interpretation. It uses
-`yss-math-expr` for generic syntax and validated t/Wald inputs in `stats::linear_test`.
+`yss-math-expr` for generic syntax and validated t/Wald inputs in `hypothesis::linear_test`.
 Project/result identity checks and report retrieval remain in Application.
 
 ## ACF/PACF
 
-`ts::acf_pacf::compute_acf_pacf` validates finite numerical input and computes ACF
+`time_series::acf_pacf::compute_acf_pacf` validates finite numerical input and computes ACF
 once for the joint result, then uses the same correlations for Durbin-Levinson PACF.
 Independent `acf` and `pacf` reuse these numerical helpers. Controlled computation
 checks cancellation/deadlines at stage boundaries and every 1024 loop elements;
@@ -34,7 +68,7 @@ existing lag-zero-only ACF and empty PACF result.
 
 ## OLS model boundary
 
-`regression::linear_model::ols` owns the model, its fitted result and its errors:
+`regression::linear::ols` owns the model, its fitted result and its errors:
 
 - `mod.rs`: `OLS`, `OlsFit` and `OlsFitError`.
 - `fit.rs`: least-squares numerical work and the intermediate solution.

@@ -1,3 +1,4 @@
+pub mod fit;
 pub mod logit;
 pub mod probit;
 

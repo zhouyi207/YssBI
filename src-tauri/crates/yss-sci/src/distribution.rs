@@ -5,7 +5,7 @@ use rand::{
 };
 use statrs::distribution as native;
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
-use yss_sci_contract::scientific::{
+use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl, ScientificInputViolation,
 };
 

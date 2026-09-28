@@ -1,7 +1,7 @@
 //! Numerical time-series model regressions.
-use yss_sci::ts::unit_root::{AdfRegression, adf_test};
-use yss_sci::ts::var::var_varsoc;
-use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
+use yss_sci::time_series::unit_root::{AdfRegression, adf_test};
+use yss_sci::time_series::var::var_varsoc;
+use yss_sci::time_series::vec::{VECConfig, VecTrendSpec, vec_estimate};
 use yss_sci_linalg::Mat;
 
 #[test]

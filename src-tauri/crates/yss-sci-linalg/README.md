@@ -43,6 +43,8 @@ let reconstructed = &a * &x;
   array. There is no second array representation or raw-pointer conversion layer.
 
 The crate owns no statistical models, project state, reports or transport.
+It is the shared numerical foundation beneath SCI's domain modules; node
+categories do not determine matrix or factorization ownership here.
 Changes must preserve numerical residual, view, rank and SCI golden tests.
 Numerical equivalence uses tolerances, not bitwise equality. macOS, Windows and
 Linux remain target platforms; tests on one platform do not establish all three.

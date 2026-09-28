@@ -1,4 +1,4 @@
-use yss_sci::regression::linear_model::{GLS, GLSConfig, WLS, WLSConfig};
+use yss_sci::regression::linear::{GLS, GLSConfig, WLS, WLSConfig};
 use yss_sci_linalg::{Col, Mat};
 
 fn near(actual: f64, expected: f64) {

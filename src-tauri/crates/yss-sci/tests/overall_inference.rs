@@ -1,4 +1,4 @@
-use yss_sci::regression::linear_model::{OLS, OlsFitError, WLS, WLSConfig};
+use yss_sci::regression::linear::{OLS, OlsFitError, WLS, WLSConfig};
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 use yss_sci_linalg::{Col, Mat};
 

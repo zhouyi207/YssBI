@@ -1,4 +1,4 @@
-use yss_sci::regression::linear_model::{GLS, GLSConfig, OLS, WLS, WLSConfig};
+use yss_sci::regression::linear::{GLS, GLSConfig, OLS, WLS, WLSConfig};
 use yss_sci_linalg::{Col, Mat};
 
 #[test]

@@ -1,5 +1,5 @@
-use yss_sci::ts::var::{VAR, VARConfig};
-use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
+use yss_sci::time_series::var::{VAR, VARConfig};
+use yss_sci::time_series::vec::{VECConfig, VecTrendSpec, vec_estimate};
 use yss_sci_linalg::Mat;
 
 fn cointegrated_sample() -> Mat<f64> {
