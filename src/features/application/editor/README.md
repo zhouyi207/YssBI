@@ -121,6 +121,10 @@ active Graph. Node creation validates its captured target when invoked, without 
 every mounted canvas to global tab selection; an unavailable canvas target cannot fall back
 to another panel.
 
+`useDetailPanelModel` reads the existing editor collections and produces one discriminated
+model for rendering; the chart branch includes its path, name and document. There is no
+separate Details target-resolution or resource-projection facade.
+
 Mind activation publishes its file path, owning panel ID and resolved topic ID to that
 same Details context. Its topic selection and collapsed branches use the existing pane
 state; the Details form consumes the policy's target and uses the shared detail controls.

@@ -1,21 +1,15 @@
 import { useMemo } from "react";
-import { useDetailResourceProjection } from "@/features/application/editor";
+import { useEditorCollections } from "@/features/core/editor";
 import { useEditorUi } from "@/features/core/editor/ui";
 import { useLogStore } from "@/features/application/log";
 import { useChartRead } from "@/features/core/chart/read";
 import { useResourceRead } from "@/features/core/resource/read";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
-import type { ChartDocument } from "@/shared/types/domain/chart";
 import { resolveDetailPanelModel } from "./resolveDetailPanelModel";
 import type { DetailPanelModel } from "./resolveDetailPanelModel";
 
-export function useDetailPanelModel(): {
-  model: DetailPanelModel;
-  chartPath: string | null;
-  chartName: string | null;
-  chartDocument: ChartDocument | null;
-} {
-  const { eventGraphs, functionGraphs, dataframes } = useDetailResourceProjection();
+export function useDetailPanelModel(): DetailPanelModel {
+  const { eventGraphs, functionGraphs, dataframes } = useEditorCollections();
   const target = useEditorUi((snapshot) => snapshot.detailFocus);
   const selectedLog = useLogStore((s) => s.selectedLog);
 
@@ -30,7 +24,7 @@ export function useDetailPanelModel(): {
       : null,
   );
 
-  const model = useMemo(
+  return useMemo(
     () =>
       resolveDetailPanelModel({
         target,
@@ -39,9 +33,8 @@ export function useDetailPanelModel(): {
         functionGraphs,
         dataframes,
         chartDocument,
+        chartName,
       }),
-    [target, selectedLog, eventGraphs, functionGraphs, dataframes, chartDocument],
+    [target, selectedLog, eventGraphs, functionGraphs, dataframes, chartDocument, chartName],
   );
-
-  return { model, chartPath, chartName, chartDocument };
 }

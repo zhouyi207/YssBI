@@ -1,5 +1,3 @@
-import type { LogRecordDto } from "@/shared/types/domain/log";
-
 export type DetailTarget =
   | { kind: "node"; id: string; graphPath: string }
   | { kind: "nodeDefinition"; nodeType: string }
@@ -13,8 +11,3 @@ export type DetailTarget =
 
 /** Explicit user selection for the Detail panel — no derived priority chain. */
 export type DetailFocus = DetailTarget;
-
-export interface DetailTargetInput {
-  detailFocus: DetailFocus | null;
-  selectedLog: LogRecordDto | null;
-}

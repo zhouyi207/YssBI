@@ -2,7 +2,6 @@ export type { EditorCanvasMode, EditorCanvasScope, EditorCanvasSession } from ".
 export { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 export { useEditorOperations } from "./useEditorOperations";
 export { useGraphCanvasCommands } from "./useGraphCanvasCommands";
-export { useDetailResourceProjection } from "./useDetailResourceProjection";
 export type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 export { disconnectConnectionsById, insertRerouteAtConnection } from "./edgeOperations";
 export { useEditorKeyboard } from "./useEditorKeyboard";
@@ -19,8 +18,6 @@ export { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 export { pruneEditorPanelsForMissingResources } from "./pruneEditorPanels";
 export { useProjectOperations } from "./useProjectOperations";
 export { useEditorCanvas } from "./useEditorCanvas";
-export { useDetailTarget } from "./useDetailTarget";
-export { resolveDetailTarget } from "./resolveDetailTarget";
 export { clearDetailFocusForClosedPanel } from "./clearDetailFocusForClosedPanel";
 export type { GraphContextMenuActions } from "./graphContextMenuActions";
 export { useCanvasViewport } from "./useCanvasViewport";

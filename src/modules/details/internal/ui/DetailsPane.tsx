@@ -12,7 +12,7 @@ import { FileDetailPanel } from "./panels/FileDetailPanel";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 export function DetailsPane() {
-  const { model, chartPath, chartName } = useDetailPanelModel();
+  const model = useDetailPanelModel();
 
   switch (model.kind) {
     case "log":
@@ -36,9 +36,9 @@ export function DetailsPane() {
     case "chart":
       return (
         <ChartDetailPanel
-          key={chartPath}
-          chartPath={chartPath!}
-          name={chartName ?? ""}
+          key={model.path}
+          chartPath={model.path}
+          name={model.name}
           document={model.document}
         />
       );

@@ -11,9 +11,9 @@ import { editorUi } from "@/features/core/editor/ui";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
-vi.mock("@/features/application/editor", () => {
+vi.mock("@/features/core/editor", () => {
   const resources = { eventGraphs: {}, functionGraphs: {}, dataframes: {} };
-  return { useDetailResourceProjection: () => resources };
+  return { useEditorCollections: () => resources };
 });
 vi.mock("@/features/application/log", () => ({
   useLogStore: (selector: (state: { selectedLog: null }) => unknown) =>
@@ -29,7 +29,7 @@ describe("Chart detail subscriptions", () => {
 
   function DetailModelProbe() {
     latest = useDetailPanelModel();
-    return <output>{latest.chartDocument?.chartType ?? latest.model.kind}</output>;
+    return <output>{latest.kind === "chart" ? latest.document?.chartType : latest.kind}</output>;
   }
 
   beforeEach(() => {
@@ -82,25 +82,26 @@ describe("Chart detail subscriptions", () => {
     expect(host.textContent).toBe("empty");
     act(() => editorUi.setDetailFocus({ kind: "chart", chartPath }));
     expect(host.textContent).toBe("scatter");
-    expect(latest.chartDocument).toBe(document);
-    expect(latest.model).toMatchObject({ kind: "chart", document });
-    expect(latest.chartName).toBe("Report");
+    expect(latest).toMatchObject({ kind: "chart", path: chartPath, name: "Report", document });
+    expect(latest.kind === "chart" && latest.document).toBe(document);
 
     act(() =>
       useResourceStore
         .getState()
         .patchResource(chartResource, { name: "Renamed report", revision: 2 }),
     );
-    expect(latest.chartName).toBe("Renamed report");
-    expect(latest.chartDocument).toBe(document);
+    expect(latest).toMatchObject({ kind: "chart", name: "Renamed report" });
+    expect(latest.kind === "chart" && latest.document).toBe(document);
 
     act(() => chartUi.updateDraft(chartPath, { chartType: "line" }));
     expect(host.textContent).toBe("line");
-    expect(latest.chartDocument).toBe(useChartDocumentStore.getState().documents[chartPath]);
+    expect(latest.kind === "chart" && latest.document).toBe(
+      useChartDocumentStore.getState().documents[chartPath],
+    );
     expect(document.chartType).toBe("scatter");
 
     act(() => editorUi.clearDetailFocus());
     expect(host.textContent).toBe("empty");
-    expect(latest.chartDocument).toBeNull();
+    expect(latest).toEqual({ kind: "empty" });
   });
 });

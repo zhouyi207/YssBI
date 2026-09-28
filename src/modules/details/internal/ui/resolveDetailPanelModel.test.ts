@@ -16,6 +16,7 @@ const logEntry = {
 } satisfies LogRecordDto;
 
 const catalog = {
+  chartName: null,
   eventGraphs: { "evt-1": { id: "evt-1", name: "Main" } },
   functionGraphs: { "fn-1": { id: "fn-1", name: "Add", functionInputs: [], functionOutputs: [] } },
   dataframes: {

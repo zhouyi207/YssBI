@@ -18,6 +18,7 @@ export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
   target: DetailTarget | null;
   selectedLog: LogRecordDto | null;
   chartDocument: ChartDocument | null;
+  chartName: string | null;
 }
 
 export type FunctionDetailModel = {
@@ -33,7 +34,7 @@ export type DetailPanelModel =
   | { kind: "nodeDefinition"; nodeType: string }
   | { kind: "event_graph"; path: string; event: { name: string } }
   | { kind: "function_graph"; path: string; fn: FunctionDetailModel }
-  | { kind: "chart"; document: ChartDocument | null }
+  | { kind: "chart"; path: string; name: string; document: ChartDocument | null }
   | { kind: "mind"; path: string; panelInstanceId: string; nodeId: string | null }
   | { kind: "doc"; path: string }
   | { kind: "unavailable"; resourceKind: ResourceKind; resourceRef: string }
@@ -73,7 +74,12 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
       };
     }
     case "chart":
-      return { kind: "chart", document: chartDocument };
+      return {
+        kind: "chart",
+        path: target.chartPath,
+        name: input.chartName ?? "",
+        document: chartDocument,
+      };
     case "mind":
       return {
         kind: "mind",
