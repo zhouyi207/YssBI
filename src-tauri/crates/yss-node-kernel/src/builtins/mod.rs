@@ -1,4 +1,5 @@
 use yss_data_contract::TabularScalar;
+mod alignment;
 mod boolean;
 mod comparison;
 mod conversion;
@@ -513,7 +514,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 std::num::NonZeroU32::new(match kind {
                     Comparison(_) => 8,
                     Distribution(_) | Series(series::SeriesKernel::Range) => 3,
-                    Statistical(Fit) => 6,
+                    Statistical(Fit) => 7,
                     Series(
                         series::SeriesKernel::Standardize
                         | series::SeriesKernel::InverseStandardize,
@@ -531,6 +532,8 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             )
             .expect("built-in kernels have distinct identities");
     }
+    statistics::register(builder);
+    alignment::register(builder);
 }
 
 fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
@@ -556,6 +559,7 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
             Input::repeated("predictors", 1..=usize::MAX),
             Input::repeated("weights", 0..=1),
             Input::repeated("sigma", 0..=usize::MAX),
+            Input::repeated("clusters", 0..=1),
         ],
         Statistical(Stats::Predict) => vec![
             Input::fixed("model"),

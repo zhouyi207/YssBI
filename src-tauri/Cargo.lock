@@ -9862,6 +9862,8 @@ version = "0.1.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "serde",
+ "serde_json",
  "thiserror 2.0.20",
  "yss-canonical-hash",
  "yss-data-contract",

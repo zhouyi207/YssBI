@@ -1,4 +1,4 @@
-use super::numeric_input;
+use super::super::numeric_input;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::sync::Arc;
 use yss_data_contract::TabularScalar;
@@ -85,6 +85,11 @@ pub(crate) fn execute(
                 Some(RuntimeValue::Scalar(TabularScalar::String(value))) => value.as_ref(),
                 _ => return Err(KernelError::InvalidParameter),
             };
+            let clusters = group(invocation, "clusters");
+            let clustered = matches!(invocation.parameter("covariance"), Some(RuntimeValue::Scalar(TabularScalar::String(v))) if v.as_ref() == "cluster");
+            if (clustered && clusters.len() != 1) || (!clustered && !clusters.is_empty()) {
+                return Err(KernelError::InvalidParameter);
+            }
             let weights = group(invocation, "weights");
             let sigma = group(invocation, "sigma");
             if (method == "WLS" && weights.len() != 1)
@@ -101,7 +106,27 @@ pub(crate) fn execute(
             let mut inputs = vec![response];
             inputs.extend(group(invocation, "predictors"));
             inputs.extend(weights);
+            inputs.extend(clusters);
             let mut prepared = columns(&inputs, invocation, 0)?;
+            let cluster_covariance = if clustered {
+                let cluster_values = prepared.pop().ok_or(KernelError::InvalidNumericInput)?;
+                let mut levels = std::collections::BTreeMap::new();
+                let cluster_id = cluster_values
+                    .into_iter()
+                    .map(|v| {
+                        let id = levels.len();
+                        *levels
+                            .entry(if v == 0.0 { 0 } else { v.to_bits() })
+                            .or_insert(id)
+                    })
+                    .collect();
+                Some(OlsCovariance::Cluster {
+                    cluster_id,
+                    xtreg_fe_style: false,
+                })
+            } else {
+                None
+            };
             let n = prepared[0].len();
             check_fit_workspace(
                 n,
@@ -140,7 +165,10 @@ pub(crate) fn execute(
                     predictors: prepared,
                     options: OlsOptions {
                         constant,
-                        covariance: covariance(invocation)?,
+                        covariance: match cluster_covariance {
+                            Some(v) => v,
+                            None => covariance(invocation)?,
+                        },
                     },
                     method,
                 },
@@ -172,7 +200,7 @@ pub(crate) fn execute(
     Ok(values)
 }
 
-fn group<'a>(invocation: &'a KernelInvocation<'_>, name: &str) -> Vec<&'a RuntimeValue> {
+pub(super) fn group<'a>(invocation: &'a KernelInvocation<'_>, name: &str) -> Vec<&'a RuntimeValue> {
     invocation
         .input_keys
         .iter()
@@ -181,7 +209,7 @@ fn group<'a>(invocation: &'a KernelInvocation<'_>, name: &str) -> Vec<&'a Runtim
         .collect()
 }
 
-fn columns(
+pub(super) fn columns(
     values: &[&RuntimeValue],
     invocation: &KernelInvocation<'_>,
     retained_bytes: usize,
@@ -203,7 +231,7 @@ fn columns(
         return series[0]
             .relation()
             .numeric_columns(&series, &control)
-            .map_err(super::relational::kernel_error);
+            .map_err(super::super::relational::kernel_error);
     }
     let mut rows = None;
     for value in values {
@@ -240,7 +268,7 @@ fn columns(
 
 /// Conservative admission estimate for the dense fit, retained model and both materialized
 /// outputs. The linear algebra library has its own opaque workspace, so this is not an RSS cap.
-fn check_fit_workspace(
+pub(super) fn check_fit_workspace(
     rows: usize,
     predictors: usize,
     constant: bool,
@@ -327,7 +355,7 @@ fn summary_options(
     Ok(options)
 }
 
-fn covariance(invocation: &KernelInvocation<'_>) -> Result<OlsCovariance, KernelError> {
+pub(super) fn covariance(invocation: &KernelInvocation<'_>) -> Result<OlsCovariance, KernelError> {
     let integer = |key: &str| match invocation.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => {
             usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)
@@ -360,7 +388,7 @@ fn covariance(invocation: &KernelInvocation<'_>) -> Result<OlsCovariance, Kernel
     })
 }
 
-fn numeric_list(
+pub(super) fn numeric_list(
     values: &[f64],
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {

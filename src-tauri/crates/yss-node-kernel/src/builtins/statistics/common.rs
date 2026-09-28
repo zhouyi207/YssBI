@@ -1,0 +1,183 @@
+pub(super) use super::linear::{check_fit_workspace, columns, group, numeric_list};
+use crate::{KernelError, KernelInvocation, RuntimeValue};
+use yss_data_contract::TabularScalar;
+
+pub(crate) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a str, KernelError> {
+    match inv.parameter(key) {
+        Some(RuntimeValue::Scalar(TabularScalar::String(v))) => Ok(v),
+        _ => Err(KernelError::InvalidParameter),
+    }
+}
+pub(super) fn boolean(inv: &KernelInvocation<'_>, key: &str) -> Result<bool, KernelError> {
+    match inv.parameter(key) {
+        Some(RuntimeValue::Scalar(TabularScalar::Bool(v))) => Ok(*v),
+        _ => Err(KernelError::InvalidParameter),
+    }
+}
+pub(crate) fn integer(inv: &KernelInvocation<'_>, key: &str) -> Result<usize, KernelError> {
+    match inv.parameter(key) {
+        Some(RuntimeValue::Scalar(TabularScalar::Integer(v))) => {
+            usize::try_from(*v).map_err(|_| KernelError::InvalidParameter)
+        }
+        _ => Err(KernelError::InvalidParameter),
+    }
+}
+pub(super) fn number(inv: &KernelInvocation<'_>, key: &str) -> Result<f64, KernelError> {
+    super::super::numeric_input(inv.parameter(key)).map_err(|_| KernelError::InvalidParameter)
+}
+pub(super) fn sci(error: yss_sci_contract::SciError) -> KernelError {
+    use yss_sci_contract::{SciError, SciInputViolation};
+    match error {
+        SciError::InvalidInput {
+            violation: SciInputViolation::ShapeMismatch,
+            ..
+        } => KernelError::ShapeMismatch,
+        SciError::InvalidInput {
+            violation: SciInputViolation::ParameterOutOfRange,
+            ..
+        } => KernelError::InvalidParameter,
+        SciError::InvalidInput { .. } => KernelError::InvalidNumericInput,
+        SciError::ComputationFailed { .. } => KernelError::ScientificFailure,
+    }
+}
+pub(super) fn metadata(n: usize) -> yss_sci_contract::StatisticalObservationMetadata {
+    yss_sci_contract::StatisticalObservationMetadata {
+        original_observation_count: n,
+        used_observation_count: n,
+        dropped_null_count: 0,
+        dropped_nan_count: 0,
+        missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
+    }
+}
+pub(super) fn value(
+    data: impl serde::Serialize,
+    inv: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
+    let data = serde_json::to_value(data).map_err(|_| KernelError::ScientificFailure)?;
+    fn charge(v: &serde_json::Value) -> Option<usize> {
+        let children = match v {
+            serde_json::Value::Array(items) => items
+                .iter()
+                .try_fold(0usize, |n, v| n.checked_add(charge(v)?))?,
+            serde_json::Value::Object(items) => items.iter().try_fold(0usize, |n, (k, v)| {
+                n.checked_add(k.len())?.checked_add(charge(v)?)
+            })?,
+            serde_json::Value::String(s) => s.len(),
+            _ => 0,
+        };
+        children.checked_add(128)
+    }
+    inv.control
+        .check_bytes(charge(&data).and_then(|n| n.checked_mul(3)))?;
+    fn convert(
+        v: serde_json::Value,
+        inv: &KernelInvocation<'_>,
+    ) -> Result<RuntimeValue, KernelError> {
+        inv.check_control()?;
+        Ok(match v {
+            serde_json::Value::Null => TabularScalar::Null.into(),
+            serde_json::Value::Bool(v) => TabularScalar::Bool(v).into(),
+            serde_json::Value::String(v) => TabularScalar::String(v.into()).into(),
+            serde_json::Value::Number(v) => {
+                if let Some(n) = v.as_i64() {
+                    TabularScalar::Integer(n).into()
+                } else if let Some(n) = v.as_u64() {
+                    TabularScalar::Unsigned(n).into()
+                } else {
+                    RuntimeValue::float64(v.as_f64().ok_or(KernelError::NonFiniteResult)?)
+                        .map_err(|_| KernelError::NonFiniteResult)?
+                }
+            }
+            serde_json::Value::Array(v) => RuntimeValue::List(
+                v.into_iter()
+                    .map(|v| convert(v, inv))
+                    .collect::<Result<_, _>>()?,
+            ),
+            serde_json::Value::Object(v) => RuntimeValue::Record(std::sync::Arc::new(
+                v.into_iter()
+                    .map(|(k, v)| Ok((k.into_boxed_str(), convert(v, inv)?)))
+                    .collect::<Result<_, KernelError>>()?,
+            )),
+        })
+    }
+    convert(data, inv)
+}
+pub(super) fn field<'a>(
+    model: &'a RuntimeValue,
+    key: &str,
+) -> Result<&'a RuntimeValue, KernelError> {
+    match model {
+        RuntimeValue::Record(fields) => fields.get(key).ok_or(KernelError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidNumericInput),
+    }
+}
+pub(super) fn decode_model<T: serde::de::DeserializeOwned>(
+    inv: &KernelInvocation<'_>,
+) -> Result<T, KernelError> {
+    let model = inv.inputs.first().ok_or(KernelError::InvalidNumericInput)?;
+    if !matches!(model, RuntimeValue::Record(_)) {
+        return Err(KernelError::InvalidNumericInput);
+    }
+    fn bytes(
+        value: &RuntimeValue,
+        inv: &KernelInvocation<'_>,
+        depth: usize,
+    ) -> Result<usize, KernelError> {
+        inv.check_control()?;
+        if depth > 64 {
+            return Err(KernelError::InvalidNumericInput);
+        }
+        let mut size = 128usize;
+        match value {
+            RuntimeValue::List(values) => {
+                for value in values.iter() {
+                    size = size
+                        .checked_add(bytes(value, inv, depth + 1)?)
+                        .ok_or(KernelError::BudgetExceeded)?;
+                }
+            }
+            RuntimeValue::Record(values) => {
+                for (key, value) in values.iter() {
+                    size = size
+                        .checked_add(key.len())
+                        .and_then(|n| n.checked_add(128))
+                        .ok_or(KernelError::BudgetExceeded)?;
+                    size = size
+                        .checked_add(bytes(value, inv, depth + 1)?)
+                        .ok_or(KernelError::BudgetExceeded)?;
+                }
+            }
+            RuntimeValue::Scalar(TabularScalar::String(value)) => {
+                size = size
+                    .checked_add(value.len())
+                    .ok_or(KernelError::BudgetExceeded)?
+            }
+            RuntimeValue::Scalar(_) => {}
+            _ => return Err(KernelError::InvalidNumericInput),
+        }
+        Ok(size)
+    }
+    fn json(value: &RuntimeValue) -> Result<serde_json::Value, KernelError> {
+        Ok(match value {
+            RuntimeValue::Scalar(value) => {
+                serde_json::to_value(value).map_err(|_| KernelError::InvalidNumericInput)?
+            }
+            RuntimeValue::List(values) => {
+                serde_json::Value::Array(values.iter().map(json).collect::<Result<_, _>>()?)
+            }
+            RuntimeValue::Record(values) => serde_json::Value::Object(
+                values
+                    .iter()
+                    .map(|(key, value)| Ok((key.to_string(), json(value)?)))
+                    .collect::<Result<_, KernelError>>()?,
+            ),
+            _ => return Err(KernelError::InvalidNumericInput),
+        })
+    }
+    inv.control
+        .check_bytes(bytes(model, inv, 0)?.checked_mul(3))?;
+    let result =
+        serde_json::from_value(json(model)?).map_err(|_| KernelError::InvalidNumericInput)?;
+    inv.check_control()?;
+    Ok(result)
+}
