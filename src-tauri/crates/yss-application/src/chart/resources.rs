@@ -80,6 +80,7 @@ impl ApplicationState {
         operation_id: OperationId,
         chart_path: ChartResourcePath,
         document: ChartDocument,
+        expected_revision: Option<ResourceRevision>,
     ) -> Result<CommittedResourceMutation, ChartApplicationError> {
         let captured = self.capture_chart_session(&project_instance_id)?;
         let result = captured.project().save_chart_document(
@@ -87,6 +88,7 @@ impl ApplicationState {
             &chart_path,
             operation_id,
             document,
+            expected_revision,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ChartApplicationError::SessionChanged)?;

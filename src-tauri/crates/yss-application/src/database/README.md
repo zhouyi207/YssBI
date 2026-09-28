@@ -18,6 +18,12 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 
 当前数据库窗口只读展示分页行与元数据，并提供导出；前端 `DatabaseService` 仅保留导入、查询、资源管理及 Details 使用的类型转换和语义设置入口。后端数据库编辑、历史和 checkpoint 仍由 Database runtime 的当前契约拥有。
 
+Harness 通过统一资源工具调用这些后端用例，覆盖导入、分页读取、行列编辑、物理类型转换、
+列语义、撤销重做、checkpoint、重命名和删除。每次修改携带 Project 资源 revision；查询同时
+验证 Database runtime 的读取基线。`duplicate_database_for_application` 复用流式 Parquet
+导出和导入，保留数据及列元数据，由现有名称分配器生成副本名称并分配新 DatabaseId。
+Harness 导出还携带预期资源 revision，写入目标文件前再次核对；普通 GUI 导出仍使用当前版本。
+
 runtime 登记必须关联实际物理准备及其存储恢复记录，schema 变化由准备前后的快照决定。未提交的物理准备通过释放对象清理；已提交或提交结果不确定的变更保留给 SQLite operation record 恢复。Application 只在存储尚未提交时补偿 runtime 登记，会话关闭后由 `resolve_storage_recoveries` 统一核对持久化结果。
 
 数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，用例入口位于 `database/mod.rs`，会话装配位于 `session/database.rs`。编辑历史是 Database Runtime 的私有实现，供 IPC 共享的 EditState 归 `yss-database-contract`。数据库导出、插件 JSON/文件导出和 Julia worker assets 直接使用 `atomicwrites::replace_atomic`；临时文件、内容同步、会话重验和失败清理由各调用方负责。窗口状态由官方插件独立持久化。

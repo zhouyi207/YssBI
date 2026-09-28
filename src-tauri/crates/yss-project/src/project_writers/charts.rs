@@ -136,6 +136,7 @@ impl ProjectState {
         chart_path: &ChartResourcePath,
         operation_id: OperationId,
         document: ChartDocument,
+        requested_revision: Option<ResourceRevision>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
@@ -157,6 +158,11 @@ impl ProjectState {
                     chart_path.as_str()
                 ))
             })?;
+        if requested_revision.is_some_and(|revision| revision != expected_revision) {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
+                message: "chart changed after the editing baseline was captured".into(),
+            });
+        }
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -343,7 +349,7 @@ mod tests {
         let mut other = draft.clone();
         other.chart_type = "scatter".into();
         let first = state
-            .save_chart_document(&session.instance_id, &path, OperationId::new(), other)
+            .save_chart_document(&session.instance_id, &path, OperationId::new(), other, None)
             .unwrap()
             .into_parts();
         draft.chart_type = "line".into();
@@ -351,7 +357,13 @@ mod tests {
         draft.encodings.y = Some("sales".into());
         let operation_id = OperationId::new();
         let saved = state
-            .save_chart_document(&session.instance_id, &path, operation_id, draft.clone())
+            .save_chart_document(
+                &session.instance_id,
+                &path,
+                operation_id,
+                draft.clone(),
+                None,
+            )
             .unwrap()
             .into_parts();
 

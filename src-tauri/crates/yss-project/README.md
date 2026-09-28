@@ -83,6 +83,9 @@ Chart 文档和文件不包含资源 revision；`chart_revisions` 是其唯一�
 与 Graph 的资源版本生命周期一致。Chart 的创建、保存、复制、移动和删除复用资源 patch 的标准回执，
 writer 不再重复构造 delta。刷新文档时可绑定 Project publication revision，在同一次一致读取中验证。
 图表文件采用 `yss-chart-document::CURRENT_CHART_SCHEMA_VERSION` 定义的严格格式，不读取含旧文档版本字段的格式，也不自动迁移。
+Chart writer 支持调用者提供读取时的预期 revision；Harness 设置编辑使用它，GUI 的独立 Save
+继续按 Rust 当前基线覆盖。Graph/Chart 重命名接受内部生命周期请求，由既有 lifecycle owner
+分配令牌，不占用客户端令牌水位，也不由 Harness 维护另一套计数器。
 
 ## 当前文档编辑
 

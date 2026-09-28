@@ -710,7 +710,7 @@ pub async fn export_database(
     let application = application.inner().clone();
     run_on_blocking_pool(move || {
         application
-            .export_database_for_application(project_instance_id, id, path, format)
+            .export_database_for_application(project_instance_id, id, path, format, None)
             .map_err(map_application_database_error)
     })
     .await

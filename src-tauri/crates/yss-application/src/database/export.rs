@@ -6,7 +6,11 @@ pub(super) fn export_database_in_captured_session(
     id: &str,
     path: &str,
     format: &str,
+    expected_revision: Option<ResourceRevision>,
 ) -> Result<(), DatabaseUseCaseError> {
+    if let Some(revision) = expected_revision {
+        check_database_revision(captured, id, revision)?;
+    }
     let export_format = format.parse::<DatabaseExportFormat>().map_err(|_| {
         DatabaseOperationError::ExportUnsupported {
             format: format.to_owned(),
@@ -42,6 +46,9 @@ pub(super) fn export_database_in_captured_session(
         state
             .revalidate_captured_session(captured)
             .map_err(DatabaseUseCaseError::SessionChanged)?;
+        if let Some(revision) = expected_revision {
+            check_database_revision(captured, id, revision)?;
+        }
         // Unix can fail syncing the directory after rename committed. Never infer
         // rollback from this error, retry publication, or clean up the destination.
         atomicwrites::replace_atomic(&temporary, destination).map_err(publication_error)

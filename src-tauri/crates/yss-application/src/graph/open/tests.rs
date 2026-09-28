@@ -303,6 +303,7 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
             yss_project_identity::OperationId::new(),
             path.clone(),
             document,
+            None,
         )
         .unwrap();
     assert_eq!(

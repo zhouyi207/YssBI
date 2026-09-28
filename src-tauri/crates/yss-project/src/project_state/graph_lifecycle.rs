@@ -552,12 +552,20 @@ impl ProjectState {
                 message: "resource rename project instance is stale".into(),
             });
         }
-        let guard = self.resource_lifecycle.register(
-            &session.instance_id,
-            resource_path,
-            lifecycle_token,
-            ResourceLifecycleIntent::Rename,
-        )?;
+        let guard = if lifecycle_token == 0 {
+            self.resource_lifecycle.allocate_and_register(
+                &session.instance_id,
+                resource_path,
+                ResourceLifecycleIntent::Rename,
+            )?
+        } else {
+            self.resource_lifecycle.register(
+                &session.instance_id,
+                resource_path,
+                lifecycle_token,
+                ResourceLifecycleIntent::Rename,
+            )?
+        };
         let operation = ResourceLifecycleOperation::from_guard(session, &guard);
         Ok(crate::ResourceRenameOwnershipLease::new(operation, guard))
     }

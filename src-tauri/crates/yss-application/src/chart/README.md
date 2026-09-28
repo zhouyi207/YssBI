@@ -13,7 +13,10 @@
 
 ## 保存与版本
 
-Chart Save 按提交的完整内容覆盖资源，不接受 frontend `expectedRevision`。`ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Rust Project 单独管理。
+GUI 的独立 Chart Save 按提交的完整内容覆盖资源，不接受 frontend `expectedRevision`。
+Harness 的图表设置编辑携带读取时的资源 revision，Application 将它交给同一 Project writer，
+在捕获事务基线时比较并在提交处重验，拒绝覆盖期间发生的新修改。
+`ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Rust Project 单独管理。
 
 前端用 operation ID 和资源路径确认保存回执，通过文档内容判断保存期间是否产生新编辑，成功才清除 dirty。干净图表的刷新依据资源索引；为索引加载文档时，读取请求绑定同一 Project publication revision，由 Rust 校验快照一致性。重命名、删除等资源操作和 Rust 内部事务继续校验资源版本。
 

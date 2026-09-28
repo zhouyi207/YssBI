@@ -43,6 +43,45 @@ pub(super) fn load_database_in_captured_session(
     })
 }
 
+pub(super) fn duplicate_database_in_captured_session(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+    id: &str,
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
+    check_database_revision(captured, id, expected_revision)?;
+    let metadata = application
+        .query_database_meta_for_application(captured.project_instance_id().clone(), id.into())?;
+    let temporary = TemporarySource(
+        std::env::temp_dir().join(format!("yss-database-copy-{}.parquet", Uuid::new_v4())),
+    );
+    std::fs::File::options()
+        .write(true)
+        .create_new(true)
+        .open(&temporary.0)
+        .map_err(import_error)?;
+    export_database_in_captured_session(
+        application,
+        captured,
+        id,
+        &temporary.0.to_string_lossy(),
+        "parquet",
+        Some(expected_revision),
+    )?;
+    import_in_captured_session(captured, operation_id, move |_| {
+        // The import owns the project filesystem lease before checking the source again.
+        check_database_revision(captured, id, expected_revision)?;
+        let reader = yss_database_io::read_parquet_batches(&temporary.0, 50_000, None)
+            .map_err(import_error)?;
+        Ok(ImportReader {
+            name: format!("{} Copy", metadata.name),
+            reader: Box::new(reader),
+            temporary: Some(temporary),
+        })
+    })
+}
+
 fn read_source(
     source: DatabaseImportSource,
     control: RelationControl,

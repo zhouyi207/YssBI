@@ -188,6 +188,25 @@ impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
 }
 
 impl ApplicationState {
+    pub fn duplicate_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = import::duplicate_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            expected_revision,
+            operation_id,
+        )?;
+        self.refresh_database_session()?;
+        Ok(result)
+    }
+
     pub fn load_database_for_application(
         &self,
         project_instance_id: ProjectInstanceId,
@@ -570,9 +589,17 @@ impl ApplicationState {
         id: String,
         path: String,
         format: String,
+        expected_revision: Option<ResourceRevision>,
     ) -> Result<(), DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
-        export_database_in_captured_session(self, &captured, &id, &path, &format)?;
+        export_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            &path,
+            &format,
+            expected_revision,
+        )?;
         self.revalidate_captured_session(&captured)
             .map_err(DatabaseUseCaseError::SessionChanged)
     }
@@ -600,6 +627,27 @@ impl ApplicationState {
 
 fn database_id(id: &str) -> DatabaseId {
     DatabaseId::from_existing(id.to_owned().into_boxed_str())
+}
+
+fn check_database_revision(
+    captured: &ApplicationSession,
+    id: &str,
+    revision: ResourceRevision,
+) -> Result<(), DatabaseUseCaseError> {
+    captured
+        .project()
+        .prepare_database_mutation_authority(captured.project_instance_id(), id, revision)
+        .map(|_| ())
+        .map_err(|error| {
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_database(
+                error,
+                DatabaseApplicationOperation::ReadMetadata,
+                captured.project_instance_id(),
+                Some(id),
+                Some(revision),
+                None,
+            ))
+        })
 }
 
 fn delete_database_in_captured_session(

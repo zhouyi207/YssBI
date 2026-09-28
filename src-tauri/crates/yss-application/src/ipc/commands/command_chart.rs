@@ -131,7 +131,13 @@ pub fn save_chart(
     document: ChartDocument,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
-        .save_chart_resource(project_instance_id, operation_id, chart_path, document)
+        .save_chart_resource(
+            project_instance_id,
+            operation_id,
+            chart_path,
+            document,
+            None,
+        )
         .map_err(|error| chart_application_command_error(&error))?;
     let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);
     emit_chart_application_result(&app, &result)?;
