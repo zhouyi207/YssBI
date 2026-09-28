@@ -1,10 +1,12 @@
 //! Shared ordinary least-squares configuration.
+pub mod discrete;
 pub mod fit;
 pub mod linear;
+pub mod prais;
 pub mod report;
 pub mod summary;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub enum OlsCovariance {
     #[default]
     NonRobust,
@@ -63,7 +65,7 @@ impl OlsCovariance {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OlsOptions {
     pub constant: bool,
     pub covariance: OlsCovariance,

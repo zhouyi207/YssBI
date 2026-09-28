@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DidFakeGroupError {
+    #[error("DID computation interrupted")]
+    Interrupted,
     #[error("observed coefficient must be finite")]
     NonFiniteObservedCoefficient,
     #[error("exogenous matrix dimensions overflow")]
@@ -91,4 +93,15 @@ pub struct ComputeDidFakeGroupRequest {
     pub payload: DidFakeGroupEnginePayload,
     pub n_perm: usize,
     pub rng_seed: u64,
+}
+
+pub struct DidRandomizationInput {
+    pub response: Vec<f64>,
+    pub predictors: Vec<Vec<f64>>,
+    pub entity: Vec<f64>,
+    pub time: Vec<f64>,
+    pub treat: Vec<f64>,
+    pub post: Vec<f64>,
+    pub repetitions: usize,
+    pub seed: u64,
 }

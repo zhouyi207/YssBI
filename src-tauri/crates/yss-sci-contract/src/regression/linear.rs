@@ -23,6 +23,8 @@ pub struct LinearRegressionRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinearRegressionResult {
+    /// Original positive observation weights, retained for WLS diagnostics.
+    pub weights: Option<Vec<f64>>,
     pub constant: bool,
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,

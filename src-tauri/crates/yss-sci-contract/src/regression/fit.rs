@@ -12,11 +12,11 @@ pub enum RegressionKind {
     Wls,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegressionFit {
     pub constant: bool,
-    pub family: &'static str,
+    pub family: String,
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,
     pub residuals: Vec<f64>,

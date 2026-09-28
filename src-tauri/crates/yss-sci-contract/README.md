@@ -19,12 +19,26 @@ Cross-domain execution and observation contracts remain shared.
   summary records. Report construction and labels belong to the runtime.
   `summary` owns the selected linear-summary contents and analysis defaults; it
   does not contain UI layout, graph identity, or cache state.
+  `discrete::BinaryOptions` owns binary-model intercept/convergence settings;
+  `prais` owns AR(1) transform and convergence settings. Linear results retain
+  optional original WLS weights for downstream diagnostics.
 - `hypothesis`: neutral hypothesis requests, results, alternatives and errors.
-- `time_series::acf_pacf`: ACF/PACF requests and results.
+- `time_series::acf_pacf`: ACF/PACF requests and results. `var` and `vec` own
+  neutral fitted models and selected-summary options; `fit` shares multivariate
+  equation/coefficient statistics, serial-test rows and stability roots.
 - `diagnostics::serial_correlation`: serial-correlation requests and BG/Q/Durbin-Watson results.
-- `panel`: numerical panel-model fits.
-- `causal::iv`: IV estimator selection and computed fits.
+- `diagnostics::residual`: residual/model test selection and BP/White/IM/RESET,
+  normality, VIF and leverage results without numerical-backend types.
+- `panel`: estimator/effect options, `PanelFit`, selected-summary options and
+  grouped coefficient/model/effect statistics. Estimator-specific statistics use
+  an enum instead of unrelated optional fields on every result.
+- `causal::iv`: IV estimator selection and fitted model facts, including design
+  columns for later analyses. First-stage, overidentification, Hausman and
+  endogenous-regressor results are independent records, selected through
+  `IvSummaryOptions` rather than embedded in every fit.
 - `causal::did`: DID inputs, inference results and typed unavailable/error codes.
+  Randomization input contains observed columns, treatment/post indicators,
+  repetitions and a reproducible seed; interruption remains an explicit failure.
 - `density`: kernel-density input and output records.
 - `distribution`: probability distribution parameters and typed samples.
 - `observation`: observation metadata, missing-value policy and category roles,
