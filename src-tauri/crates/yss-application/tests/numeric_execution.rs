@@ -2040,6 +2040,106 @@ fn literal_tables_feed_relational_statistics_and_page_without_dataset_bindings()
 }
 
 #[test]
+fn alignment_nodes_propagate_schema_and_feed_pageable_relations_to_downstream_series() {
+    use yss_data_contract::{DataValue, ValueType};
+    for panel in [false, true] {
+        let mut document = GraphDocument::default();
+        let [source, align, select, sum] = std::array::from_fn(|_| NodeId::new());
+        let align_type = if panel {
+            "yssbi.dataframe.panel.align"
+        } else {
+            "yssbi.dataframe.timeseries.align"
+        };
+        let mut parameters = vec![("time_column", serde_json::json!("time"))];
+        if panel {
+            parameters.push(("entity_column", serde_json::json!("entity")));
+        }
+        for (id, kind, parameters) in [
+            (source, "yssbi.constant.get", vec![]),
+            (align, align_type, parameters),
+            (
+                select,
+                "yssbi.dataframe.series.select",
+                vec![("column", serde_json::json!("x"))],
+            ),
+            (sum, "yssbi.dataframe.series.sum", vec![]),
+        ] {
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: kind.parse().unwrap(),
+                    position: NodePosition { x: 0., y: 0. },
+                    user_label: None,
+                    parameters: parameters
+                        .into_iter()
+                        .map(|(k, v)| (k.parse().unwrap(), v))
+                        .collect(),
+                },
+            );
+        }
+        let table = if panel {
+            r#"{"entity":["a","a","b"],"time":[3,1,2],"x":[30,10,20]}"#
+        } else {
+            r#"{"time":[3,1],"x":[30,10]}"#
+        };
+        set_constant(
+            &mut document,
+            source,
+            ValueType::DataFrame,
+            DataValue::String(table.into()),
+        );
+        for constant in document.constants.values_mut() {
+            yss_graph_document::normalize_constant_value(constant).unwrap();
+        }
+        for (from, output, to, input) in [
+            (source, "value", align, "dataframe"),
+            (align, "aligned", select, "dataframe"),
+            (select, "series", sum, "series"),
+        ] {
+            let id = ConnectionId::new();
+            document.connections.insert(
+                id,
+                DocumentConnection {
+                    id,
+                    output: PortAddress::declared(from, output.parse().unwrap()),
+                    input: PortAddress::declared(to, input.parse().unwrap()),
+                    order: None,
+                },
+            );
+        }
+        let RuntimeValue::Relation(aligned) = execute(&document, align_type).unwrap() else {
+            panic!("alignment must produce a relation");
+        };
+        let control = yss_relational_contract::RelationControl {
+            cancellation: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now() + Duration::from_secs(10),
+            max_input_bytes: 1024 * 1024,
+        };
+        let page = aligned.page(0, 10, &control).unwrap();
+        let values = page
+            .data
+            .columns()
+            .iter()
+            .find(|column| column.name().as_str() == "x")
+            .unwrap()
+            .values();
+        assert_eq!(
+            serde_json::to_value(values).unwrap(),
+            if panel {
+                serde_json::json!([10, null, 30, 20])
+            } else {
+                serde_json::json!([10, null, 30])
+            }
+        );
+        assert_eq!(
+            execute(&document, "yssbi.dataframe.series.sum").unwrap(),
+            RuntimeValue::Scalar(TabularScalar::Integer(if panel { 60 } else { 40 }))
+        );
+    }
+}
+
+#[test]
 fn assembled_memory_columns_share_the_relational_path_and_preserve_column_order() {
     use yss_data_contract::{SemanticType, ValueType};
     use yss_node_kernel::{

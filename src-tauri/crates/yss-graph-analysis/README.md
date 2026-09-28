@@ -39,6 +39,8 @@ Schema 输出缓存校验 registry、节点参数、常量内容、输入地址�
 
 Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Workflow。
 
+结果类别按实际输出契约确定。Linear、Logit/Probit 和 Prais Summary 的 report 使用既有报表呈现；IV、Panel/DID、ADF、VAR/VEC、独立诊断及 KDE 当前返回结构化数值记录，使用通用结果查看器。节点名称含 Summary、Report 或 Plot 不代表其数据已经满足专用前端报表/图形格式，不能据此路由到不匹配的渲染器。
+
 内置节点的每个数据输出端口允许连接多个下游输入，包括 Decompose 列端口和函数派生输出。
 新增分支保留已有连线；输入端口仍遵循自身容量，替换单连接输入时只移除该输入的旧连线。
 连接数量与动态端口数量是独立约束，同一个输出值由多个消费者共享。
