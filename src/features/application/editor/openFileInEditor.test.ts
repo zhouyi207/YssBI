@@ -9,8 +9,8 @@ vi.mock("./openEditorPanel", () => ({
   openEditorPanel: mocks.open,
   isEditorOpenRejectionHandled: (error: unknown) => error === mocks.handled,
 }));
-vi.mock("./activateEditorPanelAndSyncSession", () => ({
-  activateEditorPanelAndSyncSession: mocks.reveal,
+vi.mock("./editorPanelActivation", () => ({
+  revealActiveEditorDetails: mocks.reveal,
 }));
 vi.mock("./openGraphInEditor", () => ({ openGraphInEditor: vi.fn() }));
 beforeEach(() => {

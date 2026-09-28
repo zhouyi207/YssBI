@@ -3,7 +3,7 @@ import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewp
 import { logger } from "@/features/application/observability/appLogger";
 
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
-import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
+import { revealActiveEditorDetails } from "./editorPanelActivation";
 
 export interface OpenGraphInEditorOptions {
   /** Insert a newly opened editor at this TabBar index. */
@@ -35,6 +35,6 @@ export async function openGraphInEditor(
   }
 
   ensureEditorViewport(editorViewportScope(panel.groupId, graphPath));
-  await activateEditorPanelAndSyncSession(panel);
+  await revealActiveEditorDetails(panel);
   return panel;
 }

@@ -90,6 +90,15 @@ details, while no selection or multiple nodes show file information. Doc, Chart 
 Data always show the current resource. Tab activation reads the owning pane's selection
 through that same resolver; it never carries another pane's node into the newly active tab.
 
+The native file/database opening flows select the resource panel. Application
+then calls `revealActiveEditorDetails` to synchronize the resource target and reveal Details
+view for every resource kind. Sidebar rows and their Open actions use that same path,
+without kind-specific inspection branches. Passive layout synchronization and pane
+movement keep their existing visibility behavior; they only update Details content.
+Synchronization checks the captured panel's group and resource identity against the
+native active editor. It does not enqueue another activation or keep an application
+activation counter. A late open result cannot reselect a tab the user has already left.
+
 Opening Chart, Mind and Doc only opens the panel; their views own initial loading.
 Chart views share `loadChartDocumentForView` requests and reuse the existing document
 draft. A response is installed only for its captured project, resource revision and

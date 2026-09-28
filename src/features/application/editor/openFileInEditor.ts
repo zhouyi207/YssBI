@@ -2,7 +2,7 @@ import type { FileResourceKind } from "@/shared/types/domain/resource";
 import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { openGraphInEditor } from "./openGraphInEditor";
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
-import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
+import { revealActiveEditorDetails } from "./editorPanelActivation";
 
 type OpenFileOptions = { targetGroupId?: string };
 function fileDisplayName(path: string, kind: FileResourceKind): string {
@@ -14,7 +14,7 @@ async function openPanel(
   options?: OpenFileOptions,
 ): Promise<void> {
   const panel = await openEditorPanel({ resourceRef: path, resourceKind: kind }, options);
-  await activateEditorPanelAndSyncSession(panel);
+  await revealActiveEditorDetails(panel);
 }
 const openers: Record<
   FileResourceKind,

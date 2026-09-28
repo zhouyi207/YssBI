@@ -1,5 +1,5 @@
 import { openEditorPanel, isEditorOpenRejectionHandled } from "./openEditorPanel";
-import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
+import { revealActiveEditorDetails } from "./editorPanelActivation";
 
 export async function openDatabaseInEditor(databaseId: string): Promise<void> {
   try {
@@ -7,7 +7,7 @@ export async function openDatabaseInEditor(databaseId: string): Promise<void> {
       resourceRef: databaseId,
       resourceKind: "database",
     });
-    await activateEditorPanelAndSyncSession(panel);
+    await revealActiveEditorDetails(panel);
   } catch (error) {
     if (!isEditorOpenRejectionHandled(error)) throw error;
   }

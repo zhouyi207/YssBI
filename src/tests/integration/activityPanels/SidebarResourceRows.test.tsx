@@ -187,7 +187,9 @@ describe("resource sidebar rows", () => {
     act(() => dataCategory().click());
     expect(host.textContent).toContain("Sales");
     expect(dataCategory().disabled).toBe(false);
-    expect(host.querySelectorAll("[data-sidebar-tree-category-id]")).toHaveLength(4);
+    expect(host.querySelectorAll("[data-sidebar-tree-category-id]")).toHaveLength(
+      Object.keys(PROJECT_TREE_CATEGORY_IDS).length,
+    );
     expect(
       useSidebarStore.getState().expandedCategories.project?.[PROJECT_TREE_CATEGORY_IDS.data],
     ).toBe(true);

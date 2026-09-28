@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchEditorPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
 import { ensureEditorViewport } from "@/features/core/viewport";
 import { openEditorPanel } from "./openEditorPanel";
-import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
+import { revealActiveEditorDetails } from "./editorPanelActivation";
 import { openGraphInEditor } from "./openGraphInEditor";
 
 const openedPanel: WorkbenchEditorPanelInfo = {
@@ -30,8 +30,8 @@ vi.mock("./openEditorPanel", () => ({
   isEditorOpenRejectionHandled: vi.fn(() => false),
 }));
 
-vi.mock("./activateEditorPanelAndSyncSession", () => ({
-  activateEditorPanelAndSyncSession: vi.fn(async () => true),
+vi.mock("./editorPanelActivation", () => ({
+  revealActiveEditorDetails: vi.fn(async () => true),
 }));
 
 vi.mock("@/features/application/observability/appLogger", () => ({
@@ -63,7 +63,7 @@ describe("openGraphInEditor", () => {
       groupId: "group-returned",
       graphPath: "events/Main.yssbi-event",
     });
-    expect(activateEditorPanelAndSyncSession).toHaveBeenCalledWith(openedPanel);
+    expect(revealActiveEditorDetails).toHaveBeenCalledWith(openedPanel);
     expect(vi.mocked(openEditorPanel).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(ensureEditorViewport).mock.invocationCallOrder[0],
     );

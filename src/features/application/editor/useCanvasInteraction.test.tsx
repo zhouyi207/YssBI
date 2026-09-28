@@ -26,8 +26,8 @@ vi.mock("./editorCommandFocus", () => ({
   captureEditorCommandTarget: () => mocks.target,
   isEditorCommandTargetCurrent: (target: unknown) => target === mocks.target,
 }));
-vi.mock("./activateEditorPanelAndSyncSession", () => ({
-  activateCurrentEditorPanel: mocks.focusGroup,
+vi.mock("./editorPanelActivation", () => ({
+  synchronizeCurrentEditorPanel: mocks.focusGroup,
 }));
 vi.mock("@/modules/workbench/public", () => ({
   getEditorGroupGraphSelection: () => mocks.selection,

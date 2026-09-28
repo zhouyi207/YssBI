@@ -22,7 +22,7 @@ import type {
 import { isGraphSaving } from "@/features/core/dataStore/graphProjectionStore";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "./editorCommandFocus";
-import { activateCurrentEditorPanel } from "./activateEditorPanelAndSyncSession";
+import { synchronizeCurrentEditorPanel } from "./editorPanelActivation";
 import type { EditorCanvasScope } from "./editorCanvasTypes";
 
 function selectionMatches(actual: GraphSelection, expected: GraphSelection): boolean {
@@ -88,7 +88,7 @@ export function useCanvasInteraction({
     (type: CanvasGestureType, onCancel: () => void): CanvasGestureLease | null => {
       const target = captureTarget();
       if (!target) return null;
-      activateCurrentEditorPanel(groupId);
+      synchronizeCurrentEditorPanel(groupId);
       if (!isEditorCommandTargetCurrent(target)) return null;
       startCanvasInteraction(graphPath, { type, session: { groupId, panelInstanceId } });
       const owner = useGraphInteractionStore.getState().interactions[graphPath];

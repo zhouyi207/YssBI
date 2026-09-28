@@ -10,7 +10,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { openFileInEditor } from "@/features/application/editor/openFileInEditor";
 import { buildSidebarDragData } from "@/features/application/sidebar";
-import { revealDetails } from "@/features/application/editor/rightSidebarActions";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import {
   SidebarListItem,
@@ -53,10 +52,6 @@ export const SidebarFileRow = memo(function SidebarFileRow({
     event_graph: () => buildSidebarDragData(id, name, "event_graph"),
     function_graph: () => buildSidebarDragData(id, name, "function_graph"),
   };
-  const inspect: Partial<Record<FileResourceKind, () => Promise<void>>> = {
-    event_graph: () => revealDetails({ kind: "event_graph", path: id }),
-    function_graph: () => revealDetails({ kind: "function_graph", path: id }),
-  };
   const open = () => (onOpen ? onOpen({ id, kind }) : void openFileInEditor(id, kind));
   const icon = (
     <Icon
@@ -73,11 +68,9 @@ export const SidebarFileRow = memo(function SidebarFileRow({
       indentDepth={indentDepth}
       icon={icon}
       label={name}
-      onClick={async (e) => {
+      onClick={(e) => {
         e.stopPropagation();
-        const revealing = inspect[kind]?.();
         open();
-        await revealing;
       }}
       onContextMenu={onContextMenu}
       trailing={

@@ -3,7 +3,7 @@ import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 
 import { openGraphInEditor } from "./openGraphInEditor";
-import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
+import { synchronizeActiveEditorPanel } from "./editorPanelActivation";
 
 /** Handle sidebar graph-resource drops without participating in FlexLayout's native tab DnD. */
 export async function handleGraphResourceDrop(
@@ -28,5 +28,5 @@ export async function handleGraphResourceDrop(
 
   const moved = workbenchLayoutRead.getPanel(opened.panelInstanceId);
   if (moved?.metadata.role !== "editor") return;
-  await activateEditorPanelAndSyncSession({ ...moved, metadata: moved.metadata });
+  synchronizeActiveEditorPanel({ ...moved, metadata: moved.metadata });
 }

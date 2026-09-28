@@ -1,7 +1,7 @@
 import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 
-import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
+import { synchronizeActiveEditorPanel } from "./editorPanelActivation";
 
 /** Split the active canonical editor right or down; native FlexLayout DnD owns moves/order. */
 export async function splitEditorPanel(
@@ -22,6 +22,6 @@ export async function splitEditorPanel(
 
   const moved = workbenchLayoutRead.getPanel(panel.panelInstanceId);
   if (moved?.metadata.role !== "editor") return null;
-  await activateEditorPanelAndSyncSession({ ...moved, metadata: moved.metadata });
+  synchronizeActiveEditorPanel({ ...moved, metadata: moved.metadata });
   return moved.groupId;
 }

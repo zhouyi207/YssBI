@@ -40,7 +40,11 @@ Project sidebar 按 Events → Functions → Charts → Minds → Docs → Data 
 侧栏获得输入焦点不改变顶部选择，切换资源或关闭标签时高亮随原生选择更新。
 画布内单选、多选、框选和清空节点选择只改变节点选择及 Details，不改变所属 Graph 条目的背景。
 
-Event、Function、Chart、Mind、Doc、Data 打开后共用 `activateEditorPanelAndSyncSession`，保持资源编辑器为物理活动面板，并被动同步 Details 上下文；Project 分类展开不改变活动面板。
+Event、Function、Chart、Mind、Doc、Data 的物理激活统一由原生布局的打开和复用操作完成，随后由 `revealActiveEditorDetails` 同步 Details 上下文。同步前校验资源及活动面板，不再排队二次激活；Project 分类展开不改变活动面板。
+
+从侧栏条目、行尾按钮或资源“打开”动作进入上述六类资源时，统一打开流程在同步详情内容后
+切换并展开既有 Details 面板，不再由事件图和函数图的侧栏行单独触发。布局恢复、面板移动等
+被动同步保留右侧当前标签和折叠状态。
 
 资源标签的详情策略由 `features/core/editor/detail/editorDetailPolicy.ts` 集中定义：
 事件图、函数图和思维导图随所属面板的单节点选择显示节点详情，无选择或多选回到文件信息；

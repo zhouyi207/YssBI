@@ -1,4 +1,4 @@
-import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
+import { synchronizeActiveEditorPanel } from "@/features/application/editor/editorPanelActivation";
 import type { RootPanelActivationCoordinator } from "@/modules/workbench/public";
 
 export const panelActivationCoordinator: RootPanelActivationCoordinator = (panel) => {

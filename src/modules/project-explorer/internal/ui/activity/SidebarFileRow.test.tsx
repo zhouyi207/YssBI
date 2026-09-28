@@ -7,7 +7,6 @@ import { DRAG_TYPES } from "@/features/core/dnd";
 const mocks = vi.hoisted(() => ({
   listItemProps: [] as Array<Record<string, unknown>>,
   openFileInEditor: vi.fn(),
-  revealDetails: vi.fn(),
 }));
 
 vi.mock("@/modules/workbench/public", () => ({
@@ -26,9 +25,6 @@ vi.mock("@/components/ui/tooltip", () => ({
 vi.mock("@/features/application/editor/openFileInEditor", () => ({
   openFileInEditor: mocks.openFileInEditor,
 }));
-vi.mock("@/features/application/editor/rightSidebarActions", () => ({
-  revealDetails: mocks.revealDetails,
-}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -44,7 +40,6 @@ describe("SidebarFileRow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.listItemProps.length = 0;
-    mocks.revealDetails.mockResolvedValue(undefined);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -81,7 +76,7 @@ describe("SidebarFileRow", () => {
     });
   });
 
-  it("explicitly reveals graph Details before completing the row click action", async () => {
+  it("delegates row clicks to the shared resource opening flow", async () => {
     act(() =>
       root.render(
         <SidebarFileRow
@@ -93,7 +88,7 @@ describe("SidebarFileRow", () => {
       ),
     );
     const onClick = mocks.listItemProps[0]?.onClick as
-      | ((event: { stopPropagation(): void }) => Promise<void>)
+      | ((event: { stopPropagation(): void }) => void)
       | undefined;
     const stopPropagation = vi.fn();
 
@@ -102,10 +97,6 @@ describe("SidebarFileRow", () => {
     });
 
     expect(stopPropagation).toHaveBeenCalledOnce();
-    expect(mocks.revealDetails).toHaveBeenCalledWith({
-      kind: "event_graph",
-      path: "events/Main.yssbi-event",
-    });
     expect(mocks.openFileInEditor).toHaveBeenCalledWith("events/Main.yssbi-event", "event_graph");
   });
 });

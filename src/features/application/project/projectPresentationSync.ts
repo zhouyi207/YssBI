@@ -1,4 +1,4 @@
-import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
+import { synchronizeActiveEditorPanel } from "@/features/application/editor/editorPanelActivation";
 import { pruneEditorPanelsForMissingResources } from "@/features/application/editor/pruneEditorPanels";
 import { synchronizeVisibleGraphPanels } from "@/features/application/editor/synchronizeVisibleGraphPanel";
 import { workbenchLayoutController } from "@/modules/workbench/public";

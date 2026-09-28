@@ -9,10 +9,6 @@ export { useEditorKeyboard } from "./useEditorKeyboard";
 export { useWorkbenchWindowCloseGuard } from "./useWorkbenchWindowCloseGuard";
 export { useEditorPanelCommands } from "./useEditorPanelCommands";
 export {
-  activateEditorPanelAndSyncSession,
-  activateCurrentEditorPanel,
-} from "./activateEditorPanelAndSyncSession";
-export {
   requestCloseEditorPanel,
   requestCloseEditorPanels,
   requestCloseOtherEditorPanels,
