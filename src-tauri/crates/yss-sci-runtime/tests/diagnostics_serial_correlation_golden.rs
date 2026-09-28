@@ -1,10 +1,13 @@
 use serde::Deserialize;
-use yss_sci_contract::serial_tests::{SerialTestWithLag, SerialTestsInput, SerialTestsOutput};
-use yss_sci_runtime::time_series::serial_tests::compute_serial_tests;
+use yss_sci_contract::diagnostics::serial_correlation::{
+    SerialTestWithLag, SerialTestsInput, SerialTestsOutput,
+};
+use yss_sci_runtime::diagnostics::serial_correlation::compute_serial_tests;
 
 const SIMPLE_RESIDUALS: &str =
-    include_str!("fixtures/time_series/serial_tests/simple_residuals.json");
-const WITH_EXOG_BG: &str = include_str!("fixtures/time_series/serial_tests/with_exog_bg.json");
+    include_str!("fixtures/diagnostics/serial_correlation/simple_residuals.json");
+const WITH_EXOG_BG: &str =
+    include_str!("fixtures/diagnostics/serial_correlation/with_exog_bg.json");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

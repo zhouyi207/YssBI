@@ -1,4 +1,4 @@
-use super::types::PraisInfo;
+use super::linear::types::PraisInfo;
 use crate::error::computation_failed;
 use serde::Serialize;
 use yss_sci_contract::regression::fit::{

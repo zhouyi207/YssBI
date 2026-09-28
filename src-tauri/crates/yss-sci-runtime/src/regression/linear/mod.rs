@@ -1,16 +1,19 @@
-//! Synchronous scientific computation entry points.
-
-use yss_sci_contract::scientific::{
-    AcfPacfRequest, AcfPacfResult, ScientificComputationError, ScientificExecutionControl,
-    ScientificInputViolation,
+//! Linear regression entry points with admission and execution-control checks.
+pub mod types;
+use crate::error::{invalid, map_sci_error};
+use yss_sci_contract::execution::{
+    ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::regression::OlsOptions;
+use yss_sci_contract::regression::fit::RegressionFit;
+use yss_sci_contract::{SciError, StatisticalObservationMetadata};
 
 pub fn linear_regression(
-    request: yss_sci_contract::scientific::LinearRegressionRequest,
+    request: yss_sci_contract::regression::linear::LinearRegressionRequest,
     control: &ScientificExecutionControl,
-) -> Result<yss_sci_contract::scientific::LinearRegressionResult, ScientificComputationError> {
-    use yss_sci_contract::scientific::LinearRegressionResult;
+) -> Result<yss_sci_contract::regression::linear::LinearRegressionResult, ScientificComputationError>
+{
+    use yss_sci_contract::regression::linear::LinearRegressionResult;
     control.check()?;
     let observations = request.response.len();
     if request.predictors.is_empty()
@@ -48,7 +51,7 @@ pub fn linear_regression(
     };
     let constant = request.options.constant;
     control.check()?;
-    let fit = yss_sci::regression::fit::fit_linear_regression(
+    let fit = yss_sci::regression::linear::fit::fit_linear_regression(
         request.response,
         &request.predictors,
         request.options,
@@ -72,52 +75,6 @@ pub fn linear_regression(
         design,
         report,
     })
-}
-pub fn acf_pacf(
-    request: AcfPacfRequest,
-    control: &ScientificExecutionControl,
-) -> Result<AcfPacfResult, ScientificComputationError> {
-    control.check()?;
-    if request.values.len() < 4 {
-        return Err(invalid(ScientificInputViolation::EmptyInput));
-    }
-    if request.max_lag == 0 {
-        return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
-    }
-    // Report budget, not an algorithmic limit: preserve the existing lag policy.
-    let max_lag = request.max_lag.min(request.values.len() / 2 - 1).min(40);
-    let result = yss_sci::ts::acf_pacf::compute_acf_pacf(&request.values, max_lag, control)?;
-    control.check()?;
-    Ok(result)
-}
-
-const fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {
-    ScientificComputationError::InvalidInput { violation }
-}
-
-fn map_sci_error(error: SciError) -> ScientificComputationError {
-    match error {
-        SciError::InvalidInput {
-            operation,
-            violation,
-        } => {
-            if !matches!(
-                operation,
-                SciOperationCode::AcfPacf | SciOperationCode::Regression
-            ) {
-                return ScientificComputationError::ComputationFailed;
-            }
-            invalid(match violation {
-                SciInputViolation::EmptyInput => ScientificInputViolation::EmptyInput,
-                SciInputViolation::NonFiniteInput => ScientificInputViolation::NonFiniteInput,
-                SciInputViolation::ShapeMismatch => ScientificInputViolation::ShapeMismatch,
-                SciInputViolation::ParameterOutOfRange => {
-                    ScientificInputViolation::ParameterOutOfRange
-                }
-            })
-        }
-        SciError::ComputationFailed { .. } => ScientificComputationError::ComputationFailed,
-    }
 }
 
 fn validate_ols_covariance(
@@ -147,6 +104,15 @@ fn validate_ols_covariance(
     } else {
         Err(invalid(ScientificInputViolation::ParameterOutOfRange))
     }
+}
+
+pub fn fit_ols(
+    response: Vec<f64>,
+    predictors: &[Vec<f64>],
+    config: OlsOptions,
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
+    yss_sci::regression::linear::fit::fit_ols(response, predictors, config, metadata)
 }
 
 #[cfg(test)]

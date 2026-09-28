@@ -7,7 +7,7 @@ pub fn augmented_dickey_fuller(
     lags: usize,
     regression: &str,
 ) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::ts::models::augmented_dickey_fuller(series, lags, regression)?;
+    let result = yss_sci::time_series::models::augmented_dickey_fuller(series, lags, regression)?;
     serde_json::to_value(serde_json::json!({
         "operation": "adf",
         "statistic": result.test_statistic,
@@ -24,7 +24,7 @@ pub fn augmented_dickey_fuller(
 }
 
 pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::ts::models::var_fit(series, lags)?;
+    let result = yss_sci::time_series::models::var_fit(series, lags)?;
     serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VarFit))
 }
 
@@ -32,7 +32,7 @@ pub fn var_lag_order(
     series: Vec<Vec<f64>>,
     max_lags: usize,
 ) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::ts::models::var_lag_order(series, max_lags)?;
+    let result = yss_sci::time_series::models::var_lag_order(series, max_lags)?;
     serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VarLagOrder))
 }
 
@@ -42,7 +42,7 @@ pub fn vec_fit(
     lags: usize,
     trend: &str,
 ) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::ts::models::vec_fit(series, rank, lags, trend)?;
+    let result = yss_sci::time_series::models::vec_fit(series, rank, lags, trend)?;
     serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VecFit))
 }
 
@@ -51,6 +51,27 @@ pub fn vec_rank_test(
     lags: usize,
     trend: &str,
 ) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::ts::models::vec_rank_test(series, lags, trend)?;
+    let result = yss_sci::time_series::models::vec_rank_test(series, lags, trend)?;
     serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VecRank))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::augmented_dickey_fuller;
+    use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+
+    #[test]
+    fn augmented_dickey_fuller_rejects_unknown_regression() {
+        let series = [1.0, 1.4, 1.1, 1.8, 1.5, 2.2, 1.9, 2.6, 2.3, 3.0, 2.7, 3.4];
+
+        let error = augmented_dickey_fuller(&series, 1, "unexpected").unwrap_err();
+
+        assert_eq!(
+            error,
+            SciError::InvalidInput {
+                operation: SciOperationCode::Adf,
+                violation: SciInputViolation::ParameterOutOfRange,
+            }
+        );
+    }
 }

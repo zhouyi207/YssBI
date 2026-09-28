@@ -1,5 +1,5 @@
 //! Rolling means preserve nulls when any member of a complete window is null.
-use crate::data::{PreparationError, check_size};
+use crate::preprocessing::{PreparationError, check_size};
 use arrow::array::{Array, Float64Array};
 
 pub fn rolling_mean(

@@ -1,5 +1,5 @@
 //! Lag on a complete time grid; gaps remain null.
-use crate::data::PreparationError;
+use crate::preprocessing::PreparationError;
 use arrow::array::{Array, ArrayRef, Float64Array};
 
 pub fn ts_lag(

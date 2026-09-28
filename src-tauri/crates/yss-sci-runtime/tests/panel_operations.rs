@@ -1,5 +1,5 @@
 //! Panel alignment and differencing.
-use yss_sci_runtime::data::panel::{align_panel, panel_diff};
+use yss_sci_runtime::preprocessing::panel::{align_panel, panel_diff};
 
 #[test]
 fn test_panel_align_diff() {

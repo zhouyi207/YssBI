@@ -2,7 +2,7 @@
 //!
 //! Covers Durbin-Watson, Ljung-Box Q, and optional Breusch-Godfrey LM tests.
 
-use yss_sci_contract::serial_tests::{
+use yss_sci_contract::diagnostics::serial_correlation::{
     DurbinWatsonResult, SerialTestWithLag, SerialTestsInput, SerialTestsOutput,
 };
 
@@ -29,7 +29,7 @@ fn normalized_lags(input: &SerialTestsInput) -> Result<usize, SciError> {
     Ok(input.lags.min(n / 2 - 1).clamp(1, 40))
 }
 
-use yss_sci::ts::serial_correlation::{breusch_godfrey, durbin_watson, ljung_box_q};
+use yss_sci::diagnostics::serial_correlation::{breusch_godfrey, durbin_watson, ljung_box_q};
 
 fn compute(
     residuals: &[f64],

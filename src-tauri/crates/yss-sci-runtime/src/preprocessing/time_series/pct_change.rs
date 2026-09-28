@@ -1,5 +1,5 @@
 //! Percentage change; zero denominators and null operands produce null.
-use crate::data::{PreparationError, check_size};
+use crate::preprocessing::{PreparationError, check_size};
 use arrow::array::{Array, Float64Array};
 
 pub fn ts_pct_change(values: &Float64Array, lag: usize) -> Result<Float64Array, PreparationError> {

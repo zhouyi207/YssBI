@@ -3,7 +3,7 @@ use arrow::array::{Array, Date32Array, Float64Array, Int64Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use std::sync::Arc;
-use yss_sci_runtime::data::{PreparationError, time_series as ts};
+use yss_sci_runtime::preprocessing::{PreparationError, time_series as ts};
 
 #[test]
 fn test_ts_diff() {
@@ -162,7 +162,7 @@ fn arrow_dates_nulls_and_alignment_limits_are_checked_before_allocation() {
 
 #[test]
 fn panel_arrow_adapter_preserves_identity_metadata_and_existing_gap_difference() {
-    use yss_sci_runtime::data::panel;
+    use yss_sci_runtime::preprocessing::panel;
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity", DataType::Int64, false)
             .with_metadata([(String::from("column_id"), String::from("entity-id"))].into()),

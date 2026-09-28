@@ -1,5 +1,5 @@
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
-use yss_sci_contract::scientific::{ScientificComputationError, ScientificExecutionControl};
+use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 
 /// The caller admits output memory before allocating this slice. No intermediate sample buffer.
 pub fn sample_into(

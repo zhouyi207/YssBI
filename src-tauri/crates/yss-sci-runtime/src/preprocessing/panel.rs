@@ -8,7 +8,7 @@ pub type PanelDifference = (Vec<usize>, Vec<usize>, Vec<Vec<f64>>);
 use std::collections::HashMap;
 
 use super::time_series::align::{time_array, time_numbers};
-use crate::data::{MAX_PREPARED_BYTES, PreparationError, check_size};
+use crate::preprocessing::{MAX_PREPARED_BYTES, PreparationError, check_size};
 use arrow::array::{Array, Float64Array, StringArray, UInt64Array};
 use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;

@@ -1,10 +1,10 @@
-//! Runtime entry points for regression computations and report encoding.
+//! Regression-family dispatch and report encoding.
+pub mod discrete;
+pub mod linear;
 pub mod report;
 pub mod types;
-use crate::error::computation_failed;
-use yss_sci_contract::regression::OlsOptions;
-use yss_sci_contract::regression::fit::{InstrumentalVariableKind, RegressionFit, RegressionKind};
-use yss_sci_contract::{SciError, SciOperationCode, StatisticalObservationMetadata};
+use yss_sci_contract::regression::fit::{RegressionFit, RegressionKind};
+use yss_sci_contract::{SciError, StatisticalObservationMetadata};
 
 pub fn fit_regression(
     kind: RegressionKind,
@@ -16,52 +16,12 @@ pub fn fit_regression(
     yss_sci::regression::fit::fit_regression(kind, response, predictors, weights, metadata)
 }
 
-pub fn fit_ols(
-    response: Vec<f64>,
-    predictors: &[Vec<f64>],
-    config: OlsOptions,
-    metadata: StatisticalObservationMetadata,
-) -> Result<RegressionFit, SciError> {
-    yss_sci::regression::fit::fit_ols(response, predictors, config, metadata)
-}
-
-pub fn fit_instrumental_variables(
-    kind: InstrumentalVariableKind,
-    response: Vec<f64>,
-    exogenous: Vec<f64>,
-    endogenous: Vec<f64>,
-    instruments: Vec<f64>,
-) -> Result<serde_json::Value, SciError> {
-    let fit = yss_sci::regression::fit::fit_instrumental_variables(
-        kind,
-        response,
-        exogenous,
-        endogenous,
-        instruments,
-    )?;
-    serde_json::to_value(fit)
-        .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
-}
-
-pub fn fit_panel(
-    response: Vec<f64>,
-    predictors: Vec<Vec<f64>>,
-    entity: Vec<f64>,
-    time: Vec<f64>,
-    treatment: Option<Vec<f64>>,
-) -> Result<serde_json::Value, SciError> {
-    let fit = yss_sci::regression::fit::fit_panel(response, predictors, entity, time, treatment)?;
-    serde_json::to_value(fit).map_err(|_| computation_failed(SciOperationCode::Panel))
-}
-
 #[cfg(test)]
 mod tests {
     use super::report::regression_report;
     use super::*;
-    use crate::time_series::augmented_dickey_fuller;
     use yss_sci_contract::regression::fit::RegressionStatistics;
     use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
-    use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
     fn regression_metadata(observations: usize) -> StatisticalObservationMetadata {
         StatisticalObservationMetadata {
@@ -212,20 +172,5 @@ mod tests {
         assert!(prais["dw_original"].as_f64().is_some());
         assert!(prais["dw_transformed"].as_f64().is_some());
         assert!(prais["iterations"].as_u64().unwrap() > 0);
-    }
-
-    #[test]
-    fn augmented_dickey_fuller_rejects_unknown_regression() {
-        let series = [1.0, 1.4, 1.1, 1.8, 1.5, 2.2, 1.9, 2.6, 2.3, 3.0, 2.7, 3.4];
-
-        let error = augmented_dickey_fuller(&series, 1, "unexpected").unwrap_err();
-
-        assert_eq!(
-            error,
-            SciError::InvalidInput {
-                operation: SciOperationCode::Adf,
-                violation: SciInputViolation::ParameterOutOfRange,
-            }
-        );
     }
 }

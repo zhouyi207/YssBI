@@ -1,5 +1,5 @@
 //! Bounded alignment on a complete numeric or date grid using Arrow take indices.
-use crate::data::{MAX_PREPARED_BYTES, PreparationError, check_size};
+use crate::preprocessing::{MAX_PREPARED_BYTES, PreparationError, check_size};
 use arrow::array::{
     Array, ArrayRef, Date32Array, Float64Array, Int64Array, UInt64Array, make_array,
 };

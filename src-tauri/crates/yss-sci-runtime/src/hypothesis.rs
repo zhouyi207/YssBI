@@ -5,12 +5,12 @@ use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, Hypothe
 pub fn run_hypothesis_test(
     input: HypothesisTestInput,
 ) -> Result<HypothesisTestOutput, HypothesisError> {
-    yss_sci::stats::linear_hypothesis::run_hypothesis_test(input)
+    yss_sci::hypothesis::linear_hypothesis::run_hypothesis_test(input)
 }
 
 pub fn parse_at_values(
     at_spec: &str,
     param_names: &[String],
 ) -> Result<HashMap<String, f64>, HypothesisError> {
-    yss_sci::stats::linear_hypothesis::parse_at_values(at_spec, param_names)
+    yss_sci::hypothesis::linear_hypothesis::parse_at_values(at_spec, param_names)
 }

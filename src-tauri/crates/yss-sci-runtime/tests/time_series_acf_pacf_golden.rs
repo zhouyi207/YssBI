@@ -1,9 +1,8 @@
 use serde::Deserialize;
 use std::time::{Duration, Instant};
-use yss_sci_contract::scientific::{
-    AcfPacfRequest, AcfPacfResult, ScientificCancellationToken, ScientificExecutionControl,
-};
-use yss_sci_runtime::acf_pacf;
+use yss_sci_contract::execution::{ScientificCancellationToken, ScientificExecutionControl};
+use yss_sci_contract::time_series::acf_pacf::{AcfPacfRequest, AcfPacfResult};
+use yss_sci_runtime::time_series::acf_pacf;
 
 const SIMPLE_EXPONENTIAL: &str =
     include_str!("fixtures/time_series/acf_pacf/simple_exponential.json");
