@@ -1,17 +1,17 @@
-//! Backend-neutral scientific-computing contracts.
+//! Backend-neutral contracts grouped by scientific domain.
 
-mod computation;
-pub mod distribution;
-mod error;
-pub mod regression;
-pub mod scientific;
-
-pub use computation::{CategoricalRole, MissingValuePolicy, StatisticalObservationMetadata};
-pub use error::{SciError, SciInputViolation, SciOperationCode};
-
-pub mod hypothesis;
-
+pub mod causal;
 pub mod density;
+pub mod diagnostics;
+pub mod distribution;
+pub mod execution;
+pub mod hypothesis;
 pub mod panel;
+pub mod regression;
+pub mod time_series;
 
-pub mod serial_tests;
+mod error;
+mod observation;
+
+pub use error::{SciError, SciInputViolation, SciOperationCode};
+pub use observation::{CategoricalRole, MissingValuePolicy, StatisticalObservationMetadata};

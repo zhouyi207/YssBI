@@ -1,0 +1,2 @@
+//! Model diagnostic inputs and results.
+pub mod serial_correlation;

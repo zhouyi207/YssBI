@@ -1,5 +1,6 @@
 //! Shared ordinary least-squares configuration.
 pub mod fit;
+pub mod linear;
 pub mod report;
 pub mod summary;
 
