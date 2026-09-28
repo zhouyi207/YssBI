@@ -7,19 +7,9 @@ use statrs::distribution::{ChiSquared, Continuous, ContinuousCDF, Normal};
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
-const MAX_ITER: usize = 100;
-const TOL: f64 = 1e-8;
 const EPS: f64 = 1e-7;
 
-pub struct ProbitConfig {
-    pub constant: bool,
-}
-
-impl Default for ProbitConfig {
-    fn default() -> Self {
-        Self { constant: true }
-    }
-}
+pub use yss_sci_contract::regression::discrete::BinaryOptions as ProbitConfig;
 
 pub struct Probit {
     pub endog: Col<f64>,
@@ -28,14 +18,8 @@ pub struct Probit {
 }
 
 #[derive(Debug)]
-pub struct ProbitModel {
-    pub params: Col<f64>,
-}
-
-#[derive(Debug)]
 pub struct ProbitResult {
     pub num_observation: usize,
-    pub model: ProbitModel,
     pub betas: Col<f64>,
     pub stds: Col<f64>,
     pub zvalues: Col<f64>,
@@ -56,6 +40,12 @@ pub struct ProbitResult {
 
 impl Probit {
     pub fn fit(&self) -> Result<ProbitResult, String> {
+        if self.config.max_iterations == 0
+            || !self.config.tolerance.is_finite()
+            || self.config.tolerance <= 0.0
+        {
+            return Err("invalid iteration settings".into());
+        }
         let n = self.endog.nrows();
         let k = self.exog.ncols();
 
@@ -80,7 +70,7 @@ impl Probit {
         let normal = Normal::new(0.0, 1.0).map_err(|e| format!("Probit: Normal: {}", e))?;
         let mut beta = Col::<f64>::zeros(k);
 
-        for iter in 0..MAX_ITER {
+        for iter in 0..self.config.max_iterations {
             let eta = self.exog.as_ref() * beta.as_ref();
 
             // p = Φ(η), φ = PDF
@@ -134,7 +124,7 @@ impl Probit {
 
             beta = beta_new_nd;
 
-            if diff < TOL {
+            if diff < self.config.tolerance {
                 let eta_final = self.exog.as_ref() * beta.as_ref();
                 let p_final: Col<f64> = eta_final.map(|&e| normal.cdf(e).clamp(EPS, 1.0 - EPS));
                 let phi_final: Col<f64> = eta_final.map(|&e| normal.pdf(e));
@@ -212,9 +202,6 @@ impl Probit {
 
                 return Ok(ProbitResult {
                     num_observation: n,
-                    model: ProbitModel {
-                        params: beta.clone(),
-                    },
                     betas: beta,
                     stds: std_err,
                     zvalues: (z_values).into_iter().collect::<Col<f64>>(),
@@ -237,7 +224,7 @@ impl Probit {
 
         Err(format!(
             "Probit: did not converge after {} iterations",
-            MAX_ITER
+            self.config.max_iterations
         ))
     }
 }

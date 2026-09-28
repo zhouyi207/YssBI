@@ -60,7 +60,6 @@ fn test_vec_estimate_rejects_invalid_config() {
         trend_spec: VecTrendSpec::Constant,
         lags: 0,
         rank: 1,
-        mlag: 2,
     };
 
     let err = vec_estimate(&y, &config, Some(vec!["y1".into(), "y2".into()]), None).unwrap_err();

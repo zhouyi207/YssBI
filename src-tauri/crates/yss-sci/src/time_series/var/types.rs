@@ -36,9 +36,16 @@ fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
     Ok(())
 }
 
-use yss_sci_linalg::{Col, Mat};
 use serde::{Deserialize, Serialize};
+use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
+
+use crate::regression::design::covariance_rows;
+use yss_sci_contract::regression::fit::RegressionCoefficientStatistics;
+use yss_sci_contract::time_series::fit::{
+    EquationStatistics, MultivariateStatistics, SerialCorrelationTest, StabilityRoot,
+};
+pub use yss_sci_contract::time_series::var::VarFit;
 
 /// VAR 配置
 #[derive(Debug, Clone)]
@@ -47,17 +54,11 @@ pub struct VARConfig {
     pub constant: bool,
     /// 滞后阶数列表，如 [1, 2] 表示 L1 和 L2
     pub lags: Vec<usize>,
-    /// IRF 步数（预测 horizon），默认 8
-    pub step: usize,
     /// 小样本自由度调整：dfk 时用 1/(T-m) 估计 Σ
     pub dfk: bool,
-    /// varlmar 最大滞后阶数，默认 2
-    pub mlag: usize,
     /// 与 Stata `varsoc` 一致：回归从全局时刻 `sample_start` 开始（0-based 行下标），`n_obs = T - sample_start`。
     /// `None` 时等于 `max(lags)`（原行为）。
     pub sample_start_offset: Option<usize>,
-    /// 仅似然与信息准则，跳过 IRF/FEVD/诊断（`varsoc` 用）
-    pub skip_extras: bool,
 }
 
 impl Default for VARConfig {
@@ -65,11 +66,8 @@ impl Default for VARConfig {
         Self {
             constant: true,
             lags: vec![1, 2],
-            step: 8,
             dfk: false,
-            mlag: 2,
             sample_start_offset: None,
-            skip_extras: false,
         }
     }
 }
@@ -88,74 +86,6 @@ pub struct VAR {
     /// 与 Stata `var …, exog()` 一致：`None` 时用连续样本 `t = sample_start … T−1`；
     /// `Some` 时仅在列出的全局行下标 `t` 上估计（要求该期 `exog[t]` 及所需 `y` 均有限）。
     pub regression_times: Option<Vec<usize>>,
-}
-
-/// 单方程估计结果（Stata 风格）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VAREquationStats {
-    pub eq_name: String,
-    pub parms: usize,
-    pub rmse: f64,
-    pub r_sq: f64,
-    pub chi2: f64,
-    pub p_chi2: f64,
-}
-
-/// VAR 估计结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VARResult {
-    pub var_names: Vec<String>,
-    pub num_observation: usize,
-    pub log_likelihood: f64,
-    pub aic: f64,
-    pub fpe: f64,
-    pub hqic: f64,
-    pub sbic: f64,
-    pub det_sigma_ml: f64,
-    pub equations: Vec<VAREquationStats>,
-    /// 系数：按方程分组，每方程 [L1.var1, L1.var2, ..., Lp.varK, const]
-    pub coefficients: Vec<Vec<f64>>,
-    pub std_errs: Vec<Vec<f64>>,
-    pub z_values: Vec<Vec<f64>>,
-    pub p_values: Vec<Vec<f64>>,
-    pub ci_lower: Vec<Vec<f64>>,
-    pub ci_upper: Vec<Vec<f64>>,
-    /// 系数标签：如 ["dln_inv:L1.dln_inv", "dln_inv:L1.dln_inc", ...]
-    pub coef_labels: Vec<Vec<String>>,
-    /// 残差协方差矩阵 Σ (K×K)
-    pub sigma: Vec<Vec<f64>>,
-    /// 正交化 IRF: step+1 个 K×K 矩阵，[step][response][impulse]
-    pub oirf: Vec<Vec<Vec<f64>>>,
-    /// FEVD: step+1 个 K×K 矩阵，[step][response][impulse]
-    pub fevd: Vec<Vec<Vec<f64>>>,
-    /// varwle: Wald lag-exclusion 检验（Stata varwle 命令）
-    pub varwle: Vec<VARWleRow>,
-    /// varlmar: LM 残差自相关检验（Stata varlmar 命令）
-    pub varlmar: Vec<VARLmarRow>,
-    /// varstable: 特征值平稳性检验（Stata varstable 命令）
-    pub varstable: Vec<VARStableRow>,
-    /// vargranger: 格兰杰因果 Wald 检验（Stata vargranger 命令）
-    pub vargranger: Vec<VARGrangerRow>,
-}
-
-/// varstable 单行：特征值及其模
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VARStableRow {
-    /// 特征值实部
-    pub re: f64,
-    /// 特征值虚部
-    pub im: f64,
-    /// 模 |λ|
-    pub modulus: f64,
-}
-
-/// varlmar 单行：lag 阶的 LM 检验
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VARLmarRow {
-    pub lag: usize,
-    pub chi2: f64,
-    pub df: usize,
-    pub p_value: f64,
 }
 
 /// vargranger 单行：格兰杰因果 Wald 检验（Stata vargranger 命令）

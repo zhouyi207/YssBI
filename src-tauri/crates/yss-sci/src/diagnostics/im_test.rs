@@ -4,22 +4,11 @@ use statrs::distribution::{ChiSquared, ContinuousCDF};
 use yss_sci_linalg::{Col, Mat};
 
 /// χ² 检验结果（chi2, df, p_value），用于 IM-test 各分量
-#[derive(Debug, Clone)]
-pub struct Chi2TestResult {
-    pub chi2: f64,
-    pub df: usize,
-    pub p_value: f64,
-}
+pub use yss_sci_contract::diagnostics::residual::Chi2TestResult;
 
 /// Cameron & Trivedi (1990) IM-test 分解：Heteroskedasticity + Skewness + Kurtosis
 /// 对应 Stata: `estat imtest`
-#[derive(Debug, Clone)]
-pub struct ImTestResult {
-    pub heteroskedasticity: Chi2TestResult,
-    pub skewness: Chi2TestResult,
-    pub kurtosis: Chi2TestResult,
-    pub total: Chi2TestResult,
-}
+pub use yss_sci_contract::diagnostics::residual::ImTestResult;
 
 /// 辅助回归 y 对 Z，LM = n×(1 - RSS/USS)，df = rank(Z) - 1
 fn lm_chi2_aux(y: &Col<f64>, z_matrix: &yss_sci_linalg::Mat<f64>) -> Result<(f64, usize), String> {

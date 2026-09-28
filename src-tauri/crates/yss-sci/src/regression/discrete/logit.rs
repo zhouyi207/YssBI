@@ -7,8 +7,6 @@ use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
-const MAX_ITER: usize = 100;
-const TOL: f64 = 1e-8;
 const EPS: f64 = 1e-7; // clamp p to [EPS, 1-EPS] for numerical stability
 
 /// Logistic function: σ(z) = 1/(1+exp(-z))
@@ -22,15 +20,7 @@ fn sigmoid(z: f64) -> f64 {
     }
 }
 
-pub struct LogitConfig {
-    pub constant: bool,
-}
-
-impl Default for LogitConfig {
-    fn default() -> Self {
-        Self { constant: true }
-    }
-}
+pub use yss_sci_contract::regression::discrete::BinaryOptions as LogitConfig;
 
 pub struct Logit {
     pub endog: Col<f64>,
@@ -39,14 +29,8 @@ pub struct Logit {
 }
 
 #[derive(Debug)]
-pub struct LogitModel {
-    pub params: Col<f64>,
-}
-
-#[derive(Debug)]
 pub struct LogitResult {
     pub num_observation: usize,
-    pub model: LogitModel,
     pub betas: Col<f64>,
     pub stds: Col<f64>,
     pub zvalues: Col<f64>,
@@ -68,6 +52,12 @@ pub struct LogitResult {
 impl Logit {
     /// Fit the logit model via IRLS.
     pub fn fit(&self) -> Result<LogitResult, String> {
+        if self.config.max_iterations == 0
+            || !self.config.tolerance.is_finite()
+            || self.config.tolerance <= 0.0
+        {
+            return Err("invalid iteration settings".into());
+        }
         let n = self.endog.nrows();
         let k = self.exog.ncols();
 
@@ -92,7 +82,7 @@ impl Logit {
 
         let mut beta = Col::<f64>::zeros(k);
 
-        for iter in 0..MAX_ITER {
+        for iter in 0..self.config.max_iterations {
             // η = Xβ
             let eta = self.exog.as_ref() * beta.as_ref();
 
@@ -149,7 +139,7 @@ impl Logit {
 
             beta = beta_new_nd;
 
-            if diff < TOL {
+            if diff < self.config.tolerance {
                 // Compute final quantities
                 let eta_final = self.exog.as_ref() * beta.as_ref();
                 let p_final: Col<f64> = eta_final.map(|&e| sigmoid(e).clamp(EPS, 1.0 - EPS));
@@ -227,9 +217,6 @@ impl Logit {
 
                 return Ok(LogitResult {
                     num_observation: n,
-                    model: LogitModel {
-                        params: beta.clone(),
-                    },
                     betas: beta,
                     stds: std_err,
                     zvalues: (z_values).into_iter().collect::<Col<f64>>(),
@@ -252,7 +239,7 @@ impl Logit {
 
         Err(format!(
             "Logit: did not converge after {} iterations",
-            MAX_ITER
+            self.config.max_iterations
         ))
     }
 }
@@ -275,7 +262,7 @@ mod tests {
         let logit = Logit {
             endog,
             exog,
-            config: LogitConfig { constant: true },
+            config: LogitConfig::default(),
         };
         let result = logit.fit().unwrap();
 
@@ -310,7 +297,7 @@ mod tests {
         let logit = Logit {
             endog,
             exog,
-            config: LogitConfig { constant: true },
+            config: LogitConfig::default(),
         };
         let result = logit.fit().unwrap();
 

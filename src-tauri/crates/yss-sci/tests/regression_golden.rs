@@ -96,7 +96,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 + signal(row, 5)
         });
         for covariance_type in ["nonrobust", "HC1"] {
-            let result = IV2SLS {
+            let estimator = IV2SLS {
                 endog: response.clone(),
                 exog: exog.clone(),
                 endog_reg: endogenous.clone(),
@@ -109,9 +109,9 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 },
                 endog_names: None,
                 z_var_names: None,
-            }
-            .fit()
-            .unwrap();
+            };
+            let result = estimator.fit().unwrap();
+            let (first_stage, first_stage_summary) = estimator.first_stage(false).unwrap();
             let expected = &[1.0, 0.7, 2.0, -0.5][..2 + endogenous_count];
             assert_eq!(result.betas.nrows(), expected.len());
             for (&actual, &expected) in result.betas.iter().zip(expected) {
@@ -120,12 +120,13 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                     "{actual} != {expected}"
                 );
             }
-            assert_eq!(result.first_stage.len(), endogenous_count);
-            assert!(result.first_stage_summary.min_eigenvalue.is_finite());
-            assert!(result.first_stage_summary.min_eigenvalue > 0.0);
+            assert_eq!(first_stage.len(), endogenous_count);
+            assert!(first_stage_summary.min_eigenvalue.is_finite());
+            assert!(first_stage_summary.min_eigenvalue > 0.0);
             assert!(
                 result
-                    .stds
+                    .inference
+                    .standard_errors
                     .iter()
                     .all(|value| value.is_finite() && *value > 0.0)
             );

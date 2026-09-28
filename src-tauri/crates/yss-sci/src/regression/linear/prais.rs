@@ -10,49 +10,12 @@ use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
-/// Transform method: Prais-Winsten (keep t=1) or Cochrane-Orcutt (drop t=1)
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PraisTransform {
-    PraisWinsten,
-    CochraneOrcutt,
-}
-
-/// ρ estimation method (default: regress = OLS of u_t on u_{t-1})
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RhoType {
-    Regress,
-}
-
-pub struct PraisConfig {
-    pub constant: bool,
-    pub transform: PraisTransform,
-    pub rhotype: RhoType,
-    pub max_iter: usize,
-    pub tol: f64,
-}
-
-impl Default for PraisConfig {
-    fn default() -> Self {
-        Self {
-            constant: true,
-            transform: PraisTransform::PraisWinsten,
-            rhotype: RhoType::Regress,
-            max_iter: 100,
-            tol: 1e-6,
-        }
-    }
-}
+pub use yss_sci_contract::regression::prais::{PraisConfig, PraisTransform, RhoType};
 
 pub struct Prais {
     pub endog: Col<f64>,
     pub exog: Mat<f64>,
     pub config: PraisConfig,
-}
-
-#[derive(Debug)]
-pub struct PraisModel {
-    pub params: Col<f64>,
-    pub rho: f64,
 }
 
 #[derive(Debug)]
@@ -72,7 +35,6 @@ pub struct PraisResult {
     pub r2_adjusted: f64,
     pub fvalue: f64,
     pub f_p_value: f64,
-    pub model: PraisModel,
     pub betas: Col<f64>,
     pub stds: Col<f64>,
     pub tvalues: Col<f64>,
@@ -295,10 +257,6 @@ impl Prais {
                     r2_adjusted,
                     fvalue: f,
                     f_p_value,
-                    model: PraisModel {
-                        params: betas.clone(),
-                        rho,
-                    },
                     betas: betas.clone(),
                     stds: std_err,
                     tvalues: (t_values).into_iter().collect::<Col<f64>>(),

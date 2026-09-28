@@ -11,15 +11,7 @@ use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
 /// Breusch-Pagan 异方差检验结果
-#[derive(Debug, Clone)]
-pub struct BreuschPaganResult {
-    /// LM 统计量
-    pub lm_stat: f64,
-    /// 自由度
-    pub df: usize,
-    /// p 值 (H0: 同方差)
-    pub p_value: f64,
-}
+pub use yss_sci_contract::diagnostics::residual::BreuschPaganResult;
 
 /// 辅助函数：给定 z 矩阵，计算原始 BP 统计量 LM = (1/2)·ESS
 fn bp_stat_stata(

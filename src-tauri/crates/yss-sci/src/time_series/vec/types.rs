@@ -8,8 +8,8 @@ use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
 
 use yss_sci_linalg::{MatrixExt, Solve};
 
-use yss_sci_linalg::{Col, Mat};
 use serde::{Deserialize, Serialize};
+use yss_sci_linalg::{Col, Mat};
 
 /// 趋势设定：与 Stata trend() 对应
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,46 +28,6 @@ pub struct VECConfig {
     pub trend_spec: VecTrendSpec,
     pub lags: usize,
     pub rank: usize,
-    /// veclmar 最大滞后阶数，默认 2
-    pub mlag: usize,
-}
-
-/// VEC 估计结果（Stata vec 风格）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VECResult {
-    pub var_names: Vec<String>,
-    pub num_observation: usize,
-    pub log_likelihood: f64,
-    pub aic: f64,
-    pub hqic: f64,
-    pub sbic: f64,
-    pub det_sigma_ml: f64,
-    pub rank: usize,
-    pub lags: usize,
-    pub trend_spec: String,
-    /// 协整向量 β：变量行 + 可选 const 行，(K+1)×r 当 has_const 否则 K×r
-    pub beta: Vec<Vec<f64>>,
-    /// 短 run 系数：每方程 [Γ1, Γ2, ..., const/trend]
-    pub coefficients: Vec<Vec<f64>>,
-    pub std_errs: Vec<Vec<f64>>,
-    pub z_values: Vec<Vec<f64>>,
-    pub p_values: Vec<Vec<f64>>,
-    pub ci_lower: Vec<Vec<f64>>,
-    pub ci_upper: Vec<Vec<f64>>,
-    pub coef_labels: Vec<Vec<String>>,
-    pub equations: Vec<VECEquationStats>,
-    /// 协整方程统计（Stata Cointegrating equations 表）
-    pub cointegrating_equations: Vec<VECCointegratingEquationStats>,
-    /// beta 表 Stata 风格：每元素 [std_err, z, p_value, ci_lower, ci_upper]，归一化/常数用 None
-    pub beta_std_err: Vec<Vec<Option<f64>>>,
-    pub beta_z_value: Vec<Vec<Option<f64>>>,
-    pub beta_p_value: Vec<Vec<Option<f64>>>,
-    pub beta_ci_lower: Vec<Vec<Option<f64>>>,
-    pub beta_ci_upper: Vec<Vec<Option<f64>>>,
-    /// veclmar: LM 残差自相关检验（Stata veclmar 命令）
-    pub veclmar: Vec<VecLmarRow>,
-    /// vecstable: 特征值平稳性检验（Stata vecstable 命令）
-    pub vecstable: Vec<VecStableRow>,
 }
 
 /// Stata `vecrank` 风格输出（Johansen trace / max eigenvalue）
@@ -104,37 +64,12 @@ pub struct VecRankResult {
     pub note: String,
 }
 
-/// veclmar 单行：lag 阶的 LM 检验
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VecLmarRow {
-    pub lag: usize,
-    pub chi2: f64,
-    pub df: usize,
-    pub p_value: f64,
-}
-
-/// vecstable 单行：特征值及其模
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VecStableRow {
-    pub re: f64,
-    pub im: f64,
-    pub modulus: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VECCointegratingEquationStats {
-    pub eq_name: String,
-    pub parms: usize,
-    pub chi2: f64,
-    pub p_chi2: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VECEquationStats {
-    pub eq_name: String,
-    pub parms: usize,
-    pub rmse: f64,
-    pub r_sq: f64,
-    pub chi2: f64,
-    pub p_chi2: f64,
-}
+use crate::regression::design::covariance_rows;
+use yss_sci_contract::regression::fit::RegressionCoefficientStatistics;
+use yss_sci_contract::time_series::fit::{
+    EquationStatistics, MultivariateStatistics, SerialCorrelationTest, StabilityRoot,
+};
+pub use yss_sci_contract::time_series::vec::VecFit;
+use yss_sci_contract::time_series::vec::{
+    CointegratingEquationStatistics, CointegrationStatistics,
+};

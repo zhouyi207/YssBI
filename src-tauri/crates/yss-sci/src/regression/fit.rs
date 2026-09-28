@@ -43,8 +43,14 @@ pub fn fit_regression(
                 metadata,
             )
         }
-        RegressionKind::Prais => super::linear::fit::fit_prais_design(y, x, metadata),
-        RegressionKind::Logit => super::discrete::fit::fit_logit_design(y, x, metadata),
-        RegressionKind::Probit => super::discrete::fit::fit_probit_design(y, x, metadata),
+        RegressionKind::Prais => {
+            super::linear::fit::fit_prais_design(y, x, metadata, Default::default())
+        }
+        RegressionKind::Logit => {
+            super::discrete::fit::fit_logit_design(y, x, metadata, Default::default())
+        }
+        RegressionKind::Probit => {
+            super::discrete::fit::fit_probit_design(y, x, metadata, Default::default())
+        }
     }
 }

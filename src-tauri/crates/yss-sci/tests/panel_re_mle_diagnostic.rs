@@ -149,6 +149,16 @@ fn panel_re_mle_lin() {
 
     let result = fit_panel_re_mle(&endog, &exog, &entity_id, true).expect("fit_panel_re_mle");
 
+    let yss_sci_contract::panel::PanelEstimatorStatistics::MaximumLikelihood {
+        log_likelihood,
+        lr_chi2,
+        constant_iterations,
+        iterations,
+        ..
+    } = &result.estimator_statistics
+    else {
+        panic!("expected MLE inference");
+    };
     let mut out = std::io::stdout().lock();
     writeln!(out, "=== Panel RE MLE Diagnostic (lin.csv) ===").ok();
     writeln!(out, "N={}, n_entities={}", n, n_entities).ok();
@@ -159,8 +169,8 @@ fn panel_re_mle_lin() {
     writeln!(out, "  LR chi2(9) = 964.50").ok();
     writeln!(out).ok();
     writeln!(out, "Our results:").ok();
-    writeln!(out, "  Log likelihood = {:?}", result.log_likelihood).ok();
-    if let Some(ref fe) = result.fe_stats {
+    writeln!(out, "  Log likelihood = {:?}", log_likelihood).ok();
+    if let Some(ref fe) = result.effects_statistics {
         writeln!(
             out,
             "  sigma_u = {:.4}, sigma_e = {:.4}",
@@ -169,17 +179,19 @@ fn panel_re_mle_lin() {
         .ok();
         writeln!(out, "  rho = {:.4}", fe.sigma.rho).ok();
     }
-    writeln!(out, "  LR chi2 = {:?}", result.lr_chi2).ok();
+    writeln!(out, "  LR chi2 = {:?}", lr_chi2).ok();
     writeln!(out).ok();
     writeln!(out, "Constant-only iterations:").ok();
-    if let Some(ref v) = result.mle_iter_log_lik_const {
+    {
+        let v = constant_iterations;
         for (i, ll) in v.iter().enumerate() {
             writeln!(out, "  Iteration {}: Log likelihood = {:.5}", i, ll).ok();
         }
     }
     writeln!(out).ok();
     writeln!(out, "Full model iterations:").ok();
-    if let Some(ref v) = result.mle_iter_log_lik {
+    {
+        let v = iterations;
         for (i, ll) in v.iter().enumerate() {
             writeln!(out, "  Iteration {}: Log likelihood = {:.5}", i, ll).ok();
         }
@@ -189,22 +201,25 @@ fn panel_re_mle_lin() {
     let names = [
         "const", "ltlan", "ltwlab", "ltpow", "ltfer", "hrs", "mipric1", "giprice", "mci", "ngca",
     ];
-    for (i, &b) in result.betas.iter().enumerate() {
+    for (i, &b) in result.coefficients.iter().enumerate() {
         let name = names.get(i).unwrap_or(&"");
-        let se = if i < result.stds.nrows() {
-            result.stds[i]
+        let se = if i < result.inference.standard_errors.len() {
+            result.inference.standard_errors[i]
         } else {
             0.0
         };
         writeln!(out, "  {}: {:.6} (se={:.6})", name, b, se).ok();
     }
 
-    assert!((result.log_likelihood.unwrap() - 334.64947).abs() < 1e-3);
-    assert!((result.lr_chi2.unwrap() - 964.50).abs() < 1e-2);
-    let fe_stats = result.fe_stats.as_ref().expect("RE MLE sigma stats");
+    assert!((*log_likelihood - 334.64947).abs() < 1e-3);
+    assert!((*lr_chi2 - 964.50).abs() < 1e-2);
+    let fe_stats = result
+        .effects_statistics
+        .as_ref()
+        .expect("RE MLE sigma stats");
     assert!((fe_stats.sigma.sigma_u - 0.2166).abs() < 1e-3);
     assert!((fe_stats.sigma.sigma_e - 0.1056).abs() < 1e-3);
-    assert_eq!(result.num_observation, n);
-    assert_eq!(result.num_entities, n_entities);
-    assert_eq!(result.betas.nrows(), 10);
+    assert_eq!(result.statistics.observations, n);
+    assert_eq!(result.statistics.entities, n_entities);
+    assert_eq!(result.coefficients.len(), 10);
 }

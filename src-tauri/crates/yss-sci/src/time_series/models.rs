@@ -1,8 +1,8 @@
 use crate::error::{computation_failed, invalid_input};
 use crate::time_series::unit_root::{AdfResult, adf_test};
-use crate::time_series::var::{VAR, VARConfig, VARResult, VARSocResult, var_varsoc};
+use crate::time_series::var::{VAR, VARConfig, VARSocResult, VarFit, var_varsoc};
 use crate::time_series::vec::{
-    VECConfig, VECResult, VecRankResult, VecTrendSpec, vec_estimate, vec_vecrank_stats,
+    VECConfig, VecFit, VecRankResult, VecTrendSpec, vec_estimate, vec_vecrank_stats,
 };
 use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 use yss_sci_linalg::Mat;
@@ -43,7 +43,7 @@ fn multivariate_series(
     }))
 }
 
-pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<VARResult, SciError> {
+pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<VarFit, SciError> {
     if lags == 0 {
         return Err(invalid_input(
             SciOperationCode::VarFit,
@@ -57,11 +57,8 @@ pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<VARResult, SciError
         config: VARConfig {
             constant: true,
             lags: (1..=lags).collect(),
-            step: 8,
             dfk: false,
-            mlag: 2,
             sample_start_offset: None,
-            skip_extras: false,
         },
         var_names: None,
         exog_names: None,
@@ -93,7 +90,7 @@ pub fn vec_fit(
     rank: usize,
     lags: usize,
     trend: &str,
-) -> Result<VECResult, SciError> {
+) -> Result<VecFit, SciError> {
     if lags == 0 {
         return Err(invalid_input(
             SciOperationCode::VecFit,
@@ -106,7 +103,6 @@ pub fn vec_fit(
             trend_spec: vec_trend(trend, SciOperationCode::VecFit)?,
             lags,
             rank,
-            mlag: 2,
         },
         None,
         None,

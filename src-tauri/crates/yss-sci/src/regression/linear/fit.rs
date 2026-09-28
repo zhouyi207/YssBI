@@ -224,7 +224,7 @@ pub(crate) fn fit_ols_design(
     .map_err(|_| computation_failed(SciOperationCode::Regression))?;
     Ok(RegressionFit {
         constant: config.constant,
-        family: "ols",
+        family: "ols".into(),
         coefficients: result.betas.iter().copied().collect::<Vec<_>>(),
         fitted: result.fitted.iter().copied().collect::<Vec<_>>(),
         residuals: result.residuals.iter().copied().collect::<Vec<_>>(),
@@ -277,7 +277,7 @@ fn linear_fit(
         .collect::<Vec<_>>();
     Ok(RegressionFit {
         constant: true,
-        family,
+        family: family.into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
         coefficients,
@@ -286,19 +286,36 @@ fn linear_fit(
     })
 }
 
+pub fn fit_prais(
+    response: Vec<f64>,
+    predictors: &[Vec<f64>],
+    config: PraisConfig,
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
+    let x = design_matrix(
+        predictors,
+        response.len(),
+        config.constant,
+        SciOperationCode::Regression,
+    )?;
+    fit_prais_design(Col::from_iter(response), x, metadata, config)
+}
+
 pub(crate) fn fit_prais_design(
     y: Col<f64>,
     x: Mat<f64>,
     metadata: StatisticalObservationMetadata,
+    config: PraisConfig,
 ) -> Result<RegressionFit, SciError> {
+    let constant = config.constant;
     let result = Prais {
         endog: y.clone(),
         exog: x.clone(),
-        config: PraisConfig::default(),
+        config,
     }
     .fit()
     .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-    linear_fit(
+    let mut fit = linear_fit(
         "prais",
         &y,
         &x,
@@ -341,5 +358,7 @@ pub(crate) fn fit_prais_design(
             },
         },
         metadata,
-    )
+    )?;
+    fit.constant = constant;
+    Ok(fit)
 }

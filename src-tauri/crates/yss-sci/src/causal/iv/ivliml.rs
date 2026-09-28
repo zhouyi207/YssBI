@@ -5,9 +5,13 @@
 //! β̂ = {X'(I − κMZ)X}^{-1} X'(I − κMZ)y
 
 use crate::regression::covariance::compute_cov_beta;
+use crate::regression::design::covariance_rows;
 use yss_sci_contract::regression::CovParams;
+use yss_sci_contract::{
+    causal::iv::InstrumentalVariableStatistics, regression::fit::RegressionCoefficientStatistics,
+};
 
-use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
+use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use statrs::statistics::Statistics;
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
@@ -32,75 +36,8 @@ pub struct IVLIML {
     pub z_var_names: Option<Vec<String>>,
 }
 
-#[derive(Debug)]
-pub struct IVLIMLModel {
-    pub params: Col<f64>,
-}
-
-/// LIML 结果（与 IV2SLS 类似，复用 FirstStageResult/FirstStageSummary 等）
-#[derive(Debug)]
-pub struct IVLIMLResult {
-    pub num_observation: usize,
-    pub ss_model: f64,
-    pub ss_residual: f64,
-    pub ss_total: f64,
-    pub df_model: usize,
-    pub df_residual: usize,
-    pub df_total: usize,
-    pub ms_model: f64,
-    pub ms_residual: f64,
-    pub ms_total: f64,
-    pub covariance_type: String,
-    pub r2: f64,
-    pub r2_adjusted: f64,
-    pub wald_chi2: f64,
-    pub wald_chi2_p_value: f64,
-
-    pub model: IVLIMLModel,
-    pub betas: Col<f64>,
-    pub stds: Col<f64>,
-    pub zvalues: Col<f64>,
-    pub pvalues: Col<f64>,
-    pub conf_int_left: Col<f64>,
-    pub conf_int_right: Col<f64>,
-    pub cov_beta: Mat<f64>,
-    pub cond_no: f64,
-
-    /// κ used in LIML
-    pub kappa: f64,
-
-    /// 第一阶段回归（与 2SLS 相同）
-    pub first_stage: Vec<super::iv2sls::FirstStageResult>,
-    pub first_stage_summary: super::iv2sls::FirstStageSummary,
-
-    pub overid_k_iv: usize,
-    pub overid_k_endog: usize,
-
-    /// Overidentification test (estat overid): Anderson-Rubin chi2, Basmann F. Only when k_iv > k_endog and nonrobust.
-    pub overid: Option<LimlOveridTest>,
-}
-
-/// LIML overidentification test (Stata estat overid)
-/// Anderson-Rubin (1950) chi2, Basmann F
-#[derive(Debug, Clone)]
-pub struct LimlOveridTest {
-    pub anderson_rubin_stat: f64,
-    pub anderson_rubin_p_value: f64,
-    pub basmann_stat: f64,
-    pub basmann_p_value: f64,
-    pub df: usize,
-    pub df_denom: usize,
-}
-
-fn is_robust_cov_type(cov_type: &str) -> bool {
-    matches!(
-        cov_type,
-        "HC0" | "HC1" | "HC2" | "HC3" | "cluster" | "HAC" | "newey"
-    )
-}
-
 impl IVLIML {
-    pub fn fit(&self) -> Result<IVLIMLResult, String> {
+    pub fn fit(&self) -> Result<crate::causal::iv::IvEstimate, String> {
         let n = self.endog.nrows();
         let k_exog = self.exog.ncols();
         let k_endog = self.endog_reg.ncols();
@@ -294,13 +231,11 @@ impl IVLIML {
         } else {
             self.endog.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_model = ss_total - ss_residual;
         let r2 = if ss_total > 1e-300 {
             1.0 - ss_residual / ss_total
         } else {
             0.0
         };
-        let ms_model = ss_model / df_model as f64;
         let ms_residual = ss_residual / df_residual as f64;
         let ms_total = ss_total / df_total as f64;
         let r2_adjusted = if ms_total > 1e-300 {
@@ -367,175 +302,29 @@ impl IVLIML {
             (wald, 1.0 - chi2_dist.cdf(wald))
         };
 
-        let ztz_inv_nd = ztz_inv.as_ref().to_owned();
-        let df_z = n.saturating_sub(k_z);
-        let mut endog_hat = Mat::zeros(n, k_endog);
-        let mut first_stage: Vec<super::iv2sls::FirstStageResult> = Vec::with_capacity(k_endog);
-        for j in 0..k_endog {
-            let endog_col = self.endog_reg.col(j).to_owned();
-            let endog_vector = endog_col.as_ref().to_owned();
-            let zty = z_matrix.transpose() * endog_vector.as_ref();
-            let gamma = ztz_inv.as_ref() * zty.as_ref();
-            let hat = z_matrix.as_ref() * gamma.as_ref();
-            let hat_arr = hat.as_ref().to_owned();
-            for i in 0..n {
-                endog_hat[(i, j)] = hat_arr[i];
-            }
-            let resid = &endog_col - &hat_arr;
-            let ss_resid = resid.iter().map(|v| v.powi(2)).sum::<f64>();
-            let y_mean_j = endog_col.iter().mean();
-            let ss_tot = endog_col
-                .iter()
-                .map(|v| (v - y_mean_j).powi(2))
-                .sum::<f64>();
-            let r2_j = if ss_tot > 1e-300 {
-                1.0 - ss_resid / ss_tot
-            } else {
-                0.0
-            };
-            let sigma2_j = if df_z > 0 {
-                (ss_resid / df_z as f64).max(1e-300)
-            } else {
-                1e-300
-            };
-            let cov_gamma = yss_sci_linalg::Scale(sigma2_j) * &ztz_inv_nd;
-            let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[(i, i)].sqrt()).collect();
-            let gamma_nd = gamma.as_ref().to_owned();
-            let t_dist = statrs::distribution::StudentsT::new(0.0, 1.0, df_z as f64)
-                .unwrap_or(statrs::distribution::StudentsT::new(0.0, 1.0, 1.0).unwrap());
-            let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
-            let p_values: Vec<f64> = t_values
-                .iter()
-                .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
-                .collect();
-            let t_crit = t_dist.inverse_cdf(0.975);
-            let ci_left: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] - t_crit * stds[i]).collect();
-            let ci_right: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] + t_crit * stds[i]).collect();
-            let name = self
-                .endog_names
-                .as_ref()
-                .and_then(|n| n.get(j).cloned())
-                .unwrap_or_else(|| format!("endog_{}", j + 1));
-            let var_names: Vec<String> = (0..k_z)
-                .map(|i| {
-                    self.z_var_names
-                        .as_ref()
-                        .and_then(|v| v.get(i).cloned())
-                        .unwrap_or_else(|| format!("z{}", i + 1))
-                })
-                .collect();
-            let ms_resid = if df_z > 0 {
-                ss_resid / df_z as f64
-            } else {
-                0.0
-            };
-            let ms_tot = if n > 1 { ss_tot / (n - 1) as f64 } else { 0.0 };
-            let r2_adj = if ms_tot > 1e-300 {
-                1.0 - ms_resid / ms_tot
-            } else {
-                0.0
-            };
-            first_stage.push(super::iv2sls::FirstStageResult {
-                endog_name: name,
-                var_names,
-                betas: gamma_nd.iter().copied().collect(),
-                stds,
-                tvalues: t_values,
-                pvalues: p_values,
-                conf_int_left: ci_left,
-                conf_int_right: ci_right,
-                r2: r2_j,
-                r2_adjusted: r2_adj,
-            });
-        }
-
-        let first_stage_summary = super::iv2sls::compute_first_stage_summary(
-            &z,
-            &endog_hat,
-            &self.endog_reg,
-            &self.exog,
-            &self.instruments,
-            crate::causal::iv::iv2sls::FirstStageOptions {
-                has_constant: self.config.constant,
-                cov_type: &covariance_type,
-                cov_params: self.config.cov_params.as_ref(),
-                small: self.config.small,
-                for_liml: true,
-            },
-        )?;
-
-        // Overidentification test (estat overid): Anderson-Rubin chi2, Basmann F.
-        // Only when nonrobust VCE. With robust (vce(robust)), Stata does not compute overid.
-        let overid = if k_iv > k_endog && !is_robust_cov_type(&covariance_type) {
-            let df_overid = k_iv - k_endog;
-            let df_denom = n.saturating_sub(k_z);
-            let uu = u_structural.transpose() * u_structural.as_ref();
-            if df_denom > 0 && uu > 1e-300 {
-                let ztu = z.transpose() * u_structural.as_ref();
-                let ztz_inv_ztu = ztz_inv_nd.as_ref() * ztu.as_ref();
-                let u_pz_u = ztu.transpose() * ztz_inv_ztu.as_ref();
-                let sargan_stat = n as f64 * u_pz_u / uu;
-                let basmann_chi2 = if (n as f64 - sargan_stat).abs() > 1e-10 {
-                    sargan_stat * (n as f64 - k_z as f64) / (n as f64 - sargan_stat)
-                } else {
-                    sargan_stat
-                };
-                let chi2_dist = ChiSquared::new(df_overid as f64)
-                    .map_err(|e| format!("IVLIML overid ChiSquared: {}", e))?;
-                let ar_p = 1.0 - chi2_dist.cdf(sargan_stat);
-                let basmann_f_stat = basmann_chi2 / (df_overid as f64);
-                let f_dist = FisherSnedecor::new(df_overid as f64, df_denom as f64)
-                    .map_err(|e| format!("IVLIML overid FisherSnedecor: {}", e))?;
-                let basmann_p = 1.0 - f_dist.cdf(basmann_f_stat);
-
-                Some(LimlOveridTest {
-                    anderson_rubin_stat: sargan_stat,
-                    anderson_rubin_p_value: ar_p,
-                    basmann_stat: basmann_f_stat,
-                    basmann_p_value: basmann_p,
-                    df: df_overid,
-                    df_denom,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        Ok(IVLIMLResult {
-            num_observation: n,
-            ss_model,
-            ss_residual,
-            ss_total,
-            df_model,
-            df_residual,
-            df_total,
-            ms_model,
-            ms_residual,
-            ms_total,
-            covariance_type,
-            r2,
-            r2_adjusted,
-            wald_chi2,
-            wald_chi2_p_value: wald_p,
-            model: IVLIMLModel {
-                params: betas_nd.clone(),
-            },
+        Ok(crate::causal::iv::IvEstimate {
+            fitted: &self.endog - &u_structural,
+            residuals: u_structural,
             betas: betas_nd,
-            stds: std_err,
-            zvalues: (z_values).into_iter().collect::<Col<f64>>(),
-            pvalues: (p_values).into_iter().collect::<Col<f64>>(),
-            conf_int_left: ci_lower,
-            conf_int_right: ci_upper,
-            cov_beta,
-            cond_no,
-            kappa,
-            first_stage,
-            first_stage_summary,
-            overid_k_iv: k_iv,
-            overid_k_endog: k_endog,
-            overid,
+            inference: RegressionCoefficientStatistics {
+                covariance: covariance_rows(&cov_beta),
+                standard_errors: std_err.iter().copied().collect(),
+                statistic_values: z_values,
+                p_values,
+                confidence_interval_lower: ci_lower.iter().copied().collect(),
+                confidence_interval_upper: ci_upper.iter().copied().collect(),
+            },
+            statistics: InstrumentalVariableStatistics {
+                covariance_type,
+                wald_chi2,
+                wald_p_value: wald_p,
+                observations: n,
+                df_residual,
+                r2,
+                adjusted_r2: r2_adjusted,
+                condition_number: cond_no,
+                kappa,
+            },
         })
     }
 }

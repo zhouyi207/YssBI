@@ -5,3 +5,5 @@
 include!("var/types.rs");
 include!("var/varsoc.rs");
 include!("var/estimate.rs");
+
+include!("var/postestimation.rs");

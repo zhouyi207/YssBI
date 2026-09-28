@@ -1,5 +1,5 @@
 //! Binary-response design preparation and projection of computed fits.
-use super::{Logit, LogitConfig, Probit, ProbitConfig};
+use super::{Logit, Probit};
 use crate::error::computation_failed;
 use crate::regression::design::{covariance_rows, design_condition_number};
 use statrs::distribution::{ContinuousCDF, Normal};
@@ -10,15 +10,68 @@ use yss_sci_contract::regression::fit::{
 use yss_sci_contract::{SciError, SciOperationCode, StatisticalObservationMetadata};
 use yss_sci_linalg::{Col, Mat};
 
+pub fn fit_binary(
+    link: BinaryRegressionLink,
+    response: Vec<f64>,
+    predictors: &[Vec<f64>],
+    options: yss_sci_contract::regression::discrete::BinaryOptions,
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
+    let x = crate::regression::design::design_matrix(
+        predictors,
+        response.len(),
+        options.constant,
+        SciOperationCode::Regression,
+    )?;
+    let y = Col::from_iter(response);
+    match link {
+        BinaryRegressionLink::Logit => fit_logit_design(y, x, metadata, options),
+        BinaryRegressionLink::Probit => fit_probit_design(y, x, metadata, options),
+    }
+}
+
+pub fn predict_binary(
+    link: BinaryRegressionLink,
+    coefficients: &[f64],
+    predictors: &[Vec<f64>],
+    constant: bool,
+) -> Result<Vec<f64>, SciError> {
+    let n = predictors.first().map_or(0, Vec::len);
+    let x = crate::regression::design::design_matrix(
+        predictors,
+        n,
+        constant,
+        SciOperationCode::Regression,
+    )?;
+    if x.ncols() != coefficients.len() || coefficients.iter().any(|v| !v.is_finite()) {
+        return Err(crate::error::invalid_input(
+            SciOperationCode::Regression,
+            yss_sci_contract::SciInputViolation::ShapeMismatch,
+        ));
+    }
+    let normal =
+        Normal::new(0.0, 1.0).map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    Ok((&x * &Col::from_iter(coefficients.iter().copied()))
+        .iter()
+        .map(|&v| match link {
+            BinaryRegressionLink::Logit if v >= 0.0 => 1.0 / (1.0 + (-v).exp()),
+            BinaryRegressionLink::Logit => v.exp() / (1.0 + v.exp()),
+            BinaryRegressionLink::Probit => normal.cdf(v),
+        })
+        .collect())
+}
+
 pub(crate) fn fit_logit_design(
     y: Col<f64>,
     x: Mat<f64>,
     metadata: StatisticalObservationMetadata,
+    config: yss_sci_contract::regression::discrete::BinaryOptions,
 ) -> Result<RegressionFit, SciError> {
+    let constant = config.constant;
     let result = Logit {
         endog: y.clone(),
         exog: x.clone(),
-        config: LogitConfig::default(),
+        config,
     }
     .fit()
     .map_err(|_| computation_failed(SciOperationCode::Regression))?;
@@ -30,8 +83,8 @@ pub(crate) fn fit_logit_design(
     let adjusted_pseudo_r2 =
         1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
     Ok(RegressionFit {
-        constant: true,
-        family: "logit",
+        constant,
+        family: "logit".into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
         coefficients,
@@ -71,11 +124,13 @@ pub(crate) fn fit_probit_design(
     y: Col<f64>,
     x: Mat<f64>,
     metadata: StatisticalObservationMetadata,
+    config: yss_sci_contract::regression::discrete::BinaryOptions,
 ) -> Result<RegressionFit, SciError> {
+    let constant = config.constant;
     let result = Probit {
         endog: y.clone(),
         exog: x.clone(),
-        config: ProbitConfig::default(),
+        config,
     }
     .fit()
     .map_err(|_| computation_failed(SciOperationCode::Regression))?;
@@ -89,8 +144,8 @@ pub(crate) fn fit_probit_design(
     let adjusted_pseudo_r2 =
         1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
     Ok(RegressionFit {
-        constant: true,
-        family: "probit",
+        constant,
+        family: "probit".into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
         coefficients,

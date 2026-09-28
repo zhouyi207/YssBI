@@ -32,11 +32,8 @@ pub fn var_varsoc(
             config: VARConfig {
                 constant: true,
                 lags,
-                step: 1,
                 dfk: false,
-                mlag: 1,
                 sample_start_offset: Some(maxlag),
-                skip_extras: true,
             },
             var_names: var_names.clone(),
             exog_names: None,
@@ -48,23 +45,23 @@ pub fn var_varsoc(
             (None, None, None)
         } else {
             let ll_prev = prev_ll.ok_or("varsoc: internal prev_ll")?;
-            let lr_stat = 2.0 * (r.log_likelihood - ll_prev);
+            let lr_stat = 2.0 * (r.statistics.log_likelihood - ll_prev);
             let df = k * k;
             let pval = chi_squared_sf(df as f64, lr_stat);
             (Some(lr_stat), Some(df), Some(pval))
         };
-        prev_ll = Some(r.log_likelihood);
+        prev_ll = Some(r.statistics.log_likelihood);
 
         rows.push(VARSocRow {
             lag: p,
-            log_likelihood: r.log_likelihood,
+            log_likelihood: r.statistics.log_likelihood,
             lr,
             lr_df,
             lr_p,
             fpe: r.fpe,
-            aic: r.aic,
-            hqic: r.hqic,
-            sbic: r.sbic,
+            aic: r.statistics.aic,
+            hqic: r.statistics.hqic,
+            sbic: r.statistics.sbic,
         });
     }
 

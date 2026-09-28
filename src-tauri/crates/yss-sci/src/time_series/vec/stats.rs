@@ -14,13 +14,13 @@ fn compute_cointegrating_equations_chi2(
     s11: &Mat<f64>,
     n: usize,
     d: usize,
-) -> Vec<VECCointegratingEquationStats> {
+) -> Vec<CointegratingEquationStatistics> {
     let k = alpha.nrows();
     let r = alpha.ncols();
     let n_free = k.saturating_sub(r);
     if n_free == 0 {
         return (0..r)
-            .map(|j| VECCointegratingEquationStats {
+            .map(|j| CointegratingEquationStatistics {
                 eq_name: format!("_ce{}", j + 1),
                 parms: 0,
                 chi2: 0.0,
@@ -34,7 +34,7 @@ fn compute_cointegrating_equations_chi2(
         Ok(llt) => llt.solve(&Mat::<f64>::identity(k, k)),
         Err(_) => {
             return (0..r)
-                .map(|j| VECCointegratingEquationStats {
+                .map(|j| CointegratingEquationStatistics {
                     eq_name: format!("_ce{}", j + 1),
                     parms: n_free,
                     chi2: 0.0,
@@ -53,7 +53,7 @@ fn compute_cointegrating_equations_chi2(
         Ok(llt) => llt.solve(&Mat::<f64>::identity(r, r)),
         Err(_) => {
             return (0..r)
-                .map(|j| VECCointegratingEquationStats {
+                .map(|j| CointegratingEquationStatistics {
                     eq_name: format!("_ce{}", j + 1),
                     parms: n_free,
                     chi2: 0.0,
@@ -74,7 +74,7 @@ fn compute_cointegrating_equations_chi2(
         let chi2 = (n - d) as f64 * (1.0 / a_inv_jj) * (beta_free.transpose() * b_beta.as_ref());
         let chi2 = chi2.max(0.0);
         let p_chi2 = chi_squared_sf(n_free as f64, chi2);
-        result.push(VECCointegratingEquationStats {
+        result.push(CointegratingEquationStatistics {
             eq_name: format!("_ce{}", j + 1),
             parms: n_free,
             chi2,

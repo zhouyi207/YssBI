@@ -5,11 +5,7 @@ use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
 // VIF_c(x_j) = 1/(1-R²_j)，R²_j 为 x_j 对其他解释变量回归的 R²
 
 /// 单变量 VIF 结果
-#[derive(Debug, Clone)]
-pub struct VifEntry {
-    pub vif: f64,
-    pub tolerance: f64, // 1/VIF
-}
+pub use yss_sci_contract::diagnostics::residual::VifEntry;
 
 /// 计算 centered VIF（Stata 默认）
 /// x: (n × k) 设计矩阵，列顺序与变量对应

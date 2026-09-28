@@ -47,6 +47,7 @@ fn labels_after_fe_omit(
 }
 
 struct FakeGroupRiRequest<'a> {
+    control: Option<&'a yss_sci_contract::execution::ScientificExecutionControl>,
     endog: &'a Col<f64>,
     exog: &'a Mat<f64>,
     labels: &'a [(String, Option<String>)],
@@ -66,6 +67,7 @@ fn run_placebo_fake_treatment_ri(
     input: FakeGroupRiRequest<'_>,
 ) -> Result<FakeGroupRiOutcome, DidFakeGroupError> {
     let FakeGroupRiRequest {
+        control,
         endog,
         exog,
         labels,
@@ -122,6 +124,11 @@ fn run_placebo_fake_treatment_ri(
     let mut coefficients = Vec::with_capacity(n_rep);
 
     for _ in 0..n_rep {
+        if let Some(control) = control {
+            control
+                .check()
+                .map_err(|_| DidFakeGroupError::Interrupted)?;
+        }
         pool.shuffle(&mut rng);
         let fake_treated: HashSet<usize> = pool.iter().take(n_treated_entities).copied().collect();
         for index in 0..n {
@@ -145,10 +152,10 @@ fn run_placebo_fake_treatment_ri(
         .map_err(|diagnostic| DidFakeGroupError::FitFailed { diagnostic })?;
         let kept_labels = labels_after_fe_omit(labels, result.omitted_indices.as_deref());
         if let Some(index) = kept_labels.iter().position(|(name, _)| name == did_label) {
-            if index >= result.betas.nrows() {
+            if index >= result.coefficients.len() {
                 return Err(DidFakeGroupError::CoefficientIndex);
             }
-            let coefficient = result.betas[index];
+            let coefficient = result.coefficients[index];
             if !coefficient.is_finite() {
                 return Err(DidFakeGroupError::NonFiniteCoefficient);
             }
@@ -198,6 +205,15 @@ pub fn compute_fake_group_ri(
     payload: &DidFakeGroupEnginePayload,
     n_perm: usize,
     rng_seed: u64,
+) -> Result<DidPlaceboFakeGroupBlock, DidFakeGroupError> {
+    compute_fake_group_ri_controlled(payload, n_perm, rng_seed, None)
+}
+
+fn compute_fake_group_ri_controlled(
+    payload: &DidFakeGroupEnginePayload,
+    n_perm: usize,
+    rng_seed: u64,
+    control: Option<&yss_sci_contract::execution::ScientificExecutionControl>,
 ) -> Result<DidPlaceboFakeGroupBlock, DidFakeGroupError> {
     let n = payload.endog.len();
     if !payload.observed_coef.is_finite() {
@@ -257,6 +273,7 @@ pub fn compute_fake_group_ri(
     let n_perm_requested = n_perm.clamp(1, FAKE_GROUP_PERM_CAP);
 
     match run_placebo_fake_treatment_ri(FakeGroupRiRequest {
+        control,
         endog: &endog,
         exog: &exog,
         labels: &labels,
@@ -314,6 +331,122 @@ pub fn compute_fake_group_ri(
     }
 }
 
+/// Randomize treatment assignment across entities, retaining the observed TWFE specification.
+pub fn randomization_test(
+    input: yss_sci_contract::causal::did::DidRandomizationInput,
+    control: &yss_sci_contract::execution::ScientificExecutionControl,
+) -> Result<DidPlaceboFakeGroupBlock, DidFakeGroupError> {
+    use yss_sci_contract::causal::did::ExogLabelEntry;
+    control
+        .check()
+        .map_err(|_| DidFakeGroupError::Interrupted)?;
+    let n = input.response.len();
+    if n == 0
+        || [&input.entity, &input.time, &input.treat, &input.post]
+            .iter()
+            .any(|v| v.len() != n)
+        || input.predictors.iter().any(|v| v.len() != n)
+    {
+        return Err(DidFakeGroupError::LengthMismatch);
+    }
+    if input
+        .response
+        .iter()
+        .chain(&input.entity)
+        .chain(&input.time)
+        .chain(&input.treat)
+        .chain(&input.post)
+        .chain(input.predictors.iter().flatten())
+        .any(|v| !v.is_finite())
+    {
+        return Err(DidFakeGroupError::NonFiniteInput);
+    }
+    if input
+        .treat
+        .iter()
+        .chain(&input.post)
+        .any(|v| *v != 0.0 && *v != 1.0)
+    {
+        return Err(DidFakeGroupError::NonFiniteInput);
+    }
+    let ids = |values: &[f64]| -> Vec<usize> {
+        let mut levels = std::collections::BTreeMap::new();
+        values
+            .iter()
+            .map(|v| {
+                let id = levels.len();
+                *levels
+                    .entry(if *v == 0.0 { 0 } else { v.to_bits() })
+                    .or_insert(id)
+            })
+            .collect()
+    };
+    let entity_id = ids(&input.entity);
+    let time_id = ids(&input.time);
+    let mut keys = HashSet::new();
+    let mut treated = std::collections::HashMap::new();
+    for row in 0..n {
+        if !keys.insert((entity_id[row], time_id[row]))
+            || treated
+                .insert(entity_id[row], input.treat[row])
+                .is_some_and(|old| old != input.treat[row])
+        {
+            return Err(DidFakeGroupError::LengthMismatch);
+        }
+    }
+    let ncols = input.predictors.len() + 2;
+    let exog = Mat::from_fn(n, ncols, |row, col| {
+        if col == 0 {
+            1.0
+        } else if col + 1 == ncols {
+            input.treat[row] * input.post[row]
+        } else {
+            input.predictors[col - 1][row]
+        }
+    });
+    let y = Col::from_iter(input.response.iter().copied());
+    let fit = fit_panel_fe_twoway(&y, &exog, &entity_id, &time_id, true, "cluster", None)
+        .map_err(|diagnostic| DidFakeGroupError::FitFailed { diagnostic })?;
+    if fit
+        .omitted_indices
+        .as_ref()
+        .is_some_and(|omitted| omitted.contains(&(ncols - 1)))
+    {
+        return Err(DidFakeGroupError::CoefficientIndex);
+    }
+    let payload = DidFakeGroupEnginePayload {
+        endog: input.response,
+        exog_row_major: exog
+            .row_iter()
+            .flat_map(|row| row.iter().copied().collect::<Vec<_>>())
+            .collect(),
+        ncols,
+        all_labels: (0..ncols)
+            .map(|i| ExogLabelEntry {
+                variable: if i + 1 == ncols {
+                    "did".into()
+                } else {
+                    format!("x{i}")
+                },
+                category: None,
+            })
+            .collect(),
+        entity_id,
+        time_id,
+        treat: input.treat,
+        post: input.post,
+        did_label: "did".into(),
+        observed_coef: *fit
+            .coefficients
+            .iter()
+            .last()
+            .ok_or(DidFakeGroupError::CoefficientIndex)?,
+        constant: true,
+        cov_type: "cluster".into(),
+    };
+    compute_fake_group_ri_controlled(&payload, input.repetitions, input.seed, Some(control))
+}
+
 /// Fit TWFE DID using the shared panel estimator and an explicit treatment regressor.
 pub fn fit_did(
     response: Vec<f64>,
@@ -332,8 +465,9 @@ pub fn fit_did(
         ));
     }
     predictors.push(treatment);
-    let mut fit = crate::panel::fit::fit_panel(response, predictors, entity, time)?;
-    fit.family = "panel_did_twfe";
+    let mut fit =
+        crate::panel::fit::fit_panel(response, predictors, entity, time, Default::default())?;
+    fit.family = "panel_did_twfe".into();
     Ok(fit)
 }
 

@@ -48,8 +48,8 @@ fn test_fd_fe_identical_for_t2() {
     .unwrap();
 
     // FE: betas[0]=const, betas[1]=slope. FD: betas[0]=slope (no const)
-    let fe_slope = fe.betas[1];
-    let fd_slope = fd.betas[0];
+    let fe_slope = fe.coefficients[1];
+    let fd_slope = fd.coefficients[0];
 
     assert!(
         (fe_slope - fd_slope).abs() < 1e-10,
@@ -98,13 +98,13 @@ fn test_fd_slope_t3() {
         None,
     )
     .unwrap();
-    let slope = fd.betas[0];
+    let slope = fd.coefficients[0];
     assert!(
         (slope - 2.0).abs() < 1e-10,
         "FD slope should be 2.0, got {}",
         slope
     );
-    assert_eq!(fd.num_observation, 4, "4 FD obs (2 per entity)");
+    assert_eq!(fd.statistics.observations, 4, "4 FD obs (2 per entity)");
 }
 
 /// Time gaps: 与 Stata 一致，仅对相邻时间点（delta=1）差分，不跨 gap。
@@ -143,14 +143,14 @@ fn test_fd_with_time_gap() {
     .unwrap();
     // Entity 0: Δy=(2,2), Δx=(1,1) -> slope 2
     // Entity 1: 不产生 FD（gap 2-0≠1）
-    let slope = fd.betas[0];
+    let slope = fd.coefficients[0];
     assert!(
         (slope - 2.0).abs() < 1e-10,
         "FD slope with gap should be 2.0, got {}",
         slope
     );
     assert_eq!(
-        fd.num_observation, 2,
+        fd.statistics.observations, 2,
         "2 FD obs (from e0 only, e1 skipped due to gap)"
     );
 }
@@ -176,11 +176,11 @@ fn test_lsdv_matches_fe_slope() {
     let fe = fit_panel_fe(&endog, &exog, &entity_id, true, "nonrobust", None).unwrap();
     let lsdv = fit_panel_lsdv(&endog, &exog, &entity_id, true, "nonrobust", None).unwrap();
 
-    assert!((fe.betas[1] - 2.0).abs() < 1e-10);
-    assert!((lsdv.betas[1] - 2.0).abs() < 1e-10);
-    assert!((fe.betas[1] - lsdv.betas[1]).abs() < 1e-10);
-    assert_eq!(lsdv.num_entities, 3);
-    assert_eq!(lsdv.num_observation, 9);
+    assert!((fe.coefficients[1] - 2.0).abs() < 1e-10);
+    assert!((lsdv.coefficients[1] - 2.0).abs() < 1e-10);
+    assert!((fe.coefficients[1] - lsdv.coefficients[1]).abs() < 1e-10);
+    assert_eq!(lsdv.statistics.entities, 3);
+    assert_eq!(lsdv.statistics.observations, 9);
 }
 
 #[test]
@@ -201,11 +201,11 @@ fn test_fe_cluster_reports_stata_style_stats() {
 
     let fe = fit_panel_fe(&endog, &exog, &entity_id, true, "cluster", None).unwrap();
 
-    assert_eq!(fe.covariance_type, "cluster");
-    assert_eq!(fe.num_entities, 4);
-    assert!(fe.fe_stats.is_some());
-    assert!(fe.fvalue.is_finite());
-    assert!(fe.f_p_value.is_finite());
-    assert!(fe.cov_beta_nonrobust.is_some());
-    assert!((fe.betas[1] - 2.0).abs() < 0.05);
+    assert_eq!(fe.statistics.linear.covariance_type, "cluster");
+    assert_eq!(fe.statistics.entities, 4);
+    assert!(fe.effects_statistics.is_some());
+    assert!(fe.statistics.linear.f_statistic.is_finite());
+    assert!(fe.statistics.linear.f_p_value.is_finite());
+    assert!(fe.covariance_nonrobust.is_some());
+    assert!((fe.coefficients[1] - 2.0).abs() < 0.05);
 }

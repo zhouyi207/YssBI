@@ -6,13 +6,7 @@ use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
 // Ramsey (1969) regression specification-error test for omitted variables
 
 /// RESET 检验结果（F 检验）
-#[derive(Debug, Clone)]
-pub struct ResetTestResult {
-    pub f_stat: f64,
-    pub df1: usize,
-    pub df2: usize,
-    pub p_value: f64,
-}
+pub use yss_sci_contract::diagnostics::residual::ResetTestResult;
 
 /// 将变量归一化到 [0,1]：x_norm = (x - min) / (max - min)，若 max==min 则置 0
 fn normalize_min_max(v: &[f64]) -> Vec<f64> {
@@ -48,7 +42,8 @@ fn f_test_restricted_unrestricted(
         let sqrt_w: Col<f64> = w.map(|&v| v.sqrt());
         let y_w: Col<f64> = y.iter().zip(sqrt_w.iter()).map(|(a, b)| a * b).collect();
         let x_r_w: Mat<f64> = Mat::from_fn(n, k, |i, j| x_restricted[(i, j)] * sqrt_w[i]);
-        let mut x_u_w = x_r_w.clone();
+        let mut x_u_w = Mat::zeros(n, k + q);
+        x_u_w.submatrix_mut(0, 0, n, k).copy_from(&x_r_w);
         for i in 0..n {
             for j in 0..q {
                 x_u_w[(i, k + j)] = z_augment[(i, j)] * sqrt_w[i];

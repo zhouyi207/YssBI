@@ -16,11 +16,6 @@ pub struct GLS {
 }
 
 #[derive(Debug)]
-pub struct GLSModel {
-    pub params: Col<f64>,
-}
-
-#[derive(Debug)]
 pub struct GLSResult {
     pub num_observation: usize,
     pub ss_model: f64,
@@ -37,7 +32,6 @@ pub struct GLSResult {
     pub r2_adjusted: f64,
     pub fvalue: f64,
     pub f_p_value: f64,
-    pub model: GLSModel,
     pub betas: Col<f64>,
     pub stds: Col<f64>,
     pub tvalues: Col<f64>,
@@ -146,9 +140,6 @@ impl GLS {
             r2_adjusted,
             fvalue: f,
             f_p_value,
-            model: GLSModel {
-                params: betas_nd.clone(),
-            },
             betas: betas_nd,
             stds: std_err,
             tvalues: (t_values).into_iter().collect::<Col<f64>>(),

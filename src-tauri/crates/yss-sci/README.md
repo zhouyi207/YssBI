@@ -30,10 +30,11 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 | Density estimation used by visualization | `density`                                    | Kernel-density numerical computation                                          |
 | Data preprocessing                       | `preprocessing`                              | Numerical standardization; Arrow preparation stays in Runtime                 |
 
-Each method keeps its fitting and inference together. A node's Fit/Summary/Predict
-stage or navigation placement does not create a second algorithm owner. Runtime
-owns report encoding; Contract owns neutral options and results. Linalg remains a
-shared numerical foundation, independent of node categories.
+Each method owns its fitting, inference and postestimation modules. Fit results
+retain model facts and coefficient inference; optional diagnostics and postestimation
+are separate calls over those facts. A node's Fit/Summary/Predict stage does not
+create a second algorithm owner. Runtime owns selected report projections; Contract
+owns neutral options and results. Linalg remains a shared numerical foundation.
 
 `regression::fit` only dispatches regression methods. Numerical entry points live
 in `regression::linear::fit`, `regression::discrete::fit`, `panel::fit` and
@@ -43,13 +44,38 @@ the estimators that need them. DID calls the existing panel estimator, which
 continues to reuse OLS. `causal::did::fit_did` takes an explicit treatment vector;
 `panel::fit::fit_panel` owns ordinary panel fitting.
 
+These neutral fit entries consume shared binary/Prais and panel options, and IV
+accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers
+FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and
+entity/time Between, rejecting unsupported covariance/effect combinations.
+IV 2SLS and LIML share `IvEstimate` and coefficient statistics. Their first-stage,
+overidentification and endogeneity analyses are separate calls in `causal::iv::fit`;
+first-stage analysis reuses the same implementation for both estimators. Panel
+estimators return `PanelFit` directly, grouping shared model/coefficient facts and
+estimator-specific statistics without a parallel native result type.
+DID randomization takes observed columns,
+fits the TWFE treatment interaction, then permutes treatment at entity level with
+execution checks between iterations.
+
 Diagnostics use ordinary Rust submodules with explicit imports for shared
 helpers. Residual normality belongs to `diagnostics::normality`; Durbin-Watson
 and other serial correlation tests belong to `diagnostics::serial_correlation`.
+`diagnostics::residual::diagnose` consumes the fitted linear result, including
+original WLS weights, and dispatches BP/White/IM/RESET/VIF/leverage. GLS is rejected
+for residual diagnostics requiring an untransformed or diagonal-weight design;
+VIF remains a property of the original predictor design. Weighted RESET allocates
+the full augmented design before inserting fitted-value or predictor powers.
 
 Panel first differences take entity IDs and original time values; they do not
 require a second time-ID vector. First-stage IV summaries derive dimensions from
 their matrices and receive covariance/estimator choices through `FirstStageOptions`.
+
+VAR and VEC return `VarFit` and `VecFit`, sharing equation/coefficient statistics.
+Their `postestimation` modules compute residual serial tests and stability roots
+from a fit; VAR additionally exposes lag exclusion, Granger, impulse responses and
+variance decomposition. Response horizons and diagnostic lags belong to these calls,
+not fit configuration. Fit results retain the design and residuals needed by those
+analyses, without embedding a complete report or precomputed postestimation arrays.
 
 `hypothesis::linear_hypothesis` owns constraint parsing, linearization, parameter order,
 matrix construction, test selection and `at()` interpretation. It uses
@@ -81,7 +107,8 @@ explicitly, and unimplemented covariance modes retain their diagnostic failure.
 
 `OlsFit` is the numerical authority for coefficients, fitted values, residuals,
 rank and inference statistics. It does not carry a second copy of coefficients
-inside a nested model. Runtime reports project these computed values.
+inside a nested model. WLS, GLS, Prais, Logit, Probit and IV follow the same rule.
+Runtime reports project these computed values.
 
 The OLS numerical method uses SVD rank diagnostics and Cholesky of the cross
 product. OLS, WLS, GLS, Prais and the IV estimators propagate rank computation
@@ -112,6 +139,7 @@ when the AR coefficient change meets its tolerance. Exhausted iterations and
 invalid iteration settings return errors. Finite AR estimates remain clipped to
 `[-0.999, 0.999]` to retain a stationary transform; nonfinite estimates are errors.
 
-Model APIs use `yss_sci_linalg::Mat` and `Col`; serialized results retain their existing
-field and row/column meanings. Call sites use the shared OLS configuration. Structural migration does not imply that every model has
-already adopted a new solver or convergence policy.
+Numerical estimator inputs use `yss_sci_linalg::Mat` and `Col`; cross-crate fit
+contracts use ordinary vectors with documented row/column meanings. Call sites
+use the shared OLS configuration. Result organization does not change solver or
+convergence policy.

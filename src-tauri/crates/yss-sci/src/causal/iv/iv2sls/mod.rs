@@ -9,9 +9,11 @@
 //! Stage 2: Regress Y on X = [exog, endog_hat] → β. VCE uses structural residuals u = y - X_struct*β.
 
 mod critical_values;
+mod design;
 mod first_stage;
 mod fit;
+mod postestimation;
 mod types;
 
-pub(crate) use first_stage::{FirstStageOptions, compute_first_stage_summary};
+pub(crate) use first_stage::FirstStageOptions;
 pub use types::*;

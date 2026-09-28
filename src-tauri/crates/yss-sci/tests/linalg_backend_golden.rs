@@ -36,10 +36,7 @@ fn var_full_fit_preserves_coefficients_and_stability_spectrum() {
     let result = VAR {
         y: cointegrated_sample(),
         exog: None,
-        config: VARConfig {
-            step: 4,
-            ..VARConfig::default()
-        },
+        config: VARConfig::default(),
         var_names: None,
         exog_names: None,
         regression_times: None,
@@ -47,7 +44,7 @@ fn var_full_fit_preserves_coefficients_and_stability_spectrum() {
     .fit()
     .unwrap();
     assert_values(
-        result.coefficients.into_iter().flatten(),
+        result.coefficients.iter().flatten().copied(),
         &[
             0.9850730986309457,
             0.04725331784187457,
@@ -61,9 +58,12 @@ fn var_full_fit_preserves_coefficients_and_stability_spectrum() {
             -0.13862499978115922,
         ],
     );
-    assert_values([result.log_likelihood], &[-62.961109403429724]);
+    assert_values([result.statistics.log_likelihood], &[-62.961109403429724]);
     assert_values(
-        result.oirf[4].iter().flatten().copied(),
+        yss_sci::time_series::var::impulse_responses(&result, 4).unwrap()[4]
+            .iter()
+            .flatten()
+            .copied(),
         &[
             0.2592323636190237,
             -0.04572394194333182,
@@ -71,8 +71,8 @@ fn var_full_fit_preserves_coefficients_and_stability_spectrum() {
             -0.028585877762558366,
         ],
     );
-    let mut roots: Vec<_> = result
-        .varstable
+    let mut roots: Vec<_> = yss_sci::time_series::var::stability(&result)
+        .unwrap()
         .iter()
         .map(|root| (root.re, root.im))
         .collect();
@@ -100,18 +100,17 @@ fn vec_fit_preserves_cointegration_and_short_run_estimates() {
             trend_spec: VecTrendSpec::Constant,
             lags: 2,
             rank: 1,
-            mlag: 2,
         },
         None,
         None,
     )
     .unwrap();
     assert_values(
-        result.beta.into_iter().flatten(),
+        result.cointegration.beta.iter().flatten().copied(),
         &[1., -1.4570479553381204, -0.12642073895613215],
     );
     assert_values(
-        result.coefficients.into_iter().flatten(),
+        result.coefficients.iter().flatten().copied(),
         &[
             0.08528514459386069,
             -0.05143280849517221,
@@ -123,9 +122,9 @@ fn vec_fit_preserves_cointegration_and_short_run_estimates() {
             0.002137153442175969,
         ],
     );
-    assert_values([result.log_likelihood], &[-66.54617133774867]);
-    let mut roots: Vec<_> = result
-        .vecstable
+    assert_values([result.statistics.log_likelihood], &[-66.54617133774867]);
+    let mut roots: Vec<_> = yss_sci::time_series::vec::stability(&result)
+        .unwrap()
         .iter()
         .map(|root| (root.re, root.im))
         .collect();
@@ -143,4 +142,22 @@ fn vec_fit_preserves_cointegration_and_short_run_estimates() {
             0.,
         ],
     );
+
+    // A levels lag of one has no short-run lag block; its companion is I + alpha beta'.
+    let first_order = vec_estimate(
+        &cointegrated_sample(),
+        &VECConfig {
+            trend_spec: VecTrendSpec::Constant,
+            lags: 1,
+            rank: 1,
+        },
+        None,
+        None,
+    )
+    .unwrap();
+    let mut roots = yss_sci::time_series::vec::stability(&first_order).unwrap();
+    roots.sort_by(|a, b| a.modulus.partial_cmp(&b.modulus).unwrap());
+    assert_eq!(roots.len(), 2);
+    assert_values([roots[1].re, roots[1].im], &[1.0, 0.0]);
+    assert!(roots[0].modulus < 1.0);
 }

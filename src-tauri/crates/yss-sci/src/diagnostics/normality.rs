@@ -5,15 +5,7 @@ use yss_sci_linalg::Col;
 // 基于样本偏度 S 和峰度 K 的矩检验，与 ImTest（回归式 LM 检验）互补
 
 /// 残差正态性检验结果（Omnibus + Jarque-Bera）
-#[derive(Debug, Clone)]
-pub struct NormalityTestResult {
-    pub skewness: f64,
-    pub kurtosis: f64,
-    pub omnibus_stat: f64,
-    pub omnibus_p_value: f64,
-    pub jarque_bera_stat: f64,
-    pub jarque_bera_p_value: f64,
-}
+pub use yss_sci_contract::diagnostics::residual::NormalityTestResult;
 
 /// 计算样本偏度 g1 和峰度（raw K，正态时 K=3）
 fn sample_skewness_kurtosis(x: &Col<f64>) -> (f64, f64) {
