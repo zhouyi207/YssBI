@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { applyGraphChanges, graphChangesSchema } from "./graphEditorChanges";
 import { invokeCommand, isIpcError } from "@/services/ipc";
 import {
   parseGraphEditorSessionDto,
@@ -25,130 +27,77 @@ const baselines = new Map<string, Baseline>();
 let epoch = 0;
 const key = (binding: GraphSyncBinding) =>
   JSON.stringify([binding.projectInstanceId, binding.graphPath, binding.locale]);
-const record = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
-const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
-const exact = (value: Record<string, unknown>, keys: string[]) =>
-  Object.keys(value).length === keys.length && keys.every((key) => own(value, key));
+const requiredPayload = z.unknown().refine((value) => value !== undefined);
+const cursor = z.string().min(1);
+const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const responseSchema = z.strictObject({
+  projectInstanceId: z.string(),
+  graphPath: z.string(),
+  locale: z.string(),
+  changed: z.boolean(),
+  resourceRevision: integer.nullable(),
+  functionEditorProjection: requiredPayload,
+  update: requiredPayload,
+});
+const deliverySchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("snapshot"),
+    cursor,
+    snapshotBytes: integer.positive(),
+    data: requiredPayload,
+  }),
+  z.strictObject({
+    kind: z.literal("delta"),
+    baseCursor: cursor,
+    cursor,
+    snapshotBytes: integer.positive(),
+    changes: graphChangesSchema,
+  }),
+]);
+const receiptSchema = z.strictObject({
+  projectInstanceId: z.string(),
+  graphPath: z.string(),
+  operationId: z.string(),
+  requestVersion: requiredPayload,
+  committedVersion: requiredPayload,
+  command: z.enum(["edit", "save", "undo", "redo"]),
+  changed: z.boolean(),
+});
+type GraphResponse = z.infer<typeof responseSchema>;
 
-function applyChanges(previous: GraphEditorSessionDto, changes: unknown): unknown {
-  if (!Array.isArray(changes) || changes.length > 512)
-    throw new Error("Invalid graph projection changes");
-  const copies = new WeakMap<object, Record<string, unknown> | unknown[]>();
-  function copy(value: unknown): Record<string, unknown> | unknown[] {
-    if (!record(value) && !Array.isArray(value))
-      throw new Error("Graph patch parent is not a container");
-    const retained = copies.get(value);
-    if (retained) return retained;
-    const cloned = Array.isArray(value) ? [...value] : { ...value };
-    copies.set(value, cloned);
-    copies.set(cloned, cloned);
-    return cloned;
-  }
-  function property(container: Record<string, unknown> | unknown[], part: string): string {
-    if (
-      Array.isArray(container) &&
-      (!/^(0|[1-9][0-9]*)$/u.test(part) || Number(part) >= container.length)
-    )
-      throw new Error("Invalid graph array index");
-    return part;
-  }
-  let candidate: unknown = previous;
-  for (const operation of changes) {
-    if (
-      !record(operation) ||
-      (operation.kind !== "set" && operation.kind !== "remove") ||
-      !exact(operation, operation.kind === "set" ? ["kind", "path", "value"] : ["kind", "path"]) ||
-      !Array.isArray(operation.path) ||
-      operation.path.length > 32 ||
-      !operation.path.every((part) => typeof part === "string")
-    )
-      throw new Error("Invalid graph projection operation");
-    const path = operation.path as string[];
-    if (!path.length) {
-      if (operation.kind !== "set") throw new Error("Cannot remove the graph projection root");
-      candidate = operation.value;
-      continue;
-    }
-    const root = copy(candidate);
-    candidate = root;
-    let parent = root;
-    for (const segment of path.slice(0, -1)) {
-      const part = property(parent, segment);
-      if (!own(parent, part)) throw new Error("Missing graph patch parent");
-      const child = copy((parent as Record<string, unknown>)[part]);
-      Object.defineProperty(parent, part, {
-        value: child,
-        writable: true,
-        configurable: true,
-        enumerable: true,
-      });
-      parent = child;
-    }
-    const part = property(parent, path[path.length - 1]);
-    if (operation.kind === "remove") {
-      if (Array.isArray(parent) || !own(parent, part)) throw new Error("Invalid graph removal");
-      delete parent[part];
-    } else
-      Object.defineProperty(parent, part, {
-        value: operation.value,
-        writable: true,
-        configurable: true,
-        enumerable: true,
-      });
-  }
-  return candidate;
-}
-
-function envelope(value: unknown, binding: GraphSyncBinding): Record<string, unknown> {
+function envelope(value: unknown, binding: GraphSyncBinding): GraphResponse {
+  const parsed = responseSchema.safeParse(value);
   if (
-    !record(value) ||
-    !exact(value, [
-      "projectInstanceId",
-      "graphPath",
-      "locale",
-      "changed",
-      "resourceRevision",
-      "functionEditorProjection",
-      "update",
-    ]) ||
-    value.projectInstanceId !== binding.projectInstanceId ||
-    value.graphPath !== binding.graphPath ||
-    value.locale !== binding.locale ||
-    typeof value.changed !== "boolean" ||
-    (value.resourceRevision !== null &&
-      (!Number.isSafeInteger(value.resourceRevision) || (value.resourceRevision as number) < 0))
+    !parsed.success ||
+    parsed.data.projectInstanceId !== binding.projectInstanceId ||
+    parsed.data.graphPath !== binding.graphPath ||
+    parsed.data.locale !== binding.locale
   ) {
     throw new Error("Graph response binding is malformed");
   }
-  return value;
+  return parsed.data;
 }
 
-function decode(value: Record<string, unknown>, previous: Baseline | undefined): Baseline {
-  const update = value.update;
-  if (
-    !record(update) ||
-    typeof update.cursor !== "string" ||
-    !update.cursor ||
-    !Number.isSafeInteger(update.snapshotBytes) ||
-    (update.snapshotBytes as number) <= 0
-  )
-    throw new Error("Graph delivery cursor is malformed");
+function decode(value: GraphResponse, previous: Baseline | undefined): Baseline {
+  const parsed = deliverySchema.safeParse(value.update);
+  if (!parsed.success) throw new Error("Graph delivery is malformed");
+  const update = parsed.data;
   let candidate: unknown;
-  if (update.kind === "snapshot" && exact(update, ["kind", "cursor", "snapshotBytes", "data"]))
-    candidate = update.data;
-  else if (
-    update.kind === "delta" &&
-    exact(update, ["kind", "baseCursor", "cursor", "snapshotBytes", "changes"]) &&
-    previous &&
-    update.baseCursor === previous.cursor
-  )
-    candidate = applyChanges(previous.data, update.changes);
+  if (update.kind === "snapshot") candidate = update.data;
+  else if (previous && update.baseCursor === previous.cursor)
+    candidate = applyGraphChanges(previous.data, update.changes);
   else throw new Error("Graph delivery baseline is unavailable");
   const data = parseGraphEditorSessionDto(candidate);
   if (data.projection.graphPath !== value.graphPath)
     throw new Error("Graph projection identity mismatch");
-  return { cursor: update.cursor, data, bytes: update.snapshotBytes as number };
+  if (
+    update.kind === "delta" &&
+    previous &&
+    (data.editing.version.sessionId !== previous.data.editing.version.sessionId ||
+      BigInt(data.editing.version.revision) < BigInt(previous.data.editing.version.revision))
+  )
+    throw new Error("Graph delivery editing session mismatch");
+  return { cursor: update.cursor, data, bytes: update.snapshotBytes };
 }
 
 type GraphSyncCommand =
@@ -220,7 +169,7 @@ export async function invokeGraphSync(
   const requestEpoch = epoch;
   const bindingKey = key(binding);
   const previous = baselines.get(bindingKey);
-  let response: Record<string, unknown>;
+  let response: GraphResponse;
   try {
     response = envelope(
       await invokeBound(command, args, binding, previous?.cursor ?? null),
@@ -255,8 +204,8 @@ export async function invokeGraphSync(
   }
   return {
     data: decoded.data,
-    changed: response.changed as boolean,
-    resourceRevision: response.resourceRevision as number | null,
+    changed: response.changed,
+    resourceRevision: response.resourceRevision,
     functionEditorProjection: response.functionEditorProjection,
   };
 }
@@ -266,7 +215,7 @@ async function recoverCommittedCommand(
   args: Record<string, unknown>,
   binding: GraphSyncBinding,
   originalError: unknown,
-): Promise<Record<string, unknown>> {
+): Promise<GraphResponse> {
   const kind =
     command === "edit_graph"
       ? "edit"
@@ -280,28 +229,21 @@ async function recoverCommittedCommand(
   if (!kind || typeof args.operationId !== "string") throw originalError;
   try {
     const version = parseGraphEditVersion(args.version);
-    const receipt = await invokeCommand<unknown>("get_graph_edit_receipt", {
-      projectInstanceId: binding.projectInstanceId,
-      graphPath: binding.graphPath,
-      version,
-      operationId: args.operationId,
-    });
+    const result = receiptSchema.safeParse(
+      await invokeCommand<unknown>("get_graph_edit_receipt", {
+        projectInstanceId: binding.projectInstanceId,
+        graphPath: binding.graphPath,
+        version,
+        operationId: args.operationId,
+      }),
+    );
+    if (!result.success) throw originalError;
+    const receipt = result.data;
     if (
-      !record(receipt) ||
-      !exact(receipt, [
-        "projectInstanceId",
-        "graphPath",
-        "operationId",
-        "requestVersion",
-        "committedVersion",
-        "command",
-        "changed",
-      ]) ||
       receipt.projectInstanceId !== binding.projectInstanceId ||
       receipt.graphPath !== binding.graphPath ||
       receipt.operationId !== args.operationId ||
-      receipt.command !== kind ||
-      typeof receipt.changed !== "boolean"
+      receipt.command !== kind
     )
       throw originalError;
     const requested = parseGraphEditVersion(receipt.requestVersion);

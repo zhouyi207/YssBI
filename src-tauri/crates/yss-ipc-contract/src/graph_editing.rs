@@ -92,7 +92,11 @@ pub enum GraphEditorDeliveryDto {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum GraphProjectionChangeDto {
     Set {
         path: Vec<String>,
@@ -100,5 +104,11 @@ pub enum GraphProjectionChangeDto {
     },
     Remove {
         path: Vec<String>,
+    },
+    Splice {
+        path: Vec<String>,
+        index: usize,
+        delete_count: usize,
+        values: Vec<serde_json::Value>,
     },
 }

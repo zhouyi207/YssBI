@@ -161,6 +161,30 @@ fn diff(
                 }
             }
         }
+        (Value::Array(before), Value::Array(after)) => {
+            let prefix = before.iter().zip(after).take_while(|(a, b)| a == b).count();
+            let suffix = before[prefix..]
+                .iter()
+                .rev()
+                .zip(after[prefix..].iter().rev())
+                .take_while(|(a, b)| a == b)
+                .count();
+            let delete_count = before.len() - prefix - suffix;
+            let inserted = &after[prefix..after.len() - suffix];
+            if delete_count <= MAX_CHANGES && inserted.len() <= MAX_CHANGES {
+                changes.push(GraphProjectionChangeDto::Splice {
+                    path: path.clone(),
+                    index: prefix,
+                    delete_count,
+                    values: inserted.to_vec(),
+                });
+            } else {
+                changes.push(GraphProjectionChangeDto::Set {
+                    path: path.clone(),
+                    value: Value::Array(after.clone()),
+                });
+            }
+        }
         _ => changes.push(GraphProjectionChangeDto::Set {
             path: path.clone(),
             value: after.clone(),
@@ -173,6 +197,48 @@ fn diff(
 mod tests {
     use super::*;
     use yss_ipc_contract::graph_editing::{GraphEditVersionDto, GraphEditingStateDto};
+
+    #[test]
+    fn array_splices_match_the_client_fixture_and_bound_insertions() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../../../src/tests/fixtures/node-system-contracts/graph-projection-splice.json"
+        ))
+        .unwrap();
+        let mut changes = Vec::new();
+        assert!(diff(
+            &fixture["before"],
+            &fixture["after"],
+            &mut Vec::new(),
+            &mut changes
+        ));
+        assert_eq!(serde_json::to_value(changes).unwrap(), fixture["changes"]);
+
+        let mut changes = Vec::new();
+        assert!(diff(
+            &fixture["after"]["parameters"],
+            &fixture["before"]["parameters"],
+            &mut vec!["parameters".into()],
+            &mut changes
+        ));
+        assert_eq!(
+            serde_json::to_value(changes).unwrap(),
+            serde_json::json!([
+                {"kind":"splice","path":["parameters"],"index":1,"deleteCount":1,"values":[]}
+            ])
+        );
+
+        let mut changes = Vec::new();
+        assert!(diff(
+            &serde_json::json!([]),
+            &serde_json::json!(vec![0; MAX_CHANGES + 1]),
+            &mut Vec::new(),
+            &mut changes
+        ));
+        assert!(matches!(
+            changes.as_slice(),
+            [GraphProjectionChangeDto::Set { .. }]
+        ));
+    }
 
     #[test]
     fn small_edits_use_deltas_and_missing_or_foreign_baselines_use_snapshots() {

@@ -15,6 +15,7 @@ import type {
   GraphEditorSessionDto,
   GraphEditVersionDto,
 } from "@/shared/types/domain/editorMutation";
+import type { ParameterGroupDto } from "@/shared/types/domain/editorProjection";
 import type { GraphResultState } from "@/shared/types/domain/result";
 import { portAddressKey, toProjectionEntities } from "@/features/domain/editorProjection";
 import { shareProjection } from "@/features/core/state/readProjection";
@@ -77,10 +78,37 @@ function shareEntity<T extends object>(previous: T | undefined, next: T): T {
   return sameFields(previous, next) ? previous : shareProjection(previous, next);
 }
 
-function shareIds(previous: string[] | undefined, next: string[]): string[] {
+function shareItems<T>(previous: T[] | undefined, next: T[]): T[] {
   return previous?.length === next.length && next.every((id, i) => id === previous[i])
     ? previous
     : next;
+}
+
+function shareParameterGroups(
+  previous: ParameterGroupDto[] | undefined,
+  next: ParameterGroupDto[],
+): ParameterGroupDto[] {
+  if (!previous || previous === next) return next;
+  const groups = new Map(previous.map((group) => [group.key, group]));
+  return shareItems(
+    previous,
+    next.map((group) => {
+      const before = groups.get(group.key);
+      if (!before || before === group) return group;
+      const parameters = new Map(before.parameters.map((parameter) => [parameter.key, parameter]));
+      const shared = {
+        ...group,
+        display: shareProjection(before.display, group.display),
+        parameters: shareItems(
+          before.parameters,
+          group.parameters.map((parameter) =>
+            shareProjection(parameters.get(parameter.key), parameter),
+          ),
+        ),
+      };
+      return sameFields(before, shared) ? before : shared;
+    }),
+  );
 }
 
 function buildProjectionBucket(
@@ -103,18 +131,23 @@ function buildProjectionBucket(
     pinConnections: {},
   };
   for (const node of Object.values(entities.nodes)) {
-    bucket.nodes[node.nodeId] = shareEntity(previous?.nodes[node.nodeId], {
+    const before = previous?.nodes[node.nodeId];
+    const shared = {
       id: node.nodeId,
       graphPath: node.graphPath,
       nodeType: node.nodeTypeId,
-      position: node.position,
-      pinIds: shareIds(previous?.nodes[node.nodeId]?.pinIds, entities.portIdsByNodeId[node.nodeId]),
-      display: node.display,
-      parameterGroups: node.parameterGroups,
-      portInstanceAdditions: node.portInstanceAdditions,
-      capabilities: node.capabilities,
-      diagnostics: node.diagnostics,
-    });
+      position: shareProjection(before?.position, node.position),
+      pinIds: shareItems(before?.pinIds, entities.portIdsByNodeId[node.nodeId]),
+      display: shareProjection(before?.display, node.display),
+      parameterGroups: shareParameterGroups(before?.parameterGroups, node.parameterGroups),
+      portInstanceAdditions: shareProjection(
+        before?.portInstanceAdditions,
+        node.portInstanceAdditions,
+      ),
+      capabilities: shareProjection(before?.capabilities, node.capabilities),
+      diagnostics: shareProjection(before?.diagnostics, node.diagnostics),
+    };
+    bucket.nodes[node.nodeId] = sameFields(before, shared) ? before : shared;
     bucket.graphNodes.push(node.nodeId);
   }
   for (const [portId, port] of Object.entries(entities.ports)) {
@@ -133,7 +166,7 @@ function buildProjectionBucket(
       resolvedSchema: port.resolvedSchema,
       status: port.status,
     });
-    bucket.pinConnections[portId] = shareIds(
+    bucket.pinConnections[portId] = shareItems(
       previous?.pinConnections[portId],
       entities.connectionIdsByPortId[portId],
     );
@@ -151,7 +184,7 @@ function buildProjectionBucket(
       order: connection.order,
     });
   }
-  bucket.graphNodes = shareIds(previous?.graphNodes, bucket.graphNodes);
+  bucket.graphNodes = shareItems(previous?.graphNodes, bucket.graphNodes);
   if (sameFields(previous?.nodes, bucket.nodes)) bucket.nodes = previous.nodes;
   if (sameFields(previous?.pins, bucket.pins)) bucket.pins = previous.pins;
   if (sameFields(previous?.connections, bucket.connections))

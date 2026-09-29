@@ -1,0 +1,30 @@
+{
+  "before": {
+    "obsolete": true,
+    "parameters": [
+      { "key": "keys", "value": ["region"] },
+      { "key": "sum", "value": [] },
+      { "key": "mean", "value": [] }
+    ],
+    "unchanged": { "title": "Group By" }
+  },
+  "after": {
+    "parameters": [
+      { "key": "keys", "value": ["region"] },
+      { "key": "count", "value": [] },
+      { "key": "sum", "value": [] },
+      { "key": "mean", "value": [] }
+    ],
+    "unchanged": { "title": "Group By" }
+  },
+  "changes": [
+    { "kind": "remove", "path": ["obsolete"] },
+    {
+      "kind": "splice",
+      "path": ["parameters"],
+      "index": 1,
+      "deleteCount": 0,
+      "values": [{ "key": "count", "value": [] }]
+    }
+  ]
+}

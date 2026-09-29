@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import projectionWire from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
 import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { clearGraphSyncBaselines, invokeGraphSync } from "./graphEditorSync";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import type { ParameterEditorDto } from "@/shared/types/domain/editorProjection";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const binding = {
@@ -25,6 +27,133 @@ beforeEach(() => {
   vi.resetAllMocks();
   clearGraphSyncBaselines();
 });
+afterEach(() => useGraphProjectionStore.getState().clear());
+
+it("retains parameter identities through transport splices and the existing Zustand store", async () => {
+  const parameter = (key: string): ParameterEditorDto => ({
+    key,
+    display: { title: key, description: null },
+    editor: "auto",
+    presentation: "detailPanel",
+    valueType: { kind: "DataSeries", inner: { kind: "Scalar", inner: "Text" } },
+    multiline: false,
+    value: [],
+    configuration: {
+      kind: "projectColumns",
+      allowEmpty: true,
+      available: true,
+      unavailableReason: null,
+      options: [],
+      value: [],
+    },
+  });
+  const initial = data();
+  initial.projection.nodes[0].parameterGroups = [
+    {
+      key: "parameters",
+      display: { title: "Parameters", description: null },
+      parameters: ["keys", "sum", "mean"].map(parameter),
+    },
+  ];
+  const nodeId = initial.projection.nodes[0].nodeId;
+  vi.mocked(invoke).mockResolvedValueOnce(
+    response({ kind: "snapshot", cursor: "first", data: initial }),
+  );
+  const first = await invokeGraphSync("load_project_graph", {}, binding);
+  useGraphProjectionStore.getState().install(binding.graphPath, first.data);
+  const parameters = () =>
+    useGraphProjectionStore.getState().graphEntities[binding.graphPath].nodes[nodeId]
+      .parameterGroups[0].parameters;
+  const before = parameters();
+  let notifications = 0;
+  let sumChanges = 0;
+  const unsubscribe = useGraphProjectionStore.subscribe(() => {
+    notifications++;
+    if (parameters().find((p) => p.key === "sum") !== before[1]) sumChanges++;
+  });
+  for (const [baseCursor, cursor, deleteCount, values] of [
+    ["first", "second", 0, [parameter("count")]],
+    ["second", "third", 1, []],
+  ] as const) {
+    vi.mocked(invoke).mockResolvedValueOnce(
+      response({
+        kind: "delta",
+        baseCursor,
+        cursor,
+        changes: [
+          {
+            kind: "splice",
+            path: ["projection", "nodes", "0", "parameterGroups", "0", "parameters"],
+            index: 1,
+            deleteCount,
+            values,
+          },
+        ],
+      }),
+    );
+    const next = await invokeGraphSync("hydrate_editor_graph", {}, binding);
+    useGraphProjectionStore.getState().hydrate(binding.graphPath, next.data);
+    expect(parameters().find((p) => p.key === "sum")).toBe(before[1]);
+    expect(parameters().find((p) => p.key === "mean")).toBe(before[2]);
+  }
+  unsubscribe();
+  expect(notifications).toBe(2);
+  expect(sumChanges).toBe(0);
+  expect(parameters()).toEqual(before);
+});
+
+it.each(["cursor", "session", "operation"] as const)(
+  "recovers a %s mismatch with a snapshot and never repeats an edit",
+  async (fault) => {
+    vi.mocked(invoke).mockResolvedValueOnce(
+      response({ kind: "snapshot", cursor: "first", data: data() }),
+    );
+    const before = await invokeGraphSync("load_project_graph", {}, binding);
+    const changes =
+      fault === "session"
+        ? [
+            {
+              kind: "set",
+              path: ["editing", "version", "sessionId"],
+              value: "00000000-0000-0000-0000-000000000099",
+            },
+          ]
+        : fault === "operation"
+          ? [
+              {
+                kind: "splice",
+                path: ["projection", "nodes"],
+                index: 0,
+                deleteCount: 0,
+                values: [],
+                unexpected: true,
+              },
+            ]
+          : [];
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(
+        response(
+          {
+            kind: "delta",
+            baseCursor: fault === "cursor" ? "missing" : "first",
+            cursor: "bad",
+            changes,
+          },
+          true,
+        ),
+      )
+      .mockResolvedValueOnce(response({ kind: "snapshot", cursor: "recovered", data: data() }));
+    const result = await invokeGraphSync("edit_graph", { mutation: {} }, binding);
+    expect(result.changed).toBe(true);
+    expect(result.data).toEqual(before.data);
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
+      "load_project_graph",
+      "edit_graph",
+      "hydrate_editor_graph",
+    ]);
+    expect(invoke).toHaveBeenLastCalledWith("hydrate_editor_graph", { ...binding, cursor: null });
+  },
+);
 
 it("evicts cached projections by bytes and reads them again without an expired cursor", async () => {
   for (const projectInstanceId of ["first", "second", "third"]) {
