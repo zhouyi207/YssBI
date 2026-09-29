@@ -124,6 +124,38 @@ pub(crate) fn validate(
             let Some(value) = document_node.parameters.get(&parameter.key) else {
                 continue;
             };
+            if super::parameter_projection::aggregate_parameter_accepts(
+                node.node_type.as_str(),
+                parameter.key.as_str(),
+                yss_node_protocol::RelationalScalarType::Unknown,
+            )
+            .is_some()
+            {
+                let valid = super::schema_resolution::aggregate_column_names(Some(value))
+                    .is_ok_and(|columns| {
+                        columns.iter().all(|name| {
+                            schema.fields.iter().any(|field| {
+                                field.name.0 == *name
+                                    && super::parameter_projection::aggregate_parameter_accepts(
+                                        node.node_type.as_str(),
+                                        parameter.key.as_str(),
+                                        field.scalar_type,
+                                    ) == Some(true)
+                            })
+                        })
+                    });
+                if !valid {
+                    diagnostics.push(graph_problem(
+                        GraphDiagnosticKind::SchemaParameterInvalid,
+                        GraphDiagnosticLocation::Parameter {
+                            node_id: node.node_id,
+                            key: parameter.key.clone(),
+                        },
+                        [("parameter_key", parameter.key.as_str().into())],
+                    ));
+                }
+                continue;
+            }
             let TypeExpr::Concrete(type_id) = &parameter.value_type else {
                 continue;
             };

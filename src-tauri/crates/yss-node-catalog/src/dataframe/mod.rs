@@ -5,9 +5,21 @@
 
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
+mod aggregation;
 mod families;
 mod inventory;
 pub(crate) use inventory::documentation as inventory_documentation;
+pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<str>> {
+    let kind = match id {
+        "yssbi.dataframe.series.frequency" => InterfaceKind::Frequency,
+        "yssbi.dataframe.series.describe" => InterfaceKind::SeriesDescribe,
+        "yssbi.dataframe.describe" => InterfaceKind::Describe,
+        "yssbi.dataframe.groupby" => InterfaceKind::GroupBy,
+        _ => return None,
+    };
+    let (en, zh) = aggregation::help(kind);
+    Some(if locale.starts_with("zh") { zh } else { en }.into())
+}
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
@@ -44,6 +56,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             sid(DATAFRAME_DROP_NA_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_COMPOSITION_SCHEMA_RESOLVER, SchemaResolverId::new)?,
+            sid("yssbi.dataframe.schema.aggregate", SchemaResolverId::new)?,
         ],
         nodes,
         messages,
@@ -109,6 +122,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
 fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAssemblyError> {
     use InterfaceKind::*;
     match kind {
+        Frequency | SeriesDescribe | Describe | GroupBy => aggregation::interface(kind),
         DataframeSource => Ok((
             vec![streaming_output(
                 "dataframe",
@@ -801,6 +815,8 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::ConcatRows
         | InterfaceKind::ConcatColumns
         | InterfaceKind::Join
+        | InterfaceKind::Describe
+        | InterfaceKind::GroupBy
         | InterfaceKind::TimeAlign
         | InterfaceKind::PanelAlign => "dataframe",
         InterfaceKind::SeriesSelect
@@ -809,6 +825,8 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::SeriesCount
         | InterfaceKind::SeriesSum
         | InterfaceKind::SeriesMean
+        | InterfaceKind::Frequency
+        | InterfaceKind::SeriesDescribe
         | InterfaceKind::Standardize
         | InterfaceKind::InverseStandardize
         | InterfaceKind::DummyInfo
@@ -881,6 +899,10 @@ fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &Node
     let documentation = node_key_text(spec.id, "documentation");
     let aliases = node_key_text(spec.id, "aliases");
     let (en_documentation, zh_documentation) = match spec.interface {
+        InterfaceKind::Frequency
+        | InterfaceKind::SeriesDescribe
+        | InterfaceKind::Describe
+        | InterfaceKind::GroupBy => aggregation::help(spec.interface),
         InterfaceKind::IntRange => (
             "Generates integers from start (inclusive) to end (exclusive). Step must be a nonzero integer; negative steps are supported. Output allocation is bounded by the execution budget.",
             "生成从 start（包含）到 end（不包含）的整数序列。step 必须是非零整数，支持负步长；输出分配受执行内存预算限制。",
@@ -933,6 +955,7 @@ fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &Node
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
+    aggregation::messages(out);
     for (key, en, zh) in [
         ("types.dataframe.title", "DataFrame", "数据框"),
         ("types.series.title", "DataSeries", "数据序列"),

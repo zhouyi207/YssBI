@@ -34,7 +34,9 @@ fn run(
     );
     let outputs = (0..count)
         .map(|i| KernelOutputSpec {
-            data_type: if (count == 3 && i > 0) || id.ends_with("predict") {
+            data_type: if id == "yssbi.statistics.inequality.theil" && i == 0 {
+                ValueType::number()
+            } else if (count == 3 && i > 0) || id.ends_with("predict") {
                 ValueType::DataSeries(Box::new(ValueType::number()))
             } else {
                 ValueType::Struct("statistics.report".into())
@@ -70,6 +72,160 @@ fn noise(n: usize) -> Vec<f64> {
             ((state >> 32) as u32) as f64 / u32::MAX as f64 - 0.5
         })
         .collect()
+}
+
+#[test]
+fn theil_node_enforces_form_weights_and_returns_scalar_and_report() {
+    let id = "yssbi.statistics.inequality.theil";
+    let grouped = run(
+        id,
+        &[
+            ("series", series(&[1., 3.])),
+            ("weights", series(&[3., 1.])),
+        ],
+        &[("theil_form", string("grouped"))],
+        2,
+    )
+    .unwrap();
+    let individual = run(
+        id,
+        &[("series", series(&[1., 1., 1., 3.]))],
+        &[("theil_form", string("individual"))],
+        2,
+    )
+    .unwrap();
+    let scalar = |v: &RuntimeValue| super::super::numeric_input(Some(v)).unwrap();
+    assert!((scalar(&grouped[0]) - scalar(&individual[0])).abs() < 1e-12);
+    assert_eq!(field(&grouped[1], "theil_t").unwrap(), &grouped[0]);
+    assert_eq!(field(&grouped[1], "form").unwrap(), &string("grouped"));
+    assert_eq!(field(&grouped[1], "observations").unwrap(), &int(2));
+    for (form, weights) in [
+        ("individual", Some(series(&[1., 1.]))),
+        ("grouped", None),
+        ("invalid", None),
+    ] {
+        let mut inputs = vec![("series", series(&[1., 3.]))];
+        if let Some(weights) = weights {
+            inputs.push(("weights", weights));
+        }
+        assert!(matches!(
+            run(id, &inputs, &[("theil_form", string(form))], 2),
+            Err(KernelError::InvalidParameter)
+        ));
+    }
+    assert!(matches!(
+        run(
+            id,
+            &[("series", series(&[1., 3.])), ("weights", series(&[1.]))],
+            &[("theil_form", string("grouped"))],
+            2,
+        ),
+        Err(KernelError::ShapeMismatch)
+    ));
+    assert!(matches!(
+        run(
+            id,
+            &[(
+                "series",
+                RuntimeValue::List(vec![number(1.), TabularScalar::Null.into()].into())
+            )],
+            &[("theil_form", string("individual"))],
+            2,
+        ),
+        Err(KernelError::InvalidNumericInput)
+    ));
+}
+
+#[test]
+fn acf_pacf_nodes_return_finite_correlations_for_large_finite_inputs() {
+    for (method, expected) in [
+        ("acf", vec![number(1.0), number(-0.75)]),
+        ("pacf", vec![number(-0.75)]),
+    ] {
+        let result = run(
+            &format!("yssbi.statistics.timeseries.{method}"),
+            &[("series", series(&[1e308, -1e308, 1e308, -1e308]))],
+            &[("lags", int(1))],
+            2,
+        )
+        .unwrap();
+        assert_eq!(
+            field(&result[0], "values").unwrap(),
+            &RuntimeValue::List(expected.into())
+        );
+        assert_eq!(field(&result[0], "observations").unwrap(), &int(4));
+        assert_eq!(result[0], result[1]);
+    }
+}
+
+#[test]
+fn nonfinite_diagnostic_results_fail_instead_of_returning_null_reports() {
+    assert!(matches!(
+        run(
+            "yssbi.statistics.diagnostic.durbin_watson",
+            &[("series", series(&[1e308, -1e308, 1e308, -1e308]))],
+            &[],
+            2,
+        ),
+        Err(KernelError::NonFiniteResult)
+    ));
+}
+
+#[test]
+fn statistical_value_checks_nested_numbers_while_preserving_optional_nulls() {
+    #[derive(serde::Serialize)]
+    struct Report {
+        statistic: f64,
+        optional: Option<f64>,
+        samples: Vec<Option<f64>>,
+    }
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(5),
+    );
+    let inv = KernelInvocation {
+        relations: &crate::tests::relations(),
+        inputs: &[],
+        input_keys: &[],
+        parameters: Default::default(),
+        outputs: &[],
+        control: &control,
+    };
+    let report = Report {
+        statistic: 0.25,
+        optional: None,
+        samples: vec![Some(0.5), None],
+    };
+    let result = super::common::value(&report, &inv).unwrap();
+    assert_eq!(
+        field(&result, "optional").unwrap(),
+        &RuntimeValue::from(TabularScalar::Null)
+    );
+    assert_eq!(
+        field(&result, "samples").unwrap(),
+        &RuntimeValue::List(vec![number(0.5), TabularScalar::Null.into()].into())
+    );
+    for report in [
+        Report {
+            statistic: f64::NAN,
+            ..report
+        },
+        Report {
+            statistic: 0.25,
+            optional: Some(f64::INFINITY),
+            samples: vec![],
+        },
+        Report {
+            statistic: 0.25,
+            optional: None,
+            samples: vec![Some(f64::NEG_INFINITY)],
+        },
+    ] {
+        assert!(matches!(
+            super::common::value(report, &inv),
+            Err(KernelError::NonFiniteResult)
+        ));
+    }
 }
 
 #[test]
@@ -467,6 +623,57 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
 }
 
 #[test]
+fn breusch_pagan_fitted_and_rhs_agree_for_one_predictor() {
+    let n = 64;
+    let eps = noise(n);
+    let x = (0..n).map(|i| i as f64 / 10.).collect::<Vec<_>>();
+    let y = (0..n)
+        .map(|i| 1. + 0.6 * x[i] + eps[i] * (1. + x[i]))
+        .collect::<Vec<_>>();
+    let weights = x.iter().map(|x| 1. / (1. + x).powi(2)).collect::<Vec<_>>();
+    for method in ["OLS", "WLS"] {
+        let mut inputs = vec![("response", series(&y)), ("predictors", series(&x))];
+        if method == "WLS" {
+            inputs.push(("weights", series(&weights)));
+        }
+        let fit = run(
+            "yssbi.statistics.linear.fit",
+            &inputs,
+            &[
+                ("method", string(method)),
+                ("constant", flag(true)),
+                ("covariance", string("nonrobust")),
+            ],
+            3,
+        )
+        .unwrap();
+        // A nonconstant fitted line and its sole predictor span the same
+        // auxiliary design with an intercept, for either weighting scheme.
+        for koenker in [false, true] {
+            let reports = [false, true].map(|rhs| {
+                run(
+                    "yssbi.statistics.diagnostic.breusch_pagan",
+                    &[("model", fit[0].clone())],
+                    &[("rhs", flag(rhs)), ("koenker", flag(koenker))],
+                    2,
+                )
+                .unwrap()
+            });
+            for key in ["lm_stat", "p_value"] {
+                let values = reports.each_ref().map(|report| {
+                    let result = field(&report[0], "result").unwrap();
+                    super::super::numeric_input(Some(field(result, key).unwrap())).unwrap()
+                });
+                assert!(
+                    (values[0] - values[1]).abs() < 1e-8,
+                    "{method}, koenker={koenker}, {key}: {values:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
     let n = 64;
     let eps = noise(n);
@@ -510,13 +717,26 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
         ),
         ("wald", vec![("hypothesis", string("x1 = 0"))]),
     ] {
-        run(
+        let report = run(
             &format!("yssbi.statistics.diagnostic.{test}"),
             &[("model", fit[0].clone())],
             &parameters,
             2,
         )
         .unwrap_or_else(|e| panic!("{test}: {e:?}"));
+        if test == "vif" {
+            let RuntimeValue::List(entries) = field(&report[0], "result").unwrap() else {
+                panic!()
+            };
+            assert_eq!(
+                field(&entries[0], "vif").unwrap(),
+                &TabularScalar::Null.into()
+            );
+            assert_eq!(
+                field(&entries[0], "tolerance").unwrap(),
+                &TabularScalar::Null.into()
+            );
+        }
     }
     for (id, params) in [
         ("test.normality", vec![]),

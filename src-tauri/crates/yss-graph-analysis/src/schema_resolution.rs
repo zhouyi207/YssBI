@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+mod aggregation;
 mod composition;
+pub(crate) use aggregation::column_names as aggregate_column_names;
 
 use crate::{GraphSchemaIssue, GraphSchemaState};
 use yss_data_contract::ValueType;
@@ -268,6 +270,11 @@ impl EditorSchemaResolver<'_> {
         for (_, source) in &sources {
             let _ = self.resolve_output(source);
         }
+        // Series outputs need not declare a table Schema. Frequency still depends on
+        // their resolved column meaning, including upstream selection/generic changes.
+        let frequency_source = (self.document.nodes[&address.node_id].node_type.as_str()
+            == "yssbi.dataframe.series.frequency")
+            .then(|| self.frequency_source(address.node_id));
         let node = &self.document.nodes[&address.node_id];
         let constant = self
             .registry
@@ -290,6 +297,7 @@ impl EditorSchemaResolver<'_> {
                     .filter(|(port, _)| port.node_id == node.id)
                     .collect::<Vec<_>>(),
                 &expression,
+                frequency_source,
                 // Include target addresses as well: moving a source between
                 // two inputs can change Project/Append/Rename semantics.
                 sources
@@ -454,6 +462,11 @@ impl EditorSchemaResolver<'_> {
                 Ok(fields)
             }
             SchemaExpr::Filter { input, .. } => self.resolve_expression(node_id, input),
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.dataframe.schema.aggregate" =>
+            {
+                self.resolve_aggregation(node_id)
+            }
             SchemaExpr::Derived { resolver, .. }
                 if resolver.as_str() == "yssbi.dataframe.schema.composition" =>
             {

@@ -4,6 +4,179 @@ use yss_graph_document::{ConnectionId, DocumentConnection, DocumentNode, NodePos
 use yss_graph_resource_contract::{ColumnSchema, DataSchema, ResourceCatalogFingerprint};
 
 #[test]
+fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_edits() {
+    use yss_data_contract::SemanticType as S;
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::from([(
+            GraphResourceId::new("data"),
+            DataSchema {
+                columns: [
+                    ("amount", S::Numeric),
+                    ("category", S::Categorical),
+                    ("level", S::Ordinal),
+                    ("flag", S::Binary),
+                    ("text", S::Text),
+                    ("id", S::Identifier),
+                ]
+                .map(|(name, kind)| ColumnSchema {
+                    name: name.into(),
+                    data_type: ValueType::Scalar(kind),
+                    physical_type: None,
+                    semantic: None,
+                })
+                .into(),
+            },
+        )]),
+        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    );
+    let mut document = GraphDocument::default();
+    let source = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("data"))],
+    );
+    let describe = node(&mut document, "yssbi.dataframe.describe", &[]);
+    let group = node(
+        &mut document,
+        "yssbi.dataframe.groupby",
+        &[
+            ("keys", serde_json::json!(["category"])),
+            ("mean", serde_json::json!(["amount"])),
+        ],
+    );
+    let series = node(
+        &mut document,
+        "yssbi.dataframe.series.select",
+        &[("column", serde_json::json!("level"))],
+    );
+    let frequency = node(&mut document, "yssbi.dataframe.series.frequency", &[]);
+    let lag = node(&mut document, "yssbi.dataframe.timeseries.lag", &[]);
+    let one = node(&mut document, "yssbi.dataframe.series.describe", &[]);
+    for (to, input) in [
+        (describe, "source"),
+        (group, "source"),
+        (series, "dataframe"),
+    ] {
+        connect(&mut document, port(source, "dataframe"), port(to, input));
+    }
+    for to in [lag, one] {
+        connect(&mut document, port(series, "series"), port(to, "series"));
+    }
+    connect(
+        &mut document,
+        port(lag, "result"),
+        port(frequency, "series"),
+    );
+    let mut cache = GraphSemanticCache::default();
+    let first = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(
+        !first.has_blocking_diagnostics(),
+        "{:?}",
+        first.diagnostics()
+    );
+    let options = |node: NodeId, key: &str| match &first
+        .node(node)
+        .unwrap()
+        .parameters
+        .iter()
+        .find(|p| p.key.as_str() == key)
+        .unwrap()
+        .configuration
+    {
+        Some(crate::GraphParameterConfigurationFact::ProjectColumns { options, .. }) => options
+            .iter()
+            .map(|f| f.name.to_string())
+            .collect::<Vec<_>>(),
+        _ => panic!("column selector required"),
+    };
+    assert_eq!(
+        options(describe, "describe_columns"),
+        ["amount", "category", "level", "flag"]
+    );
+    assert_eq!(options(group, "mean"), ["amount"]);
+    assert_eq!(options(group, "count").len(), 6);
+    let schema = |snapshot: &crate::GraphSemanticSnapshot, id| {
+        snapshot
+            .node(id)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.address == port(id, "result"))
+            .unwrap()
+            .schema_state
+            .clone()
+    };
+    let fields = schema(&first, group).exact().unwrap().fields.clone();
+    assert_eq!(
+        fields.iter().map(|f| f.name.0.as_ref()).collect::<Vec<_>>(),
+        ["category", "row_count", "amount_mean"]
+    );
+    assert_eq!(
+        schema(&first, frequency).exact().unwrap().fields[0].scalar_type,
+        RelationalScalarType::Known(S::Ordinal)
+    );
+    assert_eq!(
+        schema(&first, describe).exact().unwrap().fields.len(),
+        yss_data_contract::aggregation::DESCRIPTION_FIELDS.len()
+    );
+    document
+        .nodes
+        .get_mut(&series)
+        .unwrap()
+        .parameters
+        .insert("column".parse().unwrap(), serde_json::json!("flag"));
+    let switched = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(
+        !switched.has_blocking_diagnostics(),
+        "{:?}",
+        switched.diagnostics()
+    );
+    assert_eq!(
+        schema(&switched, frequency).exact().unwrap().fields[0].scalar_type,
+        RelationalScalarType::Known(S::Binary)
+    );
+    document
+        .nodes
+        .get_mut(&group)
+        .unwrap()
+        .parameters
+        .insert("mean".parse().unwrap(), serde_json::json!(["category"]));
+    let invalid = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(invalid.has_blocking_diagnostics());
+    assert_eq!(
+        schema(&invalid, group).issue(),
+        Some(GraphSchemaIssue::InvalidParameter)
+    );
+    document
+        .nodes
+        .get_mut(&group)
+        .unwrap()
+        .parameters
+        .insert("mean".parse().unwrap(), serde_json::json!([]));
+    document
+        .nodes
+        .get_mut(&group)
+        .unwrap()
+        .parameters
+        .insert("sum".parse().unwrap(), serde_json::json!(["amount"]));
+    let changed = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(
+        !changed.has_blocking_diagnostics(),
+        "{:?}",
+        changed.diagnostics()
+    );
+    assert_eq!(
+        schema(&changed, group).exact().unwrap().fields[2]
+            .name
+            .0
+            .as_ref(),
+        "amount_sum"
+    );
+}
+
+#[test]
 fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
     use yss_data_contract::SemanticType as S;
     let builtin = yss_node_catalog::build_builtin_node_system().unwrap();

@@ -55,6 +55,13 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 科学计算继续调用 `yss-sci-runtime`，数值算法属于 SCI，关系执行使用 `yss-relational-contract` 的句柄。这里不直接依赖 Graph、Project、Application、Tauri、DataFusion 或 Linalg。
 
+泰尔指数适配位于 `statistics::descriptive`：个体形式只接收 `series`，分组形式必须另接一个 `weights` 数列（组人数或人口占比）。输入通过共用 `columns` 执行受控物化和行对齐检查，再调用 SCI Runtime；输出指数标量与结构化报告。分组输入为组均值，仅计算组间差异。切换形式后，不适用或缺失的 weights 明确报错。
+
+统计结果进入 `common::value` 时保留原有数值类型；转换入口在 JSON 编码前遍历并拒绝
+非有限浮点数，返回 `NonFiniteResult`，合法 `Option::None` 仍转换为空值。
+ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误抹成 Null。
+已经构造的 JSON 无法恢复被抹去的数值类型，生成这类报告的 owner 必须在编码前完成检查。
+
 ## 注册与扩展
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
@@ -95,6 +102,8 @@ UDF 的相等性和哈希包含源/输出字段元数据与实际转换操作，
 构建表达式不读取整列或修改数据集；错误在实际消费时返回，结果预览失败不改写已完成的 Run。完整列校验不能从局部预览或 LIMIT 的成功推断。
 
 ## 关系运算与统计适配
+
+频数、数据序列描述、数据帧描述和分组聚合由 `builtins::aggregation` 注册。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系执行由 DataFusion 原生聚合、排序、连接和分位数计划承担，输出保留来源绑定、租约及受控分页能力。节点执行仅构造计划，扫描及数值失败在消费时交付；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
 
 仅在类型契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
 已物化的常量数列按位置广播/运算，要求等长并约束输出内存；带关系身份的数列保留固定行域和文件租约，

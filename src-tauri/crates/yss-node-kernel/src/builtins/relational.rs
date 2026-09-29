@@ -57,6 +57,29 @@ pub(crate) fn constant(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue
             .map(|field| columns.get(&field.name).ok_or(KernelError::ShapeMismatch))
             .collect::<Result<Vec<_>, _>>()?;
         materialize(fields, &values, invocation)
+    } else if let Some(yss_data_contract::ValueType::DataSeries(element)) =
+        invocation.outputs.first().map(|output| &output.data_type)
+    {
+        if value.metadata().is_none()
+            && let yss_data_contract::ValueType::Scalar(semantic) = element.as_ref()
+            && matches!(
+                semantic,
+                yss_data_contract::SemanticType::Categorical
+                    | yss_data_contract::SemanticType::Ordinal
+                    | yss_data_contract::SemanticType::Binary
+            )
+        {
+            value
+                .clone()
+                .with_metadata(yss_data_contract::ConversionMetadata {
+                    semantic: yss_data_contract::ColumnSemantic::new(*semantic),
+                    temporal: None,
+                    dummy_base_level: None,
+                })
+                .map_err(|_| KernelError::InvalidParameter)
+        } else {
+            Ok(value.clone())
+        }
     } else {
         Ok(value.clone())
     }
@@ -64,7 +87,7 @@ pub(crate) fn constant(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue
 
 /// A single boundary for literal tables and assembled memory columns. Downstream table kernels
 /// always consume relation handles; records remain available for ordinary structured values.
-fn materialize(
+pub(super) fn materialize(
     fields: &[crate::KernelField],
     inputs: &[&RuntimeValue],
     invocation: &KernelInvocation<'_>,

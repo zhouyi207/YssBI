@@ -2,6 +2,7 @@
 mod causal;
 pub(super) mod common;
 mod density;
+mod descriptive;
 mod diagnostics;
 mod linear;
 mod panel;
@@ -21,6 +22,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     time_series::register(builder);
     diagnostics::register(builder);
     density::register(builder);
+    descriptive::register(builder);
 }
 
 pub(super) fn install(
@@ -59,10 +61,11 @@ pub(super) fn install(
                     || id.ends_with(".irf")
                     || id.ends_with(".fevd")
                     || id.ends_with(".hausman")
+                    || id.ends_with(".breusch_pagan")
                 {
-                    2
+                    3
                 } else {
-                    1
+                    2
                 },
             )
             .unwrap(),

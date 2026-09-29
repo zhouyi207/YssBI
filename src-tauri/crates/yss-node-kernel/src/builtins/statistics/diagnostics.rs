@@ -81,7 +81,16 @@ fn postestimation(
             "GLS",
             inv,
         )?;
-        serde_json::json!({"hausman": yss_sci_runtime::causal::iv::hausman(&fit).map_err(sci)?})
+        #[derive(serde::Serialize)]
+        struct HausmanReport {
+            hausman: yss_sci_contract::causal::iv::HausmanTest,
+        }
+        value(
+            HausmanReport {
+                hausman: yss_sci_runtime::causal::iv::hausman(&fit).map_err(sci)?,
+            },
+            inv,
+        )?
     } else {
         let fit: yss_sci_contract::time_series::var::VarFit = decode_model(inv)?;
         let k = fit.var_names.len();
@@ -92,7 +101,7 @@ fn postestimation(
             "OLS",
             inv,
         )?;
-        if method == "granger" {
+        let report = if method == "granger" {
             yss_sci_runtime::time_series::var_granger(&fit).map_err(sci)?
         } else {
             let steps = integer(inv, "steps")?;
@@ -111,9 +120,9 @@ fn postestimation(
                 yss_sci_runtime::time_series::var_variance_decomposition(&fit, steps)
                     .map_err(sci)?
             }
-        }
+        };
+        value(report, inv)?
     };
-    let report = value(report, inv)?;
     Ok(vec![report.clone(), report])
 }
 
@@ -224,8 +233,22 @@ fn series_test(name: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 }
                 _ => KernelError::ScientificFailure,
             })?;
+            #[derive(serde::Serialize)]
+            struct CorrelationReport<'a> {
+                function: &'a str,
+                observations: usize,
+                values: &'a [f64],
+            }
             value(
-                serde_json::json!({ "function": name, "observations": result.n, "values": if name == "acf" { result.acf } else { result.pacf } }),
+                CorrelationReport {
+                    function: name,
+                    observations: result.n,
+                    values: if name == "acf" {
+                        &result.acf
+                    } else {
+                        &result.pacf
+                    },
+                },
                 inv,
             )?
         }

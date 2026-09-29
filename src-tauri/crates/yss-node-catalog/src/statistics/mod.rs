@@ -7,6 +7,7 @@
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod analyses;
+mod descriptive;
 mod families;
 mod inventory;
 
@@ -41,6 +42,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     };
     inventory::append(&mut fragment)?;
     analyses::append(&mut fragment)?;
+    descriptive::append(&mut fragment)?;
     Ok(fragment)
 }
 

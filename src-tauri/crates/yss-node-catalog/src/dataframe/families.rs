@@ -22,6 +22,10 @@ pub(super) enum InterfaceKind {
     SeriesCount,
     SeriesSum,
     SeriesMean,
+    Frequency,
+    SeriesDescribe,
+    Describe,
+    GroupBy,
     Standardize,
     InverseStandardize,
     DummyInfo,
@@ -45,6 +49,38 @@ pub(super) struct NodeSpec {
 }
 
 pub(super) const NODES: &[NodeSpec] = &[
+    spec(
+        "yssbi.dataframe.series.frequency",
+        "Frequency",
+        "频数",
+        &["frequency", "value counts"],
+        &["频数", "频数表"],
+        InterfaceKind::Frequency,
+    ),
+    spec(
+        "yssbi.dataframe.series.describe",
+        "Describe Series",
+        "描述",
+        &["describe", "summary"],
+        &["描述", "描述统计"],
+        InterfaceKind::SeriesDescribe,
+    ),
+    spec(
+        "yssbi.dataframe.describe",
+        "Describe DataFrame",
+        "描述",
+        &["describe", "summary"],
+        &["描述", "描述统计"],
+        InterfaceKind::Describe,
+    ),
+    spec(
+        "yssbi.dataframe.groupby",
+        "Group By",
+        "分组聚合",
+        &["groupby", "aggregate", "group summary"],
+        &["分组聚合", "分类汇总"],
+        InterfaceKind::GroupBy,
+    ),
     spec(
         "yssbi.dataframe.concat.rows",
         "Concatenate Rows",

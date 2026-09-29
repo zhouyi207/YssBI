@@ -63,7 +63,7 @@ impl EditorSchemaResolver<'_> {
         })
     }
 
-    fn composition_series(
+    pub(super) fn composition_series(
         &mut self,
         source: &PortAddress,
     ) -> Result<SchemaField, GraphSchemaIssue> {
@@ -155,15 +155,33 @@ impl EditorSchemaResolver<'_> {
                 .get(parameter)
                 .and_then(serde_json::Value::as_str)
                 .and_then(|id| SemanticType::ALL.into_iter().find(|s| s.type_id() == id)),
-            _ => protocol
-                .interface
-                .ports
-                .iter()
-                .find(|port| match &source.port {
-                    PortRef::Declared { key } => &port.key == key,
-                    PortRef::Instance { template, .. } => &port.key == template,
-                })
-                .and_then(|port| declared_semantic(&port.value_type)),
+            _ => {
+                let output = protocol
+                    .interface
+                    .ports
+                    .iter()
+                    .find(|port| match &source.port {
+                        PortRef::Declared { key } => &port.key == key,
+                        PortRef::Instance { template, .. } => &port.key == template,
+                    });
+                // A shared generic series parameter preserves element meaning through
+                // operations such as Lag, even when the output has no table Schema.
+                if let Some(output) = output
+                    && matches!(&output.value_type, TypeExpr::Applied { constructor, arguments } if constructor.as_str() == "core.data_series" && matches!(arguments.as_slice(), [TypeExpr::Generic(_)]))
+                {
+                    for input in protocol.interface.ports.iter().filter(|port| {
+                        port.direction == yss_node_protocol::PortDirection::Input
+                            && port.value_type == output.value_type
+                    }) {
+                        let input = PortAddress::declared(node.id, input.key.clone());
+                        if let Some([source]) = self.input_sources.get(&input).map(Vec::as_slice) {
+                            let source = source.clone();
+                            return self.composition_series(&source);
+                        }
+                    }
+                }
+                output.and_then(|port| declared_semantic(&port.value_type))
+            }
         };
         Ok(SchemaField {
             name: SchemaColumnRef(name.into()),

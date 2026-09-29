@@ -1,4 +1,5 @@
 use yss_data_contract::TabularScalar;
+mod aggregation;
 mod alignment;
 mod boolean;
 mod comparison;
@@ -520,9 +521,11 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                         | series::SeriesKernel::InverseStandardize,
                     ) => 3,
                     Boolean(_) => 3,
-                    Statistical(Summary) => 6,
+                    Statistical(Summary) => 7,
                     Statistical(Predict) => 4,
-                    Convert => 6,
+                    Convert => 7,
+                    Series(series::SeriesKernel::Lag) => 3,
+                    Constant => 3,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 3,
                     _ => 2,
                 })
@@ -534,6 +537,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
     }
     statistics::register(builder);
     alignment::register(builder);
+    aggregation::register(builder);
 }
 
 fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {

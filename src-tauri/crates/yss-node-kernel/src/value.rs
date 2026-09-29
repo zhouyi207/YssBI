@@ -153,9 +153,7 @@ impl RuntimeValue {
         if metadata.dummy_base_level.is_none()
             && matches!(
                 metadata.semantic.kind,
-                yss_data_contract::SemanticType::Numeric
-                    | yss_data_contract::SemanticType::Text
-                    | yss_data_contract::SemanticType::Binary
+                yss_data_contract::SemanticType::Numeric | yss_data_contract::SemanticType::Text
             )
         {
             return Ok(self);

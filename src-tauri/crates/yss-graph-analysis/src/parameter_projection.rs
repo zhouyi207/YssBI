@@ -1,6 +1,24 @@
 use super::*;
 use yss_data_contract::FilterLiteral;
 
+pub(super) fn aggregate_parameter_accepts(
+    node: &str,
+    key: &str,
+    kind: RelationalScalarType,
+) -> Option<bool> {
+    use yss_data_contract::aggregation::{AggregateOperation, supports_description};
+    match (node, key) {
+        ("yssbi.dataframe.describe", "describe_columns") => {
+            Some(matches!(kind, RelationalScalarType::Known(s) if supports_description(s)))
+        }
+        ("yssbi.dataframe.groupby", key) => AggregateOperation::ALL
+            .into_iter()
+            .find(|op| op.key() == key)
+            .map(|op| matches!(kind, RelationalScalarType::Known(s) if op.accepts(s))),
+        _ => None,
+    }
+}
+
 pub(super) fn parameter_schema<'a>(
     ports: &'a [GraphPortSemanticFact],
     key: &str,
@@ -34,11 +52,17 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
             }
             _ => None,
         };
-        if parameter.key.as_str() == "subset"
+        if (parameter.key.as_str() == "subset"
             && matches!(
                 node.node_type.as_str(),
                 "yssbi.dataframe.dropna.rows" | "yssbi.dataframe.dropna.columns"
+            ))
+            || aggregate_parameter_accepts(
+                node.node_type.as_str(),
+                parameter.key.as_str(),
+                RelationalScalarType::Unknown,
             )
+            .is_some()
         {
             parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
                 allow_empty: true,
@@ -55,6 +79,14 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                 },
                 options: fields
                     .iter()
+                    .filter(|field| {
+                        aggregate_parameter_accepts(
+                            node.node_type.as_str(),
+                            parameter.key.as_str(),
+                            field.scalar_type,
+                        )
+                        .unwrap_or(true)
+                    })
                     .map(|field| GraphColumnFact {
                         name: field.name.0.clone(),
                         data_type: field.scalar_type,

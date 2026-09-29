@@ -2,6 +2,8 @@ pub(super) use super::linear::{check_fit_workspace, columns, group, numeric_list
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
 
+mod finite;
+
 pub(crate) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a str, KernelError> {
     match inv.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::String(v))) => Ok(v),
@@ -53,6 +55,8 @@ pub(super) fn value(
     data: impl serde::Serialize,
     inv: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
+    inv.check_control()?;
+    finite::validate(&data)?;
     let data = serde_json::to_value(data).map_err(|_| KernelError::ScientificFailure)?;
     fn charge(v: &serde_json::Value) -> Option<usize> {
         let children = match v {

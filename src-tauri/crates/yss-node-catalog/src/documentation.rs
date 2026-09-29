@@ -21,10 +21,12 @@ pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<B
         .or_else(|| super::statistics::inventory_documentation(node_type_id.as_str(), locale))
         .or_else(|| super::plot::inventory_documentation(node_type_id.as_str(), locale))
         .or_else(|| super::dataframe::inventory_documentation(node_type_id.as_str(), locale))
+        .or_else(|| super::dataframe::aggregation_documentation(node_type_id.as_str(), locale))
 }
 
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
+        "yssbi.statistics.inequality.theil" => markdown!("theil"),
         "yssbi.numeric.add" => markdown!("add"),
         "yssbi.numeric.subtract" => markdown!("subtract"),
         "yssbi.numeric.multiply" => markdown!("multiply"),
@@ -113,6 +115,23 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.plot.scatter.view" => markdown!("scatter"),
 
         "yssbi.statistics.adf.test" => markdown!("df_adf"),
+        "yssbi.statistics.test.normality" => markdown!("normality"),
+        "yssbi.statistics.diagnostic.breusch_pagan" => markdown!("breusch_pagan"),
+        "yssbi.statistics.diagnostic.white" => markdown!("white"),
+        "yssbi.statistics.diagnostic.information_matrix" => markdown!("information_matrix"),
+        "yssbi.statistics.diagnostic.reset" => markdown!("reset"),
+        "yssbi.statistics.diagnostic.vif" => markdown!("vif"),
+        "yssbi.statistics.diagnostic.leverage" => markdown!("leverage"),
+        "yssbi.statistics.diagnostic.breusch_godfrey" => markdown!("breusch_godfrey"),
+        "yssbi.statistics.diagnostic.wald" => markdown!("wald"),
+        "yssbi.statistics.diagnostic.durbin_watson" => markdown!("durbin_watson"),
+        "yssbi.statistics.diagnostic.ljung_box" => markdown!("ljung_box"),
+        "yssbi.statistics.diagnostic.hausman" => markdown!("hausman"),
+        "yssbi.statistics.timeseries.acf" => markdown!("acf"),
+        "yssbi.statistics.timeseries.pacf" => markdown!("pacf"),
+        "yssbi.statistics.timeseries.granger" => markdown!("granger"),
+        "yssbi.statistics.timeseries.irf" => markdown!("irf"),
+        "yssbi.statistics.timeseries.fevd" => markdown!("fevd"),
         "yssbi.statistics.linear.fit" => markdown!("linear_regression"),
         "yssbi.statistics.linear.summary" => markdown!("linear_regression_summary"),
         "yssbi.statistics.iv.2sls.fit" => markdown!("iv_2sls_fit"),

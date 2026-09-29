@@ -127,20 +127,6 @@ pub(super) fn implemented(id: &str) -> bool {
     SPECS.iter().any(|spec| spec.0 == id)
 }
 
-pub(super) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
-    let spec = SPECS.iter().find(|spec| spec.0 == id)?;
-    let zh = locale.to_ascii_lowercase().starts_with("zh");
-    let (en, cn) = help(id);
-    Some(
-        format!(
-            "# {}\n\n{}\n",
-            if zh { spec.2 } else { spec.1 },
-            if zh { cn } else { en }
-        )
-        .into(),
-    )
-}
-
 fn help(id: &str) -> (&'static str, &'static str) {
     match id.rsplit('.').next().unwrap_or_default() {
         "breusch_pagan" => (
@@ -160,8 +146,8 @@ fn help(id: &str) -> (&'static str, &'static str) {
             "连接已拟合线性模型，填写系数约束，例如 x1 = 0 或 x1 = x2。变量名与顺序以模型报告为准。使用既有协方差及残差自由度，单条受支持约束使用 t 检验，联合等式使用 Wald 推断。输出解析后的假设与实际结果，不重新拟合。",
         ),
         "vif" => (
-            "Connect a fitted linear model. Computes VIF and mean VIF from its original predictor design, excluding the configured intercept. This is a design diagnostic, including for GLS; it does not whiten the design or refit the response model.",
-            "连接已拟合线性模型。对原始自变量设计计算 VIF 和平均 VIF，排除已配置的截距。GLS 同样检查原始设计，不对白化后的矩阵计算，也不重新拟合因变量模型。",
+            "Connect a fitted linear model. Computes VIF and tolerance for each original predictor; the configured intercept has null entries. This is a design diagnostic, including for GLS; it does not whiten the design or refit the response model.",
+            "连接已拟合线性模型。对原始自变量设计逐列计算 VIF 和容忍度，已配置截距的结果为空。GLS 同样检查原始设计，不对白化后的矩阵计算，也不重新拟合因变量模型。",
         ),
         "leverage" => (
             "Connect an OLS or WLS model. Returns one diagonal hat-matrix value per fitted observation, preserving observation order and applying the original WLS precision weights. GLS is not supported.",

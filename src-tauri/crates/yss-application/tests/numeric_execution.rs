@@ -18,6 +18,245 @@ use yss_graph_execution::state::{
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use yss_node_kernel::RuntimeValue;
 
+#[test]
+fn theil_node_executes_individual_defaults_and_grouped_relational_means() {
+    use yss_data_contract::{DataValue, ValueType};
+    use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
+    const THEIL: &str = "yssbi.statistics.inequality.theil";
+    yss_application::session::NodeComponents::builtins().unwrap();
+    let mut document = GraphDocument::default();
+    let [source, means, weights, theil] = std::array::from_fn(|_| NodeId::new());
+    for (id, kind, parameters) in [
+        (source, "yssbi.constant.get", serde_json::json!({})),
+        (
+            means,
+            "yssbi.dataframe.series.select",
+            serde_json::json!({"column":"mean"}),
+        ),
+        (
+            weights,
+            "yssbi.dataframe.series.select",
+            serde_json::json!({"column":"population"}),
+        ),
+        (theil, THEIL, serde_json::json!({})),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: serde_json::from_value(parameters).unwrap(),
+                user_label: None,
+            },
+        );
+    }
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataFrame,
+        DataValue::String(r#"{"mean":[1,3],"population":[3,1]}"#.into()),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    for (from, output, to, input) in [
+        (source, "value", means, "dataframe"),
+        (source, "value", weights, "dataframe"),
+        (means, "series", theil, "series"),
+    ] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(from, output.parse().unwrap()),
+                input: PortAddress::declared(to, input.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    let numeric = |value| match value {
+        RuntimeValue::Scalar(TabularScalar::Float64(value)) => value.as_f64(),
+        _ => panic!("Theil must return a numeric scalar"),
+    };
+    let individual = numeric(execute(&document, THEIL).unwrap());
+    let expected = 0.25 * 0.5_f64.ln() + 0.75 * 1.5_f64.ln();
+    assert!((individual - expected).abs() < 1e-12);
+
+    let input = PortAddress::instance(theil, "weights".parse().unwrap(), PortInstanceId::new());
+    document.port_bindings.insert(
+        input.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey::new("0"),
+        },
+    );
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(weights, "series".parse().unwrap()),
+            input,
+            order: None,
+        },
+    );
+    document
+        .nodes
+        .get_mut(&theil)
+        .unwrap()
+        .parameters
+        .insert("theil_form".parse().unwrap(), serde_json::json!("grouped"));
+    let grouped = numeric(execute(&document, THEIL).unwrap());
+    assert!((grouped - 0.5 * (4.0_f64 / 3.0).ln()).abs() < 1e-12);
+    // Supplying population shares must retain both alignment and the same result.
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataFrame,
+        DataValue::String(r#"{"mean":[1,3],"population":[0.75,0.25]}"#.into()),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    assert!((numeric(execute(&document, THEIL).unwrap()) - grouped).abs() < 1e-12);
+}
+
+#[test]
+fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
+    use yss_data_contract::{DataValue, SemanticType as S, ValueType};
+    let mut document = GraphDocument::default();
+    let [constant, lag, frequency, describe, group, select, count] =
+        std::array::from_fn(|_| NodeId::new());
+    for (id, kind, parameters) in [
+        (constant, "yssbi.constant.get", serde_json::json!({})),
+        (lag, "yssbi.dataframe.timeseries.lag", serde_json::json!({})),
+        (
+            frequency,
+            "yssbi.dataframe.series.frequency",
+            serde_json::json!({}),
+        ),
+        (describe, "yssbi.dataframe.describe", serde_json::json!({})),
+        (
+            group,
+            "yssbi.dataframe.groupby",
+            serde_json::json!({"keys":["value"],"sum":["frequency"]}),
+        ),
+        (
+            select,
+            "yssbi.dataframe.series.select",
+            serde_json::json!({"column":"frequency_sum"}),
+        ),
+        (count, "yssbi.dataframe.series.sum", serde_json::json!({})),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: serde_json::from_value(parameters).unwrap(),
+                user_label: None,
+            },
+        );
+    }
+    set_constant(
+        &mut document,
+        constant,
+        ValueType::DataSeries(Box::new(ValueType::Scalar(S::Categorical))),
+        DataValue::String(r#"{"value":[2,1,2,null]}"#.into()),
+    );
+    for c in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(c).unwrap();
+    }
+    for (from, output, to, input) in [
+        (constant, "value", lag, "series"),
+        (lag, "result", frequency, "series"),
+        (frequency, "result", describe, "source"),
+        (frequency, "result", group, "source"),
+        (group, "result", select, "dataframe"),
+        (select, "series", count, "series"),
+    ] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(from, output.parse().unwrap()),
+                input: PortAddress::declared(to, input.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    let control = yss_relational_contract::RelationControl {
+        cancellation: Arc::new(AtomicBool::new(false)),
+        deadline: Instant::now() + Duration::from_secs(30),
+        max_input_bytes: 1024 * 1024,
+    };
+    assert_eq!(
+        execute(&document, "yssbi.dataframe.series.sum").unwrap(),
+        RuntimeValue::float64(4.0).unwrap()
+    );
+    let RuntimeValue::Relation(result) = execute(&document, "yssbi.dataframe.describe").unwrap()
+    else {
+        panic!("describe must produce a frame")
+    };
+    let page = result.page(0, 10, &control).unwrap();
+    assert_eq!(page.row_count, 3);
+    assert_eq!(
+        page.data.columns()[1].values()[0],
+        TabularScalar::String("Categorical".into())
+    );
+    // The single-series entry shares the same categorical summary and does not infer Numeric from codes.
+    let node = document.nodes.get_mut(&describe).unwrap();
+    node.node_type = "yssbi.dataframe.series.describe".parse().unwrap();
+    document
+        .connections
+        .retain(|_, c| c.input.node_id != describe);
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(constant, "value".parse().unwrap()),
+            input: PortAddress::declared(describe, "series".parse().unwrap()),
+            order: None,
+        },
+    );
+    let RuntimeValue::Relation(result) =
+        execute(&document, "yssbi.dataframe.series.describe").unwrap()
+    else {
+        panic!("describe must produce a frame")
+    };
+    let page = result.page(0, 10, &control).unwrap();
+    assert_eq!(page.row_count, 1);
+    assert_eq!(
+        page.data.columns()[1].values()[0],
+        TabularScalar::String("Categorical".into())
+    );
+    assert_eq!(page.data.columns()[4].values()[0], TabularScalar::Null);
+    set_constant(
+        &mut document,
+        constant,
+        ValueType::DataSeries(Box::new(ValueType::Scalar(S::Binary))),
+        DataValue::String(r#"{"value":[true,false,true,null]}"#.into()),
+    );
+    for c in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(c).unwrap();
+    }
+    let RuntimeValue::Relation(result) =
+        execute(&document, "yssbi.dataframe.series.describe").unwrap()
+    else {
+        panic!("describe must produce a frame")
+    };
+    let page = result.page(0, 10, &control).unwrap();
+    assert_eq!(
+        page.data.columns()[1].values()[0],
+        TabularScalar::String("Binary".into())
+    );
+    assert_eq!(page.data.columns()[4].values()[0], TabularScalar::Null);
+}
+
 fn analyze_document(
     document: &GraphDocument,
     graph: &GraphResourcePath,

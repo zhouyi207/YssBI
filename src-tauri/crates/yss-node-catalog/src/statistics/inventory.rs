@@ -7,10 +7,7 @@ mod entries;
 use entries::ENTRIES;
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for entry in ENTRIES
-        .iter()
-        .filter(|entry| !super::analyses::implemented(entry.id))
-    {
+    for entry in ENTRIES.iter().filter(|entry| !implemented(entry.id)) {
         catalog_entry::append(
             std::slice::from_ref(entry),
             fragment,
@@ -21,10 +18,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     Ok(())
 }
 
+fn implemented(id: &str) -> bool {
+    super::analyses::implemented(id) || id == super::descriptive::THEIL_ID
+}
+
 pub(crate) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
-    if super::analyses::implemented(id) {
-        return super::analyses::documentation(id, locale);
-    }
     catalog_entry::documentation(ENTRIES, id, locale)
 }
 
@@ -56,7 +54,7 @@ mod tests {
                 entry.id
             );
             let protocol = registered.protocol();
-            if super::super::analyses::implemented(entry.id) {
+            if implemented(entry.id) {
                 assert!(!protocol.interface.ports.is_empty());
                 continue;
             }
