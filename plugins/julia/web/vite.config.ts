@@ -10,7 +10,7 @@ export default defineConfig({
     target: "es2022",
     assetsInlineLimit: 64 * 1024 * 1024,
     cssCodeSplit: false,
-    rollupOptions: { output: { inlineDynamicImports: true } },
+    rolldownOptions: { output: { codeSplitting: false } },
   },
   test: { environment: "happy-dom" },
 });

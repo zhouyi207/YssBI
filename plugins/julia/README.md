@@ -76,6 +76,9 @@ src-tauri/crates/
 ```
 
 网页通信实现保留在 `web/src/sdk.ts`，由本插件的页面直接复用，不单独发布 npm 包。
+Bayes 服务直接调用 `tasks.start/get/cancel/result` 管理推理任务；`commands.execute`
+只承接清单中声明的模型和产物命令。网页语言资源只维护本插件的运行时与 Bayes 页面内容。
+插件图表仅维护 Bayes 使用的绘图实现；坐标点、尺寸和边距类型由 `web/src/shared/charts/core/types.ts` 统一定义。
 协议和 Rust SDK 保留原 crate 名称与路径。插件复用 `yss-math-expr` 提供纯数学解析；
 统计输入、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。平台文件替换直接使用 `atomicwrites`。
 插件不依赖任何宿主 SCI crate、项目模型、数据库适配器或数据库连接；数据通过协议授权的 Arrow 文件交换。

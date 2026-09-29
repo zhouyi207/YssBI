@@ -16,47 +16,11 @@ export function normalizeIpcError(error: unknown): IpcError {
 export function isIpcError(value: unknown): value is IpcError {
   return !!value && typeof value === "object" && "code" in value;
 }
-function task(value: unknown) {
-  const state = value as {
-    taskId: string;
-    state: string;
-    error: IpcError | null;
-    progress?: unknown;
-  };
-  const statuses: Record<string, string> = {
-    admitted: "queued",
-    running: "running",
-    cancelRequested: "cancelling",
-    succeeded: "completed",
-    failed: "failed",
-    cancelled: "cancelled",
-    outcomeUnknown: "outcome_unknown",
-  };
-  return {
-    taskId: state.taskId,
-    status: statuses[state.state],
-    progress: state.progress ?? null,
-    error: state.error,
-  };
-}
 export async function invokeCommand<T>(
   command: string,
   args: Record<string, unknown> = {},
 ): Promise<T> {
   try {
-    if (command === "submit_bayes_inference")
-      return task(
-        await request("tasks.start", {
-          taskType: "bayes.inference",
-          operationId: args.operationId,
-          parameters: args.input,
-          timeoutMs: args.timeoutMs,
-        }),
-      ) as T;
-    if (command === "get_bayes_inference_status")
-      return task(await request("tasks.get", args)) as T;
-    if (command === "cancel_bayes_inference") return await request<T>("tasks.cancel", args);
-    if (command === "read_bayes_inference_result") return await request<T>("tasks.result", args);
     return await request<T>("commands.execute", { commandId: command, args });
   } catch (error) {
     throw normalizeIpcError(error);

@@ -1,3 +1,8 @@
+export interface XYPoint {
+  x: number;
+  y: number;
+}
+
 export interface ChartMargin {
   top: number;
   right: number;

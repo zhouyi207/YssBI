@@ -1,3 +1,4 @@
+import { request } from "@/sdk";
 import { invokeCommand } from "@/services/ipc";
 import {
   parseBayesInferenceTaskDTO,
@@ -13,29 +14,52 @@ import type {
   TracePlotDataDTO,
 } from "@/shared/types/bayes";
 
+function parseTaskSnapshot(value: unknown): BayesInferenceTaskDTO {
+  if (value === null || typeof value !== "object") {
+    throw new Error("Invalid Bayes inference task response");
+  }
+  const snapshot = value as Record<string, unknown>;
+  const statuses: Record<string, BayesInferenceTaskDTO["status"]> = {
+    admitted: "queued",
+    running: "running",
+    cancelRequested: "cancelling",
+    succeeded: "completed",
+    failed: "failed",
+    cancelled: "cancelled",
+    outcomeUnknown: "outcome_unknown",
+  };
+  return parseBayesInferenceTaskDTO({
+    taskId: snapshot.taskId,
+    status: typeof snapshot.state === "string" ? statuses[snapshot.state] : undefined,
+    progress: snapshot.progress ?? null,
+    error: snapshot.error,
+  });
+}
+
 export async function submitBayesInference(
   input: BayesModelDraftDTO,
   options: { operationId: string; timeoutMs: number },
 ): Promise<BayesInferenceTaskDTO> {
-  return parseBayesInferenceTaskDTO(
-    await invokeCommand<unknown>("submit_bayes_inference", { input, ...options }),
+  return parseTaskSnapshot(
+    await request("tasks.start", {
+      taskType: "bayes.inference",
+      operationId: options.operationId,
+      parameters: input,
+      timeoutMs: options.timeoutMs,
+    }),
   );
 }
 
 export async function getBayesInferenceStatus(taskId: string): Promise<BayesInferenceTaskDTO> {
-  return parseBayesInferenceTaskDTO(
-    await invokeCommand<unknown>("get_bayes_inference_status", { taskId }),
-  );
+  return parseTaskSnapshot(await request("tasks.get", { taskId }));
 }
 
 export async function cancelBayesInference(taskId: string): Promise<void> {
-  await invokeCommand("cancel_bayes_inference", { taskId });
+  await request("tasks.cancel", { taskId });
 }
 
 export async function readBayesInferenceResult(taskId: string): Promise<InferenceResultDTO> {
-  return parseInferenceResultDTO(
-    await invokeCommand<unknown>("read_bayes_inference_result", { taskId }),
-  );
+  return parseInferenceResultDTO(await request("tasks.result", { taskId }));
 }
 
 export async function exportBayesArtifactCsv(

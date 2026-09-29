@@ -35,9 +35,6 @@ pub fn execute(
     let args = &value["args"];
     let task_id = args["taskId"].as_str().unwrap_or_default();
     let parameter = args["parameter"].as_str();
-    let encode = |value| {
-        serde_json::to_value(value).map_err(|_| PluginFailure::new("plugin_response_invalid"))
-    };
     match method {
         "export_bayes_artifact_csv" => {
             let kind = serde_json::from_value(args["kind"].clone())
@@ -92,7 +89,6 @@ pub fn execute(
             serde_json::to_value(yss_bayes_model::validate_draft(&draft))
                 .map_err(|_| PluginFailure::new("plugin_response_invalid"))
         }
-        "read_bayes_inference_result" => encode(service.result(task_id).map_err(bayes_error)?),
         "read_bayes_trace_plot_data" => serde_json::to_value(
             service
                 .trace_plot_data(
