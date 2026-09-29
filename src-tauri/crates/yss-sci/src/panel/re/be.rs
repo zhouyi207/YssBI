@@ -4,8 +4,6 @@ pub fn fit_panel_re_be(
     exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
-    _cov_type: &str,
-    _cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n {

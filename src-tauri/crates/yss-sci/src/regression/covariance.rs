@@ -28,8 +28,8 @@ pub fn compute_cov_beta(
         OlsCovariance::FixedScale { .. } => cov_fixed_scale(xtx_inv, cov_params),
         OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u, n, k),
         OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, k, df_residual),
-        OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k, df_residual),
-        OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k, df_residual),
+        OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k),
+        OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k),
         OlsCovariance::Cluster { .. } => cov_cluster(x, xtx_inv, u, cov_params),
         OlsCovariance::Hac { .. } => cov_hac(x, xtx_inv, u, n, k, cov_params),
         OlsCovariance::Newey { .. } => cov_newey(x, xtx_inv, u, n, k, df_residual, cov_params),
@@ -100,7 +100,6 @@ fn cov_hc2(
     u: &Col<f64>,
     n: usize,
     k: usize,
-    _df_residual: usize,
 ) -> Result<Mat<f64>, String> {
     let mut meat = Mat::<f64>::zeros(k, k);
     for i in 0..n {
@@ -125,7 +124,6 @@ fn cov_hc3(
     u: &Col<f64>,
     n: usize,
     k: usize,
-    _df_residual: usize,
 ) -> Result<Mat<f64>, String> {
     let mut meat = Mat::<f64>::zeros(k, k);
     for i in 0..n {

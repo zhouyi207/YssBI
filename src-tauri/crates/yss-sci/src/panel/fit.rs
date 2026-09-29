@@ -136,11 +136,11 @@ pub fn fit_panel(
         ),
         (Estimator::Between, Effects::Entity) => (
             "panel_between_entity",
-            fit_panel_re_be(&y, &x, &entities, c, cov, None),
+            fit_panel_re_be(&y, &x, &entities, c),
         ),
         (Estimator::Between, Effects::Time) => (
             "panel_between_time",
-            fit_panel_re_be_time(&y, &x, &entities, &times, c, cov, None),
+            fit_panel_re_be_time(&y, &x, &entities, &times, c),
         ),
         (Estimator::FirstDifference, Effects::Entity) => {
             if time

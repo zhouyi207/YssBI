@@ -73,6 +73,8 @@ roles in both the OLS and WLS dispatch paths.
 Panel first differences take entity IDs and original time values; they do not
 require a second time-ID vector. First-stage IV summaries derive dimensions from
 their matrices and receive covariance/estimator choices through `FirstStageOptions`.
+Between estimators use conventional covariance; the panel dispatcher validates that
+choice before calling the estimators, which take no covariance selector or parameters.
 
 VAR and VEC return `VarFit` and `VecFit`, sharing equation/coefficient statistics.
 Their `postestimation` modules compute residual serial tests and stability roots
