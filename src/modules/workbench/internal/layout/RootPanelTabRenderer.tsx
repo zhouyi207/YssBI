@@ -91,7 +91,7 @@ export function RootPanelTabRenderer({
   const Icon =
     metadata.role === "view"
       ? VIEW_ICONS[metadata.viewId]
-      : metadata.role === "result"
+      : metadata.role === "result" || metadata.role === "reference"
         ? VscPreview
         : metadata.role === "plugin"
           ? VscExtensions
@@ -140,7 +140,7 @@ export function RootPanelTabRenderer({
   const menuPanel = contextMenu && workbenchLayoutRead.getPanel(contextMenu.target.panelInstanceId);
   if (
     menuPanel &&
-    menuPanel.location.type !== "edge" &&
+    (menuPanel.location.type !== "edge" || menuPanel.metadata.role === "reference") &&
     canFloatWorkbenchPanel(menuPanel.metadata)
   ) {
     const location = menuPanel.location;
@@ -190,7 +190,9 @@ export function RootPanelTabRenderer({
       sections.push({
         items: [
           floatTab(t("tabBar.contextMenu.floatTab")),
-          ...(groupPanels.length > 1 ? [floatGroup(t("tabBar.contextMenu.floatGroup"))] : []),
+          ...(location.type !== "edge" && groupPanels.length > 1
+            ? [floatGroup(t("tabBar.contextMenu.floatGroup"))]
+            : []),
         ],
       });
     }

@@ -21,9 +21,22 @@ import { WorkbenchStatusBarContribution } from "./statusBarContributionRegistry"
 import { PluginProvider } from "./integrations/PluginProvider";
 import { useResultPanelLeases } from "@/features/application/results/useResultPanelLeases";
 import { useUiIntents } from "@/features/application/presentation/useUiIntents";
+import { openReferenceLink } from "@/features/application/editor/openReferenceLink";
+import { MarkdownLinkContext } from "@/shared/ui/MarkdownLink";
+
+const ReferenceDocumentationOverlay: WorkbenchOverlayRegistry["nodeDocumentation"] = (props) => (
+  <MarkdownLinkContext
+    value={async (url, title) => {
+      await openReferenceLink(url, title);
+      props.onOpenChange(false);
+    }}
+  >
+    <NodeDocumentationModal {...props} />
+  </MarkdownLinkContext>
+);
 
 const overlayRegistry = {
-  nodeDocumentation: NodeDocumentationModal,
+  nodeDocumentation: ReferenceDocumentationOverlay,
 } satisfies WorkbenchOverlayRegistry;
 
 const dragOverlay = <ActivityEditorDndOverlay />;
@@ -44,21 +57,23 @@ function WorkbenchReadyComposition() {
   useUiIntents();
 
   return (
-    <PluginProvider>
-      <WorkbenchWindow
-        panelRegistry={rootPanelRegistry}
-        tabComponent={rootPanelTabRenderer}
-        dndCoordinator={dndCoordinator}
-        onActiveEditorPanelChange={panelActivationCoordinator}
-        onClosePanels={closePanels}
-        layoutTheme={resolveYssbiLayoutTheme(themeMode)}
-        watermarkComponent={WatermarkView}
-        menuBar={<WorkbenchMenuContribution commands={commands} />}
-        statusBar={statusBar}
-        dragOverlay={dragOverlay}
-        overlays={overlayRegistry}
-      />
-    </PluginProvider>
+    <MarkdownLinkContext value={openReferenceLink}>
+      <PluginProvider>
+        <WorkbenchWindow
+          panelRegistry={rootPanelRegistry}
+          tabComponent={rootPanelTabRenderer}
+          dndCoordinator={dndCoordinator}
+          onActiveEditorPanelChange={panelActivationCoordinator}
+          onClosePanels={closePanels}
+          layoutTheme={resolveYssbiLayoutTheme(themeMode)}
+          watermarkComponent={WatermarkView}
+          menuBar={<WorkbenchMenuContribution commands={commands} />}
+          statusBar={statusBar}
+          dragOverlay={dragOverlay}
+          overlays={overlayRegistry}
+        />
+      </PluginProvider>
+    </MarkdownLinkContext>
   );
 }
 

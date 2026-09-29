@@ -34,6 +34,7 @@ import {
   type EnsureViewRequest,
   type EnsurePluginViewRequest,
   type OpenEditorRequest,
+  type OpenReferenceRequest,
   type UpsertResultRequest,
   type MoveWorkbenchPanelRequest,
   type SplitWorkbenchPanelRequest,
@@ -253,6 +254,19 @@ export class WorkbenchModelOperations {
       request.index,
     );
   };
+  openReference = (request: OpenReferenceRequest): WorkbenchPanelInfo => {
+    const metadata = { role: "reference" as const, ...request };
+    if (!isWorkbenchPanelMetadata(metadata))
+      throw new WorkbenchLayoutError("invalid_panel_metadata");
+    const existing = this.listPanels().find(
+      (panel) => panel.metadata.role === "reference" && panel.metadata.url === request.url,
+    );
+    if (existing) {
+      this.reveal(existing.panelInstanceId);
+      return this.getPanel(existing.panelInstanceId)!;
+    }
+    return this.add(metadata, request.title, "border_" + WORKBENCH_HOME_LOCATION.reference);
+  };
   upsertResult = (request: UpsertResultRequest): WorkbenchPanelInfo => {
     const key = resultReferenceKey(request.reference);
     const existing = this.listPanels().find(
@@ -383,7 +397,10 @@ export class WorkbenchModelOperations {
       !tab ||
       !metadata ||
       !canFloatWorkbenchPanel(metadata) ||
-      !(tab.getParent() instanceof TabSetNode)
+      !(
+        tab.getParent() instanceof TabSetNode ||
+        (metadata.role === "reference" && tab.getParent() instanceof BorderNode)
+      )
     )
       return false;
     this.model.doAction(Actions.popoutTab(id, "float"));

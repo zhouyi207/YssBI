@@ -5,6 +5,7 @@ import type {
   EditorPanelMetadata,
   EditorResourceKind,
   ResultPanelMetadata,
+  ReferencePanelMetadata,
   WorkbenchComponentId,
   WorkbenchPanelMetadata,
   WorkbenchViewId,
@@ -99,6 +100,7 @@ export interface EnsureViewRequest {
 export type EnsurePluginViewRequest = Omit<PluginPanelMetadata, "role">;
 
 export type UpsertResultRequest = Omit<ResultPanelMetadata, "role">;
+export type OpenReferenceRequest = Omit<ReferencePanelMetadata, "role">;
 
 export type WorkbenchLayoutErrorCode =
   | "layout_not_ready"
@@ -145,6 +147,7 @@ export interface WorkbenchLayoutReadContract {
 export interface WorkbenchLayoutControlContract {
   ensureCentralGroup(): Promise<string>;
   openEditor(request: OpenEditorRequest): Promise<WorkbenchPanelInfo>;
+  openReference(request: OpenReferenceRequest): Promise<WorkbenchPanelInfo>;
   ensureView(request: EnsureViewRequest): Promise<WorkbenchPanelInfo>;
   upsertResult(request: UpsertResultRequest): Promise<WorkbenchPanelInfo>;
   replaceResult(

@@ -276,6 +276,7 @@ export function createWorkbenchLayoutRuntime(): {
   const control: WorkbenchLayoutControlContract = {
     ensureCentralGroup: () => mutate((model) => model.ensureCentralGroup()),
     openEditor: (request) => mutate((model) => model.openEditor(request)),
+    openReference: (request) => mutate((model) => model.openReference(request)),
     ensureView: (request) => mutate((model) => model.ensureView(request)),
     upsertResult: (request) => mutate((model) => model.upsertResult(request)),
     replaceResult: (expected, request) => mutate((model) => model.replaceResult(expected, request)),

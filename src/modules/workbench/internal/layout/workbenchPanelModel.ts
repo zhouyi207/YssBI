@@ -1,4 +1,5 @@
 import { RESOURCE_KINDS } from "@/shared/types/domain/resource";
+import { parseReferenceUrl } from "@/shared/utils/referenceUrl";
 import {
   isResultPlotKind,
   isResultReference,
@@ -36,6 +37,7 @@ export type WorkbenchComponentId =
   | "Details"
   | "Assistant"
   | "Result"
+  | "Reference"
   | "Logs"
   | "Output"
   | "Problems";
@@ -64,10 +66,16 @@ export type PluginPanelMetadata = {
   readonly title: string;
   readonly location: "sidebar" | "editor";
 };
+export type ReferencePanelMetadata = {
+  readonly role: "reference";
+  readonly url: string;
+  readonly title: string;
+};
 export type WorkbenchPanelMetadata =
   | EditorPanelMetadata
   | ViewPanelMetadata
   | ResultPanelMetadata
+  | ReferencePanelMetadata
   | PluginPanelMetadata;
 
 export interface WorkbenchPanelParams extends Record<string, unknown> {
@@ -173,6 +181,13 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
   if (!isRecord(value) || typeof value.role !== "string") return false;
 
   switch (value.role) {
+    case "reference":
+      return (
+        hasKnownKeys(value, ["role", "url", "title"]) &&
+        isNonEmptyString(value.url) &&
+        parseReferenceUrl(value.url)?.href === value.url &&
+        isNonEmptyString(value.title)
+      );
     case "plugin":
       return (
         hasKnownKeys(value, ["role", "pluginId", "viewId", "title", "location"]) &&
@@ -215,6 +230,7 @@ export function componentForWorkbenchMetadata(
 ): WorkbenchComponentId {
   if (metadata.role === "editor") return "EditorResource";
   if (metadata.role === "result") return "Result";
+  if (metadata.role === "reference") return "Reference";
   if (metadata.role === "plugin") return "Plugin";
   return COMPONENT_BY_VIEW_ID[metadata.viewId];
 }

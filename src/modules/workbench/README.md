@@ -196,6 +196,7 @@ bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标�
 | `view:details`   | permanent fixed Details                   | right edge index 0                  |
 | `view:assistant` | movable/closable Assistant                | right edge index 1 on default/reset |
 | `result`         | 一个可检查结果                            | right edge                          |
+| `reference`      | Markdown 外部文献或网页                   | right edge                          |
 | `view:logs`      | Logs workspace                            | bottom edge                         |
 | `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
 | `view:problems`  | Graph Problems                            | bottom edge                         |
@@ -229,6 +230,7 @@ main Logs 的布局由 logsRuntime 在挂载时交给真实 Model，卸载时保
 editor → { role, resourceRef, resourceKind }
 view   → { role, viewId }
 result → { role, reference, leaseId, title, presentation }
+reference → { role, url, title }
 ```
 
 以下 identity 永远分离：
@@ -254,6 +256,8 @@ Singleton 与 multi-instance contract：
 - 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
 Result panel 固定读取 `reference`，不订阅 pin 的当前结果。删除来源节点或重新运行不会清空已打开的报告。
+
+Markdown 文献通过 `openReference` 在右侧打开独立 `Reference` 标签，同一规范化 HTTP(S) URL（含查询及片段）复用已有标签。标签支持现有关闭、分屏、拖动与窗口内浮动，右侧文献标签可通过右键菜单直接浮动，reset 将其放回右侧。内容由 Document editors 的 `ReferencePanel` 渲染，Workbench 仅拥有布局与 URL/title metadata。文献不绑定项目、不持有结果租约；项目切换保留它，窗口持久化时移除它以避免恢复时自动联网。
 Report 的显式“添加并计算”是引用更新入口：Results 先取得新结果租约，再通过 `replaceResult(expected, request)` 在同一个物理面板上更新引用与租约；原面板已关闭或引用已变则拒绝。新引用已有面板时复用并 reveal，释放重复取得的临时租约。替换后仍由真实面板集合对账旧租约，移动、隐藏和重新挂载不回退到旧结果。
 Application 的结果租约控制器订阅完成 hydration 后的真实面板集合，按 `leaseId` 与后端对账；切换标签、移动、重置布局保留持有关系，真实关闭才释放。
 跨窗口交接和后端窗口销毁负责独立报告的租约生命周期，详见 [Graph 与 Execution](../../features/application/results/README.md#results)。
@@ -263,7 +267,7 @@ Application 的结果租约控制器订阅完成 hydration 后的真实面板集
 
 布局实现位于 src/modules/workbench/internal/layout/：
 
-- workbenchLayoutOperations.ts 在原生 Model 上执行 openEditor、ensureView、upsertResult、activate、reveal、move、split、边栏调整和资源重映射。
+- workbenchLayoutOperations.ts 在原生 Model 上执行 openEditor、openReference、ensureView、upsertResult、activate、reveal、move、split、边栏调整和资源重映射。
 - workbenchRead.ts 与 workbenchControl.ts 提供业务侧查询和语义命令；调用方不持有可写 Model。
 - workbenchRootBinding.ts 只为 RootLayoutHost 创建渲染绑定，并接收原生布局动作与面板激活请求。
 - workbenchLayoutInternal.ts 拥有 FIFO、hydration gate、操作代际、关闭提交和复合事务。

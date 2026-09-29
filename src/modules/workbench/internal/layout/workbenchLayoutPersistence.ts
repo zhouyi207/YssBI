@@ -55,12 +55,14 @@ export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
           ? "view:" + metadata.viewId
           : metadata.role === "plugin"
             ? "plugin:" + metadata.pluginId + ":" + metadata.viewId
-            : metadata.role === "result"
-              ? "result:" +
-                metadata.reference.executionSessionId +
-                ":" +
-                metadata.reference.resultId
-              : undefined;
+            : metadata.role === "reference"
+              ? "reference:" + metadata.url
+              : metadata.role === "result"
+                ? "result:" +
+                  metadata.reference.executionSessionId +
+                  ":" +
+                  metadata.reference.resultId
+                : undefined;
       if (key && identities.has(key)) return false;
       if (key) identities.add(key);
       return true;
@@ -154,7 +156,10 @@ export function parsePersistedWorkbenchLayout(
   };
 }
 export function prepareRootLayoutForPersistence(layout: IJsonModel): IJsonModel {
-  return withoutPanels(layout, (metadata) => metadata.role === "result");
+  return withoutPanels(
+    layout,
+    (metadata) => metadata.role === "result" || metadata.role === "reference",
+  );
 }
 export function scrubProjectScopedRootLayout(layout: IJsonModel): IJsonModel {
   return withoutPanels(

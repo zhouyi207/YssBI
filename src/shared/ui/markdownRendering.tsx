@@ -6,6 +6,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { logger } from "@/features/application/observability/appLogger";
 import "katex/dist/katex.min.css";
+import { MarkdownLink } from "./MarkdownLink";
 
 function remarkMathLayout() {
   return (tree: Root, file: { toString(): string }) => {
@@ -38,6 +39,7 @@ export const markdownRemarkPlugins: NonNullable<Options["remarkPlugins"]> = [
 ];
 const REHYPE_PLUGINS: NonNullable<Options["rehypePlugins"]> = [rehypeKatex];
 export const markdownComponents: Components = {
+  a: MarkdownLink,
   table: ({ children }) => (
     <div className="markdown-table-scroll" tabIndex={0}>
       <table>{children}</table>

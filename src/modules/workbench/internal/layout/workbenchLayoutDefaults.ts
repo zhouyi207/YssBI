@@ -15,6 +15,7 @@ export const WORKBENCH_HOME_LOCATION = {
   details: "right",
   assistant: "right",
   result: "right",
+  reference: "right",
   logs: "bottom",
   output: "bottom",
   problems: "bottom",

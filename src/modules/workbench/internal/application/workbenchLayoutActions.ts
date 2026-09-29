@@ -347,7 +347,9 @@ export async function resetWorkbenchLayout(): Promise<void> {
         });
       }
 
-      const results = ordered.filter((panel) => panel.metadata.role === "result");
+      const results = ordered.filter(
+        (panel) => panel.metadata.role === "result" || panel.metadata.role === "reference",
+      );
       for (const [index, panel] of results.entries()) {
         tx.move({
           panelInstanceId: panel.panelInstanceId,

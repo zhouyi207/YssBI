@@ -140,6 +140,7 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["com
     return "EditorResource";
   }
   if (metadata.role === "result") return "Result";
+  if (metadata.role === "reference") return "Reference";
   if (metadata.role === "plugin") return "Plugin";
   return (
     {
@@ -170,7 +171,7 @@ function panel(
     title:
       metadata.role === "view"
         ? metadata.viewId
-        : metadata.role === "result" || metadata.role === "plugin"
+        : metadata.role === "result" || metadata.role === "plugin" || metadata.role === "reference"
           ? metadata.title
           : metadata.resourceRef,
     metadata,

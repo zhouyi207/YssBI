@@ -7,6 +7,7 @@ import { DetailsPane } from "@/modules/details/public";
 import { nodeCatalogActivityPanelContribution } from "@/modules/node-catalog/public";
 import { projectActivityPanelContribution } from "@/modules/project-explorer/public";
 import { ResultPanel } from "@/modules/results/public";
+import { ReferencePanel } from "@/modules/document-editor/public";
 import { GraphProblemsPanel } from "@/modules/problems/public";
 import { RunFailurePanel } from "@/modules/output/public";
 import {
@@ -68,6 +69,13 @@ const ResultDockPanel: RootPanelComponent = ({ params }) => {
   return metadata.role === "result" ? <ResultPanel reference={metadata.reference} /> : null;
 };
 
+const ReferenceDockPanel: RootPanelComponent = ({ params }) => {
+  const { metadata } = params;
+  return metadata.role === "reference" ? (
+    <ReferencePanel url={metadata.url} title={metadata.title} />
+  ) : null;
+};
+
 export const rootPanelRegistry = {
   EditorResource: RegisteredEditorPanel,
   Project: projectActivityPanelContribution,
@@ -78,6 +86,7 @@ export const rootPanelRegistry = {
   Details: DetailsPane,
   Assistant: AssistantPanel,
   Result: ResultDockPanel,
+  Reference: ReferenceDockPanel,
   Logs: MainLogsDockPanel,
   Output: RunFailurePanel,
   Problems: GraphProblemsPanel,

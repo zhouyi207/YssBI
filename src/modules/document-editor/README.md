@@ -1,7 +1,7 @@
 # Document editors
 
 > Status: Current
-> Scope: Mind and Markdown editors, transient input buffers and resource integration
+> Scope: Mind and Markdown editors, external reference previews, transient input buffers and resource integration
 > Canonical owners: This module owns document canvases; Details owns property forms; Application resource actions own commands; Rust Project owns current documents
 > Update when: Editor interaction, resource operations or projection ownership changes
 
@@ -87,6 +87,28 @@ views, with explicit language imports for common web, scripting and data languag
 Code remains readable before loading, and unsupported languages remain plain text.
 Inline code keeps Typography's code styling without decorative backticks;
 literal backticks inside code remain part of the content.
+
+Shared `MarkdownLink` prevents native click and middle-click navigation and delegates
+HTTP(S) links through `MarkdownLinkContext`. Workbench composition supplies
+`openReferenceLink`, which opens/reuses a right-side reference tab without replacing
+the application WebView; the node-help modal closes after the panel opens successfully.
+Outside the workbench, links use the existing system-browser opener. Assistant retains
+its existing external-browser link handler. Unsupported schemes are rendered as text.
+
+`ReferencePanel` owns only document presentation: a URL/title, reload and browser-open
+controls, and an independent frame. Web pages are sandboxed without top-navigation
+permission. Remote `.pdf` URLs are fetched using CORS without credentials, bounded
+by `MAX_REFERENCE_PDF_BYTES` in `services/platform/referencePdf.ts`, and checked for
+a PDF header before receiving a local Blob URL. The native PDF viewer displays that
+Blob without an HTML sandbox, which would block native PDF plugins. This supports
+PDF hosts such as the World Bank that allow CORS while denying direct frame embedding.
+Reload/unmount aborts pending reads and revokes Blob URLs. Query strings and PDF page
+fragments remain intact. The browser-open action stays available for hosts that disallow
+CORS/embedding, downloads beyond the preview budget or platforms without native PDF
+support; iframe load events cannot reliably diagnose display failures and are not
+reported as successful previews.
+Reference tabs use the existing workbench float/close/drag actions and are not restored
+when the window reopens. They do not create project resources or document drafts.
 Wide tables, code blocks and display formulas scroll within the reading column.
 Tables size to their content and stay centered within the available column width.
 Table scroll containers have no decorative frame; spacing belongs outside the
@@ -178,3 +200,8 @@ Manual acceptance on the desktop:
 6. Create, read, edit, save and open Mind/Doc through Assistant; verify the project tree,
    editor contents and Details refresh from committed resource events. Repeat with a
    pending UI text buffer and verify a stale edit cannot silently overwrite it.
+7. Open the Theil World Bank PDF link from Details and the node-help modal. Verify the
+   workbench remains present, the modal closes after opening, and the reference tab can
+   close, float, resize and dock. Reopen the same link to verify reuse. Test reload,
+   the system-browser action, and a website that rejects frames. Reset returns the
+   reference to the right side; restarting the window does not reload external pages.
