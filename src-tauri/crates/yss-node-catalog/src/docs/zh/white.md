@@ -1,46 +1,26 @@
 # White 异方差检验
 
-连接 OLS 或 WLS 的 `model`，检验误差方差是否随原解释变量、平方项及交叉项变化。无配置参数，复用原拟合样本；不支持 GLS。
+连接 OLS 或 WLS 的 `model`，检查误差方差是否随解释变量、平方项及交叉项变化。无配置参数；不支持 GLS，原模型应含截距和至少一个解释变量。
 
-## 假设与计算公式
+## 假设与公式
 
-**原假设 $H_0$：** 误差同方差；下述辅助方程中非常数项系数联合为零。
+- **原假设 $H_0$：** 同方差，平方残差辅助方程的非常数系数全为零。
+- **备择假设 $H_1$：** 至少一个系数非零，存在这些项可解释的异方差。
 
-**备择假设 $H_1$：** 至少一个非常数项系数不为零，误差方差存在这些项可解释的变化。
-
-设原设计为 $X=[\mathbf1,x_1,\ldots,x_p]$，拟合残差为 $u_i$，样本量为 $n$。构造
-
-$$
-Z=[X,x_1^2,\ldots,x_p^2,x_1x_2,\ldots,x_{p-1}x_p],
-\qquad v_i=u_i^2.
-$$
-
-将 $v$ 对 $Z$ 作 OLS 辅助回归，得到 $\hat v$。定义
+将平方残差对原解释变量及其平方、两两交叉项组成的 $Z$ 回归：
 
 $$
-R_{\mathrm{aux}}^2
-=1-\frac{\sum_i(v_i-\hat v_i)^2}{\sum_i(v_i-\bar v)^2},
-\qquad LM=nR_{\mathrm{aux}}^2,\quad q=\operatorname{rank}(Z)-1,
+LM=nR_{\mathrm{aux}}^2,\qquad
+q=\operatorname{rank}(Z)-1,\qquad
+LM\overset{H_0}{\approx}\chi_q^2.
 $$
 
-$$
-LM\overset{H_0}{\approx}\chi_q^2,\qquad p=1-F_{\chi_q^2}(LM).
-$$
+$n$ 为拟合样本数，$R_{\mathrm{aux}}^2$ 为辅助回归的中心化决定系数。自由度使用有效秩，重复项不重复计数。
 
-使用有效秩确定自由度，因此虚拟变量的 $D^2=D$、重复交叉项不会重复计算自由度。理论说明见 [statsmodels White 检验](https://www.statsmodels.org/stable/generated/statsmodels.stats.diagnostic.het_white.html)。
-
-## WLS 与适用条件
-
-WLS 使用 $v_i=w_i u_i^2$，其中 $w_i$ 为原模型的正精度权重；仍将 $v$ 对原始 $Z$ 作**无权重**辅助回归，再使用相同的 $nR^2$。此时检查的是加权误差平方的方差模式，应结合权重对应的方差设定理解原假设。
-
-当前展开方式按设计第一列为截距构造，使用前应保证原模型含截距。要求至少一个非常数解释变量，且 $n$ 大于展开后的总列数 $1+2p+p(p-1)/2$；样本门槛在有效秩缩减前检查。奇异列通过截断 SVD 处理，非有限计算会失败。平方残差无变动时按 $R^2=0$ 处理。
-
-该检验不要求误差正态，但依赖独立性、正确的条件均值及适当矩条件；不会因为原模型使用稳健协方差而自动成为聚类或序列相关稳健检验。
+WLS 将被解释量改为 $w_i u_i^2$，仍对原 $Z$ 作无权重辅助回归；$w_i$ 为原精度权重，$u_i$ 为残差。样本数须大于完整展开后的列数。
 
 ## 输出与判读
 
-`result` 与 `report` 相同：`test=white`，内层 `result` 包含 `lm_stat`、`df`、`p_value`。
+`result`、`report` 相同，`test=white`，内层 `result` 含 `lm_stat`、`df`、`p_value`。p 值取卡方右尾；$p<\alpha$ 拒绝同方差，未拒绝只表示证据不足。
 
-预设 $\alpha$ 后，$p<\alpha$ 拒绝同方差；否则只是证据不足。例如只有一个解释变量 $x$ 时，辅助方程含 $1,x,x^2$，一般自由度为 2；若 $x$ 是 0/1 变量，$x^2=x$，有效自由度变为 1。
-
-White 能检查比仅使用拟合值的 BP 更丰富的方差模式，但展开项多，可能损失检验力。拒绝也可能反映均值模型设定问题；不拒绝不能证明不存在异方差。
+方法细节：[White 检验](https://www.statsmodels.org/stable/generated/statsmodels.stats.diagnostic.het_white.html)。

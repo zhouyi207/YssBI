@@ -1,37 +1,23 @@
 # VAR 预测误差方差分解
 
-连接 VAR Fit 的 `model`，将每个变量的预测误差方差分解为各正交创新的贡献比例。`steps` 范围 1–1000，默认 8，不重新拟合模型。
+连接 VAR Fit 的 `model`，分解各正交创新对预测误差方差的贡献比例。`steps` 范围 1–1000，默认 8。
 
 ## 计算公式
 
-设变量数为 $K$、最大拟合滞后为 $p$、滞后矩阵为 $A_\ell$，创新协方差为 $\Sigma$，按拟合变量顺序取下三角分解 $\Sigma=GG'$。定义
-
 $$
-\Phi_0=I_K,\qquad
-\Phi_s=\sum_{\ell=1}^{\min(s,p)}A_\ell\Phi_{s-\ell},
-\qquad \Theta_s=\Phi_sG.
-$$
-
-未包含的滞后矩阵按零处理。对真正的 $h$ 步预测（$h\geq1$），
-
-$$
-\Omega(h)=\sum_{s=0}^{h-1}\Theta_s\Theta_s',\qquad
 \mathrm{FEVD}_{ij}(h)=
-\frac{\sum_{s=0}^{h-1}(\Theta_s)_{ij}^2}{\Omega_{ii}(h)}.
+\frac{\sum_{s=0}^{h-1}(\Theta_s)_{ij}^2}
+{\sum_{s=0}^{h-1}\sum_{j=1}^{K}(\Theta_s)_{ij}^2}.
 $$
 
-$\Omega_{ii}(h)$ 是变量 $i$ 的 $h$ 步预测误差方差，分子是正交创新 $j$ 的贡献。非退化时各比例位于 0–1，每个响应变量对所有冲击的贡献之和为 1。背景见 [statsmodels VAR 方差分解](https://www.statsmodels.org/stable/vector_ar.html#forecast-error-variance-decomposition-fevd)。
+$\Theta_s$ 为 VAR 的第 $s$ 期正交脉冲响应矩阵，$K$ 为变量数，$h$ 为预测步数。结果表示冲击 $j$ 对变量 $i$ 的预测误差方差贡献；各冲击的比例通常合计为 1。
 
-## 输出索引与示例
+## 输出与判读
 
-`result` 和 `report` 相同，含 `fevd[s][i][j]`，维度为 `(steps+1) × K × K`，依次是**累计索引、响应变量、冲击变量**。变量顺序沿用拟合模型。
+`result`、`report` 相同，`fevd[s][i][j]` 依次表示**累计索引、响应变量、冲击变量**，维度为 `(steps+1) × K × K`。
 
-**当前数组索引 $s$ 累计 $\Theta_0,\ldots,\Theta_s$，对应上述真正预测步数 $h=s+1$。** 因此 `fevd[0]` 是一步预测误差分解，`fevd[steps]` 对应 `steps+1` 步；不要把第 0 项理解为零步预测。
+**数组索引 $s$ 对应预测步数 $h=s+1$**：`fevd[0]` 是一步预测误差分解，`fevd[steps]` 对应 `steps+1` 步。数值为比例，0.25 表示 25%；正负响应方向应查看 IRF。
 
-例如 `fevd[3][0][1]=0.25`，表示第 2 个正交创新贡献第 1 个变量**四步**预测误差方差的 25%，不是第 1 个变量观测值或长期变化的 25%。FEVD 通过平方响应计算，不保留正负方向；方向应查看 IRF。
+正交化使用拟合变量顺序的 Cholesky 分解，结果依赖该顺序，创新协方差须正定。节点不提供置信区间或 p 值，也不自动验证模型稳定性。
 
-## 适用条件与限制
-
-正交化采用 Cholesky 递归识别，因此结果依赖变量顺序，需要结合实质识别假设解释。创新协方差必须正定；不稳定 VAR 的长期分解没有通常的稳定动态含义，节点不自动证明模型稳定。若某行累计方差不大于 $10^{-300}$，当前用本变量贡献 1、其他贡献 0 的约定填充，不应作为实质分解证据。
-
-FEVD 是后估计分解，**没有原假设、备择假设、p 值或置信区间输出**，比例大小也不是显著性判定。当前给出估计参数下的点分解，不计参数估计不确定性。无效模型、无法完成 Cholesky 分解或超出计算预算会失败。
+方法细节：[VAR 方差分解](https://www.statsmodels.org/stable/vector_ar.html#forecast-error-variance-decomposition-fevd)。

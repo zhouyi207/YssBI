@@ -1,36 +1,23 @@
 # VAR 正交脉冲响应
 
-连接 VAR Fit 的 `model`，计算一个正交创新冲击对各变量之后各期的影响。`steps` 范围 1–1000，默认 8，输出冲击当期 0 到 `steps` 期；不重新拟合模型。
+连接 VAR Fit 的 `model`，计算一个标准差正交创新冲击对各变量的逐期响应。`steps` 范围 1–1000，默认 8，输出第 0 到 `steps` 期。
 
 ## 计算公式
 
-设拟合 VAR 的最大滞后为 $p$，滞后系数矩阵为 $A_1,\ldots,A_p$，未包含的滞后矩阵按零处理，创新协方差为 $\Sigma$。移动平均系数递推为
-
 $$
-\Phi_0=I_K,\qquad
-\Phi_s=\sum_{\ell=1}^{\min(s,p)}A_\ell\Phi_{s-\ell}.
-$$
-
-对 $\Sigma$ 作下三角 Cholesky 分解，再计算正交响应：
-
-$$
-\Sigma=GG',\qquad u_t=G\varepsilon_t,\quad
-\operatorname{Var}(\varepsilon_t)=I_K,\qquad
-\Theta_s=\Phi_sG.
+\Phi_0=I,\qquad
+\Phi_s=\sum_{\ell=1}^{\min(s,p)}A_\ell\Phi_{s-\ell},
+\qquad \Sigma=GG',\qquad \Theta_s=\Phi_sG.
 $$
 
-$K$ 是变量数；$(\Theta_s)_{ij}$ 表示第 $j$ 个单位方差正交创新发生一个标准差冲击后，第 $i$ 个变量在 $s$ 期后的响应，单位与响应变量相同。这是逐期水平响应，没有累计求和。方法说明见 [statsmodels VAR 脉冲响应](https://www.statsmodels.org/stable/vector_ar.html#impulse-response-analysis)。
+$A_\ell$ 为拟合 VAR 的滞后系数矩阵，$p$ 为最大滞后，未纳入的滞后按零处理；$G$ 为创新协方差 $\Sigma$ 的下三角 Cholesky 因子，$\Theta_s$ 为第 $s$ 期正交响应。
 
-## 变量顺序与识别
+## 输出与判读
 
-$G$ 的下三角结构采用拟合时的变量顺序。排在后面的正交冲击对排在前面的变量当期响应为零；改变顺序通常改变结果。该递归识别假设需要实质依据，正交化本身不建立经济上的因果识别。模型中的确定性项和外生路径保持不变，响应仅由动态系数及创新协方差决定。
+`result`、`report` 相同，`oirf[s][i][j]` 依次表示**期数、响应变量、冲击变量**，维度为 `(steps+1) × K × K`，$K$ 为变量数。第 0 期为冲击当期，`oirf[0]` 等于 $G$。
 
-## 输出与示例
+响应单位与响应变量相同，为逐期值，不是累计值。变量顺序沿用拟合模型，改变顺序通常改变正交响应；创新协方差必须正定。
 
-`result`、`report` 相同，包含 `oirf[s][i][j]`，维度为 `(steps+1) × K × K`，依次为**期数、响应变量、冲击变量**，变量名称顺序沿用模型。`oirf[0]` 等于 $G$，不是单位矩阵。
+节点输出点估计，不提供置信区间或 p 值，也不自动验证 VAR 稳定性。
 
-例如 `oirf[2][0][1]=0.3` 表示第 2 个正交创新的一个标准差正向冲击，使第 1 个变量在两期后增加 0.3 个自身单位；不是 30% 的概率，也不是自动按百分比计量。
-
-这是后估计响应函数，**没有原假设、备择假设或 p 值**；当前不输出置信区间、显著性检验或自助法误差带。即使点估计为正，也不能据此声称显著为正。
-
-要求创新协方差正定以完成 Cholesky 分解，否则失败。稳定 VAR 支持通常的衰减和长期解释；本节点不会自动通过稳定性检验，不稳定模型的有限期响应即使能计算也可能不断增大。较长时域和较多变量也会受到计算预算限制。
+方法细节：[VAR 脉冲响应](https://www.statsmodels.org/stable/vector_ar.html#impulse-response-analysis)。
