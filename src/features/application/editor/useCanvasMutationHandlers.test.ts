@@ -14,7 +14,6 @@ vi.mock("@/features/application/observability/appLogger", () => ({
     graph: { warn: graphWarn },
   },
 }));
-vi.mock("@/app/i18n", () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
 
 describe("canvas mutation application wiring", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -67,7 +66,7 @@ describe("canvas mutation application wiring", () => {
     });
   });
 
-  it("adapts application error codes to a safe core outcome", async () => {
+  it("reports rejected graph operations without exposing domain errors in logs", async () => {
     executeGraphEdit.mockResolvedValueOnce({
       status: "rejected",
       code: "graph_connection_type_mismatch",
@@ -82,16 +81,15 @@ describe("canvas mutation application wiring", () => {
     });
     expect(outcome).toEqual({
       status: "failed",
-      message: "localized:canvas.connection.errors.graph_connection_type_mismatch",
     });
 
-    if (outcome.status === "failed" && outcome.message) {
+    if (outcome.status === "failed") {
       handlers.reportMutationFailure({
         graphPath: "events/main",
         intent: "connect",
-        message: outcome.message,
       });
     }
+    expect(graphWarn).toHaveBeenCalledOnce();
     expect(JSON.stringify(graphWarn.mock.calls)).not.toContain("graph_connection_type_mismatch");
   });
 });

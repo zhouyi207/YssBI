@@ -21,6 +21,8 @@ import {
 } from "@xyflow/react";
 import type { EditorCanvasSession, GraphContextMenuActions } from "@/features/application/editor";
 import { useGraphRead } from "@/features/core/graph/read";
+import { useConnectionCandidates } from "@/features/application/graphEditing/useConnectionCandidates";
+import type { ConnectionIntent } from "@/shared/types/domain/connectionCandidates";
 import {
   EDITOR_VIEWPORT_SCALE_LIMITS,
   type EditorViewport,
@@ -39,11 +41,9 @@ import {
   buildGraphFlowModel,
   projectFlowInteraction,
   type FlowInteractionProjection,
-  resolveFlowConnection,
   resolveFlowPinAction,
   type GraphFlowNode as FlowNode,
   type GraphFlowEdge as FlowEdge,
-  type FlowConnectionIntent,
   type GraphFlowModel,
 } from "./graphFlowModel";
 import "@xyflow/react/dist/base.css";
@@ -127,13 +127,13 @@ function GraphFlowRuntime({
   const connection = useRef<{
     lease: GestureLease;
     sourceId: string;
-    intent: FlowConnectionIntent;
+    intent: ConnectionIntent;
     start: { x: number; y: number };
     submitted: boolean;
   } | null>(null);
   const [connectionSource, setConnectionSource] = useState<{
     sourceId: string;
-    intent: FlowConnectionIntent;
+    intent: ConnectionIntent;
   } | null>(null);
   const [edgeMenu, setEdgeMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const beforeEdgeClick = useRef<{
@@ -221,18 +221,26 @@ function GraphFlowRuntime({
     : undefined;
   const pendingSource = pendingSourceId ? model.pins[pendingSourceId] : undefined;
   const sourceId = connectionSource?.sourceId ?? pendingSourceId;
+  const candidates = useConnectionCandidates({
+    graphPath,
+    sourcePort: sourceId ? (model.pins[sourceId]?.address ?? null) : null,
+    intent: connectionSource?.intent ?? "connect",
+    enabled: interactive && !!sourceId,
+  });
+  const candidatesRef = useRef(candidates);
+  candidatesRef.current = candidates;
   const [connectionStore] = useState(createGraphFlowInteractionStore);
   const previousFeedback = useRef<FlowInteractionProjection | undefined>(undefined);
   const feedback = useMemo(() => {
     const next = projectFlowInteraction(
       model,
       sourceId,
-      connectionSource?.intent ?? "connect",
+      candidates.decisions,
       previousFeedback.current,
     );
     previousFeedback.current = next;
     return next;
-  }, [model, sourceId, connectionSource?.intent]);
+  }, [model, sourceId, candidates.decisions]);
   const targetId = useConnection((connection) => connection.toHandle?.id ?? null);
   const connectionState = useMemo(() => {
     const target = targetId ? feedback.pins[targetId]?.feedback : null;
@@ -301,7 +309,6 @@ function GraphFlowRuntime({
           interaction.mutations.reportMutationFailure({
             graphPath,
             intent: "moveNodes",
-            message: outcome.message,
           });
       })
       .catch(() => interaction.mutations.reportMutationFailure({ graphPath, intent: "moveNodes" }))
@@ -426,12 +433,13 @@ function GraphFlowRuntime({
       const target = connectionTarget(candidate);
       return (
         !!target &&
-        resolveFlowConnection(
-          modelRef.current,
+        // A pending preview is neutral. Fast drops still go through Rust's
+        // authoritative mutation validation, including when a query failed.
+        candidatesRef.current.decisionFor(
           target.current.sourceId,
-          target.targetId,
           target.current.intent,
-        ).kind !== "invalid"
+          target.targetId,
+        )?.kind !== "invalid"
       );
     },
     [connectionTarget],
@@ -449,11 +457,10 @@ function GraphFlowRuntime({
           targetPinId: target.targetId,
         })
         .then((outcome) => {
-          if (outcome.status === "failed" && outcome.message)
+          if (outcome.status === "failed")
             interaction.mutations.reportMutationFailure({
               graphPath,
               intent: target.current.intent,
-              message: outcome.message,
             });
         })
         .catch(() =>
@@ -729,7 +736,6 @@ function GraphFlowRuntime({
                       interaction.mutations.reportMutationFailure({
                         graphPath,
                         intent: "disconnectPort",
-                        message: outcome.message,
                       });
                   })
                   .catch(() =>

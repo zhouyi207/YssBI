@@ -1,6 +1,8 @@
-export type CanvasMutationOutcome = { status: "applied" } | { status: "failed"; message?: string };
+import type { ConnectionIntent } from "@/shared/types/domain/connectionCandidates";
 
-export type CanvasConnectionIntent = "connect" | "moveConnections";
+export interface CanvasMutationOutcome {
+  status: "applied" | "failed";
+}
 
 export interface CanvasGestureLease {
   isCurrent(): boolean;
@@ -9,7 +11,7 @@ export interface CanvasGestureLease {
 
 export interface CanvasConnectionMutation {
   graphPath: string;
-  intent: CanvasConnectionIntent;
+  intent: ConnectionIntent;
   sourcePinId: string;
   targetPinId: string;
 }
@@ -22,8 +24,7 @@ export interface CanvasRerouteMutation {
 
 export interface CanvasMutationFailure {
   graphPath: string;
-  intent: CanvasConnectionIntent | "moveNodes" | "disconnectPort";
-  message?: string;
+  intent: ConnectionIntent | "moveNodes" | "disconnectPort";
 }
 
 export interface CanvasInteractionHandlers {

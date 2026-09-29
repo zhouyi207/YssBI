@@ -15,6 +15,7 @@ function GraphFlowHandle({ pin }: { pin: PinData }) {
         invalid: "ring-2 ring-red-500/90",
         replace: "ring-2 ring-amber-500/90",
         append: "ring-2 ring-emerald-500/90",
+        pending: "",
       }[feedback.kind]
     : "";
   return (

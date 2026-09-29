@@ -6,6 +6,7 @@ import { VscAdd, VscRemove } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import type { PinData, ConnectionData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { Select } from "@/shared/ui/Select";
+import { useConnectionCandidates } from "@/features/application/graphEditing/useConnectionCandidates";
 import {
   connectPinsById,
   disconnectConnectionById,
@@ -16,7 +17,7 @@ import type { NodePinViewModel } from "./NodePinViewModel";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
 import {
   connectedPeerId,
-  listCompatiblePinOptions,
+  projectPinConnectionOptions,
   listPinConnections,
 } from "./nodePinConnectionOptions";
 import { graphMutationMessageKey, graphMutationSucceeded } from "./nodeMutationFeedback";
@@ -81,8 +82,15 @@ export function NodePinConnectionField({
   const [emptySlots, setEmptySlots] = useState(0);
   const [busy, setBusy] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const anchor = pinData;
+  const candidates = useConnectionCandidates({
+    graphPath,
+    sourcePort: anchor?.address ?? null,
+    intent: "connect",
+    enabled: pickerOpen && !disabled && !busy,
+  });
   const connectionRecords = useMemo(
     () => (anchor ? listPinConnections(anchor.id, anchor.direction, connections) : []),
     [anchor, connections],
@@ -99,21 +107,26 @@ export function NodePinConnectionField({
     [anchor, connectionRecords],
   );
 
-  const inputOptions = useMemo(() => {
+  const displayOptions = useMemo(() => {
     if (!anchor) return [];
-    return listCompatiblePinOptions(anchor, pins, nodeTitles, {
-      connections,
-      includedIds: connectionTargets,
-    });
-  }, [anchor, connections, connectionTargets, nodeTitles, pins]);
+    return projectPinConnectionOptions(
+      candidates.decisions,
+      pins,
+      nodeTitles,
+      t("canvas.connection.feedback.replace"),
+      connectionTargets,
+    );
+  }, [anchor, candidates.decisions, connectionTargets, nodeTitles, pins, t]);
 
-  const outputOptions = useMemo(() => {
+  const candidateOptions = useMemo(() => {
     if (!anchor) return [];
-    return listCompatiblePinOptions(anchor, pins, nodeTitles, {
-      connections,
-      excludedIds: connectionTargets,
-    });
-  }, [anchor, connections, connectionTargets, nodeTitles, pins]);
+    return projectPinConnectionOptions(
+      candidates.decisions,
+      pins,
+      nodeTitles,
+      t("canvas.connection.feedback.replace"),
+    );
+  }, [anchor, candidates.decisions, nodeTitles, pins, t]);
 
   const handleInputChange = async (value: string) => {
     if (!anchor || busy || disabled) return;
@@ -146,6 +159,12 @@ export function NodePinConnectionField({
   };
 
   const pinTitle = pin.name || t("detail.nodeDoc.unnamed");
+  const candidateStatus =
+    candidates.status === "loading"
+      ? t("common.loading")
+      : candidates.status === "error"
+        ? t("detail.nodeDoc.connectionFailed")
+        : undefined;
   if (pin.direction === "input") {
     const currentOutputId =
       connectionRecords[0] && anchor
@@ -156,8 +175,10 @@ export function NodePinConnectionField({
         <DetailFieldRow label={pinTitle}>
           <Select
             value={currentOutputId}
-            options={[{ value: "", label: t("detail.nodeDoc.unconnected") }, ...inputOptions]}
+            options={[{ value: "", label: t("detail.nodeDoc.unconnected") }, ...displayOptions]}
             onChange={handleInputChange}
+            onOpenChange={setPickerOpen}
+            statusText={candidateStatus}
             disabled={busy || disabled || !anchor}
             id={`detail-input-${pin.id}`}
           />
@@ -181,7 +202,12 @@ export function NodePinConnectionField({
         size="icon-xs"
         aria-label={t("detail.nodeDoc.addConnection")}
         data-testid={`add-output-connection-${pin.id}`}
-        disabled={busy || disabled || outputOptions.length === 0}
+        disabled={
+          busy ||
+          disabled ||
+          !anchor ||
+          !(anchor.connections.canAppend || anchor.connections.canReplace)
+        }
         onClick={() => setEmptySlots((count) => count + 1)}
       >
         <VscAdd aria-hidden="true" data-icon="inline-start" />
@@ -208,7 +234,7 @@ export function NodePinConnectionField({
               >
                 <Select
                   value={targetId}
-                  options={inputOptions}
+                  options={displayOptions}
                   onChange={() => undefined}
                   disabled
                   id={`detail-output-${pin.id}-${index}`}
@@ -227,8 +253,13 @@ export function NodePinConnectionField({
             >
               <Select
                 value=""
-                options={[{ value: "", label: t("detail.nodeDoc.selectInput") }, ...outputOptions]}
+                options={[
+                  { value: "", label: t("detail.nodeDoc.selectInput") },
+                  ...candidateOptions,
+                ]}
                 onChange={handleOutputConnect}
+                onOpenChange={setPickerOpen}
+                statusText={candidateStatus}
                 disabled={busy || disabled || !anchor}
                 id={`detail-output-${pin.id}-${connectionRecords.length + index}`}
               />

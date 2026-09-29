@@ -1,19 +1,13 @@
 import { useMemo } from "react";
-import { i18n } from "@/app/i18n";
 import type { CanvasInteractionHandlers, CanvasMutationOutcome } from "@/features/core/canvas";
 import { executeGraphEdit } from "@/features/application/graphEditing";
-import { graphEditErrorMessageKey } from "@/features/application/graphEditing/graphEditError";
 import { logger } from "@/features/application/observability/appLogger";
 import { insertRerouteAtConnection } from "./edgeOperations";
 
 function toCanvasMutationOutcome(
   outcome: Awaited<ReturnType<typeof executeGraphEdit>>,
 ): CanvasMutationOutcome {
-  if (outcome.status === "applied") return { status: "applied" };
-
-  const code = outcome.status === "rejected" ? outcome.code : null;
-  const key = code ? graphEditErrorMessageKey(code) : null;
-  return key ? { status: "failed", message: i18n.t(key) } : { status: "failed" };
+  return { status: outcome.status === "applied" ? "applied" : "failed" };
 }
 
 export function createCanvasMutationHandlers(): CanvasInteractionHandlers {

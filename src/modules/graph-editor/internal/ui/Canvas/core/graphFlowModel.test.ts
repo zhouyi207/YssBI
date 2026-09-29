@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeGraphFlowFixture } from "@/tests/helpers/graphFlowFixture";
-import { buildGraphFlowModel, resolveFlowConnection, resolveFlowPinAction } from "./graphFlowModel";
+import { buildGraphFlowModel, resolveFlowPinAction } from "./graphFlowModel";
 
 describe("graph flow projection adapter", () => {
   it("preserves node, connection and port identities while reflecting dynamic row order", () => {
@@ -29,47 +29,13 @@ describe("graph flow projection adapter", () => {
     expect(unchanged.nodeIds).toBe(reordered.nodeIds);
     reordered.nodes[0].position.x = 100;
     expect(reordered.pins.out).toBe(bucket.pins.out);
-    expect(reordered.connections).toBe(bucket.connections);
     expect(bucket.nodes.source.position.x).toBe(0);
     expect(bucket.pins.out.name).toBe("out");
   });
 
-  it("keeps output fan-out when adding or replacing an input connection", () => {
-    const bucket = makeGraphFlowFixture();
-    bucket.pinConnections.out.push("another-branch");
-    const model = buildGraphFlowModel(bucket);
-    expect(resolveFlowConnection(model, "out", "right", "connect")).toEqual({ kind: "append" });
-    expect(resolveFlowConnection(model, "out", "left", "connect")).toEqual({
-      kind: "replace",
-      displacedConnectionIds: ["original"],
-    });
-    bucket.pins.right.orphan = true;
-    expect(resolveFlowConnection(model, "out", "right", "connect")).toMatchObject({
-      kind: "invalid",
-      reason: "orphan",
-    });
-  });
-
-  it("validates Ctrl moves between sibling inputs against their actual upstream peers", () => {
+  it("maps modifier keys to projected pin capabilities", () => {
     const bucket = makeGraphFlowFixture();
     const model = buildGraphFlowModel(bucket);
-    expect(resolveFlowConnection(model, "left", "right", "moveConnections")).toEqual({
-      kind: "append",
-    });
-    expect(resolveFlowConnection(model, "left", "out", "moveConnections")).toMatchObject({
-      kind: "invalid",
-    });
-    bucket.pins.right.acceptedType.domain = [{ kind: "Scalar", inner: "Text" }];
-    expect(resolveFlowConnection(model, "left", "right", "moveConnections")).toEqual({
-      kind: "invalid",
-      reason: "type-mismatch",
-    });
-    bucket.pins.right.acceptedType.domain = [{ kind: "Scalar", inner: "Numeric" }];
-    bucket.pins.right.connections.maximum = 0;
-    expect(resolveFlowConnection(model, "left", "right", "moveConnections")).toEqual({
-      kind: "invalid",
-      reason: "capacity",
-    });
     const event = { button: 0, altKey: false, ctrlKey: false, metaKey: false };
     expect(resolveFlowPinAction({ ...event, ctrlKey: true }, model.pins.left)).toBe(
       "moveConnections",

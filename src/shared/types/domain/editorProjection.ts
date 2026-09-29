@@ -102,7 +102,6 @@ export interface EditorPortDto {
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;
   input: EditorInputBindingDto | null;
-  acceptedType: AcceptedTypeDto;
   typeState: PortTypeStateDto;
   resolvedSchema: SchemaSummaryDto | null;
   status: ResolvedPortStatusDto;
@@ -126,8 +125,6 @@ export interface PortInstanceAdditionDto {
 
 export interface PortConnectionCapabilityDto {
   current: number;
-  maximum: number | null;
-  ordered: boolean;
   canAppend: boolean;
   canReplace: boolean;
   canMove: boolean;
@@ -144,11 +141,6 @@ export type EffectiveInputBindingKindDto =
   | "literal"
   | "protocolDefault"
   | "unbound";
-
-export interface AcceptedTypeDto {
-  display: string;
-  domain: ValueType[] | null;
-}
 
 export type PortTypeStateDto =
   | { status: "exact"; display: string; dataType: ValueType | null }

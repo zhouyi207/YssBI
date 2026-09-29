@@ -1741,14 +1741,7 @@ export const enUS = {
   canvas: {
     connection: {
       feedback: {
-        append: "Connect ports",
         replace: "Replace the existing connection",
-        "same-port": "Choose a different port",
-        "same-node": "Ports on the same node cannot be connected",
-        "same-direction": "Connect an output port to an input port",
-        "type-mismatch": "These port types are incompatible",
-        orphan: "Orphaned ports cannot be connected",
-        capacity: "This port has reached its connection limit",
       },
       errors: {
         graph_port_not_found: "The port no longer exists",
@@ -1756,6 +1749,7 @@ export const enUS = {
         graph_connection_not_found: "The connection no longer exists",
         graph_port_orphan: "Orphaned ports cannot be connected",
         graph_connection_direction_mismatch: "Connect an output port to an input port",
+        graph_connection_same_node: "Connect ports on different nodes",
         graph_connection_type_mismatch: "These port types are incompatible",
         graph_connection_type_unavailable: "Port type information is unavailable",
         graph_connection_limit_reached: "This port has reached its connection limit",

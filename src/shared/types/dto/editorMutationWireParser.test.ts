@@ -75,14 +75,11 @@ function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
           canRemove: false,
           connections: {
             current: 0,
-            maximum: null,
-            ordered: false,
             canAppend: true,
             canReplace: false,
             canMove: false,
           },
           input: null,
-          acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
           typeState,
           resolvedSchema: null,
           status: "resolved",
@@ -160,7 +157,7 @@ describe("editor mutation wire parser", () => {
     ).toThrow();
   });
 
-  it("requires all six exact connection capability fields", () => {
+  it("requires the exact connection count and action fields", () => {
     const valid = projectionWithTypeState({
       status: "exact",
       display: "Float64",
@@ -175,7 +172,7 @@ describe("editor mutation wire parser", () => {
       projection: valid,
     });
 
-    for (const key of ["current", "maximum", "ordered", "canAppend", "canReplace", "canMove"]) {
+    for (const key of ["current", "canAppend", "canReplace", "canMove"]) {
       const malformed = structuredClone(valid);
       const malformedNode = (malformed.nodes as Array<Record<string, unknown>>)[0];
       const malformedPort = (malformedNode.ports as Array<Record<string, unknown>>)[0];

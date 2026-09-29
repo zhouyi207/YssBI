@@ -1,5 +1,5 @@
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
+import type { ConnectionDecision } from "@/shared/types/domain/connectionCandidates";
 import type { ConnectionData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { formatNodePinDisplayLabel, pinDisplayTitle } from "@/features/domain/editorProjection";
 
@@ -8,13 +8,7 @@ export interface PinConnectionOption {
   value: string;
 }
 
-export interface PinConnectionOptionConfig {
-  connections?: DeepReadonly<ConnectionData[]>;
-  excludedIds?: ReadonlySet<string>;
-  includedIds?: ReadonlySet<string>;
-}
-
-export function formatPinConnectionOptionLabel(
+function formatPinConnectionOptionLabel(
   pin: DeepReadonly<PinData>,
   nodeTitles: Readonly<Record<string, string>>,
 ): string {
@@ -40,40 +34,27 @@ export function connectedPeerId(
   return connection.to === pinId ? connection.from : null;
 }
 
-function candidateCanAppendToInput(
-  anchor: DeepReadonly<PinData>,
-  candidate: DeepReadonly<PinData>,
-  connections: DeepReadonly<ConnectionData[]>,
-): boolean {
-  if (anchor.direction !== "output" || candidate.direction !== "input") return true;
-  if (candidate.connections?.canAppend) return true;
-  return !listPinConnections(candidate.id, "input", connections).some(
-    (connection) => connection.from !== anchor.id,
-  );
-}
-
-export function listCompatiblePinOptions(
-  anchor: DeepReadonly<PinData>,
+export function projectPinConnectionOptions(
+  decisions: Readonly<Partial<Record<string, ConnectionDecision>>>,
   pins: DeepReadonly<PinData[]>,
   nodeTitles: Readonly<Record<string, string>>,
-  {
-    connections = [],
-    excludedIds = new Set<string>(),
-    includedIds = new Set<string>(),
-  }: PinConnectionOptionConfig = {},
+  replacementLabel: string,
+  selectedIds?: ReadonlySet<string>,
 ): PinConnectionOption[] {
   return pins
-    .filter((candidate) => candidate.direction !== anchor.direction)
-    .filter((candidate) => !excludedIds.has(candidate.id) || includedIds.has(candidate.id))
     .filter((candidate) => {
-      if (includedIds.has(candidate.id)) return true;
-      if (!candidateCanAppendToInput(anchor, candidate, connections)) return false;
-      const output = anchor.direction === "output" ? anchor : candidate;
-      const input = anchor.direction === "input" ? anchor : candidate;
-      return resolveConnectionCompatibility(output, input).kind !== "invalid";
+      if (selectedIds?.has(candidate.id)) return true;
+      const decision = decisions[candidate.id];
+      return decision?.kind === "append" || decision?.kind === "replace";
     })
-    .map((candidate) => ({
-      value: candidate.id,
-      label: formatPinConnectionOptionLabel(candidate, nodeTitles),
-    }));
+    .map((candidate) => {
+      const label = formatPinConnectionOptionLabel(candidate, nodeTitles);
+      return {
+        value: candidate.id,
+        label:
+          decisions[candidate.id]?.kind === "replace" && !selectedIds?.has(candidate.id)
+            ? `${label} (${replacementLabel})`
+            : label,
+      };
+    });
 }

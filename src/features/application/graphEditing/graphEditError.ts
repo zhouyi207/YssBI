@@ -8,6 +8,7 @@ export const GRAPH_EDIT_ERROR_CODES = [
   "graph_connection_not_found",
   "graph_port_orphan",
   "graph_connection_direction_mismatch",
+  "graph_connection_same_node",
   "graph_connection_type_mismatch",
   "graph_connection_type_unavailable",
   "graph_connection_limit_reached",

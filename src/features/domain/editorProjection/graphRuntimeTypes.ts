@@ -22,7 +22,6 @@ import type {
   PortTypeStateDto,
   ResolvedPortStatusDto,
   SchemaSummaryDto,
-  AcceptedTypeDto,
 } from "@/shared/types/domain/editorProjection";
 
 // ==================== NodeData ====================
@@ -55,7 +54,6 @@ export interface PinData {
   canRemove: boolean;
   connections: PortConnectionCapabilityDto;
   input: EditorInputBindingDto | null;
-  acceptedType: AcceptedTypeDto;
   typeState: PortTypeStateDto;
   resolvedSchema: SchemaSummaryDto | null;
   status: ResolvedPortStatusDto;

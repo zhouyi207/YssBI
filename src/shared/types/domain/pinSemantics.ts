@@ -1,8 +1,7 @@
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 /**
- * Data pin runtime semantics — single source for display labels and theme
- * keys. Editor connection compatibility uses the
- * Rust-projected resolved type and never infers data semantics from bare strings.
+ * Pin display labels and theme keys derived from the Rust type projection.
+ * Connection decisions are supplied separately by the backend.
  */
 
 import type { ValueType } from "./valueType";

@@ -34,8 +34,6 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
     canRemove: false,
     connections: {
       current: 1,
-      maximum: direction === "input" ? 1 : null,
-      ordered: false,
       canAppend: direction === "output",
       canReplace: direction === "input",
       canMove: true,
@@ -48,7 +46,6 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
             effective: "connections",
           }
         : null,
-    acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
     typeState: {
       status: "exact",
       display: "Float64",

@@ -174,10 +174,8 @@ function isPortDisplay(value: unknown): boolean {
 
 function isConnectionCapability(value: unknown): boolean {
   return (
-    hasExactKeys(value, ["current", "maximum", "ordered", "canAppend", "canReplace", "canMove"]) &&
+    hasExactKeys(value, ["current", "canAppend", "canReplace", "canMove"]) &&
     isNonNegativeSafeInteger(value.current) &&
-    (value.maximum === null || isNonNegativeSafeInteger(value.maximum)) &&
-    typeof value.ordered === "boolean" &&
     typeof value.canAppend === "boolean" &&
     typeof value.canReplace === "boolean" &&
     typeof value.canMove === "boolean"
@@ -190,15 +188,6 @@ function isInputBinding(value: unknown): boolean {
     isJsonValue(value.literalOverride) &&
     isJsonValue(value.protocolDefault) &&
     bindingKinds.has(value.effective as string)
-  );
-}
-
-function isAcceptedType(value: unknown): boolean {
-  return (
-    hasExactKeys(value, ["display", "domain"]) &&
-    typeof value.display === "string" &&
-    (value.domain === null ||
-      (Array.isArray(value.domain) && value.domain.every(isBackendDataType)))
   );
 }
 
@@ -255,7 +244,6 @@ function isPort(value: unknown): boolean {
       "canRemove",
       "connections",
       "input",
-      "acceptedType",
       "typeState",
       "resolvedSchema",
       "status",
@@ -267,7 +255,6 @@ function isPort(value: unknown): boolean {
     typeof value.canRemove !== "boolean" ||
     !isConnectionCapability(value.connections) ||
     (value.input !== null && !isInputBinding(value.input)) ||
-    !isAcceptedType(value.acceptedType) ||
     !isPortTypeState(value.typeState) ||
     (value.resolvedSchema !== null && !isSchemaSummary(value.resolvedSchema)) ||
     !portStatuses.has(value.status as string)

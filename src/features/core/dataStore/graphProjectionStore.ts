@@ -129,7 +129,6 @@ function buildProjectionBucket(
       canRemove: port.canRemove,
       connections: port.connections,
       input: port.input,
-      acceptedType: port.acceptedType,
       typeState: port.typeState,
       resolvedSchema: port.resolvedSchema,
       status: port.status,

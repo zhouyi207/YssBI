@@ -1576,14 +1576,7 @@ export const zhCN = {
   canvas: {
     connection: {
       feedback: {
-        append: "连接端口",
         replace: "替换现有连接",
-        "same-port": "请选择其他端口",
-        "same-node": "同一节点上的端口无法互连",
-        "same-direction": "请将输出端口连接到输入端口",
-        "type-mismatch": "这些端口的数据类型不兼容",
-        orphan: "孤立端口无法连接",
-        capacity: "该端口已达到连接数量上限",
       },
       errors: {
         graph_port_not_found: "端口已不存在",
@@ -1591,6 +1584,7 @@ export const zhCN = {
         graph_connection_not_found: "连接已不存在",
         graph_port_orphan: "孤立端口无法连接",
         graph_connection_direction_mismatch: "请将输出端口连接到输入端口",
+        graph_connection_same_node: "请连接不同节点的端口",
         graph_connection_type_mismatch: "这些端口的数据类型不兼容",
         graph_connection_type_unavailable: "端口类型信息不可用",
         graph_connection_limit_reached: "该端口已达到连接数量上限",

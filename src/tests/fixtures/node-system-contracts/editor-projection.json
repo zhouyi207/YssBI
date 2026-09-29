@@ -65,9 +65,7 @@
             "canAppend": true,
             "canMove": false,
             "canReplace": false,
-            "current": 0,
-            "maximum": 1,
-            "ordered": false
+            "current": 0
           },
           "direction": "output",
           "display": {
@@ -76,15 +74,6 @@
           },
           "input": null,
           "orphan": false,
-          "acceptedType": {
-            "display": "core.binary",
-            "domain": [
-              {
-                "kind": "Scalar",
-                "inner": "Binary"
-              }
-            ]
-          },
           "resolvedSchema": null,
           "typeState": {
             "status": "exact",

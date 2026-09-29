@@ -1,40 +1,28 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { GraphProjectionSnapshot } from "@/features/core/graph/read";
-import type { PinData, ConnectionData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { resolveConnectionCompatibility } from "@/features/domain/editorProjection/connectionRules";
+import type {
+  ConnectionDecision,
+  ConnectionIntent,
+} from "@/shared/types/domain/connectionCandidates";
 import { shareProjection } from "@/features/core/state/readProjection";
 
 export type GraphFlowNode = Node<{ handlesKey: string }, "graph">;
 export type GraphFlowEdge = Edge<{ fromPinId: string; toPinId: string }, "graph">;
-export type FlowConnectionIntent = "connect" | "moveConnections";
-export type FlowConnectionFeedback =
-  | { kind: "append" }
-  | { kind: "replace"; displacedConnectionIds: readonly string[] }
-  | { kind: "invalid"; reason: string };
-
-const REASONS = {
-  samePort: "same-port",
-  sameNode: "same-node",
-  directionMismatch: "same-direction",
-  typeMismatch: "type-mismatch",
-  orphan: "orphan",
-  capacityReached: "capacity",
-} as const;
+export type FlowConnectionFeedback = ConnectionDecision | { kind: "pending" };
 
 export interface GraphFlowModel {
   nodes: GraphFlowNode[];
   nodeIds: ReadonlySet<string>;
   edges: GraphFlowEdge[];
   pins: DeepReadonly<Record<string, PinData>>;
-  connections: DeepReadonly<Record<string, ConnectionData>>;
-  pinConnections: Readonly<Record<string, readonly string[]>>;
   draggableNodeIds: ReadonlySet<string>;
 }
 
 export interface FlowPinInteraction {
   active: boolean;
-  dragState: "highlighted" | "dimmed";
+  dragState: "highlighted" | "dimmed" | "neutral";
   feedback: FlowConnectionFeedback;
 }
 
@@ -56,7 +44,7 @@ export const EMPTY_FLOW_INTERACTION: FlowInteractionProjection = {
 export function projectFlowInteraction(
   model: GraphFlowModel,
   sourceId: string | undefined,
-  intent: FlowConnectionIntent,
+  decisions: Readonly<Partial<Record<string, ConnectionDecision>>>,
   previous: FlowInteractionProjection = EMPTY_FLOW_INTERACTION,
 ): FlowInteractionProjection {
   const source = sourceId ? model.pins[sourceId] : undefined;
@@ -64,13 +52,19 @@ export function projectFlowInteraction(
   const pins: Record<string, FlowPinInteraction> = {};
   const compatibleNodes = new Set<string>();
   for (const pin of Object.values(model.pins)) {
-    const feedback = resolveFlowConnection(model, source.id, pin.id, intent);
+    const feedback: FlowConnectionFeedback = decisions[pin.id] ?? { kind: "pending" };
     const active = pin.id === source.id;
     if (feedback.kind !== "invalid") compatibleNodes.add(pin.nodeId);
     pins[pin.id] = shareProjection(previous.pins[pin.id], {
       active,
       feedback,
-      dragState: active || feedback.kind !== "invalid" ? "highlighted" : "dimmed",
+      dragState: active
+        ? "highlighted"
+        : feedback.kind === "pending"
+          ? "neutral"
+          : feedback.kind === "invalid"
+            ? "dimmed"
+            : "highlighted",
     });
   }
   return {
@@ -169,8 +163,6 @@ export function buildGraphFlowModel(
     nodeIds,
     edges,
     pins,
-    connections,
-    pinConnections: bucket?.pinConnections ?? {},
     draggableNodeIds:
       previous &&
       draggableIds.length === previous.draggableNodeIds.size &&
@@ -180,68 +172,14 @@ export function buildGraphFlowModel(
   };
 }
 
-export function resolveFlowConnection(
-  model: GraphFlowModel,
-  sourceId: string,
-  targetId: string,
-  intent: FlowConnectionIntent,
-): FlowConnectionFeedback {
-  const source = model.pins[sourceId],
-    target = model.pins[targetId];
-  if (!source || !target || source.orphan || target.orphan)
-    return { kind: "invalid", reason: "orphan" };
-  if (source.id === target.id) return { kind: "invalid", reason: "same-port" };
-  if (intent === "connect") {
-    const feedback = resolveConnectionCompatibility(source, target);
-    if (feedback.kind === "invalid") return { kind: "invalid", reason: REASONS[feedback.reason] };
-    if (feedback.kind === "append") return feedback;
-    return {
-      kind: "replace",
-      displacedConnectionIds: [
-        ...new Set([
-          ...(source.connections.canReplace ? (model.pinConnections[source.id] ?? []) : []),
-          ...(target.connections.canReplace ? (model.pinConnections[target.id] ?? []) : []),
-        ]),
-      ],
-    };
-  }
-  // Moving links replaces one endpoint with another of the SAME direction, including siblings.
-  if (source.direction !== target.direction) return { kind: "invalid", reason: "same-direction" };
-  const moved = model.pinConnections[sourceId] ?? [];
-  if (
-    !source.connections.canMove ||
-    !moved.length ||
-    (!target.connections.canAppend && !target.connections.canReplace) ||
-    (target.connections.maximum !== null &&
-      moved.length + (target.connections.canReplace ? 0 : target.connections.current) >
-        target.connections.maximum)
-  ) {
-    return { kind: "invalid", reason: "capacity" };
-  }
-  for (const id of moved) {
-    const connection = model.connections[id];
-    const other = model.pins[connection?.from === sourceId ? connection.to : connection?.from];
-    if (!other) return { kind: "invalid", reason: "orphan" };
-    // The peer keeps its existing link, so its occupied capacity is not a new append.
-    const feedback = resolveConnectionCompatibility(target, {
-      ...other,
-      connections: { ...other.connections, canAppend: true, canReplace: false },
-    });
-    if (feedback.kind === "invalid") return { kind: "invalid", reason: REASONS[feedback.reason] };
-  }
-  return target.connections.canReplace
-    ? { kind: "replace", displacedConnectionIds: model.pinConnections[targetId] ?? [] }
-    : { kind: "append" };
-}
-
 export function resolveFlowPinAction(
   event: Pick<MouseEvent, "button" | "altKey" | "ctrlKey" | "metaKey">,
   pin: DeepReadonly<PinData>,
-): "none" | "disconnect" | FlowConnectionIntent {
+): "none" | "disconnect" | ConnectionIntent {
   if (event.button !== 0 || pin.orphan) return "none";
   if (event.altKey) return pin.connections.canMove ? "disconnect" : "none";
   if (event.ctrlKey || event.metaKey) {
-    return pin.connections.canMove && pin.connections.current > 0 ? "moveConnections" : "none";
+    return pin.connections.canMove ? "moveConnections" : "none";
   }
   return pin.connections.canAppend || pin.connections.canReplace ? "connect" : "none";
 }

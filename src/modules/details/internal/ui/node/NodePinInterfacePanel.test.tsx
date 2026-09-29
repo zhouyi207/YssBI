@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import type { NodePinViewModel } from "./NodePinViewModel";
 import { NodePinInterfacePanel } from "./NodePinInterfacePanel";
@@ -25,6 +26,25 @@ vi.mock("@/features/application/editor/edgeOperations", () => ({
 vi.mock("@/features/application/editor/portInstanceActions", () => ({
   addPortInstance,
   removePortInstance,
+}));
+
+vi.mock("@/features/application/graphEditing/useConnectionCandidates", () => ({
+  useConnectionCandidates: ({
+    sourcePort,
+    enabled,
+  }: {
+    sourcePort: PortAddressDto | null;
+    enabled: boolean;
+  }) => ({
+    status: enabled ? "ready" : "idle",
+    decisions:
+      !enabled || sourcePort?.kind !== "declared"
+        ? {}
+        : ({
+            "input-value": { "source-output": { kind: "append" } },
+            "output-result": { "target-input": { kind: "append" } },
+          }[sourcePort.portKey] ?? {}),
+  }),
 }));
 
 vi.mock("react-i18next", async (importOriginal) => ({
@@ -73,8 +93,6 @@ function makePin(id: string, nodeId: string, name: string, direction: "input" | 
     dataType: { kind: "Scalar" as const, inner: "Numeric" as const },
     connections: {
       current: 0,
-      maximum: null,
-      ordered: false,
       canAppend: true,
       canReplace: true,
       canMove: true,
@@ -162,7 +180,7 @@ beforeEach(() => {
 });
 
 describe("NodePinInterfacePanel", () => {
-  it("renders pin selectors with compatible graph options", async () => {
+  it("renders pin selectors with backend-projected graph options", async () => {
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);

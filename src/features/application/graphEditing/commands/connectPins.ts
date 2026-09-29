@@ -15,9 +15,6 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphEditOutcom
     if (!pinA || !pinB) throw new Error("Cannot connect ports missing from the projection");
     const output = pinA.direction === "output" ? pinA : pinB;
     const input = pinA.direction === "input" ? pinA : pinB;
-    if (output.direction !== "output" || input.direction !== "input") {
-      throw new Error("A connection requires one output port and one input port");
-    }
     return applyGraphMutation({
       graphPath,
       mutation: {

@@ -223,11 +223,9 @@ describe("Rust-generated node-system golden contracts", () => {
     },
   );
 
-  it("freezes the six-field authoritative port connection capability", () => {
+  it("validates the authoritative port connection count and actions", () => {
     expect(editorProjection.nodes[0].ports[0].connections).toEqual({
       current: 0,
-      maximum: 1,
-      ordered: false,
       canAppend: true,
       canReplace: false,
       canMove: false,

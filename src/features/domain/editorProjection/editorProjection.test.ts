@@ -54,17 +54,11 @@ function validProjection(): EditorGraphProjectionDto {
             canRemove: false,
             connections: {
               current: 1,
-              maximum: null,
-              ordered: false,
               canAppend: true,
               canReplace: false,
               canMove: true,
             },
             input: null,
-            acceptedType: {
-              display: "Model",
-              domain: [{ kind: "Struct", inner: "Model" }],
-            },
             typeState: {
               status: "exact",
               display: "Model",
@@ -81,8 +75,6 @@ function validProjection(): EditorGraphProjectionDto {
             canRemove: true,
             connections: {
               current: 1,
-              maximum: 1,
-              ordered: false,
               canAppend: false,
               canReplace: true,
               canMove: true,
@@ -92,7 +84,6 @@ function validProjection(): EditorGraphProjectionDto {
               protocolDefault: 0,
               effective: "connections",
             },
-            acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
             typeState: {
               status: "exact",
               display: "Float64",

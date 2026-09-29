@@ -44,15 +44,12 @@ function projectedPin(nodeId: string, direction: "input" | "output"): PinData {
       dataType: { kind: "Scalar", inner: "Numeric" },
       connections: {
         current: 1,
-        maximum: direction === "input" ? 1 : null,
-        ordered: false,
         canAppend: direction === "output",
         canReplace: direction === "input",
         canMove: true,
       },
     }),
     address: { kind: "declared", nodeId, portKey: direction },
-    acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
     typeState: {
       status: "exact",
       display: "Float64",

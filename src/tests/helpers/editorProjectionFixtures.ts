@@ -40,7 +40,7 @@ export function makeProjectedPinData(
     Pick<PinData, "id" | "nodeId" | "direction"> & { dataType?: ValueType },
 ): PinData {
   const { dataType: overriddenDataType, ...projectedOverrides } = overrides;
-  const dataType: ValueType | undefined = overriddenDataType ?? {
+  const dataType: ValueType = overriddenDataType ?? {
     kind: "Scalar",
     inner: "Numeric",
   };
@@ -60,11 +60,9 @@ export function makeProjectedPinData(
     canRemove: false,
     connections: {
       current: 0,
-      maximum: overrides.direction === "input" ? 1 : null,
-      ordered: false,
       canAppend: true,
       canReplace: false,
-      canMove: true,
+      canMove: false,
     },
     input:
       overrides.direction === "input"
@@ -74,15 +72,7 @@ export function makeProjectedPinData(
             effective: "unbound",
           }
         : null,
-    acceptedType: overrides.acceptedType ?? {
-      display: dataType?.kind ?? "unknown",
-      domain: dataType ? [dataType] : null,
-    },
-    typeState:
-      overrides.typeState ??
-      (dataType
-        ? { status: "exact", display: dataType.kind, dataType }
-        : { status: "unknown", reasonCode: "unsupported_declaration" }),
+    typeState: overrides.typeState ?? { status: "exact", display: dataType.kind, dataType },
     resolvedSchema: null,
     status: "resolved",
   };
@@ -195,14 +185,11 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
               canRemove: false,
               connections: {
                 current: 1,
-                maximum: null,
-                ordered: false,
                 canAppend: true,
                 canReplace: false,
                 canMove: true,
               },
               input: null,
-              acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
               typeState: {
                 status: "exact",
                 display: "Float64",
@@ -219,8 +206,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
               canRemove: false,
               connections: {
                 current: 1,
-                maximum: 1,
-                ordered: false,
                 canAppend: false,
                 canReplace: true,
                 canMove: true,
@@ -230,7 +215,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
                 protocolDefault: null,
                 effective: "connections",
               },
-              acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
               typeState: {
                 status: "exact",
                 display: "Float64",

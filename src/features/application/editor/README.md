@@ -60,9 +60,12 @@ hiding, save locking, graph close, and project replacement invalidate the gestur
 Late mutation completion only clears that mutation's preview, never a newer drag.
 
 Pending node creation retains only the structured source port address and panel ownership.
-Connection feedback and its preview read the current graph projection; palette position comes
+Connection feedback and its preview consume versioned Rust connection candidates; palette position comes
 from the owned context menu. No Pin projection or second coordinate snapshot is kept in the
 interaction store.
+
+Canvas mutation handlers return only applied/failed status. Failure reporting consumes graph
+identity and action; it does not construct or carry unused localized message payloads.
 
 Cancellation also ends the visible selection preview and restores the pre-pointer node/edge
 selection. Pan updates require a live gesture; viewport synchronization is not a gesture.

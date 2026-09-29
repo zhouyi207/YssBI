@@ -9,7 +9,14 @@ export function makeGraphFlowFixture(): GraphEntityBucket {
   const left = makeProjectedPinData({ id: "left", nodeId: "target", direction: "input" });
   const right = makeProjectedPinData({ id: "right", nodeId: "target", direction: "input" });
   out.connections.current = 1;
-  left.connections = { ...left.connections, current: 1, canAppend: false, canReplace: true };
+  out.connections.canMove = true;
+  left.connections = {
+    ...left.connections,
+    current: 1,
+    canAppend: false,
+    canReplace: true,
+    canMove: true,
+  };
   return {
     basis: base.basis,
     outcome: base.outcome,
