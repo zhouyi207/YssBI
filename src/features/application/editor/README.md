@@ -124,6 +124,43 @@ active Graph. Node creation validates its captured target when invoked, without 
 every mounted canvas to global tab selection; an unavailable canvas target cannot fall back
 to another panel.
 
+`openReferenceLink` normalizes remote HTTP(S) documentation URLs and uses the workbench's
+`openReference` capability. References open beside Details, reuse their complete URL,
+and retain the current graph/document. The shared Markdown renderer receives this action
+from Workbench composition; it does not own layout or navigate the main WebView.
+
+Node Details displays each parameter as a top-level section, expanded by default. Parameter
+groups retain their declared ordering and descriptions without an outer Parameters heading;
+the section title is not repeated inside its control. Collapsing one parameter affects only
+that section, and diagnostic focus keeps the graph/node/parameter identity on its wrapper.
+The panel and parameter sections use memoized boundaries over the existing structurally
+shared projection. Each section subscribes only to its own parameter diagnostics; unchanged
+parameters do not rerender with another parameter edit. Column rows reserve space for order
+controls and keep a fixed height. Pending column edits use `aria-busy`, `aria-disabled` and
+guarded handlers; they block duplicate input without removing focus or fading the list.
+Native disabled controls remain for actual selection/reordering constraints.
+
+Graph synchronization uses the existing cursor-bound JSON deltas, with Immer for atomic
+installation and Zod for envelope/operation validation. Array splices preserve unchanged
+entries; the Zustand projection installer matches parameter groups and parameters by key,
+so inserting or removing a conditional field does not replace its neighbors. Protocol,
+bounds and read-only recovery belong to [Graph projection synchronization](../../../../src-tauri/crates/yss-application/src/ipc/README.md#graph-projection-synchronization).
+
+Node parameter editors commit changes through `setNodeParameters` and the existing Graph
+mutation FIFO, without an Apply button or implicit file save. Toggles, selections, column
+ordering and domain row actions submit immediately. Text and numeric input submit on Enter
+or when editing finishes; composite filter/domain editors wait until focus leaves their
+controls so a selection or row action can submit the complete change atomically. Escape
+restores the projected value. Unfinished or duplicate domain entries remain local input;
+Rust validates submitted parameters and owns undo/redo. Rejected edits retain the published
+projection and show the existing field error. Required column selections retain at least
+one column, following the Rust-issued `allowEmpty` flag.
+
+Manual acceptance for this interaction covers column selection/reordering and independent
+labels across multiple selectors, filter column/operator/literal changes (including empty
+text and exact large integers), domain code/label edits and row actions, and failure,
+undo/redo and node-switch behavior. UI unit tests are not added for this flow.
+
 `useDetailPanelModel` reads the existing editor collections and produces one discriminated
 model for rendering; the chart branch includes its path, name and document. There is no
 separate Details target-resolution or resource-projection facade.

@@ -1,10 +1,11 @@
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useId, useRef, useState, type FocusEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -23,7 +24,7 @@ interface EditorProps<TEditor, TValue> {
   editor: TEditor;
   errors: readonly string[];
   disabled?: boolean;
-  onCommit(value: TValue): void | Promise<void>;
+  onCommit(value: TValue, callbacks?: { onRejected?(): void }): void | Promise<void>;
 }
 
 type ProjectEditor = DeepReadonly<
@@ -59,66 +60,67 @@ export function ProjectColumnsEditor({
   onCommit,
 }: EditorProps<ProjectEditor, string[]>) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<readonly string[]>(editor.value);
-  useEffect(() => setSelected(editor.value), [editor.value]);
+  const id = useId();
+  const selected = editor.value;
 
   if (!editor.available) {
     return <EditorMessages unavailable={editor.unavailableReason} errors={errors} />;
   }
 
   const toggle = (name: string, checked: boolean) => {
-    setSelected((current) =>
-      checked
-        ? current.includes(name)
-          ? current
-          : [...current, name]
-        : current.filter((column) => column !== name),
-    );
+    if (disabled) return;
+    const next = checked ? [...selected, name] : selected.filter((column) => column !== name);
+    if (editor.allowEmpty || next.length > 0) void onCommit(next);
   };
   const move = (name: string, offset: -1 | 1) => {
-    setSelected((current) => {
-      const from = current.indexOf(name);
-      const to = from + offset;
-      if (from < 0 || to < 0 || to >= current.length) return current;
-      const reordered = [...current];
-      [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
-      return reordered;
-    });
+    const from = selected.indexOf(name);
+    const to = from + offset;
+    if (disabled || from < 0 || to < 0 || to >= selected.length) return;
+    const reordered = [...selected];
+    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+    void onCommit(reordered);
   };
 
   return (
-    <form
-      className="space-y-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (editor.allowEmpty || selected.length > 0) void onCommit([...selected]);
-      }}
-    >
+    <div className="space-y-3" aria-busy={disabled}>
       <div className="space-y-2">
-        {editor.options.map((option) => (
-          <div key={option.name} className="flex items-center gap-2">
-            <Checkbox
-              id={`project-column-${option.name}`}
-              aria-label={t("detail.parameterEditor.selectColumn", { column: option.name })}
-              checked={selected.includes(option.name)}
-              disabled={disabled}
-              onCheckedChange={(checked) => toggle(option.name, checked === true)}
-            />
-            <Label htmlFor={`project-column-${option.name}`} className="min-w-0 flex-1">
-              <span className="truncate">{option.name}</span>
-              <span className="ml-2 text-xs text-muted-foreground">{option.dataType}</span>
-            </Label>
-            {selected.includes(option.name) && (
-              <div className="flex items-center gap-0.5">
-                <span className="mr-1 text-xs tabular-nums text-muted-foreground">
-                  {selected.indexOf(option.name) + 1}
+        {editor.options.map((option, index) => {
+          const position = selected.indexOf(option.name);
+          const checked = position >= 0;
+          const required = !editor.allowEmpty && selected.length === 1 && checked;
+          return (
+            <div key={option.name} className="flex h-5 items-center gap-2">
+              <Checkbox
+                id={`${id}-${index}`}
+                aria-label={t("detail.parameterEditor.selectColumn", { column: option.name })}
+                checked={checked}
+                className={disabled ? "cursor-wait" : undefined}
+                disabled={required}
+                aria-disabled={disabled || required}
+                onCheckedChange={(checked) => toggle(option.name, checked === true)}
+              />
+              <Label
+                htmlFor={`${id}-${index}`}
+                className={cn("min-w-0 flex-1", disabled && "cursor-wait")}
+              >
+                <span className="truncate">{option.name}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{option.dataType}</span>
+              </Label>
+              <div
+                aria-hidden={!checked}
+                className={cn("flex w-20 shrink-0 items-center gap-0.5", !checked && "invisible")}
+              >
+                <span className="mr-1 min-w-0 flex-1 text-right text-xs tabular-nums text-muted-foreground">
+                  {checked ? position + 1 : ""}
                 </span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-xs"
                   aria-label={t("detail.parameterEditor.moveColumnUp", { column: option.name })}
-                  disabled={disabled || selected.indexOf(option.name) === 0}
+                  disabled={position <= 0}
+                  aria-disabled={disabled || position <= 0}
+                  className={disabled ? "cursor-wait" : undefined}
                   onClick={() => move(option.name, -1)}
                 >
                   ↑
@@ -128,25 +130,20 @@ export function ProjectColumnsEditor({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={t("detail.parameterEditor.moveColumnDown", { column: option.name })}
-                  disabled={disabled || selected.indexOf(option.name) === selected.length - 1}
+                  disabled={!checked || position === selected.length - 1}
+                  aria-disabled={disabled || !checked || position === selected.length - 1}
+                  className={disabled ? "cursor-wait" : undefined}
                   onClick={() => move(option.name, 1)}
                 >
                   ↓
                 </Button>
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
       <EditorMessages errors={errors} />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={disabled || (!editor.allowEmpty && selected.length === 0)}
-      >
-        {t("detail.parameterEditor.apply")}
-      </Button>
-    </form>
+    </div>
   );
 }
 
@@ -175,6 +172,25 @@ function literalValue(
   return literal.type === "boolean" ? String(literal.value) : literal.value;
 }
 
+interface PredicateDraft {
+  column: string;
+  operator: FilterOperatorDto | undefined;
+  literalType: FilterLiteralDto["type"];
+  value: string;
+}
+
+function projectedPredicate(editor: FilterEditor): PredicateDraft {
+  const column = editor.value?.column ?? "";
+  const option = editor.columns.find((candidate) => candidate.name === column);
+  const literalType = editor.value?.value?.type ?? defaultLiteralType(option);
+  return {
+    column,
+    operator: issuedOperator(option, editor.value?.operator),
+    literalType,
+    value: literalValue(editor.value?.value, literalType),
+  };
+}
+
 export function FilterPredicateEditor({
   editor,
   errors,
@@ -182,64 +198,77 @@ export function FilterPredicateEditor({
   onCommit,
 }: EditorProps<FilterEditor, FilterPredicateDto>) {
   const { t } = useTranslation();
-  const initialColumn = editor.value?.column ?? editor.columns[0]?.name ?? "";
-  const [column, setColumn] = useState(initialColumn);
-  const selectedColumn = useMemo(
-    () => editor.columns.find((option) => option.name === column) ?? editor.columns[0],
-    [column, editor.columns],
-  );
-  const initialOperator = issuedOperator(selectedColumn, editor.value?.operator);
-  const [operator, setOperator] = useState<FilterOperatorDto | undefined>(initialOperator);
-  const initialType = editor.value?.value?.type ?? defaultLiteralType(selectedColumn);
-  const [literalType, setLiteralType] = useState<FilterLiteralDto["type"]>(initialType);
-  const [value, setValue] = useState(literalValue(editor.value?.value, initialType));
-
-  useEffect(() => {
-    const nextColumn = editor.value?.column ?? editor.columns[0]?.name ?? "";
-    const option = editor.columns.find((candidate) => candidate.name === nextColumn);
-    const nextType = editor.value?.value?.type ?? defaultLiteralType(option);
-    setColumn(nextColumn);
-    setOperator(issuedOperator(option, editor.value?.operator));
-    setLiteralType(nextType);
-    setValue(literalValue(editor.value?.value, nextType));
-  }, [editor]);
+  const id = useId();
+  const latestEditor = useRef(editor);
+  latestEditor.current = editor;
+  const signature = JSON.stringify(editor);
+  const [projection, setProjection] = useState(signature);
+  const [draft, setDraft] = useState(() => projectedPredicate(editor));
+  if (projection !== signature) {
+    setProjection(signature);
+    setDraft(projectedPredicate(editor));
+  }
+  const { column, operator, literalType, value } = draft;
+  const selectedColumn = editor.columns.find((option) => option.name === column);
 
   if (!editor.available) {
     return <EditorMessages unavailable={editor.unavailableReason} errors={errors} />;
   }
 
+  const reset = () => setDraft(projectedPredicate(latestEditor.current));
+  const submit = (next: PredicateDraft) => {
+    const option = editor.columns.find((candidate) => candidate.name === next.column);
+    if (disabled || !option || !next.operator || !option.operators.includes(next.operator)) return;
+    const predicate: FilterPredicateDto = { column: next.column, operator: next.operator };
+    if (operatorNeedsValue(next.operator)) {
+      if (!option.literalTypes.includes(next.literalType)) return;
+      if (next.literalType !== "string" && next.value.length === 0) return;
+      predicate.value =
+        next.literalType === "boolean"
+          ? { type: "boolean", value: next.value === "true" }
+          : { type: next.literalType, value: next.value };
+    }
+    if (JSON.stringify(predicate) !== JSON.stringify(editor.value)) {
+      void onCommit(predicate, { onRejected: reset });
+    }
+  };
+  const change = (next: PredicateDraft) => {
+    setDraft(next);
+    submit(next);
+  };
   const chooseColumn = (name: string) => {
     const option = editor.columns.find((candidate) => candidate.name === name);
-    const nextType = defaultLiteralType(option);
-    setColumn(name);
-    setOperator(issuedOperator(option));
-    setLiteralType(nextType);
-    setValue(literalValue(undefined, nextType));
+    const nextType = option?.literalTypes.includes(literalType)
+      ? literalType
+      : defaultLiteralType(option);
+    change({
+      column: name,
+      operator: issuedOperator(option, operator),
+      literalType: nextType,
+      value: nextType === literalType ? value : literalValue(undefined, nextType),
+    });
   };
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedColumn || !operator || !selectedColumn.operators.includes(operator)) return;
-    if (!operatorNeedsValue(operator)) {
-      void onCommit({ column: selectedColumn.name, operator });
+  const blur = (event: FocusEvent<HTMLDivElement>) => {
+    const target = event.relatedTarget;
+    if (target instanceof Node && event.currentTarget.contains(target)) return;
+    // Radix select content is portaled outside this editor's DOM subtree.
+    if (
+      target instanceof Element &&
+      target.closest("[data-parameter-editor]")?.getAttribute("data-parameter-editor") === id
+    )
       return;
-    }
-    if (value.length === 0) return;
-    const literal: FilterLiteralDto =
-      literalType === "boolean"
-        ? { type: "boolean", value: value === "true" }
-        : { type: literalType, value };
-    void onCommit({ column: selectedColumn.name, operator, value: literal });
+    submit(draft);
   };
 
   return (
-    <form className="space-y-3" onSubmit={submit}>
+    <div className="space-y-3" data-parameter-editor={id} onBlur={blur}>
       <div className="space-y-1.5">
         <Label>{t("detail.parameterEditor.column")}</Label>
         <Select value={column} onValueChange={chooseColumn} disabled={disabled}>
           <SelectTrigger size="sm" aria-label={t("detail.parameterEditor.predicateColumn")}>
-            <SelectValue />
+            <SelectValue placeholder={t("detail.parameterEditor.column")} />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent data-parameter-editor={id}>
             {editor.columns.map((option) => (
               <SelectItem key={option.name} value={option.name}>
                 {option.name}
@@ -253,13 +282,13 @@ export function FilterPredicateEditor({
         <Select
           key={column}
           value={operator ?? ""}
-          onValueChange={(value) => setOperator(value as FilterOperatorDto)}
+          onValueChange={(value) => change({ ...draft, operator: value as FilterOperatorDto })}
           disabled={disabled || !selectedColumn || selectedColumn.operators.length === 0}
         >
           <SelectTrigger size="sm" aria-label={t("detail.parameterEditor.predicateOperator")}>
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent data-parameter-editor={id}>
             {selectedColumn?.operators.map((option) => (
               <SelectItem key={option} value={option}>
                 {option}
@@ -275,15 +304,14 @@ export function FilterPredicateEditor({
             value={literalType}
             onValueChange={(type) => {
               const nextType = type as FilterLiteralDto["type"];
-              setLiteralType(nextType);
-              setValue(literalValue(undefined, nextType));
+              change({ ...draft, literalType: nextType, value: literalValue(undefined, nextType) });
             }}
             disabled={disabled}
           >
             <SelectTrigger size="sm" aria-label={t("detail.parameterEditor.predicateValueType")}>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent data-parameter-editor={id}>
               {selectedColumn?.literalTypes.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
@@ -294,11 +322,15 @@ export function FilterPredicateEditor({
         </div>
       )}
       {operatorNeedsValue(operator) && literalType === "boolean" && (
-        <Select value={value} onValueChange={setValue} disabled={disabled}>
+        <Select
+          value={value}
+          onValueChange={(value) => change({ ...draft, value })}
+          disabled={disabled}
+        >
           <SelectTrigger size="sm" aria-label={t("detail.parameterEditor.predicateValue")}>
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent data-parameter-editor={id}>
             <SelectItem value="true">true</SelectItem>
             <SelectItem value="false">false</SelectItem>
           </SelectContent>
@@ -309,23 +341,20 @@ export function FilterPredicateEditor({
           aria-label={t("detail.parameterEditor.predicateValue")}
           value={value}
           disabled={disabled}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => setDraft({ ...draft, value: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              reset();
+            }
+          }}
         />
       )}
       <EditorMessages errors={errors} />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={
-          disabled ||
-          !selectedColumn ||
-          !operator ||
-          !selectedColumn.operators.includes(operator) ||
-          (operatorNeedsValue(operator) && value.length === 0)
-        }
-      >
-        {t("detail.parameterEditor.apply")}
-      </Button>
-    </form>
+    </div>
   );
 }

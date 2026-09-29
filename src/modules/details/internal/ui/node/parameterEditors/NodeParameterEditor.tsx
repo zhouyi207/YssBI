@@ -10,8 +10,8 @@ import { setNodeParameters } from "@/features/application/editor/setNodeParamete
 import type { ValueType } from "@/shared/types/domain/valueType";
 import type { DiagnosticDto, ParameterEditorDto } from "@/shared/types/domain/editorProjection";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
-import { DetailReadonlyField, DetailTextarea } from "../../shared/DetailForm";
-import { DetailFieldRow } from "../../shared/DetailFieldRow";
+import { DetailTextarea } from "../../shared/DetailForm";
+import { DetailText } from "../../shared/DetailText";
 import { detailInlineInputClass } from "../../shared/detailStyles";
 import { FilterPredicateEditor, ProjectColumnsEditor } from "./RelationalParameterEditors";
 import { SemanticDomainEditor } from "./SemanticDomainEditor";
@@ -30,6 +30,8 @@ function projectedDraft(parameter: DeepReadonly<ParameterEditorDto>): string {
 }
 
 function optionLabel(key: string, option: string, t: TFunction): string {
+  if (key === "theil_form" && ["individual", "grouped"].includes(option))
+    return t(`theil.${option}`);
   if (key === "column_match" && ["by_name", "by_position"].includes(option))
     return t(`tableComposition.${option}`);
   if (key === "join_type" && ["inner", "left", "right", "full"].includes(option))
@@ -118,14 +120,7 @@ export function NodeParameterEditor({
   const [pending, setPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const pendingRef = useRef(false);
-  const errors = diagnostics
-    .filter(
-      (diagnostic) =>
-        diagnostic.location.kind === "parameter" &&
-        diagnostic.location.nodeId === nodeId &&
-        diagnostic.location.key === parameter.key,
-    )
-    .map((diagnostic) => formatGraphDiagnostic(diagnostic, locale));
+  const errors = diagnostics.map((diagnostic) => formatGraphDiagnostic(diagnostic, locale));
   if (localError) errors.push(localError);
 
   const commit = async (value: unknown, callbacks: CommitCallbacks = {}) => {
@@ -169,30 +164,28 @@ export function NodeParameterEditor({
 
   if (parameter.editor === "graphConstant") {
     return (
-      <DetailFieldRow label={parameter.display.title}>
-        <div className="space-y-1">
-          <select
-            aria-label={parameter.display.title}
-            className={detailInlineInputClass}
-            value={String(parameter.value ?? "")}
-            disabled={pending}
-            aria-invalid={errors.length > 0}
-            onChange={(event) => void commit(event.target.value)}
-          >
-            {!constants[String(parameter.value ?? "")] && (
-              <option value={String(parameter.value ?? "")} disabled>
-                {t("detail.constants.choose")}
-              </option>
-            )}
-            {Object.values(constants).map((constant) => (
-              <option key={constant.id} value={constant.id}>
-                {constant.name}
-              </option>
-            ))}
-          </select>
-          <ParameterErrorList id={errorId} errors={errors} />
-        </div>
-      </DetailFieldRow>
+      <div className="space-y-1">
+        <select
+          aria-label={parameter.display.title}
+          className={detailInlineInputClass}
+          value={String(parameter.value ?? "")}
+          disabled={pending}
+          aria-invalid={errors.length > 0}
+          onChange={(event) => void commit(event.target.value)}
+        >
+          {!constants[String(parameter.value ?? "")] && (
+            <option value={String(parameter.value ?? "")} disabled>
+              {t("detail.constants.choose")}
+            </option>
+          )}
+          {Object.values(constants).map((constant) => (
+            <option key={constant.id} value={constant.id}>
+              {constant.name}
+            </option>
+          ))}
+        </select>
+        <ParameterErrorList id={errorId} errors={errors} />
+      </div>
     );
   }
   return (
@@ -218,82 +211,72 @@ function ParameterValueEditor({
   const configuration = parameter.configuration;
   if (parameter.editor === "semanticDomain") {
     return (
-      <DetailFieldRow label={parameter.display.title}>
+      <div className="space-y-1">
         <SemanticDomainEditor value={parameter.value} pending={pending} onCommit={commit} />
         <ParameterErrorList id={fieldErrorId} errors={errors} />
-      </DetailFieldRow>
+      </div>
     );
   }
   if (configuration?.kind === "projectColumns") {
     return (
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-foreground">{parameter.display.title}</p>
-        <ProjectColumnsEditor
-          editor={configuration}
-          errors={errors}
-          disabled={pending}
-          onCommit={commit}
-        />
-      </div>
+      <ProjectColumnsEditor
+        editor={configuration}
+        errors={errors}
+        disabled={pending}
+        onCommit={commit}
+      />
     );
   }
   if (configuration?.kind === "filterPredicate") {
     return (
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-foreground">{parameter.display.title}</p>
-        <FilterPredicateEditor
-          editor={configuration}
-          errors={errors}
-          disabled={pending}
-          onCommit={commit}
-        />
-      </div>
+      <FilterPredicateEditor
+        editor={configuration}
+        errors={errors}
+        disabled={pending}
+        onCommit={commit}
+      />
     );
   }
   if (configuration?.kind === "selectOptions") {
     return (
-      <DetailFieldRow label={parameter.display.title}>
-        <div className="space-y-1">
-          <select
-            aria-label={parameter.display.title}
-            className={detailInlineInputClass}
-            value={String(parameter.value ?? "")}
-            disabled={pending}
-            aria-invalid={errors.length > 0}
-            aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
-            onChange={(event) => commit(event.target.value)}
-          >
-            {!configuration.options.includes(String(parameter.value ?? "")) && (
-              <option value={String(parameter.value ?? "")} disabled>
-                {parameter.value == null ? "—" : String(parameter.value)}
-              </option>
-            )}
-            {configuration.options.map((option) => (
-              <option key={option} value={option}>
-                {optionLabel(parameter.key, option, t)}
-              </option>
-            ))}
-          </select>
-          <ParameterErrorList id={fieldErrorId} errors={errors} />
-        </div>
-      </DetailFieldRow>
+      <div className="space-y-1">
+        <select
+          aria-label={parameter.display.title}
+          className={detailInlineInputClass}
+          value={String(parameter.value ?? "")}
+          disabled={pending}
+          aria-invalid={errors.length > 0}
+          aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
+          onChange={(event) => commit(event.target.value)}
+        >
+          {!configuration.options.includes(String(parameter.value ?? "")) && (
+            <option value={String(parameter.value ?? "")} disabled>
+              {parameter.value == null ? "—" : String(parameter.value)}
+            </option>
+          )}
+          {configuration.options.map((option) => (
+            <option key={option} value={option}>
+              {optionLabel(parameter.key, option, t)}
+            </option>
+          ))}
+        </select>
+        <ParameterErrorList id={fieldErrorId} errors={errors} />
+      </div>
     );
   }
   if (parameter.editor === "toggle") {
     return (
-      <DetailFieldRow label={parameter.display.title}>
-        <div className="space-y-1">
-          <Switch
-            checked={parameter.value === true}
-            disabled={pending}
-            aria-label={parameter.display.title}
-            aria-invalid={errors.length > 0}
-            aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
-            onCheckedChange={(checked) => void commit(checked)}
-          />
-          <ParameterErrorList id={fieldErrorId} errors={errors} />
-        </div>
-      </DetailFieldRow>
+      <div className="space-y-1">
+        <Switch
+          checked={parameter.value === true}
+          disabled={pending}
+          aria-label={parameter.display.title}
+          aria-invalid={errors.length > 0}
+          aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
+          onCheckedChange={(checked) => void commit(checked)}
+        />
+        <ParameterErrorList id={fieldErrorId} errors={errors} />
+      </div>
     );
   }
   if (
@@ -313,9 +296,9 @@ function ParameterValueEditor({
     );
   }
   return (
-    <DetailReadonlyField label={parameter.display.title}>
+    <DetailText as="div" tone="muted" className="break-words">
       {formatFallback(parameter.value)}
-    </DetailReadonlyField>
+    </DetailText>
   );
 }
 
@@ -384,21 +367,19 @@ function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryV
   };
 
   return (
-    <DetailFieldRow label={parameter.display.title}>
-      <div className="space-y-1">
-        {parameter.editor === "text" && parameter.multiline ? (
-          <DetailTextarea {...sharedProps} />
-        ) : (
-          <Input
-            {...sharedProps}
-            type="text"
-            inputMode={parameter.editor === "number" ? "decimal" : undefined}
-            className={detailInlineInputClass}
-          />
-        )}
-        <ParameterErrorList id={errorId} errors={visibleErrors} />
-      </div>
-    </DetailFieldRow>
+    <div className="space-y-1">
+      {parameter.editor === "text" && parameter.multiline ? (
+        <DetailTextarea {...sharedProps} />
+      ) : (
+        <Input
+          {...sharedProps}
+          type="text"
+          inputMode={parameter.editor === "number" ? "decimal" : undefined}
+          className={detailInlineInputClass}
+        />
+      )}
+      <ParameterErrorList id={errorId} errors={visibleErrors} />
+    </div>
   );
 }
 

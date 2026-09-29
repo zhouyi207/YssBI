@@ -1,5 +1,5 @@
 import { useShallow } from "zustand/react/shallow";
-import { useMemo } from "react";
+import { Fragment, memo, useMemo, type ComponentProps } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { useGraphRead } from "@/features/core/graph/read";
@@ -30,7 +30,51 @@ interface NodeDetailPanelProps {
   nodeId: string;
 }
 
-export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
+function formatParameterValue(value: unknown): string {
+  return value == null ? "—" : typeof value === "string" ? value : JSON.stringify(value);
+}
+
+const NodeParameterSection = memo(function NodeParameterSection({
+  graphPath,
+  nodeId,
+  locale,
+  parameter,
+}: Omit<ComponentProps<typeof NodeParameterEditor>, "diagnostics" | "formatFallback">) {
+  const diagnostics = useGraphRead(
+    useShallow((snapshot) =>
+      (snapshot.graphEntities[graphPath]?.nodes[nodeId]?.diagnostics ?? []).filter(
+        (diagnostic) =>
+          diagnostic.location.kind === "parameter" &&
+          diagnostic.location.nodeId === nodeId &&
+          diagnostic.location.key === parameter.key,
+      ),
+    ),
+  );
+  return (
+    <div
+      tabIndex={-1}
+      data-graph-path={graphPath}
+      data-node-id={nodeId}
+      data-graph-parameter-key={parameter.key}
+    >
+      <DetailCollapsibleSection title={parameter.display.title} defaultOpen>
+        <NodeParameterEditor
+          graphPath={graphPath}
+          nodeId={nodeId}
+          locale={locale}
+          parameter={parameter}
+          diagnostics={diagnostics}
+          formatFallback={formatParameterValue}
+        />
+      </DetailCollapsibleSection>
+    </div>
+  );
+});
+
+export const NodeDetailPanel = memo(function NodeDetailPanel({
+  graphPath,
+  nodeId,
+}: NodeDetailPanelProps) {
   const { t, i18n } = useTranslation();
   const node = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.nodes[nodeId]);
   const diagnosticLabels = useGraphRead(
@@ -91,39 +135,22 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
       </DetailForm>
 
       {node.parameterGroups.map((group) => (
-        <DetailCollapsibleSection
-          key={`${graphPath}:${nodeId}:${group.key}`}
-          title={group.display.title}
-          defaultOpen
-        >
+        <Fragment key={`${graphPath}:${nodeId}:${group.key}`}>
           {group.display.description && (
-            <DetailText as="div" tone="muted" className="pb-2 text-xs">
+            <DetailText as="div" tone="muted" className="px-3 py-2 text-xs">
               {group.display.description}
             </DetailText>
           )}
-          <DetailForm>
-            {group.parameters.map((parameter) => (
-              <div
-                key={parameter.key}
-                tabIndex={-1}
-                data-graph-path={graphPath}
-                data-node-id={nodeId}
-                data-graph-parameter-key={parameter.key}
-              >
-                <NodeParameterEditor
-                  graphPath={graphPath}
-                  nodeId={nodeId}
-                  locale={i18n?.resolvedLanguage ?? "en-US"}
-                  parameter={parameter}
-                  diagnostics={node.diagnostics}
-                  formatFallback={(value) =>
-                    value == null ? "—" : typeof value === "string" ? value : JSON.stringify(value)
-                  }
-                />
-              </div>
-            ))}
-          </DetailForm>
-        </DetailCollapsibleSection>
+          {group.parameters.map((parameter) => (
+            <NodeParameterSection
+              key={parameter.key}
+              graphPath={graphPath}
+              nodeId={nodeId}
+              locale={i18n?.resolvedLanguage ?? "en-US"}
+              parameter={parameter}
+            />
+          ))}
+        </Fragment>
       ))}
 
       {node.diagnostics.length > 0 && (
@@ -161,4 +188,4 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
       {documentation && <NodeDocumentationPanel markdown={documentation} />}
     </DetailPanelShell>
   );
-}
+});

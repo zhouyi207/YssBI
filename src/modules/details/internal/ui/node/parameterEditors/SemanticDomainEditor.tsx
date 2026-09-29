@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,20 +38,31 @@ export function SemanticDomainEditor({
   onCommit(value: unknown, callbacks?: { onRejected?(): void }): void;
 }) {
   const { t } = useTranslation();
-  const latestProjection = useRef(value);
-  latestProjection.current = value;
-  const [projection, setProjection] = useState(value);
-  const [draft, setDraft] = useState(() => readDomain(value));
+  const projected = useMemo(() => readDomain(value), [value]);
+  const signature = useMemo(() => JSON.stringify(projected), [projected]);
+  const latestProjection = useRef(projected);
+  latestProjection.current = projected;
+  const [projection, setProjection] = useState(signature);
+  const [draft, setDraft] = useState(projected);
   const [page, setPage] = useState(0);
-  if (projection !== value) {
-    setProjection(value);
-    setDraft(readDomain(value));
-    setPage(0);
+  if (projection !== signature) {
+    setProjection(signature);
+    setDraft(projected);
   }
   const unique = new Set(draft.values.map((entry) => entry.value)).size === draft.values.length;
   const lastPage = Math.max(0, Math.ceil(draft.values.length / 50) - 1);
   const shownPage = Math.min(page, lastPage);
   const start = shownPage * 50;
+  const reset = () => setDraft(latestProjection.current);
+  const submit = (next: DomainDraft) => {
+    if (pending || new Set(next.values.map((entry) => entry.value)).size !== next.values.length)
+      return;
+    if (JSON.stringify(next) !== signature) onCommit(next, { onRejected: reset });
+  };
+  const change = (next: DomainDraft) => {
+    setDraft(next);
+    submit(next);
+  };
   const update = (index: number, field: "value" | "label", text: string) => {
     setDraft((current) => ({
       ...current,
@@ -66,21 +77,38 @@ export function SemanticDomainEditor({
   };
   const move = (index: number, direction: number) => {
     setPage(Math.floor((index + direction) / 50));
-    setDraft((current) => {
-      const values = [...current.values];
-      [values[index], values[index + direction]] = [values[index + direction], values[index]];
-      return { ...current, values };
-    });
+    const values = [...draft.values];
+    [values[index], values[index + direction]] = [values[index + direction], values[index]];
+    change({ ...draft, values });
   };
   const remove = (index: number) => {
-    setDraft((current) => ({
-      values: current.values.filter((_, row) => row !== index),
-      positiveValue:
-        current.positiveValue === current.values[index].value ? null : current.positiveValue,
-    }));
+    change({
+      values: draft.values.filter((_, row) => row !== index),
+      positiveValue: draft.positiveValue === draft.values[index].value ? null : draft.positiveValue,
+    });
   };
   return (
-    <div className="min-w-0 space-y-2">
+    <div
+      className="min-w-0 space-y-2"
+      onBlur={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        )
+          return;
+        submit(draft);
+      }}
+      onKeyDown={(event) => {
+        if (!(event.target instanceof HTMLInputElement) || event.nativeEvent.isComposing) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.target.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          reset();
+        }
+      }}
+    >
       <p className="text-xs text-muted-foreground">{t("conversion.domainHelp")}</p>
       <div className="max-h-64 space-y-2 overflow-y-auto">
         {draft.values.slice(start, start + 50).map((entry, row) => {
@@ -171,13 +199,11 @@ export function SemanticDomainEditor({
                 : String(draft.values.findIndex((entry) => entry.value === draft.positiveValue))
             }
             onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
+              change({
+                ...draft,
                 positiveValue:
-                  event.target.value === ""
-                    ? null
-                    : current.values[Number(event.target.value)].value,
-              }))
+                  event.target.value === "" ? null : draft.values[Number(event.target.value)].value,
+              })
             }
           >
             <option value="">{t("conversion.unspecified")}</option>
@@ -202,23 +228,10 @@ export function SemanticDomainEditor({
           disabled={pending || draft.values.length >= 65536}
           onClick={() => {
             setPage(Math.floor(draft.values.length / 50));
-            setDraft((current) => ({
-              ...current,
-              values: [...current.values, { value: "", label: "" }],
-            }));
+            change({ ...draft, values: [...draft.values, { value: "", label: "" }] });
           }}
         >
           {t("conversion.addValue")}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          disabled={pending || !unique}
-          onClick={() =>
-            onCommit(draft, { onRejected: () => setDraft(readDomain(latestProjection.current)) })
-          }
-        >
-          {t("conversion.applyDomain")}
         </Button>
       </div>
     </div>
