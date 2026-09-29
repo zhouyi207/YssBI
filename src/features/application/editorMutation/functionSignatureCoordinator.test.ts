@@ -62,11 +62,9 @@ vi.mock("@/services/nodeSystem/graphProjectionService", () => ({
 function installState(): void {
   useGraphProjectionStore.getState().clear();
   useResourceStore.getState().clear();
-  useResourceStore
-    .getState()
-    .upsertResource(
-      buildFileResourceMeta("function_graph", functionPath, "Compute", { revision: 2 }),
-    );
+  useResourceStore.getState().setSnapshot({
+    resources: [buildFileResourceMeta("function_graph", functionPath, "Compute", { revision: 2 })],
+  });
   installGraphProjectionFixture(
     functionPath,
     makeEditorProjectionFixture({
@@ -77,8 +75,6 @@ function installState(): void {
   useGraphMetaStore.setState({
     graphs: {
       [functionPath]: {
-        path: functionPath,
-        name: "Compute",
         type: "function_graph",
         functionRevision: 2,
         functionSignature: beforeSignature,
@@ -436,10 +432,16 @@ describe("executeFunctionSignatureMutation", () => {
         title: "New project",
       }).projection,
     );
-    useGraphMetaStore.getState().updateGraph(functionPath, {
-      functionRevision: 20,
-      functionSignature: afterSignature,
-    });
+    useGraphMetaStore.setState((state) => ({
+      graphs: {
+        ...state.graphs,
+        [functionPath]: {
+          ...state.graphs[functionPath],
+          functionRevision: 20,
+          functionSignature: afterSignature,
+        },
+      },
+    }));
     const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
     const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
 

@@ -24,7 +24,6 @@ export interface WorkbenchLayoutInternal {
   unbind(binding?: LayoutModelBinding): void;
   beginHydration(): number;
   completeHydration(epoch?: number): void;
-  invalidateHydration(): void;
   invalidatePendingOperations(): void;
   whenIdle(): Promise<void>;
   dispatchAction(action: Action): void;
@@ -328,11 +327,6 @@ export function createWorkbenchLayoutRuntime(): {
       for (const resolve of hydrationWaiters) resolve({ status: "hydrated" });
       hydrationWaiters.clear();
       void drain();
-    },
-    invalidateHydration() {
-      hydrationEpoch++;
-      hydrated = false;
-      publish();
     },
     invalidatePendingOperations: invalidate,
     whenIdle: () =>

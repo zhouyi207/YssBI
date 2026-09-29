@@ -31,16 +31,20 @@ beforeEach(() => {
   useChartDocumentStore.getState().clear();
   useDocumentStateStore.getState().clear();
   useResourceStore.getState().clear();
-  useResourceStore.getState().upsertResource({
-    ...ref,
-    uri: resourceKey(ref),
-    name: "Report",
-    revision: 1,
-    exists: true,
-    loaded: false,
-    hasDirtyDocument: false,
-    hasStaleDocument: false,
-    hasConflictDocument: false,
+  useResourceStore.getState().setSnapshot({
+    resources: [
+      {
+        ...ref,
+        uri: resourceKey(ref),
+        name: "Report",
+        revision: 1,
+        exists: true,
+        loaded: false,
+        hasDirtyDocument: false,
+        hasStaleDocument: false,
+        hasConflictDocument: false,
+      },
+    ],
   });
 });
 

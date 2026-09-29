@@ -17,6 +17,9 @@ menu, sidebar and keyboard call the same operations. A newly created file opens
 its editor and expands its category. Generic workbench commands use
 `saveActiveFile`, `saveProjectAs` and `openProject` to describe their actual scope.
 
+The Project sidebar owns rename input and errors through `SidebarRenameDialog`.
+`useProjectActivityActions` submits those values through `renameResource`.
+
 `EventGraphService` and `FunctionGraphService` bind separate create/rename/duplicate/
 remove IPC commands. Rust rejects a path belonging to the other file kind before
 calling shared node-document persistence. Event Graph starts with an empty node document;

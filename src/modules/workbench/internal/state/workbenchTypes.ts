@@ -5,7 +5,6 @@ export interface WorkbenchUiState {
 
 export interface WorkbenchUiCommands {
   setNodeDocumentationOpen(open: boolean): void;
-  resetWorkbenchUiState(): void;
 }
 
 export type WorkbenchUiStore = WorkbenchUiState & WorkbenchUiCommands;

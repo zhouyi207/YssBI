@@ -31,15 +31,15 @@ it("keeps unrelated graph and resource snapshots stable and freezes published st
   );
   expect(Object.isFrozen(graphBefore.graphEntities["events/A"].nodes)).toBe(true);
   const graphs = getGraphSnapshot().graphEntities;
-  useGraphMetaStore.getState().addGraph({ path: "events/B", name: "B", type: "event_graph" });
+  useGraphMetaStore.setState({ graphs: { "events/B": { type: "event_graph" } } });
   expect(getGraphSnapshot().graphEntities).toBe(graphs);
 
-  useResourceStore
-    .getState()
-    .setResources([
+  useResourceStore.getState().setSnapshot({
+    resources: [
       buildFileResourceMeta("event_graph", "events/A", "A"),
       buildFileResourceMeta("event_graph", "events/B", "B"),
-    ]);
+    ],
+  });
   const refA = { id: "events/A", kind: "event_graph" } as const;
   markResourceLoaded(refA);
   const resourceBefore = getResourceSnapshot();

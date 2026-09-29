@@ -39,17 +39,21 @@ function chart(chartType: ChartDocument["chartType"]): ChartDocument {
 }
 
 function registerChartResource(): void {
-  useResourceStore.getState().upsertResource({
-    id: chartPath,
-    kind: "chart",
-    name: "Report",
-    uri: resourceKey({ id: chartPath, kind: "chart" }),
-    exists: true,
-    loaded: true,
-    revision: committedRevision,
-    hasDirtyDocument: false,
-    hasStaleDocument: false,
-    hasConflictDocument: false,
+  useResourceStore.getState().setSnapshot({
+    resources: [
+      {
+        id: chartPath,
+        kind: "chart",
+        name: "Report",
+        uri: resourceKey({ id: chartPath, kind: "chart" }),
+        exists: true,
+        loaded: true,
+        revision: committedRevision,
+        hasDirtyDocument: false,
+        hasStaleDocument: false,
+        hasConflictDocument: false,
+      },
+    ],
   });
 }
 

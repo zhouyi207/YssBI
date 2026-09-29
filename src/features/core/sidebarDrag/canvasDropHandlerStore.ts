@@ -35,5 +35,4 @@ export const canvasDropHandlerStore = {
   },
   getHandler: (panelInstanceId: string): CanvasDropHandler | null =>
     dropHandlerStore.getState().handlers[panelInstanceId] ?? null,
-  subscribe: dropHandlerStore.subscribe,
 };

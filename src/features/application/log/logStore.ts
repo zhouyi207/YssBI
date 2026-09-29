@@ -13,7 +13,6 @@ export interface LogStore {
   autoScroll: boolean;
 
   setSelectedLog: (log: LogRecordDto | null) => void;
-  setFilter: (filter: Partial<LogLogFilter>) => void;
   toggleLevel: (level: LogLevel) => void;
   setSearchText: (text: string) => void;
   setAutoScroll: (autoScroll: boolean) => void;
@@ -30,10 +29,6 @@ export const useLogStore = create<LogStore>((set) => ({
   autoScroll: true,
 
   setSelectedLog: (log) => set({ selectedLog: log }),
-  setFilter: (filter) =>
-    set((state) => ({
-      filter: { ...state.filter, ...filter },
-    })),
   toggleLevel: (level) =>
     set((state) => {
       const levels = new Set(state.filter.levels);

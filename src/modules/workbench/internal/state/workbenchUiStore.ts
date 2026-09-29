@@ -10,5 +10,4 @@ export const useWorkbenchUiStore = create<WorkbenchUiStore>((set) => ({
   ...DEFAULT_WORKBENCH_UI_STATE,
 
   setNodeDocumentationOpen: (isNodeDocumentationOpen: boolean) => set({ isNodeDocumentationOpen }),
-  resetWorkbenchUiState: () => set(DEFAULT_WORKBENCH_UI_STATE),
 }));

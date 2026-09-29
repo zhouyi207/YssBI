@@ -8,7 +8,6 @@ import type {
 
 export interface ProjectPickerProgressHandle {
   update: (patch: Partial<ProgressState>) => void;
-  markDone: () => void;
   isCancelled: () => boolean;
 }
 
@@ -81,14 +80,6 @@ export async function runWithProjectPickerProgress<T>(
       update: (patch) => {
         if (!cancelled) {
           uiStore.updateProgress(patch);
-        }
-      },
-      markDone: () => {
-        if (!cancelled) {
-          uiStore.updateProgress({
-            detail: undefined,
-            percent: 1,
-          });
         }
       },
       isCancelled: () => cancelled,

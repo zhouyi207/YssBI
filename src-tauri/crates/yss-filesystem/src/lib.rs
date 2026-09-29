@@ -26,11 +26,6 @@ pub use transaction::{
 };
 
 #[cfg(any(test, feature = "test-support"))]
-pub use root::{
-    normalized_root_reconstruction_count_for_test,
-    reset_normalized_root_reconstruction_count_for_test,
-};
-#[cfg(any(test, feature = "test-support"))]
 pub use transaction::FilesystemFaultPoint;
 
 #[cfg(test)]

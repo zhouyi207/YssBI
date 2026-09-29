@@ -99,17 +99,19 @@ describe("settingsStore appearance persistence", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeSettingsRead(listener);
     try {
-      settingsUi.setTheme("OLED Black");
+      settingsUi.updateAppearance({ colorTheme: "OLED Black" });
       expect(listener).toHaveBeenCalledOnce();
       expect(getSettingsSnapshot().theme).toBe(COLOR_THEME_PRESETS["OLED Black"]);
       expect(getSettingsSnapshot().appearance.lastDarkColorTheme).toBe("OLED Black");
 
-      settingsUi.setTheme("Light Modern");
+      settingsUi.updateAppearance({ colorTheme: "Light Modern" });
       expect(listener).toHaveBeenCalledTimes(2);
       expect(getSettingsSnapshot().theme).toBe(DEFAULT_LIGHT_THEME);
       const { lastLightColorTheme, lastDarkColorTheme } = getSettingsSnapshot().appearance;
       expect(lastLightColorTheme).toBe("Light Modern");
-      settingsUi.setTheme(getRememberedColorTheme("dark", lastLightColorTheme, lastDarkColorTheme));
+      settingsUi.updateAppearance({
+        colorTheme: getRememberedColorTheme("dark", lastLightColorTheme, lastDarkColorTheme),
+      });
       const palette = getSettingsSnapshot().theme;
       expect(palette).toBe(COLOR_THEME_PRESETS["OLED Black"]);
 
@@ -122,7 +124,7 @@ describe("settingsStore appearance persistence", () => {
       expect(getSettingsSnapshot().appearance).toEqual(DEFAULT_APPEARANCE);
       expect(getSettingsSnapshot().ai.openAiModel).toBe("gpt-test");
 
-      settingsUi.setTheme("Light Modern");
+      settingsUi.updateAppearance({ colorTheme: "Light Modern" });
       await settingsUi.resetAllToDefaults();
       expect(getSettingsSnapshot().theme).toBe(DEFAULT_DARK_THEME);
       expect(getSettingsSnapshot().ai).toEqual(DEFAULT_AI);

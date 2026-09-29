@@ -13,7 +13,6 @@ export interface DocumentState {
 interface DocumentStateStore {
   documents: Record<ResourceKey, DocumentState>;
   upsertDocument(document: DocumentState): void;
-  patchDocument(resourceKey: ResourceKey, patch: Partial<DocumentState>): void;
   removeDocument(resourceKey: ResourceKey): void;
   clear(): void;
 }
@@ -28,18 +27,6 @@ export const useDocumentStateStore = create<DocumentStateStore>((set) => ({
         [document.resourceKey]: document,
       },
     })),
-
-  patchDocument: (resourceKey, patch) =>
-    set((state) => {
-      const previous = state.documents[resourceKey];
-      if (!previous) return state;
-      return {
-        documents: {
-          ...state.documents,
-          [resourceKey]: { ...previous, ...patch },
-        },
-      };
-    }),
 
   removeDocument: (resourceKey) =>
     set((state) => {

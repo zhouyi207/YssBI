@@ -25,7 +25,7 @@ describe("project read context", () => {
     const fixture = makeEditorProjectionFixture({ graphPath: path });
     useResourceStore
       .getState()
-      .setResources([buildFileResourceMeta("event_graph", path, "Cached")]);
+      .setSnapshot({ resources: [buildFileResourceMeta("event_graph", path, "Cached")] });
     installGraphProjectionFixture(path, fixture.projection);
     markResourceLoaded({ id: path, kind: "event_graph" });
     useProjectIOStore.setState({ graphLoadStatus: { [path]: "ready" } });

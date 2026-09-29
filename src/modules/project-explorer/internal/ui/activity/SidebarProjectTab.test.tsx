@@ -79,7 +79,7 @@ describe("SidebarProjectTab", () => {
       "functions/Second.yssbi-function",
       "Second Function",
     );
-    useResourceStore.getState().setResources([first, second]);
+    useResourceStore.getState().setSnapshot({ resources: [first, second] });
     const panel = useSidebarStore.getState().panels.project!;
     useSidebarStore.getState().publishPanels([
       {

@@ -8,21 +8,20 @@ import { useDocumentStateStore } from "@/features/core/resource/documentStateSto
 import {
   buildFileResourceMeta,
   markResourceLoaded,
-  resourceKey,
+  markResourceStale,
   useResourceStore,
 } from "@/features/core/resource";
 import { isGraphCachedInMemory } from "./graphDocumentLoadPolicy";
 
 describe("graphDocumentLoadPolicy", () => {
   const graphPath = "opaque graph resource";
-  const docKey = resourceKey({ id: graphPath, kind: "event_graph" });
 
   beforeEach(() => {
     useGraphProjectionStore.getState().clear();
     useDocumentStateStore.getState().clear();
     useResourceStore
       .getState()
-      .setResources([buildFileResourceMeta("event_graph", graphPath, "Main")]);
+      .setSnapshot({ resources: [buildFileResourceMeta("event_graph", graphPath, "Main")] });
   });
 
   it("returns false when graph is not in memory", () => {
@@ -54,7 +53,7 @@ describe("graphDocumentLoadPolicy", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     installGraphProjectionFixture(graphPath, fixture.projection);
     markResourceLoaded({ id: graphPath, kind: "event_graph" });
-    useDocumentStateStore.getState().patchDocument(docKey, { stale: true });
+    markResourceStale({ id: graphPath, kind: "event_graph" });
 
     expect(isGraphCachedInMemory(graphPath)).toBe(false);
   });

@@ -16,7 +16,9 @@ describe("collectDirtyEditorPanels", () => {
 
   it("does not infer an open panel from dirty document state", () => {
     const path = "events/A.yssbi-event";
-    useResourceStore.getState().upsertResource(buildFileResourceMeta("event_graph", path, "A"));
+    useResourceStore
+      .getState()
+      .setSnapshot({ resources: [buildFileResourceMeta("event_graph", path, "A")] });
     markResourceDirty({ id: path, kind: "event_graph" }, true);
 
     expect(collectDirtyEditorPanels()).toEqual([]);

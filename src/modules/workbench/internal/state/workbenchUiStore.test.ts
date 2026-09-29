@@ -11,10 +11,10 @@ function uiState() {
 
 describe("workbenchUiStore", () => {
   beforeEach(() => {
-    useWorkbenchUiStore.getState().resetWorkbenchUiState();
+    useWorkbenchUiStore.setState(DEFAULT_WORKBENCH_UI_STATE);
   });
 
-  it("updates modal state, then resets it", () => {
+  it("opens and closes node documentation", () => {
     const commands = useWorkbenchUiStore.getState();
 
     commands.setNodeDocumentationOpen(true);
@@ -23,7 +23,7 @@ describe("workbenchUiStore", () => {
       isNodeDocumentationOpen: true,
     });
 
-    commands.resetWorkbenchUiState();
+    commands.setNodeDocumentationOpen(false);
 
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
   });

@@ -86,7 +86,9 @@ beforeEach(() => {
   mocks.confirm.mockResolvedValue("cancel");
   useDocumentStateStore.getState().clear();
   useResourceStore.getState().clear();
-  useResourceStore.getState().upsertResource(buildFileResourceMeta("doc", saved.path, "Report"));
+  useResourceStore
+    .getState()
+    .setSnapshot({ resources: [buildFileResourceMeta("doc", saved.path, "Report")] });
   markResourceLoaded({ id: saved.path, kind: "doc" });
 });
 

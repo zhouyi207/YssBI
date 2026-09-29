@@ -11,10 +11,7 @@ interface ResourceStore {
     graphOrder?: string[];
     publicationRevision?: number;
   }): void;
-  setResources(resources: ProjectResourceMeta[]): void;
-  upsertResource(resource: ProjectResourceMeta): void;
   patchResource(ref: ResourceRef, patch: Partial<ProjectResourceMeta>): void;
-  removeResource(ref: ResourceRef): void;
   clear(): void;
 }
 
@@ -38,26 +35,6 @@ export const useResourceStore = create<ResourceStore>((set) => ({
           .map((resource) => resource.id),
     })),
 
-  setResources: (resources) =>
-    set({
-      resources: Object.fromEntries(
-        resources.map((resource) => [resourceKey(resource), resource]),
-      ) as Record<ResourceKey, ProjectResourceMeta>,
-    }),
-
-  upsertResource: (resource) =>
-    set((state) => ({
-      resources: {
-        ...state.resources,
-        [resourceKey(resource)]: resource,
-      },
-      graphOrder: state.graphOrder.includes(resource.id)
-        ? state.graphOrder
-        : resource.kind === "event_graph" || resource.kind === "function_graph"
-          ? [...state.graphOrder, resource.id]
-          : state.graphOrder,
-    })),
-
   patchResource: (ref, patch) =>
     set((state) => {
       const key = resourceKey(ref);
@@ -68,18 +45,6 @@ export const useResourceStore = create<ResourceStore>((set) => ({
           ...state.resources,
           [key]: { ...previous, ...patch },
         },
-      };
-    }),
-
-  removeResource: (ref) =>
-    set((state) => {
-      const key = resourceKey(ref);
-      if (!state.resources[key]) return state;
-      const next = { ...state.resources };
-      delete next[key];
-      return {
-        resources: next,
-        graphOrder: state.graphOrder.filter((id) => id !== ref.id),
       };
     }),
 

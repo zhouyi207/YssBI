@@ -71,8 +71,6 @@ function prepareFunctionState(
         [
           graph.path,
           {
-            path: graph.path,
-            name: graph.name,
             type: "function_graph" as const,
             functionRevision: graph.functionEditorProjection.functionRevision,
             functionSignature: structuredClone(graph.functionSignature),

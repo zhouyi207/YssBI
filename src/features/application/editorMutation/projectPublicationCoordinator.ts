@@ -230,9 +230,6 @@ export class ProjectPublicationCoordinator {
   capturePublicationRevision(): number {
     return this.appliedRevision;
   }
-  captureCommandLifecycle() {
-    return { ...captureProjectIdentity(), publicationRevision: this.appliedRevision };
-  }
   markProjectProjectionStale(): void {
     this.publishedIndexSignature = undefined;
     this.dependencies.markProjectProjectionStale();

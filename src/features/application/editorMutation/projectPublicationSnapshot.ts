@@ -360,8 +360,6 @@ export function prepareProjectSnapshotCommit(
       return [
         graph.path,
         {
-          path: graph.path,
-          name: graph.name,
           type: graph.type,
           ...functionState,
         },

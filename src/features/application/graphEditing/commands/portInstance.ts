@@ -29,19 +29,6 @@ export interface RemovePortInstanceArgs {
   address: Extract<PortAddressDto, { kind: "instance" }>;
 }
 
-export interface MovePortInstanceArgs extends RemovePortInstanceArgs {
-  placement: PortPlacementDto;
-}
-
-export const movePortInstanceCommand: CommandHandler<MovePortInstanceArgs, GraphEditOutcome> = {
-  execute(graphPath, args) {
-    return applyGraphMutation({
-      graphPath,
-      mutation: { type: "movePortInstance", payload: args },
-    });
-  },
-};
-
 export const removePortInstanceCommand: CommandHandler<RemovePortInstanceArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
     return applyGraphMutation({

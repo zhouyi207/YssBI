@@ -18,7 +18,7 @@ describe("document state queries", () => {
 
   it("tracks dirty via DocumentState as single source of truth", () => {
     const meta = buildFileResourceMeta("event_graph", "events/A.yssbi-event", "A");
-    useResourceStore.getState().upsertResource(meta);
+    useResourceStore.getState().setSnapshot({ resources: [meta] });
     markResourceLoaded({ id: meta.id, kind: "event_graph" });
 
     expect(isGraphResourceDirty(meta.id)).toBe(false);
@@ -29,7 +29,7 @@ describe("document state queries", () => {
 
   it("clears document state while retaining resource meta", () => {
     const meta = buildFileResourceMeta("event_graph", "events/A.yssbi-event", "A");
-    useResourceStore.getState().upsertResource(meta);
+    useResourceStore.getState().setSnapshot({ resources: [meta] });
     markResourceLoaded({ id: meta.id, kind: "event_graph" });
 
     clearResourceDocumentState({ id: meta.id, kind: "event_graph" });

@@ -133,6 +133,10 @@ Node Details displays each parameter as a top-level section, expanded by default
 groups retain their declared ordering and descriptions without an outer Parameters heading;
 the section title is not repeated inside its control. Collapsing one parameter affects only
 that section, and diagnostic focus keeps the graph/node/parameter identity on its wrapper.
+Every parameter uses one tagged `editor` object: for example `{ "kind": "number" }`,
+`{ "kind": "select", "options": ["OLS", "WLS"] }`, or a `projectColumns` / `filterPredicate`
+descriptor carrying its schema-derived choices and editable value. The renderer selects the
+existing control using `editor.kind`; grouping, display metadata and presentation remain separate.
 The panel and parameter sections use memoized boundaries over the existing structurally
 shared projection. Each section subscribes only to its own parameter diagnostics; unchanged
 parameters do not rerender with another parameter edit. Column rows reserve space for order

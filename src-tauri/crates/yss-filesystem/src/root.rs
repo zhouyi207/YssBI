@@ -4,11 +4,6 @@ use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
 
-#[cfg(any(test, feature = "test-support"))]
-thread_local! {
-    static NORMALIZED_ROOT_RECONSTRUCTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
 #[cfg(windows)]
 use super::windows_path_identity::WindowsPathIdentity;
 
@@ -86,8 +81,6 @@ pub struct NormalizedRoot {
 
 impl NormalizedRoot {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, FilesystemError> {
-        #[cfg(any(test, feature = "test-support"))]
-        NORMALIZED_ROOT_RECONSTRUCTIONS.set(NORMALIZED_ROOT_RECONSTRUCTIONS.get() + 1);
         let original = path.as_ref().to_path_buf();
         let input = original.clone();
         if input.as_os_str().is_empty() {
@@ -126,16 +119,6 @@ impl NormalizedRoot {
     pub fn as_path(&self) -> &Path {
         &self.path
     }
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn reset_normalized_root_reconstruction_count_for_test() {
-    NORMALIZED_ROOT_RECONSTRUCTIONS.set(0);
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn normalized_root_reconstruction_count_for_test() -> usize {
-    NORMALIZED_ROOT_RECONSTRUCTIONS.get()
 }
 
 impl PartialEq for NormalizedRoot {

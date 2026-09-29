@@ -118,7 +118,7 @@ it("applies late delete authorization to retained dirty content after an index-o
   const ref = { id: path, kind: "doc" as const };
   useResourceStore
     .getState()
-    .upsertResource(buildFileResourceMeta("doc", path, "Report", { revision: 0 }));
+    .setSnapshot({ resources: [buildFileResourceMeta("doc", path, "Report", { revision: 0 })] });
   markResourceLoaded(ref);
   markResourceDirty(ref, true);
   useDocProjectionStore.getState().install({
