@@ -162,3 +162,5 @@ Numerical estimator inputs use `yss_sci_linalg::Mat` and `Col`; cross-crate fit
 contracts use ordinary vectors with documented row/column meanings. Call sites
 use the shared OLS configuration. Result organization does not change solver or
 convergence policy.
+
+Classical hypothesis tests are organized under `hypothesis`: `sample_mean` owns mean, proportion, Poisson and equivalence tests; `categorical` owns count-table tests; `nonparametric` owns rank and sequence tests; and `variance` owns variance-homogeneity tests. These functions accept neutral contract requests and return common result records. The node catalog and kernel own graph-facing interfaces and dispatch.

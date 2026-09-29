@@ -1,0 +1,592 @@
+//! Independent sample mean tests. Inputs are already filtered to complete, finite observations.
+use statrs::distribution::{
+    Binomial, ContinuousCDF, Discrete, DiscreteCDF, Normal, Poisson, StudentsT,
+};
+use yss_sci_contract::hypothesis::{
+    Alternative, ClassicalHypothesisTest, ClassicalTestResult, SummaryTDesign,
+};
+
+pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String> {
+    match input {
+        ClassicalHypothesisTest::OneSample {
+            values,
+            null_mean,
+            alternative,
+        } => {
+            validate(&values)?;
+            if !null_mean.is_finite() || values.len() < 2 {
+                return Err(
+                    "one-sample t test requires a finite null mean and at least two observations"
+                        .into(),
+                );
+            }
+            let n = values.len();
+            let mean = values.iter().sum::<f64>() / n as f64;
+            let variance = sample_variance(&values, mean)?;
+            finish(
+                "t.one_sample",
+                format!("mean = {null_mean}"),
+                "t",
+                mean - null_mean,
+                (variance / n as f64).sqrt(),
+                (n - 1) as f64,
+                alternative,
+                vec![n],
+            )
+        }
+        ClassicalHypothesisTest::Independent {
+            first,
+            second,
+            equal_variance,
+            alternative,
+        } => {
+            validate(&first)?;
+            validate(&second)?;
+            if first.len() < 2 || second.len() < 2 {
+                return Err(
+                    "independent t test requires at least two observations per group".into(),
+                );
+            }
+            independent(
+                &first,
+                &second,
+                equal_variance,
+                0.0,
+                alternative,
+                "t.independent",
+            )
+        }
+        ClassicalHypothesisTest::Paired {
+            before,
+            after,
+            alternative,
+        } => {
+            validate(&before)?;
+            validate(&after)?;
+            if before.len() != after.len() || before.len() < 2 {
+                return Err("paired t test requires at least two aligned pairs".into());
+            }
+            let differences = before
+                .iter()
+                .zip(after)
+                .map(|(a, b)| a - b)
+                .collect::<Vec<_>>();
+            validate(&differences)?;
+            let n = differences.len();
+            let mean = differences.iter().sum::<f64>() / n as f64;
+            let variance = sample_variance(&differences, mean)?;
+            finish(
+                "t.paired",
+                "mean(before - after) = 0".into(),
+                "t",
+                mean,
+                (variance / n as f64).sqrt(),
+                (n - 1) as f64,
+                alternative,
+                vec![n],
+            )
+        }
+        ClassicalHypothesisTest::Summary {
+            design,
+            first_count,
+            first_mean,
+            first_sd,
+            second_count,
+            second_mean,
+            second_sd,
+            null_difference,
+            equal_variance,
+            alternative,
+        } => {
+            if first_count < 2
+                || !first_mean.is_finite()
+                || !first_sd.is_finite()
+                || first_sd < 0.0
+                || !null_difference.is_finite()
+            {
+                return Err("summary t test has invalid first-group summary values".into());
+            }
+            match (design, second_count, second_mean, second_sd) {
+                (SummaryTDesign::Paired, None, None, None) => {
+                    let se = first_sd / (first_count as f64).sqrt();
+                    finish(
+                        "t.summary_paired",
+                        format!("mean difference = {null_difference}"),
+                        "t",
+                        first_mean - null_difference,
+                        se,
+                        (first_count - 1) as f64,
+                        alternative,
+                        vec![first_count],
+                    )
+                }
+                (SummaryTDesign::OneSample, None, None, None) => {
+                    let se = first_sd / (first_count as f64).sqrt();
+                    finish(
+                        "t.summary_one_sample",
+                        format!("mean = {null_difference}"),
+                        "t",
+                        first_mean - null_difference,
+                        se,
+                        (first_count - 1) as f64,
+                        alternative,
+                        vec![first_count],
+                    )
+                }
+                (SummaryTDesign::Independent, Some(n2), Some(mean2), Some(sd2))
+                    if n2 >= 2 && mean2.is_finite() && sd2.is_finite() && sd2 >= 0.0 =>
+                {
+                    let estimate = first_mean - mean2;
+                    let (se, df) =
+                        summary_independent_se_df(first_count, first_sd, n2, sd2, equal_variance)?;
+                    finish(
+                        "t.summary_independent",
+                        format!("mean1 - mean2 = {null_difference}"),
+                        "t",
+                        estimate - null_difference,
+                        se,
+                        df,
+                        alternative,
+                        vec![first_count, n2],
+                    )
+                }
+                _ => {
+                    return Err(
+                        "summary t test requires all or none of the second-group summary".into(),
+                    );
+                }
+            }
+        }
+        ClassicalHypothesisTest::OneSampleZ {
+            values,
+            null_mean,
+            population_sd,
+            alternative,
+        } => {
+            validate(&values)?;
+            if values.is_empty()
+                || !null_mean.is_finite()
+                || !population_sd.is_finite()
+                || population_sd <= 0.0
+            {
+                return Err(
+                    "one-sample z test requires observations and a positive finite population SD"
+                        .into(),
+                );
+            }
+            let n = values.len();
+            let estimate = values.iter().sum::<f64>() / n as f64 - null_mean;
+            finish_normal(
+                "z.mean",
+                format!("mean = {null_mean}"),
+                estimate,
+                population_sd / (n as f64).sqrt(),
+                alternative,
+                vec![n],
+            )
+        }
+        ClassicalHypothesisTest::OneProportionZ {
+            successes,
+            trials,
+            null_probability,
+            alternative,
+        } => {
+            validate_proportion(successes, trials, null_probability)?;
+            let estimate = successes as f64 / trials as f64 - null_probability;
+            let se = (null_probability * (1.0 - null_probability) / trials as f64).sqrt();
+            finish_normal(
+                "z.proportion",
+                format!("p = {null_probability}"),
+                estimate,
+                se,
+                alternative,
+                vec![trials],
+            )
+        }
+        ClassicalHypothesisTest::ExactBinomial {
+            successes,
+            trials,
+            null_probability,
+            alternative,
+        } => {
+            validate_proportion(successes, trials, null_probability)?;
+            let p_value = binomial_p_value(successes, trials, null_probability, alternative)?;
+            let estimate = successes as f64 / trials as f64;
+            Ok(ClassicalTestResult {
+                method: "test.binomial".into(),
+                null_hypothesis: format!("p = {null_probability}"),
+                alternative: alternative_name(alternative).into(),
+                statistic_name: "successes".into(),
+                statistic: successes as f64,
+                degrees_of_freedom: vec![],
+                p_value,
+                estimate: Some(estimate),
+                standard_error: None,
+                sample_sizes: vec![trials],
+                details: [("successes".into(), successes as f64)].into(),
+            })
+        }
+        ClassicalHypothesisTest::TwoProportions {
+            first_successes,
+            first_trials,
+            second_successes,
+            second_trials,
+            null_difference,
+            alternative,
+        } => {
+            validate_proportion(first_successes, first_trials, 0.5)?;
+            validate_proportion(second_successes, second_trials, 0.5)?;
+            if !null_difference.is_finite() {
+                return Err("two-proportion test null difference must be finite".into());
+            }
+            let p1 = first_successes as f64 / first_trials as f64;
+            let p2 = second_successes as f64 / second_trials as f64;
+            let se = if null_difference == 0.0 {
+                let pooled = (first_successes + second_successes) as f64
+                    / (first_trials + second_trials) as f64;
+                (pooled * (1.0 - pooled) * (1.0 / first_trials as f64 + 1.0 / second_trials as f64))
+                    .sqrt()
+            } else {
+                (p1 * (1.0 - p1) / first_trials as f64 + p2 * (1.0 - p2) / second_trials as f64)
+                    .sqrt()
+            };
+            finish_normal(
+                "proportion.two",
+                format!("p1 - p2 = {null_difference}"),
+                p1 - p2 - null_difference,
+                se,
+                alternative,
+                vec![first_trials, second_trials],
+            )
+        }
+        ClassicalHypothesisTest::PoissonRate {
+            counts,
+            null_rate_per_observation,
+            alternative,
+        } => {
+            validate(&counts)?;
+            if counts.is_empty()
+                || counts
+                    .iter()
+                    .any(|count| *count < 0.0 || count.fract() != 0.0)
+                || !null_rate_per_observation.is_finite()
+                || null_rate_per_observation < 0.0
+            {
+                return Err("Poisson rate test requires non-negative integer counts and a non-negative finite null rate".into());
+            }
+            let events_f = counts.iter().sum::<f64>();
+            if events_f >= u64::MAX as f64 {
+                return Err("Poisson event count overflow".into());
+            }
+            let events = events_f as u64;
+            let expected = null_rate_per_observation * counts.len() as f64;
+            if !expected.is_finite() || expected > 500_000.0 || events > 1_000_000 {
+                return Err(
+                    "Poisson exact test input exceeds the supported event-count bound".into(),
+                );
+            }
+            let p_value = poisson_p_value(events, expected, alternative)?;
+            let rate = events as f64 / counts.len() as f64;
+            let statistic = (events as f64 - expected) / expected.sqrt().max(1.0);
+            Ok(ClassicalTestResult {
+                method: "poisson".into(),
+                null_hypothesis: format!("rate = {null_rate_per_observation} per observation"),
+                alternative: alternative_name(alternative).into(),
+                statistic_name: "count_score".into(),
+                statistic,
+                degrees_of_freedom: vec![],
+                p_value,
+                estimate: Some(rate),
+                standard_error: Some(rate.sqrt() / (counts.len() as f64).sqrt()),
+                sample_sizes: vec![counts.len()],
+                details: [
+                    ("event_count".into(), events as f64),
+                    ("expected_event_count".into(), expected),
+                ]
+                .into(),
+            })
+        }
+        ClassicalHypothesisTest::Equivalence {
+            values,
+            lower_bound,
+            upper_bound,
+        } => {
+            validate(&values)?;
+            if values.len() < 2
+                || !lower_bound.is_finite()
+                || !upper_bound.is_finite()
+                || lower_bound >= upper_bound
+            {
+                return Err(
+                    "equivalence test requires at least two observations and ordered finite bounds"
+                        .into(),
+                );
+            }
+            let n = values.len();
+            let mean = values.iter().sum::<f64>() / n as f64;
+            let se = (sample_variance(&values, mean)? / n as f64).sqrt();
+            if se <= 0.0 || !se.is_finite() {
+                return Err("equivalence standard error is zero or non-finite".into());
+            }
+            let df = (n - 1) as f64;
+            let dist =
+                StudentsT::new(0.0, 1.0, df).map_err(|_| "invalid equivalence t distribution")?;
+            let lower_stat = (mean - lower_bound) / se;
+            let upper_stat = (mean - upper_bound) / se;
+            let lower_p = dist.sf(lower_stat);
+            let upper_p = dist.cdf(upper_stat);
+            let p_value = lower_p.max(upper_p).clamp(0.0, 1.0);
+            Ok(ClassicalTestResult {
+                method: "equivalence".into(),
+                null_hypothesis: format!("mean <= {lower_bound} or mean >= {upper_bound}"),
+                alternative: "lower_bound < mean < upper_bound".into(),
+                statistic_name: "t_lower_bound".into(),
+                statistic: lower_stat,
+                degrees_of_freedom: vec![df],
+                p_value,
+                estimate: Some(mean),
+                standard_error: Some(se),
+                sample_sizes: vec![n],
+                details: [
+                    ("t_upper_bound".into(), upper_stat),
+                    ("p_lower_bound".into(), lower_p),
+                    ("p_upper_bound".into(), upper_p),
+                ]
+                .into(),
+            })
+        }
+    }
+}
+
+fn independent(
+    first: &[f64],
+    second: &[f64],
+    equal_variance: bool,
+    null_difference: f64,
+    alternative: Alternative,
+    method: &str,
+) -> Result<ClassicalTestResult, String> {
+    let n1 = first.len();
+    let n2 = second.len();
+    let mean1 = first.iter().sum::<f64>() / n1 as f64;
+    let mean2 = second.iter().sum::<f64>() / n2 as f64;
+    let var1 = sample_variance(first, mean1)?;
+    let var2 = sample_variance(second, mean2)?;
+    let (se, df) = summary_independent_se_df(n1, var1.sqrt(), n2, var2.sqrt(), equal_variance)?;
+    finish(
+        method,
+        format!("mean1 - mean2 = {null_difference}"),
+        "t",
+        mean1 - mean2 - null_difference,
+        se,
+        df,
+        alternative,
+        vec![n1, n2],
+    )
+}
+
+fn summary_independent_se_df(
+    n1: usize,
+    sd1: f64,
+    n2: usize,
+    sd2: f64,
+    equal_variance: bool,
+) -> Result<(f64, f64), String> {
+    let a = sd1 * sd1 / n1 as f64;
+    let b = sd2 * sd2 / n2 as f64;
+    let variance = if equal_variance {
+        let pooled =
+            (((n1 - 1) as f64 * sd1 * sd1) + ((n2 - 1) as f64 * sd2 * sd2)) / (n1 + n2 - 2) as f64;
+        pooled * (1.0 / n1 as f64 + 1.0 / n2 as f64)
+    } else {
+        a + b
+    };
+    if !variance.is_finite() || variance <= 0.0 {
+        return Err("t test standard error is zero or non-finite".into());
+    }
+    let df = if equal_variance {
+        (n1 + n2 - 2) as f64
+    } else {
+        variance * variance / (a * a / (n1 - 1) as f64 + b * b / (n2 - 1) as f64)
+    };
+    if !df.is_finite() || df <= 0.0 {
+        return Err("t test degrees of freedom are invalid".into());
+    }
+    Ok((variance.sqrt(), df))
+}
+
+fn sample_variance(values: &[f64], mean: f64) -> Result<f64, String> {
+    let variance = values
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
+        / (values.len() - 1) as f64;
+    if variance.is_finite() {
+        Ok(variance)
+    } else {
+        Err("sample variance is non-finite".into())
+    }
+}
+
+fn validate(values: &[f64]) -> Result<(), String> {
+    if values.iter().all(|value| value.is_finite()) {
+        Ok(())
+    } else {
+        Err("t test input contains a non-finite observation".into())
+    }
+}
+
+fn finish(
+    method: &str,
+    null_hypothesis: String,
+    statistic_name: &str,
+    estimate: f64,
+    standard_error: f64,
+    df: f64,
+    alternative: Alternative,
+    sample_sizes: Vec<usize>,
+) -> Result<ClassicalTestResult, String> {
+    if !estimate.is_finite()
+        || !standard_error.is_finite()
+        || standard_error <= 0.0
+        || !df.is_finite()
+        || df <= 0.0
+    {
+        return Err("t test has an invalid statistic, standard error or degrees of freedom".into());
+    }
+    let statistic = estimate / standard_error;
+    let distribution =
+        StudentsT::new(0.0, 1.0, df).map_err(|_| "invalid t distribution parameters")?;
+    let p_value = match alternative {
+        Alternative::TwoSided => 2.0 * (1.0 - distribution.cdf(statistic.abs())),
+        Alternative::Greater => 1.0 - distribution.cdf(statistic),
+        Alternative::Less => distribution.cdf(statistic),
+    }
+    .clamp(0.0, 1.0);
+    let alternative = match alternative {
+        Alternative::TwoSided => "two-sided",
+        Alternative::Greater => "greater",
+        Alternative::Less => "less",
+    };
+    Ok(ClassicalTestResult {
+        method: method.into(),
+        null_hypothesis,
+        alternative: alternative.into(),
+        statistic_name: statistic_name.into(),
+        statistic,
+        degrees_of_freedom: vec![df],
+        p_value,
+        estimate: Some(estimate),
+        standard_error: Some(standard_error),
+        sample_sizes,
+        details: Default::default(),
+    })
+}
+
+fn finish_normal(
+    method: &str,
+    null_hypothesis: String,
+    estimate: f64,
+    standard_error: f64,
+    alternative: Alternative,
+    sample_sizes: Vec<usize>,
+) -> Result<ClassicalTestResult, String> {
+    if !estimate.is_finite() || !standard_error.is_finite() || standard_error <= 0.0 {
+        return Err("z test has a zero or non-finite standard error".into());
+    }
+    let statistic = estimate / standard_error;
+    let distribution = Normal::new(0.0, 1.0).map_err(|_| "invalid standard normal parameters")?;
+    let p_value = match alternative {
+        Alternative::TwoSided => 2.0 * distribution.sf(statistic.abs()),
+        Alternative::Greater => distribution.sf(statistic),
+        Alternative::Less => distribution.cdf(statistic),
+    }
+    .clamp(0.0, 1.0);
+    Ok(ClassicalTestResult {
+        method: method.into(),
+        null_hypothesis,
+        alternative: alternative_name(alternative).into(),
+        statistic_name: "z".into(),
+        statistic,
+        degrees_of_freedom: vec![],
+        p_value,
+        estimate: Some(estimate),
+        standard_error: Some(standard_error),
+        sample_sizes,
+        details: Default::default(),
+    })
+}
+
+fn alternative_name(alternative: Alternative) -> &'static str {
+    match alternative {
+        Alternative::TwoSided => "two-sided",
+        Alternative::Greater => "greater",
+        Alternative::Less => "less",
+    }
+}
+
+fn validate_proportion(successes: usize, trials: usize, p: f64) -> Result<(), String> {
+    if trials == 0 || successes > trials || !p.is_finite() || !(0.0..=1.0).contains(&p) {
+        Err(
+            "proportion test requires valid successes, trials and a null probability in [0, 1]"
+                .into(),
+        )
+    } else {
+        Ok(())
+    }
+}
+
+fn binomial_p_value(
+    successes: usize,
+    trials: usize,
+    p: f64,
+    alternative: Alternative,
+) -> Result<f64, String> {
+    if trials > 1_000_000 {
+        return Err("exact binomial test supports at most 1,000,000 trials".into());
+    }
+    if p == 0.0 {
+        return Ok(if successes == 0 { 1.0 } else { 0.0 });
+    }
+    if p == 1.0 {
+        return Ok(if successes == trials { 1.0 } else { 0.0 });
+    }
+    let distribution =
+        Binomial::new(p, trials as u64).map_err(|_| "invalid binomial parameters")?;
+    let value = match alternative {
+        Alternative::Less => distribution.cdf(successes as u64),
+        Alternative::Greater => distribution.sf(successes.saturating_sub(1) as u64),
+        Alternative::TwoSided => {
+            let observed = distribution.pmf(successes as u64);
+            (0..=trials)
+                .filter_map(|k| {
+                    let mass = distribution.pmf(k as u64);
+                    (mass <= observed * (1.0 + 1e-12)).then_some(mass)
+                })
+                .sum()
+        }
+    };
+    Ok(value.clamp(0.0, 1.0))
+}
+
+fn poisson_p_value(observed: u64, mean: f64, alternative: Alternative) -> Result<f64, String> {
+    if mean == 0.0 {
+        return Ok(if observed == 0 { 1.0 } else { 0.0 });
+    }
+    let distribution = Poisson::new(mean).map_err(|_| "invalid Poisson parameters")?;
+    let p_value = match alternative {
+        Alternative::Less => distribution.cdf(observed),
+        Alternative::Greater => distribution.sf(observed.saturating_sub(1)),
+        Alternative::TwoSided => {
+            let observed_mass = distribution.pmf(observed);
+            let limit = ((mean + 12.0 * mean.sqrt() + 100.0).ceil() as u64).max(observed);
+            (0..=limit)
+                .filter_map(|k| {
+                    let mass = distribution.pmf(k);
+                    (mass <= observed_mass * (1.0 + 1e-12)).then_some(mass)
+                })
+                .sum()
+        }
+    };
+    Ok(p_value.clamp(0.0, 1.0))
+}
