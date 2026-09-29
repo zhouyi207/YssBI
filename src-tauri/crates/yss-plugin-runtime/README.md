@@ -12,8 +12,8 @@ implementations, runtime scripts and system-test fixtures live under `plugins/ju
 ## Durable task and installation state
 
 `extensions/registry.sqlite` commits the active registry, terminal task archive and installation
-receipts in one SQLite transaction. The old `registry.json` is imported once when no SQLite
-checkpoint exists; the original file is retained. Active task admission counts running work only:
+receipts in one SQLite transaction. Startup reads only the current SQLite checkpoint and
+creates an empty registry when none exists. Active task admission counts running work only:
 the host limit and the granted per-plugin limit never include completed history.
 
 Terminal records are removed from active memory and are queried with a stable history cursor.

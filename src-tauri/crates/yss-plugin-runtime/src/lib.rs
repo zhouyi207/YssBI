@@ -42,11 +42,8 @@ struct ManagerInner {
 struct Registry {
     revision: u64,
     entries: BTreeMap<String, Registration>,
-    #[serde(default)]
     tasks: BTreeMap<String, tasks::TaskRecord>,
-    #[serde(default)]
     installations: BTreeMap<String, InstalledPlugin>,
-    #[serde(default)]
     signers: BTreeMap<String, String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -57,7 +54,6 @@ struct Registration {
     signer: String,
     enabled: bool,
     files: Vec<FileEntry>,
-    #[serde(default)]
     granted_budget: ResourceBudget,
 }
 #[derive(Default)]
@@ -188,23 +184,9 @@ impl PluginManager {
         }
         let root = fs::canonicalize(root).map_err(|_| fail("plugin_storage_failed"))?;
         let ledger = ledger::Ledger::open(&root)?;
-        let mut registry: Registry = if let Some(registry) = ledger.load()? {
-            registry
-        } else if root.join("registry.json").exists() {
-            serde_json::from_slice(&read_bounded(
-                &root.join("registry.json"),
-                16 * 1024 * 1024,
-            )?)
-            .map_err(|_| fail("plugin_registry_invalid"))?
-        } else {
-            Registry::default()
-        };
-        for (id, entry) in &mut registry.entries {
+        let mut registry = ledger.load()?.unwrap_or_default();
+        for entry in registry.entries.values_mut() {
             entry.granted_budget = entry.manifest.resource_budget.grant()?;
-            registry
-                .signers
-                .entry(id.clone())
-                .or_insert_with(|| entry.signer.clone());
         }
         for task in registry
             .tasks
