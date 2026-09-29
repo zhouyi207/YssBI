@@ -39,12 +39,11 @@ function projectionWithParameterEditor(): Record<string, unknown> {
         {
           key: "value",
           display: { title: "Value", description: null },
-          editor: "number",
+          editor: { kind: "number" },
           presentation: "inlineAndDetail",
           valueType: { kind: "Scalar", inner: "Numeric" },
           multiline: false,
           value: 1,
-          configuration: null,
         },
       ],
     },
