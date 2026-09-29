@@ -178,3 +178,5 @@ fn normal_parameters() -> Result<Parameters, ParametersError> {
 参数值始终按参数 key 扁平保存，分组不创建对象值或执行参数。分组名称、顺序和字段归组不进入
 协议执行指纹；参数类型、默认值、约束及条件显隐参与指纹。条件可以引用同节点其他组的无条件参数，
 使用显式值或协议默认值判断。编辑、条件清理及执行投影见 [Graph analysis](../yss-graph-analysis/README.md)。
+
+Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. Three additional inventory candidates (`heterogeneity`, `kappa`, and `kendall_w`) remain outside this selected scope. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.

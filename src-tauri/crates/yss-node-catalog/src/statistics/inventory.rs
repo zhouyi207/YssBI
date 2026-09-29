@@ -19,7 +19,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 }
 
 fn implemented(id: &str) -> bool {
-    super::analyses::implemented(id) || id == super::descriptive::THEIL_ID
+    super::analyses::implemented(id)
+        || super::classical::implemented(id)
+        || id == super::descriptive::THEIL_ID
 }
 
 pub(crate) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
@@ -32,7 +34,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn inventory_entries_are_visible_leaf_placeholders_covering_every_statistical_category() {
+    fn inventory_entries_cover_every_category_and_preserve_unimplemented_placeholders() {
         let system = crate::build_builtin_node_system().unwrap();
         let catalog = system.catalog.localize(&system.registry, "zh-CN");
         let mut sources = BTreeSet::new();
@@ -54,6 +56,14 @@ mod tests {
                 entry.id
             );
             let protocol = registered.protocol();
+            let item = catalog
+                .items
+                .iter()
+                .find(|item| item.node_type_id.as_ref() == entry.id)
+                .unwrap();
+            assert_eq!(item.category_id.as_ref(), entry.category);
+            assert!(item.documentation.is_some());
+            categories.insert(entry.category);
             if implemented(entry.id) {
                 assert!(!protocol.interface.ports.is_empty());
                 continue;
@@ -64,14 +74,6 @@ mod tests {
                 entry.id
             );
             assert!(protocol.parameters.is_empty());
-            let item = catalog
-                .items
-                .iter()
-                .find(|item| item.node_type_id.as_ref() == entry.id)
-                .unwrap();
-            assert_eq!(item.category_id.as_ref(), entry.category);
-            assert!(item.documentation.is_some());
-            categories.insert(entry.category);
         }
         assert_eq!(
             categories,
