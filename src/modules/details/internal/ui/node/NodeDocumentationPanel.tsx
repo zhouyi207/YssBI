@@ -15,7 +15,7 @@ export const NodeDocumentationPanel = memo(function NodeDocumentationPanel({
 
   return (
     <DetailCollapsibleSection title={t("detail.nodeDoc.documentation")} defaultOpen>
-      <div className={`${markdownProseClass} prose-sm`}>
+      <div className={`${markdownProseClass} w-full max-w-full prose-sm`}>
         <MarkdownRenderer markdown={markdown} />
       </div>
     </DetailCollapsibleSection>
