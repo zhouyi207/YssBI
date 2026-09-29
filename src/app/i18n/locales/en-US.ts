@@ -164,7 +164,6 @@ export const enUS = {
     },
     editor: {
       chartSaveFailed: "Failed to save chart: {{error}}",
-      chartDeleteFailed: "Failed to delete chart: {{error}}",
       graphSaveFailed: "Failed to save graph: {{error}}",
       documentSaveFailed: "Failed to save “{{title}}”: {{error}}",
       resourceCatalogRefreshing: "The resource catalog is stale. Refreshing before node creation.",

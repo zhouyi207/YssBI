@@ -1,4 +1,4 @@
-import type { FileSnapshot, FileCommand, FileIndexEntry } from "./fileDocument";
+import type { FileSnapshot, FileIndexEntry } from "./fileDocument";
 export type MindReference =
   | { kind: "resource"; path: string }
   | { kind: "graph_node"; path: string; nodeId: string }
@@ -20,7 +20,6 @@ export type MindEdit =
   | { op: "move_node"; nodeId: string; parentId: string; beforeId: string | null }
   | { op: "remove_node"; nodeId: string };
 export type MindSnapshot = FileSnapshot<"mind", MindDocument>;
-export type MindCommand = FileCommand<MindEdit>;
 export type MindIndexEntry = FileIndexEntry<"mind">;
 export function isMindPath(path: unknown): path is string {
   return typeof path === "string" && /^minds\/[^/\\]+\.yssbi-mind$/.test(path);

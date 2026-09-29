@@ -158,7 +158,6 @@ export const zhCN = {
     },
     editor: {
       chartSaveFailed: "保存图表失败：{{error}}",
-      chartDeleteFailed: "删除图表失败：{{error}}",
       graphSaveFailed: "保存图失败：{{error}}",
       documentSaveFailed: "保存「{{title}}」失败：{{error}}",
       resourceCatalogRefreshing: "资源目录已过期，正在刷新后再创建节点",

@@ -5,7 +5,6 @@ import { normalizeApplicationIpcError } from "@/features/application/errorRefere
 import { revealPath } from "@/services/platform/opener";
 
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
-import { renameResource } from "@/features/application/resource/resourceActions";
 
 export type RevealProjectResourceRequest = {
   readonly kind: import("@/shared/types/domain/resource").ResourceKind;
@@ -31,8 +30,4 @@ export async function revealProjectResourceInExplorer(
     );
     throw error;
   }
-}
-
-export async function renameChartResource(chartPath: string, nextName: string): Promise<void> {
-  await renameResource({ id: chartPath, kind: "chart" }, nextName);
 }

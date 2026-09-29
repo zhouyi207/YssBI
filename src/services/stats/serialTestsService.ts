@@ -3,14 +3,10 @@ import {
   normalizeSerialTestsResponse,
   type SerialTestsRequestDTO,
   type SerialTestsResponseDTO,
-  type SerialTestWithLagDTO,
-  type DurbinWatsonResultDTO,
 } from "@/shared/types/report";
 
 export type SerialTestsRequest = SerialTestsRequestDTO;
 export type SerialTestsResponse = SerialTestsResponseDTO;
-export type SerialTestWithLag = SerialTestWithLagDTO;
-export type DurbinWatsonResult = DurbinWatsonResultDTO;
 
 /** 计算 BG、Q、DW 检验 */
 export async function computeSerialTests(req: SerialTestsRequest): Promise<SerialTestsResponse> {

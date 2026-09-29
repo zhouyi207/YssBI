@@ -4,7 +4,6 @@ import type { FrontendLogEntryDto, LogBatchDto, LogSubscriptionDto } from "@/sha
 import { parseLogBatchDto, parseLogSubscriptionDto } from "@/shared/types/dto/logParser";
 
 export type LogSubscription = RecordSubscription<LogSubscriptionDto>;
-export type FrontendLogEntry = FrontendLogEntryDto;
 
 /** Structured runtime observations use the plugin log registry and persisted history. */
 export class LogService {
