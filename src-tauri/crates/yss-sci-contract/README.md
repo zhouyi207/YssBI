@@ -59,3 +59,5 @@ Bayesian plugin inputs and cancellation controls belong to the plugin's
 ACF/PACF checks during input scans, ACF accumulation and PACF recursion; linear
 regression checks between stages, without interrupting a running decomposition.
 Scheduling, concurrency and the budget remain caller-owned.
+
+`hypothesis` carries neutral requests and result records for classical mean, proportion, count-table, rank/sequence and variance-homogeneity tests. Requests encode design and alternatives; the report keeps the statistic, reference degrees of freedom, p-value, sample sizes and method-specific finite details without depending on a node ID or backend type.
