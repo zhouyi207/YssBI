@@ -30,6 +30,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         settle_ui_intent,
         get_localized_node_catalog,
         get_compatible_node_catalog,
+        get_connection_candidates,
         create_event_graph,
         create_function_graph,
         remove_event_graph,

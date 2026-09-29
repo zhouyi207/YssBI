@@ -22,6 +22,10 @@ Result JSON encoding is shared by the desktop and Harness adapters in [result_en
 
 ## Public surface
 
+`get_connection_candidates` 接收一个包含项目身份、图路径、编辑版本、起点地址和操作意图的 `request`，在 blocking pool 查询 Application。
+响应回显请求身份，并交付语义输入 hash、候选地址及 append / replace / invalid 决策；replace 包含被替换的连接 ID，invalid 只携带稳定原因码。
+该命令不修改图，版本与资源重验由 [Graph application](../graph/README.md) 拥有；其命令专属 DTO 保存在 handler 旁。
+
 Frontend wire parsing and application publication share receipt correlation,
 revision and replacement invariants in `src/shared/types/domain/resourceMutationValidation.ts`.
 Wire adapters additionally validate exact payload shapes; they do not maintain a

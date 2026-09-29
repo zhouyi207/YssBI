@@ -807,7 +807,7 @@ fn inspect_projection(
                         EditorPortTypeState::Unknown { .. } => "unknown".into(),
                         EditorPortTypeState::Conflict { .. } => "conflict".into(),
                     },
-                    accepted_type: port.accepted_type.display.to_string(),
+                    accepted_type: port.accepted_type.to_string(),
                     maximum_connections: port.connections.maximum,
                     connection_count: port.connections.current,
                     schema: port

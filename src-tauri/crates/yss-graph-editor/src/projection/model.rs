@@ -51,7 +51,7 @@ pub struct EditorPortModel {
     pub can_remove: bool,
     pub connections: EditorPortConnectionCapabilities,
     pub input: Option<EditorInputBinding>,
-    pub accepted_type: EditorAcceptedType,
+    pub accepted_type: Box<str>,
     pub type_state: EditorPortTypeState,
     pub resolved_schema: Option<EditorSchemaSummary>,
     pub status: EditorPortStatus,
@@ -75,7 +75,6 @@ pub struct EditorPortInstanceAdditionModel {
 pub struct EditorPortConnectionCapabilities {
     pub current: u32,
     pub maximum: Option<u32>,
-    pub ordered: bool,
     pub can_append: bool,
     pub can_replace: bool,
     pub can_move: bool,
@@ -94,12 +93,6 @@ pub enum EditorEffectiveInputBinding {
     Literal,
     ProtocolDefault,
     Unbound,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct EditorAcceptedType {
-    pub display: Box<str>,
-    pub domain: Option<Box<[ValueType]>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

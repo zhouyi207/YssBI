@@ -64,6 +64,28 @@ fn build_catalog_mutation_validation_snapshot(
     CatalogMutationValidationSnapshot { resources }
 }
 
+fn capture_editor_context(
+    captured: &ApplicationSession,
+    document: &GraphDocument,
+) -> Result<
+    (GraphResolutionContext, CatalogMutationValidationSnapshot),
+    ResourceMutationApplicationError,
+> {
+    validate_graph_document(document).map_err(|error| {
+        ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+    })?;
+    let index = captured
+        .project()
+        .read_project_index(captured.project_instance_id())?;
+    let catalog = build_catalog_mutation_validation_snapshot(&index);
+    let project = super::catalog::localized_project_facts_from_index(captured, index)
+        .map_err(ResourceMutationApplicationError::Catalog)?;
+    Ok((
+        GraphResolutionContext::from_project_facts(captured, project)?,
+        catalog,
+    ))
+}
+
 fn build_graph_projection_replacement(
     captured: &ApplicationSession,
     context: &mut GraphResolutionContext,
@@ -142,16 +164,7 @@ impl<'a> GraphDocumentEditor<'a> {
                 graph: graph.clone(),
             });
         }
-        validate_graph_document(&document).map_err(|error| {
-            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-        })?;
-        let index = captured
-            .project()
-            .read_project_index(captured.project_instance_id())?;
-        let catalog = build_catalog_mutation_validation_snapshot(&index);
-        let project = super::catalog::localized_project_facts_from_index(captured, index)
-            .map_err(ResourceMutationApplicationError::Catalog)?;
-        let context = GraphResolutionContext::from_project_facts(captured, project)?;
+        let (context, catalog) = capture_editor_context(captured, &document)?;
         Ok(Self {
             captured,
             graph,
@@ -224,6 +237,33 @@ impl<'a> GraphDocumentEditor<'a> {
 }
 
 impl ApplicationState {
+    pub fn graph_connection_candidates(
+        &self,
+        project: &ProjectInstanceId,
+        graph: &GraphResourcePath,
+        version: yss_project::GraphEditVersion,
+        source: &yss_graph_document::PortAddress,
+        intent: yss_graph_editor::projection::ConnectionIntent,
+    ) -> Result<yss_graph_editor::projection::ConnectionCandidates, ResourceMutationApplicationError>
+    {
+        let captured = self.capture_resource_session(project)?;
+        let document = self.current_graph_document(project, graph, version)?;
+        let (mut context, catalog) = capture_editor_context(&captured, &document)?;
+        context.include_functions(&captured, &document)?;
+        let analysis = context.resolve(&captured, graph, &document, "en-US");
+        let candidates = captured
+            .graph()
+            .connection_candidates(graph, &document, source, intent, &catalog, &analysis)
+            .map_err(ResourceMutationApplicationError::Mutation)?;
+        context.revalidate(&captured)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        // Candidate computation may race an edit or history operation. A read
+        // never grants permission to use a result from the preceding revision.
+        self.current_graph_document(project, graph, version)?;
+        Ok(candidates)
+    }
+
     pub fn resolve_graph_document(
         &self,
         project_instance_id: ProjectInstanceId,

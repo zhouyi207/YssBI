@@ -164,6 +164,97 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
 }
 
 #[test]
+fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
+    use yss_graph_editor::projection::{ConnectionDecision, ConnectionIntent};
+    use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
+    let graph = GraphResourcePath::new("events/Candidates.yssbi-event").unwrap();
+    let source = NodeId::new();
+    let target = NodeId::new();
+    let mut project = compatible_project(&graph);
+    let mut document = compatible_draft(source);
+    document.nodes.insert(
+        target,
+        DocumentNode {
+            id: target,
+            node_type: "yssbi.numeric.subtract".parse().unwrap(),
+            position: NodePosition { x: 100., y: 0. },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    project.graphs.get_mut(&graph).unwrap().document = document;
+    let staged = staged_session(
+        project,
+        "connection-candidates",
+        GraphRuntimeTestControl::default(),
+    );
+    let app = &staged.application;
+    let instance = staged.session.project_instance_id().clone();
+    app.open_graph(crate::graph::open::OpenGraphRequest::new(
+        instance.clone(),
+        graph.clone(),
+        0,
+        "en-US",
+    ))
+    .unwrap();
+    let before = staged
+        .session
+        .project()
+        .read_graph_editing(&instance, &graph)
+        .unwrap();
+    let source_port = PortAddress::declared(source, "value".parse().unwrap());
+    let candidates = app
+        .graph_connection_candidates(
+            &instance,
+            &graph,
+            before.state.version,
+            &source_port,
+            ConnectionIntent::Connect,
+        )
+        .unwrap();
+    assert!(candidates.candidates.iter().any(|candidate| candidate.port
+        == PortAddress::declared(target, "left".parse().unwrap())
+        && candidate.decision == ConnectionDecision::Append));
+    let after = staged
+        .session
+        .project()
+        .read_graph_editing(&instance, &graph)
+        .unwrap();
+    assert_eq!(after.state, before.state);
+    assert_eq!(after.document, before.document);
+    app.edit_graph(
+        crate::graph::editing::GraphEditRequest {
+            project_instance_id: instance.clone(),
+            graph_path: graph.clone(),
+            locale: "en-US".into(),
+            operation_id: yss_project_identity::OperationId::new(),
+            version: before.state.version,
+        },
+        EditorGraphMutation::MoveNodes {
+            positions: vec![NodePositionMutation {
+                node_id: target,
+                position: NodePosition { x: 200., y: 0. },
+            }],
+        },
+    )
+    .unwrap();
+    assert!(matches!(
+        app.graph_connection_candidates(
+            &instance,
+            &graph,
+            before.state.version,
+            &source_port,
+            ConnectionIntent::Connect
+        ),
+        Err(
+            crate::graph::resources::ResourceMutationApplicationError::GraphOperation(
+                yss_project::ProjectGraphOperationError::RevisionConflict { .. }
+            )
+        )
+    ));
+}
+
+#[test]
 fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     use yss_graph_document::{
         ConnectionId, DocumentConnection, DynamicMemberLocator, DynamicPortBinding,

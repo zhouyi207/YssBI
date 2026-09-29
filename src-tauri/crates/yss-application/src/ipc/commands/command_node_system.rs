@@ -1,5 +1,6 @@
 mod catalog;
 mod common;
+mod connections;
 mod editor;
 mod execution;
 mod leases;
@@ -9,6 +10,7 @@ mod results;
 
 // The nested registry also needs the wrapper macros emitted next to each command.
 pub use catalog::*;
+pub use connections::*;
 pub use editor::*;
 pub use execution::*;
 pub use leases::*;

@@ -275,6 +275,12 @@ pub(crate) fn validate_connection_types(
     output: &PortAddress,
     input: &PortAddress,
 ) -> Result<(), EditorMutationError> {
+    if output.node_id == input.node_id {
+        return Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionSameNode,
+            "connection endpoints must belong to different nodes",
+        ));
+    }
     let output = source_port(document, registry, context, output.clone())?;
     let input = source_port(document, registry, context, input.clone())?;
     if output.direction != PortDirection::Output || input.direction != PortDirection::Input {

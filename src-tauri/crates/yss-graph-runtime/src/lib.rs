@@ -33,6 +33,7 @@ use yss_node_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
 use yss_node_protocol::PortDirection;
 use yss_node_registry::{NodeRegistry, RegistryFingerprint};
 
+mod connections;
 mod semantic_cache;
 use semantic_cache::{CachedGraphAnalysis, GraphResolutionCache, GraphResolutionCaches};
 
@@ -206,13 +207,29 @@ impl GraphRuntimeState {
         catalog: &CatalogMutationValidationSnapshot,
         resolve: impl FnOnce() -> GraphAnalysis,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
+        let analysis = (!mutation.referenced_ports().is_empty()).then(resolve);
+        self.plan_editor_mutation_with_analysis(
+            graph_path,
+            document,
+            mutation,
+            catalog,
+            analysis.as_ref(),
+        )
+    }
+
+    fn plan_editor_mutation_with_analysis(
+        &self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        mutation: EditorGraphMutation,
+        catalog: &CatalogMutationValidationSnapshot,
+        analysis: Option<&GraphAnalysis>,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
         let mut candidate = document.clone();
         let mut operations = Vec::new();
         let referenced_ports = mutation.referenced_ports();
-        let analysis = (!referenced_ports.is_empty()).then(resolve);
         for address in referenced_ports {
             let semantics = analysis
-                .as_ref()
                 .expect("referenced ports require analysis")
                 .semantic_snapshot();
             let Some(port) = semantics.concrete_interface().port(address) else {
@@ -285,7 +302,7 @@ impl GraphRuntimeState {
             self.registry(),
             EditorMutationContext {
                 catalog: Some(catalog),
-                semantics: analysis.as_ref().map(GraphAnalysis::semantic_snapshot),
+                semantics: analysis.map(GraphAnalysis::semantic_snapshot),
             },
         )?;
         apply_graph_document_patch(&mut candidate, &mutation_patch)?;

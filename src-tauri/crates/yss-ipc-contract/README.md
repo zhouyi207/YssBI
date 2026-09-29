@@ -9,6 +9,11 @@
 
 Node editor capabilities contain only the required `managed` boolean. Copy, duplicate, delete and cut availability derive from this ownership flag; the node capability payload rejects missing or unknown fields. Parameter and inline-literal editors consume their own existing projections.
 
+Desktop port connection capabilities contain `current`, `canAppend`, `canReplace` and `canMove`.
+Accepted type domains, maximum capacity and ordering stay with backend owners; the desktop uses
+connection candidate decisions for legality and replacement previews. Harness keeps its consumed
+accepted-type description and maximum-connection facts through its own contract.
+
 Graph editor sessions require `document`, `projection`, `editing`, and `resultState`. The result summary carries the matching semantic input hash, execution session ID and a decimal-string `revision` independent of the edit revision. Snapshot and delta delivery carry the same complete contract. Clients atomically publish graph entities, editing metadata and result validity, and reject older result summaries for the same execution session and semantic identity.
 
 The crate has no Tauri, Application, database or execution runtime dependency. It reuses neutral identity/document contracts and existing projection value types, including their value conversions. It creates no subscriptions, tasks, caches, incident records or business state. Application mappings and incident recording remain in their adapters.

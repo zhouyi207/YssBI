@@ -109,8 +109,6 @@ fn map_port(port: &EditorPortModel) -> EditorPortDto {
         can_remove: port.can_remove,
         connections: PortConnectionCapabilityDto {
             current: port.connections.current,
-            maximum: port.connections.maximum,
-            ordered: port.connections.ordered,
             can_append: port.connections.can_append,
             can_replace: port.connections.can_replace,
             can_move: port.connections.can_move,
@@ -129,14 +127,6 @@ fn map_port(port: &EditorPortModel) -> EditorPortDto {
                 EditorEffectiveInputBinding::Unbound => EffectiveInputBindingKindDto::Unbound,
             },
         }),
-        accepted_type: AcceptedTypeDto {
-            display: port.accepted_type.display.clone(),
-            domain: port
-                .accepted_type
-                .domain
-                .as_ref()
-                .map(|domain| domain.to_vec()),
-        },
         type_state: map_type_state(&port.type_state),
         resolved_schema: port.resolved_schema.as_ref().map(map_schema_summary),
         status: match port.status {
@@ -389,11 +379,11 @@ mod tests {
     };
     use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
     use yss_graph_editor::projection::{
-        EditorAcceptedType, EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel,
-        EditorNodeCapabilities, EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration,
-        EditorParameterDisplay, EditorParameterModel, EditorPortConnectionCapabilities,
-        EditorPortDisplay, EditorPortModel, EditorPortStatus, EditorPortTypeState,
-        EditorProjectionBasis, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
+        EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities,
+        EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration, EditorParameterDisplay,
+        EditorParameterModel, EditorPortConnectionCapabilities, EditorPortDisplay, EditorPortModel,
+        EditorPortStatus, EditorPortTypeState, EditorProjectionBasis, EditorSchemaField,
+        EditorSchemaSummary, EditorSchemaSummaryKind,
     };
     use yss_node_protocol::{
         NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey,
@@ -453,18 +443,12 @@ mod tests {
                     connections: EditorPortConnectionCapabilities {
                         current: 0,
                         maximum: Some(1),
-                        ordered: false,
                         can_append: true,
                         can_replace: false,
                         can_move: false,
                     },
                     input: None,
-                    accepted_type: EditorAcceptedType {
-                        display: "core.binary".into(),
-                        domain: Some(Box::new([yss_data_contract::ValueType::Scalar(
-                            yss_data_contract::SemanticType::Binary,
-                        )])),
-                    },
+                    accepted_type: "core.binary".into(),
                     type_state: EditorPortTypeState::Exact {
                         display: "core.binary".into(),
                         data_type: Some(yss_data_contract::ValueType::Scalar(
@@ -542,6 +526,12 @@ mod tests {
         );
         assert_eq!(wire["nodes"][0]["nodeId"], node_id.to_string());
         assert_eq!(wire["nodes"][0]["display"]["iconId"], "builtin.constants");
+        assert_eq!(
+            wire["nodes"][0]["ports"][0]["connections"],
+            json!({
+                "current": 0, "canAppend": true, "canReplace": false, "canMove": false,
+            })
+        );
         assert!(wire["nodes"][0]["ports"][0].get("templateKey").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("origin").is_none());
         assert!(wire["nodes"][0]["ports"][0].get("instanceKind").is_none());

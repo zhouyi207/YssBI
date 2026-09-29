@@ -50,6 +50,16 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
 IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。
 
+`graph_connection_candidates` 为一个起点和 connect / moveConnections 意图查询当前图的全部端口决策。
+Application 捕获当前编辑版本与资源事实、解析一次语义，在查询结束时重验资源、应用会话和图版本。
+查询与编辑复用同一资源输入捕获；Application 查询直接持有当前文档引用，不构造 `GraphDocumentEditor` 的原始/待编辑文档副本或累计历史补丁。
+Graph Runtime 对每个候选复用提交所用的 mutation planner，包括动态端口认领、重复连接、方向、同节点、类型、容量和顺序检查；查询不提交补丁、不写历史或 dirty。
+Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码的 invalid；迁移预览的替换列表只包含被挤掉的连接，不包含自身迁移的连接。
+桌面端口投影只交付连接数量与可用动作，不发送接受类型域、连接上限或顺序供前端再推导。Assistant 的图检查仍消费后端的接受类型说明和连接上限。
+响应携带语义输入 hash，前端按编辑版本、语义和资源发布身份接纳，并在下一次身份变化时丢弃。
+投影按当前起点提供 O(端口数) 的载荷，避免发布整图所有端口对；同一查询共享解析快照。
+预检只说明该快照下的连接决策，实际提交仍验证最新文档与资源。
+
 `yss-graph-runtime` 负责编辑解析；`yss-graph-execution::graph_preparation` 消费只读的 `GraphAnalysis`，
 直接构建已有 `ExecutionPlan`、`PlanParameterBundle` 和输出契约。计划缓存归执行会话，资源授权依据
 在每次准备时重新绑定。Application 组织资源和会话校验，不再持有一套图包到执行包的转换。

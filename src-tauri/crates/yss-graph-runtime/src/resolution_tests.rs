@@ -160,6 +160,228 @@ fn assert_reused(before: &GraphAnalysis, after: &GraphAnalysis, node: NodeId, ex
 }
 
 #[test]
+fn connection_candidates_match_append_replace_and_type_rejections_without_editing() {
+    use yss_graph_document::{ConnectionId, DocumentConnection};
+    use yss_graph_editor::projection::{ConnectionDecision, ConnectionIntent};
+    let runtime = runtime();
+    let mut document = GraphDocument::default();
+    let source = node(&mut document, "yssbi.constant.pi", &[]);
+    let incumbent = node(&mut document, "yssbi.constant.pi", &[]);
+    let target = node(&mut document, "yssbi.numeric.subtract", &[]);
+    let viewer = node(&mut document, "yssbi.debug.view", &[]);
+    let model = node(&mut document, "yssbi.statistics.linear.summary", &[]);
+    let port = |id, key: &str| PortAddress::declared(id, key.parse().unwrap());
+    let output = port(source, "value");
+    let occupied = ConnectionId::new();
+    let branch = ConnectionId::new();
+    for (id, from, to) in [
+        (occupied, port(incumbent, "value"), port(target, "left")),
+        (branch, output.clone(), port(viewer, "data")),
+    ] {
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: from,
+                input: to,
+                order: None,
+            },
+        );
+    }
+    let original = document.clone();
+    let analysis = resolve(&runtime, &document, &resources());
+    let catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::new(),
+    };
+    let candidates = runtime
+        .connection_candidates(
+            &graph(),
+            &document,
+            &output,
+            ConnectionIntent::Connect,
+            &catalog,
+            &analysis,
+        )
+        .unwrap();
+    let decision = |address| {
+        candidates
+            .candidates
+            .iter()
+            .find(|candidate| candidate.port == address)
+            .unwrap()
+            .decision
+            .clone()
+    };
+    assert_eq!(decision(port(target, "right")), ConnectionDecision::Append);
+    assert_eq!(
+        decision(port(target, "left")),
+        ConnectionDecision::Replace {
+            displaced_connection_ids: vec![occupied]
+        }
+    );
+    assert_eq!(
+        decision(port(viewer, "data")),
+        ConnectionDecision::Invalid {
+            reason: "graph_connection_already_exists"
+        }
+    );
+    assert_eq!(document, original, "a preview cannot mutate or claim ports");
+    for input in [port(target, "right"), port(target, "left")] {
+        let patch = runtime
+            .plan_editor_mutation(
+                &graph(),
+                &document,
+                EditorGraphMutation::Connect {
+                    output: output.clone(),
+                    input: input.clone(),
+                    order: None,
+                },
+                &catalog,
+                || analysis.clone(),
+            )
+            .unwrap();
+        let mut committed = document.clone();
+        apply_graph_document_patch(&mut committed, &patch).unwrap();
+        assert!(
+            committed.connections.contains_key(&branch),
+            "output fan-out must survive"
+        );
+        assert!(
+            committed
+                .connections
+                .values()
+                .any(|connection| connection.input == input && connection.output == output)
+        );
+        assert_eq!(
+            committed.connections.contains_key(&occupied),
+            input != port(target, "left")
+        );
+    }
+    let model_output = port(model, "result");
+    let model_candidates = runtime
+        .connection_candidates(
+            &graph(),
+            &document,
+            &model_output,
+            ConnectionIntent::Connect,
+            &catalog,
+            &analysis,
+        )
+        .unwrap();
+    assert_eq!(
+        model_candidates
+            .candidates
+            .iter()
+            .find(|candidate| candidate.port == port(target, "right"))
+            .unwrap()
+            .decision,
+        ConnectionDecision::Invalid {
+            reason: "graph_connection_type_mismatch"
+        }
+    );
+    assert_eq!(
+        runtime
+            .plan_editor_mutation(
+                &graph(),
+                &document,
+                EditorGraphMutation::Connect {
+                    output: port(target, "result"),
+                    input: port(target, "right"),
+                    order: None,
+                },
+                &catalog,
+                || analysis.clone()
+            )
+            .unwrap_err()
+            .code(),
+        "graph_connection_same_node"
+    );
+}
+
+#[test]
+fn connection_candidates_for_moves_exclude_moved_links_from_replacement_preview() {
+    use yss_graph_document::{ConnectionId, DocumentConnection};
+    use yss_graph_editor::projection::{ConnectionDecision, ConnectionIntent};
+    let runtime = runtime();
+    let mut document = GraphDocument::default();
+    let source = node(&mut document, "yssbi.constant.pi", &[]);
+    let other = node(&mut document, "yssbi.constant.pi", &[]);
+    let target = node(&mut document, "yssbi.numeric.subtract", &[]);
+    let port = |id, key: &str| PortAddress::declared(id, key.parse().unwrap());
+    let left = port(target, "left");
+    let right = port(target, "right");
+    let moved = ConnectionId::new();
+    let displaced = ConnectionId::new();
+    for (id, output, input) in [
+        (moved, port(source, "value"), left.clone()),
+        (displaced, port(other, "value"), right.clone()),
+    ] {
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output,
+                input,
+                order: None,
+            },
+        );
+    }
+    let analysis = resolve(&runtime, &document, &resources());
+    let catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::new(),
+    };
+    let candidates = runtime
+        .connection_candidates(
+            &graph(),
+            &document,
+            &left,
+            ConnectionIntent::MoveConnections,
+            &catalog,
+            &analysis,
+        )
+        .unwrap();
+    assert_eq!(
+        candidates
+            .candidates
+            .iter()
+            .find(|candidate| candidate.port == right)
+            .unwrap()
+            .decision,
+        ConnectionDecision::Replace {
+            displaced_connection_ids: vec![displaced]
+        }
+    );
+    assert_eq!(
+        candidates
+            .candidates
+            .iter()
+            .find(|candidate| candidate.port == left)
+            .unwrap()
+            .decision,
+        ConnectionDecision::Invalid {
+            reason: "graph_connection_move_same_port"
+        }
+    );
+    let patch = runtime
+        .plan_editor_mutation(
+            &graph(),
+            &document,
+            EditorGraphMutation::MoveConnections {
+                source: left,
+                target: right.clone(),
+            },
+            &catalog,
+            || analysis.clone(),
+        )
+        .unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(document.connections.len(), 1);
+    let connection = document.connections.values().next().unwrap();
+    assert_eq!(connection.input, right);
+    assert_eq!(connection.output, port(source, "value"));
+}
+
+#[test]
 fn layout_reuses_semantics_and_projects_current_display_but_constant_metadata_refreshes() {
     let runtime = runtime();
     let (mut document, node, id) = constant_document();

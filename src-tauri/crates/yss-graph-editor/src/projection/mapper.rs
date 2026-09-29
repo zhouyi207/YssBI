@@ -229,7 +229,6 @@ fn project_port(
     let connections = EditorPortConnectionCapabilities {
         current,
         maximum: port.connections.maximum,
-        ordered: port.connections.ordered,
         can_append: !port.orphan
             && port
                 .connections
@@ -252,7 +251,7 @@ fn project_port(
         can_remove: port.can_remove,
         connections,
         input,
-        accepted_type: project_accepted_type(&port.accepted_type, port.accepted_domain.as_ref()),
+        accepted_type: type_display(&port.accepted_type).into(),
         type_state: project_type_state(&port.type_state),
         resolved_schema: port
             .schema_state
@@ -398,20 +397,6 @@ fn project_filter_literal_type(
         yss_graph_analysis::GraphFilterLiteralType::Integer => EditorFilterLiteralType::Integer,
         yss_graph_analysis::GraphFilterLiteralType::Decimal => EditorFilterLiteralType::Decimal,
         yss_graph_analysis::GraphFilterLiteralType::String => EditorFilterLiteralType::String,
-    }
-}
-
-fn project_accepted_type(value: &TypeExpr, domain: Option<&TypeDomain>) -> EditorAcceptedType {
-    EditorAcceptedType {
-        display: type_display(value).into(),
-        domain: domain.map(|domain| {
-            domain
-                .types()
-                .iter()
-                .filter_map(yss_graph_type_mapping::data_type_from_resolved_type)
-                .collect::<Vec<_>>()
-                .into_boxed_slice()
-        }),
     }
 }
 

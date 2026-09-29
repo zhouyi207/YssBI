@@ -172,7 +172,6 @@ pub struct EditorPortDto {
     pub can_remove: bool,
     pub connections: PortConnectionCapabilityDto,
     pub input: Option<EditorInputBindingDto>,
-    pub accepted_type: AcceptedTypeDto,
     pub type_state: PortTypeStateDto,
     pub resolved_schema: Option<SchemaSummaryDto>,
     pub status: ResolvedPortStatusDto,
@@ -205,8 +204,6 @@ pub struct PortInstanceAdditionDto {
 #[serde(rename_all = "camelCase")]
 pub struct PortConnectionCapabilityDto {
     pub current: u32,
-    pub maximum: Option<u32>,
-    pub ordered: bool,
     pub can_append: bool,
     pub can_replace: bool,
     pub can_move: bool,
@@ -227,13 +224,6 @@ pub enum EffectiveInputBindingKindDto {
     Literal,
     ProtocolDefault,
     Unbound,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AcceptedTypeDto {
-    pub display: Box<str>,
-    pub domain: Option<Vec<ValueType>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
