@@ -1,6 +1,5 @@
 import {
   DialogOptions,
-  InputDialogOptions,
   MessageDialogOptions,
   ConfirmTriResult,
   ProgressState,
@@ -118,27 +117,6 @@ class UIStore {
     });
   }
 
-  prompt(options: Omit<InputDialogOptions, "onSubmit" | "onCancel">): Promise<string | null> {
-    return new Promise((resolve) => {
-      this.state = {
-        ...this.state,
-        modals: [
-          ...this.state.modals,
-          {
-            id: crypto.randomUUID(),
-            type: "input",
-            options: {
-              ...options,
-              onSubmit: (value) => resolve(value),
-              onCancel: () => resolve(null),
-            },
-          },
-        ],
-      };
-      this.emit();
-    });
-  }
-
   showImportDialog(options: ImportDialogOptions) {
     const existing = this.state.modals.find((modal) => modal.type === "import");
     if (existing) return existing.id;
@@ -242,9 +220,9 @@ class UIStore {
       modals: newModals,
     };
     this.emit();
-    // Complete programmatically dismissed prompts too. A user's decision has already settled its promise.
+    // Complete programmatically dismissed confirmations too. A user's decision has already settled its promise.
     for (const modal of removedModals) {
-      if (modal.type === "confirm" || modal.type === "input") modal.options.onCancel?.();
+      if (modal.type === "confirm") modal.options.onCancel?.();
     }
   }
 

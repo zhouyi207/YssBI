@@ -9,7 +9,7 @@ import {
   SqlRemoteTableSelectModal,
 } from "@/modules/data-explorer/public";
 
-import { InputModal, MessageDialog, Modal, ProgressOverlay } from "@/shared/ui";
+import { MessageDialog, Modal, ProgressOverlay } from "@/shared/ui";
 
 export const UIHost = () => {
   const { modals, progress } = useApplicationUiRead();
@@ -32,13 +32,6 @@ export const UIHost = () => {
 
           {modal.type === "confirm" && (
             <Modal options={modal.options} onClose={() => applicationUi.closeModal(modal.id)} />
-          )}
-
-          {modal.type === "input" && (
-            <InputModal
-              options={modal.options}
-              onClose={() => applicationUi.closeModal(modal.id)}
-            />
           )}
 
           {modal.type === "import" && (

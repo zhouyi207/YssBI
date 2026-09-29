@@ -1,9 +1,4 @@
-import type {
-  DialogOptions,
-  InputDialogOptions,
-  MessageDialogOptions,
-  ProgressState,
-} from "@/shared/types/ui/types";
+import type { DialogOptions, MessageDialogOptions, ProgressState } from "@/shared/types/ui/types";
 
 export type ImportDataSourceType =
   | "csv"
@@ -48,7 +43,6 @@ export type ApplicationUiModal = (
   | { readonly id: string; readonly type: "settings" }
   | { readonly id: string; readonly type: "message"; readonly options: MessageDialogOptions }
   | { readonly id: string; readonly type: "confirm"; readonly options: DialogOptions }
-  | { readonly id: string; readonly type: "input"; readonly options: InputDialogOptions }
   | { readonly id: string; readonly type: "import"; readonly options: ImportDialogOptions }
   | {
       readonly id: string;

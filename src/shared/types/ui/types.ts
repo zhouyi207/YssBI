@@ -37,15 +37,3 @@ export interface ProgressState {
   /** 为 true 时在蒙层右上角显示关闭/取消按钮。 */
   cancelable?: boolean;
 }
-
-export interface InputDialogOptions {
-  title: string;
-  message?: string;
-  label?: string;
-  defaultValue?: string;
-  placeholder?: string;
-  confirmText?: string;
-  cancelText?: string;
-  onSubmit: (value: string) => void;
-  onCancel?: () => void;
-}
