@@ -19,9 +19,9 @@ pub struct NodeComponents {
 
 #[derive(Debug, thiserror::Error)]
 pub enum NodeCompositionError {
-    #[error("built-in node definitions could not be constructed")]
+    #[error("built-in node definitions could not be constructed: {0}")]
     Builtins(#[from] BuiltinInitializationError),
-    #[error("node {node} does not match execution kernel {kernel}")]
+    #[error("node {node} does not match execution kernel {kernel}: {source}")]
     Binding {
         node: yss_node_protocol::NodeTypeId,
         kernel: Box<str>,

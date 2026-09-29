@@ -165,7 +165,7 @@ pub enum ProjectSessionCandidateError {
 
 #[derive(Debug, Error)]
 pub enum ApplicationInitializationError {
-    #[error("node components could not be assembled")]
+    #[error("node components could not be assembled: {0}")]
     NodeComposition(#[from] super::NodeCompositionError),
     #[error("initial application session composition could not be prepared")]
     SessionComposition(#[from] ProjectSessionCandidateError),

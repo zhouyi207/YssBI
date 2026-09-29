@@ -33,7 +33,7 @@ struct ApplicationServices {
 
 #[derive(Debug, Error)]
 pub enum ApplicationStartupError {
-    #[error("application session initialization failed")]
+    #[error("application session initialization failed: {0}")]
     Application(#[from] ApplicationInitializationError),
     #[error("Harness initialization failed: {0}")]
     Harness(#[from] HarnessStartupError),
@@ -122,6 +122,24 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn node_startup_error_preserves_the_assembly_failure() {
+        let assembly = yss_node_catalog::BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+            context: "classical hypothesis test",
+            value: "unsupported-test".into(),
+        };
+        let error = ApplicationStartupError::from(ApplicationInitializationError::from(
+            crate::session::NodeCompositionError::from(
+                yss_node_catalog::BuiltinInitializationError::from(assembly),
+            ),
+        ));
+
+        assert_eq!(
+            error.to_string(),
+            "application session initialization failed: node components could not be assembled: built-in node definitions could not be constructed: unsupported built-in classical hypothesis test: 'unsupported-test'"
+        );
     }
 
     #[tokio::test]

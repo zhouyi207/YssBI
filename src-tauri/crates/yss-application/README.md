@@ -62,6 +62,8 @@ Harness 与界面意图共用 `ProjectResourceRef`；提交通过 IPC gateway �
 
 [initialize(app)](src/runtime.rs) 接收 `&mut tauri::App`，构造内部 `CommandRuntime` 和业务服务，通过 `app.manage()` 注册状态，最后显示主窗口。桌面入口在此之前安装日志平台插件；Application 使用普通 `tracing` 报告结构化运行观测，不持有日志运行时。
 
+节点目录装配或内核绑定失败时，启动错误保留具体原因，供 Tauri setup 的错误输出定位无效配置或不匹配的契约。
+
 [默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 也在 runtime 内构造。内部 `ipc::CommandRuntime` 提供 Harness 通道端口并安装命令专属上下文，初始化直接调用它。业务路径解析、项目与通用业务插件等服务的安装属于 Application；桌面日志插件单独安装。
 
 `runtime.rs`、`runtime/harness.rs` 和 IPC runtime 按具体文件划分为 Composition Root；IPC 命令与 wire 适配分别按 Commands 和 Transport 检查。普通用例模块没有 Tauri 或具体 provider 构造权限。桌面入口注册 Application 与本地日志平台插件；[数据库集成测试](tests/database_test.rs) 归 Application。
