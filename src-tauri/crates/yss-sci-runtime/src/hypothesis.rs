@@ -2,6 +2,30 @@
 use std::collections::HashMap;
 use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, HypothesisTestOutput};
 
+pub fn sample_mean_test(
+    input: yss_sci_contract::hypothesis::ClassicalHypothesisTest,
+) -> Result<yss_sci_contract::hypothesis::ClassicalTestResult, HypothesisError> {
+    yss_sci::hypothesis::sample_mean::run(input).map_err(HypothesisError::InvalidInput)
+}
+
+pub fn categorical_test(
+    input: yss_sci_contract::hypothesis::CategoricalHypothesisTest,
+) -> Result<yss_sci_contract::hypothesis::ClassicalTestResult, HypothesisError> {
+    yss_sci::hypothesis::categorical::run(input).map_err(HypothesisError::InvalidInput)
+}
+
+pub fn rank_test(
+    input: yss_sci_contract::hypothesis::RankHypothesisTest,
+) -> Result<yss_sci_contract::hypothesis::ClassicalTestResult, HypothesisError> {
+    yss_sci::hypothesis::nonparametric::run(input).map_err(HypothesisError::InvalidInput)
+}
+
+pub fn variance_test(
+    input: yss_sci_contract::hypothesis::VarianceHomogeneityTest,
+) -> Result<yss_sci_contract::hypothesis::ClassicalTestResult, HypothesisError> {
+    yss_sci::hypothesis::variance::run(input).map_err(HypothesisError::InvalidInput)
+}
+
 pub fn run_hypothesis_test(
     input: HypothesisTestInput,
 ) -> Result<HypothesisTestOutput, HypothesisError> {
