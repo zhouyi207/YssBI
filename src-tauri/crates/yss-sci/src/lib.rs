@@ -1,6 +1,7 @@
 //! Numerical algorithms grouped by statistical domain and method family.
 pub mod causal;
 pub mod density;
+pub mod descriptive;
 pub mod diagnostics;
 pub mod distribution;
 mod error;

@@ -15,11 +15,62 @@ fn combined_computation_preserves_values_and_numerical_lag_bounds() {
     let result = compute_acf_pacf(&values, usize::MAX, &control()).unwrap();
     assert_eq!(result.n, 100);
     assert_eq!(result.acf.len(), 100);
-    assert_eq!(result.acf, acf(&values, usize::MAX));
-    assert_eq!(result.pacf, pacf(&values, usize::MAX));
+    assert_eq!(result.acf, acf(&values, usize::MAX).unwrap());
+    assert_eq!(result.pacf, pacf(&values, usize::MAX).unwrap());
     let constant = compute_acf_pacf(&[3.0; 4], 2, &control()).unwrap();
     assert_eq!(constant.acf, vec![1.0]);
     assert!(constant.pacf.is_empty());
+}
+
+#[test]
+fn acf_pacf_preserves_correlations_across_extreme_finite_scales() {
+    for base in [[1.0, -1.0, 1.0, -1.0], [0.5, 0.75, 1.0, 0.5]] {
+        let expected = compute_acf_pacf(&base, 3, &control()).unwrap();
+        for scale in [1e308, f64::MAX, f64::MIN_POSITIVE, f64::from_bits(16)] {
+            let values = base.map(|value| value * scale);
+            let actual = compute_acf_pacf(&values, 3, &control()).unwrap();
+            for (actual, expected) in actual
+                .acf
+                .iter()
+                .chain(&actual.pacf)
+                .zip(expected.acf.iter().chain(&expected.pacf))
+            {
+                assert!(actual.is_finite());
+                assert!(
+                    (actual - expected).abs() < 1e-12,
+                    "{values:?}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+    let result = compute_acf_pacf(&[1e308, -1e308, 1e308, -1e308], 1, &control()).unwrap();
+    assert_eq!(result.acf, vec![1.0, -0.75]);
+    assert_eq!(result.pacf, vec![-0.75]);
+    let constant = compute_acf_pacf(&[1e308; 4], 3, &control()).unwrap();
+    assert_eq!(constant.acf, vec![1.0]);
+    assert!(constant.pacf.is_empty());
+}
+
+#[test]
+fn numerical_breakdown_is_an_error_instead_of_a_partial_or_fabricated_result() {
+    for correlations in [
+        [1.0, 1.0, 0.0],
+        [1.0, 0.5, f64::NAN],
+        [1.0, 0.5, f64::INFINITY],
+    ] {
+        assert_eq!(
+            pacf_from_acf(&correlations, None),
+            Err(ScientificComputationError::ComputationFailed)
+        );
+    }
+    for result in [acf(&[1.0, f64::INFINITY], 1), pacf(&[1.0, f64::NAN], 1)] {
+        assert_eq!(
+            result,
+            Err(ScientificComputationError::InvalidInput {
+                violation: ScientificInputViolation::NonFiniteInput,
+            })
+        );
+    }
 }
 
 #[test]

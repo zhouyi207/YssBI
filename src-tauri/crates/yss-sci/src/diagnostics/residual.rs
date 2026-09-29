@@ -34,12 +34,12 @@ pub fn diagnose(model: &LinearRegressionResult, test: Test) -> Result<Output, St
             Output::BreuschPagan(match (rhs, koenker, weights.as_ref()) {
                 (true, false, None) => bp::breusch_pagan_stata_rhs(&x, &u),
                 (true, true, None) => bp::breusch_pagan_koenker_rhs(&x, &u),
-                (false, false, None) => bp::breusch_pagan_stata(&fitted, &u),
-                (false, true, None) => bp::breusch_pagan_koenker(&fitted, &u),
+                (false, false, None) => bp::breusch_pagan_stata(&u, &fitted),
+                (false, true, None) => bp::breusch_pagan_koenker(&u, &fitted),
                 (true, false, Some(w)) => wb::breusch_pagan_stata_rhs_weighted(&x, &u, w),
                 (true, true, Some(w)) => wb::breusch_pagan_koenker_rhs_weighted(&x, &u, w),
-                (false, false, Some(w)) => wb::breusch_pagan_stata_weighted(&fitted, &u, w),
-                (false, true, Some(w)) => wb::breusch_pagan_koenker_weighted(&fitted, &u, w),
+                (false, false, Some(w)) => wb::breusch_pagan_stata_weighted(&u, &fitted, w),
+                (false, true, Some(w)) => wb::breusch_pagan_koenker_weighted(&u, &fitted, w),
             }?)
         }
         Test::White => Output::White(match &weights {

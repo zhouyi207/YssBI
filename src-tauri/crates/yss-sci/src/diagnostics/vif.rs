@@ -10,7 +10,7 @@ pub use yss_sci_contract::diagnostics::residual::VifEntry;
 /// 计算 centered VIF（Stata 默认）
 /// x: (n × k) 设计矩阵，列顺序与变量对应
 /// has_constant: 若 true，第 0 列为常数项，不计算其 VIF
-/// 完美共线时用 1e99 代替 INFINITY，避免 serde_json 序列化失败
+/// 常数项以 None 表示不适用；完美共线时按现有约定返回 1e99。
 pub fn vif_centered(x: &Mat<f64>, has_constant: bool) -> Result<Vec<VifEntry>, String> {
     let n = x.nrows();
     let k = x.ncols();
@@ -22,8 +22,8 @@ pub fn vif_centered(x: &Mat<f64>, has_constant: bool) -> Result<Vec<VifEntry>, S
     for j in 0..k {
         if has_constant && j == 0 {
             result.push(VifEntry {
-                vif: f64::NAN,
-                tolerance: f64::NAN,
+                vif: None,
+                tolerance: None,
             });
             continue;
         }
@@ -48,8 +48,8 @@ pub fn vif_centered(x: &Mat<f64>, has_constant: bool) -> Result<Vec<VifEntry>, S
             (v, 1.0 / v)
         };
         result.push(VifEntry {
-            vif,
-            tolerance: tol,
+            vif: Some(vif),
+            tolerance: Some(tol),
         });
     }
     Ok(result)

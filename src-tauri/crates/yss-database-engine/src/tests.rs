@@ -9,6 +9,7 @@ use yss_database_contract::DatabaseId;
 use yss_relational_contract::{RelationComparison, RelationPredicate};
 
 use super::*;
+mod aggregation;
 
 struct RemoveFile(PathBuf);
 impl Drop for RemoveFile {

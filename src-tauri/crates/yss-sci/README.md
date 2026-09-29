@@ -27,6 +27,7 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 | Hypothesis tests                         | `hypothesis`                                 | Constraint parsing, linearization and t/Wald tests                            |
 | Model diagnostics                        | `diagnostics`                                | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation    |
 | Probability distributions                | `distribution`                               | Sampling                                                                      |
+| Descriptive statistics                   | `descriptive`                                | Individual and population-weighted Theil T                                    |
 | Density estimation used by visualization | `density`                                    | Kernel-density numerical computation                                          |
 | Data preprocessing                       | `preprocessing`                              | Numerical standardization; Arrow preparation stays in Runtime                 |
 
@@ -65,6 +66,9 @@ original WLS weights, and dispatches BP/White/IM/RESET/VIF/leverage. GLS is reje
 for residual diagnostics requiring an untransformed or diagonal-weight design;
 VIF remains a property of the original predictor design. Weighted RESET allocates
 the full augmented design before inserting fitted-value or predictor powers.
+The fitted-value BP/Koenker variants regress functions of residual squares on an
+intercept and fitted values; residuals and fitted values have distinct argument
+roles in both the OLS and WLS dispatch paths.
 
 Panel first differences take entity IDs and original time values; they do not
 require a second time-ID vector. First-stage IV summaries derive dimensions from
@@ -82,11 +86,24 @@ matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `hypothesis::linear_test`.
 Project/result identity checks and report retrieval remain in Application.
 
+## Theil T
+
+`descriptive::theil_t` computes natural-log Theil T from individual values or
+population-weighted group means. It validates nonnegative finite values/weights,
+requires positive total weight and weighted income, and treats zero income as a
+zero contribution. Separate log-space normalization and compensated sums avoid
+overflow in population/income totals. Input scans and accumulation check execution
+control every 1024 rows. Group means capture between-group inequality only.
+
 ## ACF/PACF
 
-`time_series::acf_pacf::compute_acf_pacf` validates finite numerical input and computes ACF
-once for the joint result, then uses the same correlations for Durbin-Levinson PACF.
-Independent `acf` and `pacf` reuse these numerical helpers. Controlled computation
+`time_series::acf_pacf::compute_acf_pacf` validates finite numerical input, scales before
+centering and squaring, and uses compensated sums for the mean, variance and lag products.
+It computes ACF once for the joint result, then uses the same correlations for
+Durbin-Levinson PACF. Intermediate values and correlations are checked; nonpositive
+recursion denominators and numerical breakdown return `ComputationFailed` rather than
+fabricated coefficients. Independent `acf` and `pacf` return checked results and reuse
+these numerical helpers. Controlled computation
 checks cancellation/deadlines at stage boundaries and every 1024 loop elements;
 callers retain worker scheduling and product lag budgets. The numerical lag bound
 is `n - 1`, independent of the runtime report policy. Constant series preserve the

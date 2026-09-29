@@ -29,6 +29,8 @@ Cross-domain execution and observation contracts remain shared.
 - `diagnostics::serial_correlation`: serial-correlation requests and BG/Q/Durbin-Watson results.
 - `diagnostics::residual`: residual/model test selection and BP/White/IM/RESET,
   normality, VIF and leverage results without numerical-backend types.
+  VIF uses `None` for the intercept's undefined VIF/tolerance, preserving explicit
+  optional values rather than encoding missing statistics as NaN.
 - `panel`: estimator/effect options, `PanelFit`, selected-summary options and
   grouped coefficient/model/effect statistics. Estimator-specific statistics use
   an enum instead of unrelated optional fields on every result.

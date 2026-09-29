@@ -15,6 +15,7 @@ pub use conversion::{
 };
 pub use data_value::{DataValue, DecimalLiteral, FilterLiteral, InvalidDecimal};
 pub use value_type::{ValueType, ValueTypeParseError};
+pub mod aggregation;
 pub mod table;
 
 mod tabular;

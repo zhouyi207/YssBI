@@ -134,6 +134,23 @@ pub enum DropNaMode {
 }
 
 pub trait RelationPlan: Send + Sync {
+    fn aggregate(
+        &self,
+        _keys: &[Box<str>],
+        _columns: &[yss_data_contract::aggregation::ColumnAggregate],
+    ) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
+    fn describe(&self, _columns: &[Box<str>]) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
+    fn frequency(
+        &self,
+        _column: &str,
+        _include_null: bool,
+    ) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     fn compare_series_with_tolerance(
         &self,
         _operation: ComparisonOperation,
@@ -229,6 +246,19 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    pub fn aggregate(
+        &self,
+        keys: &[Box<str>],
+        columns: &[yss_data_contract::aggregation::ColumnAggregate],
+    ) -> Result<Self, RelationError> {
+        self.plan.aggregate(keys, columns)
+    }
+    pub fn describe(&self, columns: &[Box<str>]) -> Result<Self, RelationError> {
+        self.plan.describe(columns)
+    }
+    pub fn frequency(&self, column: &str, include_null: bool) -> Result<Self, RelationError> {
+        self.plan.frequency(column, include_null)
+    }
     pub fn compare_series_with_tolerance(
         &self,
         operation: ComparisonOperation,

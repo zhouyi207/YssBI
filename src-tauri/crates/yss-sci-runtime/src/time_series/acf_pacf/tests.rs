@@ -100,3 +100,25 @@ fn computations_reject_cancelled_or_expired_calls_at_admission() {
         Err(ScientificComputationError::DeadlineExceeded)
     );
 }
+
+#[test]
+fn acf_pacf_rejects_nonfinite_results_at_the_runtime_boundary() {
+    use yss_sci_contract::time_series::acf_pacf::AcfPacfResult;
+    for result in [
+        AcfPacfResult {
+            acf: vec![1.0, f64::NAN],
+            pacf: vec![0.5],
+            n: 4,
+        },
+        AcfPacfResult {
+            acf: vec![1.0, 0.5],
+            pacf: vec![f64::INFINITY],
+            n: 4,
+        },
+    ] {
+        assert_eq!(
+            super::validate_result(&result),
+            Err(ScientificComputationError::ComputationFailed)
+        );
+    }
+}

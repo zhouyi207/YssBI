@@ -21,7 +21,21 @@ pub fn acf_pacf(
     let result =
         yss_sci::time_series::acf_pacf::compute_acf_pacf(&request.values, max_lag, control)?;
     control.check()?;
+    validate_result(&result)?;
     Ok(result)
+}
+
+fn validate_result(result: &AcfPacfResult) -> Result<(), ScientificComputationError> {
+    if result
+        .acf
+        .iter()
+        .chain(&result.pacf)
+        .all(|value| value.is_finite())
+    {
+        Ok(())
+    } else {
+        Err(ScientificComputationError::ComputationFailed)
+    }
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@
 //! export, Tauri transport, or UI state.
 pub mod causal;
 pub mod density;
+pub mod descriptive;
 pub mod diagnostics;
 pub mod distribution;
 pub mod hypothesis;

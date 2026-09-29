@@ -24,3 +24,5 @@ NumericFold 只推导语义与标量/数列结构，整数/浮点选择、广播
 
 `RuntimeValue` 负责运行期列表、记录、资源及模型的容器。其 `Scalar(TabularScalar)` 复用中立标量；`Float64(FiniteFloat64)` 明确表示有限二进制浮点数，所有入口共用有限性校验。Arrow `DataType`、数组及 `RecordBatch` 负责列的物理表示。这些载体不定义第二套基础语义。
 项目尚未发布，文件读取与实时命令均直接使用当前类型契约，不提供旧类型声明的迁移或兼容转换。
+
+`aggregation` 拥有描述所支持的语义集合、摘要结果字段，以及分组聚合的操作身份、语义约束和输出命名。Catalog、Graph Analysis 与关系执行复用这些契约，不各自推测数值编码是否代表分类变量。

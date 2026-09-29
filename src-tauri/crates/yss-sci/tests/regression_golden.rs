@@ -807,12 +807,13 @@ fn test_diagnostics_direct_helpers() {
 
     let vif = diagnostics::vif::vif_centered(&exog, true).unwrap();
     assert_eq!(vif.len(), 4);
-    assert!(vif[0].vif.is_nan());
-    assert!(
-        vif.iter()
-            .skip(1)
-            .all(|entry| entry.vif >= 1.0 || entry.vif.is_infinite())
-    );
+    assert!(vif[0].vif.is_none());
+    assert!(vif[0].tolerance.is_none());
+    assert!(vif.iter().skip(1).all(|entry| {
+        entry
+            .vif
+            .is_some_and(|value| value.is_finite() && value >= 1.0)
+    }));
 
     let leverage = diagnostics::leverage::leverage(&exog).unwrap();
     assert_eq!(leverage.len(), exog.nrows());

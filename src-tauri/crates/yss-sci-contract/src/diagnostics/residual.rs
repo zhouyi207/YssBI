@@ -46,8 +46,10 @@ pub struct NormalityTestResult {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct VifEntry {
-    pub vif: f64,
-    pub tolerance: f64, // 1/VIF
+    /// None for the intercept, whose centered VIF is not defined.
+    pub vif: Option<f64>,
+    /// 1/VIF; None for the intercept.
+    pub tolerance: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy)]

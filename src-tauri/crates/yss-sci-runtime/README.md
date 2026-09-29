@@ -26,7 +26,7 @@ lag, capped at `min(n / 2 - 1, 40)`), then passes slices and the same control to
 `yss-sci::time_series::acf_pacf::compute_acf_pacf`. SCI owns finite-input validation and the
 joint numerical calculation: one ACF feeds the PACF recursion. It checks cancellation
 and deadlines throughout input/numerical loops and before returning. The runtime
-rechecks before delivering the shared `AcfPacfResult`; no duplicate runtime request/result
+rechecks control and rejects nonfinite ACF/PACF coefficients before delivering the shared `AcfPacfResult`; no duplicate runtime request/result
 records are maintained. SCI itself permits lags through `n - 1`; 40 is a report budget.
 Application declares this dependency for its IPC commands. Desktop composition
 and other application modules do not call it or construct/inject a backend object.
@@ -54,6 +54,7 @@ Entry points and method-specific report records live in their owning domains.
 | `causal::did`          | TWFE DID fitting and randomization inference                                    |
 | `preprocessing`        | Arrow panel/time alignment and tabular transformations                          |
 | `density`              | Density computation entry point                                                 |
+| `descriptive`          | Theil T entry point and form/observation-count report                           |
 | `distribution`         | Probability distribution sampling entry point                                   |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Capability

@@ -1,5 +1,6 @@
 //! DataFusion plan construction and controlled Arrow execution. No Graph document or UI state.
 
+mod aggregation;
 mod dataset;
 mod drop_na;
 mod page;
