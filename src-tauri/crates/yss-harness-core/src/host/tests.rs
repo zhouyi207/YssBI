@@ -5,7 +5,6 @@ use yss_harness_contract::*;
 use std::sync::Arc;
 
 use super::*;
-use crate::dataset_quality_review_workflow;
 use crate::test_support::{
     FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway, SequentialIds,
     StaticCapabilityGateway,
@@ -448,7 +447,32 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
         .turn_id
         .clone()
         .unwrap();
-    let workflow = dataset_quality_review_workflow("database-1").unwrap();
+    let schema_step = WorkflowStepId::try_new("inspect_dataset_schema").unwrap();
+    let workflow = crate::CompiledWorkflow::compile(WorkflowDefinition {
+        id: WorkflowId::try_new("quality-review-test").unwrap(),
+        version: WorkflowVersion::try_new("1.0.0").unwrap(),
+        steps: vec![
+            WorkflowStep {
+                id: schema_step.clone(),
+                depends_on: Vec::new(),
+                request: AutomationCapabilityRequest::InspectDatasetSchema(
+                    InspectDatasetSchemaRequest {
+                        database_id: "database-1".into(),
+                    },
+                ),
+            },
+            WorkflowStep {
+                id: WorkflowStepId::try_new("inspect_dataset_profile").unwrap(),
+                depends_on: vec![schema_step],
+                request: AutomationCapabilityRequest::InspectDatasetProfile(
+                    InspectDatasetProfileRequest {
+                        database_id: "database-1".into(),
+                    },
+                ),
+            },
+        ],
+    })
+    .unwrap();
     let planned = host
         .plan_workflow(&session.id, Some(&turn_id), &workflow)
         .await
@@ -469,7 +493,7 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
 }
 
 #[tokio::test]
-async fn project_session_reconciliation_stales_old_open_sessions() {
+async fn project_session_reconciliation_stales_old_active_sessions() {
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = HarnessHost::new(HarnessPorts {
         agent_driver: Arc::new(MockAgentDriver::new("unused")),

@@ -70,12 +70,12 @@ impl HarnessSessionStorePort for SqliteHarnessStore {
         })
     }
 
-    fn load_open_sessions<'a>(
+    fn load_active_sessions<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>> {
         Box::pin(async move {
             let payloads = sqlx::query_scalar::<_, String>(
-                "SELECT payload_json FROM assistant_session WHERE state IN ('active', 'closing') ORDER BY id ASC",
+                "SELECT payload_json FROM assistant_session WHERE state = 'active' ORDER BY id ASC",
             )
             .fetch_all(&self.pool)
             .await
@@ -171,9 +171,7 @@ impl HarnessSessionStorePort for SqliteHarnessStore {
 fn session_state(state: HarnessSessionState) -> &'static str {
     match state {
         HarnessSessionState::Active => "active",
-        HarnessSessionState::Closing => "closing",
         HarnessSessionState::Stale => "stale",
-        HarnessSessionState::Closed => "closed",
     }
 }
 

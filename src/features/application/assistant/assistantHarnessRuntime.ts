@@ -27,7 +27,7 @@ import {
   type HarnessMemoryRecord,
 } from "@/services/assistant/harnessService";
 
-type ProjectionStatus = "initializing" | "ready" | "provider-unavailable" | "error" | "closed";
+type ProjectionStatus = "initializing" | "ready" | "provider-unavailable" | "error";
 type ProjectionMessageStatus =
   | Readonly<{ type: "running" }>
   | Readonly<{ type: "complete"; reason: "stop" }>
@@ -411,7 +411,6 @@ class AssistantHarnessProjection {
     let messages = this.snapshot.messages;
     let isRunning = this.snapshot.isRunning;
     let activity = this.snapshot.activity;
-    let status = this.snapshot.status;
     let memoryCount = this.snapshot.memoryCount;
     let memoryRecords = this.snapshot.memoryRecords;
     if (event.type === "turn_started" && event.turnId) {
@@ -580,9 +579,6 @@ class AssistantHarnessProjection {
     } else if (event.type === "memory_deleted") {
       memoryRecords = memoryRecords.filter((record) => record.recordId !== event.payload.recordId);
       memoryCount = memoryRecords.length;
-    } else if (event.type === "session_closed") {
-      status = "closed";
-      isRunning = false;
     }
     this.update({
       ...this.snapshot,
@@ -590,7 +586,6 @@ class AssistantHarnessProjection {
       messages,
       isRunning,
       activity,
-      status,
       memoryCount,
       memoryRecords,
     });

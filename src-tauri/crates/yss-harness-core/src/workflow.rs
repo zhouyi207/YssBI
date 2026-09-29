@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use yss_harness_contract::{
-    AutomationCapabilityRequest, HarnessSessionId, HarnessTurnId, InspectDatasetProfileRequest,
-    InspectDatasetSchemaRequest, ProjectSessionBinding, ToolEffect, UnixMillis, WorkflowDefinition,
-    WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep, WorkflowStepId,
-    WorkflowStepRecord, WorkflowStepState, WorkflowVersion,
+    HarnessSessionId, HarnessTurnId, ProjectSessionBinding, ToolEffect, UnixMillis,
+    WorkflowDefinition, WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep,
+    WorkflowStepId, WorkflowStepRecord, WorkflowStepState,
 };
 
 #[derive(Clone, Debug)]
@@ -53,40 +52,6 @@ impl CompiledWorkflow {
     }
 }
 
-pub fn dataset_quality_review_workflow(
-    database_id: impl Into<String>,
-) -> Result<CompiledWorkflow, WorkflowCompileError> {
-    let database_id = database_id.into();
-    let schema_step = WorkflowStepId::try_new("inspect_dataset_schema")
-        .map_err(|_| WorkflowCompileError::InvalidIdentity)?;
-    let definition = WorkflowDefinition {
-        id: WorkflowId::try_new("dataset_quality_review")
-            .map_err(|_| WorkflowCompileError::InvalidIdentity)?,
-        version: WorkflowVersion::try_new("1.0.0")
-            .map_err(|_| WorkflowCompileError::InvalidIdentity)?,
-        steps: vec![
-            WorkflowStep {
-                id: schema_step.clone(),
-                depends_on: Vec::new(),
-                request: AutomationCapabilityRequest::InspectDatasetSchema(
-                    InspectDatasetSchemaRequest {
-                        database_id: database_id.clone(),
-                    },
-                ),
-            },
-            WorkflowStep {
-                id: WorkflowStepId::try_new("inspect_dataset_profile")
-                    .map_err(|_| WorkflowCompileError::InvalidIdentity)?,
-                depends_on: vec![schema_step],
-                request: AutomationCapabilityRequest::InspectDatasetProfile(
-                    InspectDatasetProfileRequest { database_id },
-                ),
-            },
-        ],
-    };
-    CompiledWorkflow::compile(definition)
-}
-
 fn ensure_acyclic(steps: &[WorkflowStep]) -> Result<(), WorkflowCompileError> {
     let mut remaining_dependencies = steps
         .iter()
@@ -116,8 +81,6 @@ fn ensure_acyclic(steps: &[WorkflowStep]) -> Result<(), WorkflowCompileError> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum WorkflowCompileError {
-    #[error("workflow identity is invalid")]
-    InvalidIdentity,
     #[error("workflow has no steps")]
     Empty,
     #[error("workflow contains duplicate step ids")]

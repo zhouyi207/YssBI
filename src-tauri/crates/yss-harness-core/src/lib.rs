@@ -32,10 +32,7 @@ pub use planner::{MethodRegistry, StatisticalPlanner, StatisticalPlannerError};
 pub use ports::HarnessPorts;
 pub use skills::{SkillError, SkillRegistry};
 pub use tools::ToolRegistry;
-pub use workflow::{
-    CompiledWorkflow, WorkflowCompileError, WorkflowRuntime, WorkflowRuntimeError,
-    dataset_quality_review_workflow,
-};
+pub use workflow::{CompiledWorkflow, WorkflowCompileError, WorkflowRuntime, WorkflowRuntimeError};
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

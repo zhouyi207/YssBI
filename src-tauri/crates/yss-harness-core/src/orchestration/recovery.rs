@@ -7,7 +7,7 @@ pub(crate) async fn pending_agent_turns(
     ports: &HarnessPorts,
 ) -> Result<Vec<HarnessTurnRecord>, PersistenceFailure> {
     let mut pending = BTreeMap::new();
-    for session in ports.sessions.load_open_sessions().await? {
+    for session in ports.sessions.load_active_sessions().await? {
         for envelope in ports.events.load_events_after(&session.id, 0).await? {
             match envelope.event {
                 HarnessEvent::AgentRunStarted { run_id, .. } => {

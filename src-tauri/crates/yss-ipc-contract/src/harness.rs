@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use yss_harness_contract::{
     AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, HarnessSessionRecord,
     KnowledgeCitation, MemoryKind, MemoryRecord, MemoryScope, MemoryStatus, StatisticalPlan,
-    StructuredMemoryValue, WorkflowRunRecord, WorkflowRunState,
+    StructuredMemoryValue,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -64,13 +64,6 @@ pub struct HarnessSubscriptionDto {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkflowRunDto {
-    pub run_id: String,
-    pub state: WorkflowRunState,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct HarnessMemoryRecordDto {
     pub record_id: String,
     pub scope: MemoryScope,
@@ -91,15 +84,6 @@ impl From<MemoryRecord> for HarnessMemoryRecordDto {
             value: record.value,
             created_at: record.created_at.get(),
             updated_at: record.updated_at.get(),
-        }
-    }
-}
-
-impl From<WorkflowRunRecord> for WorkflowRunDto {
-    fn from(record: WorkflowRunRecord) -> Self {
-        Self {
-            run_id: record.id.to_string(),
-            state: record.state,
         }
     }
 }
@@ -146,7 +130,6 @@ pub enum HarnessEventKindDto {
         evidence_count: usize,
     },
     SessionCreated,
-    SessionClosed,
     TurnStarted {
         user_message: String,
     },
@@ -269,7 +252,6 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
                 evidence_count: outcome.evidence.len(),
             },
             HarnessEvent::SessionCreated => Self::SessionCreated,
-            HarnessEvent::SessionClosed => Self::SessionClosed,
             HarnessEvent::TurnStarted { user_message } => Self::TurnStarted {
                 user_message: user_message.clone(),
             },

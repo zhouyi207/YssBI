@@ -269,7 +269,7 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
         })
     }
 
-    fn load_open_sessions<'a>(
+    fn load_active_sessions<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>> {
         Box::pin(async move {
@@ -280,11 +280,7 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
                 .sessions
                 .values()
                 .filter(|session| {
-                    matches!(
-                        session.state,
-                        yss_harness_contract::HarnessSessionState::Active
-                            | yss_harness_contract::HarnessSessionState::Closing
-                    )
+                    session.state == yss_harness_contract::HarnessSessionState::Active
                 })
                 .cloned()
                 .collect())

@@ -21,6 +21,43 @@ fn session() -> HarnessSessionRecord {
 }
 
 #[tokio::test]
+async fn stale_conversations_remain_loadable_and_can_be_reactivated() {
+    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+    let mut session = session();
+    session.conversation = Some(HarnessConversationMetadata {
+        project_key: "project-root".into(),
+        title: "Dataset review".into(),
+        last_opened_at: session.created_at,
+    });
+    store.create_session(&session).await.unwrap();
+    assert_eq!(
+        store.load_active_sessions().await.unwrap(),
+        vec![session.clone()]
+    );
+
+    session.state = HarnessSessionState::Stale;
+    session.updated_at = UnixMillis::from_existing(2);
+    store.update_session(&session).await.unwrap();
+    assert!(store.load_active_sessions().await.unwrap().is_empty());
+    assert_eq!(
+        store
+            .list_conversations(&session.principal_id, "project-root")
+            .await
+            .unwrap(),
+        vec![session.clone()]
+    );
+    assert_eq!(
+        store.load_session(&session.id).await.unwrap(),
+        Some(session.clone())
+    );
+
+    session.state = HarnessSessionState::Active;
+    session.updated_at = UnixMillis::from_existing(3);
+    store.update_session(&session).await.unwrap();
+    assert_eq!(store.load_active_sessions().await.unwrap(), vec![session]);
+}
+
+#[tokio::test]
 async fn workflow_save_rejects_a_stale_completion_after_cancellation() {
     let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
     let session = session();
@@ -98,14 +135,14 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
             .await
             .unwrap();
     }
-    sqlx::query("CREATE TRIGGER fail_selected_event BEFORE INSERT ON assistant_event WHEN json_extract(NEW.payload_json, '$.event.type') = 'session_closed' BEGIN SELECT RAISE(ABORT, 'injected append failure'); END")
+    sqlx::query("CREATE TRIGGER fail_selected_event BEFORE INSERT ON assistant_event WHEN json_extract(NEW.payload_json, '$.event.type') = 'turn_failed' BEGIN SELECT RAISE(ABORT, 'injected append failure'); END")
         .execute(&first.pool).await.unwrap();
     let (failure, b, c) = tokio::join!(
         first.append_event(
             &session.id,
             None,
             session.created_at,
-            HarnessEvent::SessionClosed
+            HarnessEvent::TurnFailed
         ),
         second.append_event(
             &session.id,
@@ -135,7 +172,7 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
     assert!(
         !persisted
             .iter()
-            .any(|event| matches!(event.event, HarnessEvent::SessionClosed))
+            .any(|event| matches!(event.event, HarnessEvent::TurnFailed))
     );
     assert_eq!(second.latest_sequence(&session.id).await.unwrap(), 11);
     sqlx::query("DROP TRIGGER fail_selected_event")

@@ -33,10 +33,6 @@ export interface HarnessEventSubscription {
 }
 
 export class HarnessService {
-  static async runtimeStatus(): Promise<HarnessRuntimeStatus> {
-    return parseHarnessRuntimeStatus(await invokeCommand("get_harness_runtime_status"));
-  }
-
   static async configureProvider(
     model: string,
     baseUrl: string,

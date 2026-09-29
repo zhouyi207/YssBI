@@ -1072,13 +1072,20 @@ async fn text_is_published_while_provider_waits_and_pending_text_survives_cancel
 
 #[test]
 fn cancellation_token_preserves_the_first_reason() {
-    let token = CancellationToken::default();
-    assert!(token.cancel(yss_harness_contract::CancellationReason::User));
-    assert!(!token.cancel(yss_harness_contract::CancellationReason::DeadlineElapsed));
-    assert_eq!(
-        token.reason(),
-        Some(yss_harness_contract::CancellationReason::User)
-    );
+    use yss_harness_contract::CancellationReason;
+
+    for reason in [
+        CancellationReason::User,
+        CancellationReason::ProjectReplaced,
+        CancellationReason::DeadlineElapsed,
+    ] {
+        let token = CancellationToken::default();
+        assert_eq!(token.reason(), None);
+        assert!(token.cancel(reason));
+        assert!(!token.cancel(CancellationReason::User));
+        assert!(!token.cancel(CancellationReason::DeadlineElapsed));
+        assert_eq!(token.reason(), Some(reason));
+    }
 }
 
 #[tokio::test]

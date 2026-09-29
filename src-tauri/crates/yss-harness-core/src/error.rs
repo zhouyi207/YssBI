@@ -36,8 +36,6 @@ pub enum HarnessError {
     Agent(AgentDriverFailureCode),
     #[error("harness turn was cancelled")]
     Cancelled,
-    #[error("harness turn is still draining")]
-    TurnStillRunning,
     #[error("workflow already has an active execution owner")]
     ConcurrentWorkflow,
     #[error("workflow compilation failed")]

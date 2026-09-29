@@ -389,9 +389,8 @@ pub trait AgentDriverConfigurationPort: Send + Sync {
 #[repr(u8)]
 pub enum CancellationReason {
     User = 1,
-    SessionClosing = 2,
-    ProjectReplaced = 3,
-    DeadlineElapsed = 4,
+    ProjectReplaced = 2,
+    DeadlineElapsed = 3,
 }
 
 #[derive(Debug, Default)]
@@ -431,9 +430,8 @@ impl CancellationToken {
     pub fn reason(&self) -> Option<CancellationReason> {
         match self.state.reason.load(Ordering::Acquire) {
             1 => Some(CancellationReason::User),
-            2 => Some(CancellationReason::SessionClosing),
-            3 => Some(CancellationReason::ProjectReplaced),
-            4 => Some(CancellationReason::DeadlineElapsed),
+            2 => Some(CancellationReason::ProjectReplaced),
+            3 => Some(CancellationReason::DeadlineElapsed),
             _ => None,
         }
     }

@@ -150,44 +150,12 @@ impl HarnessHost {
         Ok(record)
     }
 
-    pub async fn close_session(&self, session_id: &HarnessSessionId) -> Result<(), HarnessError> {
-        let mut session = self
-            .ports
-            .sessions
-            .load_session(session_id)
-            .await?
-            .ok_or(HarnessError::SessionNotFound)?;
-        if session.state == HarnessSessionState::Closed {
-            return Ok(());
-        }
-        session.state = HarnessSessionState::Closing;
-        session.updated_at = self.ports.clock.now();
-        self.ports.sessions.update_session(&session).await?;
-        if self.cancel_active_turn(session_id, CancellationReason::SessionClosing) {
-            return Err(HarnessError::TurnStillRunning);
-        }
-        session.state = HarnessSessionState::Closed;
-        session.updated_at = self.ports.clock.now();
-        MemoryService::new(
-            Arc::clone(&self.ports.memory),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-        )
-        .expire_session(session_id)
-        .await?;
-        self.ports.sessions.update_session(&session).await?;
-        self.event_writer()
-            .append(session_id, None, HarnessEvent::SessionClosed)
-            .await?;
-        Ok(())
-    }
-
     pub async fn reconcile_project_session(
         &self,
         current: &ProjectSessionBinding,
     ) -> Result<usize, HarnessError> {
         let mut stale_count = 0usize;
-        for mut session in self.ports.sessions.load_open_sessions().await? {
+        for mut session in self.ports.sessions.load_active_sessions().await? {
             if &session.project == current {
                 continue;
             }
@@ -253,32 +221,6 @@ impl HarnessHost {
                     record_id: record_id.clone(),
                 },
             )
-            .await?;
-        Ok(())
-    }
-
-    pub(super) async fn finish_closing_session(
-        &self,
-        session_id: &HarnessSessionId,
-    ) -> Result<(), HarnessError> {
-        let Some(mut session) = self.ports.sessions.load_session(session_id).await? else {
-            return Ok(());
-        };
-        if session.state != HarnessSessionState::Closing {
-            return Ok(());
-        }
-        MemoryService::new(
-            Arc::clone(&self.ports.memory),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-        )
-        .expire_session(session_id)
-        .await?;
-        session.state = HarnessSessionState::Closed;
-        session.updated_at = self.ports.clock.now();
-        self.ports.sessions.update_session(&session).await?;
-        self.event_writer()
-            .append(session_id, None, HarnessEvent::SessionClosed)
             .await?;
         Ok(())
     }

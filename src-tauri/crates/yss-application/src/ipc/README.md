@@ -114,6 +114,12 @@ remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
 
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 
+Desktop Harness commands expose provider configuration, session creation/listing/reopening,
+event subscriptions, turn submission/cancellation and memory management. DataAgent uses the
+existing dataset schema/profile capabilities for quality inspection. Generic workflow control
+remains a Core API, with its states delivered through the shared event stream.
+Provider configuration replies carry the current configured status consumed by Assistant.
+
 Graph tools call Application directly through the capability gateway. Application reads the Project-owned editing state and validates the current revision/hash before editing, validating, running or saving. Rust returns the capability result; Graph Activity carries editing and execution notifications to frontend consumers.
 
 Assistant `apply_graph_edit` atomically persists its complete current graph through the Project file transaction, retaining undo history. It needs no editor panel or Webview acknowledgement. A successful receipt confirms both the edit and persistence; a file failure leaves the prior graph state intact and returns `persistence_unavailable`. GUI edits, validation and execution keep their existing explicit-save behavior.

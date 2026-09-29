@@ -249,7 +249,7 @@ SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护�
 
 ## 5. Session, turn, and events
 
-一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；底层 workflow/session 调用可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel、close 和 project/session currentness 由 Rust 控制。
+一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；底层 workflow/session 调用可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel 和 project/session currentness 由 Rust 控制。Session 状态为 `Active` 或 `Stale`：项目绑定失效时标记 `Stale`、取消正在运行的 turn 并使 Session Memory 失效；重新打开对话时验证归属并恢复为 `Active`。Session store 的 `load_active_sessions` 只返回当前有效的绑定。
 
 对话及其完整事件/工具账本继续保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。界面按当前用户和项目查询对话列表，优先恢复最近打开的一项；可新建和切换多个对话。切换后从 sequence 0 重放目标对话，旧订阅和迟到回调不能混入新对话；未发送草稿只在当前挂载界面内按对话分开保存。生成回答期间先停止或等待结束再切换。
 
@@ -285,13 +285,13 @@ terminal event 和 persisted terminal state 都由 Harness 产生。取消会封
 
 Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事实。计划区分 research question、analysis mode、study design、estimands、variable roles、candidate methods、selected workflow、diagnostics、robustness 和 reporting needs。
 
-当前 production workflow 是 versioned `dataset_quality_review`：先读取 dataset schema，再读取 dataset profile。每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表；compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作。
+当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_dataset_schema` 和 `inspect_dataset_profile` 能力执行。通用 Workflow runtime 接收调用方构造的 versioned definition；每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表，compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作；桌面没有手动工作流控制入口。
 
 每个 run 的 advance 持有唯一执行租约；并发 advance 返回 `ConcurrentWorkflow`，状态转换使用短时异步互斥，能力调用期间不持有该转换锁。
 运行记录携带 revision；`save_run` 的创建仅允许不存在的记录，更新必须匹配预期 revision，成功返回递增版本，冲突不覆盖当前记录。
 取消先持久化 `Cancelled`，再取消正在执行的能力所共享的 token；迟到结果不能更新终态或发布步骤完成事件。
 暂停阻止新步骤派发，必须显式 resume。已准入步骤可以在重读当前版本并核对执行尝试后收尾，但保持 `Paused` 或恢复后的 `Ready`；再次 advance 才继续派发或确认完成。
-恢复跳过仍有执行所有者的 run。中断的 Inspect 步骤可重新调度，并保留已持久化的暂停状态；其他中断步骤标为 `TerminalFailure`，run 标为 `Failed`，避免重复执行可能已提交的操作，实际提交结果以工具账本和业务回执为准。当前桌面质量检查工作流只执行读取能力。
+恢复跳过仍有执行所有者的 run。中断的 Inspect 步骤可重新调度，并保留已持久化的暂停状态；其他中断步骤标为 `TerminalFailure`，run 标为 `Failed`，避免重复执行可能已提交的操作，实际提交结果以工具账本和业务回执为准。
 
 统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败也返回具体字段或枚举错误。模型预算统一由 Core 的角色配置传入 Rig。
 
@@ -309,7 +309,7 @@ Workflow run 绑定 exact definition ID/version 和 Project session。恢复或�
 
 Skill 是包含指令正文的版本化方法包，manifest 记录 ID、版本和来源哈希。`SkillRegistry` 是当前内置方法包的来源，SQLite 不存储 Skill 安装包。当前内置 Skill 用于上下文预加载；执行权限由实际角色/任务范围和 Gateway 校验。Knowledge source 是 authority，search index 可以重建。Memory 是结构化、scoped、带 source/project/sensitivity/retention 的 record；审批将 `Proposed` 直接转为 `Active`。
 
-当前注册并加载的 Skill 是 [statistical-report-writing](skills/statistical-report-writing/SKILL.md)，拥有统计证据、公式、表格竖线、显著性标记、金额转义及交付检查规则；Markdown 解析选项和布局仍由共享前端渲染器负责。数据质量检查由独立的 `dataset_quality_review` Workflow 执行。
+当前注册并加载的 Skill 是 [statistical-report-writing](skills/statistical-report-writing/SKILL.md)，拥有统计证据、公式、表格竖线、显著性标记、金额转义及交付检查规则；Markdown 解析选项和布局仍由共享前端渲染器负责。
 
 Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本、source hash 和原始规范作为独立 System 消息预加载到每次 ManagerAgent 和 ReportAgent 请求，位于基础工具策略之后、知识和对话历史之前。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。ReportAgent 复用同一写作 Skill，Manager 直接撰写统计正文时同样适用。当前没有模型侧 `load_skill` 工具；内置方法包由 Core 加载。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
 
@@ -343,7 +343,7 @@ Provider 连接时限由 adapter 管理；模型调用次数、输出上限和�
 
 ## 9. Tauri transport and frontend projection
 
-`yss-application::ipc` 当前暴露 Harness runtime status/provider configuration、按项目列举、新建、重新打开及关闭 session、event subscribe/unsubscribe、turn submit/cancel、memory list/delete，以及 dataset-quality workflow plan/advance/pause/resume/cancel。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准，不在本文复制。
+`yss-application::ipc` 当前暴露 Harness provider configuration、按项目列举、新建及重新打开 session、event subscribe/unsubscribe、turn submit/cancel 和 memory list/delete。Provider 配置回执返回当前配置状态。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准，不在本文复制。
 
 有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。`src/features/application/assistant/assistantHarnessRuntime.ts` 维护可重建的 projection、last sequence 和 reconnect；assistant-ui ExternalStore 只渲染 messages、plan、tool cards、memory 和 composer actions。
 

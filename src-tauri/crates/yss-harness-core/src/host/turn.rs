@@ -191,7 +191,6 @@ impl HarnessHost {
             self.event_writer()
                 .append(session_id, Some(&turn_id), HarnessEvent::TurnCancelled)
                 .await?;
-            self.finish_closing_session(session_id).await?;
             return Err(HarnessError::Cancelled);
         }
         match result {
@@ -217,7 +216,6 @@ impl HarnessHost {
                         },
                     )
                     .await?;
-                self.finish_closing_session(session_id).await?;
                 Ok(result)
             }
             Err(error) => self.fail_turn(&mut turn, error.into()).await,
@@ -312,7 +310,6 @@ impl HarnessHost {
         self.event_writer()
             .append(&turn.session_id, Some(&turn.id), HarnessEvent::TurnFailed)
             .await?;
-        self.finish_closing_session(&turn.session_id).await?;
         Err(error)
     }
 

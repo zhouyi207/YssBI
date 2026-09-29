@@ -90,7 +90,7 @@ export type HarnessEvent = Readonly<{
           evidenceCount: number;
         };
       }>
-    | Readonly<{ type: "session_created" | "session_closed" | "turn_failed" | "turn_cancelled" }>
+    | Readonly<{ type: "session_created" | "turn_failed" | "turn_cancelled" }>
     | Readonly<{ type: "turn_started"; payload: { userMessage: string } }>
     | Readonly<{ type: "text_delta"; payload: { delta: string } }>
     | Readonly<{ type: "plan_proposed"; payload: { plan: unknown } }>
@@ -321,7 +321,7 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
     throw new InvalidHarnessPayloadError("HarnessEvent");
   }
   const base = { sequence, sessionId, turnId: turnIdValue as string | null, occurredAt };
-  if (["session_created", "session_closed", "turn_failed", "turn_cancelled"].includes(type)) {
+  if (["session_created", "turn_failed", "turn_cancelled"].includes(type)) {
     return { ...base, type } as HarnessEvent;
   }
   const eventPayload = payload(source);

@@ -15,9 +15,7 @@ use crate::{
 #[serde(rename_all = "snake_case")]
 pub enum HarnessSessionState {
     Active,
-    Closing,
     Stale,
-    Closed,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -82,7 +80,6 @@ pub enum HarnessEvent {
         run_id: crate::AgentRunId,
     },
     SessionCreated,
-    SessionClosed,
     TurnStarted {
         user_message: String,
     },
@@ -303,7 +300,7 @@ pub trait HarnessSessionStorePort: Send + Sync {
         session_id: &'a HarnessSessionId,
     ) -> PersistenceFuture<'a, Result<Option<HarnessSessionRecord>, PersistenceFailure>>;
 
-    fn load_open_sessions<'a>(
+    fn load_active_sessions<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>>;
 

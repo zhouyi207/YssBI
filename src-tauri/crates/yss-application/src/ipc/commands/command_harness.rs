@@ -6,10 +6,10 @@ use crate::session::ApplicationState;
 use tauri::State;
 use tauri::ipc::Channel;
 use yss_harness_contract::{
-    AgentDriverConfigurationFailure, AgentDriverConfigurationPort, HarnessSessionId, HarnessTurnId,
-    MemoryRecordId, PrincipalId, SecretCredential, WorkflowRunId,
+    AgentDriverConfigurationFailure, AgentDriverConfigurationPort, HarnessSessionId,
+    MemoryRecordId, PrincipalId, SecretCredential,
 };
-use yss_harness_core::{HarnessError, HarnessHost, dataset_quality_review_workflow};
+use yss_harness_core::{HarnessError, HarnessHost};
 
 use crate::ipc::error::CommandError;
 use yss_ipc_contract::harness::ConfigureHarnessProviderRequestDto;
@@ -19,7 +19,6 @@ use yss_ipc_contract::harness::HarnessRuntimeStatusDto;
 use yss_ipc_contract::harness::HarnessSessionDto;
 use yss_ipc_contract::harness::HarnessSubscriptionDto;
 use yss_ipc_contract::harness::HarnessTurnResultDto;
-use yss_ipc_contract::harness::WorkflowRunDto;
 
 mod gateway;
 pub use gateway::ApplicationCapabilityGateway;
@@ -41,15 +40,6 @@ impl HarnessRuntimeState {
             channels,
             provider,
         }
-    }
-}
-
-#[tauri::command]
-pub fn get_harness_runtime_status(
-    runtime: State<'_, HarnessRuntimeState>,
-) -> HarnessRuntimeStatusDto {
-    HarnessRuntimeStatusDto {
-        provider_configured: runtime.provider.is_configured(),
     }
 }
 
@@ -213,18 +203,6 @@ pub fn cancel_harness_turn(
 }
 
 #[tauri::command]
-pub async fn close_harness_session(
-    runtime: State<'_, HarnessRuntimeState>,
-    session_id: String,
-) -> Result<(), CommandError> {
-    runtime
-        .host
-        .close_session(&parse_session_id(session_id)?)
-        .await
-        .map_err(map_harness_error)
-}
-
-#[tauri::command]
 pub async fn list_harness_memory(
     runtime: State<'_, HarnessRuntimeState>,
     session_id: String,
@@ -257,90 +235,9 @@ pub async fn delete_harness_memory(
         .map_err(map_harness_error)
 }
 
-#[tauri::command]
-pub async fn plan_dataset_quality_review(
-    runtime: State<'_, HarnessRuntimeState>,
-    session_id: String,
-    turn_id: String,
-    database_id: String,
-) -> Result<WorkflowRunDto, CommandError> {
-    let session_id = parse_session_id(session_id)?;
-    let turn_id = HarnessTurnId::try_new(turn_id)
-        .map_err(|_| CommandError::expected("invalid_harness_turn_id"))?;
-    let workflow = dataset_quality_review_workflow(database_id)
-        .map_err(|_| CommandError::expected("invalid_workflow_request"))?;
-    runtime
-        .host
-        .plan_workflow(&session_id, Some(&turn_id), &workflow)
-        .await
-        .map(WorkflowRunDto::from)
-        .map_err(map_harness_error)
-}
-
-#[tauri::command]
-pub async fn advance_harness_workflow(
-    runtime: State<'_, HarnessRuntimeState>,
-    run_id: String,
-) -> Result<WorkflowRunDto, CommandError> {
-    let run_id = WorkflowRunId::try_new(run_id)
-        .map_err(|_| CommandError::expected("invalid_workflow_run_id"))?;
-    runtime
-        .host
-        .advance_workflow(&run_id)
-        .await
-        .map(WorkflowRunDto::from)
-        .map_err(map_harness_error)
-}
-
-#[tauri::command]
-pub async fn pause_harness_workflow(
-    runtime: State<'_, HarnessRuntimeState>,
-    run_id: String,
-) -> Result<WorkflowRunDto, CommandError> {
-    let run_id = parse_workflow_run_id(run_id)?;
-    runtime
-        .host
-        .pause_workflow(&run_id)
-        .await
-        .map(WorkflowRunDto::from)
-        .map_err(map_harness_error)
-}
-
-#[tauri::command]
-pub async fn resume_harness_workflow(
-    runtime: State<'_, HarnessRuntimeState>,
-    run_id: String,
-) -> Result<WorkflowRunDto, CommandError> {
-    let run_id = parse_workflow_run_id(run_id)?;
-    runtime
-        .host
-        .resume_workflow(&run_id)
-        .await
-        .map(WorkflowRunDto::from)
-        .map_err(map_harness_error)
-}
-
-#[tauri::command]
-pub async fn cancel_harness_workflow(
-    runtime: State<'_, HarnessRuntimeState>,
-    run_id: String,
-) -> Result<WorkflowRunDto, CommandError> {
-    let run_id = parse_workflow_run_id(run_id)?;
-    runtime
-        .host
-        .cancel_workflow(&run_id)
-        .await
-        .map(WorkflowRunDto::from)
-        .map_err(map_harness_error)
-}
-
 fn parse_session_id(value: String) -> Result<HarnessSessionId, CommandError> {
     HarnessSessionId::try_new(value)
         .map_err(|_| CommandError::expected("invalid_harness_session_id"))
-}
-
-fn parse_workflow_run_id(value: String) -> Result<WorkflowRunId, CommandError> {
-    WorkflowRunId::try_new(value).map_err(|_| CommandError::expected("invalid_workflow_run_id"))
 }
 
 fn map_harness_error(error: HarnessError) -> CommandError {
@@ -372,7 +269,6 @@ fn map_harness_error(error: HarnessError) -> CommandError {
             })
         }
         HarnessError::Cancelled => CommandError::expected("harness_turn_cancelled"),
-        HarnessError::TurnStillRunning => CommandError::expected("harness_turn_still_running"),
         HarnessError::ConcurrentWorkflow => CommandError::expected("workflow_already_running"),
         HarnessError::WorkflowCompile(_) => CommandError::expected("invalid_workflow_request"),
         HarnessError::WorkflowRuntime(_) => CommandError::expected("workflow_transition_failed"),
