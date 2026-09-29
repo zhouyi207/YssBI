@@ -117,12 +117,11 @@ describe("NodeDetailPanel projection selection", () => {
           {
             key: "value",
             display: { title: "Value", description: null },
-            editor: "number",
+            editor: { kind: "number" },
             presentation: "inlineAndDetail",
             valueType: { kind: "Scalar", inner: "Numeric" },
             multiline: false,
             value: 42,
-            configuration: null,
           },
         ],
       },

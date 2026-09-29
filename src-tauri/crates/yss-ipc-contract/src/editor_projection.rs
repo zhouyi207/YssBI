@@ -293,16 +293,15 @@ pub struct ParameterGroupDto {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParameterEditorDto {
     pub key: Box<str>,
     pub display: ParameterDisplayDto,
-    pub editor: ParameterEditorKindDto,
+    pub editor: ParameterEditorSpecDto,
     pub presentation: ParameterPresentationDto,
     pub value_type: Option<ValueType>,
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
-    pub configuration: Option<SchemaAwareParameterEditorDto>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,11 +324,19 @@ impl From<ParameterPresentation> for ParameterPresentationDto {
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
-pub enum SchemaAwareParameterEditorDto {
-    SelectOptions {
-        options: Vec<Box<str>>,
+pub enum ParameterEditorSpecDto {
+    SemanticDomain,
+    GraphConstant,
+    Auto,
+    Text,
+    Number,
+    Toggle,
+    Resource,
+    Select {
+        options: Option<Vec<Box<str>>>,
     },
     ProjectColumns {
         allow_empty: bool,
@@ -376,19 +383,6 @@ pub enum FilterLiteralTypeDto {
 pub struct ParameterDisplayDto {
     pub title: Box<str>,
     pub description: Option<Box<str>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ParameterEditorKindDto {
-    SemanticDomain,
-    GraphConstant,
-    Auto,
-    Text,
-    Number,
-    Toggle,
-    Select,
-    Resource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -109,12 +109,11 @@ function validProjection(): EditorGraphProjectionDto {
               {
                 key: "formula",
                 display: { title: "公式", description: "模型公式" },
-                editor: "text",
+                editor: { kind: "text" },
                 presentation: "inlineAndDetail",
                 valueType: { kind: "Scalar", inner: "Numeric" },
                 multiline: true,
                 value: "y ~ x",
-                configuration: null,
               },
             ],
           },
@@ -309,7 +308,7 @@ describe("validateEditorGraphProjection", () => {
 
   it("strictly validates Rust-issued schema-aware editor wire data", () => {
     const projection = validProjection();
-    projection.nodes[0].parameterGroups[0].parameters[0].configuration = {
+    projection.nodes[0].parameterGroups[0].parameters[0].editor = {
       kind: "filterPredicate",
       available: true,
       unavailableReason: null,
@@ -330,17 +329,17 @@ describe("validateEditorGraphProjection", () => {
     expect(validateEditorGraphProjection(projection)).toBe(projection);
 
     const extra = structuredClone(projection);
-    Object.assign(extra.nodes[0].parameterGroups[0].parameters[0].configuration!, {
+    Object.assign(extra.nodes[0].parameterGroups[0].parameters[0].editor, {
       compatibility: true,
     });
     expect(() => validateEditorGraphProjection(extra)).toThrow(/parameter editor/);
 
     const lossy = structuredClone(projection);
-    const configuration = lossy.nodes[0].parameterGroups[0].parameters[0].configuration;
-    if (configuration?.kind !== "filterPredicate" || !configuration.value?.value) {
+    const editor = lossy.nodes[0].parameterGroups[0].parameters[0].editor;
+    if (editor.kind !== "filterPredicate" || !editor.value?.value) {
       throw new Error("test fixture mismatch");
     }
-    configuration.value.value.value = 9007199254740994 as never;
+    editor.value.value.value = 9007199254740994 as never;
     expect(() => validateEditorGraphProjection(lossy)).toThrow(/parameter editor/);
   });
 

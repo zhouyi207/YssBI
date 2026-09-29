@@ -1,5 +1,5 @@
 import { SEMANTIC_TYPES } from "./database";
-import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
+import { isParameterEditorSpecDto } from "@/shared/types/domain/parameterEditorValidators";
 import type {
   DiagnosticLocationDto,
   EditorGraphProjectionDto,
@@ -16,16 +16,6 @@ const bindingKinds = new Set(["connections", "literal", "protocolDefault", "unbo
 const scalarTypes = new Set<unknown>([...SEMANTIC_TYPES, null]);
 const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "derived"]);
 const portStatuses = new Set(["resolved", "orphan"]);
-const parameterEditorKinds = new Set([
-  "semanticDomain",
-  "graphConstant",
-  "auto",
-  "text",
-  "number",
-  "toggle",
-  "select",
-  "resource",
-]);
 const parameterPresentations = new Set(["detailPanel", "inlineAndDetail"]);
 const diagnosticSeverities = new Set(["error", "warning", "information"]);
 
@@ -285,18 +275,16 @@ export function isParameterEditor(value: unknown): boolean {
       "valueType",
       "multiline",
       "value",
-      "configuration",
     ]) &&
     typeof value.key === "string" &&
     hasExactKeys(value.display, ["title", "description"]) &&
     typeof value.display.title === "string" &&
     isStringOrNull(value.display.description) &&
-    parameterEditorKinds.has(value.editor as string) &&
+    isParameterEditorSpecDto(value.editor) &&
     parameterPresentations.has(value.presentation as string) &&
     (value.valueType === null || isBackendDataType(value.valueType)) &&
     typeof value.multiline === "boolean" &&
-    isJsonValue(value.value) &&
-    (value.configuration === null || isSchemaAwareParameterEditorDto(value.configuration))
+    isJsonValue(value.value)
   );
 }
 

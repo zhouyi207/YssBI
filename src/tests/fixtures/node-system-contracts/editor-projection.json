@@ -34,12 +34,13 @@
           },
           "parameters": [
             {
-              "configuration": null,
               "display": {
                 "description": "Immutable value defined in this graph's Details panel.",
                 "title": "Constant"
               },
-              "editor": "graphConstant",
+              "editor": {
+                "kind": "graphConstant"
+              },
               "key": "constant",
               "multiline": false,
               "presentation": "detailPanel",

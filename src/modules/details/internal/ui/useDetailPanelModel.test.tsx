@@ -59,16 +59,20 @@ describe("Chart detail subscriptions", () => {
     };
     const store = useChartDocumentStore.getState();
     const chartResource = { kind: "chart" as const, id: chartPath };
-    useResourceStore.getState().upsertResource({
-      ...chartResource,
-      name: "Report",
-      uri: resourceKey(chartResource),
-      revision: 1,
-      exists: true,
-      loaded: true,
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
+    useResourceStore.getState().setSnapshot({
+      resources: [
+        {
+          ...chartResource,
+          name: "Report",
+          uri: resourceKey(chartResource),
+          revision: 1,
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
+      ],
     });
     store.upsertDocument(chartPath, document);
     act(() =>

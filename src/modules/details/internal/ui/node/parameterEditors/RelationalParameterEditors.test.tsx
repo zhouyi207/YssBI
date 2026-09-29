@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SchemaAwareParameterEditorDto } from "@/shared/types/dto/editorProjection";
+import type { ParameterEditorSpecDto } from "@/shared/types/domain/editorProjection";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe("ProjectColumnsEditor", () => {
   it("renders the Rust-issued unavailable reason and validation errors", () => {
-    const editor: Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }> = {
+    const editor: Extract<ParameterEditorSpecDto, { kind: "projectColumns" }> = {
       kind: "projectColumns",
       allowEmpty: false,
       available: false,

@@ -162,7 +162,7 @@ export function NodeParameterEditor({
     }
   };
 
-  if (parameter.editor === "graphConstant") {
+  if (parameter.editor.kind === "graphConstant") {
     return (
       <div className="space-y-1">
         <select
@@ -208,8 +208,8 @@ function ParameterValueEditor({
 }: OrdinaryValueEditorProps & { formatFallback(value: unknown): string }) {
   const { t } = useTranslation();
   const fieldErrorId = useId();
-  const configuration = parameter.configuration;
-  if (parameter.editor === "semanticDomain") {
+  const editor = parameter.editor;
+  if (parameter.editor.kind === "semanticDomain") {
     return (
       <div className="space-y-1">
         <SemanticDomainEditor value={parameter.value} pending={pending} onCommit={commit} />
@@ -217,27 +217,17 @@ function ParameterValueEditor({
       </div>
     );
   }
-  if (configuration?.kind === "projectColumns") {
+  if (editor.kind === "projectColumns") {
     return (
-      <ProjectColumnsEditor
-        editor={configuration}
-        errors={errors}
-        disabled={pending}
-        onCommit={commit}
-      />
+      <ProjectColumnsEditor editor={editor} errors={errors} disabled={pending} onCommit={commit} />
     );
   }
-  if (configuration?.kind === "filterPredicate") {
+  if (editor.kind === "filterPredicate") {
     return (
-      <FilterPredicateEditor
-        editor={configuration}
-        errors={errors}
-        disabled={pending}
-        onCommit={commit}
-      />
+      <FilterPredicateEditor editor={editor} errors={errors} disabled={pending} onCommit={commit} />
     );
   }
-  if (configuration?.kind === "selectOptions") {
+  if (editor.kind === "select" && editor.options !== null) {
     return (
       <div className="space-y-1">
         <select
@@ -249,12 +239,12 @@ function ParameterValueEditor({
           aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
           onChange={(event) => commit(event.target.value)}
         >
-          {!configuration.options.includes(String(parameter.value ?? "")) && (
+          {!editor.options.includes(String(parameter.value ?? "")) && (
             <option value={String(parameter.value ?? "")} disabled>
               {parameter.value == null ? "—" : String(parameter.value)}
             </option>
           )}
-          {configuration.options.map((option) => (
+          {editor.options.map((option) => (
             <option key={option} value={option}>
               {optionLabel(parameter.key, option, t)}
             </option>
@@ -264,7 +254,7 @@ function ParameterValueEditor({
       </div>
     );
   }
-  if (parameter.editor === "toggle") {
+  if (parameter.editor.kind === "toggle") {
     return (
       <div className="space-y-1">
         <Switch
@@ -280,9 +270,9 @@ function ParameterValueEditor({
     );
   }
   if (
-    parameter.editor === "number" ||
-    parameter.editor === "text" ||
-    (parameter.editor === "select" &&
+    parameter.editor.kind === "number" ||
+    parameter.editor.kind === "text" ||
+    (parameter.editor.kind === "select" &&
       parameter.valueType?.kind === "Scalar" &&
       parameter.valueType.inner === "Text")
   ) {
@@ -328,7 +318,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryV
   };
   const submit = (value: unknown) => onCommit(value, { onRejected: reset });
   const commitDraft = (resetInvalid = false) => {
-    if (parameter.editor === "number") {
+    if (parameter.editor.kind === "number") {
       const parsed = parseNumberDraft(draft, parameter.valueType);
       if (!parsed.ok) {
         setParseError(numberDraftErrorMessage(parsed.error, t));
@@ -368,13 +358,13 @@ function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryV
 
   return (
     <div className="space-y-1">
-      {parameter.editor === "text" && parameter.multiline ? (
+      {parameter.editor.kind === "text" && parameter.multiline ? (
         <DetailTextarea {...sharedProps} />
       ) : (
         <Input
           {...sharedProps}
           type="text"
-          inputMode={parameter.editor === "number" ? "decimal" : undefined}
+          inputMode={parameter.editor.kind === "number" ? "decimal" : undefined}
           className={detailInlineInputClass}
         />
       )}

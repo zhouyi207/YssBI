@@ -33,12 +33,11 @@ it("retains parameter identities through transport splices and the existing Zust
   const parameter = (key: string): ParameterEditorDto => ({
     key,
     display: { title: key, description: null },
-    editor: "auto",
     presentation: "detailPanel",
     valueType: { kind: "DataSeries", inner: { kind: "Scalar", inner: "Text" } },
     multiline: false,
     value: [],
-    configuration: {
+    editor: {
       kind: "projectColumns",
       allowEmpty: true,
       available: true,

@@ -188,25 +188,30 @@ fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
             title: parameter.display.title.clone(),
             description: parameter.display.description.clone(),
         },
-        editor: match parameter.editor {
-            ParameterEditorKind::Auto => ParameterEditorKindDto::Auto,
-            ParameterEditorKind::GraphConstant => ParameterEditorKindDto::GraphConstant,
-            ParameterEditorKind::SemanticDomain => ParameterEditorKindDto::SemanticDomain,
-            ParameterEditorKind::Text => ParameterEditorKindDto::Text,
-            ParameterEditorKind::Number => ParameterEditorKindDto::Number,
-            ParameterEditorKind::Toggle => ParameterEditorKindDto::Toggle,
-            ParameterEditorKind::Select => ParameterEditorKindDto::Select,
-            ParameterEditorKind::Resource => ParameterEditorKindDto::Resource,
-        },
+        editor: map_parameter_editor(parameter),
         presentation: parameter.presentation.into(),
         value_type: parameter.value_type.clone(),
         multiline: parameter.multiline,
         value: parameter.value.clone(),
-        configuration: parameter
-            .configuration
-            .as_ref()
-            .map(map_parameter_configuration),
     }
+}
+
+fn map_parameter_editor(parameter: &EditorParameterModel) -> ParameterEditorSpecDto {
+    let editor = match parameter.editor {
+        ParameterEditorKind::GraphConstant => return ParameterEditorSpecDto::GraphConstant,
+        ParameterEditorKind::SemanticDomain => return ParameterEditorSpecDto::SemanticDomain,
+        ParameterEditorKind::Auto => ParameterEditorSpecDto::Auto,
+        ParameterEditorKind::Text => ParameterEditorSpecDto::Text,
+        ParameterEditorKind::Number => ParameterEditorSpecDto::Number,
+        ParameterEditorKind::Toggle => ParameterEditorSpecDto::Toggle,
+        ParameterEditorKind::Select => ParameterEditorSpecDto::Select { options: None },
+        ParameterEditorKind::Resource => ParameterEditorSpecDto::Resource,
+    };
+    parameter
+        .configuration
+        .as_ref()
+        .map(map_configured_parameter_editor)
+        .unwrap_or(editor)
 }
 
 fn map_schema_summary(summary: &EditorSchemaSummary) -> SchemaSummaryDto {
@@ -230,22 +235,20 @@ fn map_schema_summary(summary: &EditorSchemaSummary) -> SchemaSummaryDto {
     }
 }
 
-fn map_parameter_configuration(
+fn map_configured_parameter_editor(
     configuration: &EditorParameterConfiguration,
-) -> SchemaAwareParameterEditorDto {
+) -> ParameterEditorSpecDto {
     match configuration {
-        EditorParameterConfiguration::SelectOptions { options } => {
-            SchemaAwareParameterEditorDto::SelectOptions {
-                options: options.to_vec(),
-            }
-        }
+        EditorParameterConfiguration::SelectOptions { options } => ParameterEditorSpecDto::Select {
+            options: Some(options.to_vec()),
+        },
         EditorParameterConfiguration::ProjectColumns {
             allow_empty,
             available,
             unavailable_reason,
             options,
             value,
-        } => SchemaAwareParameterEditorDto::ProjectColumns {
+        } => ParameterEditorSpecDto::ProjectColumns {
             allow_empty: *allow_empty,
             available: *available,
             unavailable_reason: unavailable_reason.clone(),
@@ -263,7 +266,7 @@ fn map_parameter_configuration(
             unavailable_reason,
             columns,
             value,
-        } => SchemaAwareParameterEditorDto::FilterPredicate {
+        } => ParameterEditorSpecDto::FilterPredicate {
             available: *available,
             unavailable_reason: unavailable_reason.clone(),
             columns: columns
@@ -545,7 +548,7 @@ mod tests {
         );
         assert_eq!(wire["nodes"][0]["portInstanceAdditions"], json!([]));
         assert_eq!(
-            wire["nodes"][0]["parameterGroups"][0]["parameters"][0]["configuration"],
+            wire["nodes"][0]["parameterGroups"][0]["parameters"][0]["editor"],
             json!({
                 "kind": "projectColumns",
                 "allowEmpty": false,
@@ -577,10 +580,38 @@ mod tests {
         assert_eq!(group["key"], "parameters");
         let field = &group["parameters"][0];
         assert_eq!(
-            field["configuration"],
-            json!({"kind": "selectOptions", "options": ["nonrobust", "HC1"]})
+            field["editor"],
+            json!({"kind": "select", "options": ["nonrobust", "HC1"]})
         );
         assert_eq!(field["value"], "HC1");
+        assert!(field.get("configuration").is_none());
+
+        let parameter = &mut model.nodes[0].parameter_groups[0].parameters[0];
+        parameter.configuration = None;
+        for (kind, expected) in [
+            (ParameterEditorKind::Auto, json!({"kind": "auto"})),
+            (
+                ParameterEditorKind::GraphConstant,
+                json!({"kind": "graphConstant"}),
+            ),
+            (
+                ParameterEditorKind::SemanticDomain,
+                json!({"kind": "semanticDomain"}),
+            ),
+            (ParameterEditorKind::Text, json!({"kind": "text"})),
+            (ParameterEditorKind::Number, json!({"kind": "number"})),
+            (ParameterEditorKind::Toggle, json!({"kind": "toggle"})),
+            (ParameterEditorKind::Resource, json!({"kind": "resource"})),
+            (
+                ParameterEditorKind::Select,
+                json!({"kind": "select", "options": null}),
+            ),
+        ] {
+            parameter.editor = kind;
+            let projected = map_parameter(parameter);
+            assert_eq!(serde_json::to_value(&projected.editor).unwrap(), expected);
+            assert_eq!(projected.value, parameter.value);
+        }
 
         model.outcome = EditorResolutionOutcome::Incomplete;
         model.diagnostics[0].blocking = true;

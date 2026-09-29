@@ -9,6 +9,12 @@
 
 Node editor capabilities contain only the required `managed` boolean. Copy, duplicate, delete and cut availability derive from this ownership flag; the node capability payload rejects missing or unknown fields. Parameter and inline-literal editors consume their own existing projections.
 
+Node parameter groups have `{ key, display, parameters }`. Every parameter carries an
+`editor` object discriminated by `kind`; plain controls and schema-aware column/filter controls
+share this field. A `select` editor contains `options`, with null retaining text entry for
+text-valued parameters without projected choices. Parameter values, display metadata, presentation
+and multiline behavior retain their existing meaning. The desktop accepts only this shape.
+
 Desktop port connection capabilities contain `current`, `canAppend`, `canReplace` and `canMove`.
 Accepted type domains, maximum capacity and ordering stay with backend owners; the desktop uses
 connection candidate decisions for legality and replacement previews. Harness keeps its consumed
@@ -24,5 +30,8 @@ An `outputs` demand includes `includeDefaultResults` and the required boolean `r
 Command-only request/response schemas may stay beside their handler. Shared types have one definition here, with no compatibility re-export from the former schema modules.
 
 Harness tool lifecycle events are `tool_invocation_started`, `tool_invocation_completed`, and `tool_invocation_failed`. Each carries its actual invocation identity and capability ID; there is no pre-identity placeholder event or legacy event conversion.
+
+Harness workflow state reaches desktop consumers through `HarnessEventDto`. Session and turn
+command responses have their own DTOs; workflow run records remain in the Harness contract.
 
 The complete wire and delivery contract is maintained in [Desktop IPC](../yss-application/src/ipc/README.md).

@@ -13,7 +13,7 @@ import { isNodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationD
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
 import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
 import { isParameterEditor } from "@/shared/types/domain/editorProjectionGuards";
-import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
+import { isParameterEditorSpecDto } from "@/shared/types/domain/parameterEditorValidators";
 import { parseProjectEvent } from "@/services/project/projectEventParser";
 import { parseProjectFunctionGraphIndexRow } from "@/services/project/projectService";
 import { parseGraphProjectionReplacementDto } from "@/shared/types/dto/editorMutationWireParser";
@@ -34,12 +34,11 @@ describe("Rust-generated node-system golden contracts", () => {
     const parameter = {
       key: "semantic_domain",
       display: { title: "Values and levels", description: null },
-      editor: "semanticDomain",
+      editor: { kind: "semanticDomain" },
       presentation: "detailPanel",
       valueType: { kind: "Object" },
       multiline: false,
       value: { values: [{ value: "001", label: "First" }], positiveValue: null },
-      configuration: null,
     };
     expect(isParameterEditor(parameter)).toBe(true);
     expect(isParameterEditor({ ...parameter, editor: "unknownEditor" })).toBe(false);
@@ -353,10 +352,17 @@ describe("Rust-generated node-system golden contracts", () => {
     }
   });
 
-  it("strictly accepts and rejects every schema-aware parameter configuration variant", () => {
+  it("strictly accepts and rejects every parameter editor variant", () => {
     const variants = [
+      ...["auto", "text", "number", "toggle", "resource", "graphConstant", "semanticDomain"].map(
+        (kind) => ({ value: { kind }, missing: "kind" }),
+      ),
       {
-        value: { kind: "selectOptions", options: ["nonrobust", "HC1"] },
+        value: { kind: "select", options: null },
+        missing: "options",
+      },
+      {
+        value: { kind: "select", options: ["nonrobust", "HC1"] },
         missing: "options",
       },
       {
@@ -398,20 +404,20 @@ describe("Rust-generated node-system golden contracts", () => {
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       (
         node.parameterGroups as Array<{ parameters: Array<Record<string, unknown>> }>
-      )[0].parameters[0].configuration = value;
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(true);
+      )[0].parameters[0].editor = value;
+      expect(isParameterEditorSpecDto(value)).toBe(true);
       expect(isEditorGraphProjectionDto(projection)).toBe(true);
 
       Object.assign(value, { compatibility: true });
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
+      expect(isParameterEditorSpecDto(value)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
       deleteKey(value, "compatibility");
       deleteKey(value, missing);
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
+      expect(isParameterEditorSpecDto(value)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
       Object.assign(value, original);
       value.kind = "unsupported";
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
+      expect(isParameterEditorSpecDto(value)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
   });

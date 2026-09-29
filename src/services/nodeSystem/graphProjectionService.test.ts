@@ -102,16 +102,16 @@ describe("GraphProjectionService", () => {
   );
 
   it.each(requests)(
-    "rejects malformed nested parameter configuration from %s with the public error",
+    "rejects malformed nested parameter editor from %s with the public error",
     async (_name, request) => {
       const malformed = structuredClone(session) as unknown as {
         projection: {
           nodes: Array<{
-            parameterGroups: Array<{ parameters: Array<{ configuration: unknown }> }>;
+            parameterGroups: Array<{ parameters: Array<{ editor: unknown }> }>;
           }>;
         };
       };
-      malformed.projection.nodes[0].parameterGroups[0].parameters[0].configuration = {
+      malformed.projection.nodes[0].parameterGroups[0].parameters[0].editor = {
         kind: "projectColumns",
         available: true,
         unavailableReason: null,

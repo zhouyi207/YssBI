@@ -17,7 +17,7 @@ import type {
   FilterLiteralDto,
   FilterOperatorDto,
   FilterPredicateDto,
-  SchemaAwareParameterEditorDto,
+  ParameterEditorSpecDto,
 } from "@/shared/types/domain/editorProjection";
 
 interface EditorProps<TEditor, TValue> {
@@ -27,12 +27,8 @@ interface EditorProps<TEditor, TValue> {
   onCommit(value: TValue, callbacks?: { onRejected?(): void }): void | Promise<void>;
 }
 
-type ProjectEditor = DeepReadonly<
-  Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }>
->;
-type FilterEditor = DeepReadonly<
-  Extract<SchemaAwareParameterEditorDto, { kind: "filterPredicate" }>
->;
+type ProjectEditor = DeepReadonly<Extract<ParameterEditorSpecDto, { kind: "projectColumns" }>>;
+type FilterEditor = DeepReadonly<Extract<ParameterEditorSpecDto, { kind: "filterPredicate" }>>;
 
 function EditorMessages({
   unavailable,

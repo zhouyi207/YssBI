@@ -4,10 +4,19 @@ import type {
   FilterOperatorDto,
   FilterPredicateDto,
   RelationalScalarTypeDto,
-  SchemaAwareParameterEditorDto,
+  ParameterEditorSpecDto,
 } from "@/shared/types/domain/editorProjection";
 
 const relationalScalarTypes = new Set<RelationalScalarTypeDto>([...SEMANTIC_TYPES, null]);
+const simpleEditorKinds = new Set([
+  "semanticDomain",
+  "graphConstant",
+  "auto",
+  "text",
+  "number",
+  "toggle",
+  "resource",
+]);
 const filterOperators = new Set<FilterOperatorDto>([
   "equal",
   "notEqual",
@@ -69,17 +78,19 @@ function isFilterPredicate(value: unknown): value is FilterPredicateDto {
   );
 }
 
-export function isSchemaAwareParameterEditorDto(
-  value: unknown,
-): value is SchemaAwareParameterEditorDto {
+export function isParameterEditorSpecDto(value: unknown): value is ParameterEditorSpecDto {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
-  if (candidate.kind === "selectOptions") {
+  if (simpleEditorKinds.has(candidate.kind as string)) {
+    return hasExactKeys(candidate, ["kind"]);
+  }
+  if (candidate.kind === "select") {
     return (
       hasExactKeys(candidate, ["kind", "options"]) &&
-      Array.isArray(candidate.options) &&
-      candidate.options.length > 0 &&
-      candidate.options.every((option) => typeof option === "string")
+      (candidate.options === null ||
+        (Array.isArray(candidate.options) &&
+          candidate.options.length > 0 &&
+          candidate.options.every((option) => typeof option === "string")))
     );
   }
   const commonValid =

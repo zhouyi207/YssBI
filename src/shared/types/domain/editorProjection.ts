@@ -174,12 +174,11 @@ export interface ParameterGroupDto {
 export interface ParameterEditorDto {
   key: string;
   display: ParameterDisplayDto;
-  editor: ParameterEditorKindDto;
+  editor: ParameterEditorSpecDto;
   presentation: ParameterPresentationDto;
   valueType: ValueType | null;
   multiline: boolean;
   value: unknown | null;
-  configuration: SchemaAwareParameterEditorDto | null;
 }
 
 export interface DataframeColumnOptionDto {
@@ -209,8 +208,11 @@ export interface FilterPredicateDto {
   value?: FilterLiteralDto;
 }
 
-export type SchemaAwareParameterEditorDto =
-  | { kind: "selectOptions"; options: string[] }
+export type ParameterEditorSpecDto =
+  | {
+      kind: "semanticDomain" | "graphConstant" | "auto" | "text" | "number" | "toggle" | "resource";
+    }
+  | { kind: "select"; options: string[] | null }
   | {
       kind: "projectColumns";
       allowEmpty: boolean;
@@ -236,15 +238,6 @@ export interface ParameterDisplayDto {
   title: string;
   description: string | null;
 }
-export type ParameterEditorKindDto =
-  | "semanticDomain"
-  | "graphConstant"
-  | "auto"
-  | "text"
-  | "number"
-  | "toggle"
-  | "select"
-  | "resource";
 
 export interface DiagnosticDto {
   code: string;
