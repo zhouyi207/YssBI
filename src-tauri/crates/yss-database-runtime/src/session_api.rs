@@ -488,20 +488,6 @@ pub fn page_snapshot(
     })
 }
 
-pub fn column_statistics(
-    session: &DatabaseRuntimeSession,
-    database: DatabaseId,
-) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
-    session.read_physical_column_stats(&database)
-}
-
 pub fn column_distributions(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
@@ -514,17 +500,6 @@ pub fn column_distributions(
         ));
     }
     session.read_physical_column_distributions(&database)
-}
-
-pub fn dataset_overview(
-    session: &DatabaseRuntimeSession,
-    database: DatabaseId,
-) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
-    dataset_overview_with_control(
-        session,
-        database,
-        &crate::database_instance::query_control(16 * 1024 * 1024),
-    )
 }
 
 pub fn dataset_overview_with_control(

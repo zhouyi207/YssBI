@@ -56,6 +56,9 @@ non-finite values while reporting nulls separately; category ties sort determini
 empty tables return empty summaries. Plot preparation reads Arrow directly and keeps the existing
 day/microsecond coordinate convention. Plugin snapshots use exact Arrow IPC batches.
 
+Harness profile inspection calls `session_api::dataset_overview_with_control` with the caller's
+cancellation and query budget. The desktop uses `session_api::column_distributions` for Details.
+
 A relation captures the actual dataset snapshot and the Project grant revision. Graph source,
 projection, filter, and series kernels retain that handle. Native optimizer rewrites can drop
 field metadata, so the adapter retains the source Arrow schema, validates native names/types,

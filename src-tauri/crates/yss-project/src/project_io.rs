@@ -90,10 +90,6 @@ pub struct ProjectIndex {
 }
 
 impl ProjectIndex {
-    pub fn contains_node_file(&self, path: &str) -> bool {
-        self.event_graphs.iter().any(|file| file.path == path)
-            || self.function_graphs.iter().any(|file| file.path == path)
-    }
     pub const fn authority_generation(&self) -> u64 {
         self.authority_generation
     }

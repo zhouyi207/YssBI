@@ -579,24 +579,6 @@ impl ApplicationState {
         captured.subscribe_graph_activity(observer)
     }
 
-    pub fn execution_run_state(
-        &self,
-        project: &ProjectInstanceId,
-        execution_session: &str,
-        run_id: u64,
-    ) -> Result<Option<yss_graph_execution::run_registry::RunState>, ResourceMutationApplicationError>
-    {
-        let captured = self.capture_resource_session(project)?;
-        if captured.execution_session_id().as_uuid().to_string() != execution_session {
-            return Err(ResourceMutationApplicationError::SessionChanged(
-                crate::session::SessionRevalidationError::Changed,
-            ));
-        }
-        Ok(captured.execution().runs().state(
-            yss_graph_execution::run_registry::RunId::from_existing(run_id),
-        ))
-    }
-
     pub fn execution_snapshot(
         &self,
         project: &ProjectInstanceId,

@@ -330,13 +330,6 @@ impl DatabaseRuntimeSession {
         self.physical.read_page(database, offset, limit)
     }
 
-    pub(crate) fn read_physical_column_stats(
-        &self,
-        database: &DatabaseId,
-    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
-        self.physical.read_column_stats(database)
-    }
-
     pub(crate) fn read_physical_column_distributions(
         &self,
         database: &DatabaseId,

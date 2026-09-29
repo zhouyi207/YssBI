@@ -18,6 +18,8 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 
 当前数据库窗口只读展示分页行与元数据，并提供导出；前端 `DatabaseService` 仅保留导入、查询、资源管理及 Details 使用的类型转换和语义设置入口。后端数据库编辑、历史和 checkpoint 仍由 Database runtime 的当前契约拥有。
 
+桌面 IPC 只注册这些实际使用的入口。数据概览由 Harness 的 profile capability 携带查询控制直接读取；行列编辑、撤销重做、checkpoint 和编辑状态通过统一资源工具调用 Application 用例。
+
 Harness 通过统一资源工具调用这些后端用例，覆盖导入、分页读取、行列编辑、物理类型转换、
 列语义、撤销重做、checkpoint、重命名和删除。每次修改携带 Project 资源 revision；查询同时
 验证 Database runtime 的读取基线。`duplicate_database_for_application` 复用流式 Parquet

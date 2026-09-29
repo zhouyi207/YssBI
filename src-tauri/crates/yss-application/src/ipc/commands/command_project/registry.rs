@@ -147,11 +147,6 @@ pub async fn toggle_registered_project_favorite(
         .map_err(CommandError::internal)
 }
 
-#[tauri::command]
-pub fn get_project_registry_path(projects: State<ProjectManagement>) -> String {
-    projects.path().to_string_lossy().into_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use std::io;

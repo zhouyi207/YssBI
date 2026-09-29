@@ -57,6 +57,14 @@ and [Document editors](../../../../../src/modules/document-editor/README.md).
 
 Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initialize(app)`. The desktop entry connects these two functions directly to Tauri. Commands, schemas, response caches and diagnosed errors remain private to the IPC module.
 
+Database commands cover the current desktop's imports, paged reads, metadata, column distributions,
+resource management, export, type conversion and semantic settings. Harness calls Application
+use cases directly for row/column editing, history and checkpoints; its profile capability owns
+dataset overview reads. See [Database application](../database/README.md).
+
+Execution recovery reads `get_execution_snapshot` for the current project session and then applies
+Graph activity notifications. RunId state remains internal to the execution registry.
+
 `get_project_path` and `get_project_databases` take no wire arguments and query the active Application session. Frontend hydration rechecks its captured project lifecycle identity before publishing either response; these queries do not accept a caller-supplied project identity.
 
 Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, Application startup plugin or binding registry. Platform plugins own their namespaced command registries.

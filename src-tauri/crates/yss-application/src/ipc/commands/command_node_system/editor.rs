@@ -371,37 +371,6 @@ pub fn unsubscribe_graph_activity(
 }
 
 #[tauri::command]
-pub fn get_execution_run_state(
-    application: State<'_, ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    execution_session_id: String,
-    run_id: String,
-) -> Result<Option<&'static str>, CommandError> {
-    let id = run_id
-        .parse::<u64>()
-        .map_err(|_| CommandError::expected("invalid_run_id"))?;
-    if id == 0 || id.to_string() != run_id {
-        return Err(CommandError::expected("invalid_run_id"));
-    }
-    application
-        .execution_run_state(&project_instance_id, &execution_session_id, id)
-        .map(|state| {
-            state.map(|state| {
-                use yss_graph_execution::run_registry::RunState;
-                match state {
-                    RunState::Admitted => "admitted",
-                    RunState::Running => "running",
-                    RunState::Finalizing => "finalizing",
-                    RunState::Succeeded => "succeeded",
-                    RunState::Failed => "failed",
-                    RunState::Cancelled => "cancelled",
-                }
-            })
-        })
-        .map_err(map_editor_resource_error)
-}
-
-#[tauri::command]
 pub fn get_execution_snapshot(
     application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,

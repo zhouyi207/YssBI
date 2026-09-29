@@ -460,39 +460,6 @@ impl ApplicationState {
         Ok(result)
     }
 
-    pub fn query_column_stats_for_application(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        id: String,
-    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseUseCaseError> {
-        let captured = self.capture_database_session(&project_instance_id)?;
-        let database = database_id(&id);
-        let basis = captured
-            .database()
-            .capture_query_basis(&database)
-            .map_err(|error| {
-                map_database_runtime_error(
-                    error,
-                    DatabaseApplicationOperation::ColumnStatistics,
-                    &id,
-                )
-            })?;
-        let result =
-            session_api::column_statistics(captured.database(), database).map_err(|error| {
-                map_database_runtime_error(
-                    error,
-                    DatabaseApplicationOperation::ColumnStatistics,
-                    &id,
-                )
-            })?;
-        session_api::revalidate_query_basis(captured.database(), &basis).map_err(|error| {
-            map_database_runtime_error(error, DatabaseApplicationOperation::ColumnStatistics, &id)
-        })?;
-        self.revalidate_captured_session(&captured)
-            .map_err(DatabaseUseCaseError::SessionChanged)?;
-        Ok(result)
-    }
-
     pub fn query_column_distributions_for_application(
         &self,
         project_instance_id: ProjectInstanceId,
@@ -520,39 +487,6 @@ impl ApplicationState {
             })?;
         session_api::revalidate_query_basis(captured.database(), &basis).map_err(|error| {
             map_database_runtime_error(error, DatabaseApplicationOperation::ColumnDistribution, &id)
-        })?;
-        self.revalidate_captured_session(&captured)
-            .map_err(DatabaseUseCaseError::SessionChanged)?;
-        Ok(result)
-    }
-
-    pub fn query_dataset_overview_for_application(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        id: String,
-    ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseUseCaseError> {
-        let captured = self.capture_database_session(&project_instance_id)?;
-        let database = database_id(&id);
-        let basis = captured
-            .database()
-            .capture_query_basis(&database)
-            .map_err(|error| {
-                map_database_runtime_error(
-                    error,
-                    DatabaseApplicationOperation::DatasetOverview,
-                    &id,
-                )
-            })?;
-        let result =
-            session_api::dataset_overview(captured.database(), database).map_err(|error| {
-                map_database_runtime_error(
-                    error,
-                    DatabaseApplicationOperation::DatasetOverview,
-                    &id,
-                )
-            })?;
-        session_api::revalidate_query_basis(captured.database(), &basis).map_err(|error| {
-            map_database_runtime_error(error, DatabaseApplicationOperation::DatasetOverview, &id)
         })?;
         self.revalidate_captured_session(&captured)
             .map_err(DatabaseUseCaseError::SessionChanged)?;

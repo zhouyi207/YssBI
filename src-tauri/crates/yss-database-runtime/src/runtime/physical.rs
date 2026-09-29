@@ -165,19 +165,6 @@ impl DatabaseRuntimePhysicalState {
             .map_err(|_| DatabaseError::schema(DatabaseOperation::Query, Some(database.clone())))?;
         Ok(DatabaseRuntimePageSnapshot { rows, row_ids })
     }
-    pub(crate) fn read_column_stats(
-        &self,
-        database: &DatabaseId,
-    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseError> {
-        self.required_instance(database)?
-            .query()
-            .and_then(|query| {
-                query
-                    .column_stats(&query_control(16 * 1024 * 1024))
-                    .map_err(Into::into)
-            })
-            .map_err(|error| failure(database, DatabaseOperation::Query, error))
-    }
     pub(crate) fn read_column_distributions(
         &self,
         database: &DatabaseId,

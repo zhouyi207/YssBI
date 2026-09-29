@@ -12,9 +12,9 @@ use yss_harness_contract::{
     CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityId,
     CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
     DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
-    InspectDatasetSchemaRequest, InspectProjectRequest, InspectResultRequest, NodeCatalogMatch,
-    NodeCatalogSearchResult, ProjectInspection, ResultCategoryInspection, ResultInspection,
-    ResultValueInspection, SearchNodeCatalogRequest,
+    InspectDatasetSchemaRequest, InspectResultRequest, NodeCatalogMatch, NodeCatalogSearchResult,
+    ProjectInspection, ResultCategoryInspection, ResultInspection, ResultValueInspection,
+    SearchNodeCatalogRequest,
 };
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_kernel::RuntimeValue;
@@ -119,8 +119,8 @@ fn invoke_capability(
             inspect_result(application, &captured, request, control)
                 .map(AutomationCapabilityResult::ResultInspection)
         }
-        AutomationCapabilityRequest::InspectProject(request) => {
-            inspect_project(&captured, request).map(AutomationCapabilityResult::ProjectInspection)
+        AutomationCapabilityRequest::InspectProject(_) => {
+            inspect_project(&captured).map(AutomationCapabilityResult::ProjectInspection)
         }
         AutomationCapabilityRequest::ListGraphResults(request) => {
             graph::list_graph_results(&captured, request.graph_path)
@@ -166,10 +166,7 @@ fn ensure_project_binding(
     Ok(())
 }
 
-fn inspect_project(
-    captured: &ApplicationSession,
-    _request: InspectProjectRequest,
-) -> Result<ProjectInspection, CapabilityFailure> {
+fn inspect_project(captured: &ApplicationSession) -> Result<ProjectInspection, CapabilityFailure> {
     let project = resources::project_inspection(captured)?;
     enforce_result_bound(CapabilityId::InspectProject, project.resources.len())?;
     Ok(project)

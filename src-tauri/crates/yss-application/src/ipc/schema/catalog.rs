@@ -421,13 +421,18 @@ mod tests {
             .expect("function resource item is present");
         assert_eq!(item["resourceRevision"], 0);
         assert_eq!(item["available"], true);
-        let unavailable = wire["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|item| item["nodeTypeId"] == "yssbi.statistics.logit.fit")
-            .unwrap();
-        assert_eq!(unavailable["available"], false);
+        for (id, expected) in [
+            ("yssbi.statistics.logit.fit", true),
+            ("yssbi.statistics.inequality.gini", false),
+        ] {
+            let node = wire["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["nodeTypeId"] == id)
+                .unwrap();
+            assert_eq!(node["available"], expected);
+        }
         assert_eq!(item["creation"]["kind"], "resourceBound");
         assert_eq!(item["creation"]["createArgs"]["kind"], "function_graph");
         assert!(
@@ -464,9 +469,16 @@ mod tests {
             .unwrap();
         assert_eq!(function["item"]["creation"], item["creation"]);
         assert_eq!(function["item"]["available"], true);
-        assert!(rows.iter().any(|row| row["item"]["creation"]["nodeTypeId"]
-            == "yssbi.statistics.logit.fit"
-            && row["item"]["available"] == false));
+        for (id, expected) in [
+            ("yssbi.statistics.logit.fit", true),
+            ("yssbi.statistics.inequality.gini", false),
+        ] {
+            assert!(
+                rows.iter()
+                    .any(|row| row["item"]["creation"]["nodeTypeId"] == id
+                        && row["item"]["available"] == expected)
+            );
+        }
         assert!(rows.iter().any(|row| row["kind"] == "category"));
     }
 }
