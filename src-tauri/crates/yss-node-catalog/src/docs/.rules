@@ -5,17 +5,18 @@
   documentation mapping. Short catalog descriptions are not a substitute.
 - Describe the actual node input, parameter defaults/ranges, preprocessing,
   output fields and limitations after checking Catalog, Kernel, Runtime and SCI.
-- For each implemented test or selectable variant, state its purpose, null and
-  alternative hypotheses, statistic formula, symbol definitions, reference
-  distribution, degrees of freedom and p-value/rejection rule separately.
-- Expand named intermediate quantities needed to reproduce the calculation.
-  Specify moment denominators, kurtosis convention, weighting and lag/horizon
-  indexing when relevant. Do not replace a formula with only a method name.
-- Explain sample-size and model assumptions, degenerate inputs and what a
-  non-significant result does and does not establish. Descriptive diagnostics,
-  response functions and decompositions must not invent tests or p-values.
-- Include a practical interpretation/example and authoritative references for
-  statistical methods. Distinguish implementation conventions from general theory.
+- Keep help focused on using and interpreting the node. For each test or
+  selectable variant, retain its null and alternative hypotheses, core statistic
+  formula, reference distribution/degrees of freedom and result interpretation.
+- Define necessary symbols briefly beside the formula. Omit standalone notation,
+  sample-moment tutorials, derivations, elementary worked examples and internal
+  numerical branches. Link to references for detailed mathematics.
+- Retain only conditions and conventions that affect node use or interpretation,
+  such as sample requirements, weighting, kurtosis convention and output indexing.
+  Do not invent tests or p-values for descriptive diagnostics or decompositions.
+- Avoid repetitive generic caveats, exhaustive failure lists and reference
+  sections for their own sake. Add an example only when it clarifies an actual
+  parameter, expression syntax or output-indexing ambiguity.
 - Use `$...$` and `$$...$$` math supported by the existing Markdown renderer;
   verify changed formulas render. Keep maintenance rules and backend paths out
   of user-facing prose.
