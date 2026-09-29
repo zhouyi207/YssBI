@@ -6,15 +6,15 @@ use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
     AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort,
     AutomationIdKind, CapabilityFailure, CapabilityFailureCode, CapabilityFuture,
-    CapabilityGatewayPort, CapabilityInvocationContext, ClockPort, HarnessEventEnvelope,
-    HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId, HarnessSessionRecord,
-    HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord, IdGeneratorPort,
-    KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord, KnowledgeSourceStatus,
-    KnowledgeSourceStorePort, MemoryRecord, MemoryRecordId, MemoryStatus, MemoryStorePort,
-    ModelCapabilityExecutor, PersistenceFailure, PersistenceFailureCode, PersistenceFuture,
-    SkillPackage, SkillSourcePort, ToolInvocationBegin, ToolInvocationLedgerPort,
-    ToolInvocationRecord, UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId,
-    WorkflowRunRecord, WorkflowRunState, WorkflowStorePort, WorkflowVersion,
+    CapabilityGatewayPort, CapabilityInvocationContext, ClockPort, HarnessEvent,
+    HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId,
+    HarnessSessionRecord, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
+    IdGeneratorPort, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
+    KnowledgeSourceStatus, KnowledgeSourceStorePort, MemoryRecord, MemoryRecordId, MemoryStatus,
+    MemoryStorePort, ModelCapabilityExecutor, PersistenceFailure, PersistenceFailureCode,
+    PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort, ToolInvocationRecord,
+    UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState,
+    WorkflowStorePort, WorkflowVersion,
 };
 
 pub struct FixedClock {
@@ -52,6 +52,7 @@ impl IdGeneratorPort for SequentialIds {
         let prefix = match kind {
             AutomationIdKind::HarnessSession => "session",
             AutomationIdKind::HarnessTurn => "turn",
+            AutomationIdKind::AgentRun => "agent",
             AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
             AutomationIdKind::CapabilityInvocation => "capability",
@@ -172,13 +173,6 @@ struct InMemoryState {
     knowledge_sources: BTreeMap<KnowledgeSourceId, KnowledgeSourceRecord>,
     knowledge_documents:
         BTreeMap<yss_harness_contract::KnowledgeDocumentId, KnowledgeDocumentRecord>,
-    skills: BTreeMap<
-        (
-            yss_harness_contract::SkillId,
-            yss_harness_contract::SkillVersion,
-        ),
-        SkillPackage,
-    >,
     approvals: BTreeMap<ApprovalGrantId, ApprovalGrantRecord>,
 }
 
@@ -361,17 +355,28 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
 impl HarnessEventStorePort for InMemoryHarnessStore {
     fn append_event<'a>(
         &'a self,
-        event: &'a HarnessEventEnvelope,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        session_id: &'a HarnessSessionId,
+        turn_id: Option<&'a HarnessTurnId>,
+        occurred_at: UnixMillis,
+        event: HarnessEvent,
+    ) -> PersistenceFuture<'a, Result<HarnessEventEnvelope, PersistenceFailure>> {
         Box::pin(async move {
             let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            let events = state.events.entry(event.session_id.clone()).or_default();
-            let expected = events.last().map_or(1, |current| current.sequence + 1);
-            if event.sequence != expected {
-                return Err(conflict());
-            }
-            events.push(event.clone());
-            Ok(())
+            let events = state.events.entry(session_id.clone()).or_default();
+            let sequence = events
+                .last()
+                .map_or(0, |current| current.sequence)
+                .checked_add(1)
+                .ok_or_else(invalid_record)?;
+            let envelope = HarnessEventEnvelope {
+                sequence,
+                session_id: session_id.clone(),
+                turn_id: turn_id.cloned(),
+                occurred_at,
+                event,
+            };
+            events.push(envelope.clone());
+            Ok(envelope)
         })
     }
 
@@ -467,14 +472,26 @@ impl WorkflowStorePort for InMemoryHarnessStore {
     fn save_run<'a>(
         &'a self,
         run: &'a WorkflowRunRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        expected_revision: Option<u64>,
+    ) -> PersistenceFuture<'a, Result<WorkflowRunRecord, PersistenceFailure>> {
         Box::pin(async move {
-            self.state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .runs
-                .insert(run.id.clone(), run.clone());
-            Ok(())
+            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            let mut committed = run.clone();
+            match expected_revision {
+                Some(expected)
+                    if run.revision == expected
+                        && state
+                            .runs
+                            .get(&run.id)
+                            .is_some_and(|current| current.revision == expected) =>
+                {
+                    committed.revision = expected.checked_add(1).ok_or_else(invalid_record)?;
+                }
+                None if run.revision == 0 && !state.runs.contains_key(&run.id) => {}
+                _ => return Err(conflict()),
+            }
+            state.runs.insert(run.id.clone(), committed.clone());
+            Ok(committed)
         })
     }
 
@@ -817,47 +834,12 @@ impl KnowledgeSourceStorePort for InMemoryHarnessStore {
     }
 }
 
-impl SkillSourcePort for InMemoryHarnessStore {
-    fn install_package<'a>(
-        &'a self,
-        package: &'a SkillPackage,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            let key = (
-                package.manifest.id.clone(),
-                package.manifest.version.clone(),
-            );
-            if state
-                .skills
-                .get(&key)
-                .is_some_and(|existing| existing != package)
-            {
-                return Err(conflict());
-            }
-            state.skills.insert(key, package.clone());
-            Ok(())
-        })
-    }
-
-    fn list_packages<'a>(
-        &'a self,
-    ) -> PersistenceFuture<'a, Result<Vec<SkillPackage>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .skills
-                .values()
-                .cloned()
-                .collect())
-        })
-    }
-}
-
 fn conflict() -> PersistenceFailure {
     PersistenceFailure::new(PersistenceFailureCode::Conflict)
+}
+
+fn invalid_record() -> PersistenceFailure {
+    PersistenceFailure::new(PersistenceFailureCode::InvalidRecord)
 }
 
 fn not_found() -> PersistenceFailure {

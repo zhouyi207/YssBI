@@ -16,6 +16,3 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 tracing.workspace = true
 yss-harness-contract = { path = "../yss-harness-contract" }
-
-[dev-dependencies]
-yss-project-identity = { path = "../yss-project-identity" }

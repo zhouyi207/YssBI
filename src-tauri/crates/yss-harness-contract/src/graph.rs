@@ -1,6 +1,7 @@
+//! Graph inspection, edits, validation and execution receipts.
+
 use crate::{
-    CapabilityContractError, GraphConnectionInspection, GraphEditPortRef, GraphNodeInspection,
-    ResultCategoryInspection,
+    CapabilityContractError, MAX_RESOURCE_ID_BYTES, ResultCategoryInspection, validate_resource_id,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -181,4 +182,345 @@ pub(crate) fn validate_graph_json(value: &impl Serialize) -> Result<(), Capabili
         });
     }
     Ok(())
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InspectGraphRequest {
+    pub graph_path: String,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphEditPosition {
+    pub node_id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum GraphEditPortRef {
+    Declared {
+        node_id: String,
+        port_key: String,
+    },
+    Instance {
+        node_id: String,
+        template_key: String,
+        instance_id: String,
+    },
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    content = "payload",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum GraphEditOperation {
+    CreateConstant {
+        name: String,
+        value: GraphConstantLiteral,
+        x: f64,
+        y: f64,
+        client_id: Option<String>,
+    },
+    CreateNode {
+        client_id: Option<String>,
+        node_type_id: String,
+        resource_path: Option<String>,
+        x: f64,
+        y: f64,
+        user_label: Option<String>,
+    },
+    MoveNodes {
+        positions: Vec<GraphEditPosition>,
+    },
+    DeleteNodes {
+        node_ids: Vec<String>,
+    },
+    Connect {
+        output: GraphEditPortRef,
+        input: GraphEditPortRef,
+        order: Option<String>,
+    },
+    DisconnectConnections {
+        connection_ids: Vec<String>,
+    },
+    SetParameters {
+        node_id: String,
+        parameters: BTreeMap<String, serde_json::Value>,
+    },
+    SetLiteral {
+        address: GraphEditPortRef,
+        literal: Option<serde_json::Value>,
+    },
+    AddPortInstance {
+        node_id: String,
+        template_key: String,
+        client_id: Option<String>,
+    },
+    RemovePortInstance {
+        address: GraphEditPortRef,
+    },
+    DisconnectPort {
+        address: GraphEditPortRef,
+    },
+    DisconnectNode {
+        node_id: String,
+    },
+    MoveConnections {
+        source: GraphEditPortRef,
+        target: GraphEditPortRef,
+    },
+    DuplicateNodes {
+        node_ids: Vec<String>,
+        offset_x: f64,
+        offset_y: f64,
+    },
+    SetConstant {
+        id: String,
+        constant: Option<serde_json::Value>,
+    },
+    InsertConstantReference {
+        id: String,
+        x: f64,
+        y: f64,
+        client_id: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ApplyGraphEditRequest {
+    pub graph_path: String,
+    pub base_revision: u64,
+    pub graph_hash: String,
+    pub client_key: String,
+    pub locale: String,
+    pub operations: Vec<GraphEditOperation>,
+}
+
+pub(crate) fn validate_graph_edit_operation(
+    operation: &GraphEditOperation,
+) -> Result<(), CapabilityContractError> {
+    match operation {
+        GraphEditOperation::CreateConstant {
+            name, value, x, y, ..
+        } => {
+            validate_resource_id("name", name)?;
+            validate_graph_json(value)?;
+            if !x.is_finite()
+                || !y.is_finite()
+                || matches!(value, GraphConstantLiteral::Decimal(value) if !value.is_finite())
+                || matches!(value, GraphConstantLiteral::Integer(value) if value.unsigned_abs() > 9_007_199_254_740_991)
+            {
+                return Err(CapabilityContractError::InvalidField("value"));
+            }
+        }
+        GraphEditOperation::CreateNode {
+            client_id: _,
+            node_type_id,
+            resource_path,
+            x,
+            y,
+            user_label,
+        } => {
+            validate_resource_id("nodeTypeId", node_type_id)?;
+            if resource_path
+                .as_ref()
+                .is_some_and(|path| path.trim().is_empty() || path.len() > MAX_RESOURCE_ID_BYTES)
+                || user_label.as_ref().is_some_and(|label| label.len() > 1_024)
+                || !x.is_finite()
+                || !y.is_finite()
+            {
+                return Err(CapabilityContractError::InvalidField("operation"));
+            }
+        }
+        GraphEditOperation::MoveNodes { positions } => {
+            if positions.is_empty()
+                || positions.len() > 200
+                || positions.iter().any(|position| {
+                    position.node_id.trim().is_empty()
+                        || !position.x.is_finite()
+                        || !position.y.is_finite()
+                })
+            {
+                return Err(CapabilityContractError::InvalidField("positions"));
+            }
+        }
+        GraphEditOperation::DeleteNodes { node_ids } => {
+            if node_ids.is_empty()
+                || node_ids.len() > 200
+                || node_ids.iter().any(|id| id.trim().is_empty())
+            {
+                return Err(CapabilityContractError::InvalidField("nodeIds"));
+            }
+        }
+        GraphEditOperation::Connect {
+            output,
+            input,
+            order,
+        } => {
+            validate_graph_edit_port(output)?;
+            validate_graph_edit_port(input)?;
+            if order.as_ref().is_some_and(|order| order.len() > 1_024) {
+                return Err(CapabilityContractError::InvalidField("order"));
+            }
+        }
+        GraphEditOperation::DisconnectConnections { connection_ids } => {
+            if connection_ids.is_empty()
+                || connection_ids.len() > 200
+                || connection_ids.iter().any(|id| id.trim().is_empty())
+            {
+                return Err(CapabilityContractError::InvalidField("connectionIds"));
+            }
+        }
+        GraphEditOperation::SetParameters {
+            node_id,
+            parameters,
+        } => {
+            validate_resource_id("nodeId", node_id)?;
+            validate_graph_json(parameters)?;
+        }
+        GraphEditOperation::SetLiteral { address, literal } => {
+            validate_graph_edit_port(address)?;
+            validate_graph_json(literal)?;
+        }
+        GraphEditOperation::AddPortInstance {
+            node_id,
+            template_key,
+            ..
+        } => {
+            validate_resource_id("nodeId", node_id)?;
+            validate_resource_id("templateKey", template_key)?;
+        }
+        GraphEditOperation::RemovePortInstance { address }
+        | GraphEditOperation::DisconnectPort { address } => validate_graph_edit_port(address)?,
+        GraphEditOperation::DisconnectNode { node_id } => validate_resource_id("nodeId", node_id)?,
+        GraphEditOperation::MoveConnections { source, target } => {
+            validate_graph_edit_port(source)?;
+            validate_graph_edit_port(target)?;
+        }
+        GraphEditOperation::DuplicateNodes {
+            node_ids,
+            offset_x,
+            offset_y,
+        } => {
+            if node_ids.is_empty()
+                || node_ids.len() > 200
+                || !offset_x.is_finite()
+                || !offset_y.is_finite()
+            {
+                return Err(CapabilityContractError::InvalidField("nodeIds"));
+            }
+        }
+        GraphEditOperation::SetConstant { id, constant } => {
+            validate_resource_id("constantId", id)?;
+            validate_graph_json(constant)?;
+        }
+        GraphEditOperation::InsertConstantReference { id, x, y, .. } => {
+            validate_resource_id("constantId", id)?;
+            if !x.is_finite() || !y.is_finite() {
+                return Err(CapabilityContractError::InvalidField("position"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_graph_edit_port(port: &GraphEditPortRef) -> Result<(), CapabilityContractError> {
+    let invalid = match port {
+        GraphEditPortRef::Declared { node_id, port_key } => {
+            node_id.trim().is_empty() || port_key.trim().is_empty()
+        }
+        GraphEditPortRef::Instance {
+            node_id,
+            template_key,
+            instance_id,
+        } => {
+            node_id.trim().is_empty()
+                || template_key.trim().is_empty()
+                || instance_id.trim().is_empty()
+        }
+    };
+    if invalid {
+        Err(CapabilityContractError::InvalidField("port"))
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphNodeInspection {
+    pub node_id: String,
+    pub node_type_id: String,
+    pub user_label: Option<String>,
+    pub x: f64,
+    pub y: f64,
+    pub title: String,
+    pub parameters: Vec<GraphParameterInspection>,
+    pub ports: Vec<GraphPortFacts>,
+    pub port_templates: Vec<GraphPortTemplateInspection>,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum GraphPortInspection {
+    Declared {
+        node_id: String,
+        port_key: String,
+    },
+    Instance {
+        node_id: String,
+        template_key: String,
+        instance_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphConnectionInspection {
+    pub connection_id: String,
+    pub output: GraphPortInspection,
+    pub input: GraphPortInspection,
+    pub order: Option<String>,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphInspection {
+    pub graph_path: String,
+    pub semantic_input_hash: String,
+    pub ready: bool,
+    pub nodes: Vec<GraphNodeInspection>,
+    pub connections: Vec<GraphConnectionInspection>,
+    pub revision: u64,
+    pub graph_hash: String,
+    pub constants: BTreeMap<String, serde_json::Value>,
+    pub diagnostics: Vec<GraphDiagnosticInspection>,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphEditReceipt {
+    pub graph_path: String,
+    pub from_revision: u64,
+    pub to_revision: u64,
+    pub client_key: String,
+    pub graph_hash: String,
+    pub created_nodes: BTreeMap<String, String>,
+    pub created_ports: BTreeMap<String, GraphEditPortRef>,
+    pub changes: GraphEditChanges,
 }

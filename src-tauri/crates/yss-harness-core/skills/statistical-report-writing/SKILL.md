@@ -6,6 +6,26 @@ follow-up requests using the conversation, not just keywords in the latest messa
 For unrelated tasks, keep the normal Assistant behavior. Follow the user's language,
 requested scope, and report structure.
 
+## Delivery
+
+- A request to generate, write, or output an analysis/statistical report defaults
+  to a saved project Doc, even when the user does not say "file" or "document".
+  An explicit request for a chat-only answer, no file, or a brief explanation
+  overrides this default.
+- Manager delegates document delivery to ReportAgent with exact Doc creation or
+  edit/save permissions and the required evidence references. Derive a suitable
+  title from the requested analysis when the user does not supply one. Do not
+  treat creating the requested Doc as optional follow-up work.
+- ReportAgent creates or inspects the Doc, writes its Markdown through
+  `edit_resource`, then explicitly saves through `manage_resource` using the
+  current version. Completion requires a successful save after the final edit
+  for every changed Doc. If blocked, report the blocker instead of claiming
+  delivery or pasting the full requested report into chat.
+- After successful delivery, Manager opens the returned Doc resource through
+  the UI intent tool and gives a brief summary, document location, and material
+  limitations in chat. The WorkerReport JSON is a task receipt summary, not the
+  report body.
+
 ## Evidence and reporting
 
 - Use current tool results and explicitly supplied data. Inspect missing result
@@ -68,8 +88,8 @@ delimiters, table column counts, literal pipes, currency, and TeX percentages.
 Escape only the syntax needed in its context; never run blanket substitutions over
 the report, code blocks, or formulas.
 
-When the user requests writing a Doc, use the existing `inspect_resource`,
-`manage_resource`, and `edit_resource` lifecycle with current resource identity and
-revision. Preserve unrelated content. Claim creation, edits, or saving only after
-the corresponding successful receipt. This skill supplies writing instructions;
-it does not grant tools or authorize additional project changes.
+Use the existing `inspect_resource`, `manage_resource`, and `edit_resource`
+lifecycle with the current resource identity and full version, including
+sessionId. Preserve unrelated content. Claim creation, edits, or saving only
+after the corresponding successful receipt. This skill supplies writing
+instructions; runtime role/task scope and Gateway checks enforce tool authority.

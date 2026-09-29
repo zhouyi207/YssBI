@@ -1,7 +1,105 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import type { HarnessKnowledgeCitation } from "@/services/assistant/harnessService";
+import type {
+  HarnessAgentRole,
+  HarnessAgentState,
+  HarnessEvent,
+} from "@/services/assistant/harnessContract";
 
 export type AssistantMessageContent = Exclude<ThreadMessageLike["content"], string>;
+
+export interface ProjectionAgentTask {
+  readonly runId: string;
+  readonly role: HarnessAgentRole;
+  readonly objective: string;
+  readonly state: HarnessAgentState | "running";
+  readonly summary: string | null;
+  readonly warnings: readonly string[];
+  readonly activity: string | null;
+  readonly plan: unknown | null;
+}
+
+export function updateAgentTask(
+  content: AssistantMessageContent,
+  event: HarnessEvent,
+): AssistantMessageContent {
+  if (
+    event.type !== "agent_run_started" &&
+    event.type !== "agent_run_finished" &&
+    event.type !== "agent_run_output" &&
+    event.type !== "agent_run_invalidated"
+  )
+    return content;
+  if (
+    (event.type === "agent_run_started" || event.type === "agent_run_finished") &&
+    event.payload.role === "manager"
+  )
+    return content;
+  const runId = event.payload.runId;
+  const index = content.findIndex(
+    (part) =>
+      part.type === "data" &&
+      part.name === "agent-task" &&
+      (part.data as ProjectionAgentTask).runId === runId,
+  );
+  const previous = index >= 0 ? (content[index] as { data: ProjectionAgentTask }).data : undefined;
+  let task: ProjectionAgentTask;
+  if (event.type === "agent_run_started") {
+    task = {
+      runId,
+      role: event.payload.role,
+      objective: event.payload.objective,
+      state: "running",
+      summary: null,
+      warnings: [],
+      activity: null,
+      plan: null,
+    };
+  } else if (!previous) {
+    return content;
+  } else if (event.type === "agent_run_invalidated") {
+    task = { ...previous, state: "stale", activity: null };
+  } else if (event.type === "agent_run_finished") {
+    task = {
+      ...previous,
+      state: event.payload.state,
+      summary: event.payload.summary,
+      warnings: event.payload.warnings,
+      activity: null,
+    };
+  } else {
+    const output = event.payload.event;
+    if (output.type === "plan_proposed") {
+      task = { ...previous, plan: output.payload.plan };
+      return content.map((part, i) =>
+        i === index ? { type: "data", name: "agent-task", data: task } : part,
+      );
+    }
+    if (
+      output.type !== "tool_invocation_started" &&
+      output.type !== "tool_invocation_completed" &&
+      output.type !== "tool_invocation_failed"
+    )
+      return content;
+    task = {
+      ...previous,
+      activity: output.type === "tool_invocation_started" ? output.payload.capabilityId : null,
+    };
+  }
+  const part = { type: "data" as const, name: "agent-task", data: task };
+  return index < 0 ? [...content, part] : content.map((old, i) => (i === index ? part : old));
+}
+
+export function settleAgentTasks(
+  content: AssistantMessageContent,
+  state: "cancelled" | "interrupted",
+): AssistantMessageContent {
+  return content.map((part) => {
+    if (part.type !== "data" || part.name !== "agent-task") return part;
+    const task = part.data as ProjectionAgentTask;
+    return task.state === "running" ? { ...part, data: { ...task, state, activity: null } } : part;
+  });
+}
 export interface ProjectionToolCall {
   readonly invocationId: string;
   readonly capabilityId: string;

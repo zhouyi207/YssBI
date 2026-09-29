@@ -1,31 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CapabilityId, HarnessSessionId, KnowledgeChunkId, KnowledgeDocumentId, KnowledgeSourceId,
-    MemoryRecordId, PersistenceFailure, PersistenceFuture, ProjectSessionBinding, SkillId,
-    SkillVersion, SourceHash, UnixMillis, WorkflowId,
+    HarnessSessionId, KnowledgeChunkId, KnowledgeDocumentId, KnowledgeSourceId, MemoryRecordId,
+    PersistenceFailure, PersistenceFuture, ProjectSessionBinding, SkillId, SkillVersion,
+    SourceHash, UnixMillis,
 };
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SkillScope {
-    Builtin,
-    Project,
-    User,
-    Remote,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SkillManifest {
     pub id: SkillId,
     pub version: SkillVersion,
-    pub scope: SkillScope,
-    pub domain: String,
-    /// Instruction-only skills do not require an executable workflow.
-    pub entry_workflow: Option<WorkflowId>,
-    pub allowed_capabilities: Vec<CapabilityId>,
-    pub knowledge_scopes: Vec<String>,
     pub source_hash: SourceHash,
 }
 
@@ -34,17 +19,6 @@ pub struct SkillManifest {
 pub struct SkillPackage {
     pub manifest: SkillManifest,
     pub instructions: String,
-}
-
-pub trait SkillSourcePort: Send + Sync {
-    fn install_package<'a>(
-        &'a self,
-        package: &'a SkillPackage,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
-
-    fn list_packages<'a>(
-        &'a self,
-    ) -> PersistenceFuture<'a, Result<Vec<SkillPackage>, PersistenceFailure>>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -258,7 +232,6 @@ pub enum MemoryConfidence {
 #[serde(rename_all = "snake_case")]
 pub enum MemoryStatus {
     Proposed,
-    Approved,
     Active,
     Superseded,
     Invalidated,

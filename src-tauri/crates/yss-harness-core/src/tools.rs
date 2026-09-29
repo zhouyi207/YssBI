@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::future::{Future, poll_fn};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
@@ -6,79 +5,52 @@ use std::task::Poll;
 use std::time::Duration;
 
 use yss_harness_contract::{
-    AgentEvent, AgentEventOutput, ApprovalGrantId, AutomationIdKind, AutomationIdentityError,
-    CancellationToken, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
-    CapabilityGatewayPort, CapabilityId, CapabilityInvocationContext, CapabilityInvocationId,
-    ClockPort, HarnessSessionId, HarnessTurnId, IdGeneratorPort, IdempotencyKey,
-    ModelCapabilityExecutor, ModelCapabilityOutcome, ModelCapabilityRequest, PrincipalId,
-    ProjectSessionBinding, ToolDescriptor, ToolEffect, ToolInvocationBegin, ToolInvocationId,
-    ToolInvocationLedgerPort, ToolInvocationRecord, ToolInvocationState, WorkflowRunId,
-    WorkflowStepId,
+    AgentEvent, AgentEventOutput, ApprovalGrantId, AutomationIdKind, CancellationToken,
+    CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityGatewayPort,
+    CapabilityId, CapabilityInvocationContext, CapabilityInvocationId, ClockPort, HarnessSessionId,
+    HarnessTurnId, IdGeneratorPort, IdempotencyKey, ModelCapabilityExecutor,
+    ModelCapabilityOutcome, ModelCapabilityRequest, PrincipalId, ProjectSessionBinding,
+    ToolDescriptor, ToolEffect, ToolInvocationBegin, ToolInvocationId, ToolInvocationLedgerPort,
+    ToolInvocationRecord, ToolInvocationState, WorkflowRunId, WorkflowStepId,
 };
 
 #[derive(Clone, Debug)]
 pub struct ToolRegistry {
-    descriptors: BTreeMap<CapabilityId, ToolDescriptor>,
+    capabilities: std::collections::BTreeSet<CapabilityId>,
 }
 
 impl ToolRegistry {
-    pub fn project_assistant() -> Result<Self, AutomationIdentityError> {
-        let mut registry = Self::read_only_foundation()?;
-        for capability in [
-            CapabilityId::ManageResource,
-            CapabilityId::EditResource,
-            CapabilityId::ExportDataset,
-            CapabilityId::InspectUi,
-            CapabilityId::UpdateUi,
-            CapabilityId::RequestUiIntent,
-            CapabilityId::ApplyGraphEdit,
-            CapabilityId::ValidateGraph,
-            CapabilityId::ExecuteGraph,
-            CapabilityId::SaveGraph,
-            CapabilityId::ListGraphResults,
-        ] {
-            registry
-                .descriptors
-                .insert(capability, ToolDescriptor::for_capability(capability)?);
+    pub fn for_agent(role: yss_harness_contract::AgentRole) -> Self {
+        Self {
+            capabilities: crate::agent_definition(role)
+                .capabilities
+                .iter()
+                .copied()
+                .collect(),
         }
-        Ok(registry)
     }
-    pub fn read_only_foundation() -> Result<Self, AutomationIdentityError> {
-        let descriptors = [
-            CapabilityId::InspectResource,
-            CapabilityId::InspectGraph,
-            CapabilityId::SearchNodeCatalog,
-            CapabilityId::InspectDatasetSchema,
-            CapabilityId::InspectDatasetProfile,
-            CapabilityId::InspectResult,
-            CapabilityId::InspectProject,
-        ]
-        .into_iter()
-        .map(|capability_id| {
-            ToolDescriptor::for_capability(capability_id)
-                .map(|descriptor| (capability_id, descriptor))
-        })
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
-        Ok(Self { descriptors })
+
+    pub(crate) fn for_capability(capability_id: CapabilityId) -> Self {
+        Self {
+            capabilities: [capability_id].into_iter().collect(),
+        }
     }
 
     pub fn descriptors(&self) -> Vec<ToolDescriptor> {
-        self.descriptors.values().cloned().collect()
+        self.capabilities
+            .iter()
+            .copied()
+            .map(ToolDescriptor::for_capability)
+            .collect()
     }
 
-    pub fn descriptor(&self, capability_id: CapabilityId) -> Option<&ToolDescriptor> {
-        self.descriptors.get(&capability_id)
-    }
-
-    pub(crate) fn with_approved_capability(
-        mut self,
+    pub fn descriptor(
+        &self,
         capability_id: CapabilityId,
-    ) -> Result<Self, AutomationIdentityError> {
-        self.descriptors.insert(
-            capability_id,
-            ToolDescriptor::for_capability(capability_id)?,
-        );
-        Ok(self)
+    ) -> Option<&'static yss_harness_contract::CapabilityDescriptor> {
+        self.capabilities
+            .contains(&capability_id)
+            .then(|| capability_id.descriptor())
     }
 }
 
@@ -97,6 +69,7 @@ pub(crate) struct HarnessToolExecutor {
     workflow_step_id: Option<WorkflowStepId>,
     approval_grant_id: Option<ApprovalGrantId>,
     output: Option<Arc<dyn AgentEventOutput>>,
+    agent: Option<Arc<std::sync::Mutex<yss_harness_contract::AgentInvocationScope>>>,
 }
 
 impl HarnessToolExecutor {
@@ -131,6 +104,7 @@ impl HarnessToolExecutor {
             workflow_step_id: None,
             approval_grant_id: None,
             output: None,
+            agent: None,
         }
     }
 
@@ -167,6 +141,7 @@ impl HarnessToolExecutor {
             workflow_step_id: Some(workflow_step_id),
             approval_grant_id: None,
             output: None,
+            agent: None,
         }
     }
 
@@ -201,11 +176,20 @@ impl HarnessToolExecutor {
             workflow_step_id: None,
             approval_grant_id: Some(approval_grant_id),
             output: None,
+            agent: None,
         }
     }
 
     pub(crate) fn with_output(mut self, output: Arc<dyn AgentEventOutput>) -> Self {
         self.output = Some(output);
+        self
+    }
+
+    pub(crate) fn with_agent(
+        mut self,
+        agent: Arc<std::sync::Mutex<yss_harness_contract::AgentInvocationScope>>,
+    ) -> Self {
+        self.agent = Some(agent);
         self
     }
 
@@ -223,6 +207,13 @@ impl HarnessToolExecutor {
         &self,
         request: ModelCapabilityRequest,
     ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
+        let agent = self
+            .agent
+            .as_ref()
+            .map(|scope| scope.lock().unwrap_or_else(|e| e.into_inner()).clone());
+        if let Some(scope) = &agent {
+            crate::authorize_agent_capability(scope, &request.request)?;
+        }
         let capability_id = request.request.capability_id();
         let descriptor = self.registry.descriptor(capability_id).ok_or_else(|| {
             CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
@@ -245,7 +236,12 @@ impl HarnessToolExecutor {
             {
                 let digest = yss_canonical_hash::hash_canonical(
                     "yssbi.assistant.graph-edit.idempotency.v1",
-                    &(&self.session_id, &self.turn_id, &edit.client_key),
+                    &(
+                        &self.session_id,
+                        &self.turn_id,
+                        agent.as_ref().map(|scope| &scope.run_id),
+                        &edit.client_key,
+                    ),
                 )
                 .map_err(|_| persistence_unavailable())?;
                 IdempotencyKey::try_new(
@@ -260,13 +256,14 @@ impl HarnessToolExecutor {
             };
         let started_at = self.clock.now();
         let deadline = started_at
-            .checked_add(descriptor.timeout_ms)
+            .checked_add(descriptor.timeout_ms())
             .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::DeadlineElapsed))?;
         let mut record = ToolInvocationRecord {
             id: invocation_id.clone(),
             idempotency_key,
             session_id: self.session_id.clone(),
             turn_id: self.turn_id.clone(),
+            agent_run_id: agent.as_ref().map(|scope| scope.run_id.clone()),
             workflow_run_id: self.workflow_run_id.clone(),
             workflow_step_id: self.workflow_step_id.clone(),
             project: self.project.clone(),
@@ -356,7 +353,7 @@ impl HarnessToolExecutor {
         }
         if outcome.as_ref().is_ok_and(|result| {
             result
-                .validate_budget(descriptor.result_budget.maximum_bytes as usize)
+                .validate_budget(yss_harness_contract::MAX_CAPABILITY_RESULT_BYTES)
                 .is_err()
         }) {
             outcome = Err(CapabilityFailure::new(
@@ -421,12 +418,15 @@ impl HarnessToolExecutor {
         &self,
         key: &IdempotencyKey,
     ) -> Result<CapabilityInvocationContext, CapabilityFailure> {
-        let context = CapabilityInvocationContext::new(
+        let mut context = CapabilityInvocationContext::new(
             self.principal_id.clone(),
             self.session_id.clone(),
             CapabilityInvocationId::try_new(key.as_str()).map_err(|_| persistence_unavailable())?,
             self.project.clone(),
         );
+        if let Some(agent) = &self.agent {
+            context = context.with_agent(agent.lock().unwrap_or_else(|e| e.into_inner()).clone());
+        }
         Ok(match &self.approval_grant_id {
             Some(grant_id) => context.with_approval(grant_id.clone()),
             None => context,
@@ -506,6 +506,7 @@ fn persistence_unavailable() -> CapabilityFailure {
 mod tests {
     use super::*;
     use crate::test_support::{FixedClock, InMemoryHarnessStore, SequentialIds};
+    use std::collections::BTreeMap;
     use std::sync::Mutex;
     use yss_harness_contract::{
         AgentFuture, AgentOutputFailure, AutomationCapabilityRequest, CancellationReason,
@@ -564,7 +565,7 @@ mod tests {
             let clock = Arc::new(FixedClock::new(1000));
             let output = Arc::new(Output::default());
             let executor = HarnessToolExecutor::new(
-                ToolRegistry::read_only_foundation().unwrap(),
+                ToolRegistry::for_agent(yss_harness_contract::AgentRole::Review),
                 Arc::new(FailingGateway(mode, clock.clone())),
                 store.clone(),
                 clock,
@@ -603,22 +604,24 @@ mod tests {
     }
 
     #[test]
-    fn default_registry_keeps_mutating_capabilities_unrouted() {
-        let registry = ToolRegistry::read_only_foundation().unwrap();
+    fn review_registry_is_read_only_and_stats_registers_its_graph_tools() {
+        let registry = ToolRegistry::for_agent(yss_harness_contract::AgentRole::Review);
 
         assert!(registry.descriptor(CapabilityId::InspectGraph).is_some());
         assert!(registry.descriptor(CapabilityId::InspectResource).is_some());
         assert!(registry.descriptor(CapabilityId::ManageResource).is_none());
         assert!(registry.descriptor(CapabilityId::ApplyGraphEdit).is_none());
-        let editor = ToolRegistry::project_assistant().unwrap();
+        let step = ToolRegistry::for_capability(CapabilityId::InspectDatasetSchema);
+        assert!(
+            step.descriptor(CapabilityId::InspectDatasetSchema)
+                .is_some()
+        );
+        assert!(step.descriptor(CapabilityId::ApplyGraphEdit).is_none());
+        let editor = ToolRegistry::for_agent(yss_harness_contract::AgentRole::Stats);
         for id in [
             CapabilityId::InspectResource,
             CapabilityId::ManageResource,
             CapabilityId::EditResource,
-            CapabilityId::ExportDataset,
-            CapabilityId::InspectUi,
-            CapabilityId::UpdateUi,
-            CapabilityId::RequestUiIntent,
             CapabilityId::ApplyGraphEdit,
             CapabilityId::ValidateGraph,
             CapabilityId::ExecuteGraph,
@@ -751,7 +754,7 @@ mod tests {
         });
         let store = Arc::new(InMemoryHarnessStore::default());
         let executor = HarnessToolExecutor::new(
-            ToolRegistry::project_assistant().unwrap(),
+            ToolRegistry::for_agent(yss_harness_contract::AgentRole::Stats),
             gateway.clone(),
             Arc::new(FailFirstFinish(store.clone(), AtomicBool::new(true))),
             Arc::new(FixedClock::new(1000)),

@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use yss_harness_contract::{
     AutomationCapabilityRequest, HarnessSessionId, HarnessTurnId, InspectDatasetProfileRequest,
-    InspectDatasetSchemaRequest, ProjectSessionBinding, UnixMillis, WorkflowDefinition, WorkflowId,
-    WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep, WorkflowStepId,
-    WorkflowStepKind, WorkflowStepRecord, WorkflowStepState, WorkflowVersion,
+    InspectDatasetSchemaRequest, ProjectSessionBinding, ToolEffect, UnixMillis, WorkflowDefinition,
+    WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep, WorkflowStepId,
+    WorkflowStepRecord, WorkflowStepState, WorkflowVersion,
 };
 
 #[derive(Clone, Debug)]
@@ -40,11 +40,9 @@ impl CompiledWorkflow {
             {
                 return Err(WorkflowCompileError::UnknownDependency);
             }
-            if let WorkflowStepKind::Capability(request) = &step.kind {
-                request
-                    .validate()
-                    .map_err(|_| WorkflowCompileError::InvalidCapabilityRequest)?;
-            }
+            step.request
+                .validate()
+                .map_err(|_| WorkflowCompileError::InvalidCapabilityRequest)?;
         }
         ensure_acyclic(&definition.steps)?;
         Ok(Self { definition })
@@ -70,22 +68,18 @@ pub fn dataset_quality_review_workflow(
             WorkflowStep {
                 id: schema_step.clone(),
                 depends_on: Vec::new(),
-                kind: WorkflowStepKind::Capability(
-                    AutomationCapabilityRequest::InspectDatasetSchema(
-                        InspectDatasetSchemaRequest {
-                            database_id: database_id.clone(),
-                        },
-                    ),
+                request: AutomationCapabilityRequest::InspectDatasetSchema(
+                    InspectDatasetSchemaRequest {
+                        database_id: database_id.clone(),
+                    },
                 ),
             },
             WorkflowStep {
                 id: WorkflowStepId::try_new("inspect_dataset_profile")
                     .map_err(|_| WorkflowCompileError::InvalidIdentity)?,
                 depends_on: vec![schema_step],
-                kind: WorkflowStepKind::Capability(
-                    AutomationCapabilityRequest::InspectDatasetProfile(
-                        InspectDatasetProfileRequest { database_id },
-                    ),
+                request: AutomationCapabilityRequest::InspectDatasetProfile(
+                    InspectDatasetProfileRequest { database_id },
                 ),
             },
         ],
@@ -151,6 +145,7 @@ impl WorkflowRuntime {
     ) -> WorkflowRunRecord {
         WorkflowRunRecord {
             id: run_id,
+            revision: 0,
             session_id,
             turn_id,
             definition_id: compiled.definition.id.clone(),
@@ -178,8 +173,27 @@ impl WorkflowRuntime {
 
     pub fn start(run: &mut WorkflowRunRecord, now: UnixMillis) -> Result<(), WorkflowRuntimeError> {
         match run.state {
-            WorkflowRunState::Planned | WorkflowRunState::Ready | WorkflowRunState::Paused => {
-                run.state = WorkflowRunState::Running;
+            WorkflowRunState::Planned | WorkflowRunState::Ready => {
+                for step in run.steps.values_mut() {
+                    if step.state == WorkflowStepState::RetriableFailure {
+                        step.state = WorkflowStepState::Pending;
+                    }
+                }
+                run.state = if run
+                    .steps
+                    .values()
+                    .any(|step| step.state == WorkflowStepState::TerminalFailure)
+                {
+                    WorkflowRunState::Failed
+                } else if run
+                    .steps
+                    .values()
+                    .all(|step| step.state == WorkflowStepState::Succeeded)
+                {
+                    WorkflowRunState::Completed
+                } else {
+                    WorkflowRunState::Running
+                };
                 run.updated_at = now;
                 Ok(())
             }
@@ -243,10 +257,7 @@ impl WorkflowRuntime {
                     record.state == WorkflowStepState::Pending
                         && step.depends_on.iter().all(|dependency| {
                             run.steps.get(dependency).is_some_and(|dependency_record| {
-                                matches!(
-                                    dependency_record.state,
-                                    WorkflowStepState::Succeeded | WorkflowStepState::Skipped
-                                )
+                                dependency_record.state == WorkflowStepState::Succeeded
                             })
                         })
                 })
@@ -277,42 +288,6 @@ impl WorkflowRuntime {
         Ok(())
     }
 
-    pub fn wait_for_approval(
-        compiled: &CompiledWorkflow,
-        run: &mut WorkflowRunRecord,
-        step_id: &WorkflowStepId,
-        now: UnixMillis,
-    ) -> Result<(), WorkflowRuntimeError> {
-        if !Self::ready_steps(compiled, run)?.contains(step_id)
-            || !compiled.definition.steps.iter().any(|step| {
-                &step.id == step_id && matches!(step.kind, WorkflowStepKind::Approval { .. })
-            })
-        {
-            return Err(WorkflowRuntimeError::StepNotReady);
-        }
-        run.state = WorkflowRunState::WaitingForApproval;
-        run.updated_at = now;
-        Ok(())
-    }
-
-    pub fn wait_for_external_input(
-        compiled: &CompiledWorkflow,
-        run: &mut WorkflowRunRecord,
-        step_id: &WorkflowStepId,
-        now: UnixMillis,
-    ) -> Result<(), WorkflowRuntimeError> {
-        if !Self::ready_steps(compiled, run)?.contains(step_id)
-            || !compiled.definition.steps.iter().any(|step| {
-                &step.id == step_id && matches!(step.kind, WorkflowStepKind::Decision { .. })
-            })
-        {
-            return Err(WorkflowRuntimeError::StepNotReady);
-        }
-        run.state = WorkflowRunState::WaitingForExternalInput;
-        run.updated_at = now;
-        Ok(())
-    }
-
     pub fn succeed_step(
         compiled: &CompiledWorkflow,
         run: &mut WorkflowRunRecord,
@@ -321,12 +296,16 @@ impl WorkflowRuntime {
     ) -> Result<(), WorkflowRuntimeError> {
         transition_running_step(run, step_id, WorkflowStepState::Succeeded)?;
         run.updated_at = now;
-        if run.steps.values().all(|step| {
-            matches!(
-                step.state,
-                WorkflowStepState::Succeeded | WorkflowStepState::Skipped
-            )
-        }) {
+        // Pausing stops dispatch, not settlement of the already admitted step.
+        // Resume/advance decides whether the workflow can proceed or finish.
+        if run.state != WorkflowRunState::Running {
+            return Ok(());
+        }
+        if run
+            .steps
+            .values()
+            .all(|step| step.state == WorkflowStepState::Succeeded)
+        {
             run.state = WorkflowRunState::Completed;
         } else if Self::ready_steps(compiled, run)?.is_empty()
             && run
@@ -354,11 +333,13 @@ impl WorkflowRuntime {
                 WorkflowStepState::TerminalFailure
             },
         )?;
-        run.state = if retriable {
-            WorkflowRunState::Paused
-        } else {
-            WorkflowRunState::Failed
-        };
+        if run.state == WorkflowRunState::Running {
+            run.state = if retriable {
+                WorkflowRunState::Paused
+            } else {
+                WorkflowRunState::Failed
+            };
+        }
         run.updated_at = now;
         Ok(())
     }
@@ -369,7 +350,6 @@ impl WorkflowRuntime {
         now: UnixMillis,
     ) -> Result<(), WorkflowRuntimeError> {
         ensure_run_matches(compiled, run)?;
-        let mut requires_reconciliation = false;
         for step in &compiled.definition.steps {
             let Some(record) = run.steps.get_mut(&step.id) else {
                 return Err(WorkflowRuntimeError::UnknownStep);
@@ -377,14 +357,21 @@ impl WorkflowRuntime {
             if record.state != WorkflowStepState::Running {
                 continue;
             }
-            if matches!(step.kind, WorkflowStepKind::Capability(_)) {
-                record.state = WorkflowStepState::Pending;
-            } else {
-                requires_reconciliation = true;
-            }
+            record.state =
+                if step.request.capability_id().descriptor().effect == ToolEffect::Inspect {
+                    WorkflowStepState::Pending
+                } else {
+                    // The operation may already have committed; only its ledger can
+                    // establish the outcome. A new attempt must not repeat the effect.
+                    WorkflowStepState::TerminalFailure
+                };
         }
-        run.state = if requires_reconciliation {
-            WorkflowRunState::Paused
+        run.state = if run
+            .steps
+            .values()
+            .any(|step| step.state == WorkflowStepState::TerminalFailure)
+        {
+            WorkflowRunState::Failed
         } else {
             WorkflowRunState::Ready
         };
@@ -411,6 +398,12 @@ fn transition_running_step(
     step_id: &WorkflowStepId,
     next: WorkflowStepState,
 ) -> Result<(), WorkflowRuntimeError> {
+    if !matches!(
+        run.state,
+        WorkflowRunState::Running | WorkflowRunState::Paused | WorkflowRunState::Ready
+    ) {
+        return Err(WorkflowRuntimeError::InvalidRunTransition);
+    }
     let record = run
         .steps
         .get_mut(step_id)
@@ -444,8 +437,7 @@ pub enum WorkflowRuntimeError {
 mod tests {
     use super::*;
     use yss_harness_contract::{
-        AutomationCapabilityRequest, InspectGraphRequest, WorkflowId, WorkflowStepKind,
-        WorkflowVersion,
+        AutomationCapabilityRequest, InspectGraphRequest, WorkflowId, WorkflowVersion,
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
@@ -456,11 +448,9 @@ mod tests {
                 .iter()
                 .map(|dependency| WorkflowStepId::try_new(*dependency).unwrap())
                 .collect(),
-            kind: WorkflowStepKind::Capability(AutomationCapabilityRequest::InspectGraph(
-                InspectGraphRequest {
-                    graph_path: "events/Main.yssbi-event".to_owned(),
-                },
-            )),
+            request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
+                graph_path: "events/Main.yssbi-event".to_owned(),
+            }),
         }
     }
 

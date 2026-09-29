@@ -1,0 +1,248 @@
+use std::{collections::BTreeMap, sync::Mutex};
+use yss_harness_contract::*;
+
+#[derive(Default)]
+pub(super) struct Evidence {
+    pub(super) invocations: Vec<ToolInvocationId>,
+    pub(super) artifacts: Vec<ResourceChange>,
+    pub(super) results: Vec<GraphResultReference>,
+    pub(super) plan: Option<StatisticalPlan>,
+    requires_saved_document: bool,
+    document_saves: BTreeMap<ProjectResourceRef, bool>,
+}
+
+impl Evidence {
+    pub(super) fn for_task(task: &AgentTask) -> Self {
+        Self {
+            requires_saved_document: task.worker == AgentRole::Report
+                && (task
+                    .scope
+                    .creations
+                    .iter()
+                    .any(|grant| matches!(grant.specification, ResourceCreation::Doc { .. }))
+                    || task.scope.resources.iter().any(|access| {
+                        access.resource.kind == ProjectResourceKind::Doc
+                            && access.operations.iter().any(|operation| {
+                                matches!(
+                                    operation,
+                                    AgentResourceOperation::Edit | AgentResourceOperation::Save
+                                )
+                            })
+                    })),
+            ..Self::default()
+        }
+    }
+}
+
+pub(super) fn record_receipt(
+    request: &AutomationCapabilityRequest,
+    result: &AutomationCapabilityResult,
+    evidence: &mut Evidence,
+    scope: &mut AgentInvocationScope,
+) {
+    let Some(task) = &mut scope.task else {
+        return;
+    };
+    match result {
+        AutomationCapabilityResult::ResourceManaged(receipt)
+        | AutomationCapabilityResult::ResourceEdited(receipt) => {
+            evidence.artifacts.extend(receipt.changes.clone());
+            for change in &receipt.changes {
+                if change.resource.kind != ProjectResourceKind::Doc {
+                    continue;
+                }
+                if change.deleted {
+                    evidence.document_saves.remove(&change.resource);
+                } else {
+                    // Only the matching successful Save receipt proves delivery.
+                    // A later edit or rename requires another save before completion.
+                    let saved = matches!(
+                        (request, result),
+                        (
+                            AutomationCapabilityRequest::ManageResource(
+                                ManageResourceRequest::Save { resource, .. }
+                            ),
+                            AutomationCapabilityResult::ResourceManaged(_)
+                        ) if resource == &change.resource
+                            && change.revision_kind == ResourceRevisionKind::Resource
+                    );
+                    evidence
+                        .document_saves
+                        .insert(change.resource.clone(), saved);
+                }
+            }
+            for moved in &receipt.moves {
+                if let Some(access) = task
+                    .resources
+                    .iter_mut()
+                    .find(|access| access.resource == moved.from)
+                {
+                    access.resource = moved.to.clone();
+                    access.version = None;
+                }
+            }
+            for change in &receipt.changes {
+                if change.deleted {
+                    task.resources
+                        .retain(|access| access.resource != change.resource);
+                    continue;
+                }
+                if let Some(access) = task
+                    .resources
+                    .iter_mut()
+                    .find(|access| access.resource == change.resource)
+                {
+                    if change.revision_kind == ResourceRevisionKind::Resource
+                        && let Some(version) = &mut access.version
+                    {
+                        version.revision = change.revision;
+                    }
+                } else if matches!(
+                    request,
+                    AutomationCapabilityRequest::ManageResource(
+                        ManageResourceRequest::Create { .. }
+                            | ManageResourceRequest::Duplicate { .. }
+                    )
+                ) {
+                    let operations = match request {
+                        AutomationCapabilityRequest::ManageResource(
+                            ManageResourceRequest::Create { specification },
+                        ) => task
+                            .creations
+                            .iter()
+                            .find(|grant| &grant.specification == specification)
+                            .map(|grant| grant.operations.clone()),
+                        AutomationCapabilityRequest::ManageResource(
+                            ManageResourceRequest::Duplicate { resource, .. },
+                        ) => task
+                            .resources
+                            .iter()
+                            .find(|grant| &grant.resource == resource)
+                            .map(|grant| grant.operations.clone()),
+                        _ => None,
+                    }
+                    .unwrap_or_default();
+                    task.resources.push(AgentResourceAccess {
+                        resource: change.resource.clone(),
+                        version: None,
+                        operations,
+                    });
+                }
+            }
+        }
+        AutomationCapabilityResult::GraphExecution(value) => {
+            add_results(task, evidence, &value.results)
+        }
+        AutomationCapabilityResult::GraphResults(value) => {
+            add_results(task, evidence, &value.results)
+        }
+        AutomationCapabilityResult::GraphEditReceipt(value) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource.id == value.graph_path)
+            {
+                evidence.artifacts.push(ResourceChange {
+                    resource: access.resource.clone(),
+                    revision: value.to_revision,
+                    revision_kind: ResourceRevisionKind::Resource,
+                    deleted: false,
+                });
+                if let Some(version) = &mut access.version {
+                    version.revision = value.to_revision;
+                }
+            }
+        }
+        AutomationCapabilityResult::GraphSaved(value) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource.id == value.graph_path)
+            {
+                evidence.artifacts.push(ResourceChange {
+                    resource: access.resource.clone(),
+                    revision: value.resource_revision,
+                    revision_kind: ResourceRevisionKind::Resource,
+                    deleted: false,
+                });
+                if let Some(version) = &mut access.version {
+                    version.revision = value.resource_revision;
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn add_results(
+    task: &mut AgentTaskScope,
+    evidence: &mut Evidence,
+    results: &[GraphResultReference],
+) {
+    for result in results {
+        let access = AgentResultAccess {
+            execution_session_id: result.execution_session_id.clone(),
+            result_id: result.result_id,
+        };
+        if !task.results.contains(&access) {
+            task.results.push(access);
+        }
+        if !evidence.results.contains(result) {
+            evidence.results.push(result.clone());
+        }
+    }
+}
+
+pub(super) fn finish_outcome(
+    run_id: AgentRunId,
+    role: AgentRole,
+    result: &Result<AgentTurnResult, AgentDriverFailure>,
+    evidence: &Mutex<Evidence>,
+) -> AgentTaskOutcome {
+    let evidence = evidence.lock().unwrap_or_else(|e| e.into_inner());
+    // The public reply is already owned by the turn transcript; only Workers produce reports.
+    let mut report = result.as_ref().ok().and_then(|result| {
+        if role != AgentRole::Manager && result.final_text.len() <= 32 * 1024 {
+            serde_json::from_str::<WorkerReport>(&result.final_text).ok()
+        } else {
+            None
+        }
+    });
+    if evidence.requires_saved_document
+        && (evidence.document_saves.is_empty()
+            || evidence.document_saves.values().any(|saved| !saved))
+        && let Some(report) = &mut report
+        && report.blocked_reason.is_none()
+    {
+        report.summary = "Report delivery is incomplete: a successful Doc save receipt is required for every changed document.".into();
+        report.blocked_reason = Some("report_document_not_saved".into());
+        report.next_steps.push("Delegate a corrected ReportAgent task with Doc creation/edit/save permissions. Write the report with edit_resource and finish with manage_resource save using the current version.".into());
+    }
+    let failure_code = result.as_ref().err().map(|error| error.code).or_else(|| {
+        (role != AgentRole::Manager && report.is_none())
+            .then_some(AgentDriverFailureCode::InvalidProviderResponse)
+    });
+    let state = match failure_code {
+        Some(AgentDriverFailureCode::Cancelled) => AgentRunState::Cancelled,
+        Some(_) => AgentRunState::Failed,
+        None if report
+            .as_ref()
+            .is_some_and(|report| report.blocked_reason.is_some()) =>
+        {
+            AgentRunState::Blocked
+        }
+        None => AgentRunState::Completed,
+    };
+    AgentTaskOutcome {
+        run_id,
+        role,
+        state,
+        report,
+        failure_code,
+        artifacts: evidence.artifacts.clone(),
+        results: evidence.results.clone(),
+        evidence: evidence.invocations.clone(),
+        plan: evidence.plan.clone(),
+        invalidated_runs: vec![],
+    }
+}

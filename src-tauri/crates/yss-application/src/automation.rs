@@ -50,6 +50,9 @@ fn invoke_capability(
     publish: &mut dyn FnMut(&crate::events::CommittedResourceMutation),
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
     control.check()?;
+    if let Some(agent) = context.agent() {
+        yss_harness_core::authorize_agent_capability(agent, &request)?;
+    }
     let read_only =
         request.capability_id().descriptor().effect == yss_harness_contract::ToolEffect::Inspect;
     request

@@ -20,6 +20,18 @@ const HARNESS_CAPABILITY_IDS = [
 ] as const;
 export type HarnessCapabilityId = (typeof HARNESS_CAPABILITY_IDS)[number];
 
+const AGENT_ROLES = ["manager", "data", "stats", "plot", "report", "review"] as const;
+export type HarnessAgentRole = (typeof AGENT_ROLES)[number];
+const AGENT_STATES = [
+  "completed",
+  "stale",
+  "blocked",
+  "failed",
+  "cancelled",
+  "interrupted",
+] as const;
+export type HarnessAgentState = (typeof AGENT_STATES)[number];
+
 export interface HarnessKnowledgeCitation {
   readonly sourceId: string;
   readonly documentId: string;
@@ -42,7 +54,7 @@ export interface HarnessMemoryRecord {
     | "user_preference"
     | "reporting_preference"
     | "workflow_summary";
-  readonly status: "proposed" | "approved" | "active" | "superseded" | "invalidated" | "deleted";
+  readonly status: "proposed" | "active" | "superseded" | "invalidated" | "deleted";
   readonly value: Readonly<Record<string, unknown>>;
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -55,6 +67,29 @@ export type HarnessEvent = Readonly<{
   occurredAt: number;
 }> &
   (
+    | Readonly<{ type: "agent_run_invalidated"; payload: { runId: string } }>
+    | Readonly<{
+        type: "agent_run_started";
+        payload: {
+          runId: string;
+          parentRunId: string | null;
+          role: HarnessAgentRole;
+          objective: string;
+        };
+      }>
+    | Readonly<{ type: "agent_run_output"; payload: { runId: string; event: HarnessEvent } }>
+    | Readonly<{
+        type: "agent_run_finished";
+        payload: {
+          runId: string;
+          role: HarnessAgentRole;
+          state: HarnessAgentState;
+          summary: string | null;
+          blockedReason: string | null;
+          warnings: readonly string[];
+          evidenceCount: number;
+        };
+      }>
     | Readonly<{ type: "session_created" | "session_closed" | "turn_failed" | "turn_cancelled" }>
     | Readonly<{ type: "turn_started"; payload: { userMessage: string } }>
     | Readonly<{ type: "text_delta"; payload: { delta: string } }>
@@ -174,7 +209,6 @@ const MEMORY_KINDS = new Set([
 ] as const);
 const MEMORY_STATUSES = new Set([
   "proposed",
-  "approved",
   "active",
   "superseded",
   "invalidated",
@@ -292,6 +326,70 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
   }
   const eventPayload = payload(source);
   if (!eventPayload) throw new InvalidHarnessPayloadError("HarnessEvent");
+  if (type === "agent_run_invalidated") {
+    const runId = stringField(eventPayload, "runId");
+    if (runId) return { ...base, type, payload: { runId } };
+  }
+  if (type === "agent_run_started") {
+    const runId = stringField(eventPayload, "runId");
+    const { parentRunId, role, objective } = eventPayload;
+    if (
+      runId &&
+      (parentRunId === null || (typeof parentRunId === "string" && parentRunId.length > 0)) &&
+      AGENT_ROLES.includes(role as HarnessAgentRole) &&
+      typeof objective === "string"
+    ) {
+      return {
+        ...base,
+        type,
+        payload: { runId, parentRunId, role: role as HarnessAgentRole, objective },
+      };
+    }
+  } else if (type === "agent_run_output") {
+    const runId = stringField(eventPayload, "runId");
+    const event = record(eventPayload.event);
+    if (
+      runId &&
+      event &&
+      [
+        "text_delta",
+        "plan_proposed",
+        "tool_invocation_started",
+        "tool_invocation_completed",
+        "tool_invocation_failed",
+      ].includes(event.type as string)
+    ) {
+      return { ...base, type, payload: { runId, event: parseHarnessEvent({ ...base, ...event }) } };
+    }
+  } else if (type === "agent_run_finished") {
+    const runId = stringField(eventPayload, "runId");
+    const evidenceCount = integerField(eventPayload, "evidenceCount");
+    const { role, state, summary, blockedReason, warnings } = eventPayload;
+    if (
+      runId &&
+      evidenceCount !== null &&
+      AGENT_ROLES.includes(role as HarnessAgentRole) &&
+      AGENT_STATES.includes(state as HarnessAgentState) &&
+      (summary === null || typeof summary === "string") &&
+      (blockedReason === null || typeof blockedReason === "string") &&
+      Array.isArray(warnings) &&
+      warnings.every((warning) => typeof warning === "string")
+    ) {
+      return {
+        ...base,
+        type,
+        payload: {
+          runId,
+          role: role as HarnessAgentRole,
+          state: state as HarnessAgentState,
+          summary,
+          blockedReason,
+          warnings,
+          evidenceCount,
+        },
+      };
+    }
+  }
   if (type === "turn_started") {
     const userMessage = stringField(eventPayload, "userMessage");
     if (userMessage) return { ...base, type, payload: { userMessage } };

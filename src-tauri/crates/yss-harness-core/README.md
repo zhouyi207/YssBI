@@ -31,6 +31,82 @@ yss-harness-core
 
 `yss-application::runtime` 接收 Tauri app 并拥有桌面初始化；其中 `runtime/harness.rs` 构造 SQLite store、configurable Rig driver、时钟和 ID 实现。Application 直接构造内部 `ipc::CommandRuntime`，提供 capability gateway 和 `HarnessChannelHub` 的中立端口，再组成已有 `HarnessPorts`。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。Application 安装业务服务后直接安装 IPC 上下文，Host/provider 与订阅方共享同一组 Channel hubs。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
 
+## Manager–Worker roles and task lifecycle
+
+桌面使用扁平的六角色编排。角色定义和工具集合由 [agents/mod.rs](src/agents/mod.rs)
+拥有，权限检查位于 [agents/policy.rs](src/agents/policy.rs)；[orchestration](src/orchestration/mod.rs) 拥有运行和委派，回执归集与中断恢复分别位于其子模块。Rig 根据
+provider-neutral 请求构建模型与工具循环，不另设角色注册表或持久状态。
+
+| 角色         | 职责与写入边界                                                       |
+| ------------ | -------------------------------------------------------------------- |
+| ManagerAgent | 唯一用户对话入口，发现资源、委派任务、处理阻塞与汇总；可请求 UI 意图 |
+| DataAgent    | 数据理解、质量检查及获准的 Database 准备、导入和导出                 |
+| StatsAgent   | 复用 StatisticalPlan，选择节点、编辑分析图、执行并读取诊断与结果     |
+| PlotAgent    | 读取指定数据/结果，创建和编辑 Chart；图形能力仍由 Chart owner 决定   |
+| ReportAgent  | 复用 statistical-report-writing，创建、编辑和保存 Doc                |
+| ReviewAgent  | 独立上下文中的只读审查，返回问题和证据；不能修改或委派               |
+
+一个用户 Turn 内创建一个 Manager run 和按需启动的 Worker runs。只有 Manager 的 executor
+实现 `delegate_task`；Worker 只能返回 Manager，不能互相调用或递归委派。任务携带稳定 key、
+目标、约束、完成条件、当前 turn 内已完成的依赖 run IDs，以及精确的资源/版本/操作授权。
+已有资源必须带读取版本；创建授权同时列出精确创建参数和新资源后续允许的操作。
+相同 key/相同请求复用已完成结果；运行中或 key 内容冲突明确拒绝，不自动执行第二次。
+
+Core 和 Application Gateway 共用角色策略，按工具、操作、资源种类、具体资源和结果引用
+检查权限。Manager 生成的任务不能改变角色边界，例如 Report 获得 `edit_resource` 也不能
+编辑 Database。新资源仅从真实回执取得 ID，并继承明确声明的操作。统计图执行另外在
+Application 的准备入口核对实际资源需求、语义依赖和资源版本；图范围授权不能隐式扩展为
+整个项目的执行权限。项目会话、审批和资源 Owner 的提交校验继续生效。
+
+Worker 使用角色规范、单个任务、必要约束和指定依赖的结构化交付，不复制整个用户会话。
+报告 Skill 只加载到 Manager/Report，统计计划工具只提供给 Stats。Worker 最终报告必须符合
+JSON schema，Core 从真实工具回执归集资源变化、结果引用和证据调用 IDs。模型摘要不替代
+回执；无有效报告、明确阻塞、取消和失败分别形成相应终态。
+
+“生成／输出／撰写分析报告”默认交付项目内已保存的 Doc；明确要求只在聊天中回答、不创建文件或简短解释时，由 Manager 直接回答。
+Manager 为 ReportAgent 提供 Doc 创建或编辑/保存授权、完整资源版本和真实证据引用；ReportAgent 通过现有资源工具写入 Markdown，并在最后一次修改后显式保存。
+对于有 Doc 创建、正文编辑或保存授权的 ReportAgent 任务，Core 根据本次任务的成功回执检查文档交付：至少有一份 Doc 保存成功，且所有仍存在的已修改 Doc 都已保存。仅返回任务摘要、只创建或编辑、保存失败、保存后再修改都不能形成 `Completed`，会返回 `Blocked` 和 `report_document_not_saved`。明确的只读检查、重命名或删除任务仍按其操作范围完成。
+报告内容的证据质量仍由 Worker 和独立 Review 负责。Manager 收到完成且含 Doc 回执的结果后请求打开文档，聊天正文只汇总结果、文档位置和限制；失败或受阻不能改为粘贴完整报告并宣称交付。
+
+每个 turn 至多 24 个 Worker tasks、256 次业务工具调用，最多 4 个 Worker 同时准入；每个
+模型 run 至多 32 次模型调用、每次输出最多 8192 tokens。Manager 时限 30 分钟，Worker
+时限 5 分钟；Rig 直接执行 Core 请求中必需的预算，不再维护另一套可选预算。只读 Worker 可以并行，当前版本通过共享
+读写门串行化所有写 Worker（包括跨会话），业务 Owner 仍拒绝 GUI 并发造成的过期版本。
+预算和运行上限由源码拥有，不作为模型可自行扩大的参数。
+
+任务状态复用 SQLite-backed Harness 有序事件流：`AgentRunStarted`、`AgentRunOutput`、
+`AgentRunFinished` 和 `AgentRunInvalidated`。工具账本携带 `agent_run_id`，图编辑幂等 key
+也区分各 run。并行生产者经异步交付锁按序持久化与发布。Worker 正文不会成为 Manager 的
+公开正文；主会话重建原生委派调用/结果，Worker 工具记录保留为独立证据。Manager 的正文由现有 Turn/transcript 保存，Manager run 的 `report` 为空；仅 Worker 返回任务报告。
+
+同一 turn 内的后续提交改变已有任务输入时，Core 标记该任务及其依赖链为 stale，并把
+`invalidatedRuns` 返回 Manager。依赖未完成或已过期的任务不能启动；输入版本变化在模型
+启动前形成 blocked 结果。Manager 应重新安排受影响的分析、图表和报告。
+
+取消向所有已准入 Worker 传播并等待业务操作收尾。启动恢复将未结束的 runs 记为
+interrupted，保留已经提交的工具证据，不自动重做可能已提交的操作。前端从相同事件流恢复
+任务卡片和运行状态，统计计划继续复用现有展示。真实模型与桌面人工验收见
+[Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
+
+## Source organization
+
+四个 crate 保持原有分层，公开类型继续从各自 crate 根导出。内部按实际职责组织：
+
+| 范围          | 源码入口与职责                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core Host     | [host/mod.rs](src/host/mod.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs)、[workflow](src/host/workflow.rs)、[approval](src/host/approval.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
+| Core 公共依赖 | [ports.rs](src/ports.rs) 拥有注入端口集合，[error.rs](src/error.rs) 拥有 Core 错误；编排器不依赖 Host 内部实现                                                                                                                                                                                                                                                                                                                                              |
+| 上下文与事件  | [conversation.rs](src/conversation.rs) 统一历史重建和消息组装；[events.rs](src/events.rs) 统一持久事件写入、交付及 Agent 输出适配                                                                                                                                                                                                                                                                                                                           |
+| 角色与权限    | [agents/mod.rs](src/agents/mod.rs) 定义六角色、工具及预算，[policy.rs](src/agents/policy.rs) 执行共享授权检查                                                                                                                                                                                                                                                                                                                                               |
+| 编排与交付    | [orchestration/mod.rs](src/orchestration/mod.rs) 调度 Manager/Worker；[receipts.rs](src/orchestration/receipts.rs) 从真实回执归集证据、产物并更新任务范围；[recovery.rs](src/orchestration/recovery.rs) 恢复未结束的运行                                                                                                                                                                                                                                    |
+| Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider.rs](../yss-harness-rig/src/provider.rs) 管理配置，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools/mod.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败                                                                                             |
+| SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、workflow、ledger、approval、memory 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                                                                       |
+| Contract      | [lib.rs](../yss-harness-contract/src/lib.rs) 只组织模块和导出；[context.rs](../yss-harness-contract/src/context.rs) 拥有调用身份与绑定，[capabilities.rs](../yss-harness-contract/src/capabilities.rs) 拥有能力注册、请求/结果信封与 schema，[gateway.rs](../yss-harness-contract/src/gateway.rs) 拥有调用控制和 port，[inspection.rs](../yss-harness-contract/src/inspection.rs) 拥有读取投影，[graph.rs](../yss-harness-contract/src/graph.rs) 集中图契约 |
+
+角色提示与通用工具提示位于 `src/agents/prompts/*.txt`，由 `include_str!` 编译进程序；
+提示词不承担后端授权。版本化 Skill 仍位于 `skills/`，由 SkillRegistry 解析。
+现有测试随模块组织到对应 `tests.rs` 或并发测试文件，测试功能和协议夹具保持一致。
+
 ## 2. Authority
 
 | 事实                                                 | Authority                                           |
@@ -42,7 +118,7 @@ yss-harness-core
 | Tool invocation state、idempotency 和 result receipt | Harness tool ledger                                 |
 | approval grant lifecycle                             | Harness approval service/store                      |
 | Session Memory record                                | Harness memory service/store                        |
-| Skill identity/version/source                        | Harness skill registry/source port                  |
+| Skill identity/version/source                        | Harness skill registry                              |
 | Knowledge source/citation                            | knowledge source store；lexical index 是 projection |
 | ordered Assistant stream                             | persisted Harness events + Rust sequence            |
 | rendered conversation/workflow cards                 | React projection，可从 replay 重建                  |
@@ -57,10 +133,10 @@ Harness 只通过 constructor-injected ports 使用外部能力：
 
 - `AgentDriverPort`：provider-neutral model turn；
 - `CapabilityGatewayPort`：唯一业务 capability seam；
-- session/event/workflow/tool-ledger/approval/memory/knowledge/skill stores；
+- session/event/workflow/tool-ledger/approval/memory/knowledge stores；
 - clock 和 ID generator。
 
-adapter 不得把 framework type 带入 Core，也不得拥有 policy。Application Gateway 每次调用根据 principal、Harness session、Project instance/session、resource currentness、approval、deadline、cancellation 和 invocation identity 验证请求。
+adapter 不得把 framework type 带入 Core，也不得拥有 policy。Application Gateway 每次调用根据 principal、Harness session、Project instance/session、resource currentness、approval、deadline、cancellation 和 invocation identity 验证请求。模型请求只携带角色、预算、上下文和工具签名；授权身份由 Core executor 与事件输出持有，不重复塞入 Rig 不使用的请求字段。
 
 ## 4. Registered capabilities
 
@@ -69,7 +145,7 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 不透明标识。数据库声明中的 DatabaseId 与 publication key 不可互换。图内部编辑与运行继续
 共用节点图协议，传入对应的 `resource.id` 作为 `graphPath`。
 
-桌面默认使用 `ToolRegistry::project_assistant`；只读 foundation 仍可供独立检查型调用方使用：
+桌面按 `ToolRegistry::for_agent(role)` 选择工具；Workflow step 和批准执行只注册本次所需的单个能力。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
 
 | Capability                | 作用                                                                                     |
 | ------------------------- | ---------------------------------------------------------------------------------------- |
@@ -167,7 +243,7 @@ Application 复用打开图时的基线和编辑流程的最终解析投影，�
 
 GraphPortInspection 的 declared/instance 字段统一使用 camelCase，序列化、会话持久化读取与 capability schema 使用同一契约，不接受 snake_case 别名。
 
-SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护迁移版本字段。空数据库在事务中创建全部当前表；已有数据库的 DDL 必须与 adapter 拥有的 schema 一致，JSON 列由 `json_valid` 约束保护，读取再使用当前类型校验。不兼容结构返回 `InvalidRecord`，保留原表与记录，不自动重建。需要重新初始化时，应先备份并移走应用数据目录下的 `db/statistical-harness.sqlite` 及其 SQLite sidecar 文件，再启动应用；此操作不由初始化代码自动执行。当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
+SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护迁移版本字段。空数据库在事务中创建全部当前表；已有数据库的 DDL 必须与 adapter 拥有的 schema 一致，JSON 列由 `json_valid` 约束保护，读取再使用当前类型校验。不兼容结构返回 `InvalidRecord`，保留原表与记录，不自动重建。桌面启动错误保留 Harness 初始化阶段和持久化错误码，便于区分结构不兼容与数据库不可用。需要重新初始化时，应先备份并移走应用数据目录下的 `db/statistical-harness.sqlite` 及其 SQLite sidecar 文件，再启动应用；此操作不由初始化代码自动执行。当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
 
 节点搜索对 node ID、标题、别名、技术词及资源名分词排序，完整匹配优先，混合语言短语允许部分词命中。profile 的 null 指标表示未计算；复杂常量只暴露类型和 metadata，不复制 tabular 数据。已有图的校验和运行不要求重新设计统计方案。
 
@@ -196,6 +272,11 @@ validate and persist user turn
 
 每个 Harness event 包含 stream/session/sequence 和相关 turn/workflow identity。事件先进入 durable store，再交付 live channel。Frontend 订阅从 last seen sequence replay；出现 gap、断线或交付竞态时重新订阅并 replay，不把本地数组当作 durable transcript。
 
+`HarnessEventStorePort::append_event` 在一次持久化操作中分配会话内的连续序号并写入事件，返回已提交的 envelope。
+SQLite 在 `BEGIN IMMEDIATE` 事务内读取当前最大序号并 INSERT；失败回滚不消耗序号，独立连接使用同一分配规则。
+Host 只发布成功提交的 envelope，不维护第二份序号计数器；本 Host 的发布锁保持 live delivery 顺序。
+发布失败后的事件仍可重放，前端继续严格检查连续序号，不跳过缺号。
+
 terminal event 和 persisted terminal state 都由 Harness 产生。取消会封锁或忽略 late model/tool output；frontend stop action 不能把已经完成的业务 commit 改写为“取消成功”。
 
 模型取消或超时后，Rig 停止模型请求并等待已准入工具完成 ledger/终态事件收尾，然后 Harness 结束 turn。共享 cancellation token 支持多个等待者。启动恢复结束遗留 running invocation/turn；中断的 mutation 使用 `outcome_unknown`，不推断已经回滚。已持久化的真实 receipt 保留；内存编辑回执随 Project 编辑会话释放，进程崩溃后不能从当前图内容猜测旧工具是否提交。完整跨进程 commit reconciliation 仍属于 roadmap。
@@ -204,9 +285,15 @@ terminal event 和 persisted terminal state 都由 Harness 产生。取消会封
 
 Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事实。计划区分 research question、analysis mode、study design、estimands、variable roles、candidate methods、selected workflow、diagnostics、robustness 和 reporting needs。
 
-当前 production workflow 是 versioned `dataset_quality_review`：先读取 dataset schema，再读取 dataset profile。Workflow compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request；runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作。
+当前 production workflow 是 versioned `dataset_quality_review`：先读取 dataset schema，再读取 dataset profile。每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表；compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作。
 
-统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败也返回具体字段或枚举错误。桌面对话默认不设模型调用轮次、整轮时长、输出 tokens 或累计文本长度上限，持续到模型完成或用户停止；HTTP 保留连接超时，不设请求总时长。Rig 调用方可显式传入可选预算，模型服务自身的容量约束仍然生效。
+每个 run 的 advance 持有唯一执行租约；并发 advance 返回 `ConcurrentWorkflow`，状态转换使用短时异步互斥，能力调用期间不持有该转换锁。
+运行记录携带 revision；`save_run` 的创建仅允许不存在的记录，更新必须匹配预期 revision，成功返回递增版本，冲突不覆盖当前记录。
+取消先持久化 `Cancelled`，再取消正在执行的能力所共享的 token；迟到结果不能更新终态或发布步骤完成事件。
+暂停阻止新步骤派发，必须显式 resume。已准入步骤可以在重读当前版本并核对执行尝试后收尾，但保持 `Paused` 或恢复后的 `Ready`；再次 advance 才继续派发或确认完成。
+恢复跳过仍有执行所有者的 run。中断的 Inspect 步骤可重新调度，并保留已持久化的暂停状态；其他中断步骤标为 `TerminalFailure`，run 标为 `Failed`，避免重复执行可能已提交的操作，实际提交结果以工具账本和业务回执为准。当前桌面质量检查工作流只执行读取能力。
+
+统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败也返回具体字段或枚举错误。模型预算统一由 Core 的角色配置传入 Rig。
 
 Workflow run 绑定 exact definition ID/version 和 Project session。恢复或继续前必须重验 binding/currentness；step output 仍是 typed capability result，不允许 model 自行制造 estimate、p-value、standard error 或 confidence interval。
 
@@ -218,13 +305,13 @@ Workflow run 绑定 exact definition ID/version 和 Project session。恢复或�
 - builtin statistical knowledge 安装；
 - bounded lexical retrieval 和 source citation；
 - Session Memory proposal、policy、list 和 delete；
-- SQLite persistence ports for sessions/events/workflows/ledger/approval/memory/knowledge/skills。
+- SQLite persistence ports for sessions/events/workflows/ledger/approval/memory/knowledge。
 
-Skill 是允许 tools、knowledge scope 和 workflow policy 的版本化方法包，不是任意脚本。Knowledge source 是 authority，search index 可以重建。Memory 是结构化、scoped、带 source/project/sensitivity/retention 的 record，不等同于 transcript 或 vector index。
+Skill 是包含指令正文的版本化方法包，manifest 记录 ID、版本和来源哈希。`SkillRegistry` 是当前内置方法包的来源，SQLite 不存储 Skill 安装包。当前内置 Skill 用于上下文预加载；执行权限由实际角色/任务范围和 Gateway 校验。Knowledge source 是 authority，search index 可以重建。Memory 是结构化、scoped、带 source/project/sensitivity/retention 的 record；审批将 `Proposed` 直接转为 `Active`。
 
-`SkillManifest.entryWorkflow` 可为空：`dataset-quality-review` 绑定现有质量检查 workflow；[statistical-report-writing](skills/statistical-report-writing/SKILL.md) 是不执行 workflow 的报告写作规范。后者拥有统计证据、公式、表格竖线、显著性标记、金额转义及交付检查规则；Markdown 解析选项和布局仍由共享前端渲染器负责。
+当前注册并加载的 Skill 是 [statistical-report-writing](skills/statistical-report-writing/SKILL.md)，拥有统计证据、公式、表格竖线、显著性标记、金额转义及交付检查规则；Markdown 解析选项和布局仍由共享前端渲染器负责。数据质量检查由独立的 `dataset_quality_review` Workflow 执行。
 
-Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本、source hash 和原始规范作为独立 System 消息预加载到每次 Assistant 请求，位于基础工具策略之后、知识和对话历史之前。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。当前没有独立报告 Agent 或模型侧 `load_skill` 工具；这是 Host 加载内置方法包，不改变现有工具注册、授权与资源保存流程。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
+Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本、source hash 和原始规范作为独立 System 消息预加载到每次 ManagerAgent 和 ReportAgent 请求，位于基础工具策略之后、知识和对话历史之前。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。ReportAgent 复用同一写作 Skill，Manager 直接撰写统计正文时同样适用。当前没有模型侧 `load_skill` 工具；内置方法包由 Core 加载。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
 
 当前 Assistant 自动使用的持久记忆范围是 Session Memory。Persistent User Memory、portable Project Memory、hybrid/vector retrieval、remote Skill trust 和完整治理 UI 尚未成为 current production contract。
 
@@ -242,15 +329,17 @@ Frontend AI settings 通过 explicit Harness configuration command 更新 config
 Rig adapter 显式启用 `rig-core` 的 Reqwest 和 Rustls 功能，以支持 HTTPS、证书校验及系统代理。
 配置的 OpenAI-compatible 服务显式使用 Chat Completions API，在 base URL 下请求 `/chat/completions`；不使用 Rig 默认的 Responses API。Base URL 应填写 API 根路径（如 `https://api.openai.com/v1`），不包含具体接口路径。
 模型工具参数均为对象；`yss-harness-contract::capability_input_schema` 在生成 `ToolDescriptor.input_schema` 时统一声明根级 `type: object`，同时保留 typed schema 的 `oneOf`、`$defs` 等约束。Rig adapter 将 descriptor 中的完整 schema 序列化为 function parameters。内部参数解码契约不变。
-模型调用使用 Rig 多轮 streaming 接口，只发布公开 text 内容；首段立即发布，后续短片段按 40ms 或 4KiB 合并，工具边界和终止前刷新。工具生命周期仍由 Gateway 发布，不能用 Rig 的批次完成事件代替实时工具状态。取消和超时停止读取模型流，保留已产生的文本并等待已接纳工具完成清理。`finalText` 保存整轮公开文本，不在流结束时再发送一份完整 TextDelta。
+
+模型工具签名仅包含 capability identity 与输入 schema；未参与执行的工具版本、输出 schema、声明式 data-access/idempotency 字段已移除。效果、调用时限和条目上限继续取自共享 CapabilityDescriptor；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现。
+模型调用使用 Rig 多轮 streaming 接口；首段立即发布，后续短片段按 40ms 或 4KiB 合并，工具边界和终止前刷新。工具生命周期由 Core executor 发布，不能用 Rig 的批次完成事件代替实时工具状态。取消和超时停止读取模型流，保留已产生的文本并等待已接纳工具完成清理。Manager 的 `finalText` 保存整轮公开文本，不在流结束时再发送一份完整 TextDelta。Worker 进度使用带 run ID 的独立事件；其交付报告只解析 Rig 最后一条模型响应，避免把工具前的进度文字混进 JSON 报告。输出模式和控制工具由 Core 在请求中明确提供，Rig 不根据角色自行决定权限。
 实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
 
 普通工具和统计计划工具共用 Rig adapter 的参数解码器。反序列化失败以现有 CapabilityFailure 的 InvalidRequest 返回 reason、category、path 和 expected；字段路径只保留 schema 已声明的字段及数组索引，动态 map key 脱敏，预期类型、范围和枚举来自工具自身 schema，并限制诊断长度。原始 Serde 文案、错误参数值和凭据不进入反馈。计划策略拒绝继续提供 reason 和 availableMethods。
 
 Rig 0.42 默认会把 ToolExecutionError 转成模型反馈，不能以返回该错误作为必然中止的保证。Adapter 因此对取消、超时、项目会话失效、内部错误、持久化故障和工具运行通道异常发出独立的致命信号：流消费者在下一次模型调用前结束，刷新已产生的公开文本，并等待已准入工具完成收尾。计划工具的事件持久化或交付故障也使用此路径。Provider/stream 错误继续由 AgentDriverFailure 终止；ModelTurnRetried 的拒绝策略保持原有语义。
 
-Provider 请求有连接/总时限，完整 model turn 也有独立时限；模型任务 panic 和超时均转换为 typed terminal failure，原始 panic/响应内容不进入错误 wire。具体预算由 adapter 配置和源码拥有。
-`providerConfigured` 表示本地客户端配置已建立，不表示远端认证已经通过。模型调用按结构化 HTTP 状态区分认证、限流、请求拒绝、服务不可用和连接失败；响应解析失败单独分类，原始响应和凭据不进入错误 wire。
+Provider 连接时限由 adapter 管理；模型调用次数、输出上限和完整 run 时限由 Core 请求传入。模型任务 panic 和超时均转换为 typed terminal failure，原始 panic/响应内容不进入错误 wire。
+`providerConfigured` 直接读取当前可选驱动是否存在，配置和清除驱动共用同一状态；它表示本地客户端配置已建立，不表示远端认证已经通过。模型调用按结构化 HTTP 状态区分认证、限流、请求拒绝、服务不可用和连接失败；响应解析失败单独分类，原始响应和凭据不进入错误 wire。
 
 ## 9. Tauri transport and frontend projection
 
@@ -260,9 +349,13 @@ Provider 请求有连接/总时限，完整 model turn 也有独立时限；模�
 
 Provider 初始化和设置变更统一由 Assistant 的 300ms 防抖 effect 配置，事件订阅建立前不开放发送。每次设置变化立即使旧配置回执失效；成功和失败回执都必须匹配当前 projection generation 和配置请求序号，迟到回执不能覆盖较新状态。
 
+当前请求的具体错误始终在 Assistant 状态区显示，即使会话仍可继续发送；不能因消息已经标记为中断而隐藏 provider 拒绝、认证、限流等原因。消息内的中断提示用于说明已完成操作仍然有效。
+
 提交携带 active graph reference。模型上下文由 Harness Core 的 `conversation` 从本会话的完整持久事件流和工具账本重建，以当前 TurnStarted 为边界；当前用户消息只加入一次。不限制最近轮数，不按条截断用户或 assistant 文本，也不将失败/取消轮次排除。相邻 TextDelta 合并，工具事件保留其间的顺序；已有流式正文时不重复追加 TurnCompleted.finalText。
 
 AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和统计计划变体。工具参数与成功/失败结果读取本会话中对应 invocation 的原始记录，Rig 映射为成对的原生 tool-call/tool-result 消息，不将工具证据降为 assistant 摘要。恢复后的成功 receipt 保留成功，失败保留结构化 failure，缺少确定终态的调用标记 outcome_unknown；取消或失败的 turn 附带明确状态，不暗示已经提交的操作被回滚。事件缺口或缺失的工具记录会明确失败，不静默发送不完整历史。
+
+Rig 将历史中重叠执行的业务工具和 Worker 委派合并为同一条 assistant 调用组，随后连续附上与每个调用 ID 对应的结果。组内进度文字在完整结果之后传给模型，不能插入调用与结果之间；持久事件和前端展示顺序保持原样。缺失、重复或不匹配的结果在发给 provider 前明确拒绝，不清空或截断历史来绕过协议错误。
 
 完整结果 JSON 随工具历史传递，DataSeries/DataFrame 仍保持引用或已读取的数据页。Rig 不再为单条历史消息设 1 MiB 准入上限，也不自动裁剪历史；供应商返回结构化 context_length_exceeded 时映射为 assistant_context_window_exceeded，界面提示完整对话超过模型容量，保留会话供用户切换模型或开启新会话。新消息、模型生成和超时准入仍使用各自已有契约。
 
@@ -303,13 +396,13 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 
 当前 production Assistant intentionally does not provide：
 
-- chart/report write 或 external write tools；
-- unknown commit outcome reconciliation；
+- 超出现有 Chart/Doc owner 契约的图形类型或报告导出格式；
+- 所有写入种类的通用跨进程自动重试；
 - external MCP client/server process exposure；
 - persistent User Memory 或 portable Project Memory；
 - vector/hybrid Knowledge retrieval；
 - remote Skill install/signing；
-- autonomous background or multi-agent execution。
+- Worker 递归委派、后台自主执行或重启后自动续跑子 Agent。
 
 这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md) 维护。
 

@@ -2,11 +2,82 @@ import { describe, expect, it } from "vitest";
 import {
   InvalidHarnessPayloadError,
   parseHarnessRuntimeStatus,
+  parseHarnessMemoryRecord,
   parseHarnessSessions,
   parseHarnessEvent,
 } from "./harnessContract";
 
 describe("Harness wire contract", () => {
+  it("parses memory lifecycle records and rejects unknown states", () => {
+    const memory = {
+      recordId: "memory-1",
+      scope: "session",
+      kind: "research_question",
+      value: { type: "research_question", question: "How does education relate to income?" },
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    for (const status of ["proposed", "active", "superseded", "invalidated", "deleted"]) {
+      const record = { ...memory, status };
+      expect(parseHarnessMemoryRecord(record)).toEqual(record);
+    }
+    expect(() => parseHarnessMemoryRecord({ ...memory, status: "unknown" })).toThrow(
+      InvalidHarnessPayloadError,
+    );
+  });
+
+  it("parses worker lifecycle and only permits model events inside worker output", () => {
+    const base = { sequence: 1, sessionId: "session", turnId: "turn", occurredAt: 1 };
+    const started = {
+      ...base,
+      type: "agent_run_started",
+      payload: {
+        runId: "worker",
+        parentRunId: "manager",
+        role: "review",
+        objective: "Check the report",
+      },
+    };
+    expect(parseHarnessEvent(started)).toEqual(started);
+    const output = {
+      ...base,
+      type: "agent_run_output",
+      payload: {
+        runId: "worker",
+        event: { type: "text_delta", payload: { delta: "worker progress" } },
+      },
+    };
+    expect(parseHarnessEvent(output).type).toBe("agent_run_output");
+    expect(() =>
+      parseHarnessEvent({
+        ...output,
+        payload: {
+          ...output.payload,
+          event: { type: "turn_completed", payload: { finalText: "false completion" } },
+        },
+      }),
+    ).toThrow(InvalidHarnessPayloadError);
+    expect(() =>
+      parseHarnessEvent({ ...started, payload: { ...started.payload, role: "unknown" } }),
+    ).toThrow(InvalidHarnessPayloadError);
+    const finished = {
+      ...base,
+      type: "agent_run_finished",
+      payload: {
+        runId: "worker",
+        role: "review",
+        state: "blocked",
+        summary: "Missing results",
+        blockedReason: "Evidence unavailable",
+        warnings: [],
+        evidenceCount: 0,
+      },
+    };
+    expect(parseHarnessEvent(finished)).toEqual(finished);
+    expect(() =>
+      parseHarnessEvent({ ...finished, payload: { ...finished.payload, state: "running" } }),
+    ).toThrow(InvalidHarnessPayloadError);
+  });
   it("accepts resource edit lifecycle events without accepting unknown capabilities", () => {
     const event = {
       sequence: 1,

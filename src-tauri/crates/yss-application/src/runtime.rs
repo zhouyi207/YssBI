@@ -35,7 +35,7 @@ struct ApplicationServices {
 pub enum ApplicationStartupError {
     #[error("application session initialization failed")]
     Application(#[from] ApplicationInitializationError),
-    #[error("Harness initialization failed")]
+    #[error("Harness initialization failed: {0}")]
     Harness(#[from] HarnessStartupError),
     #[error("project registry initialization failed")]
     ProjectRegistry(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -122,6 +122,44 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[tokio::test]
+    async fn harness_startup_reports_persistence_failure_without_replacing_the_database() {
+        let directory = TestDirectory(
+            std::env::temp_dir().join(format!("yss-application-runtime-{}", uuid::Uuid::new_v4())),
+        );
+        let database_dir = directory.0.join("db");
+        std::fs::create_dir_all(&database_dir).unwrap();
+        let database_path = database_dir.join("statistical-harness.sqlite");
+        let invalid_database = b"unreadable database fixture";
+        std::fs::write(&database_path, invalid_database).unwrap();
+
+        let result = ApplicationServices::initialize(
+            ApplicationPaths {
+                app_data_dir: directory.0.clone(),
+                samples_dir: directory.0.join("samples"),
+            },
+            |_| HarnessTransportPorts {
+                capability_gateway: Arc::new(RejectingCapabilityGateway),
+                event_sink: Arc::new(InMemoryHarnessStore::default()),
+            },
+        )
+        .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("an unreadable Harness database must fail startup"),
+        };
+        assert!(matches!(
+            &error,
+            ApplicationStartupError::Harness(HarnessStartupError::Persistence(failure))
+                if failure.code == yss_harness_contract::PersistenceFailureCode::Unavailable
+        ));
+        assert_eq!(
+            error.to_string(),
+            "Harness initialization failed: Harness SQLite persistence could not be initialized: unavailable"
+        );
+        assert_eq!(std::fs::read(database_path).unwrap(), invalid_database);
     }
 
     #[tokio::test]

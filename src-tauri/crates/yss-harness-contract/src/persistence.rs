@@ -65,6 +65,22 @@ pub struct HarnessTurnRecord {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum HarnessEvent {
+    AgentRunStarted {
+        run_id: crate::AgentRunId,
+        parent_run_id: Option<crate::AgentRunId>,
+        role: crate::AgentRole,
+        task: Option<Box<crate::AgentTask>>,
+    },
+    AgentRunOutput {
+        run_id: crate::AgentRunId,
+        event: AgentEvent,
+    },
+    AgentRunFinished {
+        outcome: Box<crate::AgentTaskOutcome>,
+    },
+    AgentRunInvalidated {
+        run_id: crate::AgentRunId,
+    },
     SessionCreated,
     SessionClosed,
     TurnStarted {
@@ -141,26 +157,16 @@ pub struct WorkflowDefinition {
 pub struct WorkflowStep {
     pub id: WorkflowStepId,
     pub depends_on: Vec<WorkflowStepId>,
-    pub kind: WorkflowStepKind,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
-pub enum WorkflowStepKind {
-    Capability(AutomationCapabilityRequest),
-    Approval { capability_id: CapabilityId },
-    Decision { condition_key: String },
+    pub request: AutomationCapabilityRequest,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowRunState {
     Planned,
-    WaitingForApproval,
     Ready,
     Running,
     Paused,
-    WaitingForExternalInput,
     Completed,
     Failed,
     Cancelled,
@@ -174,7 +180,6 @@ pub enum WorkflowStepState {
     Succeeded,
     RetriableFailure,
     TerminalFailure,
-    Skipped,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -188,6 +193,7 @@ pub struct WorkflowStepRecord {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkflowRunRecord {
     pub id: WorkflowRunId,
+    pub revision: u64,
     pub session_id: HarnessSessionId,
     pub turn_id: Option<HarnessTurnId>,
     pub definition_id: WorkflowId,
@@ -214,6 +220,7 @@ pub struct ToolInvocationRecord {
     pub idempotency_key: IdempotencyKey,
     pub session_id: HarnessSessionId,
     pub turn_id: HarnessTurnId,
+    pub agent_run_id: Option<crate::AgentRunId>,
     pub workflow_run_id: Option<WorkflowRunId>,
     pub workflow_step_id: Option<WorkflowStepId>,
     pub project: ProjectSessionBinding,
@@ -322,10 +329,15 @@ pub trait HarnessSessionStorePort: Send + Sync {
 }
 
 pub trait HarnessEventStorePort: Send + Sync {
+    /// Allocate the next session sequence and persist the envelope atomically.
+    /// A failed append must not consume a sequence.
     fn append_event<'a>(
         &'a self,
-        event: &'a HarnessEventEnvelope,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
+        session_id: &'a HarnessSessionId,
+        turn_id: Option<&'a HarnessTurnId>,
+        occurred_at: UnixMillis,
+        event: HarnessEvent,
+    ) -> PersistenceFuture<'a, Result<HarnessEventEnvelope, PersistenceFailure>>;
 
     fn load_events_after<'a>(
         &'a self,
@@ -358,10 +370,13 @@ pub trait WorkflowStorePort: Send + Sync {
         version: &'a WorkflowVersion,
     ) -> PersistenceFuture<'a, Result<Option<WorkflowDefinition>, PersistenceFailure>>;
 
+    /// None inserts revision zero; Some(r) compares r and returns revision r + 1.
+    /// A missing/changed row or duplicate creation returns Conflict.
     fn save_run<'a>(
         &'a self,
         run: &'a WorkflowRunRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
+        expected_revision: Option<u64>,
+    ) -> PersistenceFuture<'a, Result<WorkflowRunRecord, PersistenceFailure>>;
 
     fn load_run<'a>(
         &'a self,

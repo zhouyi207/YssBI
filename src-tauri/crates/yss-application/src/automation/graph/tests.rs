@@ -678,6 +678,87 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
 }
 
 #[test]
+fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() {
+    let mut fixture = Fixture::new();
+    fixture.inspect();
+    let created = fixture.edit(vec![
+        GraphEditOperation::CreateNode {
+            client_id: Some("source".into()),
+            node_type_id: "yssbi.dataframe.source.get".into(),
+            resource_path: Some(format!("databases/{}", fixture.dataset)),
+            x: 0.,
+            y: 0.,
+            user_label: None,
+        },
+        node("yssbi.debug.view", "view"),
+        connect(port("$source", "dataframe"), port("$view", "data")),
+    ]);
+    assert!(created.changes.ready);
+    let graph = ProjectResourceRef {
+        kind: ProjectResourceKind::EventGraph,
+        id: fixture.path.clone(),
+    };
+    let database = ProjectResourceRef {
+        kind: ProjectResourceKind::Database,
+        id: fixture.dataset.clone(),
+    };
+    let mut grants = Vec::new();
+    for resource in [graph, database] {
+        let AutomationCapabilityResult::ResourceInspection(value) = fixture
+            .action(AutomationCapabilityRequest::InspectResource(
+                InspectResourceRequest {
+                    resource: resource.clone(),
+                    offset: 0,
+                    limit: 1,
+                },
+            ))
+            .unwrap()
+        else {
+            panic!("resource")
+        };
+        grants.push(AgentResourceAccess {
+            resource,
+            version: Some(value.version),
+            operations: vec![
+                AgentResourceOperation::Inspect,
+                AgentResourceOperation::Execute,
+            ],
+        });
+    }
+    let context = fixture.context.clone();
+    let run = AutomationCapabilityRequest::ExecuteGraph(ExecuteGraphRequest {
+        graph_path: fixture.path.clone(),
+        graph_hash: created.graph_hash,
+    });
+    fixture.context = context.clone().with_agent(AgentInvocationScope {
+        run_id: AgentRunId::try_new("restricted-stats").unwrap(),
+        role: AgentRole::Stats,
+        task: Some(AgentTaskScope {
+            resources: vec![grants[0].clone()],
+            ..Default::default()
+        }),
+    });
+    let AutomationCapabilityResult::GraphExecution(denied) = fixture.action(run.clone()).unwrap()
+    else {
+        panic!("execution")
+    };
+    assert_eq!(denied.status, "failed");
+    assert!(denied.run_id.is_none());
+    fixture.context = context.with_agent(AgentInvocationScope {
+        run_id: AgentRunId::try_new("scoped-stats").unwrap(),
+        role: AgentRole::Stats,
+        task: Some(AgentTaskScope {
+            resources: grants,
+            ..Default::default()
+        }),
+    });
+    let AutomationCapabilityResult::GraphExecution(allowed) = fixture.action(run).unwrap() else {
+        panic!("execution")
+    };
+    assert_eq!(allowed.status, "succeeded", "{:?}", allowed.failure_code);
+}
+
+#[test]
 fn graph_edit_receipts_include_downstream_columns_and_only_changed_entities() {
     let mut f = Fixture::new();
     f.inspect();
@@ -1162,12 +1243,21 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             "{query}"
         );
         if let AutomationCapabilityResult::NodeCatalogSearch(result) = result {
-            assert!(
-                result
-                    .matches
-                    .iter()
-                    .all(|item| item.node_type_id != "yssbi.statistics.logit.fit")
-            );
+            let application = f.application.as_ref().unwrap();
+            let session = application.capture_session().unwrap();
+            let (_, _, _, catalog) = application
+                .localized_node_catalog(crate::graph::catalog::LocalizedCatalogRequest::new(
+                    session.project_instance_id().clone(),
+                    "zh-CN",
+                ))
+                .unwrap()
+                .into_transport_parts()
+                .into_fields();
+            assert!(result.matches.iter().all(|item| {
+                catalog.items.iter().any(|entry| {
+                    entry.node_type_id.as_ref() == item.node_type_id.as_str() && entry.available
+                })
+            }));
         }
     }
 }

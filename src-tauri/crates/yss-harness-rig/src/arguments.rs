@@ -272,9 +272,7 @@ mod tests {
     #[test]
     fn diagnostics_keep_schema_paths_and_expectations_without_echoing_values_or_map_keys() {
         let schema = serde_json::to_value(
-            ToolDescriptor::for_capability(CapabilityId::SearchNodeCatalog)
-                .unwrap()
-                .input_schema,
+            ToolDescriptor::for_capability(CapabilityId::SearchNodeCatalog).input_schema,
         )
         .unwrap();
         for (arguments, category, path, expected) in [
@@ -310,9 +308,7 @@ mod tests {
         assert!(!serde_json::to_string(&failure).unwrap().contains("secret"));
 
         let schema = serde_json::to_value(
-            ToolDescriptor::for_capability(CapabilityId::ApplyGraphEdit)
-                .unwrap()
-                .input_schema,
+            ToolDescriptor::for_capability(CapabilityId::ApplyGraphEdit).input_schema,
         )
         .unwrap();
         for payload in [

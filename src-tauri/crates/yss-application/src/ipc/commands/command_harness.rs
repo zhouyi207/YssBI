@@ -373,9 +373,7 @@ fn map_harness_error(error: HarnessError) -> CommandError {
         }
         HarnessError::Cancelled => CommandError::expected("harness_turn_cancelled"),
         HarnessError::TurnStillRunning => CommandError::expected("harness_turn_still_running"),
-        error @ HarnessError::SequenceExhausted => {
-            CommandError::diagnosed("harness_sequence_exhausted", error)
-        }
+        HarnessError::ConcurrentWorkflow => CommandError::expected("workflow_already_running"),
         HarnessError::WorkflowCompile(_) => CommandError::expected("invalid_workflow_request"),
         HarnessError::WorkflowRuntime(_) => CommandError::expected("workflow_transition_failed"),
         HarnessError::WorkflowNotFound => CommandError::expected("workflow_run_not_found"),

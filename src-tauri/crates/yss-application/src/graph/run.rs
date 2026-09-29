@@ -54,10 +54,18 @@ pub struct RunGraphRequest {
     graph_path: GraphResourcePath,
     demand: RunDemand,
     required_resources: Box<[ProjectResourceRequirement]>,
+    resource_authorizations: Option<Box<[RunResourceAuthorization]>>,
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
     document: GraphDocument,
     semantic_input_hash: [u8; 32],
+}
+
+#[derive(Clone, Debug)]
+pub struct RunResourceAuthorization {
+    pub resource: ProjectResourceId,
+    pub access: ProjectResourceAccess,
+    pub expected_version: Option<u64>,
 }
 
 impl RunGraphRequest {
@@ -72,6 +80,7 @@ impl RunGraphRequest {
             graph_path,
             demand: RunDemand::Default,
             required_resources: Box::new([]),
+            resource_authorizations: None,
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline: Instant::now() + std::time::Duration::from_secs(60),
             document,
@@ -94,6 +103,14 @@ impl RunGraphRequest {
 
     pub fn with_cancellation(mut self, cancellation: Arc<AtomicBool>) -> Self {
         self.cancellation = cancellation;
+        self
+    }
+
+    pub fn with_resource_authorizations(
+        mut self,
+        authorizations: Vec<RunResourceAuthorization>,
+    ) -> Self {
+        self.resource_authorizations = Some(authorizations.into_boxed_slice());
         self
     }
 
@@ -244,6 +261,8 @@ pub enum ExecutionApplicationError {
 
 #[derive(Debug, Error)]
 pub enum ResourceBindingError {
+    #[error("execution resource is outside the caller's authorized scope")]
+    ScopeDenied,
     #[error("project dataset snapshot is unavailable")]
     Dataset(#[source] yss_database_runtime::error::DatabaseError),
     #[error("present resource has no version")]
@@ -312,6 +331,19 @@ where
         request.required_resources.iter().cloned(),
         graph_resource_requirements(&initial_data, &request.graph_path, Some(&request.document))?,
     );
+    if let Some(allowed) = &request.resource_authorizations {
+        for required in &required_resources {
+            if !allowed.iter().any(|grant| {
+                &grant.resource == required.resource()
+                    && (required.access() == ProjectResourceAccess::Shared
+                        || grant.access == ProjectResourceAccess::Exclusive)
+            }) {
+                return Err(ExecutionApplicationError::ResourceBindings(
+                    ResourceBindingError::ScopeDenied,
+                ));
+            }
+        }
+    }
 
     let project_request = ProjectExecutionRequest::new(
         request.project_instance_id.clone(),
@@ -325,6 +357,23 @@ where
 
     let context = GraphResolutionContext::capture(&captured, &request.document)?;
     let analysis = context.resolve(&captured, &request.graph_path, &request.document, "en-US");
+    if let Some(allowed) = &request.resource_authorizations {
+        authorize_semantic_resources(analysis.semantic_snapshot(), allowed)?;
+        for grant in prepared_project.resources().grants() {
+            let permitted = allowed
+                .iter()
+                .find(|entry| &entry.resource == grant.resource())
+                .ok_or(ExecutionApplicationError::ResourceBindings(
+                    ResourceBindingError::ScopeDenied,
+                ))?;
+            if permitted
+                .expected_version
+                .is_some_and(|version| grant.version().map(|actual| actual.get()) != Some(version))
+            {
+                return Err(ExecutionApplicationError::DraftChanged);
+            }
+        }
+    }
     if analysis.semantic_input_hash() != &request.semantic_input_hash {
         return Err(ExecutionApplicationError::DraftChanged);
     }
@@ -600,6 +649,26 @@ fn revalidate_final_session(
     state
         .revalidate_captured_session(captured)
         .map_err(ExecutionApplicationError::StaleSession)
+}
+
+fn authorize_semantic_resources(
+    semantics: &yss_graph_analysis::GraphSemanticSnapshot,
+    allowed: &[RunResourceAuthorization],
+) -> Result<(), ExecutionApplicationError> {
+    for dependency in semantics.dependencies().entries().keys() {
+        if !allowed
+            .iter()
+            .any(|entry| entry.resource.as_str() == dependency.identity())
+        {
+            return Err(ExecutionApplicationError::ResourceBindings(
+                ResourceBindingError::ScopeDenied,
+            ));
+        }
+    }
+    for function in semantics.functions().values() {
+        authorize_semantic_resources(&function.semantics, allowed)?;
+    }
+    Ok(())
 }
 
 fn merge_resource_requirements(

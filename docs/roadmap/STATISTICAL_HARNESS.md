@@ -116,6 +116,17 @@ Skill 仍是版本化方法包，不获得任意脚本或 filesystem execution c
 
 background scheduling、pause/resume across restart 和 multi-session concurrency 必须先定义 admission、公平性、resource budget、project replacement 和 user-visible control。首阶段不引入 autonomous multi-agent swarm。
 
+### Manager–Worker 桌面验收
+
+当前扁平六角色实现和预算契约见 [Harness Core](../../src-tauri/crates/yss-harness-core/README.md)。
+以下为真实模型与桌面人工验收，自动化契约测试不能替代：
+
+- [ ] 简单改图样式、续写报告只委派必要角色；Worker 不互相调用。
+- [ ] 数据准备、分析、绘图、独立审查、报告和最终复核能返回可打开的真实产物。
+- [ ] 并行只读任务的进度、取消、重新打开会话及中断提示可正确重放。
+- [ ] 数据或图修改后，受影响的交付提示需要更新；Manager 使用新版本重新安排任务。
+- [ ] 窄面板及各主题下任务卡片、统计计划和最终正文显示正常。
+
 ## 8. Provider and privacy controls
 
 - provider/model selection 与 capability discovery；

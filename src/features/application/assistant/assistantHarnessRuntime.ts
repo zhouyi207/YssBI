@@ -2,6 +2,8 @@ import {
   appendAssistantText,
   finishAssistantText,
   updateAssistantContent,
+  updateAgentTask,
+  settleAgentTasks,
   type AssistantMessageContent,
   type ProjectionToolCall,
 } from "./assistantMessageContent";
@@ -424,28 +426,53 @@ class AssistantHarnessProjection {
         },
       ];
       isRunning = true;
+    } else if (
+      (event.type === "agent_run_started" ||
+        event.type === "agent_run_finished" ||
+        event.type === "agent_run_output" ||
+        event.type === "agent_run_invalidated") &&
+      event.turnId
+    ) {
+      if (
+        event.type === "agent_run_output" ||
+        event.type === "agent_run_invalidated" ||
+        event.payload.role !== "manager"
+      ) {
+        messages = updateAssistantMessage({
+          messages,
+          turnId: event.turnId,
+          occurredAt: event.occurredAt,
+          citations: this.citationsByTurn.get(event.turnId) ?? [],
+          plan: this.plansByTurn.get(event.turnId) ?? null,
+          tools: this.toolsByTurn.get(event.turnId) ?? [],
+          transform: (content) => updateAgentTask(content, event),
+        });
+      }
     } else if (event.type === "text_delta" && event.turnId) {
-      messages = upsertAssistantMessage(
+      messages = updateAssistantMessage({
         messages,
-        event.turnId,
-        event.payload.delta,
-        event.occurredAt,
-        this.citationsByTurn.get(event.turnId) ?? [],
-        this.plansByTurn.get(event.turnId) ?? null,
-        this.toolsByTurn.get(event.turnId) ?? [],
-      );
+        turnId: event.turnId,
+        occurredAt: event.occurredAt,
+        citations: this.citationsByTurn.get(event.turnId) ?? [],
+        plan: this.plansByTurn.get(event.turnId) ?? null,
+        tools: this.toolsByTurn.get(event.turnId) ?? [],
+        transform: (content) => appendAssistantText(content, event.payload.delta),
+        status: { type: "running" },
+      });
       isRunning = true;
     } else if (event.type === "turn_completed" && event.turnId) {
       this.settleTurnTools(event.turnId, "interrupted");
-      messages = completeAssistantMessage(
+      messages = updateAssistantMessage({
         messages,
-        event.turnId,
-        event.payload.finalText,
-        event.occurredAt,
-        this.citationsByTurn.get(event.turnId) ?? [],
-        this.plansByTurn.get(event.turnId) ?? null,
-        this.toolsByTurn.get(event.turnId) ?? [],
-      );
+        turnId: event.turnId,
+        occurredAt: event.occurredAt,
+        citations: this.citationsByTurn.get(event.turnId) ?? [],
+        plan: this.plansByTurn.get(event.turnId) ?? null,
+        tools: this.toolsByTurn.get(event.turnId) ?? [],
+        transform: (content) =>
+          finishAssistantText(settleAgentTasks(content, "interrupted"), event.payload.finalText),
+        status: { type: "complete", reason: "stop" },
+      });
       isRunning = false;
       activity = null;
     } else if ((event.type === "turn_failed" || event.type === "turn_cancelled") && event.turnId) {
@@ -453,15 +480,20 @@ class AssistantHarnessProjection {
         event.turnId,
         event.type === "turn_cancelled" ? "cancelled" : "interrupted",
       );
-      messages = failAssistantMessage(
+      messages = updateAssistantMessage({
         messages,
-        event.turnId,
-        event.type === "turn_cancelled" ? "cancelled" : "error",
-        event.occurredAt,
-        this.citationsByTurn.get(event.turnId) ?? [],
-        this.plansByTurn.get(event.turnId) ?? null,
-        this.toolsByTurn.get(event.turnId) ?? [],
-      );
+        turnId: event.turnId,
+        occurredAt: event.occurredAt,
+        citations: this.citationsByTurn.get(event.turnId) ?? [],
+        plan: this.plansByTurn.get(event.turnId) ?? null,
+        tools: this.toolsByTurn.get(event.turnId) ?? [],
+        transform: (content) =>
+          settleAgentTasks(content, event.type === "turn_cancelled" ? "cancelled" : "interrupted"),
+        status: {
+          type: "incomplete",
+          reason: event.type === "turn_cancelled" ? "cancelled" : "error",
+        },
+      });
       isRunning = false;
       activity = null;
     } else if (
@@ -495,14 +527,14 @@ class AssistantHarnessProjection {
       if (index < 0) tools.push(tool);
       else tools[index] = tool;
       this.toolsByTurn.set(turnId, tools);
-      messages = upsertToolMessage(
+      messages = updateAssistantMessage({
         messages,
         turnId,
-        event.occurredAt,
-        this.citationsByTurn.get(turnId) ?? [],
-        this.plansByTurn.get(turnId) ?? null,
+        occurredAt: event.occurredAt,
+        citations: this.citationsByTurn.get(turnId) ?? [],
+        plan: this.plansByTurn.get(turnId) ?? null,
         tools,
-      );
+      });
       activity = tools.find((tool) => tool.state === "running")?.capabilityId ?? null;
     } else if (event.type === "workflow_started") {
       activity = event.payload.runId;
@@ -520,25 +552,25 @@ class AssistantHarnessProjection {
       if (!citations.some((citation) => citation.chunkId === event.payload.citation.chunkId)) {
         this.citationsByTurn.set(turnId, [...citations, event.payload.citation]);
       }
-      messages = upsertToolMessage(
+      messages = updateAssistantMessage({
         messages,
         turnId,
-        event.occurredAt,
-        this.citationsByTurn.get(turnId) ?? [],
-        this.plansByTurn.get(turnId) ?? null,
-        this.toolsByTurn.get(turnId) ?? [],
-      );
+        occurredAt: event.occurredAt,
+        citations: this.citationsByTurn.get(turnId) ?? [],
+        plan: this.plansByTurn.get(turnId) ?? null,
+        tools: this.toolsByTurn.get(turnId) ?? [],
+      });
     } else if (event.type === "plan_proposed" && event.turnId) {
       const turnId = event.turnId;
       this.plansByTurn.set(turnId, event.payload.plan);
-      messages = upsertPlanMessage(
+      messages = updateAssistantMessage({
         messages,
         turnId,
-        event.payload.plan,
-        event.occurredAt,
-        this.citationsByTurn.get(turnId) ?? [],
-        this.toolsByTurn.get(turnId) ?? [],
-      );
+        occurredAt: event.occurredAt,
+        citations: this.citationsByTurn.get(turnId) ?? [],
+        plan: event.payload.plan,
+        tools: this.toolsByTurn.get(turnId) ?? [],
+      });
     } else if (event.type === "memory_recorded") {
       memoryRecords = [
         ...memoryRecords.filter((record) => record.recordId !== event.payload.record.recordId),
@@ -579,129 +611,38 @@ class AssistantHarnessProjection {
   }
 }
 
-function updateAssistantMessage(
-  messages: readonly ProjectionMessage[],
-  turnId: string,
-  occurredAt: number,
-  citations: readonly HarnessKnowledgeCitation[],
-  plan: unknown | null,
-  tools: readonly ProjectionToolCall[],
-  transform: (content: AssistantMessageContent) => AssistantMessageContent,
-  status?: ProjectionMessageStatus,
-): readonly ProjectionMessage[] {
+function updateAssistantMessage({
+  messages,
+  turnId,
+  occurredAt,
+  citations,
+  plan,
+  tools,
+  transform,
+  status,
+}: {
+  messages: readonly ProjectionMessage[];
+  turnId: string;
+  occurredAt: number;
+  citations: readonly HarnessKnowledgeCitation[];
+  plan: unknown | null;
+  tools: readonly ProjectionToolCall[];
+  transform?: (content: AssistantMessageContent) => AssistantMessageContent;
+  status?: ProjectionMessageStatus;
+}): readonly ProjectionMessage[] {
   const id = `assistant-${turnId}`;
   const existing = messages.find((message) => message.id === id);
+  const content = updateAssistantContent(existing?.content ?? [], citations, plan, tools);
   const message: ProjectionMessage = {
     id,
     role: "assistant",
     createdAt: existing?.createdAt ?? new Date(occurredAt),
-    content: transform(updateAssistantContent(existing?.content ?? [], citations, plan, tools)),
+    content: transform ? transform(content) : content,
     status: status ?? existing?.status ?? { type: "running" },
   };
   return existing
     ? messages.map((previous) => (previous.id === id ? message : previous))
     : [...messages, message];
-}
-
-function upsertAssistantMessage(
-  messages: readonly ProjectionMessage[],
-  turnId: string,
-  delta: string,
-  occurredAt: number,
-  citations: readonly HarnessKnowledgeCitation[],
-  plan: unknown | null,
-  tools: readonly ProjectionToolCall[],
-): readonly ProjectionMessage[] {
-  return updateAssistantMessage(
-    messages,
-    turnId,
-    occurredAt,
-    citations,
-    plan,
-    tools,
-    (content) => appendAssistantText(content, delta),
-    { type: "running" },
-  );
-}
-
-function completeAssistantMessage(
-  messages: readonly ProjectionMessage[],
-  turnId: string,
-  finalText: string,
-  occurredAt: number,
-  citations: readonly HarnessKnowledgeCitation[],
-  plan: unknown | null,
-  tools: readonly ProjectionToolCall[],
-): readonly ProjectionMessage[] {
-  return updateAssistantMessage(
-    messages,
-    turnId,
-    occurredAt,
-    citations,
-    plan,
-    tools,
-    (content) => finishAssistantText(content, finalText),
-    { type: "complete", reason: "stop" },
-  );
-}
-
-function failAssistantMessage(
-  messages: readonly ProjectionMessage[],
-  turnId: string,
-  reason: "cancelled" | "error",
-  occurredAt: number,
-  citations: readonly HarnessKnowledgeCitation[],
-  plan: unknown | null,
-  tools: readonly ProjectionToolCall[],
-): readonly ProjectionMessage[] {
-  return updateAssistantMessage(
-    messages,
-    turnId,
-    occurredAt,
-    citations,
-    plan,
-    tools,
-    (content) => content,
-    { type: "incomplete", reason },
-  );
-}
-
-function upsertPlanMessage(
-  messages: readonly ProjectionMessage[],
-  turnId: string,
-  plan: unknown,
-  occurredAt: number,
-  citations: readonly HarnessKnowledgeCitation[],
-  tools: readonly ProjectionToolCall[],
-): readonly ProjectionMessage[] {
-  return updateAssistantMessage(
-    messages,
-    turnId,
-    occurredAt,
-    citations,
-    plan,
-    tools,
-    (content) => content,
-  );
-}
-
-function upsertToolMessage(
-  messages: readonly ProjectionMessage[],
-  turnId: string,
-  occurredAt: number,
-  citations: readonly HarnessKnowledgeCitation[],
-  plan: unknown | null,
-  tools: readonly ProjectionToolCall[],
-): readonly ProjectionMessage[] {
-  return updateAssistantMessage(
-    messages,
-    turnId,
-    occurredAt,
-    citations,
-    plan,
-    tools,
-    (content) => content,
-  );
 }
 
 export function useAssistantHarnessRuntime() {

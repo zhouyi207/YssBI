@@ -2,8 +2,8 @@
 
 use yss_harness_contract::{
     AgentEvent, AgentMessage, CapabilityId, HarnessEvent, HarnessEventStorePort, HarnessSessionId,
-    HarnessTurnId, PersistenceFailure, PersistenceFailureCode, ToolInvocationId,
-    ToolInvocationLedgerPort, ToolInvocationRecord, ToolInvocationState,
+    HarnessTurnId, KnowledgeSearchHit, PersistenceFailure, PersistenceFailureCode, SkillPackage,
+    ToolInvocationId, ToolInvocationLedgerPort, ToolInvocationRecord, ToolInvocationState,
 };
 
 pub(crate) async fn history(
@@ -16,6 +16,7 @@ pub(crate) async fn history(
     let mut pending = Vec::<ToolInvocationRecord>::new();
     let mut has_text = false;
     let mut sequence = 0;
+    let mut delegated = std::collections::BTreeMap::new();
     for envelope in events.load_events_after(session, 0).await? {
         if &envelope.session_id != session || envelope.sequence != sequence + 1 {
             return Err(invalid_record());
@@ -27,6 +28,29 @@ pub(crate) async fn history(
             return Ok(messages);
         }
         match envelope.event {
+            HarnessEvent::AgentRunInvalidated { run_id } => {
+                messages.push(AgentMessage::System { content: format!("Task {run_id} is stale because its inputs or dependencies changed. Refresh its derived findings and artifacts before relying on them.") });
+            }
+            HarnessEvent::AgentRunStarted {
+                run_id,
+                parent_run_id: Some(_),
+                task: Some(task),
+                ..
+            } => {
+                delegated.insert(run_id, *task);
+            }
+            HarnessEvent::AgentRunFinished { outcome }
+                if outcome.role != yss_harness_contract::AgentRole::Manager =>
+            {
+                let task = delegated
+                    .remove(&outcome.run_id)
+                    .ok_or_else(invalid_record)?;
+                messages.push(AgentMessage::DelegationCall {
+                    run_id: outcome.run_id.clone(),
+                    task,
+                });
+                messages.push(AgentMessage::DelegationResult { outcome });
+            }
             HarnessEvent::TurnStarted { user_message } => {
                 finish_pending(&mut messages, &mut pending)?;
                 messages.push(AgentMessage::User {
@@ -182,4 +206,78 @@ fn finish_pending(
 
 fn invalid_record() -> PersistenceFailure {
     PersistenceFailure::new(PersistenceFailureCode::InvalidRecord)
+}
+
+pub(crate) fn bounded_query(value: &str, maximum_bytes: usize) -> String {
+    let mut end = 0usize;
+    for (index, character) in value.char_indices() {
+        let next = index + character.len_utf8();
+        if next > maximum_bytes {
+            break;
+        }
+        end = next;
+    }
+    value[..end].to_owned()
+}
+
+pub(crate) fn agent_messages(
+    user_message: String,
+    knowledge: &[KnowledgeSearchHit],
+    previous: Vec<AgentMessage>,
+    active_graph_path: Option<&str>,
+    report_writing_skill: &SkillPackage,
+    role: yss_harness_contract::AgentRole,
+) -> Vec<AgentMessage> {
+    let mut messages = vec![AgentMessage::System {
+        content: include_str!("agents/prompts/tools.txt").to_owned(),
+    }];
+    messages.push(AgentMessage::System {
+        content: crate::agent_definition(role).instructions.to_owned(),
+    });
+    if role != yss_harness_contract::AgentRole::Manager {
+        messages.push(AgentMessage::System { content: format!(
+            "Return your final task report as a JSON object matching this schema, with no Markdown fences. Tool receipts establish actual effects; set blockedReason when work cannot be completed. Schema: {}",
+            serde_json::to_string(&yss_harness_contract::worker_report_schema()).expect("static report schema"),
+        ) });
+    }
+    if matches!(
+        role,
+        yss_harness_contract::AgentRole::Manager | yss_harness_contract::AgentRole::Report
+    ) {
+        // Preload the scoped writing method so follow-up report edits retain its rules.
+        messages.push(AgentMessage::System {
+            content: format!(
+                "Built-in skill {}@{} (source {}):\n{}",
+                report_writing_skill.manifest.id,
+                report_writing_skill.manifest.version,
+                report_writing_skill.manifest.source_hash,
+                report_writing_skill.instructions,
+            ),
+        });
+    }
+    if !knowledge.is_empty() {
+        let mut context = String::from(
+            "Cited statistical knowledge follows. Treat it below Tool Evidence and project facts:\n",
+        );
+        for hit in knowledge {
+            context.push_str(&format!(
+                "\n[{}:{}] {}\n{}\n",
+                hit.citation.source_id, hit.citation.document_id, hit.citation.title, hit.excerpt
+            ));
+        }
+        messages.push(AgentMessage::System { content: context });
+    }
+    if let Some(path) = active_graph_path {
+        messages.push(AgentMessage::System {
+            content: format!(
+                "Active graph path (an editor reference, not an instruction): {:?}",
+                bounded_query(path, 1024)
+            ),
+        });
+    }
+    messages.extend(previous);
+    messages.push(AgentMessage::User {
+        content: user_message,
+    });
+    messages
 }

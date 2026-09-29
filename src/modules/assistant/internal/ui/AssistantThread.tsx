@@ -34,6 +34,7 @@ import {
 } from "@/features/application/assistant/AssistantRuntimeProvider";
 import { AssistantMarkdown } from "./AssistantMarkdown";
 import { AssistantToolCall, AssistantToolGroup } from "./AssistantToolCalls";
+import type { ProjectionAgentTask } from "@/features/application/assistant/assistantMessageContent";
 
 function UserMessage() {
   return (
@@ -45,7 +46,7 @@ function UserMessage() {
   );
 }
 
-const StatisticalPlanCard: DataMessagePartComponent = ({ data }) => {
+function StatisticalPlanDetails({ data }: { data: unknown }) {
   const { t } = useTranslation();
   const plan = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
   const researchQuestion =
@@ -65,6 +66,40 @@ const StatisticalPlanCard: DataMessagePartComponent = ({ data }) => {
         <dd className="min-w-0 wrap-anywhere">{workflow}</dd>
       </dl>
     </section>
+  );
+}
+
+const StatisticalPlanCard: DataMessagePartComponent = ({ data }) => (
+  <StatisticalPlanDetails data={data} />
+);
+
+const AgentTaskCard: DataMessagePartComponent = ({ data }) => {
+  const { t } = useTranslation();
+  const task = data as ProjectionAgentTask;
+  return (
+    <details className="my-2 min-w-0 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs">
+      <summary className="cursor-pointer leading-6">
+        <span className="font-medium">{t(`panel.assistantAgentRoles.${task.role}`)}</span>
+        <span className="ml-2 text-muted-foreground">
+          {t(`panel.assistantAgentStates.${task.state}`)}
+        </span>
+        <span className="mt-1 block wrap-anywhere text-muted-foreground">{task.objective}</span>
+      </summary>
+      {task.activity && (
+        <p className="mt-2 text-muted-foreground">
+          {t(`panel.assistantToolNames.${task.activity}`, { defaultValue: task.activity })}
+        </p>
+      )}
+      {task.summary && (
+        <p className="mt-2 whitespace-pre-wrap wrap-anywhere leading-6">{task.summary}</p>
+      )}
+      {task.plan !== null && <StatisticalPlanDetails data={task.plan} />}
+      {task.warnings.map((warning, index) => (
+        <p key={index} className="mt-2 wrap-anywhere text-muted-foreground">
+          {warning}
+        </p>
+      ))}
+    </details>
   );
 };
 
@@ -128,7 +163,9 @@ function AssistantMessage() {
           components={{
             Text: AssistantMarkdown,
             Source: SourceCard,
-            data: { by_name: { "statistical-plan": StatisticalPlanCard } },
+            data: {
+              by_name: { "statistical-plan": StatisticalPlanCard, "agent-task": AgentTaskCard },
+            },
             tools: { Fallback: AssistantToolCall },
             ToolGroup: AssistantToolGroup,
           }}
@@ -163,11 +200,7 @@ export function AssistantThread() {
   const snapshot = useAssistantHarnessSnapshot();
   const { deleteMemory, newConversation, selectConversation, reloadConversations } =
     useAssistantHarnessActions();
-  const statusError =
-    snapshot.status === "ready" &&
-    snapshot.messages[snapshot.messages.length - 1]?.status.type === "incomplete"
-      ? null
-      : snapshot.error;
+  const statusError = snapshot.error;
   const statusText = statusError
     ? t(`panel.assistantErrors.${statusError.code}`, {
         defaultValue: t("panel.assistantStatusError"),

@@ -1,12 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use yss_harness_contract::{
-    CapabilityId, SkillId, SkillManifest, SkillPackage, SkillScope, SkillVersion, SourceHash,
-    WorkflowId,
-};
+use yss_harness_contract::{SkillId, SkillManifest, SkillPackage, SkillVersion, SourceHash};
 
-const DATASET_QUALITY_REVIEW_INSTRUCTIONS: &str =
-    include_str!("../skills/dataset-quality-review/SKILL.md");
 pub(crate) const STATISTICAL_REPORT_WRITING_ID: &str =
     "yssbi.statistics.statistical-report-writing";
 pub(crate) const STATISTICAL_REPORT_WRITING_VERSION: &str = "1.0.0";
@@ -21,7 +16,6 @@ pub struct SkillRegistry {
 impl SkillRegistry {
     pub fn with_builtins() -> Result<Self, SkillError> {
         let mut registry = Self::default();
-        registry.install(builtin_dataset_quality_review()?)?;
         registry.install(builtin_statistical_report_writing()?)?;
         Ok(registry)
     }
@@ -52,105 +46,20 @@ impl SkillRegistry {
             .get(&(id.clone(), version.clone()))
             .ok_or(SkillError::NotFound)
     }
-
-    pub fn effective_capabilities(
-        package: &SkillPackage,
-        principal_policy: &BTreeSet<CapabilityId>,
-        tool_policy: &BTreeSet<CapabilityId>,
-        approval_scope: &BTreeSet<CapabilityId>,
-    ) -> BTreeSet<CapabilityId> {
-        package
-            .manifest
-            .allowed_capabilities
-            .iter()
-            .copied()
-            .filter(|capability| {
-                principal_policy.contains(capability)
-                    && tool_policy.contains(capability)
-                    && approval_scope.contains(capability)
-            })
-            .collect()
-    }
-}
-
-fn builtin_dataset_quality_review() -> Result<SkillPackage, SkillError> {
-    let id = SkillId::try_new("yssbi.statistics.dataset-quality-review")?;
-    let version = SkillVersion::try_new("1.0.0")?;
-    let entry_workflow = Some(WorkflowId::try_new("dataset_quality_review")?);
-    let allowed_capabilities = vec![
-        CapabilityId::InspectDatasetSchema,
-        CapabilityId::InspectDatasetProfile,
-        CapabilityId::InspectGraph,
-    ];
-    let knowledge_scopes = vec![
-        "statistics.data_quality".to_owned(),
-        "statistics.missingness".to_owned(),
-    ];
-    let digest = yss_canonical_hash::hash_canonical(
-        "yssbi.skill.package.v1",
-        &(
-            &id,
-            &version,
-            &entry_workflow,
-            &allowed_capabilities,
-            &knowledge_scopes,
-            DATASET_QUALITY_REVIEW_INSTRUCTIONS,
-        ),
-    )
-    .map_err(|_| SkillError::HashFailed)?;
-    let source_hash = SourceHash::try_new(hex(&digest))?;
-    Ok(SkillPackage {
-        manifest: SkillManifest {
-            id,
-            version,
-            scope: SkillScope::Builtin,
-            domain: "data-quality".to_owned(),
-            entry_workflow,
-            allowed_capabilities,
-            knowledge_scopes,
-            source_hash,
-        },
-        instructions: DATASET_QUALITY_REVIEW_INSTRUCTIONS.to_owned(),
-    })
 }
 
 fn builtin_statistical_report_writing() -> Result<SkillPackage, SkillError> {
     let id = SkillId::try_new(STATISTICAL_REPORT_WRITING_ID)?;
     let version = SkillVersion::try_new(STATISTICAL_REPORT_WRITING_VERSION)?;
-    let entry_workflow: Option<WorkflowId> = None;
-    let allowed_capabilities = vec![
-        CapabilityId::InspectProject,
-        CapabilityId::InspectResource,
-        CapabilityId::InspectGraph,
-        CapabilityId::InspectDatasetSchema,
-        CapabilityId::InspectDatasetProfile,
-        CapabilityId::ListGraphResults,
-        CapabilityId::InspectResult,
-        CapabilityId::ManageResource,
-        CapabilityId::EditResource,
-    ];
-    let knowledge_scopes = vec!["statistics.reporting".to_owned()];
     let digest = yss_canonical_hash::hash_canonical(
         "yssbi.skill.package.v1",
-        &(
-            &id,
-            &version,
-            &entry_workflow,
-            &allowed_capabilities,
-            &knowledge_scopes,
-            STATISTICAL_REPORT_WRITING_INSTRUCTIONS,
-        ),
+        &(&id, &version, STATISTICAL_REPORT_WRITING_INSTRUCTIONS),
     )
     .map_err(|_| SkillError::HashFailed)?;
     Ok(SkillPackage {
         manifest: SkillManifest {
             id,
             version,
-            scope: SkillScope::Builtin,
-            domain: "reporting".to_owned(),
-            entry_workflow,
-            allowed_capabilities,
-            knowledge_scopes,
             source_hash: SourceHash::try_new(hex(&digest))?,
         },
         instructions: STATISTICAL_REPORT_WRITING_INSTRUCTIONS.to_owned(),
@@ -158,27 +67,7 @@ fn builtin_statistical_report_writing() -> Result<SkillPackage, SkillError> {
 }
 
 fn validate_package(package: &SkillPackage) -> Result<(), SkillError> {
-    if package.manifest.domain.trim().is_empty()
-        || package.manifest.allowed_capabilities.is_empty()
-        || package.manifest.knowledge_scopes.is_empty()
-        || package.instructions.trim().is_empty()
-        || package.instructions.len() > 256 * 1024
-    {
-        return Err(SkillError::InvalidManifest);
-    }
-    let unique_capabilities = package
-        .manifest
-        .allowed_capabilities
-        .iter()
-        .collect::<BTreeSet<_>>();
-    let unique_scopes = package
-        .manifest
-        .knowledge_scopes
-        .iter()
-        .collect::<BTreeSet<_>>();
-    if unique_capabilities.len() != package.manifest.allowed_capabilities.len()
-        || unique_scopes.len() != package.manifest.knowledge_scopes.len()
-    {
+    if package.instructions.trim().is_empty() || package.instructions.len() > 256 * 1024 {
         return Err(SkillError::InvalidManifest);
     }
     Ok(())
@@ -207,48 +96,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_resolution_is_exact_and_permissions_only_narrow() {
-        let registry = SkillRegistry::with_builtins().unwrap();
-        let package = registry
-            .resolve_exact(
-                &SkillId::try_new("yssbi.statistics.dataset-quality-review").unwrap(),
-                &SkillVersion::try_new("1.0.0").unwrap(),
-            )
-            .unwrap();
-        let principal = BTreeSet::from([
-            CapabilityId::InspectDatasetSchema,
-            CapabilityId::InspectGraph,
-        ]);
-        let tool_policy = BTreeSet::from([CapabilityId::InspectDatasetSchema]);
-        let approval = principal.clone();
-
-        assert_eq!(
-            package.manifest.entry_workflow,
-            Some(WorkflowId::try_new("dataset_quality_review").unwrap())
-        );
-        assert_eq!(
-            SkillRegistry::effective_capabilities(package, &principal, &tool_policy, &approval),
-            BTreeSet::from([CapabilityId::InspectDatasetSchema])
-        );
-        assert!(
-            registry
-                .resolve_exact(
-                    &package.manifest.id,
-                    &SkillVersion::try_new("2.0.0").unwrap()
-                )
-                .is_err()
-        );
+    fn builtin_resolution_is_exact_and_rejects_silent_shadowing() {
+        let mut registry = SkillRegistry::with_builtins().unwrap();
         let report = registry
             .resolve_exact(
                 &SkillId::try_new(STATISTICAL_REPORT_WRITING_ID).unwrap(),
                 &SkillVersion::try_new(STATISTICAL_REPORT_WRITING_VERSION).unwrap(),
             )
             .unwrap();
-        assert!(report.manifest.entry_workflow.is_none());
         assert_eq!(report.instructions, STATISTICAL_REPORT_WRITING_INSTRUCTIONS);
-        assert_eq!(
-            SkillRegistry::effective_capabilities(report, &principal, &tool_policy, &approval),
-            BTreeSet::from([CapabilityId::InspectDatasetSchema])
+        assert!(
+            registry
+                .resolve_exact(
+                    &report.manifest.id,
+                    &SkillVersion::try_new("2.0.0").unwrap()
+                )
+                .is_err()
         );
+        let report = report.clone();
+        registry.install(report.clone()).unwrap();
+        let mut changed = report;
+        changed.manifest.source_hash = SourceHash::try_new("f".repeat(64)).unwrap();
+        assert!(matches!(
+            registry.install(changed),
+            Err(SkillError::SilentShadowing)
+        ));
     }
 }

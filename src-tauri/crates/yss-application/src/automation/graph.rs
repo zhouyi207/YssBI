@@ -28,6 +28,9 @@ pub fn invoke_graph_capability(
     control: &CapabilityControl,
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
     control.check()?;
+    if let Some(agent) = context.agent() {
+        yss_harness_core::authorize_agent_capability(agent, &request)?;
+    }
     request
         .validate()
         .map_err(|error| invalid_request(request.capability_id(), error))?;
@@ -234,32 +237,86 @@ pub fn invoke_graph_capability(
             let mut failure_code = None;
             let mut failure_location = None;
             let mut status = "failed";
-            let outcome = run_graph_with_sink(
-                application,
-                RunGraphRequest::new(
-                    captured.project_instance_id().clone(),
-                    path.clone(),
-                    document.clone(),
-                    projection.basis.semantic_input_hash,
-                )
-                .with_cancellation(control.cancellation_flag())
-                .with_deadline(control.deadline()),
-                |event| {
-                    run_id = Some(event.identity().run_id().get());
-                    match event.kind() {
-                        RunApplicationEventKind::RunCancelled => status = "cancelled",
-                        RunApplicationEventKind::RunErrored { failure } => {
-                            failure_code = Some(format!("{:?}", failure.code));
-                            failure_location =
-                                Some(format!("{:?}: {:?}", failure.phase, failure.source));
-                        }
-                        _ => {}
+            let mut run_request = RunGraphRequest::new(
+                captured.project_instance_id().clone(),
+                path.clone(),
+                document.clone(),
+                projection.basis.semantic_input_hash,
+            )
+            .with_cancellation(control.cancellation_flag())
+            .with_deadline(control.deadline());
+            if let Some(agent) = context.agent() {
+                let task = agent
+                    .task
+                    .as_ref()
+                    .ok_or_else(|| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+                let authorizations = task
+                    .resources
+                    .iter()
+                    .filter(|entry| {
+                        entry.operations.contains(&AgentResourceOperation::Inspect)
+                            || entry.operations.contains(&AgentResourceOperation::Execute)
+                    })
+                    .map(|entry| {
+                        let resource = if entry.resource.kind == ProjectResourceKind::Database {
+                            format!("databases/{}", entry.resource.id)
+                        } else {
+                            entry.resource.id.clone()
+                        };
+                        Ok(crate::graph::run::RunResourceAuthorization {
+                            resource: yss_project::execution_authority::ProjectResourceId::new(
+                                resource.into_boxed_str(),
+                            )
+                            .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?,
+                            access: if yss_harness_core::authorize_agent_resource(
+                                agent,
+                                &entry.resource,
+                                AgentResourceOperation::Edit,
+                            )
+                            .is_ok()
+                            {
+                                yss_project::execution_authority::ProjectResourceAccess::Exclusive
+                            } else {
+                                yss_project::execution_authority::ProjectResourceAccess::Shared
+                            },
+                            expected_version: entry
+                                .version
+                                .as_ref()
+                                .map(|version| version.revision),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, CapabilityFailure>>()?;
+                run_request = run_request.with_resource_authorizations(authorizations);
+            }
+            let outcome = run_graph_with_sink(application, run_request, |event| {
+                run_id = Some(event.identity().run_id().get());
+                match event.kind() {
+                    RunApplicationEventKind::RunCancelled => status = "cancelled",
+                    RunApplicationEventKind::RunErrored { failure } => {
+                        failure_code = Some(format!("{:?}", failure.code));
+                        failure_location =
+                            Some(format!("{:?}: {:?}", failure.phase, failure.source));
                     }
-                    true
-                },
-            );
-            if outcome.is_err() && failure_code.is_none() && status != "cancelled" {
-                failure_code = Some("graph_execution_failed".into());
+                    _ => {}
+                }
+                true
+            });
+            if let Err(error) = &outcome
+                && failure_code.is_none()
+                && status != "cancelled"
+            {
+                failure_code = Some(
+                    match error {
+                        crate::graph::run::ExecutionApplicationError::ResourceBindings(
+                            crate::graph::run::ResourceBindingError::ScopeDenied,
+                        ) => "agent_scope_denied",
+                        crate::graph::run::ExecutionApplicationError::DraftChanged => {
+                            "resource_version_changed"
+                        }
+                        _ => "graph_execution_failed",
+                    }
+                    .into(),
+                );
             }
             let mut result_count = None;
             let mut results = Vec::new();
@@ -569,12 +626,8 @@ fn transform_graph_edit(
         created_ports,
         changes: graph_changes(before, after),
     };
-    AutomationCapabilityResult::GraphEditReceipt(receipt.clone()).validate_budget(
-        ToolDescriptor::for_capability(CapabilityId::ApplyGraphEdit)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?
-            .result_budget
-            .maximum_bytes as usize,
-    )?;
+    AutomationCapabilityResult::GraphEditReceipt(receipt.clone())
+        .validate_budget(MAX_CAPABILITY_RESULT_BYTES)?;
     Ok((transformed, receipt))
 }
 

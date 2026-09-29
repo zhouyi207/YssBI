@@ -22,9 +22,9 @@ pub struct HarnessServices {
 
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessStartupError {
-    #[error("Harness SQLite persistence could not be initialized")]
+    #[error("Harness SQLite persistence could not be initialized: {0}")]
     Persistence(#[from] yss_harness_contract::PersistenceFailure),
-    #[error("Harness application initialization failed")]
+    #[error("Harness application initialization failed: {0}")]
     Application(#[from] crate::harness::HarnessInitializationError),
 }
 
@@ -46,6 +46,7 @@ impl IdGeneratorPort for HarnessIdGenerator {
         let prefix = match kind {
             AutomationIdKind::HarnessSession => "session",
             AutomationIdKind::HarnessTurn => "turn",
+            AutomationIdKind::AgentRun => "agent",
             AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
             AutomationIdKind::CapabilityInvocation => "capability",

@@ -8,6 +8,91 @@ struct Fixture {
     context: CapabilityInvocationContext,
     publications: Vec<CommittedResourceMutation>,
 }
+
+#[test]
+fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gateway() {
+    let mut fixture = Fixture::new();
+    let doc = fixture.create(ResourceCreation::Doc {
+        name: "Report".into(),
+    });
+    let other = fixture.create(ResourceCreation::Doc {
+        name: "Other".into(),
+    });
+    let chart = fixture.create(ResourceCreation::Chart {
+        name: "Plot".into(),
+    });
+    let doc_version = fixture.inspect(&doc).version;
+    let other_version = fixture.inspect(&other).version;
+    let chart_version = fixture.inspect(&chart).version;
+    let scope = AgentInvocationScope {
+        run_id: AgentRunId::try_new("report-run").unwrap(),
+        role: AgentRole::Report,
+        task: Some(AgentTaskScope {
+            resources: vec![
+                AgentResourceAccess {
+                    resource: doc.clone(),
+                    version: Some(doc_version.clone()),
+                    operations: vec![
+                        AgentResourceOperation::Inspect,
+                        AgentResourceOperation::Save,
+                    ],
+                },
+                // Even an overbroad task cannot give ReportAgent a different role's write authority.
+                AgentResourceAccess {
+                    resource: chart.clone(),
+                    version: Some(chart_version.clone()),
+                    operations: vec![
+                        AgentResourceOperation::Inspect,
+                        AgentResourceOperation::Save,
+                    ],
+                },
+            ],
+            ..Default::default()
+        }),
+    };
+    fixture.context = fixture.context.clone().with_agent(scope.clone());
+    for (resource, version) in [(chart, chart_version), (other, other_version)] {
+        let failure = fixture
+            .call(AutomationCapabilityRequest::ManageResource(
+                ManageResourceRequest::Save { resource, version },
+            ))
+            .unwrap_err();
+        assert_eq!(failure.code, CapabilityFailureCode::InvalidRequest);
+    }
+    fixture
+        .call(AutomationCapabilityRequest::ManageResource(
+            ManageResourceRequest::Save {
+                resource: doc.clone(),
+                version: doc_version.clone(),
+            },
+        ))
+        .unwrap();
+    fixture.context = fixture.context.clone().with_agent(AgentInvocationScope {
+        role: AgentRole::Review,
+        ..scope
+    });
+    assert!(
+        fixture
+            .call(AutomationCapabilityRequest::ManageResource(
+                ManageResourceRequest::Save {
+                    resource: doc.clone(),
+                    version: doc_version
+                }
+            ))
+            .is_err()
+    );
+    assert!(
+        fixture
+            .call(AutomationCapabilityRequest::InspectResource(
+                InspectResourceRequest {
+                    resource: doc,
+                    offset: 0,
+                    limit: 1
+                }
+            ))
+            .is_ok()
+    );
+}
 impl Fixture {
     fn new() -> Self {
         let directory =

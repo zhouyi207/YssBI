@@ -9,10 +9,8 @@ use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
-    ApprovalPolicy, AutomationCapabilityRequest, AutomationCapabilityResult,
-    AutomationIdentityError, CapabilityFailure, CapabilityId, HarnessSessionId, PrincipalId,
-    ProjectSessionBinding, StatisticalPlan, ToolEffect, capability_input_schema,
-    capability_output_schema,
+    AutomationCapabilityRequest, AutomationCapabilityResult, AutomationIdentityError,
+    CapabilityFailure, CapabilityId, StatisticalPlan, capability_input_schema,
 };
 
 macro_rules! string_identity {
@@ -57,6 +55,11 @@ pub struct HarnessTurnId(String);
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 #[schemars(transparent)]
+pub struct AgentRunId(String);
+
+#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
+#[schemars(transparent)]
 pub struct WorkflowId(String);
 
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
@@ -73,16 +76,6 @@ pub struct WorkflowRunId(String);
 #[serde(transparent)]
 #[schemars(transparent)]
 pub struct WorkflowStepId(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
-pub struct ToolId(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
-pub struct ToolVersion(String);
 
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
@@ -145,12 +138,11 @@ pub struct MethodVersion(String);
 pub struct ApprovalGrantId(String);
 
 string_identity!(HarnessTurnId, "harness turn id");
+string_identity!(AgentRunId, "agent run id");
 string_identity!(WorkflowId, "workflow id");
 string_identity!(WorkflowVersion, "workflow version");
 string_identity!(WorkflowRunId, "workflow run id");
 string_identity!(WorkflowStepId, "workflow step id");
-string_identity!(ToolId, "tool id");
-string_identity!(ToolVersion, "tool version");
 string_identity!(ToolInvocationId, "tool invocation id");
 string_identity!(IdempotencyKey, "idempotency key");
 string_identity!(SkillId, "skill id");
@@ -182,93 +174,32 @@ impl UnixMillis {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DataAccessPolicy {
-    MetadataOnly,
-    AggregatesOnly,
-    BoundedRecords,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum IdempotencyPolicy {
-    ReadOnlyReplayable,
-    InvocationBound,
-    ReconciliationRequired,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResultBudget {
-    /// For inspect_result, budgets apply to data pages, not to complete result JSON.
-    pub maximum_items: u16,
-    pub maximum_bytes: u32,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolDescriptor {
-    pub id: ToolId,
-    pub version: ToolVersion,
     pub capability_id: CapabilityId,
     pub input_schema: Schema,
-    pub output_schema: Schema,
-    pub effect: ToolEffect,
-    pub approval: ApprovalPolicy,
-    pub data_access: DataAccessPolicy,
-    pub timeout_ms: u64,
-    pub idempotency: IdempotencyPolicy,
-    pub result_budget: ResultBudget,
 }
 
 impl ToolDescriptor {
-    pub fn for_capability(capability_id: CapabilityId) -> Result<Self, AutomationIdentityError> {
-        let capability = capability_id.descriptor();
-        Ok(Self {
-            id: ToolId::try_new(capability_id.as_str())?,
-            version: ToolVersion::try_new(match capability_id {
-                CapabilityId::InspectResult => "3.0.0",
-                CapabilityId::InspectProject
-                | CapabilityId::InspectDatasetSchema
-                | CapabilityId::RequestUiIntent => "2.0.0",
-                _ => "1.0.0",
-            })?,
+    pub fn for_capability(capability_id: CapabilityId) -> Self {
+        Self {
             capability_id,
             input_schema: capability_input_schema(capability_id),
-            output_schema: capability_output_schema(capability_id),
-            effect: capability.effect,
-            approval: capability.approval,
-            data_access: if capability.effect == ToolEffect::Mutate
-                || matches!(
-                    capability_id,
-                    CapabilityId::InspectResult | CapabilityId::InspectResource
-                ) {
-                DataAccessPolicy::BoundedRecords
-            } else {
-                DataAccessPolicy::MetadataOnly
-            },
-            timeout_ms: if capability.effect == ToolEffect::Compute {
-                60_000
-            } else {
-                30_000
-            },
-            idempotency: if capability.effect == ToolEffect::Mutate {
-                IdempotencyPolicy::InvocationBound
-            } else {
-                IdempotencyPolicy::ReadOnlyReplayable
-            },
-            result_budget: ResultBudget {
-                maximum_items: capability.maximum_results,
-                maximum_bytes: 1_048_576,
-            },
-        })
+        }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentMessage {
+    DelegationCall {
+        run_id: AgentRunId,
+        task: crate::AgentTask,
+    },
+    DelegationResult {
+        outcome: Box<crate::AgentTaskOutcome>,
+    },
     System {
         content: String,
     },
@@ -295,10 +226,10 @@ pub enum AgentMessage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentTurnRequest {
-    pub session_id: HarnessSessionId,
-    pub turn_id: HarnessTurnId,
-    pub principal_id: PrincipalId,
-    pub project: ProjectSessionBinding,
+    pub role: crate::AgentRole,
+    pub limits: crate::AgentRunLimits,
+    pub control_tools: Vec<crate::AgentControlTool>,
+    pub output_mode: crate::AgentOutputMode,
     pub messages: Vec<AgentMessage>,
     pub tools: Vec<ToolDescriptor>,
 }
@@ -409,6 +340,17 @@ pub trait ModelCapabilityExecutor: Send + Sync {
         &'a self,
         request: ModelCapabilityRequest,
     ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>>;
+
+    fn delegate<'a>(
+        &'a self,
+        _task: crate::AgentTask,
+    ) -> AgentFuture<'a, Result<crate::AgentTaskOutcome, CapabilityFailure>> {
+        Box::pin(async {
+            Err(CapabilityFailure::new(
+                crate::CapabilityFailureCode::InvalidRequest,
+            ))
+        })
+    }
 }
 
 pub trait AgentEventOutput: Send + Sync {
@@ -550,6 +492,7 @@ impl Drop for CancellationFuture {
 pub enum AutomationIdKind {
     HarnessSession,
     HarnessTurn,
+    AgentRun,
     WorkflowRun,
     ToolInvocation,
     CapabilityInvocation,

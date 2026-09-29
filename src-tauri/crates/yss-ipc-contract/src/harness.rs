@@ -123,6 +123,28 @@ pub struct HarnessEventDto {
     rename_all_fields = "camelCase"
 )]
 pub enum HarnessEventKindDto {
+    AgentRunInvalidated {
+        run_id: String,
+    },
+    AgentRunStarted {
+        run_id: String,
+        parent_run_id: Option<String>,
+        role: yss_harness_contract::AgentRole,
+        objective: String,
+    },
+    AgentRunOutput {
+        run_id: String,
+        event: Box<HarnessEventKindDto>,
+    },
+    AgentRunFinished {
+        run_id: String,
+        role: yss_harness_contract::AgentRole,
+        state: yss_harness_contract::AgentRunState,
+        summary: Option<String>,
+        blocked_reason: Option<String>,
+        warnings: Vec<String>,
+        evidence_count: usize,
+    },
     SessionCreated,
     SessionClosed,
     TurnStarted {
@@ -209,6 +231,43 @@ impl From<&HarnessEventEnvelope> for HarnessEventDto {
 impl From<&HarnessEvent> for HarnessEventKindDto {
     fn from(event: &HarnessEvent) -> Self {
         match event {
+            HarnessEvent::AgentRunInvalidated { run_id } => Self::AgentRunInvalidated {
+                run_id: run_id.to_string(),
+            },
+            HarnessEvent::AgentRunStarted {
+                run_id,
+                parent_run_id,
+                role,
+                task,
+            } => Self::AgentRunStarted {
+                run_id: run_id.to_string(),
+                parent_run_id: parent_run_id.as_ref().map(ToString::to_string),
+                role: *role,
+                objective: task
+                    .as_ref()
+                    .map(|task| task.objective.clone())
+                    .unwrap_or_default(),
+            },
+            HarnessEvent::AgentRunOutput { run_id, event } => Self::AgentRunOutput {
+                run_id: run_id.to_string(),
+                event: Box::new(Self::from(event)),
+            },
+            HarnessEvent::AgentRunFinished { outcome } => Self::AgentRunFinished {
+                run_id: outcome.run_id.to_string(),
+                role: outcome.role,
+                state: outcome.state,
+                summary: outcome.report.as_ref().map(|report| report.summary.clone()),
+                blocked_reason: outcome
+                    .report
+                    .as_ref()
+                    .and_then(|report| report.blocked_reason.clone()),
+                warnings: outcome
+                    .report
+                    .as_ref()
+                    .map(|report| report.warnings.clone())
+                    .unwrap_or_default(),
+                evidence_count: outcome.evidence.len(),
+            },
             HarnessEvent::SessionCreated => Self::SessionCreated,
             HarnessEvent::SessionClosed => Self::SessionClosed,
             HarnessEvent::TurnStarted { user_message } => Self::TurnStarted {
