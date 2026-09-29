@@ -458,30 +458,6 @@ impl BayesInferenceService {
         result_from_state(&state, task_id)
     }
 
-    pub fn clear_task(&self, task_id: &str) -> Result<(), BayesApplicationError> {
-        let result = {
-            let mut state = self.lock_state()?;
-            let task = state
-                .tasks
-                .get(task_id)
-                .ok_or(BayesApplicationError::TaskNotFound)?;
-            if matches!(
-                task.status,
-                TaskStatus::Queued | TaskStatus::Running | TaskStatus::Cancelling
-            ) {
-                return Err(BayesApplicationError::TaskActive);
-            }
-            state.tasks.remove(task_id);
-            state.worker_handles.remove(task_id);
-            state.worker_sources.remove(task_id);
-            state.results.remove(task_id)
-        };
-        if let Some(result) = result.as_ref() {
-            remove_result_artifacts(result);
-        }
-        Ok(())
-    }
-
     pub fn export_artifact_csv(
         &self,
         task_id: &str,
@@ -1471,7 +1447,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_task_deletes_only_materialized_worker_artifacts() {
+    fn result_cleanup_deletes_only_materialized_worker_artifacts() {
         let test_root = TemporaryAppRoot::new("bayes-artifact-ownership");
         let owned_directory = test_root.path().join("bayes-results").join("task-owned");
         fs::create_dir_all(&owned_directory).expect("create owned artifact directory");
@@ -1503,27 +1479,12 @@ mod tests {
             }
         }))
         .expect("valid result projection");
-        let service = test_service(
-            test_root.path(),
-            Arc::new(Mutex::new(0)),
-            TestWorkerOutcome::Success,
-        );
-        {
-            let mut state = service.inner.lock().expect("service state lock");
-            state
-                .tasks
-                .insert(task_id.clone(), completed_task(task_id.clone()));
-            state.results.insert(
-                task_id.clone(),
-                StoredInferenceResult {
-                    result,
-                    owned_artifacts: vec![owned_artifact.clone()],
-                    owned_artifact_directory: Some(owned_directory.clone()),
-                },
-            );
-        }
-
-        service.clear_task(&task_id).expect("clear task");
+        let stored = StoredInferenceResult {
+            result,
+            owned_artifacts: vec![owned_artifact.clone()],
+            owned_artifact_directory: Some(owned_directory.clone()),
+        };
+        super::remove_result_artifacts(&stored);
 
         assert!(!owned_artifact.exists());
         assert!(!owned_directory.exists());

@@ -45,6 +45,8 @@ pnpm plugin:julia:package
 
 项目数据通过有界 Arrow 文件快照传入插件，不穿过网页。任务使用 operation ID 去重，关闭页面不终止计算；取消意图不会被迟到状态覆盖。进程异常后的未知结果不会自动重试。结果以 JSON、CSV 摘要及原始 artifacts 提交到项目 `extension-results/`，包含来源和内容哈希，禁用/卸载不删除已有结果。
 
+任务历史清理由宿主账本提供。原生 Bayes 服务在失败或取消后的产物清理中，只删除自身记录为当前任务所有的路径；结果清单中的外部路径不授予删除权限。
+
 插件与宿主统一使用 Arrow 数据边界，workspace 不再依赖 Polars。输入保留跨批次的行对齐、类别标签和缺失值；
 Julia worker 分批写出 Float64/Utf8 交换文件，交换表模式与 Julia 模型不变。
 插件直接使用 Arrow 读写交换文件，写入时显式使用 8 字节对齐，兼容 Julia Arrow 对首条消息位置的读取要求。
