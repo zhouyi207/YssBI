@@ -1,5 +1,6 @@
 //! Scientific node adapters, grouped by statistical domain.
 mod causal;
+mod classical;
 pub(super) mod common;
 mod density;
 mod descriptive;
@@ -23,6 +24,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     diagnostics::register(builder);
     density::register(builder);
     descriptive::register(builder);
+    classical::register(builder);
 }
 
 pub(super) fn install(
