@@ -21,6 +21,7 @@
 - [ ] 按 [SCI](src-tauri/crates/yss-sci/README.md) 与 [Linalg](src-tauri/crates/yss-sci-linalg/README.md) 当前契约继续核对其余模型的秩不足策略、模型参数与报告，并评估 SVD 重复计算。
 - [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`，`yss-application::ipc` 也有既有诊断。数值循环/模型参数重构需结合 SCI golden tests；传输参数和 wire 枚举须保持 IPC 契约，不能为消除 lint 随意改协议。
 - [ ] 评估前端既有的 14 条 Oxlint 警告；涉及遍历集合副本和测试 observer 的条目应先确认快照/回调语义，再决定简化或注明必要原因。
+- [ ] immer, zod, zustand, json patch 前端可以充分利用这些库来实现优化
 
 ## Routed roadmaps
 
@@ -29,13 +30,3 @@
 - [v1.0](docs/roadmap/v1_0.md)
 - [JSON Driver](docs/roadmap/jsonDriver.md)
 - [motion](docs/roadmap/motion.md)
-
-immer, zod, zustand, json patch
-
-FlexLayout 我认为还有好多功能没有用上，请分析目前项目还有哪些是可以让 Flexlayout 来管理的，无论是已实现的还是未实现的都列出来
-
- 已找到几个具体候选：设置、节点文档、架构查看器，以及 ADF 结果详情抽屉，都可以评估改成可停靠面板。库的悬浮
-  边栏、标签固定、彩色分组、布局撤销也尚未接入。不过，浮窗和分组还被当前布局校验明确拒绝，启用它们需要同时调
-  整恢复、关闭和面板查询逻辑
-
- ADF 结果详情抽屉 这个是什么鸟东东西
