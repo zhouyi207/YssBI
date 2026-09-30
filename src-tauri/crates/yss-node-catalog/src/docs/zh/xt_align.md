@@ -1,6 +1,6 @@
 # 面板对齐
 
-连接 DataFrame，选择 entity_column 和 time_column。时间列须为 Int64、UInt64（不超过 i64::MAX）或 Date32，键不允许为空，实体与时间组合必须唯一。
+连接 DataFrame，选择 entity_column 和 time_column。时间列须为 Int64、UInt64（不超过 i64::MAX）、可无损表示为 Int64 的整数型 Float64 或 Date32，键不允许为空，实体与时间组合必须唯一。
 
 全部已观测时间的有序并集构成共享序号网格。interval 是该网格的位置步长，不是日历时长。每个实体只在自身最早与最晚观测位置之间补齐；所有实体均未观测的日期不会被引入。偏离指定网格的观测会报错。
 

@@ -1,9 +1,5 @@
-# Scatter
+# Scatter Plot
 
-Scatter plot from **X** and **Y** `DataSeries`; pairs rows and skips null points.
+Connect aligned, equally sized Numeric X and Y series. Preserves input row order; missing and nonfinite values are rejected. Draws at most 2048 systematically sampled points, preserving endpoints and reporting sampling.
 
-**X** may be numeric or **Date**; **Y** must be plottable as numeric.
-
-## Usage
-
-Running the graph opens the **Plot** window; **Date** axes use date formatting. Requires at least one valid $(x,y)$ pair.
+Open the Result output in a workbench result panel or separate Plot window.

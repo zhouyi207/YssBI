@@ -1,7 +1,7 @@
 # yss-sci-runtime
 
 > Status: Current
-> Scope: 同步科学计算入口、Arrow 输入准备与 SCI 调用边界
+> Scope: 同步科学计算入口、中立数值输入与 SCI 调用边界
 > Canonical owners: 本 crate 源码拥有适配与入口；数值算法和线性代数由对应 SCI crates 拥有
 > Update when: 计算入口、输入输出契约或调用边界改变时
 
@@ -11,11 +11,10 @@ and `yss-application::ipc::commands`.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
 faer or `yss-sci-linalg` dependency and does not construct numerical matrices or own
-estimators. Arrow remains the tabular exchange representation; SCI converts
-numeric inputs into Linalg matrices and returns computed results.
-
-Time alignment consumes Arrow `Int64`, `UInt64` (within `i64::MAX`) and `Date32` arrays directly. Alignment and
-panel preparation share the checked numeric-grid helpers in `preprocessing::time_series::align`.
+estimators. SCI converts numeric inputs into Linalg matrices and returns computed results.
+Tabular transformations and time/panel alignment use native relation plans in
+`yss-database-engine`, requested by [Node Kernel](../yss-node-kernel/README.md).
+Runtime receives prepared neutral inputs and has no Arrow dependency.
 
 `regression::linear::linear_regression` and `time_series::acf_pacf` accept neutral requests and `ScientificExecutionControl` from
 `yss-sci-contract`. Fit and Summary kernels forward the execution cancellation and deadline;
@@ -37,28 +36,49 @@ these checks do not promise cooperative interruption of a running matrix decompo
 
 ## Capability modules
 
+`visualization` exposes controlled, stateless plot-data computations over neutral
+slices and model facts. Algorithms stay in SCI, tabular preparation in Node Kernel,
+and rendering in D3. It does not create or retrieve results.
+
 Domain names follow [SCI's category mapping](../yss-sci/README.md#domain-organization).
 Entry points and method-specific report records live in their owning domains.
 
-| Module                 | Responsibility                                                                  |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| `regression`           | Regression-family dispatch and result serialization                             |
-| `regression::linear`   | Controlled OLS/WLS/GLS and configurable Prais computation, linear model records |
-| `regression::discrete` | Configurable Logit/Probit fits and prediction from existing coefficients        |
-| `regression::report`   | Report labels, fields and serialization                                         |
-| `hypothesis`           | Neutral hypothesis and margins `at()` entry points into SCI                     |
-| `time_series`          | ACF/PACF, ADF, VAR and VEC entry points                                         |
-| `diagnostics`          | Residual/model and serial-correlation tests, neutral diagnostic records         |
-| `panel`                | Panel fitting and selected report projections                                   |
-| `causal::iv`           | IV fitting, selected diagnostics and report projections                         |
-| `causal::did`          | TWFE DID fitting and randomization inference                                    |
-| `preprocessing`        | Arrow panel/time alignment and tabular transformations                          |
-| `density`              | Density computation entry point                                                 |
-| `descriptive`          | Gini, Dagum decomposition and Theil T entry points                              |
-| `distribution`         | Probability distribution sampling entry point                                   |
+| Module                 | Responsibility                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| `regression`           | Regression-family dispatch and result serialization                                                     |
+| `regression::linear`   | Controlled OLS/WLS/GLS and configurable Prais computation, linear model records                         |
+| `regression::discrete` | Configurable Logit/Probit fits and prediction from existing coefficients                                |
+| `regression::models`   | Stateless exports of controlled robust, penalized, GLM/likelihood, nonlinear and model-building entries |
+| `regression::report`   | Report labels, fields and serialization                                                                 |
+| `hypothesis`           | Neutral hypothesis and margins `at()` entry points into SCI                                             |
+| `anova`                | Controlled ANOVA/ANCOVA, MANOVA and repeated-measures entry points                                      |
+| `association`          | Correlation, partial/rank correlation and inter-rater agreement entry points                            |
+| `multivariate`         | Controlled multivariate analyses with separate scores and summaries                                     |
+| `time_series`          | ACF/PACF, ADF, VAR and VEC entry points                                                                 |
+| `diagnostics`          | Residual/model and serial-correlation tests, neutral diagnostic records                                 |
+| `panel`                | Panel fitting and selected report projections                                                           |
+| `causal::iv`           | IV fitting, selected diagnostics and report projections                                                 |
+| `causal::did`          | TWFE DID fitting and randomization inference                                                            |
+| `descriptive`          | Gini, Dagum decomposition and Theil T entry points                                                      |
+| `distribution`         | Probability distribution sampling entry point                                                           |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
 entry points call the corresponding SCI owner; report encoding stays here.
+
+`regression::models` exposes SCI's neutral functions directly. It adds no estimator,
+options mirror or report model; node adapters supply aligned columns, budgets,
+category coding and label restoration. All additional regression analyses return
+the shared structured contracts for the existing result inspection flow.
+
+`multivariate` exposes controlled PCA, principal-axis factors, canonical correlation,
+correspondence, LDA/QDA, RDA and classical MDS entry points and their neutral summaries
+and separate row-major scores. It neither rebuilds numerical models nor introduces
+another result hierarchy; Kernel owns exact labels and coordinate-table conversion.
+
+`anova::{anova, manova, repeated_measures}` exposes SCI's controlled neutral
+functions and shared `yss-sci-contract::anova` reports directly. Runtime does not
+construct designs, refit models or duplicate ANOVA inference. Node adapters own
+tabular alignment, budgets and original factor-label restoration.
 Fit contracts come from `yss-sci-contract`; Runtime does not maintain a second
 hierarchy of regression, panel or diagnostic result types.
 
@@ -66,6 +86,11 @@ hierarchy of regression, panel or diagnostic result types.
 control to SCI and return its shared descriptive contracts. They do not recalculate
 statistics or introduce another report model; category labels are restored by the
 node adapter. Theil retains its form and observation-count projection here.
+
+`association` forwards neutral slices, options and execution control to SCI for
+Pearson/partial/Spearman/Kendall, Kappa, ICC, Bland–Altman, Kendall W, Ridit and rwg.
+It returns the shared contracts directly; node adapters own ordinal/category
+interpretation and label restoration, while Results owns storage and rendering.
 
 ## Linear regression data flow
 
@@ -100,18 +125,8 @@ fitted model without refitting it, and fits do not cache full reports.
 `causal::did::randomization_test` accepts observed data and execution control, fits the
 observed TWFE specification once and checks cancellation between permutations.
 
-Tabular preparation accepts Arrow arrays and `RecordBatch` values. `align_batches` checks
-retained-input and estimated output memory before concatenating or expanding the grid.
-Time alignment preserves
-Int64/UInt64/Date32 and column metadata, fills gaps with nulls, and checks duplicate/null times and
-the bounded output size before allocating a complete grid. Lag, difference, percentage change,
-and rolling means retain their numeric/null policies. Off-grid observations are rejected.
-Panel alignment uses positions in the shared sorted observed-time grid, filling only each
-entity's own start-to-end range; it does not generate unobserved calendar dates or a full
-entity-time Cartesian product. Arrow take preserves all original column types, order and
-metadata. Repeated entity-time keys fail. Panel differences retain their existing numerical
-and gap policies through `panel_diff`.
-These routines prepare already admitted inputs and do not own relational plans or project data.
+Kernel density plot preparation uses `visualization::kde`, which passes the caller's
+execution control to SCI's density computation.
 
 The crate does not own project/database state, graph scheduling, result storage,
 Tauri commands, frontend state, Julia processes or Bayesian worker lifecycle.
@@ -135,6 +150,6 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 
 [`yss-sci-linalg`](../yss-sci-linalg/README.md) 拥有不透明的 `Mat`、`Col`、行与借用视图，以及矩阵运算、分解检查、稳定错误类型和秩阈值。faer 仅是该 crate 的实现依赖，对外不重导出原生类型。SCI 只通过 Linalg 使用矩阵；runtime 只调用 SCI，不依赖 Linalg 或 faer。中性契约使用业务结构和普通向量，Arrow 负责表格交换；输入与报告按逻辑行列转换，不依赖矩阵物理存储顺序。
 
-[`yss-sci`](../yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel、causal、diagnostics 等领域组织入口；`preprocessing` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。线性回归报告由 runtime 映射 OLS/WLS/GLS 拟合结果，预测值和残差使用模型已计算的事实。`regression::linear::linear_regression`、`time_series::acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
+[`yss-sci`](../yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel、causal、diagnostics 等领域组织入口；表格准备由 Node Kernel 与数据库引擎承担，runtime 与核心算法均不依赖 Arrow 或 Polars。线性回归报告由 runtime 映射 OLS/WLS/GLS 拟合结果，预测值和残差使用模型已计算的事实。`regression::linear::linear_regression`、`time_series::acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
 
 SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随机化推断和核密度计算。假设检验也归 SCI：复用 `yss-math-expr` 解析，完成约束线性化、参数列序、矩阵构造与 t/Wald 分派；Application 保留结果身份和项目状态检查。Julia 插件不依赖任何 SCI crate，输入值、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。

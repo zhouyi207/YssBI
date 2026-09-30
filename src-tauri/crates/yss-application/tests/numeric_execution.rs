@@ -1,4 +1,10 @@
 use std::collections::BTreeMap;
+#[path = "numeric_execution/regression_models.rs"]
+mod regression_models;
+#[path = "numeric_execution/transforms.rs"]
+mod transforms;
+#[path = "numeric_execution/visualization.rs"]
+mod visualization;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 use yss_data_contract::TabularScalar;
@@ -17,6 +23,275 @@ use yss_graph_execution::state::{
 };
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use yss_node_kernel::RuntimeValue;
+
+#[test]
+fn anova_nodes_reject_independent_relation_domains_and_mixed_materialized_columns() {
+    use arrow::{
+        array::Float64Array,
+        datatypes::{DataType, Field, Schema},
+        record_batch::RecordBatch,
+    };
+    use yss_data_contract::ValueType;
+    use yss_node_kernel::{
+        KernelControl, KernelError, KernelId, KernelInvocation, KernelOutputSpec, KernelRegistry,
+    };
+    let relations: Arc<dyn yss_relational_contract::RelationFactory> =
+        yss_database_runtime::dataset_query_engine().unwrap();
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    let outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let mut inv = KernelInvocation {
+        relations: &relations,
+        inputs: &[],
+        input_keys: &["response", "factors"],
+        parameters: Default::default(),
+        outputs: &outputs,
+        control: &control,
+    };
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new("y", DataType::Float64, false)])),
+        vec![Arc::new(Float64Array::from(vec![1., 2., 3., 2., 4., 6.]))],
+    )
+    .unwrap();
+    let left = relations
+        .clone()
+        .materialize(batch.clone(), &inv.relation_control())
+        .unwrap();
+    let right = relations
+        .clone()
+        .materialize(batch, &inv.relation_control())
+        .unwrap();
+    let unrelated = [
+        RuntimeValue::Series(left.select_series("y").unwrap()),
+        RuntimeValue::Series(right.select_series("y").unwrap()),
+    ];
+    let mixed = [
+        unrelated[0].clone(),
+        RuntimeValue::List(
+            [0., 0., 0., 1., 1., 1.]
+                .into_iter()
+                .map(|v| RuntimeValue::float64(v).unwrap())
+                .collect(),
+        ),
+    ];
+    let kernels = KernelRegistry::default();
+    let id = KernelId::new("yssbi.statistics.anova.one_way".into()).unwrap();
+    for inputs in [&unrelated[..], &mixed[..]] {
+        inv.inputs = inputs;
+        assert!(matches!(
+            kernels.execute(&id, &inv),
+            Err(KernelError::UnalignedSeries)
+        ));
+    }
+}
+
+#[test]
+fn association_nodes_execute_aligned_data_and_switch_conditional_parameters() {
+    use yss_data_contract::{DataValue, ValueType};
+    use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
+    yss_application::session::NodeComponents::builtins().unwrap();
+    let registry = yss_node_catalog::build_builtin_node_system()
+        .unwrap()
+        .registry;
+    let mut document = GraphDocument::default();
+    let source = NodeId::new();
+    document.nodes.insert(
+        source,
+        DocumentNode {
+            id: source,
+            node_type: "yssbi.constant.get".parse().unwrap(),
+            position: NodePosition { x: 0., y: 0. },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    let values = serde_json::json!({
+        "x":[1,2,3,4,5,6,7,8,9,10,11,12], "y":[5,2,4,4,5,7,6,10,9,8,11,12],
+        "c1":[0,1,2,0,1,2,0,1,2,0,1,2], "c2":[2,5,1,4,3,7,2,5,6,1,4,3],
+        "r3":[2,3,4,5,7,7,8,8,10,10,12,11], "i1":[1,2,3,4,5,2,3,4,3,4,3,2], "i2":[1,1,3,4,5,2,2,3,4,3,2,3]
+    });
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataFrame,
+        DataValue::String(values.to_string().into()),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    let mut selectors = BTreeMap::new();
+    for column in ["x", "y", "c1", "c2", "r3", "i1", "i2"] {
+        let id = NodeId::new();
+        selectors.insert(column, id);
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: "yssbi.dataframe.series.select".parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: serde_json::from_value(serde_json::json!({"column":column})).unwrap(),
+                user_label: None,
+            },
+        );
+        let connection = ConnectionId::new();
+        document.connections.insert(
+            connection,
+            DocumentConnection {
+                id: connection,
+                output: PortAddress::declared(source, "value".parse().unwrap()),
+                input: PortAddress::declared(id, "dataframe".parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    let mut nodes = BTreeMap::new();
+    for suffix in [
+        "association.pearson",
+        "association.partial",
+        "association.spearman",
+        "association.kendall",
+        "test.kappa",
+        "association.icc",
+        "association.bland_altman",
+        "test.kendall_w",
+        "association.ridit",
+        "association.rwg",
+    ] {
+        let id = NodeId::new();
+        let kind = format!("yssbi.statistics.{suffix}");
+        assert!(registry.protocol(&kind.parse().unwrap()).is_some());
+        nodes.insert(suffix, id);
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        let fixed: Vec<(&str, &str)> = if suffix.ends_with("ridit") {
+            vec![("sample", "i1"), ("reference", "i2")]
+        } else if suffix.ends_with("kappa")
+            || suffix.ends_with("icc")
+            || suffix.ends_with("kendall_w")
+            || suffix.ends_with("rwg")
+        {
+            vec![]
+        } else {
+            vec![("x", "x"), ("y", "y")]
+        };
+        for (input, column) in fixed {
+            let connection = ConnectionId::new();
+            document.connections.insert(
+                connection,
+                DocumentConnection {
+                    id: connection,
+                    output: PortAddress::declared(selectors[column], "series".parse().unwrap()),
+                    input: PortAddress::declared(id, input.parse().unwrap()),
+                    order: None,
+                },
+            );
+        }
+        let repeated: Vec<(&str, Vec<&str>)> = if suffix.ends_with("partial") {
+            vec![("controls", vec!["c1", "c2"])]
+        } else if suffix.ends_with("kappa") {
+            vec![("ratings", vec!["x", "y"])]
+        } else if suffix.ends_with("icc") || suffix.ends_with("kendall_w") {
+            vec![("ratings", vec!["x", "y", "r3"])]
+        } else if suffix.ends_with("rwg") {
+            vec![("items", vec!["i1", "i2"])]
+        } else {
+            vec![]
+        };
+        for (input, columns) in repeated {
+            for (index, column) in columns.into_iter().enumerate() {
+                let address =
+                    PortAddress::instance(id, input.parse().unwrap(), PortInstanceId::new());
+                document.port_bindings.insert(
+                    address.clone(),
+                    DynamicPortBinding::UserCreated {
+                        order: OrderKey::new(index.to_string()),
+                    },
+                );
+                let connection = ConnectionId::new();
+                document.connections.insert(
+                    connection,
+                    DocumentConnection {
+                        id: connection,
+                        output: PortAddress::declared(selectors[column], "series".parse().unwrap()),
+                        input: address,
+                        order: None,
+                    },
+                );
+            }
+        }
+    }
+    for suffix in nodes.keys() {
+        let result = execute(&document, &format!("yssbi.statistics.{suffix}")).unwrap();
+        assert!(matches!(result, RuntimeValue::Record(_)), "{suffix}");
+    }
+    let kappa = nodes["test.kappa"];
+    document.nodes.get_mut(&kappa).unwrap().parameters =
+        serde_json::from_value(serde_json::json!({"kappa_method":"fleiss"})).unwrap();
+    let result = execute(&document, "yssbi.statistics.test.kappa").unwrap();
+    let RuntimeValue::Record(result) = result else {
+        panic!("Fleiss result")
+    };
+    assert_eq!(
+        result["method"],
+        RuntimeValue::Scalar(TabularScalar::String("fleiss_kappa".into()))
+    );
+    let rwg = nodes["association.rwg"];
+    document.nodes.get_mut(&rwg).unwrap().parameters = serde_json::from_value(
+        serde_json::json!({"null_distribution":"specified_variance","expected_variance":3}),
+    )
+    .unwrap();
+    let result = execute(&document, "yssbi.statistics.association.rwg").unwrap();
+    let RuntimeValue::Record(result) = result else {
+        panic!("rwg result")
+    };
+    assert_eq!(
+        result["null_distribution"],
+        RuntimeValue::Scalar(TabularScalar::String("specified_variance".into()))
+    );
+    let mut unaligned = document.clone();
+    let foreign = NodeId::new();
+    unaligned.nodes.insert(
+        foreign,
+        DocumentNode {
+            id: foreign,
+            ..document.nodes[&source].clone()
+        },
+    );
+    set_constant(
+        &mut unaligned,
+        foreign,
+        ValueType::DataFrame,
+        DataValue::String(values.to_string().into()),
+    );
+    for constant in unaligned.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    for connection in unaligned.connections.values_mut() {
+        if connection.input == PortAddress::declared(selectors["y"], "dataframe".parse().unwrap()) {
+            connection.output = PortAddress::declared(foreign, "value".parse().unwrap());
+        }
+    }
+    assert_eq!(
+        execute(&unaligned, "yssbi.statistics.association.pearson")
+            .unwrap_err()
+            .failure()
+            .code,
+        RunFailureCode::UnalignedSeries
+    );
+}
 
 #[test]
 fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
@@ -660,8 +935,9 @@ fn series_catalog_nodes_execute_through_graph_planning_and_standardization_round
         );
     }
     let output = execute(&document, "yssbi.dataframe.series.inverse_standardize").unwrap();
-    let RuntimeValue::List(values) = output else {
-        panic!("expected materialized roundtrip");
+    assert!(matches!(output, RuntimeValue::Series(_)));
+    let RuntimeValue::List(values) = observed_values(output) else {
+        panic!("expected a series result");
     };
     for (i, value) in values.iter().enumerate() {
         let RuntimeValue::Scalar(TabularScalar::Float64(value)) = value else {
@@ -765,15 +1041,39 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
                 relations: &factory,
                 inputs,
                 input_keys: &keys,
-                parameters: parameters
-                    .into_iter()
-                    .map(|(key, value)| {
-                        (
-                            yss_node_kernel::KernelParameterKey::new(key.into()).unwrap(),
-                            Cow::Owned(value),
-                        )
-                    })
-                    .collect(),
+                parameters: {
+                    let mut effective = parameters
+                        .into_iter()
+                        .map(|(key, value)| {
+                            (
+                                yss_node_kernel::KernelParameterKey::new(key.into()).unwrap(),
+                                Cow::Owned(value),
+                            )
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    if !suffix.starts_with("logic.") {
+                        let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+                        let protocol = builtin
+                            .registry
+                            .protocol(&format!("yssbi.dataframe.{suffix}").parse().unwrap())
+                            .unwrap();
+                        for parameter in protocol.parameters.iter() {
+                            if let Some(default) = &parameter.default_value {
+                                effective
+                                    .entry(
+                                        yss_node_kernel::KernelParameterKey::new(
+                                            parameter.key.as_str().into(),
+                                        )
+                                        .unwrap(),
+                                    )
+                                    .or_insert_with(|| {
+                                        Cow::Owned(RuntimeValue::try_from(&default.value).unwrap())
+                                    });
+                            }
+                        }
+                    }
+                    effective
+                },
                 outputs: &output_types
                     .into_iter()
                     .map(|data_type| KernelOutputSpec {
@@ -827,6 +1127,29 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             number(expected)
         );
     }
+    let wide = RuntimeValue::List(vec![number(i64::MAX), number(i64::MAX), number(-1)].into());
+    assert_eq!(
+        run(
+            "series.sum",
+            &[wide],
+            vec![],
+            vec![V::Scalar(S::Numeric)],
+            &control
+        )
+        .unwrap()[0],
+        RuntimeValue::Scalar(TabularScalar::Unsigned(u64::MAX - 2))
+    );
+    let overflow = RuntimeValue::List(vec![number(i64::MIN), number(-1)].into());
+    assert!(matches!(
+        run(
+            "series.sum",
+            &[overflow],
+            vec![],
+            vec![V::Scalar(S::Numeric)],
+            &control
+        ),
+        Err(KernelError::NonFiniteResult)
+    ));
     for (kind, param, size, expected) in [
         (
             "timeseries.difference",
@@ -918,10 +1241,20 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         &control,
     )
     .unwrap();
-    assert_eq!(
-        dummy[0].metadata().unwrap().dummy_base_level.as_deref(),
-        Some("a")
-    );
+    let RuntimeValue::Series(dummy_series) = &dummy[0] else {
+        panic!("dummy information must remain lazy");
+    };
+    let dummy_metadata = yss_data_contract::ConversionMetadata {
+        semantic: yss_database_arrow::column_semantic(dummy_series.plan().field()).unwrap(),
+        temporal: yss_database_arrow::temporal_metadata(dummy_series.plan().field().data_type()),
+        dummy_base_level: dummy_series
+            .plan()
+            .field()
+            .metadata()
+            .get("yssbi.dummy_base_level")
+            .cloned(),
+    };
+    assert_eq!(dummy_metadata.dummy_base_level.as_deref(), Some("a"));
     assert_eq!(
         as_json(&dummy[0]),
         serde_json::json!(["a", "b", "a", "a", "b"])
@@ -929,7 +1262,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
     let (field, _) = yss_database_arrow::materialized_column(
         "entity",
         &[TabularScalar::String("a".into())],
-        dummy[0].metadata(),
+        Some(&dummy_metadata),
     )
     .unwrap();
     assert_eq!(
@@ -1149,6 +1482,35 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
     ));
 }
 
+/// Tests consume lazy results at the same boundary as Results, while checking their values.
+fn observed_values(value: RuntimeValue) -> RuntimeValue {
+    let RuntimeValue::Series(series) = &value else {
+        return value.unannotated().clone();
+    };
+    let mut values = Vec::new();
+    series
+        .as_relation()
+        .unwrap()
+        .visit_batches(
+            &yss_relational_contract::RelationControl {
+                cancellation: Arc::new(AtomicBool::new(false)),
+                deadline: Instant::now() + Duration::from_secs(10),
+                max_input_bytes: 16 * 1024 * 1024,
+            },
+            &mut |batch| {
+                values.extend(
+                    yss_database_arrow::materialized_values(batch.column(0).as_ref())
+                        .map_err(|_| yss_relational_contract::RelationError::InvalidInput)?
+                        .into_iter()
+                        .map(RuntimeValue::Scalar),
+                );
+                Ok(())
+            },
+        )
+        .unwrap();
+    RuntimeValue::List(values.into())
+}
+
 fn execute(
     document: &GraphDocument,
     output_node_type: &str,
@@ -1301,7 +1663,7 @@ fn equality_modes_use_catalog_defaults_and_validate_tolerances() {
         yss_graph_document::normalize_constant_value(value).unwrap();
     }
     assert_eq!(
-        execute(&document, "yssbi.logic.equal").unwrap(),
+        observed_values(execute(&document, "yssbi.logic.equal").unwrap()),
         RuntimeValue::List(Arc::from([
             RuntimeValue::Scalar(TabularScalar::Bool(true)),
             RuntimeValue::Scalar(TabularScalar::Bool(false)),
@@ -1312,7 +1674,9 @@ fn equality_modes_use_catalog_defaults_and_validate_tolerances() {
         serde_json::json!({"mode":"tolerance","absolute_tolerance":0,"relative_tolerance":0}),
     )
     .unwrap();
-    let RuntimeValue::List(values) = execute(&document, "yssbi.logic.equal").unwrap() else {
+    let RuntimeValue::List(values) =
+        observed_values(execute(&document, "yssbi.logic.equal").unwrap())
+    else {
         panic!()
     };
     assert_eq!(values[0], RuntimeValue::Scalar(TabularScalar::Bool(false)));
@@ -1486,15 +1850,17 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
     ] {
         let numeric = ValueType::Scalar(yss_data_contract::SemanticType::Numeric);
         assert_eq!(
-            evaluate(
-                operator,
-                numeric.clone(),
-                values,
-                numeric,
-                DataValue::Integer(scalar),
-                scalar_left
-            )
-            .unwrap(),
+            observed_values(
+                evaluate(
+                    operator,
+                    numeric.clone(),
+                    values,
+                    numeric,
+                    DataValue::Integer(scalar),
+                    scalar_left
+                )
+                .unwrap()
+            ),
             RuntimeValue::List(
                 expected
                     .map(|value| RuntimeValue::float64(value).unwrap())
@@ -1503,15 +1869,17 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
         );
     }
     assert_eq!(
-        evaluate(
-            "multiply",
-            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            r#"{"value":[0.2,0.5,1.0]}"#,
-            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Integer(123),
-            false
-        )
-        .unwrap(),
+        observed_values(
+            evaluate(
+                "multiply",
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                r#"{"value":[0.2,0.5,1.0]}"#,
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                DataValue::Integer(123),
+                false
+            )
+            .unwrap()
+        ),
         RuntimeValue::List(
             [24.6, 61.5, 123.]
                 .map(|value| RuntimeValue::float64(value).unwrap())
@@ -1519,17 +1887,19 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
         )
     );
     assert_eq!(
-        evaluate(
-            "multiply",
-            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            r#"{"value":[1,2,3]}"#,
-            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Decimal(
-                yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal")
-            ),
-            false
-        )
-        .unwrap(),
+        observed_values(
+            evaluate(
+                "multiply",
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                r#"{"value":[1,2,3]}"#,
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                DataValue::Decimal(
+                    yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal")
+                ),
+                false
+            )
+            .unwrap()
+        ),
         RuntimeValue::List(
             [0.5, 1., 1.5]
                 .map(|value| RuntimeValue::float64(value).unwrap())
@@ -1537,17 +1907,19 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
         )
     );
     assert_eq!(
-        evaluate(
-            "subtract",
-            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            r#"{"value":[1,2,3]}"#,
-            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Decimal(
-                yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal")
-            ),
-            true
-        )
-        .unwrap(),
+        observed_values(
+            evaluate(
+                "subtract",
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                r#"{"value":[1,2,3]}"#,
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                DataValue::Decimal(
+                    yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal")
+                ),
+                true
+            )
+            .unwrap()
+        ),
         RuntimeValue::List(
             [-0.5, -1.5, -2.5]
                 .map(|value| RuntimeValue::float64(value).unwrap())
@@ -1675,7 +2047,7 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
     }
 
     assert_eq!(
-        execute(&document, "yssbi.logic.not").unwrap(),
+        observed_values(execute(&document, "yssbi.logic.not").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Scalar(TabularScalar::Bool(true)),
             RuntimeValue::Scalar(TabularScalar::Bool(false)),
@@ -1685,7 +2057,7 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
     );
     document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.or".parse().unwrap();
     assert_eq!(
-        execute(&document, "yssbi.logic.not").unwrap(),
+        observed_values(execute(&document, "yssbi.logic.not").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Scalar(TabularScalar::Bool(false)),
             RuntimeValue::Scalar(TabularScalar::Bool(false)),
@@ -1701,7 +2073,7 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
         .unwrap();
     edge.output = PortAddress::declared(flag, "value".parse().unwrap());
     assert_eq!(
-        execute(&document, "yssbi.logic.not").unwrap(),
+        observed_values(execute(&document, "yssbi.logic.not").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Scalar(TabularScalar::Bool(true)),
             RuntimeValue::Scalar(TabularScalar::Bool(true)),
@@ -1831,7 +2203,7 @@ fn unary_arithmetic_nodes_execute_scalar_and_series_graphs() {
             yss_graph_document::normalize_constant_value(value).unwrap();
         }
         assert_eq!(
-            execute(&document, &node_type).unwrap(),
+            observed_values(execute(&document, &node_type).unwrap()),
             RuntimeValue::List(
                 expected
                     .map(|value| RuntimeValue::float64(value).unwrap())
@@ -1890,7 +2262,7 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
         );
     }
     assert_eq!(
-        execute(&document, "yssbi.logic.equal").unwrap(),
+        observed_values(execute(&document, "yssbi.logic.equal").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Scalar(TabularScalar::Bool(false)),
             RuntimeValue::Scalar(TabularScalar::Bool(true)),
@@ -1906,7 +2278,7 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
         edge.input = PortAddress::declared(comparison, pin.parse().unwrap());
     }
     assert_eq!(
-        execute(&document, "yssbi.logic.equal").unwrap(),
+        observed_values(execute(&document, "yssbi.logic.equal").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Scalar(TabularScalar::Bool(false)),
             RuntimeValue::Scalar(TabularScalar::Bool(true)),
@@ -2037,7 +2409,7 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
         yss_graph_document::normalize_constant_value(constant).unwrap();
     }
     assert_eq!(
-        execute(&document, "yssbi.value.convert").unwrap(),
+        observed_values(execute(&document, "yssbi.value.convert").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::float64(1.).unwrap(),
             RuntimeValue::Scalar(TabularScalar::Null),
@@ -2105,7 +2477,7 @@ fn automatic_conversion_executes_the_downstream_target_without_rewriting_paramet
         yss_graph_document::normalize_constant_value(constant).unwrap();
     }
     assert_eq!(
-        execute(&document, "yssbi.numeric.divide").unwrap(),
+        observed_values(execute(&document, "yssbi.numeric.divide").unwrap()),
         RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::float64(6.).unwrap(),
             RuntimeValue::float64(2.).unwrap()
@@ -2239,7 +2611,11 @@ fn remaining_semantic_conversions_execute_automatically_and_keep_metadata_in_cha
                 yss_graph_document::normalize_constant_value(constant).unwrap();
             }
             assert_eq!(
-                execute(&document, "yssbi.logic.equal").unwrap(),
+                observed_values(
+                    execute(&document, "yssbi.logic.equal").unwrap_or_else(|error| panic!(
+                        "{expected_semantic:?}, {input}: {error:?}"
+                    ))
+                ),
                 RuntimeValue::List(std::sync::Arc::from([
                     RuntimeValue::Scalar(TabularScalar::Bool(true)),
                     RuntimeValue::Scalar(TabularScalar::Null)

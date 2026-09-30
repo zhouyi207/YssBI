@@ -12,12 +12,23 @@ pub enum ResultCategory {
 pub enum PlotDataKind {
     Scatter,
     Line,
-    Plot,
     Ecdf,
     Kde,
     Histogram,
     Correlation,
     Correlogram,
+    Boxplot,
+    Wordcloud,
+    Errorbar,
+    PpQq,
+    Roc,
+    Quadrant,
+    Pareto,
+    Combination,
+    Bubble,
+    Violin,
+    Heatmap,
+    Coefficient,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,7 +9,8 @@ Statistical models and numerical algorithms over `yss-sci-linalg` matrices, vect
 and numeric slices. Matrix arithmetic, checked factorizations and rank conventions
 use `yss-sci-linalg`; this crate does not depend on faer. Public computation contracts
 use `yss-sci-contract`. The crate has no Arrow, Polars or chrono dependency.
-Tabular input alignment and transformations belong to `yss-sci-runtime::preprocessing`.
+Tabular input alignment and transformations use `yss-database-engine` relation plans
+through [Node Kernel](../yss-node-kernel/README.md).
 
 ## Domain organization
 
@@ -18,18 +19,21 @@ The domains follow the [node catalog](../yss-node-catalog/README.md)'s main
 categories; a category gets a module when it has an implementation or contract.
 SCI does not depend on the catalog or use node IDs to select algorithms.
 
-| Node category / capability               | SCI module                                   | Responsibility                                                                |
-| ---------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
-| Regression                               | `regression::linear`, `regression::discrete` | OLS/WLS/GLS/Prais and Logit/Probit, including their numerical fit projections |
-| Panel models                             | `panel`                                      | Fixed/random effects, between and difference estimators, panel fit projection |
-| Econometric and causal analysis          | `causal::iv`, `causal::did`                  | 2SLS/LIML, TWFE DID and DID randomization inference                           |
-| Time series                              | `time_series`                                | ACF/PACF, ADF, VAR, VEC and cointegration rank                                |
-| Hypothesis tests                         | `hypothesis`                                 | Constraint parsing, linearization and t/Wald tests                            |
-| Model diagnostics                        | `diagnostics`                                | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation    |
-| Probability distributions                | `distribution`                               | Sampling                                                                      |
-| Descriptive statistics                   | `descriptive`                                | Empirical Gini, Dagum decomposition and Theil T                               |
-| Density estimation used by visualization | `density`                                    | Kernel-density numerical computation                                          |
-| Data preprocessing                       | `preprocessing`                              | Numerical standardization; Arrow preparation stays in Runtime                 |
+| Node category / capability               | SCI module                                                         | Responsibility                                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Regression                               | `regression::linear`, `regression::discrete`, `regression::models` | Linear/binary fits, robust/penalized/PLS, GLM and likelihood models, nonlinear designs and model-building analyses |
+| Panel models                             | `panel`                                                            | Fixed/random effects, between and difference estimators, panel fit projection                                      |
+| Econometric and causal analysis          | `causal::iv`, `causal::did`                                        | 2SLS/LIML, TWFE DID and DID randomization inference                                                                |
+| Time series                              | `time_series`                                                      | ACF/PACF, ADF, VAR, VEC and cointegration rank                                                                     |
+| Hypothesis tests                         | `hypothesis`                                                       | Constraint parsing, linearization and t/Wald tests                                                                 |
+| Analysis of variance                     | `anova`                                                            | Factorial ANOVA/ANCOVA, MANOVA and complete within-subject designs                                                 |
+| Correlation and agreement                | `association`                                                      | Paired/rank/partial correlation, Kappa, ICC, concordance, Ridit and rwg                                            |
+| Multivariate analysis                    | `multivariate`                                                     | PCA, principal-axis factors, CCA, correspondence, LDA/QDA, RDA and classical MDS                                   |
+| Model diagnostics                        | `diagnostics`                                                      | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation                                         |
+| Probability distributions                | `distribution`                                                     | Sampling                                                                                                           |
+| Descriptive statistics                   | `descriptive`                                                      | Empirical Gini, Dagum decomposition and Theil T                                                                    |
+| Density estimation used by visualization | `density`                                                          | Kernel-density numerical computation                                                                               |
+| Visualization plot data                  | `visualization`                                                    | Controlled distributions, paired points, category frequencies and matrix projections                               |
 
 Each method owns its fitting, inference and postestimation modules. Fit results
 retain model facts and coefficient inference; optional diagnostics and postestimation
@@ -88,6 +92,107 @@ matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `hypothesis::linear_test`.
 Project/result identity checks and report retrieval remain in Application.
 
+## Additional regression estimators
+
+`regression::models` owns controlled estimators over neutral numeric columns:
+Huber/Tukey M-estimation with MAD/H1 inference, Ridge/Lasso with an unpenalized
+intercept, PLS1, quantile IRLS with IID density covariance, curve families, bounded
+custom-formula nonlinear least squares, Deming with linear-time delete-one
+jackknife, and restricted cubic spline bases with an OLS analysis.
+
+GLM supports Gaussian identity/log, binomial logit/probit/cloglog and log-linked
+Poisson/Gamma/inverse Gaussian. Fractional response reuses the mean equation with
+HC0 score-sandwich inference. Likelihood fitting covers NB2, ZIP/ZINB, normal
+left/two-bound Tobit, constant-precision Beta, multinomial/ordered logit and
+stratified binary conditional logit. Firth solves the adjusted logistic score.
+Conditional normalizers use log-domain case-count dynamic programming and omit
+homogeneous strata; they do not identify absolute probabilities.
+
+Shared numerical preparation scales designs and restores coefficient/covariance
+units. Likelihood models use a controlled line-search optimizer and complete
+observed Hessians, including mixture cross-blocks. Nonlinear fitting uses the
+existing expression parser, damped Jacobian steps and active parameter bounds;
+boundary inference is unavailable. Computation failure or nonconvergence remains
+an error, not a successful placeholder fit. No coefficient p-values are invented
+for Ridge/Lasso/PLS. Iteration checks also cover observation scans and objective
+evaluations; decompositions and sorting are checked at their boundaries.
+
+Block-entry, stepwise AIC/BIC, single-variable/all-variable and grouped analyses
+reuse existing OLS. Single-threshold regression searches a bounded candidate grid
+and treats the selected threshold as fixed for conditional coefficient inference.
+The neutral structured results retain actual models, original predictor/row
+positions, selection history, category probabilities and method-specific facts.
+Fixtures provide reproducible SciPy/statsmodels coefficients and inference;
+separate kernel/graph checks cover labels, budgets, alignment and authoring defaults.
+
+## Correlation and agreement
+
+`association::correlation` scales and centers finite observations before computing
+correlations. Partial correlation residualizes against full-rank centered controls
+through checked Linalg factors; degenerate controls/residuals fail. Rank methods use
+average ranks and Kendall tau-b uses a Fenwick tree, including both marginal tie
+corrections. Exact inference enumerates position permutations for at most nine
+observations (including ties); larger samples use documented approximations.
+
+`association::agreement` owns weighted Cohen and Fleiss Kappa, six ICC definitions,
+Bland–Altman limits/intervals, tie-corrected W, and rwg with an explicit null variance.
+Kappa intervals use delta variance; ICC intervals use F distributions; Bland–Altman
+statistics use complete observations while display points are bounded. Negative
+estimates are retained where defined; nonidentifiable coefficients fail and
+unavailable inference uses `None`. `association::ridit` compares independent ordered
+samples and uses tie-corrected rank inference. Input scans and numerical loops check
+execution control; sorts and Linalg decompositions are checked at their boundaries.
+Reference fixtures identify their SciPy/statsmodels versions and cover coefficient,
+test and interval values separately from kernel metadata and graph alignment tests.
+
+## Multivariate analysis
+
+`multivariate` owns centered/scaled preparation, symmetric covariance spectra,
+principal-axis factor extraction and orthogonal varimax, whitened CCA, simple
+correspondence analysis, Gaussian LDA/QDA, multivariate least-squares RDA and
+classical metric MDS. It uses only checked Linalg matrices/factors and shared
+`yss-sci-contract::multivariate` options/results. Original means, scales, eigenvalues
+and inertia remain explicit; coordinate matrices are row-major independent outputs.
+
+PCA can use sample-SD standardization or original-unit covariance. Factor models
+require identification, positive-definite correlation and convergence; regression
+scores and KMO/Bartlett are distinct from a model-fit test. CCA keeps all roots for
+sequential Wilks/Bartlett inference even when fewer axes are retained. Exact perfect
+roots retain zero lambda with unavailable finite inference. CA accepts nonnegative
+weights and retains null inertia proportions for independent tables.
+
+LDA/QDA standardize training features, apply optional isotropic covariance shrinkage,
+and classify aligned optional new observations using training means/scales and
+empirical/equal priors. Training confusion is not cross-validation. RDA returns
+fitted-response scores, inertia/R-squared and optional reproducible whole-row
+permutation inference. MDS accepts observation Euclidean distances or validated
+square dissimilarities, reports negative inertia and uses positive embedding axes.
+
+Controlled loops check cancellation/deadlines, with checks around decompositions.
+Kernel owns complete workspace admission and tabular labels, not SCI. No graph,
+Arrow or backend-specific type crosses the neutral scientific result contract.
+
+## Analysis of variance
+
+`anova` owns sum-contrast categorical designs with additive centered ANCOVA
+covariates. Main-effect/full-factorial models support type I sequential, type II
+marginality and type III adjusted nested-model tests, sharing checked rank and
+Cholesky least squares from Linalg. Full designs must be identifiable with positive
+residual degrees of freedom; missing/nonfinite observations are rejected.
+
+MANOVA reuses those designs and residual SSCP matrices, whitens each hypothesis
+with residual Cholesky and calculates symmetric eigenvalues for Wilks, Pillai,
+Hotelling–Lawley and Roy statistics and their F approximations. Invalid small-sample
+approximation degrees use optional inference fields; singular response covariance
+is an input failure. SSCP arrays retain original response units and input order.
+
+Repeated measures require complete balanced within-subject factorial cells,
+using tensor products of orthonormal Helmert contrasts to separate each effect
+from its subject-interaction error. Greenhouse–Geisser epsilon is computed from
+each effect's contrast covariance and adjusts reference degrees without changing F.
+Input scans, term construction and computations check cancellation/deadlines;
+matrix decompositions are not cooperatively interrupted.
+
 ## Inequality measures
 
 `descriptive::gini` uses equal observation weights without a small-sample correction.
@@ -110,6 +215,23 @@ requires positive total weight and weighted income, and treats zero income as a
 zero contribution. Separate log-space normalization and compensated sums avoid
 overflow in population/income totals. Input scans and accumulation check execution
 control every 1024 rows. Group means capture between-group inequality only.
+
+## Visualization
+
+`visualization/` owns numerical plot data in `distribution`, `points`,
+`categorical` and `matrix`. Neutral records live in `yss-sci-contract::visualization`;
+Runtime forwards functions and execution control. KDE, Pearson correlation and
+ACF/PACF reuse their existing numerical owners. Node Kernel prepares tabular inputs;
+D3 owns pixels, axes, colors and word placement. SCI retains no graph or window state.
+
+Distribution summaries and ROC AUC use complete samples. Point displays are bounded
+at 2048, heatmaps at 128 rows and grouped displays at 64 columns; sampling metadata
+preserves original observation counts. Coefficient intervals consume fitted model
+facts and residual degrees of freedom without refitting.
+
+The `visualization` example emits actual SCI payloads for the frontend contract
+fixture and manual D3 previews. Box whiskers follow the [NIST convention](https://www.itl.nist.gov/div898/handbook/eda/section3/boxplot.htm);
+normal probability plots document their Hazen plotting positions in node help.
 
 ## ACF/PACF
 

@@ -6,9 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-arrow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
 yss-sci = { path = "../yss-sci" }
 yss-sci-contract = { path = "../yss-sci-contract" }

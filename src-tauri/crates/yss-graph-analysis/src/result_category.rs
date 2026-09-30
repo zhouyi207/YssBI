@@ -11,12 +11,23 @@ pub enum GraphResultCategory {
 pub enum GraphPlotDataKind {
     Scatter,
     Line,
-    Plot,
     Ecdf,
     Kde,
     Histogram,
     Correlation,
     Correlogram,
+    Boxplot,
+    Wordcloud,
+    Errorbar,
+    PpQq,
+    Roc,
+    Quadrant,
+    Pareto,
+    Combination,
+    Bubble,
+    Violin,
+    Heatmap,
+    Coefficient,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,9 +42,7 @@ pub(crate) fn result_category_for_output(
 ) -> GraphResultCategory {
     if port_key == "result" && node_type_id == "yssbi.statistics.linear.summary" {
         GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::LinearRegressionSummary)
-    } else if port_key == "result"
-        && (node_type_id.starts_with("yssbi.statistics.") || node_type_id == "yssbi.plot.kde.view")
-    {
+    } else if port_key == "result" && node_type_id.starts_with("yssbi.statistics.") {
         GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::Structured)
     } else {
         plot_category_for_output(node_type_id, port_key)
@@ -48,6 +57,19 @@ fn plot_category_for_output(node_type_id: &str, port_key: &str) -> GraphResultCa
         "yssbi.plot.scatter.view" => GraphPlotDataKind::Scatter,
         "yssbi.plot.line.view" => GraphPlotDataKind::Line,
         "yssbi.plot.ecdf.view" => GraphPlotDataKind::Ecdf,
+        "yssbi.plot.kde.view" => GraphPlotDataKind::Kde,
+        "yssbi.plot.boxplot.view" => GraphPlotDataKind::Boxplot,
+        "yssbi.plot.wordcloud.view" => GraphPlotDataKind::Wordcloud,
+        "yssbi.plot.errorbar.view" => GraphPlotDataKind::Errorbar,
+        "yssbi.plot.pp_qq.view" => GraphPlotDataKind::PpQq,
+        "yssbi.plot.roc.view" => GraphPlotDataKind::Roc,
+        "yssbi.plot.quadrant.view" => GraphPlotDataKind::Quadrant,
+        "yssbi.plot.pareto.view" => GraphPlotDataKind::Pareto,
+        "yssbi.plot.combination.view" => GraphPlotDataKind::Combination,
+        "yssbi.plot.bubble.view" => GraphPlotDataKind::Bubble,
+        "yssbi.plot.violin.view" => GraphPlotDataKind::Violin,
+        "yssbi.plot.heatmap.view" => GraphPlotDataKind::Heatmap,
+        "yssbi.plot.coefficient.view" => GraphPlotDataKind::Coefficient,
         "yssbi.plot.histogram.view" => GraphPlotDataKind::Histogram,
         "yssbi.plot.correlation.view" => GraphPlotDataKind::Correlation,
         "yssbi.plot.correlogram.view" => GraphPlotDataKind::Correlogram,
@@ -84,7 +106,6 @@ mod tests {
             "yssbi.statistics.adf.test",
             "yssbi.statistics.diagnostic.reset",
             "yssbi.statistics.inequality.theil",
-            "yssbi.plot.kde.view",
         ] {
             assert_eq!(
                 result_category_for_output(node, "result"),
@@ -96,6 +117,25 @@ mod tests {
             ("yssbi.plot.scatter.view", GraphPlotDataKind::Scatter),
             ("yssbi.plot.line.view", GraphPlotDataKind::Line),
             ("yssbi.plot.ecdf.view", GraphPlotDataKind::Ecdf),
+            ("yssbi.plot.kde.view", GraphPlotDataKind::Kde),
+            ("yssbi.plot.boxplot.view", GraphPlotDataKind::Boxplot),
+            ("yssbi.plot.wordcloud.view", GraphPlotDataKind::Wordcloud),
+            ("yssbi.plot.errorbar.view", GraphPlotDataKind::Errorbar),
+            ("yssbi.plot.pp_qq.view", GraphPlotDataKind::PpQq),
+            ("yssbi.plot.roc.view", GraphPlotDataKind::Roc),
+            ("yssbi.plot.quadrant.view", GraphPlotDataKind::Quadrant),
+            ("yssbi.plot.pareto.view", GraphPlotDataKind::Pareto),
+            (
+                "yssbi.plot.combination.view",
+                GraphPlotDataKind::Combination,
+            ),
+            ("yssbi.plot.bubble.view", GraphPlotDataKind::Bubble),
+            ("yssbi.plot.violin.view", GraphPlotDataKind::Violin),
+            ("yssbi.plot.heatmap.view", GraphPlotDataKind::Heatmap),
+            (
+                "yssbi.plot.coefficient.view",
+                GraphPlotDataKind::Coefficient,
+            ),
             ("yssbi.plot.histogram.view", GraphPlotDataKind::Histogram),
             (
                 "yssbi.plot.correlation.view",

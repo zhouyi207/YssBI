@@ -9,6 +9,12 @@
 
 ## 调用边界
 
+`builtins/statistics/regression_models` 为回归目录的 31 个新增入口提供无图适配：
+按本地输入键共同物化并证明行域对齐，将分类响应和分组编码交给 SCI，返回时恢复
+原始标签和声明的有序级别。输入、密集工作区、批量模型结果和结构化序列化均执行
+预算检查；SCI 接收同一取消标记和 deadline。每个入口只有结构化 `result`，
+不创建报告端口或专用页面。原有 Linear/Logit/Probit/Prais 生命周期继续由原适配器维护。
+
 `KernelInvocation` 接收已求值输入、固定端口或重复组的局部键、有序输出类型/字段、已解析参数、`KernelControl` 和中立 `RelationFactory`。参数可以借用现有 literal 和已授权的资源运行值。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`；注册表在调用前检查输入布局，在返回后检查输出数量和外层载体，不重新推导 Graph 的元素语义。
 
 运行值的标量载荷统一为 `TabularScalar`，有限浮点表示为 `Float64(FiniteFloat64)`；没有内核自定义 Decimal 算术类型。文档的 `DecimalLiteral` 是精确数字文本，在求值时转换。列表和记录通过不可变 `Arc` 共享。调度槽、下游输入和结果发布不再逐元素复制；统计拟合值和残差只在转换成运行值时分配一次，不先复制原数值向量。紧凑数值缓冲仍属于[后续评估](../../../TODO.md)，当前模型向量与通用运行值列表保持不同表示。
@@ -16,6 +22,7 @@
 DataFrame 常量和内存列组合统一通过调用方注入的 `RelationFactory` 进入共享查询引擎，后续选列、筛选、拆列和分页均使用 `RelationHandle`。`Record` 承载配置、结构化统计模型和检验结果。字面量关系不声明数据集绑定，不能据此获得外部资源授权；组合仍检查实际数据集的会话、快照及执行环境。
 
 导入裸分类字面量时建立无序值域，已有显式值域和顺序级别继续保持不变；日期时间文本复用 Arrow 适配器的日历转换，去除时区时保留墙钟字段。
+数列常量按已解析的元素语义导入关系句柄；Identifier、Datetime 和全空列同样保留声明的语义，不从底层文本或首个非空值重新猜测。
 
 `KernelControl::check_bytes/reserve` 统一执行预算检查和可失败的预留。统计内存列在转换前检查完整形状和总输入大小；GLS 辅助矩阵、密集工作区及两份输出使用合计准入估算，预测和转换循环周期性检查取消。估算不等同于进程 RSS 上限，也不承诺中断正在执行的矩阵分解。
 
@@ -41,19 +48,31 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 ## 模块
 
-| 模块                                         | 职责                                                            |
-| -------------------------------------------- | --------------------------------------------------------------- |
-| [identity](src/identity.rs)                  | KernelId、参数键及能力指纹                                      |
-| [invocation](src/invocation.rs)              | 中立调用、输出元数据、取消/deadline 和计算预算                  |
-| [value](src/value.rs)                        | 标量、列表、记录、关系/数列句柄与原生线性回归 运行值            |
-| [registry](src/registry.rs)                  | 注册一致性、冻结指纹、能力查询、执行契约与输出数量检查          |
-| [builtins](src/builtins/mod.rs)              | 内置注册装配及逻辑、常量、转换等适配                            |
-| [numeric](src/builtins/numeric.rs)           | 已有标量/数列四则运算                                           |
-| [relational](src/builtins/relational.rs)     | 已有 DataFrame/数列关系操作和按输出 Schema 拆列                 |
-| [statistics](src/builtins/statistics/mod.rs) | 按回归、因果、面板、时间序列、诊断和密度分类的 SCI Runtime 适配 |
-| [alignment](src/builtins/alignment.rs)       | 数据帧时间网格与面板对齐、受控物化及关系输出                    |
+| 模块                                           | 职责                                                      |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| [identity](src/identity.rs)                    | KernelId、参数键及能力指纹                                |
+| [invocation](src/invocation.rs)                | 中立调用、输出元数据、取消/deadline 和计算预算            |
+| [value](src/value.rs)                          | 标量、列表、记录、关系/数列句柄与原生线性回归 运行值      |
+| [registry](src/registry.rs)                    | 注册一致性、冻结指纹、能力查询、执行契约与输出数量检查    |
+| [builtins](src/builtins/mod.rs)                | 内置注册装配及逻辑、常量、转换等适配                      |
+| [numeric](src/builtins/numeric.rs)             | 已有标量/数列四则运算                                     |
+| [relational](src/builtins/relational.rs)       | 已有 DataFrame/数列关系操作和按输出 Schema 拆列           |
+| [statistics](src/builtins/statistics/mod.rs)   | 按回归、因果、面板、时间序列和诊断分类的 SCI Runtime 适配 |
+| [visualization](src/builtins/visualization.rs) | 可视化数值输入准备与 SCI 绘图数据适配                     |
+| [alignment](src/builtins/alignment.rs)         | 数据帧时间网格与面板对齐的原生关系计划请求                |
+| [transforms](src/builtins/transforms.rs)       | 数列变换、排序、筛选、重塑与标量聚合结果消费              |
 
 科学计算继续调用 `yss-sci-runtime`，数值算法属于 SCI，关系执行使用 `yss-relational-contract` 的句柄。这里不直接依赖 Graph、Project、Application、Tauri、DataFusion 或 Linalg。
+
+`statistics::multivariate` 注册多元分析的七个目录 ID；数值列共同消费并证明行域，分类训练标签用 `TabularScalar::compare` 精确编码。
+判别的新预测组独立验证其自身对齐，复用训练尺度并恢复原始标签/语义。输入、密集工作区及得分的运行值/Arrow 转换一起准入，再调用 Runtime。
+摘要通过已有 typed finite-value 转换；得分/主坐标按 Invocation 中 Graph 已解析的字段，通过 `relational::materialize` 进入共享查询引擎，保持原行顺序但建立独立计算行域。
+CCA 的 X/Y 轴组合成一张得分表以支持相互比较。观测数据不复制进内联摘要，坐标表和预测数列沿用现有分页。内核不计算输出 Schema 或图血缘。
+
+`statistics::anova` 注册七个方差分析入口，通过已有 `series::load` 联合物化关系数列，或读取等长内存列。
+响应与连续协变量要求无损数值转换；因素及受试者以 `TabularScalar::compare` 精确编码，宽整数标签不转浮点，结果恢复原因素标签。
+因素数、重复组布局、平方和/交互选项与 Catalog 同步；输入、密集工作区和报告一起检查预算，再调用 SCI Runtime，并保留取消/deadline 错误。
+只接受已证明对齐的关系列或等长内存列，不混合两者，不删除缺失观测；唯一输出为结构化 `statistics.report`。
 
 泰尔指数适配位于 `statistics::descriptive`：个体形式只接收 `series`，分组形式必须另接一个 `weights` 数列（组人数或人口占比）。输入通过共用 `columns` 执行受控物化和行对齐检查，再调用 SCI Runtime；唯一输出为包含指数及描述字段的结构化 result。分组输入为组均值，仅计算组间差异。切换形式后，不适用或缺失的 weights 明确报错。
 
@@ -64,7 +83,17 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误抹成 Null。
 已经构造的 JSON 无法恢复被抹去的数值类型，生成这类报告的 owner 必须在编码前完成检查。
 
+相关与一致性适配位于 `statistics::association`。数值列复用 `columns`，Ordinal/分类列复用 `series::load/column` 和语义元数据；配对列共同投影验证行域，Ridit 的独立样本分别读取。加权 Kappa 要求明确类别顺序，宽整数类别通过精确比较编码并在输出时恢复；不以 Float64 合并标签。Kappa 和 rwg 的条件参数在声明、内核可选性与执行校验中保持一致，inactive 参数不进入调用。排序、残差化、置换、方差与推断属于 SCI；调用前检查工作区，执行中转发取消/deadline。
+
 ## 注册与扩展
+
+`builtins::visualization` registers all 19 plot adapters. Paired/matrix inputs use
+joint relation projection or equal-length memory columns; box/violin groups are
+independent samples. Missing values are rejected. ROC respects declared positive
+Binary codes, including inverted Boolean meanings. Coefficient plots consume
+native OLS/WLS/GLS models. Adapters share controlled materialization, budgets and
+finite-result encoding, then call `yss-sci-runtime::visualization`.
+Each result is one `plot.data` record; rendering does not run inside a kernel.
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
@@ -108,10 +137,10 @@ UDF 的相等性和哈希包含源/输出字段元数据与实际转换操作，
 频数、数据序列描述、数据帧描述和分组聚合由 `builtins::aggregation` 注册。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系执行由 DataFusion 原生聚合、排序、连接和分位数计划承担，输出保留来源绑定、租约及受控分页能力。节点执行仅构造计划，扫描及数值失败在消费时交付；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
 
 仅在类型契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
-已物化的常量数列按位置广播/运算，要求等长并约束输出内存；带关系身份的数列保留固定行域和文件租约，
+文档数列常量一次性导入 Arrow 字面量表达式，和范围生成节点共用显式位置坐标；等长常量数列可逐元素运算，不同长度返回 ShapeMismatch。带关系身份的数列保留固定行域和文件租约，
 通过 DataFusion 原生表达式及 Arrow 批运算执行，不在节点求值时整列 collect。
 原始列和计算数列都由 `SeriesHandle` 持有 adapter-owned 表达式，表达式不进入持久化 Graph 文档。
-数据帧组合使用原生 Union、Join、Projection 及用于稳定顺序的 Window/Sort 计划。按行拼接保留重复行、输入顺序及各来源行序；列名模式补齐缺失列，位置模式使用首表列名。公共列要求相同物理类型和兼容语义，不进行隐式有损提升。连接支持多列键和 inner/left/right/full，空键不匹配，重复键保留全部匹配组合；输出保留两侧键，右侧重名列使用后缀消歧。
+数据帧组合使用原生 Union、Join、Projection 及用于稳定顺序的 Window/Sort 计划。按行拼接保留重复行、输入顺序及各来源行序；列名模式补齐缺失列，位置模式使用首表列名。公共列要求相同物理类型和兼容语义，不进行隐式有损提升。连接支持多列键和 inner/left/right/full/semi/anti，空键不匹配。半连接和反连接只返回左列及稳定的左行顺序；其他连接保留全部匹配组合和两侧键，右侧重名列使用后缀消歧。
 `RelationHandle::bindings` 保留全部来源绑定，组合执行检查项目会话、执行环境及同一数据集的快照一致性。来源租约由组合结果和输出流共同持有；资源准备入口仍要求每个数据源授权值只有一个匹配绑定。多来源结果不伪装成单一数据集，自动化只读检查按预算列出其来源。
 DataFrame 字面量和内存列组合在 Kernel 内通过 Arrow 适配器物化列及语义元数据，以 `RecordBatch` 交给注入的 `RelationFactory`，一次性导入同一 DataFusion runtime，之后复用上述关系运算及分页。`TabularSnapshot` 只用于文档和展示边界，不作为内核物化的中转。字面量关系的来源绑定为空；空绑定不授权任何外部数据集。普通结构化值仍使用 Record。
 DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命名和数列投影保留行域证明；筛选行、截取、行拼接和连接建立新行域。按列拼接与组装只组合可证明对齐的惰性输入，不以长度或行号猜测独立数据帧的对应关系。组装也支持等长内存数列，保留其已物化形式，不混用惰性与内存数列。
@@ -127,9 +156,9 @@ DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命�
 
 Logit/Probit/Prais、IV 2SLS/LIML、Panel、TWFE DID、ADF、VAR/VEC 及阶数/协整秩检验均有执行适配。模型以不可变 Record 保存中立拟合契约，Summary 在预算及执行控制检查后解码为对应契约，交给 Runtime 组装所选报告并调用需要的 SCI 分析；Fit 不附带完整报告。Logit/Probit Predict 使用既有系数。Panel/VAR/VEC 只输出模型，DID 输出模型和报告，不把未提供或多方程的观测结果伪装为单个拟合数列。参数组合和输出含义见 [Catalog](../yss-node-catalog/README.md) 与各节点帮助。
 
-独立诊断复用上游线性模型的观测、设计列、协方差及 WLS 权重；VIF、杠杆值、BP/White/IM/RESET、BG、系数 t/Wald，以及序列正态性、DW、Ljung–Box、ACF/PACF 通过对应领域适配。VAR 的 Granger/IRF/FEVD 与非稳健 2SLS 的 Hausman 在对应节点执行时计算，IRF/FEVD 的 steps 控制分析范围，不重新拟合上游模型。IV/VAR/VEC Summary 只计算所选诊断。DID 伪处理组随机化显式接收 treat/post 与随机种子，在置换之间检查取消。KDE 输出 256 个密度点的结构化结果，当前没有交互图窗。
+独立诊断复用上游线性模型的观测、设计列、协方差及 WLS 权重；VIF、杠杆值、BP/White/IM/RESET、BG、系数 t/Wald，以及序列正态性、DW、Ljung–Box、ACF/PACF 通过对应领域适配。VAR 的 Granger/IRF/FEVD 与非稳健 2SLS 的 Hausman 在对应节点执行时计算，IRF/FEVD 的 steps 控制分析范围，不重新拟合上游模型。IV/VAR/VEC Summary 只计算所选诊断。DID 伪处理组随机化显式接收 treat/post 与随机种子，在置换之间检查取消。KDE 经 visualization 适配输出绘图数据，默认 256 个网格点，可在结果面板和 Plot 窗口查看。
 
-数据帧对齐接收表和列名参数，经受控批流读取后调用 Runtime 的有界 Arrow 准备，再通过 RelationFactory 返回关系。时间序列使用原始时间单位的等距网格；面板使用共享已观测时间序列的位置，在每个实体自己的起止位置内补齐。原列类型、列序和元数据保留，补入的非键值为 Null；重复键和偏离指定网格的观测失败。
+数据帧对齐接收表和列名参数，通过关系契约构造原生窗口、聚合、range/unnest 和连接计划，不收集输入批次、不调用 SCI 对齐。时间序列使用原始时间单位的等距网格；面板使用共享已观测时间序列的位置，在每个实体自己的起止位置内补齐。原列类型、列序和元数据保留，补入的非键值为 Null。重复键、缺失键、网格与输出预算校验保留在计划表达式中，在消费时交付失败。
 
 `LinearRegressionValue` 共享不可变拟合模型；Summary 另持有本次 `LinearSummaryOptions` 和选中检验的不可变结果。ACF/PACF、序列相关和假设检验在 Summary 执行时按选项计算，未选项不调用 SCI。模型拥有有界 memo，每类分析只缓存最近一组参数；补选复用相同模型和参数的结果，参数变化重新计算，新 Fit 使用独立缓存。计算不持有 memo 锁，遵守调用预算并在分析间检查取消；旧 Summary 继续持有原分析快照。
 
@@ -158,7 +187,7 @@ DataFrame 的 `dropna.rows` 生成原生 Null 过滤计划，保留列结构；`
 这一状态由 `GraphSemanticSnapshot` 拥有，消费结果不会回写或替代语义快照。
 
 Relation 的 `schema_is_deferred()` 区分未确定的 Schema 与真正的零列表；Deferred 时 `schema()`
-的空标记不能作为列清单。分页先通过 `resolve` 消费受控批流，统计完整输入的候选列是否含 Null
+的空标记不能作为列清单。分页先通过 `resolve` 消费原生 count 聚合的一行结果，判断完整输入的候选列是否含 Null
 或非 Null，再构造投影及分页计划。批流消费也经过同一解析入口。只缓存成功解析的不可变关系计划，
 不缓存全表数据或失败；来源绑定、租约、取消、deadline 及批内存预算贯穿统计和输出阶段。
 统计不把 NaN/空字符串/零值算作缺失；空表保留列，零列结果继续保留行数。
@@ -167,13 +196,12 @@ Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompo
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-database-engine` 内；计划构造不 collect。
 
 数据序列目录的整数序列、长度、非空计数、求和、均值、标准化、逆标准化、虚拟变量信息、
-时间差分、变化率、滚动均值、滞后及面板差分均由 Node Kernel 执行。Graph Resolve 不执行计算。关系输入在节点执行时通过
-`RelationExecutor::visit_batches` 消费受控 Arrow 批流，长度和计数不保留整列，其他变换
-在输入与输出预算内物化。数值运算拒绝非有限值或有损提升；空值规则由各节点帮助明确。
+时间差分、变化率、滚动统计、滞后及面板差分均由 Node Kernel 请求原生关系运算。Graph Resolve 不执行计算。
+数列变换返回 `SeriesHandle`；长度、计数、求和和均值构造原生聚合并只读取标量结果，不在内核保留整列。数值运算拒绝非有限值或有损提升；空值规则由各节点帮助明确。
 标准化使用样本标准差并分别输出均值和标准差，不存在额外 Transform 句柄。
-标准化先受控扫描计算统计量；关系数列的标准化和逆标准化输出保留原行域的惰性表达式，
-通过适配器的 Null 保留变换计算，仍可与原列比较或组合。内存数列继续输出内存数列，
-不通过长度相同推断其与无关关系的行对齐。两步往返不保证浮点逐位相同。
+标准化与逆标准化统一通过 `SeriesTransform` 请求；窗口聚合的 `WindowOperation` 只表达数值聚合，排名和方向填充使用各自的变换请求。
+标准化通过原生 avg/stddev 聚合取得两个标量，标准化和逆标准化输出保留原行域的惰性表达式，
+通过窗口与投影计算，仍可与原列比较或组合。数列常量以显式位置坐标导入，已有等长常量数列的逐元素运算继续成立；该坐标不授权数据帧或数据集间按长度拼接。两步往返不保证浮点逐位相同。
 六个逻辑比较节点默认精确比较，可在配置中切换到数值容差模式，并显示绝对/相对容差字段；默认 atol=1e-12、rtol=1e-9，
 标量、物化数列与关系表达式共享 `NumericTolerance` 判定。Null 传播，容差必须有限且非负，
 到 Float64 的有损转换被拒绝。容差模式采用对称公式 `abs(a-b) <= atol + rtol * max(abs(a), abs(b))`，先将容差内的两值视为相等，再应用比较运算符，容差外保留数值顺序。运算符及容差参数参与表达式身份，不能被优化器误合并。布尔运算不需要数值容差。容差关系不具备传递性，不用于排序或分组。
@@ -185,7 +213,7 @@ Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompo
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），
 计划准备将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，
 也不为每列提前扫描数据；下游统计消费或 Results 分页时才交由 DataFusion 投影和读取。
-文档内已物化的 DataFrame 常量按同一输出契约返回对应列的值列表。
+文档内的 DataFrame 与 DataSeries 常量在常量入口导入，后续选列和变换均传递惰性句柄。
 关系和数列持有固定 session、dataset snapshot/revision、查询上下文及文件租约。资源准备检查句柄内的
 session/revision 与已授权资源一致。OLS 可以接收既有数值列表，或来自同一个关系句柄的原始/计算数列；后者共同投影、
 消费异步 Arrow 批流，并使用独立输入内存预算准备数值矩阵。NULL/非有限值仍被拒绝，不隐式逐列删除缺失样本。

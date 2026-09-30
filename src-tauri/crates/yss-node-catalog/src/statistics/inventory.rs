@@ -20,6 +20,10 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 
 fn implemented(id: &str) -> bool {
     super::analyses::implemented(id)
+        || super::regression_models::implemented(id)
+        || super::anova::implemented(id)
+        || super::multivariate::implemented(id)
+        || super::association::implemented(id)
         || super::classical::implemented(id)
         || super::descriptive::implemented(id)
 }
@@ -34,11 +38,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn inventory_entries_cover_every_category_and_preserve_unimplemented_placeholders() {
+    fn inventory_placeholders_remain_registered_and_every_statistical_category_has_nodes() {
         let system = crate::build_builtin_node_system().unwrap();
         let catalog = system.catalog.localize(&system.registry, "zh-CN");
         let mut sources = BTreeSet::new();
-        let mut categories = BTreeSet::new();
         for entry in ENTRIES {
             for source in entry.source_ids {
                 assert!(
@@ -63,7 +66,6 @@ mod tests {
                 .unwrap();
             assert_eq!(item.category_id.as_ref(), entry.category);
             assert!(item.documentation.is_some());
-            categories.insert(entry.category);
             if implemented(entry.id) {
                 assert!(!protocol.interface.ports.is_empty());
                 continue;
@@ -76,7 +78,12 @@ mod tests {
             assert!(protocol.parameters.is_empty());
         }
         assert_eq!(
-            categories,
+            catalog
+                .items
+                .iter()
+                .map(|item| item.category_id.as_ref())
+                .filter(|category| category.starts_with("statistics."))
+                .collect::<BTreeSet<_>>(),
             super::super::CATEGORIES
                 .iter()
                 .map(|&(id, _, _)| id)

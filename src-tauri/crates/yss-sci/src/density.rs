@@ -1,8 +1,13 @@
 //! Context-free Gaussian kernel density estimation API.
 
 use yss_sci_contract::density::{DensityPoint, KernelDensityInput, KernelDensityOutput};
+use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 
-pub fn compute_kernel_density(input: KernelDensityInput<'_>) -> KernelDensityOutput {
+pub fn compute_kernel_density_controlled(
+    input: KernelDensityInput<'_>,
+    control: &ScientificExecutionControl,
+) -> Result<KernelDensityOutput, ScientificComputationError> {
+    control.check()?;
     let values = input
         .values
         .iter()
@@ -10,7 +15,7 @@ pub fn compute_kernel_density(input: KernelDensityInput<'_>) -> KernelDensityOut
         .filter(|value| value.is_finite())
         .collect::<Vec<_>>();
     if values.is_empty() || input.grid_points < 2 {
-        return KernelDensityOutput { points: Vec::new() };
+        return Ok(KernelDensityOutput { points: Vec::new() });
     }
 
     let bandwidth = silverman_bandwidth(&values);
@@ -24,16 +29,25 @@ pub fn compute_kernel_density(input: KernelDensityInput<'_>) -> KernelDensityOut
         .map_or(padded_min, |value| value.max(padded_min));
     let grid_max = max + padding;
     let denominator = (input.grid_points - 1) as f64;
-    let points = (0..input.grid_points)
-        .map(|index| {
-            let x = grid_min + index as f64 / denominator * (grid_max - grid_min);
-            DensityPoint {
-                x,
-                density: kde_at(x, &values, bandwidth),
+    let mut points = Vec::with_capacity(input.grid_points);
+    for index in 0..input.grid_points {
+        control.check()?;
+        let fraction = index as f64 / denominator;
+        let x = grid_min * (1.0 - fraction) + grid_max * fraction;
+        let mut sum = 0.0;
+        for (i, value) in values.iter().enumerate() {
+            if i.is_multiple_of(1024) {
+                control.check()?;
             }
-        })
-        .collect();
-    KernelDensityOutput { points }
+            sum += gaussian_kernel((x - value) / bandwidth);
+        }
+        let density = sum / values.len() as f64 / bandwidth;
+        if !x.is_finite() || !density.is_finite() {
+            return Err(ScientificComputationError::ComputationFailed);
+        }
+        points.push(DensityPoint { x, density });
+    }
+    Ok(KernelDensityOutput { points })
 }
 
 #[inline]
@@ -53,31 +67,28 @@ fn silverman_bandwidth(values: &[f64]) -> f64 {
         return 1.0;
     }
 
-    let mean = finite.iter().sum::<f64>() / n;
+    let scale = finite.iter().map(|value| value.abs()).fold(1.0, f64::max);
+    let mean = finite.iter().map(|value| value / scale).sum::<f64>() / n;
     let variance = finite
         .iter()
-        .map(|value| (value - mean).powi(2))
+        .map(|value| (value / scale - mean).powi(2))
         .sum::<f64>()
         / (n - 1.0);
     let sigma = variance.sqrt();
     if sigma <= 0.0 || !sigma.is_finite() {
-        return 1.0;
+        return (scale * f64::EPSILON * 1024.0).max(1.0);
     }
 
-    1.06 * sigma * n.powf(-0.2)
-}
-
-fn kde_at(x: f64, values: &[f64], bandwidth: f64) -> f64 {
-    let kernel_sum = values
-        .iter()
-        .map(|value| gaussian_kernel((x - value) / bandwidth))
-        .sum::<f64>();
-    kernel_sum / (values.len() as f64 * bandwidth)
+    (1.06 * sigma * n.powf(-0.2)) * scale
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{KernelDensityInput, compute_kernel_density, gaussian_kernel, silverman_bandwidth};
+    use super::{
+        KernelDensityInput, ScientificExecutionControl, compute_kernel_density_controlled,
+        gaussian_kernel, silverman_bandwidth,
+    };
+    use std::time::{Duration, Instant};
 
     #[test]
     fn gaussian_kernel_is_symmetric_and_normalized_at_zero() {
@@ -94,11 +105,18 @@ mod tests {
 
     #[test]
     fn kde_grid_returns_requested_finite_ordered_points() {
-        let points = compute_kernel_density(KernelDensityInput {
-            values: &[0.0, 1.0, 2.0, f64::NAN],
-            grid_points: 32,
-            min_x: None,
-        })
+        let points = compute_kernel_density_controlled(
+            KernelDensityInput {
+                values: &[0.0, 1.0, 2.0, f64::NAN],
+                grid_points: 32,
+                min_x: None,
+            },
+            &ScientificExecutionControl {
+                cancellation: Default::default(),
+                deadline: Instant::now() + Duration::from_secs(30),
+            },
+        )
+        .unwrap()
         .points;
         assert_eq!(points.len(), 32);
         assert!(points.windows(2).all(|pair| pair[0].x < pair[1].x));

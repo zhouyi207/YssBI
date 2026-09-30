@@ -1,11 +1,5 @@
-# Correlogram (ACF & PACF)
+# 相关图（ACF 与 PACF）
 
-连接序列输入后，在 **Detail → 参数** 中设置 **最大滞后阶数**。
+Values 接收至少 4 个有限且非常量的 Numeric 观测，拒绝缺失值。Maximum lag 默认 20，可取 1–40，实际最大阶数为 $\min(L,\lfloor n/2\rfloor-1,40)$。
 
-绘制 **Float64** **DataSeries** 的样本 ACF 与 PACF（至 **Lags** 阶，默认 20，实际上限为 $n/2$）。
-
-含累积 Ljung–Box $Q$ 统计量与 p 值（悬停柱条查看）。95% 置信带半宽 $1.96/\sqrt{n}$。
-
-## 用法
-
-执行后打开 **Plot** 窗口展示 ACF / PACF 双面板。须至少 4 个非 null 观测。
+ACF 与 Durbin–Levinson PACF 从第 1 阶显示，95% 白噪声参考带半宽为 $1.96/\sqrt n$。ACF 另外给出累积 Ljung–Box $Q_k=n(n+2)\sum_{j=1}^k r_j^2/(n-j)$，检验前 $k$ 阶自相关均为零，以 $\chi^2_k$ 计算 P 值；这里不调整拟合参数自由度。PACF 不附加 Q 检验。Result 在结果面板或 Plot 窗口展示双面板。

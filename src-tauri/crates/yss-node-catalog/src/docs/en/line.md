@@ -1,9 +1,5 @@
-# Line
+# Line Plot
 
-Line chart from **X** and **Y** `DataSeries`; pairs rows and skips null points.
+Connect aligned, equally sized Numeric X and Y series. Points are stably sorted by X. Missing and nonfinite observations are rejected. Inputs exceeding 2048 points are systematically sampled for display, preserving endpoints and reporting sampling.
 
-**X** may be numeric or **Date**; **Y** must be plottable as numeric.
-
-## Usage
-
-Running the graph opens the **Plot** window; suited to time-series trajectories. **Date** axes use date formatting. Requires at least one valid $(x,y)$ pair.
+Open Result in a workbench result panel or separate Plot window. Line display controls affect rendering only.

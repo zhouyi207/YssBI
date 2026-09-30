@@ -5,3 +5,4 @@ pub(crate) mod design;
 pub mod discrete;
 pub mod fit;
 pub mod linear;
+pub mod models;

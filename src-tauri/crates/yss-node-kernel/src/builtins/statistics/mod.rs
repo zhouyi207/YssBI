@@ -1,13 +1,16 @@
 //! Scientific node adapters, grouped by statistical domain.
+mod anova;
+mod association;
 mod causal;
 mod classical;
 pub(super) mod common;
-mod density;
 mod descriptive;
 mod diagnostics;
 mod linear;
+mod multivariate;
 mod panel;
 mod regression;
+mod regression_models;
 #[cfg(test)]
 mod tests;
 mod time_series;
@@ -17,12 +20,15 @@ use crate::{KernelContract, KernelId, KernelParameterKey, KernelRegistryBuilder}
 pub(crate) use linear::{LinearKernel, execute};
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    anova::register(builder);
+    multivariate::register(builder);
     regression::register(builder);
+    regression_models::register(builder);
+    association::register(builder);
     causal::register(builder);
     panel::register(builder);
     time_series::register(builder);
     diagnostics::register(builder);
-    density::register(builder);
     descriptive::register(builder);
     classical::register(builder);
 }
@@ -52,7 +58,8 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(
-                if id.contains(".iv.")
+                if id.starts_with("yssbi.plot.")
+                    || id.contains(".iv.")
                     || id.contains(".panel.")
                     || id.contains(".var.")
                     || id.contains(".vec.")

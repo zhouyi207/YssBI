@@ -8,7 +8,9 @@ use yss_data_contract::DataValue;
 mod aggregation;
 mod families;
 mod inventory;
+mod transforms;
 pub(crate) use inventory::documentation as inventory_documentation;
+pub(crate) use transforms::documentation as transformation_documentation;
 pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<str>> {
     let kind = match id {
         "yssbi.dataframe.series.frequency" => InterfaceKind::Frequency,
@@ -63,6 +65,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ..ProviderFragment::default()
     };
     inventory::append(&mut fragment)?;
+    transforms::append(&mut fragment)?;
     Ok(fragment)
 }
 
@@ -142,7 +145,10 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
                     Some(SchemaExpr::Input(port_key("source")?)),
                 )?,
             ],
-            vec![bounded_positive_integer_parameter("rows", 100, 1_000_000)?],
+            vec![
+                bounded_positive_integer_parameter("rows", 100, 1_000_000)?,
+                transforms::offset_parameter()?,
+            ],
         )),
         Rename => Ok((
             vec![
@@ -303,7 +309,11 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
                     "right_keys",
                     yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
                 )?,
-                choice_parameter("join_type", "inner", &["inner", "left", "right", "full"])?,
+                choice_parameter(
+                    "join_type",
+                    "inner",
+                    &["inner", "left", "right", "full", "semi", "anti"],
+                )?,
                 parameter(
                     "right_suffix",
                     concrete("core.text")?,
@@ -447,9 +457,16 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         TimeWindow => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_series_type(), None)?,
+                transforms::window_context()?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
-            vec![positive_integer_parameter("window", 1)?],
+            std::iter::once(positive_integer_parameter("window", 1)?)
+                .chain([
+                    choice_parameter("operation", "mean", &["mean", "sum", "min", "max", "std"])?,
+                    transforms::minimum_periods_parameter()?,
+                ])
+                .chain(transforms::window_parameters()?)
+                .collect(),
         )),
         TimeLag => Ok((
             vec![
@@ -459,9 +476,13 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
                     generic_series_type("element")?,
                     None,
                 )?,
+                transforms::window_context()?,
                 data_output("result", "Result", generic_series_type("element")?, None)?,
             ],
-            vec![positive_integer_parameter("window", 1)?],
+            std::iter::once(positive_integer_parameter("window", 1)?)
+                .chain([choice_parameter("direction", "lag", &["lag", "lead"])?])
+                .chain(transforms::window_parameters()?)
+                .collect(),
         )),
         PanelAlign => Ok((
             vec![
@@ -638,6 +659,12 @@ fn port(
     cardinality: PortCardinality,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
+    let relational = match &value_type {
+        TypeExpr::Concrete(id) => id.as_str() == "tabular.dataframe",
+        TypeExpr::Applied { constructor, .. } => constructor.as_str() == "core.data_series",
+        TypeExpr::Union(types) => types.iter().any(|t| matches!(t, TypeExpr::Applied { constructor, .. } if constructor.as_str() == "core.data_series")),
+        _ => false,
+    };
     Ok(PortSpec {
         key: port_key(key)?,
         title: title.into(),
@@ -649,10 +676,16 @@ fn port(
             literal_policy: LiteralPolicy::Forbidden,
             default_value: None,
         }),
-        consumption: (direction == PortDirection::Input)
-            .then_some(InputConsumption::FullyMaterialized),
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
+        consumption: (direction == PortDirection::Input).then_some(if relational {
+            InputConsumption::Streaming
+        } else {
+            InputConsumption::FullyMaterialized
+        }),
+        production: (direction == PortDirection::Output).then_some(if relational {
+            OutputProduction::Streaming
+        } else {
+            OutputProduction::FullyMaterialized
+        }),
         editor: PortEditorSpec::Default,
         schema,
     })
@@ -956,6 +989,7 @@ fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &Node
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
     aggregation::messages(out);
+    transforms::shared_window_messages(out);
     for (key, en, zh) in [
         ("types.dataframe.title", "DataFrame", "数据框"),
         ("types.series.title", "DataSeries", "数据序列"),

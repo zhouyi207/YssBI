@@ -1,6 +1,7 @@
 //! Regression-family dispatch and report encoding.
 pub mod discrete;
 pub mod linear;
+pub mod models;
 pub mod report;
 use yss_sci_contract::regression::fit::{RegressionFit, RegressionKind};
 use yss_sci_contract::{SciError, StatisticalObservationMetadata};

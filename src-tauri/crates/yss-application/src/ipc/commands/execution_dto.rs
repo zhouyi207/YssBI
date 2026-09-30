@@ -60,12 +60,23 @@ pub enum ResultPresentationDto {
 pub enum ResultPlotKindDto {
     Scatter,
     Line,
-    Plot,
     Ecdf,
     Kde,
     Histogram,
     Correlation,
     Correlogram,
+    Boxplot,
+    Wordcloud,
+    Errorbar,
+    PpQq,
+    Roc,
+    Quadrant,
+    Pareto,
+    Combination,
+    Bubble,
+    Violin,
+    Heatmap,
+    Coefficient,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -152,9 +163,24 @@ fn result_presentation(
             chart: match kind {
                 yss_graph_execution::plan::PlotDataKind::Scatter => ResultPlotKindDto::Scatter,
                 yss_graph_execution::plan::PlotDataKind::Line => ResultPlotKindDto::Line,
-                yss_graph_execution::plan::PlotDataKind::Plot => ResultPlotKindDto::Plot,
                 yss_graph_execution::plan::PlotDataKind::Ecdf => ResultPlotKindDto::Ecdf,
                 yss_graph_execution::plan::PlotDataKind::Kde => ResultPlotKindDto::Kde,
+                yss_graph_execution::plan::PlotDataKind::Boxplot => ResultPlotKindDto::Boxplot,
+                yss_graph_execution::plan::PlotDataKind::Wordcloud => ResultPlotKindDto::Wordcloud,
+                yss_graph_execution::plan::PlotDataKind::Errorbar => ResultPlotKindDto::Errorbar,
+                yss_graph_execution::plan::PlotDataKind::PpQq => ResultPlotKindDto::PpQq,
+                yss_graph_execution::plan::PlotDataKind::Roc => ResultPlotKindDto::Roc,
+                yss_graph_execution::plan::PlotDataKind::Quadrant => ResultPlotKindDto::Quadrant,
+                yss_graph_execution::plan::PlotDataKind::Pareto => ResultPlotKindDto::Pareto,
+                yss_graph_execution::plan::PlotDataKind::Combination => {
+                    ResultPlotKindDto::Combination
+                }
+                yss_graph_execution::plan::PlotDataKind::Bubble => ResultPlotKindDto::Bubble,
+                yss_graph_execution::plan::PlotDataKind::Violin => ResultPlotKindDto::Violin,
+                yss_graph_execution::plan::PlotDataKind::Heatmap => ResultPlotKindDto::Heatmap,
+                yss_graph_execution::plan::PlotDataKind::Coefficient => {
+                    ResultPlotKindDto::Coefficient
+                }
                 yss_graph_execution::plan::PlotDataKind::Histogram => ResultPlotKindDto::Histogram,
                 yss_graph_execution::plan::PlotDataKind::Correlation => {
                     ResultPlotKindDto::Correlation
@@ -265,6 +291,30 @@ mod tests {
     use super::*;
     use yss_data_contract::TabularScalar;
     use yss_node_kernel::RuntimeValue;
+
+    #[test]
+    fn visualization_presentations_keep_the_exact_chart_wire_tags() {
+        use yss_graph_execution::plan::{PlotDataKind, ResultCategory};
+        for (kind, tag) in [
+            (PlotDataKind::Boxplot, "boxplot"),
+            (PlotDataKind::Wordcloud, "wordcloud"),
+            (PlotDataKind::Errorbar, "errorbar"),
+            (PlotDataKind::PpQq, "ppQq"),
+            (PlotDataKind::Roc, "roc"),
+            (PlotDataKind::Quadrant, "quadrant"),
+            (PlotDataKind::Pareto, "pareto"),
+            (PlotDataKind::Combination, "combination"),
+            (PlotDataKind::Bubble, "bubble"),
+            (PlotDataKind::Violin, "violin"),
+            (PlotDataKind::Heatmap, "heatmap"),
+            (PlotDataKind::Coefficient, "coefficient"),
+            (PlotDataKind::Kde, "kde"),
+        ] {
+            let wire =
+                serde_json::to_value(result_presentation(ResultCategory::PlotData(kind))).unwrap();
+            assert_eq!(wire, serde_json::json!({ "kind": "plot", "chart": tag }));
+        }
+    }
 
     #[test]
     fn relation_page_wire_keeps_unknown_count_and_exact_wide_integer_text() {

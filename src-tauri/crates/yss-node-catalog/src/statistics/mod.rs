@@ -7,10 +7,14 @@
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod analyses;
+mod anova;
+mod association;
 mod classical;
 mod descriptive;
 mod families;
 mod inventory;
+mod multivariate;
+mod regression_models;
 
 pub(crate) use inventory::documentation as inventory_documentation;
 
@@ -43,6 +47,10 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     };
     inventory::append(&mut fragment)?;
     analyses::append(&mut fragment)?;
+    anova::append(&mut fragment)?;
+    multivariate::append(&mut fragment)?;
+    association::append(&mut fragment)?;
+    regression_models::append(&mut fragment)?;
     classical::append(&mut fragment)?;
     descriptive::append(&mut fragment)?;
     Ok(fragment)
@@ -786,6 +794,11 @@ const CATEGORIES: &[(&str, &str, &str)] = &[
         "描述统计",
     ),
     ("statistics.tests", "Hypothesis Tests", "假设检验"),
+    (
+        "statistics.imputation",
+        "Interpolation and Imputation",
+        "插值处理",
+    ),
     (
         "statistics.association",
         "Association and Agreement",

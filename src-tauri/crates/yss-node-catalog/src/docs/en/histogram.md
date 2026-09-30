@@ -1,9 +1,5 @@
 # Histogram
 
-Plots a histogram from numeric **Values** (`Float64` or `Int64` `DataSeries`).
+Values requires at least one finite Numeric observation and rejects missing values. Bins defaults to 0, selecting $k=\lceil\log_2 n\rceil+1$ by Sturges' rule, capped at 128. Set 1–128 to choose a bin count explicitly.
 
-Bin count uses Sturges' rule: $k = \lceil \log_2 n + 1 \rceil$ (capped at 100). Null and non-finite values are dropped before plotting.
-
-## Usage
-
-Running the graph opens the **Plot** window with the histogram; repeated runs refresh the chart. Requires at least one valid value.
+Bins have equal width and are left-inclusive/right-exclusive except the final bin, which includes the maximum. Constant samples expand around their value. Counts sum to the complete observation count. Result includes endpoints and counts and opens in a result panel or Plot window.

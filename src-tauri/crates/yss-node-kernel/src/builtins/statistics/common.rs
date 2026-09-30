@@ -10,7 +10,10 @@ pub(crate) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a s
         _ => Err(KernelError::InvalidParameter),
     }
 }
-pub(super) fn boolean(inv: &KernelInvocation<'_>, key: &str) -> Result<bool, KernelError> {
+pub(in crate::builtins) fn boolean(
+    inv: &KernelInvocation<'_>,
+    key: &str,
+) -> Result<bool, KernelError> {
     match inv.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::Bool(v))) => Ok(*v),
         _ => Err(KernelError::InvalidParameter),
@@ -24,7 +27,10 @@ pub(crate) fn integer(inv: &KernelInvocation<'_>, key: &str) -> Result<usize, Ke
         _ => Err(KernelError::InvalidParameter),
     }
 }
-pub(super) fn number(inv: &KernelInvocation<'_>, key: &str) -> Result<f64, KernelError> {
+pub(in crate::builtins) fn number(
+    inv: &KernelInvocation<'_>,
+    key: &str,
+) -> Result<f64, KernelError> {
     super::super::numeric_input(inv.parameter(key)).map_err(|_| KernelError::InvalidParameter)
 }
 pub(super) fn sci(error: yss_sci_contract::SciError) -> KernelError {
@@ -51,7 +57,7 @@ pub(super) fn metadata(n: usize) -> yss_sci_contract::StatisticalObservationMeta
         missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
     }
 }
-pub(super) fn value(
+pub(in crate::builtins) fn value(
     data: impl serde::Serialize,
     inv: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {

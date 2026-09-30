@@ -67,9 +67,14 @@ mod tests {
             .iter()
             .filter(|category| category.parent_category_id.as_deref() == Some("statistics"))
             .collect();
-        assert_eq!(categories.len(), 22);
+        assert_eq!(categories.len(), 23);
         let orders: BTreeSet<_> = categories.iter().map(|category| category.order).collect();
         assert_eq!(orders.len(), categories.len());
+        assert!(
+            categories
+                .iter()
+                .any(|category| category.category_id.as_ref() == "statistics.imputation")
+        );
         for (node, expected) in [
             ("linear.fit", "regression"),
             ("linear.summary", "regression"),

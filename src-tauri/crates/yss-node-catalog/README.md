@@ -24,12 +24,12 @@ GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配�
 
 “数据 → 常量”提供固定的 π 和 e 节点，无输入、无参数，输出 Numeric 标量；运行值由 Kernel 使用 Rust 标准库的 Float64 常量提供。它们不引用图内自定义常量，后者仍通过“读取常量”节点访问。
 
-“数据处理”另有数据标签、数据编码、单次插补、多重插补和 MICE 插补五个目录入口，由 `src/dataframe/inventory.rs` 维护。它们复用目录骨架装配，保留用途与范围说明，端口、参数和内核待实现，当前显示为不可用。数据编码不等同于基础类型转换；MICE 是多重插补的具体算法，二者保留独立入口。
+“数据处理 → 数据序列”包含待实现的“数据标签”入口；单次插补、多重插补和 MICE 插补归入“统计 → 插值处理”（`statistics.imputation`）。这四个入口仍由 `src/dataframe/inventory.rs` 维护，节点 ID 不变。数据编码入口已实现为数据序列目录中的“虚拟变量生成”，沿用 `yssbi.dataframe.encode`，不代替基础类型转换。MICE 是 MI 的具体算法，二者保留独立入口。
 
-“可视化 / Visualization”使用 `plot` 分类 ID，包含原有散点、折线、ECDF、KDE、直方、相关性和自相关图节点。
-另有箱线图、词云、误差线图、P-P/Q-Q 图、ROC 曲线、象限图、帕累托图、组合图、气泡图、小提琴图、热力图和系数图共 12 个新增目录入口。
-新增入口由 `src/plot/inventory.rs` 维护；与统计目录骨架复用 `catalog_entry` 装配及说明逻辑，端口、参数和内核待实现，按缺少内核显示为不可用。已登记内容从 SCI 的 CSV/Excel 待办清单中移除。
-KDE 已接入数值执行，`result` 输出为包含 256 个密度点的 `statistics.report` 结构化结果；当前不打开交互图窗。
+“可视化 / Visualization”使用 `plot` 分类 ID，19 个节点均在 `src/plot/mod.rs` 声明并由 Kernel 执行：散点、折线、ECDF、KDE、直方、相关性、自相关、箱线、词云、误差线、P-P/Q-Q、ROC、象限、帕累托、组合、气泡、小提琴、热力和系数图。
+输出统一为 `plot.data` 结构化绘图数据，通过既有 Result 查询和 Plot 窗口由 D3 展示。
+配对输入需要已证明的行对齐，箱线/小提琴组可为独立样本；缺失值不隐式删除。
+KDE 默认 256 个网格点，系数图接收线性 Fit 的 OLS/WLS/GLS 模型。所有节点均有中英文帮助，说明参数、计算和展示点数限制。
 
 统计节点的 `Family` 表示方法族，`Stage` 表示对该方法执行的操作，目录分类表示用户在哪里找到节点。
 线性回归的 Fit、Summary、Predict 均使用 `Family::Linear`，预测由 `Stage::Predict` 表达。
@@ -44,30 +44,47 @@ KDE 已接入数值执行，`result` 输出为包含 256 个密度点的 `statis
 
 统计目录在 `statistics` 下按以下顺序注册，分类不表示相应算法已实现。每个节点有一个主分类；跨领域检索复用节点别名，不重复注册节点。
 
-| 目录                 | 分类 ID                       | 内容与边界                                     |
-| -------------------- | ----------------------------- | ---------------------------------------------- |
-| 描述统计             | `statistics.descriptive`      | Gini、Dagum Gini 分解、Theil T                 |
-| 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验       |
-| 相关与一致性         | `statistics.association`      | 相关、偏相关、一致性、Kappa、ICC 等            |
-| 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性       |
-| 方差分析             | `statistics.anova`            | 单因素、多因素、协方差分析、重复测量等入口     |
-| 多元分析             | `statistics.multivariate`     | 主成分、因子、判别、典型相关等                 |
-| 纵向与多层模型       | `statistics.longitudinal`     | GEE、LMM、GLMM、多层模型；统一导航但不混同方法 |
-| 面板模型             | `statistics.panel`            | 固定效应、随机效应、组间与差分估计等           |
-| 计量与因果分析       | `statistics.causal`           | 工具变量、GMM、DID、断点、匹配等子领域         |
-| 时间序列             | `statistics.timeseries`       | 平稳性、协整、单变量与多变量模型、预测         |
-| 生存分析             | `statistics.survival`         | 生存曲线、风险模型、参数生存模型等             |
-| 空间分析             | `statistics.spatial`          | 空间设计对象、空间相关、空间回归               |
-| 测量、问卷与结构方程 | `statistics.psychometrics`    | 信效度、测量模型、结构方程等                   |
-| 综合评价与决策       | `statistics.decision`         | 赋权、排序、综合评价、决策方法                 |
-| 机器学习             | `statistics.machine_learning` | 树、集成、聚类等；与回归目录交叉检索           |
-| Meta 分析            | `statistics.meta`             | 效应量、合并模型、异质性、敏感性分析           |
-| 实验设计与质量控制   | `statistics.design_quality`   | 实验设计、过程能力、控制图相关分析             |
-| 功效与样本量         | `statistics.power`            | 按研究设计和检验目标组织                       |
-| 复杂抽样分析         | `statistics.survey`           | 抽样设计、加权估计、设计型方差与回归           |
-| 推断与重抽样         | `statistics.inference`        | 重抽样过程、区间构造、多重推断等               |
-| 模型诊断与比较       | `statistics.diagnostics`      | 残差诊断、模型检验、模型比较                   |
-| 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等             |
+| 目录                 | 分类 ID                       | 内容与边界                                       |
+| -------------------- | ----------------------------- | ------------------------------------------------ |
+| 描述统计             | `statistics.descriptive`      | Gini、Dagum Gini 分解、Theil T                   |
+| 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验         |
+| 插值处理             | `statistics.imputation`       | 单次插补、多重插补与 MICE 插补                   |
+| 相关与一致性         | `statistics.association`      | Pearson/偏相关/秩相关、Kappa、ICC、W、Ridit、rwg |
+| 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性         |
+| 方差分析             | `statistics.anova`            | 单因素、多因素、协方差分析、重复测量等入口       |
+| 多元分析             | `statistics.multivariate`     | 主成分、因子、判别、典型相关等                   |
+| 纵向与多层模型       | `statistics.longitudinal`     | GEE、LMM、GLMM、多层模型；统一导航但不混同方法   |
+| 面板模型             | `statistics.panel`            | 固定效应、随机效应、组间与差分估计等             |
+| 计量与因果分析       | `statistics.causal`           | 工具变量、GMM、DID、断点、匹配等子领域           |
+| 时间序列             | `statistics.timeseries`       | 平稳性、协整、单变量与多变量模型、预测           |
+| 生存分析             | `statistics.survival`         | 生存曲线、风险模型、参数生存模型等               |
+| 空间分析             | `statistics.spatial`          | 空间设计对象、空间相关、空间回归                 |
+| 测量、问卷与结构方程 | `statistics.psychometrics`    | 信效度、测量模型、结构方程等                     |
+| 综合评价与决策       | `statistics.decision`         | 赋权、排序、综合评价、决策方法                   |
+| 机器学习             | `statistics.machine_learning` | 树、集成、聚类等；与回归目录交叉检索             |
+| Meta 分析            | `statistics.meta`             | 效应量、合并模型、异质性、敏感性分析             |
+| 实验设计与质量控制   | `statistics.design_quality`   | 实验设计、过程能力、控制图相关分析               |
+| 功效与样本量         | `statistics.power`            | 按研究设计和检验目标组织                         |
+| 复杂抽样分析         | `statistics.survey`           | 抽样设计、加权估计、设计型方差与回归             |
+| 推断与重抽样         | `statistics.inference`        | 重抽样过程、区间构造、多重推断等                 |
+| 模型诊断与比较       | `statistics.diagnostics`      | 残差诊断、模型检验、模型比较                     |
+| 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等               |
+
+“方差分析”的七个既有入口均由 `statistics/anova.rs` 完善为可执行节点，保留原 ID。
+单因素、双因素和三因素分别要求 1、2、3 个分类因素；多因素与 ANCOVA/MANOVA 支持 1–8 个因素。
+因素输入接受数值编码、分类、有序、二元、文本及标识符数列，每项有 2–32 个观测类别。
+多因素模型可选主效应或完整因素交互及 I/II/III 型平方和，默认完整交互与 III 型；设计含截距且最多 256 列，秩亏或无残差自由度明确拒绝。
+ANCOVA 另接 1–32 个连续协变量，使用中心化的加性平行斜率；MANOVA 接 2–16 个响应，输出 Wilks/Pillai/Hotelling–Lawley/Roy 检验和 SSCP。
+重复测量使用长表的 response、subjects 与 1–4 个受试者内因素，要求每个受试者在全部组合上恰好一行、最多 256 个组合，默认 Greenhouse–Geisser 校正。
+七者均只输出可由 Inspect 查看数值与 JSON 的结构化 `result`，完整中英文帮助由 `src/documentation.rs` 映射。
+
+“多元分析”的七个既有 ID 由 `statistics/multivariate.rs` 完善：典型相关、探索性因子、PCA、对应分析、判别分析、RDA 和 MDS。
+典型相关保留 `yssbi.statistics.association.canonical`，目录位置为 `statistics.multivariate`；聚类与分层聚类仍属于机器学习分类。
+每个节点输出结构化 `result`；PCA、主轴因子、CCA 和 RDA 另有得分表，CA 有行/列主坐标表，经典 MDS 有坐标表，LDA/QDA 有保留原类别语义的预测数列。
+得分与坐标字段由 `components` 参数在 Graph 中推导，编辑不扫描数据；可继续选列及绘图，观测得分不塞入摘要 JSON。CCA 将 X/Y 得分置于同一表以保留可证明的相互对齐。
+数值变量通常最多 16 列，CCA 两组合计最多 16，CA 最多 32 行/列，判别最多 8 类，经典 MDS 最多 512 点；计算仍受内存及执行控制约束。
+PCA 支持相关/协方差形式；主轴因子支持无旋转/正交 varimax、KMO/Bartlett 与回归得分；LDA/QDA 支持先验、收缩和可选独立新数据；RDA 提供可复现行置换。
+各方法的范围、默认值、假设、报告口径与可连接数据输出见已注册的中英文 `multivariate_*.md` 帮助。
 
 现有 IV 和 DID 节点归入“计量与因果分析”，Panel 模型归入“面板模型”；ADF、VAR、VEC 与协整检验归入“时间序列”。现有 Predict 节点归入“预测与估计后分析”；Summary 跟随方法所在主分类，不因包含诊断指标就归入“模型诊断与比较”。尚无节点的分类保留注册，展示与筛选由通用目录树处理。
 
@@ -89,8 +106,21 @@ Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 ent
 泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
 
 Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistics.inequality.dagum_gini`，均已注册执行内核，使用个体等权、未经小样本修正的经验 Gini。Gini 输入 `series`；Dagum 另需同一行域的 `groups` 标签列，支持数值、文本、标识符及分类语义，最多 64 组。唯一结构化 `result` 可通过既有 Inspect 查看数值或报告；Dagum 返回组内、组间净差异、超变密度、贡献占比及分组/组对明细。全零子组的未定义 Gini 和零总体差异下的贡献占比保留为 null，非正总体均值拒绝计算。输入与解释见各节点中英文帮助。
+
+`statistics/association.rs` 完善原“相关与一致性”目录的 10 个 ID：Pearson、偏相关、Spearman、Kendall tau-b、Kappa、ICC、Bland–Altman、Kendall W、Ridit、rwg。全部只有结构化 `result`，复用 Inspect。配对和评定者列必须对齐，Ridit 的样本/参考总体允许独立读取。Spearman/Kendall/W 支持显式 Ordinal 顺序；Kappa 支持 Cohen（含线性/二次加权）和 Fleiss，ICC 显式选择六种常用模型/测量定义，rwg 显式选择均匀或指定方差的零假设。秩检验自动在不超过 9 个观测时使用精确位置置换，否则采用渐近方法；Bland–Altman 统计量用完整样本，展示点最多 2000 个。方法定义、样本要求与推断限制由 20 篇中英文节点帮助维护，不另建专用报告页面。
 工作流模板、模型预设、结果指标、统计专用绘图和原理说明也按本轮要求登记入口；该登记不表示模板执行、参数预设或绘图能力已经实现。普通数据处理、缺失数据处理、通用绘图和 AI 模块未纳入本轮统计入口。
 实现某项方法时直接完善其既有定义及内核绑定；只有存在可复用模型时才提供 Fit/Summary 分工，不从入口名称推断或批量生成端口契约。
+
+`statistics/regression_models.rs` 完善“回归模型”中的 31 个原占位入口，包括
+稳健、岭/Lasso、单响应 PLS、曲线/非线性及自定义公式、离散/计数/比例模型、
+GLM、Deming、分位数、单门槛和 RCS 分析。分层、逐步、单因素与多因素、分组、
+基准入口分别落实为分块 OLS、AIC/BIC 选择和明确的 OLS 批量分析；不推定多层模型
+或抽象工作流引擎。全部唯一输出为结构化 `result`，复用 Inspect 数值/报告切换。
+RCS 接收响应和单个自变量，结果保留节点及数值基函数设计并给出 OLS 拟合。
+分类响应保留原始标签和概率，有序 Logit 遵守显式 Ordinal 顺序；条件 Logit 为
+分层二元定义。GLM 只声明实际支持的分布/链接组合，条件参数进入真实计算。
+62 篇中英文帮助维护参数、模型公式、系数推断和当前边界；惩罚模型不伪造常规
+系数显著性，非线性活动边界不提供无约束协方差，选择后的推断按条件结果解释。
 
 “运算”下按“算术”“逻辑”“转换”排列；“类别转换”节点位于“转换”中，处理标量和数列的语义转换。分类及其中英文名称由 Rust 目录统一提供。
 
@@ -112,20 +142,23 @@ Bernoulli/二项允许概率 0 和 1；几何/负二项要求 0 < p ≤ 1；泊�
 超出精确计数范围时报错，离散均匀的端点则支持完整 Int64 范围。分布参数化详见各节点帮助。
 
 “数据处理”下“数据帧”和“数据序列”为同级目录，按主要操作对象归类。时间序列对齐、面板对齐归入“数据帧”；时间序列差分、百分比变化、滚动均值、滞后及面板差分归入“数据序列”。面板差分的对齐数据帧用于提供分组上下文，实际变换和输出对象是数列。“时间序列”和“面板数据”不再单独设目录，节点定义和标识保持不变。
-数据序列节点均已注册执行内核。选列保留惰性执行；标准化扫描统计量后保留关系行域，逆标准化沿用同一行域；其他变换按目录契约在执行时计算，
-不会在图编辑或分析阶段扫描数据。整数范围包含起点、不包含终点，支持非零负步长。
+数据序列节点均已注册执行内核。选列、数列变换、虚拟变量信息及整数范围均返回惰性数列句柄，使用 DataFusion 投影、窗口或 range/unnest 计划；节点不将关系数列收集成内存列表。长度、非空计数、求和、均值及标准化的标量统计输出消费原生聚合的一行结果。文档中的数列常量一次性导入查询引擎，以显式位置坐标保持等长常量数列原有的逐元素语义；数据帧和数据集不通过长度建立对齐证明。
+图编辑和分析不扫描数据。整数范围包含起点、不包含终点，支持非零负步长。
 长度包含 Null，非空计数排除 Null，求和忽略 Null 且空输入返回零，均值无有效值时返回 Null。
 标准化使用样本标准差（ddof = 1），输出标准化值、均值及标准差；无有效方差时报错。
 关系数列的标准化与逆标准化支持 Null 保留且可与原数列比较。浮点往返校验使用“等于”的容差模式，
 默认绝对容差 1e-12、相对容差 1e-9，可在 Detail 配置中修改；默认精确模式不保证浮点往返全为真。
-时序节点使用当前行顺序；高阶差分重复一阶差分，变化率采用比例值（0.1 表示 10%），
-滚动均值要求完整非空窗口，滞后保留类型与元数据。面板差分通过实体列和时间列选项指定分组上下文，
+时序节点默认使用当前行顺序；高阶差分表达重复一阶差分，变化率采用比例值（0.1 表示 10%）。
+滚动节点支持 mean/sum/min/max/std，默认均值及完整非空窗口；`min_periods` 为零时要求完整窗口，否则按指定有效值数计算。滞后节点支持 lag/lead 并保留类型与元数据。二者可连接同一行域的可选上下文选择分组列和排序列；窗口结果恢复原始行顺序。面板差分通过实体列和时间列选项指定分组上下文，
 不要求上游先执行面板对齐；结果恢复原始行顺序。虚拟变量信息只附加参照组提示，不生成指示列。
 
 时间序列和面板对齐均接收一个 DataFrame，通过 time_column、entity_column（仅面板）及正整数 interval 配置。输出保留列顺序、类型和元数据，新增非键单元格为 Null；重复键、缺失键、偏离网格或超出内存预算会失败。面板网格使用共享已观测时间的位置，仅补齐各实体自己的起止范围，详见节点帮助。
 数据帧的筛选入口为“筛选行”（配置列条件）和“筛选列”（选择并排列列）。
 “移除行”复用行条件配置，仅删除条件为真的行，保留条件为假或 NULL 的行；“为空”条件可显式移除缺失值。“移除列”复用列选择器，删除指定列并保留其余列的顺序、类型与血缘；至少选择一个现有列且至少保留一列。两个节点均产生新的计算结果，不修改源数据集。
-数据帧组合分为“按行拼接”“按列拼接”“连接”和“组装数据帧”。按行拼接支持列名/位置对齐；连接支持多列键及四种连接类型，复用列选择器分别展示左右输入的列；组装允许混合语义数列。字段命名与输入顺序由 Graph 的组合 Schema resolver 推导，执行由 Kernel 经关系契约交给 DataFusion。
+数据帧组合分为“按行拼接”“按列拼接”“连接”和“组装数据帧”。按行拼接支持列名/位置对齐；连接支持多列键及 inner/left/right/full/semi/anti，半连接和反连接仅返回左表列且保留左表顺序；组装允许混合语义数列。字段命名与输入顺序由 Graph 的组合 Schema resolver 推导，执行由 Kernel 经关系契约交给 DataFusion。
+
+`src/dataframe/transforms.rs` 注册排序、行去重、添加或替换列、按数列筛选行、转长表、转宽表、时间重采样，以及条件选择、缺失判断、填充、值映射、文本处理、日期处理、数值限制、分箱、累计、排名和前后向填充。全部接入执行内核，并提供中英文帮助。普通取值列表和数值边界列表在 Details 中逐项编辑，列参数复用 Rust 投影的列选择器。
+排序与去重保留同值行的源顺序；添加或替换列、条件选择和窗口输出保留已证明的行域。转长表要求取值列物理类型及语义兼容；透视及虚拟变量生成显式声明类别值与输出列名，不扫描数据发现列。Graph 的 `schema.transform` 解析固定输出字段、名称冲突与选择列诊断。限制行同时支持非负 `offset`，窗口表达式先计算再截取，分页不改变窗口结果。
 
 数据序列增加“频数”和“描述”，数据帧增加“描述”和“分组聚合”。四者输出可分页、可连接的数据帧；原统计目录的频数、分类汇总、描述和基线分析占位定义已移除，不保留旧 ID 转换。
 描述支持 Numeric、Categorical、Ordinal、Binary；后三者采用分类摘要，整数编码不改变语义。Text、Datetime、Identifier 不自动作为类别；数据帧描述默认选择全部受支持列，显式选列必须受支持。
@@ -183,4 +216,4 @@ fn normal_parameters() -> Result<Parameters, ParametersError> {
 协议执行指纹；参数类型、默认值、约束及条件显隐参与指纹。条件可以引用同节点其他组的无条件参数，
 使用显式值或协议默认值判断。编辑、条件清理及执行投影见 [Graph analysis](../yss-graph-analysis/README.md)。
 
-Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. Three additional inventory candidates (`heterogeneity`, `kappa`, and `kendall_w`) remain outside this selected scope. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.
+Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. `heterogeneity` remains unimplemented; Kappa and Kendall W are implemented separately under `statistics.association`. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.

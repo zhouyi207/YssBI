@@ -1,5 +1,10 @@
-use super::statistics::{Input, common, install};
-use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
+//! Grid alignment is a native range/unnest/join plan.
+use super::relational::kernel_error;
+use super::transforms::{integer, text};
+use crate::{
+    KernelContract, KernelError, KernelId, KernelInputSpec, KernelInvocation, KernelParameterKey,
+    KernelRegistryBuilder, RuntimeValue,
+};
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     for (id, panel, parameters) in [
@@ -14,59 +19,40 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             &["entity_column", "time_column", "interval"][..],
         ),
     ] {
-        install(
-            builder,
-            id,
-            vec![Input::fixed("dataframe")],
-            parameters,
-            1,
-            move |inv| align(panel, inv),
-        );
+        builder
+            .register(
+                KernelId::new(id.into()).unwrap(),
+                std::num::NonZeroU32::new(3).unwrap(),
+                KernelContract::new(
+                    [KernelInputSpec::fixed("dataframe")],
+                    parameters
+                        .iter()
+                        .map(|p| KernelParameterKey::new((*p).into()).unwrap()),
+                    1..=1,
+                )
+                .unwrap(),
+                move |inv| align(panel, inv),
+            )
+            .expect("unique alignment kernel");
     }
 }
 fn align(panel: bool, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
-    let Some(RuntimeValue::Relation(frame)) = inv.inputs.first() else {
-        return Err(KernelError::InvalidParameter);
+    inv.check_control()?;
+    let [RuntimeValue::Relation(frame)] = inv.inputs else {
+        return Err(KernelError::InputLayoutMismatch);
     };
-    let mut batches = Vec::new();
-    let mut bytes = 0usize;
-    frame
-        .visit_batches(&inv.relation_control(), &mut |batch| {
-            inv.relation_control().check()?;
-            bytes = bytes
-                .checked_add(batch.get_array_memory_size().saturating_mul(3))
-                .filter(|v| *v <= inv.control.max_input_bytes)
-                .ok_or(yss_relational_contract::RelationError::MemoryLimitExceeded)?;
-            batches.push(batch.clone());
-            Ok(())
-        })
-        .map_err(super::relational::kernel_error)?;
     let entity = if panel {
-        Some(common::text(inv, "entity_column")?)
+        Some(text(inv, "entity_column")?)
     } else {
         None
     };
-    let time = common::text(inv, "time_column")?;
-    let interval = i64::try_from(common::integer(inv, "interval")?)
-        .map_err(|_| KernelError::InvalidParameter)?;
-    let result = yss_sci_runtime::preprocessing::align_batches(
-        &batches,
-        time,
-        entity,
-        interval,
-        inv.control.max_input_bytes,
-    )
-    .map_err(|e| match e {
-        yss_sci_runtime::preprocessing::PreparationError::MemoryLimit => {
-            KernelError::BudgetExceeded
-        }
-        _ => KernelError::InvalidParameter,
-    })?;
-    inv.check_control()?;
-    Ok(vec![RuntimeValue::Relation(
-        inv.relations
-            .clone()
-            .materialize(result, &inv.relation_control())
-            .map_err(super::relational::kernel_error)?,
-    )])
+    let result = frame
+        .align_grid(
+            text(inv, "time_column")?,
+            entity,
+            integer(inv, "interval")?,
+            inv.control.max_input_bytes,
+        )
+        .map_err(kernel_error)?;
+    Ok(vec![RuntimeValue::Relation(result)])
 }

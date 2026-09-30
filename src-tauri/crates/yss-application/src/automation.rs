@@ -508,12 +508,23 @@ fn plot_kind(kind: PlotDataKind) -> &'static str {
     match kind {
         PlotDataKind::Scatter => "scatter",
         PlotDataKind::Line => "line",
-        PlotDataKind::Plot => "plot",
         PlotDataKind::Ecdf => "ecdf",
         PlotDataKind::Kde => "kde",
         PlotDataKind::Histogram => "histogram",
         PlotDataKind::Correlation => "correlation",
         PlotDataKind::Correlogram => "correlogram",
+        PlotDataKind::Boxplot => "boxplot",
+        PlotDataKind::Wordcloud => "wordcloud",
+        PlotDataKind::Errorbar => "errorbar",
+        PlotDataKind::PpQq => "ppQq",
+        PlotDataKind::Roc => "roc",
+        PlotDataKind::Quadrant => "quadrant",
+        PlotDataKind::Pareto => "pareto",
+        PlotDataKind::Combination => "combination",
+        PlotDataKind::Bubble => "bubble",
+        PlotDataKind::Violin => "violin",
+        PlotDataKind::Heatmap => "heatmap",
+        PlotDataKind::Coefficient => "coefficient",
     }
 }
 
@@ -614,6 +625,27 @@ mod tests {
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
     use yss_harness_contract::GraphEditOperation;
+
+    #[test]
+    fn new_plot_kind_labels_follow_the_execution_enum_wire() {
+        for kind in [
+            PlotDataKind::Boxplot,
+            PlotDataKind::Wordcloud,
+            PlotDataKind::Errorbar,
+            PlotDataKind::PpQq,
+            PlotDataKind::Roc,
+            PlotDataKind::Quadrant,
+            PlotDataKind::Pareto,
+            PlotDataKind::Combination,
+            PlotDataKind::Bubble,
+            PlotDataKind::Violin,
+            PlotDataKind::Heatmap,
+            PlotDataKind::Coefficient,
+        ] {
+            let wire = serde_json::to_value(kind).unwrap();
+            assert_eq!(Some(plot_kind(kind)), wire.as_str());
+        }
+    }
 
     #[test]
     fn result_bounds_fail_closed_at_the_contract_descriptor_limit() {

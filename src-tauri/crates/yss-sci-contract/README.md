@@ -13,6 +13,11 @@ Cross-domain execution and observation contracts remain shared.
 
 - `execution`: `ScientificExecutionControl`, cancellation and computation errors.
   These types contain no execution-plan or project identities, and define no backend trait.
+- `anova`: coded categorical factors, bounded design dimensions, factorial and
+  sums-of-squares options, univariate/ANCOVA tables, MANOVA tests/SSCP and
+  within-subject tables with Greenhouse–Geisser correction. Generic factor labels
+  allow adapters to restore exact tabular values; optional MANOVA inference fields
+  explicitly represent unavailable small-sample F approximations.
 - `regression`: the single OLS configuration/default and covariance selection.
   `linear` defines OLS/WLS/GLS computation requests/results; `fit` defines neutral
   regression statistics; `report` defines typed OLS
@@ -22,7 +27,23 @@ Cross-domain execution and observation contracts remain shared.
   `discrete::BinaryOptions` owns binary-model intercept/convergence settings;
   `prais` owns AR(1) transform and convergence settings. Linear results retain
   optional original WLS weights for downstream diagnostics.
+  `models` owns bounded predictor/category dimensions, estimator/convergence
+  options and structured coefficient/model/workflow results for the additional
+  regression methods. Method-specific facts use `RegressionDetails`; undefined
+  inference/metrics use optional fields. Generic category/group labels preserve
+  original scalar identities, and workflows retain original predictor/row indices.
 - `hypothesis`: neutral hypothesis requests, results, alternatives and errors.
+- `multivariate`: PCA, principal-axis factors, canonical correlation, simple CA,
+  LDA/QDA, RDA and classical MDS options and typed summaries. Numerical observation
+  coordinates remain separate row-major outputs. Classification labels are generic
+  for exact adapter restoration. Bounds cover variables, classes, table categories
+  and dense MDS points; undefined inference/proportions use explicit optional fields.
+- `association`: paired correlation, partial-correlation, rank-test and inter-rater
+  agreement options/results. It distinguishes Pearson confidence options from rank
+  inference options, six ICC definitions, Cohen/Fleiss weighting, and rwg null models.
+  Generic category labels preserve caller-owned scalar identities; unavailable
+  inference uses `Option`, never NaN. Bounds cover raters, controls, categories,
+  exact permutations and display points.
 - `time_series::acf_pacf`: ACF/PACF requests and results. `var` and `vec` own
   neutral fitted models and selected-summary options; `fit` shares multivariate
   equation/coefficient statistics, serial-test rows and stability roots.
@@ -42,6 +63,10 @@ Cross-domain execution and observation contracts remain shared.
   Randomization input contains observed columns, treatment/post indicators,
   repetitions and a reproducible seed; interruption remains an explicit failure.
 - `density`: kernel-density input and output records.
+- `visualization`: typed XY/reference lines, histograms, grouped distributions,
+  intervals, ROC/AUC, category frequencies, rectangular matrices and coefficient
+  intervals. Display bounds and sampling metadata contain no pixel layout,
+  graph identity or result/window lifecycle.
 - `descriptive`: empirical `GiniResult`, Dagum group/pair/component statistics, and the
   64-group report bound. Group labels are generic so the node adapter can replace
   numerical group IDs with original scalar labels without changing statistics.

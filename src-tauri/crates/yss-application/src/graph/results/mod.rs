@@ -473,6 +473,8 @@ fn charge_value(
 
 #[cfg(test)]
 mod tests {
+    mod anova;
+    mod multivariate;
     mod paging;
     use super::*;
     use crate::result_encoding::runtime_value_to_json;

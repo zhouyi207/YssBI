@@ -9,6 +9,8 @@ mod numeric;
 mod relational;
 mod series;
 mod statistics;
+mod transforms;
+mod visualization;
 
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_relational_contract::NumericOperation;
@@ -251,13 +253,28 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         (
             "yssbi.dataframe.timeseries.rolling_mean",
             Series(series::SeriesKernel::RollingMean),
-            &["window"],
+            &[
+                "window",
+                "operation",
+                "min_periods",
+                "partition_by",
+                "order_by",
+                "descending",
+                "nulls_first",
+            ],
             1..=1,
         ),
         (
             "yssbi.dataframe.timeseries.lag",
             Series(series::SeriesKernel::Lag),
-            &["window"],
+            &[
+                "window",
+                "direction",
+                "partition_by",
+                "order_by",
+                "descending",
+                "nulls_first",
+            ],
             1..=1,
         ),
         (
@@ -384,7 +401,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         (
             "yssbi.dataframe.limit",
             Relational(relational::RelationalKernel::Limit),
-            &["rows"],
+            &["rows", "offset"],
             1..=1,
         ),
         (
@@ -514,18 +531,17 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
                     Comparison(_) => 8,
-                    Distribution(_) | Series(series::SeriesKernel::Range) => 3,
+                    Distribution(_) => 3,
+                    Series(_) => 4,
                     Statistical(Fit) => 7,
-                    Series(
-                        series::SeriesKernel::Standardize
-                        | series::SeriesKernel::InverseStandardize,
-                    ) => 3,
                     Boolean(_) => 3,
                     Statistical(Summary) => 8,
                     Statistical(Predict) => 4,
                     Convert => 7,
-                    Series(series::SeriesKernel::Lag) => 3,
-                    Constant => 3,
+                    Constant => 5,
+                    Relational(
+                        relational::RelationalKernel::Limit | relational::RelationalKernel::Join,
+                    ) => 4,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 3,
                     _ => 2,
                 })
@@ -536,8 +552,10 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             .expect("built-in kernels have distinct identities");
     }
     statistics::register(builder);
+    visualization::register(builder);
     alignment::register(builder);
     aggregation::register(builder);
+    transforms::register(builder);
 }
 
 fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
@@ -556,6 +574,9 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
         Series(series::SeriesKernel::Dummy) => vec![Input::fixed("source")],
         Series(series::SeriesKernel::PanelDifference) => {
             vec![Input::fixed("aligned"), Input::fixed("series")]
+        }
+        Series(series::SeriesKernel::RollingMean | series::SeriesKernel::Lag) => {
+            vec![Input::fixed("series"), Input::repeated("context", 0..=1)]
         }
         Series(_) => vec![Input::fixed("series")],
         Statistical(Stats::Fit) => vec![
@@ -596,7 +617,7 @@ fn execute_kernel(
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let value = match kind {
         BuiltinKernel::Distribution(kind) => distribution::execute(kind, invocation),
-        BuiltinKernel::Series(kind) => return series::execute(kind, invocation),
+        BuiltinKernel::Series(kind) => return transforms::execute_series(kind, invocation),
         BuiltinKernel::Statistical(kind) => {
             return statistics::execute(kind, invocation);
         }

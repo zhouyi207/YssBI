@@ -60,14 +60,8 @@ pub(crate) fn constant(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue
     } else if let Some(yss_data_contract::ValueType::DataSeries(element)) =
         invocation.outputs.first().map(|output| &output.data_type)
     {
-        if value.metadata().is_none()
+        let value = if value.metadata().is_none()
             && let yss_data_contract::ValueType::Scalar(semantic) = element.as_ref()
-            && matches!(
-                semantic,
-                yss_data_contract::SemanticType::Categorical
-                    | yss_data_contract::SemanticType::Ordinal
-                    | yss_data_contract::SemanticType::Binary
-            )
         {
             value
                 .clone()
@@ -79,7 +73,8 @@ pub(crate) fn constant(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue
                 .map_err(|_| KernelError::InvalidParameter)
         } else {
             Ok(value.clone())
-        }
+        }?;
+        super::transforms::series_input(&value, invocation).map(RuntimeValue::Series)
     } else {
         Ok(value.clone())
     }
@@ -293,6 +288,8 @@ pub(crate) fn execute(
                 "left" => yss_data_contract::table::TableJoinKind::Left,
                 "right" => yss_data_contract::table::TableJoinKind::Right,
                 "full" => yss_data_contract::table::TableJoinKind::Full,
+                "semi" => yss_data_contract::table::TableJoinKind::Semi,
+                "anti" => yss_data_contract::table::TableJoinKind::Anti,
                 _ => return Err(KernelError::Failed),
             };
             relation.join(
@@ -352,7 +349,11 @@ pub(crate) fn execute(
             let RuntimeValue::Scalar(TabularScalar::Integer(rows)) = parameter("rows")? else {
                 return Err(KernelError::Failed);
             };
-            relation.limit(0, usize::try_from(*rows).map_err(|_| KernelError::Failed)?)
+            let offset = super::transforms::integer(invocation, "offset")?;
+            relation.limit(
+                usize::try_from(offset).map_err(|_| KernelError::InvalidParameter)?,
+                usize::try_from(*rows).map_err(|_| KernelError::Failed)?,
+            )
         }
         RelationalKernel::Rename => {
             relation.rename(&text(parameter("from")?)?, &text(parameter("to")?)?)
@@ -423,6 +424,7 @@ pub(crate) fn kernel_error(error: RelationError) -> KernelError {
         RelationError::NonFiniteResult => KernelError::NonFiniteResult,
         RelationError::InvalidInput => KernelError::InvalidNumericInput,
         RelationError::UnalignedSeries => KernelError::UnalignedSeries,
+        RelationError::ShapeMismatch => KernelError::ShapeMismatch,
         RelationError::MemoryLimitExceeded => KernelError::BudgetExceeded,
         RelationError::InvalidConversion => KernelError::InvalidParameter,
         _ => KernelError::Failed,

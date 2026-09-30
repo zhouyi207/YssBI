@@ -19,16 +19,89 @@ pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<B
     mapped_documentation(node_type_id.as_str())
         .map(|documentation| select_locale(documentation, locale).into())
         .or_else(|| super::statistics::inventory_documentation(node_type_id.as_str(), locale))
-        .or_else(|| super::plot::inventory_documentation(node_type_id.as_str(), locale))
         .or_else(|| super::dataframe::inventory_documentation(node_type_id.as_str(), locale))
         .or_else(|| super::dataframe::aggregation_documentation(node_type_id.as_str(), locale))
+        .or_else(|| super::dataframe::transformation_documentation(node_type_id.as_str(), locale))
 }
 
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
+        "yssbi.statistics.regression.robust" => markdown!("regression_robust"),
+        "yssbi.statistics.regression.hierarchical" => markdown!("regression_hierarchical"),
+        "yssbi.statistics.regression.stepwise" => markdown!("regression_stepwise"),
+        "yssbi.statistics.regression.curve" => markdown!("regression_curve"),
+        "yssbi.statistics.regression.nonlinear" => markdown!("regression_nonlinear"),
+        "yssbi.statistics.regression.nonlinear_formula" => {
+            markdown!("regression_nonlinear_formula")
+        }
+        "yssbi.statistics.regression.ridge" => markdown!("regression_ridge"),
+        "yssbi.statistics.regression.lasso" => markdown!("regression_lasso"),
+        "yssbi.statistics.regression.pls" => markdown!("regression_pls"),
+        "yssbi.statistics.regression.logit.multinomial" => {
+            markdown!("regression_logit_multinomial")
+        }
+        "yssbi.statistics.regression.logit.ordinal" => markdown!("regression_logit_ordinal"),
+        "yssbi.statistics.regression.logit.firth" => markdown!("regression_logit_firth"),
+        "yssbi.statistics.regression.poisson" => markdown!("regression_poisson"),
+        "yssbi.statistics.regression.negative_binomial" => {
+            markdown!("regression_negative_binomial")
+        }
+        "yssbi.statistics.regression.zero_inflated_poisson" => {
+            markdown!("regression_zero_inflated_poisson")
+        }
+        "yssbi.statistics.regression.zero_inflated_negative_binomial" => {
+            markdown!("regression_zero_inflated_negative_binomial")
+        }
+        "yssbi.statistics.regression.tobit" => markdown!("regression_tobit"),
+        "yssbi.statistics.regression.logit.conditional" => {
+            markdown!("regression_logit_conditional")
+        }
+        "yssbi.statistics.regression.deming" => markdown!("regression_deming"),
+        "yssbi.statistics.regression.quantile" => markdown!("regression_quantile"),
+        "yssbi.statistics.workflow.regression.univariate_multivariable" => {
+            markdown!("regression_workflow_univariate_multivariable")
+        }
+        "yssbi.statistics.workflow.regression.grouped" => markdown!("regression_workflow_grouped"),
+        "yssbi.statistics.workflow.regression.baseline" => {
+            markdown!("regression_workflow_baseline")
+        }
+        "yssbi.statistics.regression.threshold" => markdown!("regression_threshold"),
+        "yssbi.statistics.transform.rcs" => markdown!("regression_rcs"),
+        "yssbi.statistics.regression.glm" => markdown!("regression_glm"),
+        "yssbi.statistics.regression.gamma" => markdown!("regression_gamma"),
+        "yssbi.statistics.regression.inverse_gaussian" => markdown!("regression_inverse_gaussian"),
+        "yssbi.statistics.regression.cloglog" => markdown!("regression_cloglog"),
+        "yssbi.statistics.regression.beta" => markdown!("regression_beta"),
+        "yssbi.statistics.regression.fractional_response" => {
+            markdown!("regression_fractional_response")
+        }
+        "yssbi.statistics.association.canonical" => markdown!("multivariate_canonical"),
+        "yssbi.statistics.multivariate.exploratory_factor" => markdown!("multivariate_factor"),
+        "yssbi.statistics.multivariate.pca" => markdown!("multivariate_pca"),
+        "yssbi.statistics.multivariate.correspondence" => markdown!("multivariate_correspondence"),
+        "yssbi.statistics.multivariate.discriminant" => markdown!("multivariate_discriminant"),
+        "yssbi.statistics.multivariate.rda" => markdown!("multivariate_rda"),
+        "yssbi.statistics.multivariate.mds" => markdown!("multivariate_mds"),
+        "yssbi.statistics.anova.one_way" => markdown!("anova_one_way"),
+        "yssbi.statistics.anova.two_way" => markdown!("anova_two_way"),
+        "yssbi.statistics.anova.three_way" => markdown!("anova_three_way"),
+        "yssbi.statistics.anova.factorial" => markdown!("anova_factorial"),
+        "yssbi.statistics.anova.ancova" => markdown!("anova_ancova"),
+        "yssbi.statistics.anova.manova" => markdown!("anova_manova"),
+        "yssbi.statistics.anova.repeated_measures" => markdown!("anova_repeated_measures"),
         "yssbi.statistics.inequality.theil" => markdown!("theil"),
         "yssbi.statistics.inequality.gini" => markdown!("gini"),
         "yssbi.statistics.inequality.dagum_gini" => markdown!("dagum_gini"),
+        "yssbi.statistics.association.pearson" => markdown!("pearson"),
+        "yssbi.statistics.association.partial" => markdown!("partial_correlation"),
+        "yssbi.statistics.association.spearman" => markdown!("spearman"),
+        "yssbi.statistics.association.kendall" => markdown!("kendall"),
+        "yssbi.statistics.test.kappa" => markdown!("kappa"),
+        "yssbi.statistics.association.icc" => markdown!("icc"),
+        "yssbi.statistics.association.bland_altman" => markdown!("bland_altman"),
+        "yssbi.statistics.test.kendall_w" => markdown!("kendall_w"),
+        "yssbi.statistics.association.ridit" => markdown!("ridit"),
+        "yssbi.statistics.association.rwg" => markdown!("rwg"),
         "yssbi.numeric.add" => markdown!("add"),
         "yssbi.numeric.subtract" => markdown!("subtract"),
         "yssbi.numeric.multiply" => markdown!("multiply"),
@@ -115,6 +188,18 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.plot.kde.view" => markdown!("kde"),
         "yssbi.plot.line.view" => markdown!("line"),
         "yssbi.plot.scatter.view" => markdown!("scatter"),
+        "yssbi.plot.boxplot.view" => markdown!("boxplot"),
+        "yssbi.plot.wordcloud.view" => markdown!("wordcloud"),
+        "yssbi.plot.errorbar.view" => markdown!("errorbar"),
+        "yssbi.plot.pp_qq.view" => markdown!("pp_qq"),
+        "yssbi.plot.roc.view" => markdown!("roc"),
+        "yssbi.plot.quadrant.view" => markdown!("quadrant"),
+        "yssbi.plot.pareto.view" => markdown!("pareto_plot"),
+        "yssbi.plot.combination.view" => markdown!("combination"),
+        "yssbi.plot.bubble.view" => markdown!("bubble"),
+        "yssbi.plot.violin.view" => markdown!("violin"),
+        "yssbi.plot.heatmap.view" => markdown!("heatmap"),
+        "yssbi.plot.coefficient.view" => markdown!("coefficient"),
 
         "yssbi.statistics.test.t.one_sample" => markdown!("test_t_one_sample"),
         "yssbi.statistics.test.t.independent" => markdown!("test_t_independent"),

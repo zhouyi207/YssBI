@@ -73,6 +73,225 @@ fn noise(n: usize) -> Vec<f64> {
 }
 
 #[test]
+fn anova_adapters_preserve_exact_labels_and_enforce_shapes_and_parameters() {
+    let id = "yssbi.statistics.anova.one_way";
+    let wide = [9_007_199_254_740_992i64, 9_007_199_254_740_993];
+    let labels = RuntimeValue::List(
+        [wide[0], wide[0], wide[0], wide[1], wide[1], wide[1]]
+            .into_iter()
+            .map(int)
+            .collect(),
+    );
+    let result = run(
+        id,
+        &[
+            ("response", series(&[1., 2., 3., 2., 4., 6.])),
+            ("factors", labels.clone()),
+        ],
+        &[],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(factors) = field(&result[0], "factors").unwrap() else {
+        panic!("factor metadata");
+    };
+    assert_eq!(
+        field(&factors[0], "levels").unwrap(),
+        &RuntimeValue::List(wide.into_iter().map(int).collect())
+    );
+    assert!(matches!(
+        run(
+            id,
+            &[("response", series(&[1., 2.])), ("factors", labels)],
+            &[],
+            1
+        ),
+        Err(KernelError::ShapeMismatch)
+    ));
+    let nulls = RuntimeValue::List(vec![int(0), TabularScalar::Null.into(), int(1), int(1)].into());
+    assert!(matches!(
+        run(
+            id,
+            &[("response", series(&[1., 2., 3., 4.])), ("factors", nulls)],
+            &[],
+            1
+        ),
+        Err(KernelError::InvalidNumericInput)
+    ));
+    let repeated = "yssbi.statistics.anova.repeated_measures";
+    let inputs = [
+        ("response", series(&[1., 3., 2., 5., 4., 5.])),
+        (
+            "subjects",
+            RuntimeValue::List(
+                ["乙", "乙", "甲", "甲", "丙", "丙"]
+                    .into_iter()
+                    .map(string)
+                    .collect(),
+            ),
+        ),
+        (
+            "factors",
+            RuntimeValue::List(
+                ["before", "after", "before", "after", "before", "after"]
+                    .into_iter()
+                    .map(string)
+                    .collect(),
+            ),
+        ),
+    ];
+    let result = run(
+        repeated,
+        &inputs,
+        &[("sphericity_correction", string("greenhouse_geisser"))],
+        1,
+    )
+    .unwrap();
+    assert_eq!(field(&result[0], "subjects").unwrap(), &int(3));
+    assert!(matches!(
+        run(
+            repeated,
+            &inputs,
+            &[("sphericity_correction", string("invalid"))],
+            1
+        ),
+        Err(KernelError::InvalidParameter)
+    ));
+}
+
+#[test]
+fn association_ordinal_order_and_wide_category_labels_survive_kernel_mapping() {
+    use yss_data_contract::{ColumnSemantic, ConversionMetadata, SemanticType, SemanticValue};
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../yss-sci/src/association/fixtures/reference.json"
+    ))
+    .unwrap();
+    let codes: Vec<Vec<usize>> =
+        serde_json::from_value(fixture["ordinal_weighted"]["ratings"].clone()).unwrap();
+    let labels = ["Z", "M", "A", "B"];
+    let ordinal = |values: &[usize]| {
+        RuntimeValue::List(values.iter().map(|&i| string(labels[i])).collect())
+            .with_metadata(ConversionMetadata {
+                semantic: ColumnSemantic {
+                    values: labels
+                        .iter()
+                        .map(|label| SemanticValue {
+                            value: (*label).into(),
+                            label: (*label).into(),
+                        })
+                        .collect(),
+                    ..ColumnSemantic::new(SemanticType::Ordinal)
+                },
+                temporal: None,
+                dummy_base_level: None,
+            })
+            .unwrap()
+    };
+    let outputs = run(
+        "yssbi.statistics.test.kappa",
+        &[
+            ("ratings", ordinal(&codes[0])),
+            ("ratings", ordinal(&codes[1])),
+        ],
+        &[
+            ("kappa_method", string("cohen")),
+            ("kappa_weighting", string("linear")),
+            ("confidence_level", number(0.95)),
+        ],
+        1,
+    )
+    .unwrap();
+    let coefficient =
+        super::super::numeric_input(Some(field(&outputs[0], "coefficient").unwrap())).unwrap();
+    assert!(
+        (coefficient - fixture["ordinal_weighted"]["coefficient"].as_f64().unwrap()).abs() < 1e-12
+    );
+    let RuntimeValue::List(categories) = field(&outputs[0], "categories").unwrap() else {
+        panic!("category labels")
+    };
+    assert_eq!(categories.len(), 4);
+    assert_eq!(categories[0], string("Z"));
+    let wide = |values: &[u64]| {
+        RuntimeValue::List(
+            values
+                .iter()
+                .map(|&value| TabularScalar::Unsigned(value).into())
+                .collect(),
+        )
+    };
+    let outputs = run(
+        "yssbi.statistics.test.kappa",
+        &[
+            (
+                "ratings",
+                wide(&[u64::MAX, u64::MAX, u64::MAX - 1, u64::MAX - 1]),
+            ),
+            (
+                "ratings",
+                wide(&[u64::MAX, u64::MAX - 1, u64::MAX - 1, u64::MAX - 1]),
+            ),
+        ],
+        &[
+            ("kappa_method", string("cohen")),
+            ("kappa_weighting", string("none")),
+            ("confidence_level", number(0.95)),
+        ],
+        1,
+    )
+    .unwrap();
+    assert_eq!(field(&outputs[0], "coefficient").unwrap(), &number(0.5));
+    let RuntimeValue::List(categories) = field(&outputs[0], "categories").unwrap() else {
+        panic!("wide labels")
+    };
+    assert_eq!(
+        categories[0],
+        RuntimeValue::Scalar(TabularScalar::Unsigned(u64::MAX))
+    );
+    assert_eq!(
+        categories[1],
+        RuntimeValue::Scalar(TabularScalar::Unsigned(u64::MAX - 1))
+    );
+    assert!(matches!(
+        run(
+            "yssbi.statistics.test.kappa",
+            &[
+                (
+                    "ratings",
+                    RuntimeValue::List(vec![string("A"), string("B")].into())
+                ),
+                (
+                    "ratings",
+                    RuntimeValue::List(vec![string("B"), string("A")].into())
+                )
+            ],
+            &[
+                ("kappa_method", string("cohen")),
+                ("kappa_weighting", string("linear")),
+                ("confidence_level", number(0.95))
+            ],
+            1
+        ),
+        Err(KernelError::InvalidParameter)
+    ));
+    let independent = run(
+        "yssbi.statistics.association.ridit",
+        &[
+            ("sample", series(&[1., 2., 3.])),
+            ("reference", series(&[1., 1., 2., 2., 3., 3., 3., 3.])),
+        ],
+        &[
+            ("alternative", string("two_sided")),
+            ("continuity_correction", flag(false)),
+        ],
+        1,
+    )
+    .unwrap();
+    let mean =
+        super::super::numeric_input(Some(field(&independent[0], "mean_ridit").unwrap())).unwrap();
+    assert!((mean - 5.0 / 12.0).abs() < 1e-12);
+}
+
+#[test]
 fn theil_node_enforces_form_weights_and_returns_structured_result() {
     let id = "yssbi.statistics.inequality.theil";
     let grouped = run(
@@ -778,8 +997,14 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
         panic!()
     };
     assert_eq!(model.report.model_basic_info.covariance_type, "cluster");
-    let density = run("yssbi.plot.kde.view", &[("values", fit[2].clone())], &[], 1).unwrap();
-    let RuntimeValue::List(points) = field(&density[0], "points").unwrap() else {
+    let density = run(
+        "yssbi.plot.kde.view",
+        &[("values", fit[2].clone())],
+        &[("grid_points", int(256))],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(points) = field(&density[0], "data").unwrap() else {
         panic!()
     };
     assert_eq!(points.len(), 256);
@@ -787,10 +1012,10 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
         run(
             "yssbi.plot.kde.view",
             &[("values", series(&[-f64::MAX, f64::MAX]))],
-            &[],
+            &[("grid_points", int(256))],
             1
         ),
-        Err(KernelError::NonFiniteResult)
+        Err(KernelError::ScientificFailure)
     ));
 }
 
