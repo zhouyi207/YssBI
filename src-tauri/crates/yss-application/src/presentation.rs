@@ -224,8 +224,7 @@ impl PresentationSession {
             }
         }
         next.spec.validate().map_err(|_| UiError::Invalid)?;
-        templates::regression::validate_bindings(&next.spec, &default.spec)
-            .map_err(|_| UiError::Invalid)?;
+        templates::validate_bindings(&next.spec, &default.spec).map_err(|_| UiError::Invalid)?;
         if next.spec != previous.spec {
             next.revision = previous
                 .revision
@@ -509,11 +508,14 @@ fn report_spec(session: &ApplicationSession, source: &UiSource) -> Result<UiSpec
             source.result_id.parse().map_err(|_| UiError::Invalid)?,
         ))
         .ok_or(UiError::Unavailable)?;
-    let RuntimeValue::LinearRegression(model) = result.value().value().unannotated() else {
-        return Err(UiError::Unavailable);
-    };
-    let summary = model.summary.as_ref().ok_or(UiError::Unavailable)?;
-    Ok(templates::regression::spec_for(&summary.options))
+    match result.value().value().unannotated() {
+        RuntimeValue::LinearRegression(model) => {
+            let summary = model.summary.as_ref().ok_or(UiError::Unavailable)?;
+            Ok(templates::regression::spec_for(&summary.options))
+        }
+        RuntimeValue::Record(_) => Ok(templates::structured()),
+        _ => Err(UiError::Unavailable),
+    }
 }
 
 fn validate_source(
@@ -533,12 +535,12 @@ fn validate_source(
         .execution()
         .query_result(ResultId::from_existing(id))
         .ok_or(UiError::Unavailable)?;
-    if report
-        && !matches!(
-            result.value().value().unannotated(),
-            RuntimeValue::LinearRegression(model) if model.summary.is_some()
-        )
-    {
+    let supports_report = match result.value().value().unannotated() {
+        RuntimeValue::Record(_) => true,
+        RuntimeValue::LinearRegression(model) => model.summary.is_some(),
+        _ => false,
+    };
+    if report && !supports_report {
         return Err(UiError::Unavailable);
     }
     Ok(())

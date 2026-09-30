@@ -7,7 +7,7 @@
 
 ## 状态归属
 
-首个接入场景是线性回归结果报告。Rust Application session 保存每个结果的页面 JSON，React 只安装其只读投影。
+结构化统计结果与线性回归结果共用 JSON 报告。Rust Application session 保存每个结果的页面 JSON，React 只安装其只读投影。
 GUI 的排序、显隐、重置、JSON 导入和 Harness 的页面修改调用相同用例。模型不能改写统计结果；报告组件继续使用既有 Results 查询、分页、分析与面板租约。
 
 Summary 内容和检验参数属于图节点参数。默认页面只生成本次结果已选择的绑定；布局 replace/patch/reset 同样受该结果能力约束，不能通过 JSON 加入未计算的分析。Report 的“添加并计算”调用 Results 的节点编辑与定向执行流程，成功后切换到新结果及其默认页面，不改写旧结果的统计快照。
@@ -40,11 +40,14 @@ Spec 只包含 `root` 和按稳定 ID 索引的 `elements`；每个元素有 `co
 | column / row                                                      | gap                       | 稳定元素 ID 列表 |
 | section                                                           | title、collapsible        | 稳定元素 ID 列表 |
 | text                                                              | text，按纯文本呈现        | 空               |
+| structured                                                        | binding，绑定结构化结果   | 空               |
 | equation / keyValue / table / statCard / coefficientTable / chart | binding                   | 空               |
 | analysis                                                          | binding，登记过的分析交互 | 空               |
 | button                                                            | label、封闭的 intent      | 空               |
 
 组件目录按展示方式定义。`section` 只负责标题和折叠；模型概览、ANOVA、诊断等业务名称属于报告模板的元素 ID 和数据绑定。默认模板按报告类型放在 Application 的 [templates/regression.rs](../yss-application/src/presentation/templates/regression.rs)，UI contract 不拥有回归模板。
+
+普通结构化结果使用 [templates/mod.rs](../yss-application/src/presentation/templates/mod.rs) 的默认页面，将 `structured` 绑定到 `result`。组件递归组合键值表、表格和章节，不按统计方法选择页面。绑定的数值直接来自既有 Results 查询，Spec 中不复制结果；布局校验只允许当前默认页面授予的绑定及组件类型。线性回归继续使用有界表引用和已选分析，Fit 模型不授予这些报告能力。
 
 模板条目直接关联 Summary 的内容选项，仅为已选内容构造元素及子树；同一份生成结果用于默认页、重置和绑定能力校验。
 

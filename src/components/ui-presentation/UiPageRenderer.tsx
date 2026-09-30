@@ -6,15 +6,17 @@ import { Section } from "./Section";
 import { KeyValue } from "./KeyValue";
 import { DataTable } from "./DataTable";
 import { StatCard } from "./StatCard";
+import { StructuredData } from "./StructuredData";
 
 export type UiResultBindings = Readonly<
   Record<
     string,
-    {
-      readonly type: Exclude<UiBindingKind, "keyValue" | "statCard">;
-      readonly content: ReactNode;
-      readonly available?: boolean;
-    }
+    | {
+        readonly type: Exclude<UiBindingKind, "keyValue" | "statCard" | "structured">;
+        readonly content: ReactNode;
+        readonly available?: boolean;
+      }
+    | { readonly type: "structured"; readonly value: unknown; readonly available?: boolean }
   >
 >;
 
@@ -59,7 +61,8 @@ export function UiPageRenderer({
     }
     if (!hasOwn(results, binding) || results[binding].type !== component.type)
       throw new Error("ui_binding_invalid");
-    return results[binding].content;
+    const result = results[binding];
+    return result.type === "structured" ? <StructuredData value={result.value} /> : result.content;
   };
   const render = (id: string): ReactNode => {
     if (!available(id)) return null;

@@ -34,6 +34,7 @@ export type UiComponent =
       readonly props: { readonly label: string; readonly intent: UiIntent };
     };
 export type UiBindingKind =
+  | "structured"
   | "equation"
   | "keyValue"
   | "table"
@@ -187,6 +188,7 @@ export function validateUiElement(value: unknown): asserts value is UiElement {
       if (!props.title.trim() || typeof props.collapsible !== "boolean") fail();
       return;
     }
+    case "structured":
     case "equation":
     case "keyValue":
     case "table":

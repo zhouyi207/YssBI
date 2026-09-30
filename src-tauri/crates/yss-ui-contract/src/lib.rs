@@ -18,6 +18,7 @@ pub struct UiSource {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UiBindingKind {
+    Structured,
     Equation,
     KeyValue,
     Table,
@@ -72,6 +73,7 @@ pub enum UiComponent {
     Row { gap: u8 },
     Text { text: String },
     Section { title: String, collapsible: bool },
+    Structured { binding: String },
     Equation { binding: String },
     KeyValue { binding: String },
     Table { binding: String },
@@ -85,6 +87,7 @@ pub enum UiComponent {
 impl UiComponent {
     pub fn binding(&self) -> Option<(&str, UiBindingKind)> {
         let (binding, kind) = match self {
+            Self::Structured { binding } => (binding, UiBindingKind::Structured),
             Self::Equation { binding } => (binding, UiBindingKind::Equation),
             Self::KeyValue { binding } => (binding, UiBindingKind::KeyValue),
             Self::Table { binding } => (binding, UiBindingKind::Table),

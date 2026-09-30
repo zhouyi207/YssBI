@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use yss_sci_contract::regression::summary::LinearSummaryOptions;
-use yss_ui_contract::{InvalidUiSpec, UiComponent, UiElement, UiSpec};
+use yss_ui_contract::{UiComponent, UiElement, UiSpec};
 
 fn entries(
     options: &LinearSummaryOptions,
@@ -156,27 +156,10 @@ pub(in crate::presentation) fn spec_for(options: &LinearSummaryOptions) -> UiSpe
     }
 }
 
-pub(in crate::presentation) fn validate_bindings(
-    spec: &UiSpec,
-    allowed: &UiSpec,
-) -> Result<(), InvalidUiSpec> {
-    // The default template grants only bindings supported by this result's summary options.
-    for element in spec.elements.values() {
-        if let Some(binding) = element.component.binding()
-            && !allowed
-                .elements
-                .values()
-                .any(|element| element.component.binding() == Some(binding))
-        {
-            return Err(InvalidUiSpec);
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::presentation::templates::validate_bindings;
 
     #[test]
     fn template_wire_and_binding_types_match_the_report_contract() {
