@@ -1,11 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcfPacfRequestDto {
-    pub residuals: Vec<f64>,
-    pub max_lag: usize,
-}
+use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AcfPacfResponseDto {
@@ -41,21 +34,6 @@ impl From<yss_sci_contract::hypothesis::HypothesisTestOutput> for HypothesisTest
             p_value: out.p_value,
         }
     }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SerialTestsRequestDto {
-    pub residuals: Vec<f64>,
-    pub lags: usize,
-    #[serde(default)]
-    pub exog: Option<Vec<Vec<f64>>>,
-    #[serde(default = "default_bg_nomiss0")]
-    pub bg_nomiss0: bool,
-}
-
-fn default_bg_nomiss0() -> bool {
-    true
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -1,6 +1,4 @@
-import React from "react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Button } from "@/components/ui/button";
 
 export function InfoSegmentedToggle<T extends string>({
   value,
@@ -26,30 +24,5 @@ export function InfoSegmentedToggle<T extends string>({
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
-  );
-}
-
-export function InfoAccentButton({
-  children,
-  disabled,
-  loading,
-  onClick,
-}: {
-  children: React.ReactNode;
-  disabled?: boolean;
-  loading?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={disabled || loading}
-      onClick={onClick}
-      className="border-[var(--accent-color)]/40 bg-[var(--accent-color)]/20 text-[var(--accent-color)] hover:bg-[var(--accent-color)]/30"
-    >
-      {loading ? "..." : children}
-    </Button>
   );
 }

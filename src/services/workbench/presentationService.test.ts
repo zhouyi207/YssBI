@@ -1,5 +1,6 @@
-import { expect, it, vi } from "vitest";
-import { subscribeUi } from "./presentationService";
+import { beforeEach, expect, it, vi } from "vitest";
+import { activateUiElement, readUiPage, subscribeUi, updateUiPage } from "./presentationService";
+import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { parseUiIntent } from "@/shared/types/domain/uiPresentation";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -13,6 +14,8 @@ vi.mock("@/services/devHmrIpc", () => ({
   trackChannel: (channel: unknown) => channel,
   untrackChannel: vi.fn(),
 }));
+
+beforeEach(() => invoke.mockReset());
 
 it("validates typed resource opening and restricts node focus to node graphs", () => {
   const intent = {
@@ -55,4 +58,69 @@ it("shares one project stream, recovers a late listener and releases only after 
   await closeSecond();
   expect(invoke).toHaveBeenLastCalledWith("unsubscribe_ui", { subscriptionId: "subscription" });
   expect(fail).not.toHaveBeenCalled();
+});
+
+it("projects full result descriptors to the closed source contract for every page command", async () => {
+  const descriptor: ResultDescriptor = {
+    executionSessionId: "00000000-0000-0000-0000-000000000001",
+    resultId: "42",
+    provenance: {
+      runId: "run",
+      graphPath: "graphs/report.yssbi",
+      nodeId: "00000000-0000-0000-0000-000000000002",
+      output: null,
+      createdAtMs: "123",
+    },
+    presentation: { kind: "report", report: "structured" },
+    valueKind: "scalar",
+    metadata: null,
+    totalCount: null,
+    title: "Report",
+  };
+  const original = structuredClone(descriptor);
+  const source = {
+    executionSessionId: descriptor.executionSessionId,
+    resultId: descriptor.resultId,
+  };
+  const page = {
+    source,
+    revision: 1,
+    spec: {
+      root: "report",
+      elements: {
+        report: {
+          component: { type: "text", props: { text: "Report" } },
+          visible: true,
+          children: [],
+        },
+      },
+    },
+  };
+  const update = { kind: "snapshot", page };
+  const receipt = {
+    id: "00000000-0000-0000-0000-000000000003",
+    intent: { kind: "showPanel", panel: "assistant" },
+    status: "pending",
+  };
+  invoke.mockResolvedValueOnce({ kind: "page", page });
+  expect(await readUiPage("project", descriptor)).toEqual(page);
+  expect(invoke).toHaveBeenLastCalledWith("inspect_ui", {
+    projectInstanceId: "project",
+    request: { kind: "page", source },
+  });
+
+  invoke.mockResolvedValueOnce(update);
+  expect(await updateUiPage("project", descriptor, 1, { kind: "reset" })).toEqual(update);
+  expect(invoke).toHaveBeenLastCalledWith("update_ui", {
+    projectInstanceId: "project",
+    request: { source, baseRevision: 1, action: { kind: "reset" } },
+  });
+
+  invoke.mockResolvedValueOnce(receipt);
+  expect(await activateUiElement("project", descriptor, 1, "assistant")).toEqual(receipt);
+  expect(invoke).toHaveBeenLastCalledWith("activate_ui_element", {
+    projectInstanceId: "project",
+    request: { source, baseRevision: 1, id: "assistant", clientKey: expect.any(String) },
+  });
+  expect(descriptor).toEqual(original);
 });

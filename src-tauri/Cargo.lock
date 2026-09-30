@@ -9295,7 +9295,6 @@ dependencies = [
  "yss-relational-contract",
  "yss-resource-naming",
  "yss-sci-contract",
- "yss-sci-runtime",
  "yss-ui-contract",
 ]
 

@@ -55,7 +55,7 @@ export function createDefaultBayesDraft(): BayesModelDraftDTO {
     [],
     symbolNamesByRole(symbols, "parameter"),
     draft.likelihood,
-  ).parameters;
+  );
 
   return {
     ...draft,

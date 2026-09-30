@@ -28,7 +28,6 @@ flowchart TD
     APP --> ADAPTERS["SQLite / Rig / notify / Plugin Manager"]
     APP --> TAURI["Tauri：runtime 与 IPC 模块使用"]
     APP --> IPC["Event / 中立 Channel / Contract"]
-    APP -->|IPC commands| SCI["yss-sci-runtime"]
 ```
 
 Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Channel 和 Contract crates。Channel 不反向依赖 Application；依赖应用事件和图动作的通道适配器已归入 `ipc/channel`。普通用例模块保持原有分层约束，Application 不依赖桌面根包。
@@ -99,7 +98,7 @@ Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子�
 
 ### 桌面 IPC
 
-[ipc](src/ipc/README.md) 拥有唯一命令注册表、私有 handler/schema/error 和活动面板响应缓存。其 `channel` 子模块编码执行事件与图活动，编辑器响应使用有界 snapshot/delta 缓存；中立的 Harness 订阅、项目进度和诊断交付复用 `yss-ipc-channel`。Standalone SCI 命令可以调用 `yss-sci-runtime`，普通 Application 用例只读取 Graph Execution 已保留的模型与分析结果。
+[ipc](src/ipc/README.md) 拥有唯一命令注册表、私有 handler/schema/error 和活动面板响应缓存。其 `channel` 子模块编码执行事件与图活动，编辑器响应使用有界 snapshot/delta 缓存；中立的 Harness 订阅、项目进度和诊断交付复用 `yss-ipc-channel`。统计报告通过结果引用查询 Graph Execution 已保留的模型与分析结果；数值计算由 Node Kernel 调用 `yss-sci-runtime`，Application 不直接依赖 SCI runtime。
 
 ### 项目管理服务
 

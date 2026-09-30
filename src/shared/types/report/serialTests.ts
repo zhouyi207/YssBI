@@ -1,6 +1,6 @@
 /**
- * 序列相关检验 DTO（对齐 Rust `command_serial_tests.rs`）
- * IPC 边界经 `normalizeSerialTestsResponse` 窄化。
+ * 序列相关检验 DTO（对齐 Rust `ipc/schema/statistics.rs` 中的结果结构）
+ * 当前结果分析边界由 `parseResultAnalysis` 校验。
  */
 
 import { isFiniteNumber, isNonNegativeInteger, isRecord } from "./guards";
@@ -50,7 +50,7 @@ export function normalizeDurbinWatsonResult(raw: unknown): DurbinWatsonResultDTO
   return { d: raw.d };
 }
 
-/** 窄化 `compute_serial_tests` 响应；拒绝 `dw` 为裸 number 等漂移形态。 */
+/** 窄化序列相关检验结果；拒绝 `dw` 为裸 number 等漂移形态。 */
 export function normalizeSerialTestsResponse(raw: unknown): SerialTestsResponseDTO | null {
   if (!isRecord(raw)) return null;
   const dw = normalizeDurbinWatsonResult(raw.dw);

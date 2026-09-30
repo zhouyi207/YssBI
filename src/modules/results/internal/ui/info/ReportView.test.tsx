@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 
+import { readFileSync } from "node:fs";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ResultViewPresentationProvider } from "@/features/application/results/resultViewPresentation";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { ReportView } from "./ReportView";
-import { ReportLayout } from "./shared/ReportLayout";
 
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 
@@ -39,33 +38,13 @@ const descriptor: ResultDescriptor = {
   title: "Linear Regression Summary",
 };
 
+const reportFixture = JSON.parse(
+  readFileSync("src/tests/fixtures/node-system-contracts/ols-summary-report.json", "utf8"),
+);
 const malformedLinearRegressionReport = {
-  title: "Linear Regression Summary",
-  endog_name: "response",
-  paramNames: ["const", "x"],
-  resultRef: { executionSessionId: "00000000-0000-0000-0000-000000000001", resultId: "42" },
-  observations: { kind: "tableRef", part: "observations", rowCount: 3 },
-  model_basic_info: {
-    model_type: "OLS",
-    method: "Least Squares",
-    num_observation: 3,
-    r_squared: 0.8,
-    adj_r_squared: 0.7,
-    f_statistic: 8,
-    prob_f_statistic: 0.05,
-    df_model: 1,
-    df_residual: 1,
-    df_total: 2,
-    ss_model: 2,
-    ss_residual: 0.5,
-    ss_total: 2.5,
-    ms_model: 2,
-    ms_residual: 0.5,
-    ms_total: 1.25,
-    covariance_type: "nonrobust",
-  },
+  ...reportFixture,
+  resultRef: { executionSessionId: resultSessionFixture, resultId: "42" },
   coefficients: { kind: "tableRef", part: "coefficients" },
-  diagnostic_info: { cond_no: 1 },
 };
 
 describe("ReportView", () => {
@@ -82,29 +61,6 @@ describe("ReportView", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-  });
-
-  it("omits the report title when embedded but keeps it standalone", () => {
-    act(() => {
-      root.render(
-        <ResultViewPresentationProvider presentation="embedded">
-          <ReportLayout title="Embedded report">
-            <p>Report body</p>
-          </ReportLayout>
-        </ResultViewPresentationProvider>,
-      );
-    });
-    expect(container.querySelector("h1")).toBeNull();
-    expect(container.textContent).toContain("Report body");
-
-    act(() => {
-      root.render(
-        <ReportLayout title="Standalone report">
-          <p>Report body</p>
-        </ReportLayout>,
-      );
-    });
-    expect(container.querySelector("h1")?.textContent).toBe("Standalone report");
   });
 
   it("logs an actionable diagnostic for a malformed canonical OLS report", () => {
@@ -136,7 +92,7 @@ describe("ReportView", () => {
     expect(logError).toHaveBeenCalledWith(expect.any(String), "ReportValidation");
   });
 
-  it("reports the exact missing OLS model field path", () => {
+  it("reports the exact missing OLS presentation field path", () => {
     act(() => {
       root.render(
         <ReportView
@@ -144,9 +100,9 @@ describe("ReportView", () => {
           report="linearRegressionSummary"
           data={{
             ...malformedLinearRegressionReport,
-            model_basic_info: {
-              ...malformedLinearRegressionReport.model_basic_info,
-              covariance_type: undefined,
+            presentation: {
+              ...reportFixture.presentation,
+              summary: { ...reportFixture.presentation.summary, items: undefined },
             },
             coefficients: { ...malformedLinearRegressionReport.coefficients, rowCount: 1 },
           }}
@@ -155,14 +111,14 @@ describe("ReportView", () => {
     });
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Unable to render linear regression report: model_basic_info.covariance_type missing required field.",
+      "Unable to render linear regression report: presentation.summary.items missing required field.",
     );
     expect(logError).toHaveBeenCalledTimes(1);
     expect(JSON.parse(logError.mock.calls[0][0])).toMatchObject({
       resultId: "42",
       runId: "7",
       nodeId: "ols-node",
-      fieldPath: "model_basic_info.covariance_type",
+      fieldPath: "presentation.summary.items",
       reason: "missing required field",
     });
   });

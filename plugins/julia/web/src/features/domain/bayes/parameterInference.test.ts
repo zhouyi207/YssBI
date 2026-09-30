@@ -7,21 +7,21 @@ describe("Bayesian parameter inference", () => {
   it("adds inferred parameters and likelihood parameters with defaults", () => {
     const result = mergeInferredParameters([], ["a", "b"], DEFAULT_NORMAL_LIKELIHOOD);
 
-    expect(result.parameters.map((parameter) => parameter.name)).toEqual(["a", "b", "sigma"]);
-    expect(result.parameters.find((parameter) => parameter.name === "a")?.prior).toEqual({
+    expect(result.map((parameter) => parameter.name)).toEqual(["a", "b", "sigma"]);
+    expect(result.find((parameter) => parameter.name === "a")?.prior).toEqual({
       distribution: "normal",
       args: [0, 10],
     });
-    expect(result.parameters.find((parameter) => parameter.name === "sigma")?.constraint).toEqual({
+    expect(result.find((parameter) => parameter.name === "sigma")?.constraint).toEqual({
       type: "positive",
     });
-    expect(result.parameters.find((parameter) => parameter.name === "sigma")?.prior).toEqual({
+    expect(result.find((parameter) => parameter.name === "sigma")?.prior).toEqual({
       distribution: "exponential",
       args: [1],
     });
   });
 
-  it("preserves existing parameter settings and reports unused parameters", () => {
+  it("preserves existing parameter settings and removes unused parameters", () => {
     const existing = [
       {
         ...createDefaultParameter("a"),
@@ -32,10 +32,10 @@ describe("Bayesian parameter inference", () => {
 
     const result = mergeInferredParameters(existing, ["a"], DEFAULT_NORMAL_LIKELIHOOD);
 
-    expect(result.parameters.find((parameter) => parameter.name === "a")?.prior).toEqual({
+    expect(result.find((parameter) => parameter.name === "a")?.prior).toEqual({
       distribution: "normal",
       args: [0, 5],
     });
-    expect(result.unusedParameterNames).toEqual(["old"]);
+    expect(result.map((parameter) => parameter.name)).toEqual(["a", "sigma"]);
   });
 });

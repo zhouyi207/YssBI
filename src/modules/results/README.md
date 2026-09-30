@@ -23,7 +23,7 @@ renderer 绘制。前端不计算统计量、核密度、AUC 或置信区间；�
 
 统计节点只输出一份结构化 `result`。Result 面板与独立 Inspect 窗口共用右上角的“数值 / 报告”切换，默认查看数值。两种视图绑定同一个结果引用和租约，切换不重新执行节点；已经打开的报告保持挂载，保留布局、分页和显隐状态。独立报告也使用 `/inspect`，不再注册 `/info` 或按统计方法分派专用页面。
 
-所有报告使用 `ResultReportPage` 和 `UiPageRenderer`。普通结果的 JSON 页面绑定 `structured` 组件，由它使用通用键值表、数据表和可折叠章节呈现对象、数组及矩阵；长数组在已受 Results 大小限制的载荷内每页呈现 100 项，空值、布尔值与宽整数文本保留原意。它不推断统计方法或执行计算。
+所有报告使用 `ResultReportPage` 和 `UiPageRenderer`。普通结果的 JSON 页面绑定 `structured` 组件，由它使用通用键值表、数据表和可折叠章节呈现对象、数组及矩阵；数组保留为结果引用，展开后由 `StructuredResult` 每次请求至多 100 项的有界数据页，嵌套数组继续按需读取，空值、布尔值与宽整数文本保留原意。它不推断统计方法或执行计算。
 
 线性回归的 `LinearResultBindings` 只接入原生结果的系数、观测、图形和分析查询，页面组合仍由同一个 JSON renderer 完成。其余统计结果不要求符合旧的专用报告载荷。
 
@@ -34,9 +34,9 @@ renderer 绘制。前端不计算统计量、核密度、AUC 或置信区间；�
 线性回归报告接入 Rust 拥有的 JSON 页面。GUI 的排序、显隐、重置、导入和 Harness 修改共用 Application，前端通过快照与稳定元素增量呈现容器、文本、报告章节及受控按钮。
 页面结构、组件目录、修订校验、回执和会话恢复见 [JSON 页面与界面意图](../../../src-tauri/crates/yss-ui-contract/README.md)；不再维护独立的前端报告布局权威或旧 Spec 转换。
 
-通用展示组件集中在 [ui-presentation](../../components/ui-presentation/)：Section、Equation、KeyValue、DataTable、StatCard、CoefficientTable 和 Chart 各自按文件维护，表格框架、公式映射和控件就近复用。组件只接收展示数据；查询、参数和结果生命周期保留在 Application results 与报告协调组件。其他报告直接使用同一份系数表、公式和卡片实现。
+通用展示组件集中在 [ui-presentation](../../components/ui-presentation/)：Section、Equation、KeyValue、DataTable、StatCard、CoefficientTable 和 Chart 各自按文件维护，表格框架、公式映射和控件就近复用。组件只接收展示数据；查询、参数和结果生命周期保留在 Application results 与报告协调组件。
 
-通用组件与数值格式函数从各自 owner 直接导入，报告 `shared` 只组织报告专用组合。公式映射表自行使用统一数值格式；假设检验的公式转换留在检验组件内部。
+通用组件与数值格式函数从各自 owner 直接导入，报告 `shared` 仅保留线性报告使用的 ACF/PACF、序列相关和假设检验结果视图。检验选项由 Summary 配置，视图通过结果引用读取已计算值，不再保留内联样本计算表单或按统计方法拆分的旧报告组件。公式映射表自行使用统一数值格式；假设检验的公式转换留在检验组件内部。
 
 UiPageRenderer 按组件类型呈现 `presentation` 中的键值条目、列和行、指标；分页、公式、图表及分析通过稳定的 Results 绑定接入。章节组合由 Rust 模板拥有，前端不再逐个分发 ModelSummary、ANOVA 等章节枚举。Results 与查询协调器拥有统计值和能力校验，数值不来自 Spec；折叠区展开后才挂载查询组件。
 系数分页由报告内的窄 Context 承载，系数表、系数图和公式订阅同一页；系数图与表格在模板中独立组合，隐藏元素仍保留页码。其他章节以稳定数据和绑定隔离渲染，布局忙碌状态及系数翻页不重建无关统计图和检验区。分页快照与图表输入保持引用稳定，页面 Hook 只订阅项目身份。

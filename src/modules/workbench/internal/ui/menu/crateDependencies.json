@@ -285,12 +285,6 @@
         "target": null
       },
       {
-        "name": "yss-sci-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-ui-contract",
         "kind": "normal",
         "optional": false,

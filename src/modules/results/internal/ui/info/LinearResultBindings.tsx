@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useContext,
   useEffect,
   useMemo,
@@ -32,13 +34,14 @@ import {
 import type { ResultReference } from "@/shared/types/domain/result";
 import type { UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
 import { ResultReportPage } from "./ResultReportPage";
-import { ReportLazyBoundary, LazyEquation } from "./shared";
 import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
 import { HypothesisTestResultView } from "./shared/HypothesisTestBlock";
 import { AcfPacfResultView } from "./shared/ACFPACFBlock";
 import { SerialTestsResultView } from "./shared/SerialTestsBlock";
 import { useLinearSummaryContents } from "@/features/application/results/useLinearSummaryContents";
 import { AddReportContents } from "./AddReportContents";
+
+const LazyEquation = lazy(() => import("@/components/ui-presentation/Equation"));
 
 function PageToolbar({ page }: { page: PagedResultRowsState }) {
   return (
@@ -221,9 +224,11 @@ function LinearCoefficientsSection({
   const { page, coefficients, coefficientError } = value;
   if (mode === "equation")
     return coefficients.length === data.coefficients.rowCount && coefficients.length > 0 ? (
-      <ReportLazyBoundary variant="formula">
+      <Suspense
+        fallback={<div className="rounded-lg border border-border bg-card h-24 animate-pulse" />}
+      >
         <LazyEquation endogName={data.endog_name} coefficients={coefficients} />
-      </ReportLazyBoundary>
+      </Suspense>
     ) : null;
   return (
     <>

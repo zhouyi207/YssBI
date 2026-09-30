@@ -7,7 +7,6 @@ import type {
   ParameterSpecDTO,
   ParseExpressionResponseDTO,
   PriorSpecDTO,
-  SymbolDraftDTO,
 } from "@/shared/types/bayes";
 import { parseBayesExpression } from "@/services/bayes";
 import {
@@ -31,7 +30,6 @@ import {
 
 export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefaultBayesDraft()) {
   const [draft, setDraft] = useState<BayesModelDraftDTO>(initialDraft);
-  const [unusedParameterNames, setUnusedParameterNames] = useState<string[]>([]);
   const [formulaError, setFormulaError] = useState<FormulaParseError | null>(null);
   const formulaRequestGeneration = useRef(0);
 
@@ -57,32 +55,6 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
       setFormulaError(formatFormulaParseError(caught));
       return false;
     }
-  };
-
-  const updateSymbolRole = (name: string, role: BayesSymbolRoleDTO) => {
-    setDraft((current) => rebuildDraft(applySymbolRole(current, name, role)));
-  };
-
-  const updateSymbolDataBinding = (name: string, column: string) => {
-    setDraft((current) => rebuildDraft(applySymbolDataBinding(current, name, column)));
-  };
-
-  const updateSymbolPrior = (name: string, prior: PriorSpecDTO) => {
-    setDraft((current) => ({
-      ...current,
-      parameters: current.parameters.map((parameter) =>
-        parameter.name === name ? { ...parameter, prior } : parameter,
-      ),
-    }));
-  };
-
-  const updateSymbolConstraint = (name: string, constraint: ParameterSpecDTO["constraint"]) => {
-    setDraft((current) => ({
-      ...current,
-      parameters: current.parameters.map((parameter) =>
-        parameter.name === name ? { ...parameter, constraint } : parameter,
-      ),
-    }));
   };
 
   const updateDataset = (dataset: BayesModelDraftDTO["dataset"]) => {
@@ -116,20 +88,6 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     });
   };
 
-  const updateSymbols = (symbols: SymbolDraftDTO[]) => {
-    formulaRequestGeneration.current += 1;
-    setDraft((current) => rebuildDraft({ ...current, symbols }));
-  };
-
-  const updateLikelihood = (likelihood: LikelihoodSpecDTO) => {
-    formulaRequestGeneration.current += 1;
-    setDraft((current) => rebuildDraft({ ...current, likelihood }));
-  };
-
-  const updateParameters = (parameters: ParameterSpecDTO[]) => {
-    setDraft((current) => ({ ...current, parameters }));
-  };
-
   const updateSampler = (sampler: InferenceConfigDTO) => {
     setDraft((current) => ({ ...current, sampler }));
   };
@@ -154,12 +112,11 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
     });
     const boundResponse = bindResponseExpression(next.rawResponse);
     const boundPredictor = bindRawExpression(next.rawPredictor, symbols);
-    const merged = mergeInferredParameters(
+    const parameters = mergeInferredParameters(
       next.parameters,
       symbolNamesByRole(symbols, "parameter"),
       next.likelihood,
     );
-    setUnusedParameterNames(merged.unusedParameterNames);
     const independentSymbols = new Set(symbolNamesByRole(symbols, "independent"));
     const dataBindings = Object.fromEntries(
       Object.entries(next.dataBindings).filter(([name]) => independentSymbols.has(name)),
@@ -174,7 +131,7 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
       symbols,
       boundResponse,
       boundPredictor,
-      parameters: merged.parameters,
+      parameters,
       dataBindings,
       responseBinding,
     };
@@ -183,19 +140,10 @@ export function useBayesModelDraft(initialDraft: BayesModelDraftDTO = createDefa
   return {
     draft,
     draftHash,
-    setDraft,
     updateModelEquation,
-    updateSymbolRole,
-    updateSymbolDataBinding,
-    updateSymbolPrior,
-    updateSymbolConstraint,
     updateDataset,
     updateSymbolConfiguration,
-    updateSymbols,
-    updateLikelihood,
-    updateParameters,
     updateSampler,
-    unusedParameterNames,
     formulaError,
     clearFormulaError: () => setFormulaError(null),
   };

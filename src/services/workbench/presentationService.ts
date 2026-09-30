@@ -8,14 +8,14 @@ import {
   parseUiUpdate,
   parseUiIntentReceipt,
 } from "@/shared/types/dto/uiPresentation";
-import type { ResultReference } from "@/shared/types/domain/result";
+import { resultReference, type ResultReference } from "@/shared/types/domain/result";
 import type { UiAction, UiEvent, UiIntentStatus } from "@/shared/types/domain/uiPresentation";
 import { isRecord } from "@/shared/types/report/guards";
 
 export async function readUiPage(projectInstanceId: string, source: ResultReference) {
   const result = await invokeCommand<unknown>("inspect_ui", {
     projectInstanceId,
-    request: { kind: "page", source },
+    request: { kind: "page", source: resultReference(source) },
   });
   if (!isRecord(result) || result.kind !== "page" || Object.keys(result).length !== 2)
     throw new Error("ui_spec_invalid");
@@ -30,7 +30,7 @@ export async function updateUiPage(
   return parseUiUpdate(
     await invokeCommand("update_ui", {
       projectInstanceId,
-      request: { source, baseRevision, action },
+      request: { source: resultReference(source), baseRevision, action },
     }),
   );
 }
@@ -43,7 +43,12 @@ export async function activateUiElement(
   return parseUiIntentReceipt(
     await invokeCommand("activate_ui_element", {
       projectInstanceId,
-      request: { source, baseRevision, id, clientKey: crypto.randomUUID() },
+      request: {
+        source: resultReference(source),
+        baseRevision,
+        id,
+        clientKey: crypto.randomUUID(),
+      },
     }),
   );
 }

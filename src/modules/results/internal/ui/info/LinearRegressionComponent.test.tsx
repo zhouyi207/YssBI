@@ -46,7 +46,7 @@ vi.mock("react-i18next", () => ({
 }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-it("loads an OLS overview and requests report data and tests by reference on demand", async () => {
+it("loads an OLS overview and reads selected analyses and expanded plots by reference", async () => {
   const report = JSON.parse(
     readFileSync("src/tests/fixtures/node-system-contracts/ols-summary-report.json", "utf8"),
   );
@@ -54,6 +54,10 @@ it("loads an OLS overview and requests report data and tests by reference on dem
     (item: { id: string }) => item.id === "numObservations",
   ).value = 53940;
   report.observations.rowCount = 53940;
+  report.summary.residual_plot = true;
+  report.summary.acf_pacf = true;
+  report.summary.serial_tests = true;
+  report.summary.hypothesis_test = true;
   vi.spyOn(ResultService, "getDescriptor").mockResolvedValue({
     resultId: "17",
     executionSessionId: resultSessionFixture,
@@ -127,6 +131,7 @@ it("loads an OLS overview and requests report data and tests by reference on dem
           p_value: 0.1,
         },
       };
+    if (analysis.kind === "serialTests") return { kind: "serialTests", value: { dw: { d: 1.85 } } };
     return { kind: "acfPacf", value: { acf: [1, 0.1], pacf: [0.1], n: 53940 } };
   });
   const host = document.createElement("div");
@@ -158,7 +163,13 @@ it("loads an OLS overview and requests report data and tests by reference on dem
       200,
       "coefficients",
     );
-    expect(ResultService.analyze).not.toHaveBeenCalled();
+    expect(ResultService.analyze).toHaveBeenCalledTimes(3);
+    expect(ResultService.analyze).toHaveBeenCalledWith(report.resultRef, { kind: "acfPacf" });
+    expect(ResultService.analyze).toHaveBeenCalledWith(report.resultRef, { kind: "serialTests" });
+    expect(ResultService.analyze).toHaveBeenCalledWith(report.resultRef, { kind: "hypothesis" });
+    expect(host.textContent).toContain("Durbin-Watson");
+    expect(host.textContent).toContain("1.850");
+    expect(host.textContent).toContain("H₀ 原假设");
 
     const plot = [...host.querySelectorAll("details")].find(
       (element) => element.querySelector("summary")?.textContent === "Residuals vs Fitted",
@@ -174,31 +185,7 @@ it("loads an OLS overview and requests report data and tests by reference on dem
     });
     expect(host.textContent).toContain("sampled observations of 53940");
 
-    const generate = [...host.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("生成"),
-    )!;
-    await act(async () => generate.click());
-    expect(ResultService.analyze).toHaveBeenCalledWith(report.resultRef, {
-      kind: "acfPacf",
-      maxLag: 20,
-    });
-
-    const hypothesis = host.querySelector<HTMLInputElement>('input[placeholder^="e.g."]')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-        hypothesis,
-        "x1 = 0",
-      );
-      hypothesis.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const run = [...host.querySelectorAll("button")].find(
-      (button) => button.textContent === "Run",
-    )!;
-    await act(async () => run.click());
-    expect(ResultService.analyze).toHaveBeenCalledWith(report.resultRef, {
-      kind: "hypothesis",
-      hypothesis: "x1 = 0",
-    });
+    expect(ResultService.analyze).toHaveBeenCalledTimes(4);
     expect(ResultService.getPage).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => root.unmount());

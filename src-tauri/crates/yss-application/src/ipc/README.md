@@ -102,15 +102,13 @@ the handler records a local lint expectation with that reason. Internal use case
 still remove redundant inputs. Boxing the project event payload only changes its
 in-memory representation; the tagged event wire remains unchanged.
 
-Standalone statistical commands convert DTOs and directly call the stateless
-`yss-sci-runtime` functions. ACF/PACF retains Application session admission and its
-60-second deadline, including blocking-pool queue time. The async command dispatches
-numerical work to that pool and rechecks its session and execution budget before returning.
-SCI cooperatively checks the same budget inside ACF/PACF loops. Analyses of retained
-graph results read the Summary computed by Node Kernel through Application's
-session/result validation. Node Kernel, standalone IPC commands and Execution's
-focused benchmark consume SCI runtime; numerical rules
-remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
+Statistical report queries use `analyze_result` with a retained result reference.
+Application validates the session/result and reads the Summary already computed by
+Node Kernel; it does not accept raw model arrays for a second standalone computation.
+ACF/PACF, serial-correlation tests and hypothesis tests run through graph nodes and
+the Summary execution path. Node Kernel and Execution's focused benchmark consume
+SCI runtime; numerical rules remain in `yss-sci` and shared data/control types in
+`yss-sci-contract`.
 
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 

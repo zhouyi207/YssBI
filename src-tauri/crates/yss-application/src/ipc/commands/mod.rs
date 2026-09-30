@@ -1,10 +1,7 @@
 pub mod command_activity_panel;
 pub mod command_dataframe;
 pub mod command_harness;
-pub mod command_hypothesis;
 pub mod command_node_system;
-pub mod command_panel_did;
-pub mod command_parse_at;
 pub mod command_plugin;
 pub mod command_presentation;
 pub mod command_project;
@@ -16,21 +13,14 @@ pub mod command_mind;
 mod file_resource;
 pub use command_doc::*;
 pub use command_mind::*;
-pub mod command_sci;
-pub mod command_serial_tests;
 pub(crate) mod project_failure;
 
 pub use command_activity_panel::*;
 pub use command_dataframe::*;
 pub use command_harness::*;
-pub use command_hypothesis::*;
 pub use command_node_system::*;
-pub use command_panel_did::*;
-pub use command_parse_at::*;
 pub use command_plugin::*;
 pub use command_presentation::*;
 pub use command_project::*;
 
 pub use command_chart::*;
-pub use command_sci::*;
-pub use command_serial_tests::*;

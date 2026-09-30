@@ -1,12 +1,5 @@
 import katex from "katex";
 import type { HypothesisTestResult } from "@/shared/types/domain/resultReport";
-import { Input } from "@/components/ui/input";
-import {
-  useHypothesisTestBlock,
-  type HypothesisTestSource,
-} from "@/features/application/stats/useHypothesisTestBlock";
-import { InfoAccentButton } from "@/components/ui-presentation/Controls";
-import { ReportSection } from "./ReportLayout";
 import { formatNum } from "@/shared/stats/formatStat";
 
 function HypothesisFormulas({ form, paramNames }: { form: string; paramNames: string[] }) {
@@ -26,38 +19,6 @@ function HypothesisFormulas({ form, paramNames }: { form: string; paramNames: st
           />
         );
       })}
-    </div>
-  );
-}
-
-export function HypothesisTestBlock({ source }: { source: HypothesisTestSource }) {
-  const { hypothesis, setHypothesis, result, error, loading, paramNames, canRun, run } =
-    useHypothesisTestBlock(source);
-
-  return (
-    <div className="mt-6">
-      <ReportSection title="Hypothesis Test (t / Wald)" icon="test">
-        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-          <div className="flex gap-2">
-            <Input
-              type="text"
-              value={hypothesis}
-              onChange={(e) => setHypothesis(e.target.value)}
-              placeholder="e.g. x1 = 0 或 petal_width = -0.5626, petal_length = 0.7（逗号分隔多约束）"
-              className="flex-1 font-mono text-sm"
-              onKeyDown={(e) => e.key === "Enter" && void run()}
-            />
-            <InfoAccentButton onClick={() => void run()} disabled={!canRun} loading={loading}>
-              Run
-            </InfoAccentButton>
-          </div>
-          <div className="text-[10px] text-muted-foreground">
-            Param names: {paramNames.join(", ")}
-          </div>
-          {error ? <div className="font-mono text-xs text-red-400">{error}</div> : null}
-          {result && <HypothesisTestResultView result={result} paramNames={paramNames} />}
-        </div>
-      </ReportSection>
     </div>
   );
 }

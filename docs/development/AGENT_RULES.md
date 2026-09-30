@@ -83,9 +83,8 @@ add or commit them unless explicitly requested.
   Graph, Project, Application or Tauri; resource authorization, graph addresses,
   execution plans, result storage and graph error locations stay with their owners.
   Application composes one frozen registry shared by readiness checks and execution.
-- Only `yss-node-kernel`, `yss-graph-execution`'s focused SCI benchmark, and Application's
-  `ipc/commands` modules consume `yss-sci-runtime`. Other Application modules and desktop composition do not
-  construct or inject a scientific backend. Runtime exposes stateless functions and calls `yss-sci`, which calls
+- Only `yss-node-kernel` and `yss-graph-execution`'s focused SCI benchmark consume
+  `yss-sci-runtime`. Application and desktop composition do not construct or inject a scientific backend. Runtime exposes stateless functions and calls `yss-sci`, which calls
   `yss-sci-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;
   runtime uses neutral inputs/results. Julia plugin crates own their Bayes
   input and cancellation contracts and do not depend on host SCI crates.
