@@ -23,8 +23,8 @@ pub(crate) enum SeriesKernel {
     PanelDifference,
 }
 
-struct Column {
-    values: Vec<TabularScalar>,
+pub(super) struct Column {
+    pub(super) values: Vec<TabularScalar>,
     metadata: Option<ConversionMetadata>,
 }
 
@@ -37,7 +37,7 @@ fn metadata(field: &arrow_schema::Field) -> Result<ConversionMetadata, KernelErr
     })
 }
 
-fn load(
+pub(super) fn load(
     handles: &[SeriesHandle],
     invocation: &KernelInvocation<'_>,
 ) -> Result<Vec<Column>, KernelError> {
@@ -84,7 +84,10 @@ fn load(
     Ok(columns)
 }
 
-fn column(value: &RuntimeValue, invocation: &KernelInvocation<'_>) -> Result<Column, KernelError> {
+pub(super) fn column(
+    value: &RuntimeValue,
+    invocation: &KernelInvocation<'_>,
+) -> Result<Column, KernelError> {
     if let RuntimeValue::Series(handle) = value.unannotated() {
         return Ok(load(std::slice::from_ref(handle), invocation)?.remove(0));
     }

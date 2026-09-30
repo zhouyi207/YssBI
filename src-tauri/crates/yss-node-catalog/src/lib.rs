@@ -201,6 +201,8 @@ mod tests {
         for name in [
             "yssbi.statistics.panel.did.twfe",
             "yssbi.statistics.inequality.theil",
+            "yssbi.statistics.inequality.gini",
+            "yssbi.statistics.inequality.dagum_gini",
         ] {
             let node = system
                 .registry

@@ -21,7 +21,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 fn implemented(id: &str) -> bool {
     super::analyses::implemented(id)
         || super::classical::implemented(id)
-        || id == super::descriptive::THEIL_ID
+        || super::descriptive::implemented(id)
 }
 
 pub(crate) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {

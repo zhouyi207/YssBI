@@ -57,6 +57,8 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 泰尔指数适配位于 `statistics::descriptive`：个体形式只接收 `series`，分组形式必须另接一个 `weights` 数列（组人数或人口占比）。输入通过共用 `columns` 执行受控物化和行对齐检查，再调用 SCI Runtime；唯一输出为包含指数及描述字段的结构化 result。分组输入为组均值，仅计算组间差异。切换形式后，不适用或缺失的 weights 明确报错。
 
+同一适配模块注册 Gini 和 Dagum Gini。Gini 复用数值列读取；Dagum 复用 `series::load` 联合投影数值与标签、证明行对齐，内存列复用 `series::column`。标签使用 `TabularScalar::compare` 精确分组，再以中立组编号调用 SCI，输出时恢复原始标签，宽整数不转为浮点。输入、排序缓冲和组对输出在调用前共同检查预算；最多 64 组。仅在执行时读取数据，算法与中断控制继续由 SCI 拥有。
+
 统计结果进入 `common::value` 时保留原有数值类型；转换入口在 JSON 编码前遍历并拒绝
 非有限浮点数，返回 `NonFiniteResult`，合法 `Option::None` 仍转换为空值。
 ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误抹成 Null。

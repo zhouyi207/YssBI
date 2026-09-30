@@ -27,6 +27,8 @@ pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<B
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
         "yssbi.statistics.inequality.theil" => markdown!("theil"),
+        "yssbi.statistics.inequality.gini" => markdown!("gini"),
+        "yssbi.statistics.inequality.dagum_gini" => markdown!("dagum_gini"),
         "yssbi.numeric.add" => markdown!("add"),
         "yssbi.numeric.subtract" => markdown!("subtract"),
         "yssbi.numeric.multiply" => markdown!("multiply"),

@@ -46,7 +46,7 @@ KDE 已接入数值执行，`result` 输出为包含 256 个密度点的 `statis
 
 | 目录                 | 分类 ID                       | 内容与边界                                     |
 | -------------------- | ----------------------------- | ---------------------------------------------- |
-| 描述统计             | `statistics.descriptive`      | Theil T；Gini、Dagum Gini 待实现               |
+| 描述统计             | `statistics.descriptive`      | Gini、Dagum Gini 分解、Theil T                 |
 | 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验       |
 | 相关与一致性         | `statistics.association`      | 相关、偏相关、一致性、Kappa、ICC 等            |
 | 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性       |
@@ -87,6 +87,8 @@ Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 ent
 这些来源记录继续保留方法身份；已经实现的诊断及后估计由 `statistics/analyses.rs`、描述统计由 `statistics/descriptive.rs` 完善原 ID 的端口、参数和内核绑定，不重复生成骨架。其余入口保留名称、搜索别名、分类、用途、来源编号和范围说明，尚无内核，仍在目录中显示为不可用且不进入 AI 可执行节点搜索。
 
 泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
+
+Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistics.inequality.dagum_gini`，均已注册执行内核，使用个体等权、未经小样本修正的经验 Gini。Gini 输入 `series`；Dagum 另需同一行域的 `groups` 标签列，支持数值、文本、标识符及分类语义，最多 64 组。唯一结构化 `result` 可通过既有 Inspect 查看数值或报告；Dagum 返回组内、组间净差异、超变密度、贡献占比及分组/组对明细。全零子组的未定义 Gini 和零总体差异下的贡献占比保留为 null，非正总体均值拒绝计算。输入与解释见各节点中英文帮助。
 工作流模板、模型预设、结果指标、统计专用绘图和原理说明也按本轮要求登记入口；该登记不表示模板执行、参数预设或绘图能力已经实现。普通数据处理、缺失数据处理、通用绘图和 AI 模块未纳入本轮统计入口。
 实现某项方法时直接完善其既有定义及内核绑定；只有存在可复用模型时才提供 Fit/Summary 分工，不从入口名称推断或批量生成端口契约。
 

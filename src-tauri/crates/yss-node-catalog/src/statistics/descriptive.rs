@@ -2,8 +2,87 @@
 use super::*;
 
 pub(super) const THEIL_ID: &str = "yssbi.statistics.inequality.theil";
+pub(super) const GINI_ID: &str = "yssbi.statistics.inequality.gini";
+pub(super) const DAGUM_ID: &str = "yssbi.statistics.inequality.dagum_gini";
+
+pub(super) fn implemented(id: &str) -> bool {
+    matches!(id, THEIL_ID | GINI_ID | DAGUM_ID)
+}
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    for (id, en, zh, en_help, zh_help, aliases) in [
+        (
+            GINI_ID,
+            "Gini coefficient",
+            "Gini 基尼系数",
+            "Empirical Gini for nonnegative observations with a positive mean. Returns one structured result; observations have equal weight.",
+            "计算非负观测、正均值数据的经验基尼系数，个体等权，输出单个结构化结果。",
+            &["inequality.gini", "Gini", "基尼系数"][..],
+        ),
+        (
+            DAGUM_ID,
+            "Dagum Gini decomposition",
+            "Dagum 基尼系数",
+            "Connect values and aligned group labels. Decomposes empirical Gini into within-group, net between-group and transvariation contributions, with group and pairwise details.",
+            "连接数值及对齐的分组标签，将经验基尼系数分解为组内差异、组间净差异和超变密度，并输出分组与组对明细。",
+            &["inequality.dagum_gini", "Dagum Gini", "基尼分解"][..],
+        ),
+    ] {
+        let mut ports = vec![data_input("series", "Values", series_type()?)?];
+        if id == DAGUM_ID {
+            let members = [
+                "core.numeric",
+                "core.categorical",
+                "core.ordinal",
+                "core.binary",
+                "core.text",
+                "core.identifier",
+            ]
+            .into_iter()
+            .map(|id| concrete(id).map(data_series_type))
+            .collect::<Result<Vec<_>, _>>()?;
+            ports.push(data_input(
+                "groups",
+                "Group labels",
+                normalize_type_expr(TypeExpr::Union(members)).map_err(|error| {
+                    BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+                        context: "Dagum group labels",
+                        value: error.to_string().into(),
+                    }
+                })?,
+            )?);
+        }
+        ports.push(data_output("result", "Result", report_type()?)?);
+        fragment.nodes.push(leaf(
+            NodeProtocol {
+                type_id: sid(id, NodeTypeId::new)?,
+                catalog: NodeCatalogProtocol {
+                    title_key: node_key(id, "title")?,
+                    documentation_key: Some(node_key(id, "documentation")?),
+                    aliases_key: Some(node_key(id, "aliases")?),
+                    category_id: sid("statistics.descriptive", NodeCategoryId::new)?,
+                    icon_id: sid("builtin.statistics", IconId::new)?,
+                    style_id: sid("builtin.dataframe", NodeStyleId::new)?,
+                    hidden: false,
+                },
+                interface: assembled_interface(id, ports, vec![], vec![])?,
+                parameters: assembled_parameters(id, vec![])?,
+                instance_display: NodeInstanceDisplaySpec::Static,
+                execution: execution(),
+                typing: NodeTypingSpec::Fixed,
+                scope: NodeScope::Any,
+                managed_role: None,
+            },
+            id,
+        ));
+        for (locale, title, help) in [("en-US", en, en_help), ("zh-CN", zh, zh_help)] {
+            fragment.messages.extend([
+                (locale, node_key_text(id, "title"), Text(title)),
+                (locale, node_key_text(id, "documentation"), Text(help)),
+                (locale, node_key_text(id, "aliases"), Aliases(aliases)),
+            ]);
+        }
+    }
     fragment.nodes.push(leaf(
         NodeProtocol {
             type_id: sid(THEIL_ID, NodeTypeId::new)?,

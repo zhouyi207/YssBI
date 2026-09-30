@@ -19,6 +19,142 @@ use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSna
 use yss_node_kernel::RuntimeValue;
 
 #[test]
+fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
+    use yss_data_contract::{DataValue, ValueType};
+    const GINI: &str = "yssbi.statistics.inequality.gini";
+    const DAGUM: &str = "yssbi.statistics.inequality.dagum_gini";
+    yss_application::session::NodeComponents::builtins().unwrap();
+    let mut document = GraphDocument::default();
+    let [source, values, groups, gini, dagum] = std::array::from_fn(|_| NodeId::new());
+    for (id, kind, config) in [
+        (source, "yssbi.constant.get", serde_json::json!({})),
+        (
+            values,
+            "yssbi.dataframe.series.select",
+            serde_json::json!({"column":"values"}),
+        ),
+        (
+            groups,
+            "yssbi.dataframe.series.select",
+            serde_json::json!({"column":"groups"}),
+        ),
+        (gini, GINI, serde_json::json!({})),
+        (dagum, DAGUM, serde_json::json!({})),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: serde_json::from_value(config).unwrap(),
+                user_label: None,
+            },
+        );
+    }
+    let data = r#"{"values":[1,2,3,4],"groups":["East","East","West","West"]}"#;
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataFrame,
+        DataValue::String(data.into()),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    for (from, output, to, input) in [
+        (source, "value", values, "dataframe"),
+        (source, "value", groups, "dataframe"),
+        (values, "series", gini, "series"),
+        (values, "series", dagum, "series"),
+        (groups, "series", dagum, "groups"),
+    ] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(from, output.parse().unwrap()),
+                input: PortAddress::declared(to, input.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    let number = |value: &RuntimeValue| match value {
+        RuntimeValue::Scalar(TabularScalar::Float64(value)) => value.as_f64(),
+        _ => panic!("expected a numeric statistic"),
+    };
+    let RuntimeValue::Record(result) = execute(&document, GINI).unwrap() else {
+        panic!("structured Gini")
+    };
+    assert!((number(&result["gini"]) - 0.25).abs() < 1e-12);
+    let RuntimeValue::Record(result) = execute(&document, DAGUM).unwrap() else {
+        panic!("structured Dagum")
+    };
+    for (key, expected) in [
+        ("gini", 0.25),
+        ("within", 0.05),
+        ("between", 0.20),
+        ("transvariation", 0.0),
+    ] {
+        assert!((number(&result[key]) - expected).abs() < 1e-12, "{key}");
+    }
+    let RuntimeValue::List(rows) = &result["groups"] else {
+        panic!("group rows")
+    };
+    assert_eq!(rows.len(), 2);
+    let RuntimeValue::Record(first) = &rows[0] else {
+        panic!("group row")
+    };
+    assert_eq!(
+        first["group"],
+        RuntimeValue::Scalar(TabularScalar::String("East".into()))
+    );
+
+    // Equal row counts from a separate relation are not proof of observation alignment.
+    let mut unaligned = document.clone();
+    let foreign = NodeId::new();
+    unaligned.nodes.insert(
+        foreign,
+        DocumentNode {
+            id: foreign,
+            ..document.nodes[&source].clone()
+        },
+    );
+    set_constant(
+        &mut unaligned,
+        foreign,
+        ValueType::DataFrame,
+        DataValue::String(data.into()),
+    );
+    for constant in unaligned.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    for connection in unaligned.connections.values_mut() {
+        if connection.input == PortAddress::declared(groups, "dataframe".parse().unwrap()) {
+            connection.output = PortAddress::declared(foreign, "value".parse().unwrap());
+        }
+    }
+    assert_eq!(
+        execute(&unaligned, DAGUM).unwrap_err().failure().code,
+        RunFailureCode::UnalignedSeries
+    );
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataFrame,
+        DataValue::String(r#"{"values":[1,2,3,4],"groups":["East",null,"West","West"]}"#.into()),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    assert_eq!(
+        execute(&document, DAGUM).unwrap_err().failure().code,
+        RunFailureCode::InvalidNumericInput
+    );
+}
+
+#[test]
 fn theil_node_executes_individual_defaults_and_grouped_relational_means() {
     use yss_data_contract::{DataValue, ValueType};
     use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
