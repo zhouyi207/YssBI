@@ -42,6 +42,9 @@ Cross-domain execution and observation contracts remain shared.
   Randomization input contains observed columns, treatment/post indicators,
   repetitions and a reproducible seed; interruption remains an explicit failure.
 - `density`: kernel-density input and output records.
+- `descriptive`: empirical `GiniResult`, Dagum group/pair/component statistics, and the
+  64-group report bound. Group labels are generic so the node adapter can replace
+  numerical group IDs with original scalar labels without changing statistics.
 - `distribution`: probability distribution parameters and typed samples.
 - `observation`: observation metadata, missing-value policy and category roles,
   exported from the crate root for all domains.

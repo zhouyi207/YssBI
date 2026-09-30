@@ -54,13 +54,18 @@ Entry points and method-specific report records live in their owning domains.
 | `causal::did`          | TWFE DID fitting and randomization inference                                    |
 | `preprocessing`        | Arrow panel/time alignment and tabular transformations                          |
 | `density`              | Density computation entry point                                                 |
-| `descriptive`          | Theil T entry point and form/observation-count report                           |
+| `descriptive`          | Gini, Dagum decomposition and Theil T entry points                              |
 | `distribution`         | Probability distribution sampling entry point                                   |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
 entry points call the corresponding SCI owner; report encoding stays here.
 Fit contracts come from `yss-sci-contract`; Runtime does not maintain a second
 hierarchy of regression, panel or diagnostic result types.
+
+`descriptive::gini` and `descriptive::dagum_gini` forward neutral slices and execution
+control to SCI and return its shared descriptive contracts. They do not recalculate
+statistics or introduce another report model; category labels are restored by the
+node adapter. Theil retains its form and observation-count projection here.
 
 ## Linear regression data flow
 

@@ -27,7 +27,7 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 | Hypothesis tests                         | `hypothesis`                                 | Constraint parsing, linearization and t/Wald tests                            |
 | Model diagnostics                        | `diagnostics`                                | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation    |
 | Probability distributions                | `distribution`                               | Sampling                                                                      |
-| Descriptive statistics                   | `descriptive`                                | Individual and population-weighted Theil T                                    |
+| Descriptive statistics                   | `descriptive`                                | Empirical Gini, Dagum decomposition and Theil T                               |
 | Density estimation used by visualization | `density`                                    | Kernel-density numerical computation                                          |
 | Data preprocessing                       | `preprocessing`                              | Numerical standardization; Arrow preparation stays in Runtime                 |
 
@@ -88,7 +88,21 @@ matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `hypothesis::linear_test`.
 Project/result identity checks and report retrieval remain in Application.
 
-## Theil T
+## Inequality measures
+
+`descriptive::gini` uses equal observation weights without a small-sample correction.
+Positive adjacent gaps in sorted, maximum-scaled values replace cancellation-prone
+weighted rank differences; compensated sums keep finite inputs usable even when
+their unscaled total would overflow. Negative/missing/nonfinite values and a zero
+overall mean are rejected.
+
+`dagum_gini` returns within, net between and transvariation contributions, their
+shares, subgroup statistics and pairwise rows through `yss-sci-contract::descriptive`.
+Directed differences are integrated over merged sorted group samples without an
+observation-pair matrix. Complexity is O(n log n + kn) for n observations and k groups;
+the report supports at most 64 groups. Undefined zero-subgroup statistics and zero-Gini
+contribution shares use `None`, not NaN. Sorting boundaries, input scans and numerical
+loops check cancellation/deadlines. Sort itself is not cooperatively interruptible.
 
 `descriptive::theil_t` computes natural-log Theil T from individual values or
 population-weighted group means. It validates nonnegative finite values/weights,
