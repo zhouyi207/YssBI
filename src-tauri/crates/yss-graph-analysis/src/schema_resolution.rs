@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 mod aggregation;
 mod composition;
+mod multivariate;
+mod transforms;
 pub(crate) use aggregation::column_names as aggregate_column_names;
 
 use crate::{GraphSchemaIssue, GraphSchemaState};
@@ -462,6 +464,16 @@ impl EditorSchemaResolver<'_> {
                 Ok(fields)
             }
             SchemaExpr::Filter { input, .. } => self.resolve_expression(node_id, input),
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.statistics.multivariate.schema.coordinates" =>
+            {
+                self.resolve_multivariate_coordinates(node_id)
+            }
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.dataframe.schema.transform" =>
+            {
+                self.resolve_transform(node_id)
+            }
             SchemaExpr::Derived { resolver, .. }
                 if resolver.as_str() == "yssbi.dataframe.schema.aggregate" =>
             {

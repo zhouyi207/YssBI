@@ -10,6 +10,8 @@ use yss_relational_contract::{RelationComparison, RelationPredicate};
 
 use super::*;
 mod aggregation;
+mod alignment;
+mod transforms;
 
 struct RemoveFile(PathBuf);
 impl Drop for RemoveFile {

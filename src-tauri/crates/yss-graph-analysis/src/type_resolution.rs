@@ -527,7 +527,51 @@ fn bind_pattern_generics(
                 }
             }
         }
-        TypeExpr::Concrete(_) | TypeExpr::Class(_) | TypeExpr::Union(_) | TypeExpr::Unknown => {}
+        TypeExpr::Union(members) => {
+            // A scalar-or-series port binds the series element parameter from either shape.
+            // Scalar alternatives are explicit, so frames and models cannot become elements.
+            for member in members {
+                let TypeExpr::Applied {
+                    constructor,
+                    arguments,
+                } = member
+                else {
+                    continue;
+                };
+                if constructor.as_str() != "core.data_series" {
+                    continue;
+                }
+                let [TypeExpr::Generic(parameter)] = arguments.as_slice() else {
+                    continue;
+                };
+                let candidates = domain
+                    .iter()
+                    .filter_map(|value| match value {
+                        ResolvedType::Nominal(id)
+                            if members.iter().any(
+                                |m| matches!(m,TypeExpr::Concrete(allowed) if allowed==id),
+                            ) =>
+                        {
+                            Some(value.clone())
+                        }
+                        ResolvedType::Applied {
+                            constructor: actual,
+                            arguments,
+                        } if actual == constructor => arguments.first().cloned(),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                if !candidates.is_empty() {
+                    bind_pattern_generics(
+                        &TypeExpr::Generic(parameter.clone()),
+                        &state_from_candidates(candidates),
+                        bindings,
+                        conflicts,
+                    );
+                }
+            }
+        }
+        TypeExpr::Concrete(_) | TypeExpr::Class(_) | TypeExpr::Unknown => {}
     }
 }
 

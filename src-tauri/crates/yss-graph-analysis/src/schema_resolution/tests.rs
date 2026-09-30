@@ -4,6 +4,57 @@ use yss_graph_document::{ConnectionId, DocumentConnection, DocumentNode, NodePos
 use yss_graph_resource_contract::{ColumnSchema, DataSchema, ResourceCatalogFingerprint};
 
 #[test]
+fn multivariate_coordinate_schemas_refresh_from_dimensions_without_reading_data() {
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::new(),
+        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    );
+    let mut document = GraphDocument::default();
+    let pca = node(&mut document, "yssbi.statistics.multivariate.pca", &[]);
+    let canonical = node(&mut document, "yssbi.statistics.association.canonical", &[]);
+    let mut cache = GraphSemanticCache::default();
+    let fields = |snapshot: &crate::GraphSemanticSnapshot, id| {
+        snapshot
+            .node(id)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.address == port(id, "scores"))
+            .unwrap()
+            .schema_state
+            .exact()
+            .unwrap()
+            .fields
+            .iter()
+            .map(|field| field.name.0.to_string())
+            .collect::<Vec<_>>()
+    };
+    let first = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert_eq!(fields(&first, pca), vec!["axis1", "axis2"]);
+    assert_eq!(fields(&first, canonical), vec!["x_axis1", "y_axis1"]);
+    document
+        .nodes
+        .get_mut(&pca)
+        .unwrap()
+        .parameters
+        .insert("components".parse().unwrap(), serde_json::json!(3));
+    document
+        .nodes
+        .get_mut(&canonical)
+        .unwrap()
+        .parameters
+        .insert("components".parse().unwrap(), serde_json::json!(2));
+    let edited = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert_eq!(fields(&edited, pca), vec!["axis1", "axis2", "axis3"]);
+    assert_eq!(
+        fields(&edited, canonical),
+        vec!["x_axis1", "x_axis2", "y_axis1", "y_axis2"]
+    );
+}
+
+#[test]
 fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_edits() {
     use yss_data_contract::SemanticType as S;
     let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
@@ -598,6 +649,278 @@ fn dataframe_decomposition_uses_all_seven_semantics_and_tracks_metadata_changes(
     let second = resources(changed);
     assert!(!second.matches_dependencies(&dependencies));
     assert_matches_full(&document, &builtin.registry, &second, &mut cache);
+}
+
+#[test]
+fn transform_schemas_are_static_and_refresh_from_declared_categories() {
+    use yss_data_contract::SemanticType as S;
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::from([(
+            GraphResourceId::new("data"),
+            DataSchema {
+                columns: [
+                    ("id", S::Identifier),
+                    ("x", S::Numeric),
+                    ("y", S::Numeric),
+                    ("category", S::Categorical),
+                    ("time", S::Datetime),
+                ]
+                .map(|(name, kind)| ColumnSchema {
+                    name: name.into(),
+                    data_type: ValueType::Scalar(kind),
+                    physical_type: None,
+                    semantic: None,
+                })
+                .into(),
+            },
+        )]),
+        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    );
+    let mut document = GraphDocument::default();
+    let source = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("data"))],
+    );
+    let long = node(
+        &mut document,
+        "yssbi.dataframe.unpivot",
+        &[
+            ("keys", serde_json::json!(["id"])),
+            ("columns", serde_json::json!(["x", "y"])),
+        ],
+    );
+    let wide = node(
+        &mut document,
+        "yssbi.dataframe.pivot",
+        &[
+            ("keys", serde_json::json!(["id"])),
+            ("category_column", serde_json::json!("category")),
+            ("value_column", serde_json::json!("x")),
+            ("levels", serde_json::json!(["a", "b"])),
+            ("names", serde_json::json!(["a_total", "b_total"])),
+        ],
+    );
+    let resample = node(
+        &mut document,
+        "yssbi.dataframe.resample",
+        &[
+            ("time_column", serde_json::json!("time")),
+            ("keys", serde_json::json!(["id"])),
+            ("columns", serde_json::json!(["x"])),
+        ],
+    );
+    let selected = node(
+        &mut document,
+        "yssbi.dataframe.series.select",
+        &[("column", serde_json::json!("category"))],
+    );
+    let encoded = node(
+        &mut document,
+        "yssbi.dataframe.encode",
+        &[
+            ("levels", serde_json::json!(["a", "b"])),
+            ("names", serde_json::json!(["is_a", "is_b"])),
+        ],
+    );
+    for target in [long, wide, resample] {
+        connect(
+            &mut document,
+            port(source, "dataframe"),
+            port(target, "source"),
+        );
+    }
+    connect(
+        &mut document,
+        port(source, "dataframe"),
+        port(selected, "dataframe"),
+    );
+    connect(
+        &mut document,
+        port(selected, "series"),
+        port(encoded, "series"),
+    );
+    let mut cache = GraphSemanticCache::default();
+    let snapshot = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(
+        !snapshot.has_blocking_diagnostics(),
+        "{:?}",
+        snapshot.diagnostics()
+    );
+    let fields = |snapshot: &crate::GraphSemanticSnapshot, node| {
+        snapshot
+            .node(node)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.address == port(node, "result"))
+            .unwrap()
+            .schema_state
+            .exact()
+            .unwrap()
+            .fields
+            .clone()
+    };
+    assert_eq!(
+        fields(&snapshot, long)
+            .iter()
+            .map(|f| f.name.0.as_ref())
+            .collect::<Vec<_>>(),
+        vec!["id", "variable", "value"]
+    );
+    assert_eq!(
+        fields(&snapshot, wide)
+            .iter()
+            .map(|f| f.name.0.as_ref())
+            .collect::<Vec<_>>(),
+        vec!["id", "a_total", "b_total"]
+    );
+    assert_eq!(
+        fields(&snapshot, resample)
+            .iter()
+            .map(|f| f.name.0.as_ref())
+            .collect::<Vec<_>>(),
+        vec!["time", "id", "x_mean"]
+    );
+    assert!(
+        fields(&snapshot, encoded)
+            .iter()
+            .all(|f| f.scalar_type == RelationalScalarType::Known(S::Binary))
+    );
+    document.nodes.get_mut(&wide).unwrap().parameters.insert(
+        "names".parse().unwrap(),
+        serde_json::json!(["id", "b_total"]),
+    );
+    let changed = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(changed.has_blocking_diagnostics());
+    assert!(
+        changed
+            .node(wide)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.address == port(wide, "result"))
+            .unwrap()
+            .schema_state
+            .exact()
+            .is_none()
+    );
+}
+
+#[test]
+fn conditional_selection_unifies_scalar_and_series_elements_for_composition() {
+    use yss_data_contract::SemanticType as S;
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let resources = catalog(Some(ValueType::Scalar(S::Numeric)));
+    let mut document = GraphDocument::default();
+    let source = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("databases/a"))],
+    );
+    let selected = node(
+        &mut document,
+        "yssbi.dataframe.series.select",
+        &[("column", serde_json::json!("amount"))],
+    );
+    let missing = node(&mut document, "yssbi.dataframe.series.is_null", &[]);
+    let choose = node(&mut document, "yssbi.dataframe.series.choose", &[]);
+    let scalar = node(&mut document, "yssbi.constant.get", &[]);
+    let id = yss_graph_document::ConstantId::from_uuid(scalar.as_uuid());
+    document.constants.insert(
+        id,
+        yss_graph_document::GraphConstant {
+            id,
+            name: "fallback".into(),
+            data_type: ValueType::Scalar(S::Numeric),
+            data_value: yss_data_contract::DataValue::Integer(0),
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        },
+    );
+    document.nodes.get_mut(&scalar).unwrap().parameters.insert(
+        "constant".parse().unwrap(),
+        serde_json::json!(id.to_string()),
+    );
+    let output = node(
+        &mut document,
+        "yssbi.dataframe.set_column",
+        &[("name", serde_json::json!("filled"))],
+    );
+    connect(
+        &mut document,
+        port(source, "dataframe"),
+        port(selected, "dataframe"),
+    );
+    connect(
+        &mut document,
+        port(selected, "series"),
+        port(missing, "series"),
+    );
+    connect(
+        &mut document,
+        port(missing, "result"),
+        port(choose, "condition"),
+    );
+    connect(
+        &mut document,
+        port(scalar, "value"),
+        port(choose, "when_true"),
+    );
+    connect(
+        &mut document,
+        port(selected, "series"),
+        port(choose, "when_false"),
+    );
+    connect(
+        &mut document,
+        port(source, "dataframe"),
+        port(output, "source"),
+    );
+    connect(
+        &mut document,
+        port(choose, "result"),
+        port(output, "series"),
+    );
+    let snapshot = resolve_graph_semantics(&document, &builtin.registry, &resources);
+    assert!(
+        !snapshot.has_blocking_diagnostics(),
+        "{:?}",
+        snapshot.diagnostics()
+    );
+    let chosen = snapshot
+        .node(choose)
+        .unwrap()
+        .ports
+        .iter()
+        .find(|p| p.address == port(choose, "result"))
+        .unwrap();
+    assert_eq!(chosen.type_state.domain().unwrap().iter().count(), 1);
+    let fields = &snapshot
+        .node(output)
+        .unwrap()
+        .ports
+        .iter()
+        .find(|p| p.address == port(output, "result"))
+        .unwrap()
+        .schema_state
+        .exact()
+        .unwrap()
+        .fields;
+    assert_eq!(
+        fields.last().unwrap().scalar_type,
+        RelationalScalarType::Known(S::Numeric)
+    );
+    document.constants.get_mut(&id).unwrap().data_type = ValueType::Scalar(S::Text);
+    document.constants.get_mut(&id).unwrap().data_value =
+        yss_data_contract::DataValue::String("wrong".into());
+    assert!(
+        resolve_graph_semantics(&document, &builtin.registry, &resources)
+            .has_blocking_diagnostics()
+    );
 }
 
 fn node(

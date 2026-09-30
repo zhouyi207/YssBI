@@ -65,6 +65,21 @@ field metadata, so the adapter retains the source Arrow schema, validates native
 and restores metadata at the batch boundary. GraphSemanticSnapshot remains the sole semantic
 Graph authority.
 
+Graph data preparation uses the neutral requests in `yss-relational-contract`; native
+`LogicalPlan` and `Expr` values remain in `yss-database-engine`. Projection, filtering,
+sorting, deduplication, fixed-schema pivot/unpivot, resampling, encoding and grid alignment
+compose native plans. Series transformations retain their row domain and expressions;
+nested windows are lowered into successive native Window operators and restore source
+order. Repeated differences use a bounded DataFusion window evaluator, preserving repeated
+subtraction and null propagation without collecting columns in node kernels.
+
+Literal series are imported once as immutable Arrow arrays and exposed through expressions
+over explicit position coordinates; generated integer ranges use the same coordinates.
+Equal-length literal/range series in one engine can align by those coordinates. Independent
+dataset or table relations never acquire alignment from matching lengths. Row-changing
+operations establish a new domain. Scalar reductions consume only native aggregate results;
+data-dependent column dropping consumes one aggregate row and retains its deferred schema.
+
 ## Editing and publication
 
 An edit request identifies a row, a column and a replacement value in a captured snapshot.

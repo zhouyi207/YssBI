@@ -1,6 +1,9 @@
 //! Data-dependent column selection is resolved at consumption, never during graph planning.
 use crate::relation::DataFusionRelation;
-use arrow::datatypes::{Schema, SchemaRef};
+use arrow::{
+    array::Array,
+    datatypes::{Schema, SchemaRef},
+};
 use datafusion::{common::Column, logical_expr::Expr};
 use futures_util::StreamExt;
 use std::sync::{Arc, OnceLock};
@@ -38,13 +41,20 @@ pub(crate) fn rows(
             DropNaMode::All => a.and(b),
         });
     if let Some(missing) = missing {
-        let frame = source
-            .domain
-            .as_ref()
-            .clone()
-            .filter(source.expand_expression(missing.is_not_true())?)
+        let (frame, position) = source.positioned()?;
+        let frame = frame
+            .filter(missing.is_not_true())
             .map_err(|_| RelationError::InvalidPlan)?;
-        source.derived(frame, source.schema.clone(), false)
+        source.rebuilt(
+            frame,
+            source
+                .schema
+                .fields()
+                .iter()
+                .map(|f| f.as_ref().clone())
+                .collect(),
+            vec![crate::series_transform::col(&position).sort(true, false)],
+        )
     } else {
         source.project(
             &source
@@ -162,25 +172,65 @@ async fn resolve_columns(
     if indexes.is_empty() {
         return Ok(source.clone());
     }
-    let names = indexes
-        .iter()
-        .map(|i| schema.field(*i).name().as_str().into())
-        .collect::<Vec<Box<str>>>();
-    let scan = source.project(&names)?;
+    let adapter = source
+        .plan()
+        .as_any()
+        .downcast_ref::<DataFusionRelation>()
+        .ok_or(RelationError::InvalidInput)?;
+    let mut expressions = vec![
+        datafusion::functions_aggregate::expr_fn::count(datafusion::prelude::lit(1_i64))
+            .alias("rows"),
+    ];
+    for (position, index) in indexes.iter().enumerate() {
+        expressions.push(
+            datafusion::functions_aggregate::expr_fn::count(Expr::Column(Column::from_name(
+                schema.field(*index).name().clone(),
+            )))
+            .alias(format!("valid_{position}")),
+        );
+    }
+    let frame = adapter
+        .frame
+        .clone()
+        .aggregate(vec![], expressions)
+        .map_err(|_| RelationError::InvalidPlan)?;
+    let aggregate_schema = Arc::new(frame.schema().as_arrow().clone());
+    let scan = DataFusionRelation::handle(
+        frame,
+        aggregate_schema,
+        adapter.bindings.clone(),
+        adapter.lease.clone(),
+        adapter.executor.clone(),
+        false,
+        vec![],
+    )?;
     let mut stream = scan.stream(control.clone()).await?;
     let mut has_null = vec![false; indexes.len()];
     let mut has_value = vec![false; indexes.len()];
     let mut has_rows = false;
     while let Some(batch) = crate::relation::controlled(stream.next(), control).await? {
         let batch = batch?;
-        if batch.get_array_memory_size() > control.max_input_bytes {
-            return Err(RelationError::MemoryLimitExceeded);
+        if batch.num_rows() == 0 {
+            continue;
         }
-        has_rows |= batch.num_rows() > 0;
-        for (i, array) in batch.columns().iter().enumerate() {
-            let nulls = array.logical_null_count();
-            has_null[i] |= nulls > 0;
-            has_value[i] |= nulls < array.len();
+        if batch.num_rows() != 1 {
+            return Err(RelationError::InvalidPlan);
+        }
+        let count = |column: usize| {
+            batch
+                .column(column)
+                .as_any()
+                .downcast_ref::<arrow::array::Int64Array>()
+                .filter(|array| !array.is_null(0))
+                .map(|array| array.value(0))
+                .ok_or(RelationError::InvalidPlan)
+        };
+        let rows = count(0)?;
+        has_rows = rows > 0;
+        for position in 0..indexes.len() {
+            let valid = count(position + 1)?;
+            has_null[position] = valid < rows;
+            has_value[position] = valid > 0;
         }
     }
     control.check()?;

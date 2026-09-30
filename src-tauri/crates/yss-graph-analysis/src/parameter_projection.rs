@@ -8,6 +8,12 @@ pub(super) fn aggregate_parameter_accepts(
 ) -> Option<bool> {
     use yss_data_contract::aggregation::{AggregateOperation, supports_description};
     match (node, key) {
+        ("yssbi.dataframe.sort", "descending_columns")
+        | ("yssbi.dataframe.deduplicate", "keys")
+        | ("yssbi.dataframe.unpivot", "keys")
+        | ("yssbi.dataframe.pivot", "keys")
+        | ("yssbi.dataframe.resample", "keys") => Some(true),
+        (node, "partition_by" | "order_by") if node.starts_with("yssbi.dataframe.") => Some(true),
         ("yssbi.dataframe.describe", "describe_columns") => {
             Some(matches!(kind, RelationalScalarType::Known(s) if supports_description(s)))
         }
@@ -26,10 +32,18 @@ pub(super) fn parameter_schema<'a>(
     let source = match key {
         "left_keys" => Some("left"),
         "right_keys" => Some("right"),
+        "partition_by" | "order_by" => Some("context"),
         _ => None,
     };
-    ports.iter().filter(|port| port.direction == PortDirection::Input)
-        .filter(|port| source.is_none_or(|source| matches!(&port.address.port, PortRef::Declared { key } if key.as_str() == source)))
+    ports
+        .iter()
+        .filter(|port| port.direction == PortDirection::Input)
+        .filter(|port| {
+            source.is_none_or(|source| match &port.address.port {
+                PortRef::Declared { key } => key.as_str() == source,
+                PortRef::Instance { template, .. } => template.as_str() == source,
+            })
+        })
         .find_map(|port| port.schema_state.exact())
 }
 
@@ -201,7 +215,11 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                 if matches!(parameter.editor, ParameterEditorSpec::Select)
                     && matches!(
                         parameter.key.as_str(),
-                        "column" | "entity_column" | "time_column"
+                        "column"
+                            | "entity_column"
+                            | "time_column"
+                            | "category_column"
+                            | "value_column"
                     )
                     && schema.is_some() =>
             {

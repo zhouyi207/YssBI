@@ -26,6 +26,7 @@ pub(crate) struct DataFusionRelation {
     pub(crate) domain: Arc<DataFrame>,
     pub(crate) columns: Vec<Expr>,
     pub(crate) domain_order: Vec<datafusion::logical_expr::expr::Sort>,
+    pub(crate) positional_length: Option<usize>,
 }
 
 impl DataFusionRelation {
@@ -175,12 +176,18 @@ impl DataFusionRelation {
         } else {
             expression
         };
-        self.domain
-            .as_ref()
-            .clone()
-            .filter(self.expand_expression(expression)?)
-            .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, self.schema.clone(), false))
+        let (frame, position) = self.positioned()?;
+        self.rebuilt(
+            frame
+                .filter(expression)
+                .map_err(|_| RelationError::InvalidPlan)?,
+            self.schema
+                .fields()
+                .iter()
+                .map(|f| f.as_ref().clone())
+                .collect(),
+            vec![crate::series_transform::col(&position).sort(true, false)],
+        )
     }
 
     pub(crate) fn handle(
@@ -213,6 +220,7 @@ impl DataFusionRelation {
             lease,
             executor,
             ordered_single_file,
+            positional_length: None,
         }
         .into_handle()
     }
@@ -233,39 +241,111 @@ impl DataFusionRelation {
         let executor = self.executor.clone();
         Ok(RelationHandle::new(Arc::new(self), executor))
     }
-    pub(crate) fn derived(
-        &self,
-        frame: DataFrame,
-        schema: SchemaRef,
-        ordered_single_file: bool,
-    ) -> Result<RelationHandle, RelationError> {
-        let domain = Arc::new(frame);
-        let frame = domain
-            .as_ref()
-            .clone()
-            .select(
-                self.columns
-                    .iter()
-                    .zip(schema.fields())
-                    .map(|(expr, field)| expr.clone().alias(field.name())),
-            )
-            .map_err(|_| RelationError::InvalidPlan)?;
-        Self {
-            domain,
-            domain_order: self.domain_order.clone(),
-            columns: self.columns.clone(),
-            frame,
-            schema,
-            bindings: self.bindings.clone(),
-            lease: self.lease.clone(),
-            executor: self.executor.clone(),
-            ordered_single_file,
-        }
-        .into_handle()
-    }
 }
 
 impl RelationPlan for DataFusionRelation {
+    fn positional_length(&self) -> Option<usize> {
+        self.positional_length
+    }
+    fn shares_row_domain(&self, other: &RelationHandle) -> bool {
+        other
+            .plan()
+            .as_any()
+            .downcast_ref::<Self>()
+            .is_some_and(|other| Arc::ptr_eq(&self.domain, &other.domain))
+    }
+    fn transform_series(
+        &self,
+        series: &SeriesHandle,
+        operation: &yss_relational_contract::SeriesTransform,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        self.transformed_series(series, operation)
+    }
+    fn reduce_series(
+        &self,
+        series: &SeriesHandle,
+        operation: yss_relational_contract::SeriesReduction,
+    ) -> Result<RelationHandle, RelationError> {
+        self.reduction(series, operation)
+    }
+    fn choose_series(
+        &self,
+        condition: &SeriesHandle,
+        when_true: &SeriesOperand,
+        when_false: &SeriesOperand,
+        output_field: Option<&arrow::datatypes::Field>,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        self.chosen(condition, when_true, when_false, output_field)
+    }
+    fn concatenate_text(
+        &self,
+        operands: &[SeriesOperand],
+        separator: &str,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        self.text_concatenated(operands, separator)
+    }
+    fn sort_rows(
+        &self,
+        columns: &[yss_relational_contract::SortColumn],
+    ) -> Result<RelationHandle, RelationError> {
+        self.sorted(columns)
+    }
+    fn deduplicate(
+        &self,
+        keys: &[Box<str>],
+        keep: yss_relational_contract::DuplicateKeep,
+    ) -> Result<RelationHandle, RelationError> {
+        self.unique_rows(keys, keep)
+    }
+    fn set_column(
+        &self,
+        name: &str,
+        series: &SeriesHandle,
+    ) -> Result<RelationHandle, RelationError> {
+        self.column_set(name, series)
+    }
+    fn filter_mask(
+        &self,
+        mask: &SeriesHandle,
+        drop_matches: bool,
+    ) -> Result<RelationHandle, RelationError> {
+        self.masked(mask, drop_matches)
+    }
+    fn unpivot(
+        &self,
+        spec: &yss_relational_contract::UnpivotSpec,
+    ) -> Result<RelationHandle, RelationError> {
+        self.melted(spec)
+    }
+    fn pivot(
+        &self,
+        spec: &yss_relational_contract::PivotSpec,
+    ) -> Result<RelationHandle, RelationError> {
+        self.widened(spec)
+    }
+    fn resample(
+        &self,
+        spec: &yss_relational_contract::ResampleSpec,
+    ) -> Result<RelationHandle, RelationError> {
+        self.resampled(spec)
+    }
+    fn encode_series(
+        &self,
+        series: &SeriesHandle,
+        levels: &[yss_relational_contract::PivotLevel],
+        reference: Option<&str>,
+    ) -> Result<RelationHandle, RelationError> {
+        self.encoded(series, levels, reference)
+    }
+    fn align_grid(
+        &self,
+        time: &str,
+        entity: Option<&str>,
+        interval: i64,
+        max_bytes: usize,
+    ) -> Result<RelationHandle, RelationError> {
+        self.aligned(time, entity, interval, max_bytes)
+    }
     fn aggregate(
         &self,
         keys: &[Box<str>],
@@ -344,13 +424,18 @@ impl RelationPlan for DataFusionRelation {
     fn limit(&self, offset: usize, limit: usize) -> Result<RelationHandle, RelationError> {
         // This limit fixes the scan strategy. A later limit must not turn an existing
         // large-offset query into a single-partition prefix scan.
-        crate::limit_frame(
-            self.domain.as_ref().clone(),
-            offset,
-            limit,
-            self.ordered_single_file,
-        )
-        .and_then(|frame| self.derived(frame, self.schema.clone(), false))
+        let (input, position) = self.positioned()?;
+        crate::limit_frame(input, offset, limit, self.ordered_single_file).and_then(|frame| {
+            self.rebuilt(
+                frame,
+                self.schema
+                    .fields()
+                    .iter()
+                    .map(|f| f.as_ref().clone())
+                    .collect(),
+                vec![crate::series_transform::col(&position).sort(true, false)],
+            )
+        })
     }
     fn rename(&self, old: &str, new: &str) -> Result<RelationHandle, RelationError> {
         if new.trim().is_empty()
@@ -418,7 +503,14 @@ impl RelationPlan for DataFusionRelation {
             .schema
             .field_with_name(column)
             .map_err(|_| RelationError::InvalidInput)?;
-        Ok(crate::series::column(field))
+        let index = self
+            .schema
+            .index_of(column)
+            .map_err(|_| RelationError::InvalidInput)?;
+        Ok(Arc::new(crate::series::DataFusionSeries {
+            expression: self.columns[index].clone(),
+            field: Arc::new(field.clone()),
+        }))
     }
 
     fn project_series(
@@ -452,7 +544,7 @@ impl RelationPlan for DataFusionRelation {
             } else {
                 series.plan().field().clone().with_name(&name)
             });
-            expressions.push(owner.expand_expression(crate::series::expression(series)?)?);
+            expressions.push(crate::series::expression(series)?);
         }
         self.project_expressions(fields, expressions)
     }
@@ -497,16 +589,6 @@ impl RelationPlan for DataFusionRelation {
         conversion: yss_data_contract::SemanticConversion,
     ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
         crate::series::convert(series, conversion)
-    }
-
-    fn standardize_series(
-        &self,
-        series: &SeriesHandle,
-        mean: f64,
-        standard_deviation: f64,
-        inverse: bool,
-    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
-        crate::series::standardize(series, mean, standard_deviation, inverse)
     }
 }
 

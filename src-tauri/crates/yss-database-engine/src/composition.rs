@@ -1,10 +1,7 @@
 use crate::relation::DataFusionRelation;
 use arrow::datatypes::{Field, Schema, SchemaRef};
 use datafusion::{
-    common::{
-        Column, ScalarValue,
-        tree_node::{Transformed, TreeNode},
-    },
+    common::{Column, ScalarValue},
     dataframe::DataFrame,
     logical_expr::{Expr, ExprFunctionExt, JoinType, expr::Sort},
 };
@@ -60,36 +57,14 @@ impl DataFusionRelation {
             .build()
             .map_err(|_| RelationError::InvalidPlan)?
             .alias(&internal);
-        let frame = self
-            .domain
-            .as_ref()
-            .clone()
-            .window(vec![number])
-            .map_err(|_| RelationError::InvalidPlan)?;
         let mut expressions = self
             .columns
             .iter()
             .zip(self.schema.fields())
             .map(|(expr, field)| expr.clone().alias(field.name()))
             .collect::<Vec<_>>();
-        expressions.push(column(&internal).alias(name));
-        frame
-            .select(expressions)
-            .map_err(|_| RelationError::InvalidPlan)
-    }
-
-    pub(crate) fn expand_expression(&self, expression: Expr) -> Result<Expr, RelationError> {
-        expression
-            .transform_up(|expression| {
-                if let Expr::Column(column) = &expression {
-                    let index = self.schema.index_of(&column.name)?;
-                    Ok(Transformed::yes(self.columns[index].clone()))
-                } else {
-                    Ok(Transformed::no(expression))
-                }
-            })
-            .map(|value| value.data)
-            .map_err(|_| RelationError::InvalidPlan)
+        expressions.push(number.alias(name));
+        self.select_native(expressions)
     }
 
     pub(crate) fn project_expressions(
@@ -97,17 +72,13 @@ impl DataFusionRelation {
         fields: Vec<Field>,
         expressions: Vec<Expr>,
     ) -> Result<RelationHandle, RelationError> {
-        let frame = self
-            .domain
-            .as_ref()
-            .clone()
-            .select(
-                expressions
-                    .iter()
-                    .zip(&fields)
-                    .map(|(expr, field)| expr.clone().alias(field.name())),
-            )
-            .map_err(|_| RelationError::InvalidPlan)?;
+        let frame = self.select_native(
+            expressions
+                .iter()
+                .zip(&fields)
+                .map(|(expr, field)| expr.clone().alias(field.name()))
+                .collect(),
+        )?;
         Self {
             frame,
             schema: Arc::new(Schema::new_with_metadata(
@@ -121,6 +92,7 @@ impl DataFusionRelation {
             domain: self.domain.clone(),
             domain_order: self.domain_order.clone(),
             columns: expressions,
+            positional_length: self.positional_length,
         }
         .into_handle()
     }
@@ -181,6 +153,7 @@ impl DataFusionRelation {
             lease: Arc::new(leases),
             executor: self.executor.clone(),
             ordered_single_file: false,
+            positional_length: None,
         }
         .into_handle()
     }
@@ -389,6 +362,8 @@ impl DataFusionRelation {
             TableJoinKind::Left => JoinType::Left,
             TableJoinKind::Right => JoinType::Right,
             TableJoinKind::Full => JoinType::Full,
+            TableJoinKind::Semi => JoinType::LeftSemi,
+            TableJoinKind::Anti => JoinType::LeftAnti,
         };
         let keys = spec
             .left_keys
@@ -436,6 +411,9 @@ impl DataFusionRelation {
                 matches!(spec.kind, TableJoinKind::Left | TableJoinKind::Full),
             ),
         ] {
+            if side == "__right" && matches!(spec.kind, TableJoinKind::Semi | TableJoinKind::Anti) {
+                continue;
+            }
             for (field, name) in schema.fields().iter().zip(names) {
                 fields.push(
                     derived_field(field, &name).with_nullable(nullable || field.is_nullable()),
@@ -445,6 +423,9 @@ impl DataFusionRelation {
         }
         let mut order = Vec::new();
         for (side, position) in [("__left", left_position), ("__right", right_position)] {
+            if side == "__right" && matches!(spec.kind, TableJoinKind::Semi | TableJoinKind::Anti) {
+                continue;
+            }
             let mut name = position.clone();
             while fields.iter().any(|field| field.name() == &name) {
                 name.push('_');

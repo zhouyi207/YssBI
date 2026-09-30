@@ -4,7 +4,7 @@ use yss_data_contract::TabularScalar;
 use arrow::array::{Array, ArrayRef, Float64Array};
 use arrow::compute::kernels::numeric;
 use arrow::datatypes::{DataType, Field};
-use datafusion::common::{Column, DataFusionError, ScalarValue};
+use datafusion::common::{DataFusionError, ScalarValue};
 use datafusion::logical_expr::{ColumnarValue, Expr, Volatility, create_udf};
 use yss_relational_contract::{
     BooleanOperand, BooleanOperation, NumericOperation, NumericType, RelationError, SeriesHandle,
@@ -14,79 +14,6 @@ use yss_relational_contract::{
 pub(crate) struct DataFusionSeries {
     pub expression: Expr,
     pub field: Arc<Field>,
-}
-
-pub(crate) fn standardize(
-    series: &SeriesHandle,
-    mean: f64,
-    sd: f64,
-    inverse: bool,
-) -> Result<Arc<dyn SeriesPlan>, RelationError> {
-    if !yss_database_arrow::is_numeric_field(series.plan().field())
-        || !mean.is_finite()
-        || !sd.is_finite()
-        || sd <= 0.0
-    {
-        return Err(RelationError::InvalidInput);
-    }
-    let function = create_udf(
-        if inverse {
-            "yssbi_inverse_standardize"
-        } else {
-            "yssbi_standardize"
-        },
-        vec![
-            series.plan().field().data_type().clone(),
-            DataType::Float64,
-            DataType::Float64,
-        ],
-        DataType::Float64,
-        Volatility::Immutable,
-        Arc::new(move |arguments| {
-            let arrays = ColumnarValue::values_to_arrays(arguments)?;
-            let input =
-                yss_database_arrow::lossless_cast(arrays[0].as_ref(), &DataType::Float64, false)
-                    .map_err(|_| failure(RelationError::InvalidInput))?;
-            let input = input
-                .as_any()
-                .downcast_ref::<Float64Array>()
-                .ok_or_else(|| failure(RelationError::InvalidInput))?;
-            let values = input
-                .iter()
-                .map(|value| {
-                    value
-                        .map(|x| {
-                            let result = if inverse {
-                                x * sd + mean
-                            } else {
-                                (x - mean) / sd
-                            };
-                            if result.is_finite() {
-                                Ok(result)
-                            } else {
-                                Err(failure(RelationError::NonFiniteResult))
-                            }
-                        })
-                        .transpose()
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ColumnarValue::Array(Arc::new(Float64Array::from(values))))
-        }),
-    );
-    // Include statistics in expression identity so optimizer CSE cannot merge transforms
-    // that use different means or scales. Preserve the original relation's row domain.
-    Ok(Arc::new(DataFusionSeries {
-        expression: function.call(vec![
-            expression(series)?,
-            Expr::Literal(ScalarValue::Float64(Some(mean)), None),
-            Expr::Literal(ScalarValue::Float64(Some(sd)), None),
-        ]),
-        field: Arc::new(Field::new(
-            "result",
-            DataType::Float64,
-            series.plan().field().is_nullable(),
-        )),
-    }))
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -171,13 +98,6 @@ impl SeriesPlan for DataFusionSeries {
             .downcast_ref::<Self>()
             .is_some_and(|other| self.expression == other.expression && self.field == other.field)
     }
-}
-
-pub(crate) fn column(field: &Field) -> Arc<dyn SeriesPlan> {
-    Arc::new(DataFusionSeries {
-        expression: Expr::Column(Column::from_name(field.name().clone())),
-        field: Arc::new(field.clone()),
-    })
 }
 
 pub(crate) fn expression(series: &SeriesHandle) -> Result<Expr, RelationError> {

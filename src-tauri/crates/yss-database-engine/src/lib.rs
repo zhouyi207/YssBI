@@ -6,10 +6,16 @@ mod drop_na;
 mod page;
 mod profile;
 pub use dataset::{DatasetQuery, DatasetQueryPage};
+mod alignment;
 mod comparison;
 mod composition;
+mod difference;
+mod literal;
 mod relation;
 mod series;
+mod series_transform;
+mod table_transform;
+mod windows;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,9 +42,28 @@ pub struct DataFusionRuntime {
     runtime: Option<tokio::runtime::Runtime>,
     batch_size: usize,
     target_partitions: usize,
+    literal_domains:
+        std::sync::Mutex<std::collections::BTreeMap<usize, std::sync::Weak<DataFrame>>>,
 }
 
 impl yss_relational_contract::RelationFactory for DataFusionRuntime {
+    fn literal_series(
+        self: Arc<Self>,
+        field: Field,
+        values: Arc<dyn Array>,
+        control: &RelationControl,
+    ) -> Result<SeriesHandle, RelationError> {
+        self.literal_vector(field, values, control)
+    }
+    fn integer_range(
+        self: Arc<Self>,
+        start: i64,
+        end: i64,
+        step: i64,
+        control: &RelationControl,
+    ) -> Result<RelationHandle, RelationError> {
+        self.range_relation(start, end, step, control)
+    }
     fn materialize(
         self: Arc<Self>,
         data: arrow::record_batch::RecordBatch,
@@ -102,6 +127,7 @@ impl DataFusionRuntime {
             .build()
             .map_err(|_| RelationError::QueryFailed)?;
         Ok(Arc::new(Self {
+            literal_domains: std::sync::Mutex::new(std::collections::BTreeMap::new()),
             environment,
             runtime: Some(runtime),
             batch_size,
@@ -243,11 +269,8 @@ impl DataFusionRuntime {
         {
             return Err(RelationError::InvalidInput);
         }
-        if series
-            .iter()
-            .any(|series| series.relation() != first.relation())
-        {
-            return Err(RelationError::UnalignedSeries);
+        for series in series {
+            first.relation().check_row_domain(series.relation())?;
         }
         let relation = first.relation().project_series(series)?;
         let mut stream = relation.stream(control.clone()).await?;

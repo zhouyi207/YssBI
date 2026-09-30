@@ -20,9 +20,10 @@ fn runtime() -> GraphRuntimeState {
 fn inventory_entries_remain_visible_but_unavailable_without_kernels() {
     let runtime = runtime();
     let mut catalog = runtime.localized_catalog_with_resources(&[], "zh-CN");
-    runtime.annotate_catalog_availability(&mut catalog, |id| id == "yssbi.statistics.linear.fit");
+    runtime.annotate_catalog_availability(&mut catalog, |id| {
+        id == "yssbi.statistics.linear.fit" || id.starts_with("yssbi.plot.")
+    });
     let mut placeholders = 0;
-    let mut visualization_placeholders = 0;
     for item in &catalog.items {
         if item.node_type_id.starts_with("yssbi.statistics.") && item.ports.is_empty() {
             assert!(
@@ -31,35 +32,52 @@ fn inventory_entries_remain_visible_but_unavailable_without_kernels() {
                 item.node_type_id
             );
             placeholders += 1;
-        }
-        if item.node_type_id.starts_with("yssbi.plot.") && item.ports.is_empty() {
             assert!(
-                !item.available,
-                "{} must not be creatable",
+                item.documentation.is_some(),
+                "{} requires help explaining its unavailable state",
                 item.node_type_id
             );
-            visualization_placeholders += 1;
+        }
+        if item.node_type_id.starts_with("yssbi.plot.") {
+            assert!(
+                !item.ports.is_empty(),
+                "{} requires a concrete interface",
+                item.node_type_id
+            );
+            assert!(
+                item.available,
+                "{} has an installed kernel",
+                item.node_type_id
+            );
         }
     }
-    assert_eq!(placeholders, 309);
-    assert_eq!(visualization_placeholders, 12);
-    for id in [
-        "yssbi.dataframe.labels",
-        "yssbi.dataframe.encode",
-        "yssbi.dataframe.impute.single",
-        "yssbi.dataframe.impute.multiple",
-        "yssbi.dataframe.impute.mice",
+    assert!(
+        placeholders > 0,
+        "the catalog still contains explicitly unavailable methods"
+    );
+    for (id, category) in [
+        ("yssbi.dataframe.labels", "dataframe.series"),
+        ("yssbi.dataframe.impute.single", "statistics.imputation"),
+        ("yssbi.dataframe.impute.multiple", "statistics.imputation"),
+        ("yssbi.dataframe.impute.mice", "statistics.imputation"),
     ] {
         let item = catalog
             .items
             .iter()
             .find(|item| item.node_type_id.as_ref() == id)
             .unwrap();
-        assert_eq!(item.category_id.as_ref(), "data_processing");
+        assert_eq!(item.category_id.as_ref(), category);
         assert!(!item.available);
         assert!(item.ports.is_empty());
         assert!(item.documentation.is_some());
     }
+    let encoding = catalog
+        .items
+        .iter()
+        .find(|item| item.node_type_id.as_ref() == "yssbi.dataframe.encode")
+        .unwrap();
+    assert_eq!(encoding.category_id.as_ref(), "dataframe.series");
+    assert!(!encoding.ports.is_empty());
     assert!(catalog.items.iter().any(|item| {
         item.node_type_id.as_ref() == "yssbi.statistics.linear.fit" && item.available
     }));

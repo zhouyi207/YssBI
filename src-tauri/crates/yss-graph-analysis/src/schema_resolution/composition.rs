@@ -115,6 +115,29 @@ impl EditorSchemaResolver<'_> {
                 .find(|field| field.name.0.as_ref() == selected)
                 .ok_or(GraphSchemaIssue::MissingColumn);
         }
+        if node.node_type.as_str() == "yssbi.dataframe.series.choose" {
+            let mut fields = Vec::new();
+            for key in ["when_true", "when_false"] {
+                let input = PortAddress::declared(node.id, key.parse().unwrap());
+                let source = self
+                    .input_sources
+                    .get(&input)
+                    .and_then(|s| match s.as_slice() {
+                        [s] => Some(s.clone()),
+                        _ => None,
+                    })
+                    .ok_or(GraphSchemaIssue::UnconnectedInput)?;
+                fields.push(self.composition_series(&source)?);
+            }
+            if fields[0].scalar_type != fields[1].scalar_type {
+                return Err(GraphSchemaIssue::ConflictingInputs);
+            }
+            return Ok(SchemaField {
+                name: SchemaColumnRef("result".into()),
+                scalar_type: fields[0].scalar_type,
+                lineage: None,
+            });
+        }
         let mut name = match &source.port {
             PortRef::Declared { key } => key.as_str().to_owned(),
             PortRef::Instance { template, .. } => template.as_str().to_owned(),
@@ -127,6 +150,7 @@ impl EditorSchemaResolver<'_> {
                     name = constant.name.clone();
                 }
                 match &constant.data_type {
+                    ValueType::Scalar(kind) => Some(*kind),
                     ValueType::DataSeries(element) => match element.as_ref() {
                         ValueType::Scalar(kind) => Some(*kind),
                         _ => None,
@@ -318,10 +342,15 @@ impl EditorSchemaResolver<'_> {
                         .collect::<Vec<_>>(),
                     suffix,
                 );
-                left.extend(right.into_iter().zip(names).map(|(mut field, name)| {
-                    field.name.0 = name.into();
-                    field
-                }));
+                if !matches!(
+                    parameter("join_type").and_then(serde_json::Value::as_str),
+                    Some("semi" | "anti")
+                ) {
+                    left.extend(right.into_iter().zip(names).map(|(mut field, name)| {
+                        field.name.0 = name.into();
+                        field
+                    }));
+                }
                 left
             }
             _ => return Err(GraphSchemaIssue::UnsupportedResolver),

@@ -15,6 +15,8 @@ pub enum TableJoinKind {
     Left,
     Right,
     Full,
+    Semi,
+    Anti,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
