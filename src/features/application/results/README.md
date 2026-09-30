@@ -79,7 +79,7 @@ WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通�
 Fit 的 `model` 与 Summary 的唯一 `result` 共享不可变的原生 `LinearRegressionResult`，仍由当前 `ResultStore` 拥有。报告类别统一为 `linearRegressionSummary`，标题为 Linear Regression Summary，模型概览保留实际 OLS/WLS/GLS 方法。WLS/GLS 的平方和与 R² 使用变换尺度，拟合值与残差保留原始尺度。
 拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 的 `presentation` 提供带格式标记的模型概览条目、ANOVA 列和行、条件数指标，由 [报告展示投影](../../../../src-tauri/crates/yss-application/src/graph/results/report/presentation.rs) 从统计结果构造，数字不会预先转换为展示字符串。报告还包含完整参数名目录 `paramNames`、
 `{ executionSessionId, resultId }` 引用，以及 coefficients/observations 表引用与行数。
-引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。
+原生线性报告引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。
 `get_result_table_page` 复用有界页面投影；`analyze_result` 读取已选的 ACF/PACF、序列相关与假设检验结果，仅需分析 kind。计算参数只由 Summary 节点配置，不在读取请求中重复传递。
 残差图请求保留显示范围与点数，按拟合值范围筛选、跨整个匹配总体进行系统抽样，并标明总体/匹配数和抽样状态。
 统计检验使用完整拟合数据。Application 捕获共享结果后在锁外读取/投影，返回前重验 session 与结果可用性，
@@ -87,6 +87,15 @@ Fit 的 `model` 与 Summary 的唯一 `result` 共享不可变的原生 `LinearR
 数据仍由原 ResultStore 拥有，不另建报告存储或复制完整数据。
 
 Application 的 `query_result_projection` 返回有界强类型投影；普通对象在克隆或编码前检查展开深度和空间预算，原生报告仅展开概览、参数目录与表引用。共享协议映射 `result_encoding` 供 IPC 与 Harness 调用，统一字段、宽整数文本与内联 JSON 字节上限；计数写入器不分配完整编码缓冲区。DataFrame、DataSeries 和顶层内存数列走现有分页入口；AI 不另维护统计字段白名单。AI 的 JSON 与表引用读取语义见 [Harness capability 契约](../../../../src-tauri/crates/yss-harness-core/README.md#4-registered-capabilities)。
+
+结构化统计报告也默认只交付标量概览和数据引用。所有数组（含小数组和空数组）统一投影为
+`{ kind: "tableRef", part, rowCount }`，不按大小选择是否内联；原数组仍由同一个不可变
+ResultStore 结果持有。`structured:` part 由后端生成，使用有长度/深度边界且转义字段名的
+内部数组地址；客户端把完整 part 原样传回 `get_result_table_page` / `inspect_result`，
+不能据此查询其他结果或外部资源。分页会重新验证结果身份、类型、可用性和页大小，
+嵌套数组继续返回引用。原生线性报告仍使用 `coefficients` / `observations` 两个固定 part。
+GUI 默认只显示引用的行数，用户展开“查看数据”后才挂载分页读取；AI 通过显式
+`inspect_result` 的 part 读取所需数据页。报告打开本身不预取这些数组。
 
 线性回归报告的 `summary` 携带本次执行的内容选择和检验参数。Summary 执行阶段只计算选中的附加检验；报告查询返回已计算的检验，拒绝未选项和 Fit 模型。Fit 的普通 Inspector 保留模型概览，不伪造默认 Summary、分析能力或报告表引用。概览与报告共用 `query_result_projection`，不另设线性报告查询入口。系数读取只在选择系数表、系数图或方程时挂载；选择图形/观测表后仍在展开时读取有界投影。
 

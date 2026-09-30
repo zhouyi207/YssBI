@@ -16,6 +16,7 @@ use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 pub mod report;
 mod retention;
 mod structure;
+mod structured;
 pub(crate) use structure::ResultStructure;
 
 pub struct ResultPinQuery {
@@ -185,6 +186,9 @@ impl ApplicationState {
             }
             RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_) => {
                 Err(ResultQueryApplicationError::InvalidPageRequest)
+            }
+            value if structured::supports(&snapshot) => {
+                Ok(ResultValueProjection::Value(structured::project(value)?))
             }
             value => {
                 let mut remaining = MAX_INLINE_PROJECTION_BYTES;

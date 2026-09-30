@@ -338,7 +338,22 @@ fn multivariate_nodes_execute_publish_summaries_and_page_connectable_scores() {
             );
         }
         if method == "canonical" {
-            correlation = report["correlations"][0].as_f64().unwrap();
+            let correlations = app
+                .query_result_table(
+                    reference(id, 0),
+                    report["correlations"]["part"]
+                        .as_str()
+                        .unwrap()
+                        .parse()
+                        .unwrap(),
+                    0,
+                    1,
+                )
+                .unwrap();
+            correlation = crate::result_encoding::runtime_value_to_json(&correlations.values[0])
+                .unwrap()[0]
+                .as_f64()
+                .unwrap();
             assert_eq!(page.columns[0].name.as_ref(), "x_axis1");
             assert_eq!(page.columns[1].name.as_ref(), "y_axis1");
         }

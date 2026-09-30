@@ -15,10 +15,27 @@ use yss_sci_contract::hypothesis::HypothesisTestOutput;
 
 pub(crate) mod presentation;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResultTablePart {
     Coefficients,
     Observations,
+    Structured(Box<str>),
+}
+
+impl std::str::FromStr for ResultTablePart {
+    type Err = ReportQueryError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "coefficients" => Ok(Self::Coefficients),
+            "observations" => Ok(Self::Observations),
+            _ => value
+                .strip_prefix("structured:")
+                .filter(|path| super::structured::path_tokens(path).is_some())
+                .map(|path| Self::Structured(path.into()))
+                .ok_or(ReportQueryError::InvalidRequest),
+        }
+    }
 }
 
 pub struct LinearRegressionReportProjection {
@@ -87,6 +104,15 @@ impl ApplicationState {
         offset: usize,
         limit: usize,
     ) -> Result<ResultPageProjection, ReportQueryError> {
+        if let ResultTablePart::Structured(path) = &part {
+            return self.with_report_result(reference, |snapshot| {
+                if !super::structured::supports(snapshot) {
+                    return Err(ReportQueryError::WrongKind);
+                }
+                super::structured::page(snapshot.value().value(), path, offset, limit)
+                    .map_err(|_| ReportQueryError::InvalidRequest)
+            });
+        }
         self.with_linear_regression_summary(reference, |result, summary| {
             let allowed = match part {
                 ResultTablePart::Coefficients => {
@@ -95,6 +121,7 @@ impl ApplicationState {
                         || summary.options.equation
                 }
                 ResultTablePart::Observations => summary.options.observations,
+                ResultTablePart::Structured(_) => return Err(ReportQueryError::WrongKind),
             };
             if !allowed {
                 return Err(ReportQueryError::InvalidRequest);
@@ -142,6 +169,26 @@ impl ApplicationState {
         reference: ResultReference,
         read: impl FnOnce(&LinearRegressionResult, &LinearSummary) -> Result<T, ReportQueryError>,
     ) -> Result<T, ReportQueryError> {
+        self.with_report_result(reference, |snapshot| {
+            let RuntimeValue::LinearRegression(result) = snapshot.value().value() else {
+                return Err(ReportQueryError::WrongKind);
+            };
+            // Only an executed Summary grants native report reads; Fit remains a model input.
+            let summary = result
+                .summary
+                .as_deref()
+                .ok_or(ReportQueryError::WrongKind)?;
+            read(result, summary)
+        })
+    }
+
+    fn with_report_result<T>(
+        &self,
+        reference: ResultReference,
+        read: impl FnOnce(
+            &yss_graph_execution::result::StoredResultSnapshot,
+        ) -> Result<T, ReportQueryError>,
+    ) -> Result<T, ReportQueryError> {
         let captured = self.capture_session()?;
         if captured.execution_session_id() != reference.execution_session_id {
             return Err(ReportQueryError::Stale);
@@ -150,15 +197,7 @@ impl ApplicationState {
             .execution()
             .query_result(reference.result_id)
             .ok_or(ReportQueryError::Unavailable)?;
-        let RuntimeValue::LinearRegression(result) = snapshot.value().value() else {
-            return Err(ReportQueryError::WrongKind);
-        };
-        // Only an executed Summary grants report reads; Fit remains a model input.
-        let summary = result
-            .summary
-            .as_deref()
-            .ok_or(ReportQueryError::WrongKind)?;
-        let outcome = read(result, summary);
+        let outcome = read(&snapshot);
         self.revalidate_captured_session(&captured)
             .map_err(|_| ReportQueryError::Stale)?;
         if captured
@@ -226,6 +265,7 @@ fn table_page(
                 ("residual", "Float64"),
             ],
         ),
+        ResultTablePart::Structured(_) => return Err(ReportQueryError::WrongKind),
     };
     let offset = offset.min(count);
     let end = offset.saturating_add(limit).min(count);
@@ -260,6 +300,7 @@ fn table_page(
                     RuntimeValue::float64(result.residuals[row])
                         .map_err(|_| ReportQueryError::UnrepresentableValue)?,
                 ]),
+                ResultTablePart::Structured(_) => return Err(ReportQueryError::WrongKind),
             }))
         })
         .collect::<Result<_, ReportQueryError>>()?;

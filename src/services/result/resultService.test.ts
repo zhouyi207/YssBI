@@ -153,11 +153,16 @@ describe("ResultService", () => {
       resultId: "17",
     };
     await ResultService.getPage(resultReferenceFixture("17"), 200, 200, "observations");
+    await ResultService.getPage(resultReferenceFixture("17"), 53930, 100, "structured:/fitted");
     const response = { kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } };
     vi.mocked(invoke).mockResolvedValueOnce(response);
     await expect(ResultService.analyze(reference, { kind: "acfPacf" })).resolves.toEqual(response);
     expect(vi.mocked(invoke).mock.calls).toEqual([
       ["get_result_table_page", { reference, part: "observations", offset: 200, limit: 200 }],
+      [
+        "get_result_table_page",
+        { reference, part: "structured:/fitted", offset: 53930, limit: 100 },
+      ],
       ["analyze_result", { reference, analysis: { kind: "acfPacf" } }],
     ]);
     vi.mocked(invoke).mockResolvedValueOnce({

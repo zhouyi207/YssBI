@@ -419,16 +419,12 @@ fn inspect_result(
         })?;
     let reference = result.provenance().reference();
     let page = if let Some(part) = request.part.as_deref() {
-        let part = match part {
-            "coefficients" => crate::graph::results::report::ResultTablePart::Coefficients,
-            "observations" => crate::graph::results::report::ResultTablePart::Observations,
-            _ => {
-                return Err(invalid_request(
-                    CapabilityId::InspectResult,
-                    CapabilityContractError::InvalidField("part"),
-                ));
-            }
-        };
+        let part = part.parse().map_err(|_| {
+            invalid_request(
+                CapabilityId::InspectResult,
+                CapabilityContractError::InvalidField("part"),
+            )
+        })?;
         Some(
             application
                 .query_result_table(reference, part, request.offset, usize::from(request.limit))

@@ -48,19 +48,24 @@ impl From<ResultReference> for ResultReferenceDto {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ResultTablePartDto {
-    Coefficients,
-    Observations,
+#[derive(Debug, Clone, Deserialize)]
+#[serde(try_from = "String")]
+pub struct ResultTablePartDto(ResultTablePart);
+
+impl TryFrom<String> for ResultTablePartDto {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value
+            .parse()
+            .map(Self)
+            .map_err(|_| "invalid result table part")
+    }
 }
 
 impl From<ResultTablePartDto> for ResultTablePart {
     fn from(value: ResultTablePartDto) -> Self {
-        match value {
-            ResultTablePartDto::Coefficients => Self::Coefficients,
-            ResultTablePartDto::Observations => Self::Observations,
-        }
+        value.0
     }
 }
 

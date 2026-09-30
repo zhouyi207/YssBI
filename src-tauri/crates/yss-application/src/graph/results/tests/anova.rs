@@ -267,33 +267,57 @@ fn anova_nodes_execute_graph_defaults_with_mixed_factor_labels_and_interactions(
             result["observations"],
             RuntimeValue::Scalar(TabularScalar::Integer(32))
         );
-        let RuntimeValue::List(factors) = &result["factors"] else {
-            panic!("{method} factors");
-        };
-        let RuntimeValue::Record(first) = &factors[0] else {
-            panic!("first factor");
-        };
-        assert_eq!(
-            first["levels"],
-            RuntimeValue::List(
-                ["control", "treatment"]
-                    .into_iter()
-                    .map(|s| RuntimeValue::Scalar(TabularScalar::String(s.into())))
-                    .collect()
-            )
-        );
         let wire = crate::result_encoding::query_result_json(&app, reference)
             .unwrap()
             .unwrap();
-        assert!(wire["table"].is_array());
+        let factors = app
+            .query_result_table(
+                reference,
+                wire["factors"]["part"].as_str().unwrap().parse().unwrap(),
+                0,
+                10,
+            )
+            .unwrap();
+        let first = crate::result_encoding::runtime_value_to_json(&factors.values[0]).unwrap();
+        let levels = app
+            .query_result_table(
+                reference,
+                first[0]["levels"]["part"]
+                    .as_str()
+                    .unwrap()
+                    .parse()
+                    .unwrap(),
+                0,
+                10,
+            )
+            .unwrap();
+        let levels = levels
+            .values
+            .iter()
+            .map(crate::result_encoding::runtime_value_to_json)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            levels,
+            vec![
+                serde_json::json!(["control"]),
+                serde_json::json!(["treatment"])
+            ]
+        );
+        assert_eq!(wire["table"]["kind"], "tableRef");
         if method != "repeated_measures" {
             assert_eq!(wire["options"]["sums_of_squares"], "type_iii");
         }
-        let RuntimeValue::List(table) = &result["table"] else {
-            panic!("{method} table");
-        };
+        let table = app
+            .query_result_table(
+                reference,
+                wire["table"]["part"].as_str().unwrap().parse().unwrap(),
+                0,
+                100,
+            )
+            .unwrap();
         assert_eq!(
-            table.len(),
+            table.values.len(),
             match method {
                 "one_way" => 1,
                 "two_way" => 3,

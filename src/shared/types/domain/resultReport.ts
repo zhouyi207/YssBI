@@ -2,11 +2,31 @@ import type { UiKeyValueData, UiTableData, UiStatCardData } from "./uiData";
 import type { SerialTestsResponseDTO } from "@/shared/types/report/serialTests";
 import type { ResultReference } from "./result";
 
-export type ResultTablePart = "coefficients" | "observations";
+export type StructuredResultPart = `structured:/${string}`;
+export type ResultTablePart = "coefficients" | "observations" | StructuredResultPart;
 export interface ResultTableReference<Part extends ResultTablePart = ResultTablePart> {
   readonly kind: "tableRef";
   readonly part: Part;
   readonly rowCount: number;
+}
+
+export function isStructuredTableReference(
+  value: unknown,
+): value is ResultTableReference<StructuredResultPart> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const reference = value as Record<string, unknown>;
+  return (
+    Object.keys(reference).length === 3 &&
+    reference.kind === "tableRef" &&
+    typeof reference.part === "string" &&
+    reference.part.startsWith("structured:/") &&
+    reference.part.length <= 4107 &&
+    !/~(?:[^01]|$)/.test(reference.part) &&
+    reference.part.slice("structured:/".length).split("/").length <= 64 &&
+    typeof reference.rowCount === "number" &&
+    Number.isSafeInteger(reference.rowCount) &&
+    reference.rowCount >= 0
+  );
 }
 
 export interface LinearRegressionReportData {

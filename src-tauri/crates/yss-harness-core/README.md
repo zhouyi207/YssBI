@@ -175,6 +175,10 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 DataFrame、DataSeries 和内存数列仍通过 `offset`/`limit` 分页，不展开全部数据。JSON 中的数据引用保持原样；AI 可以把 `resultRef.executionSessionId`、`resultRef.resultId` 和 `tableRef.part` 传给同一个 `inspect_result` 继续分页读取。未指定 `part` 时读取完整 JSON；指定 `part` 时读取该结果公开的表。分页响应使用 JSON 行值和 `nextOffset`/`hasMore`，保留行数及字节边界。项目会话、结果可用性、取消和 deadline 检查继续生效。
 
+结构化统计结果的所有数组也保持 `tableRef`，包括小数组及空数组。没有 `part` 的概览
+不展开数组；后续 inspect 使用同一结果身份并原样传回后端生成的 `structured:` part。
+分页内的嵌套数组继续返回引用，不隐式读取其他数组或把完整模型数据放进回执。
+
 Model-facing schema 来自 typed capability contract；Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再通过 Gateway 执行，最后持久化成功 result 或 structured failure。idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
 
 `inspect_project` 复用 Project 的 `read_project_index`，与左侧项目树使用同一资源成员来源，
