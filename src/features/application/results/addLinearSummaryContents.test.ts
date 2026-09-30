@@ -67,7 +67,7 @@ const original: ResultDescriptor = {
     nodeId,
     runId: "2",
     createdAtMs: "1",
-    output: { graphPath, port: { kind: "declared", nodeId, portKey: "report" } },
+    output: { graphPath, port: { kind: "declared", nodeId, portKey: "result" } },
   },
 };
 const next = { ...original, resultId: "18", provenance: { ...original.provenance, runId: "3" } };

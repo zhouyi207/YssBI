@@ -2003,6 +2003,11 @@ export const enUS = {
     cancelled: "Result computation was cancelled",
   },
   sourceInspector: {
+    viewMode: "View mode",
+    numericView: "Values",
+    reportView: "Report",
+    previous: "Previous",
+    next: "Next",
     title: "Source Inspector",
     loading: "Loading…",
     missingResultId: "Missing result ID in URL",

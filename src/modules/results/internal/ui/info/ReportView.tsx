@@ -4,15 +4,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ReportKind, ResultDescriptor } from "@/features/application/results/types";
 import { validateReportPayload } from "@/shared/types/report/reportValidation";
 import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
-import { resolveReportComponent } from "./reportViewResolver";
+import { LinearResultBindings } from "./LinearResultBindings";
+import { ResultReportPage } from "./ResultReportPage";
+import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 
 interface ReportViewProps {
   descriptor: ResultDescriptor;
   report: ReportKind;
   data: unknown;
+  onValueChange?: (value: LinearRegressionReportData) => void;
 }
 
-export function ReportView({ descriptor, report, data }: ReportViewProps) {
+export function ReportView({ descriptor, report, data, onValueChange }: ReportViewProps) {
   const validation = useMemo(
     () => validateReportPayload(descriptor, report, data),
     [descriptor, report, data],
@@ -36,8 +39,19 @@ export function ReportView({ descriptor, report, data }: ReportViewProps) {
       </Alert>
     );
   } else {
-    const Component = resolveReportComponent(report);
-    content = <Component data={validation.value} />;
+    content =
+      report === "linearRegressionSummary" ? (
+        <LinearResultBindings
+          data={validation.value as LinearRegressionReportData}
+          onValueChange={onValueChange}
+        />
+      ) : (
+        <ResultReportPage
+          reference={descriptor}
+          data={{}}
+          bindings={{ result: { type: "structured", value: validation.value } }}
+        />
+      );
   }
 
   return (

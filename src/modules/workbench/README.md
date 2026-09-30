@@ -257,6 +257,8 @@ Singleton 与 multi-instance contract：
 
 Result panel 固定读取 `reference`，不订阅 pin 的当前结果。删除来源节点或重新运行不会清空已打开的报告。
 
+报告类别复用 Results 的封闭类型校验：`structured` 与原生线性摘要均进入同一个 Inspect，数值/报告切换属于面板内查看状态，不创建另一个面板或结果租约。
+
 Markdown 文献通过 `openReference` 在右侧打开独立 `Reference` 标签，同一规范化 HTTP(S) URL（含查询及片段）复用已有标签。标签支持现有关闭、分屏、拖动与窗口内浮动，右侧文献标签可通过右键菜单直接浮动，reset 将其放回右侧。内容由 Document editors 的 `ReferencePanel` 渲染，Workbench 仅拥有布局与 URL/title metadata。文献不绑定项目、不持有结果租约；项目切换保留它，窗口持久化时移除它以避免恢复时自动联网。
 Report 的显式“添加并计算”是引用更新入口：Results 先取得新结果租约，再通过 `replaceResult(expected, request)` 在同一个物理面板上更新引用与租约；原面板已关闭或引用已变则拒绝。新引用已有面板时复用并 reveal，释放重复取得的临时租约。替换后仍由真实面板集合对账旧租约，移动、隐藏和重新挂载不回退到旧结果。
 Application 的结果租约控制器订阅完成 hydration 后的真实面板集合，按 `leaseId` 与后端对账；切换标签、移动、重置布局保留持有关系，真实关闭才释放。

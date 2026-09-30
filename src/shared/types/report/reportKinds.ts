@@ -3,6 +3,7 @@
  */
 
 export type ReportPayloadKind =
+  | "structured"
   | "linearRegressionSummary"
   | "binarySummary"
   | "iv2slsSummary"

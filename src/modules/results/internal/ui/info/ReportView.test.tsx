@@ -28,7 +28,7 @@ const descriptor: ResultDescriptor = {
     nodeId: "ols-node",
     output: {
       graphPath: "events/main.yssbi-event",
-      port: { kind: "declared", nodeId: "ols-node", portKey: "report" },
+      port: { kind: "declared", nodeId: "ols-node", portKey: "result" },
     },
     createdAtMs: "100",
   },
@@ -127,7 +127,7 @@ describe("ReportView", () => {
       resultId: "42",
       runId: "7",
       nodeId: "ols-node",
-      outputPinId: "report",
+      outputPinId: "result",
       presentation: { kind: "report", report: "linearRegressionSummary" },
       valueKind: "scalar",
       fieldPath: "coefficients.rowCount",

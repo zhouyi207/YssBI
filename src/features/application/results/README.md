@@ -72,11 +72,11 @@ Pin 查询与当前结果搜索重新验证数据库内容及函数依赖；报�
 
 线性回归统一使用 `yssbi.statistics.linear.fit`、`linear.summary` 与 `linear.predict`。Fit 在配置中选择 OLS/WLS/GLS，输出 `model`、`fitted`、`residuals`；Summary 只接收 `model`，无拟合参数，也不重新估计；Predict 使用同一模型的系数与截距。
 
-统计目录的其他 Summary 同样只接收对应方法的已拟合模型。ADF 不属于模型汇总：`adf.test` 接收序列及检验配置，声明 `result` 和 `report` 输出；Graph 仅将其 `report` 分类为 ADF 统计报告，`result` 保持普通结果。ADF 及非线性回归的相关目录定义尚未注册执行内核，不能据此视为已贯通；当前定义与接入边界见 [Node Catalog](../../../../src-tauri/crates/yss-node-catalog/README.md)。
+统计目录的其他 Summary 同样只接收对应方法的已拟合模型。Summary、ADF、独立检验和诊断只输出结构化 `result`；数值与报告是同一引用的两种展示，不是独立输出。普通结构化结果使用通用 JSON 页面，ADF 及已实现方法的接入范围见 [Node Catalog](../../../../src-tauri/crates/yss-node-catalog/README.md)。
 WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通过按顺序添加的 `sigma` 数列接收完整相对误差协方差矩阵的各列，验证有限、方阵、对称与正定。只允许所选方法需要的辅助输入。WLS 权重与训练列联合读取以验证共同样本；协方差矩阵的行列顺序由调用者对应训练样本。GLS 当前仅支持常规标准误；其他标准误配置被拒绝。
 执行计划保留端口实例分组身份和模板名，内核只接收中立模板名来区分 predictors/weights/sigma，不解析图地址。
 
-Fit 的 `model` 与 Summary 的 `result`、`report` 共享不可变的原生 `LinearRegressionResult`，仍由当前 `ResultStore` 拥有。报告类别统一为 `linearRegressionSummary`，标题为 Linear Regression Summary，模型概览保留实际 OLS/WLS/GLS 方法。WLS/GLS 的平方和与 R² 使用变换尺度，拟合值与残差保留原始尺度。
+Fit 的 `model` 与 Summary 的唯一 `result` 共享不可变的原生 `LinearRegressionResult`，仍由当前 `ResultStore` 拥有。报告类别统一为 `linearRegressionSummary`，标题为 Linear Regression Summary，模型概览保留实际 OLS/WLS/GLS 方法。WLS/GLS 的平方和与 R² 使用变换尺度，拟合值与残差保留原始尺度。
 拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 的 `presentation` 提供带格式标记的模型概览条目、ANOVA 列和行、条件数指标，由 [报告展示投影](../../../../src-tauri/crates/yss-application/src/graph/results/report/presentation.rs) 从统计结果构造，数字不会预先转换为展示字符串。报告还包含完整参数名目录 `paramNames`、
 `{ executionSessionId, resultId }` 引用，以及 coefficients/observations 表引用与行数。
 引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。

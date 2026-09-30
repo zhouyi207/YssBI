@@ -32,7 +32,7 @@ it("keeps the opened snapshot when its pin is invalidated and rerun", async () =
     port: {
       kind: "declared" as const,
       nodeId: "00000000-0000-0000-0000-000000000002",
-      portKey: "report",
+      portKey: "result",
     },
   };
   const descriptor: ResultDescriptor = {

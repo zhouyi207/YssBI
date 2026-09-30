@@ -13,7 +13,7 @@ import {
 } from "@/features/application/presentation";
 import { UnifiedResultView, ResultViewPresentationProvider } from "@/features/application/results";
 import type { ResultDescriptor, ResultReference } from "@/shared/types/domain/result";
-import { ReportView } from "../info/ReportView";
+import { ResultInspector } from "./ResultInspector";
 import { PlotResultView } from "@/features/application/presentation/PlotResultView";
 
 function ResultStatus({ message }: { message: string }) {
@@ -93,7 +93,7 @@ export function ResultContent({ reference }: { reference: ResultReference }) {
   if (state.payload.mode === "report") {
     return (
       <ResultViewPresentationProvider presentation="embedded">
-        <ReportView
+        <ResultInspector
           descriptor={state.descriptor}
           report={state.payload.report}
           data={state.payload.data}

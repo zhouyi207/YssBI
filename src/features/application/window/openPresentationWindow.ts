@@ -8,11 +8,11 @@ import type { ResultPresentation } from "@/shared/types/domain/result";
 const presentationWindowKinds = {
   inspector: "inspect",
   plot: "plot",
-  report: "info",
+  report: "inspect",
 } as const satisfies Record<ResultPresentation["kind"], PresentationWindowPayload["kind"]>;
 
 export interface PresentationWindowPayload {
-  kind: "inspect" | "plot" | "info";
+  kind: "inspect" | "plot";
   windowTitle: string;
 }
 

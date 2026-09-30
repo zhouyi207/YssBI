@@ -44,22 +44,25 @@ describe("loadPresentationWindow", () => {
     vi.clearAllMocks();
   });
 
-  it("loads a ready scalar report as the canonical object only", async () => {
-    const report = { title: "Linear Regression Summary", model_basic_info: {} };
-    vi.mocked(ResultService.getDescriptor).mockResolvedValue(
-      descriptor("20", {
-        presentation: { kind: "report", report: "linearRegressionSummary" },
-      }),
-    );
-    vi.mocked(ResultService.getValue).mockResolvedValue({ kind: "value", value: report });
+  it.each(["linearRegressionSummary", "structured"] as const)(
+    "loads a ready %s result as the canonical object only",
+    async (kind) => {
+      const report = { title: "Linear Regression Summary", model_basic_info: {} };
+      vi.mocked(ResultService.getDescriptor).mockResolvedValue(
+        descriptor("20", {
+          presentation: { kind: "report", report: kind },
+        }),
+      );
+      vi.mocked(ResultService.getValue).mockResolvedValue({ kind: "value", value: report });
 
-    await expect(loadPresentationWindow(resultReferenceFixture("20"))).resolves.toMatchObject({
-      status: "ready",
-      payload: { mode: "report", report: "linearRegressionSummary", data: report },
-    });
-    expect(ResultService.getValue).toHaveBeenCalledWith(resultReferenceFixture("20"));
-    expect(ResultService.getPage).not.toHaveBeenCalled();
-  });
+      await expect(loadPresentationWindow(resultReferenceFixture("20"))).resolves.toMatchObject({
+        status: "ready",
+        payload: { mode: "report", report: kind, data: report },
+      });
+      expect(ResultService.getValue).toHaveBeenCalledWith(resultReferenceFixture("20"));
+      expect(ResultService.getPage).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { kind: "report", report: "linearRegressionSummary" },

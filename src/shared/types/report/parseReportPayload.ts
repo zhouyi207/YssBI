@@ -6,8 +6,15 @@ import { binaryRegressionReportField, inlineRegressionReportField } from "./pars
 import { linearRegressionReportField } from "./parseLinearRegression";
 import { varSocResultDataField, varSummaryResultDataField } from "./parseVar";
 import { vecRankResultDataField, vecSummaryResultDataField } from "./parseVec";
+import { isRecord } from "./guards";
 
 const reportFields = {
+  structured: {
+    read: (raw: unknown, fieldPath: string) =>
+      isRecord(raw)
+        ? { ok: true as const, value: raw }
+        : { ok: false as const, issue: { fieldPath, reason: "expected structured result data" } },
+  },
   linearRegressionSummary: linearRegressionReportField,
   binarySummary: binaryRegressionReportField,
   iv2slsSummary: inlineRegressionReportField,

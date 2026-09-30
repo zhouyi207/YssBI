@@ -1,4 +1,12 @@
-import { createContext, useContext, useMemo, useState, type FC, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type FC,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,10 +30,9 @@ import {
   type LinearRegressionReportData,
 } from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
-import { useUiPage } from "@/features/application/presentation/useUiPage";
-import { UiPageRenderer, type UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
-import { ResultPageLayoutControls } from "./ResultPageLayoutControls";
-import { ReportLayout, ReportLazyBoundary, RSquaredBadge, LazyEquation } from "./shared";
+import type { UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
+import { ResultReportPage } from "./ResultReportPage";
+import { ReportLazyBoundary, LazyEquation } from "./shared";
 import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
 import { HypothesisTestResultView } from "./shared/HypothesisTestBlock";
 import { AcfPacfResultView } from "./shared/ACFPACFBlock";
@@ -174,8 +181,14 @@ function CoefficientsProvider({
   );
 }
 
-export const LinearRegressionComponent: FC<{ data: LinearRegressionReportData }> = ({ data }) => {
+export const LinearResultBindings: FC<{
+  data: LinearRegressionReportData;
+  onValueChange?: (value: LinearRegressionReportData) => void;
+}> = ({ data, onValueChange }) => {
   const contents = useLinearSummaryContents(data);
+  useEffect(() => {
+    onValueChange?.(contents.data);
+  }, [contents.data, onValueChange]);
   const report = (
     <LinearRegressionReport
       key={`${contents.data.resultRef.executionSessionId}:${contents.data.resultRef.resultId}`}
@@ -278,8 +291,6 @@ function LinearRegressionReport({
 }) {
   const { data } = contents;
   const { t } = useTranslation();
-  const presentation = useUiPage(data.resultRef);
-  const summary = data.presentation.summary.items;
   const results = useMemo<UiResultBindings>(
     () => ({
       equation: {
@@ -329,18 +340,7 @@ function LinearRegressionReport({
     [data],
   );
   return (
-    <ReportLayout
-      title={data.title}
-      badges={
-        <>
-          <RSquaredBadge value={summary.find((item) => item.id === "rSquared")?.value} />
-          <span className="text-xs text-muted-foreground">
-            {summary.find((item) => item.id === "method")?.value} &middot; n=
-            {data.observations.rowCount}
-          </span>
-        </>
-      }
-    >
+    <ResultReportPage reference={data.resultRef} data={data.presentation} bindings={results}>
       <AddReportContents
         options={data.summary}
         paramNames={data.paramNames}
@@ -351,28 +351,6 @@ function LinearRegressionReport({
       {!LINEAR_SUMMARY_CONTENTS.some(({ key }) => data.summary[key]) && (
         <p className="text-sm text-muted-foreground">{t("reportSummary.empty")}</p>
       )}
-      {presentation.error && (
-        <ResultReadError error={presentation.error} onRetry={() => void presentation.reload()} />
-      )}
-      {!presentation.page && !presentation.error && (
-        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-      )}
-      {presentation.page && (
-        <>
-          <ResultPageLayoutControls
-            spec={presentation.page.spec}
-            busy={presentation.busy}
-            onAction={presentation.act}
-          />
-          <UiPageRenderer
-            spec={presentation.page.spec}
-            data={data.presentation}
-            results={results}
-            disabled={presentation.busy}
-            onActivate={(id) => void presentation.activate(id)}
-          />
-        </>
-      )}
-    </ReportLayout>
+    </ResultReportPage>
   );
 }

@@ -2,6 +2,7 @@ import { RESOURCE_KINDS } from "@/shared/types/domain/resource";
 import { parseReferenceUrl } from "@/shared/utils/referenceUrl";
 import {
   isResultPlotKind,
+  isResultReportKind,
   isResultReference,
   type ResultReference,
   type ResultPresentation,
@@ -87,21 +88,6 @@ const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
   WORKBENCH_ACTIVITY_VIEW_IDS,
 );
 const WORKBENCH_VIEW_ID_SET = new Set<WorkbenchViewId>(WORKBENCH_VIEW_IDS);
-const RESULT_REPORT_KINDS = new Set([
-  "linearRegressionSummary",
-  "binarySummary",
-  "iv2slsSummary",
-  "ivLimlSummary",
-  "praisSummary",
-  "varSummary",
-  "varSoc",
-  "panelSummary",
-  "panelDid",
-  "dfAdfSummary",
-  "dfAdfSummaryList",
-  "vecSummary",
-  "vecRankSummary",
-]);
 
 const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentId>> = {
   project: "Project",
@@ -149,7 +135,7 @@ function isResultPresentation(value: unknown): value is ResultPresentation {
       return (
         hasKnownKeys(value, ["kind", "report"]) &&
         typeof value.report === "string" &&
-        RESULT_REPORT_KINDS.has(value.report)
+        isResultReportKind(value.report)
       );
     default:
       return false;

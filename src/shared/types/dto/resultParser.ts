@@ -1,6 +1,6 @@
 import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectionGuards";
 import { portAddressKey } from "@/shared/types/domain/editorProjectionParser";
-import { isResultPlotKind } from "./result";
+import { isResultPlotKind, isResultReportKind } from "./result";
 import type {
   GraphOutputRefDto,
   ResultMetadata,
@@ -18,21 +18,6 @@ import type {
 type UnknownRecord = Record<string, unknown>;
 
 const DECIMAL_ID_PATTERN = /^(0|[1-9]\d*)$/;
-const REPORT_KINDS = new Set([
-  "linearRegressionSummary",
-  "binarySummary",
-  "iv2slsSummary",
-  "ivLimlSummary",
-  "praisSummary",
-  "varSummary",
-  "varSoc",
-  "panelSummary",
-  "panelDid",
-  "dfAdfSummary",
-  "dfAdfSummaryList",
-  "vecSummary",
-  "vecRankSummary",
-]);
 const VALUE_KINDS = new Set(["scalar", "sequence"]);
 
 function fail(contract: string): never {
@@ -145,7 +130,7 @@ export function parseResultPresentation(value: unknown): ResultPresentation {
       if (
         !hasExactKeys(value, ["kind", "report"]) ||
         typeof value.report !== "string" ||
-        !REPORT_KINDS.has(value.report)
+        !isResultReportKind(value.report)
       )
         return fail("report presentation");
       return { kind: "report", report: value.report as ResultReportKind };

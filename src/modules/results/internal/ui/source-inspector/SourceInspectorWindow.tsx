@@ -3,7 +3,7 @@ import { VscPreview } from "react-icons/vsc";
 import { usePresentationWindow } from "@/features/application/presentation";
 import { UnifiedResultView } from "@/features/application/results";
 import { PresentationWindowShell } from "@/features/application/window/PresentationWindowShell";
-import { ReportView } from "../info/ReportView";
+import { ResultInspector } from "../panel/ResultInspector";
 
 export const SourceInspectorWindow: React.FC = () => {
   const { t } = useTranslation();
@@ -31,7 +31,7 @@ export const SourceInspectorWindow: React.FC = () => {
         <UnifiedResultView payload={state.payload.descriptor} />
       ) : null}
       {state.status === "ready" && state.payload.mode === "report" ? (
-        <ReportView
+        <ResultInspector
           descriptor={state.descriptor}
           report={state.payload.report}
           data={state.payload.data}

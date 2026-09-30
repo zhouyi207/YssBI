@@ -43,8 +43,8 @@ vi.mock("@/features/application/results", async () => {
   };
 });
 
-vi.mock("../info/ReportView", () => ({
-  ReportView: (props: { descriptor: ResultDescriptor; report: string; data: unknown }) => {
+vi.mock("./ResultInspector", () => ({
+  ResultInspector: (props: { descriptor: ResultDescriptor; report: string; data: unknown }) => {
     mocks.reportView(props);
     return <div data-testid="report-preview">report preview</div>;
   },
@@ -158,7 +158,7 @@ describe("ResultContent", () => {
     container.remove();
   });
 
-  it("passes preloaded report data to ReportView unchanged", async () => {
+  it("passes preloaded result data to the inspector unchanged", async () => {
     mocks.loadPresentationWindow.mockResolvedValueOnce({
       status: "ready",
       descriptor: reportDescriptor,

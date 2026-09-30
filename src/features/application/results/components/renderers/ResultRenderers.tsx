@@ -49,13 +49,19 @@ export function ScalarResultView({ payload }: { payload: ResultDescriptor }) {
     <ResultViewShell title={payload.title}>
       {error ? (
         <ResultReadError error={error} />
+      ) : loading ? (
+        <p className="text-sm">Loading…</p>
       ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <pre className="break-all text-sm">
-            {loading ? "Loading…" : JSON.stringify(value?.value, null, 2)}
-          </pre>
-        </ScrollArea>
+        <ResultJsonView value={value?.value} />
       )}
     </ResultViewShell>
+  );
+}
+
+export function ResultJsonView({ value }: { value: unknown }) {
+  return (
+    <ScrollArea className="min-h-0 flex-1">
+      <pre className="break-all text-sm">{JSON.stringify(value, null, 2)}</pre>
+    </ScrollArea>
   );
 }

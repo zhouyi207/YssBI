@@ -7,7 +7,6 @@ const DEFAULT_SIZES = {
   logs: { width: 1000, height: 600 },
   inspect: { width: 1000, height: 600 },
   plot: { width: 960, height: 800 },
-  info: { width: 960, height: 800 },
 } as const;
 
 export type WindowKind = keyof typeof DEFAULT_SIZES;

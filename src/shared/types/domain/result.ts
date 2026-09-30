@@ -72,20 +72,11 @@ export function isResultPlotKind(value: unknown): value is ResultPlotKind {
   return typeof value === "string" && (RESULT_PLOT_KINDS as readonly string[]).includes(value);
 }
 
-export type ResultReportKind =
-  | "linearRegressionSummary"
-  | "binarySummary"
-  | "iv2slsSummary"
-  | "ivLimlSummary"
-  | "praisSummary"
-  | "varSummary"
-  | "varSoc"
-  | "panelSummary"
-  | "panelDid"
-  | "dfAdfSummary"
-  | "dfAdfSummaryList"
-  | "vecSummary"
-  | "vecRankSummary";
+export const RESULT_REPORT_KINDS = ["structured", "linearRegressionSummary"] as const;
+export type ResultReportKind = (typeof RESULT_REPORT_KINDS)[number];
+export function isResultReportKind(value: unknown): value is ResultReportKind {
+  return typeof value === "string" && (RESULT_REPORT_KINDS as readonly string[]).includes(value);
+}
 
 export type ResultPresentation =
   | { kind: "inspector" }

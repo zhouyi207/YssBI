@@ -9,7 +9,15 @@
 读取、分页、分析和结果生命周期见 [Results application](../../features/application/results/README.md)；
 组件目录、受控动作与增量协议见 [UI contract](../../../src-tauri/crates/yss-ui-contract/README.md)。
 
-## 线性回归语义报告布局
+## Inspect 与 JSON 报告
+
+统计节点只输出一份结构化 `result`。Result 面板与独立 Inspect 窗口共用右上角的“数值 / 报告”切换，默认查看数值。两种视图绑定同一个结果引用和租约，切换不重新执行节点；已经打开的报告保持挂载，保留布局、分页和显隐状态。独立报告也使用 `/inspect`，不再注册 `/info` 或按统计方法分派专用页面。
+
+所有报告使用 `ResultReportPage` 和 `UiPageRenderer`。普通结果的 JSON 页面绑定 `structured` 组件，由它使用通用键值表、数据表和可折叠章节呈现对象、数组及矩阵；长数组在已受 Results 大小限制的载荷内每页呈现 100 项，空值、布尔值与宽整数文本保留原意。它不推断统计方法或执行计算。
+
+线性回归的 `LinearResultBindings` 只接入原生结果的系数、观测、图形和分析查询，页面组合仍由同一个 JSON renderer 完成。其余统计结果不要求符合旧的专用报告载荷。
+
+## 页面布局与数据绑定
 
 内容选择与检验参数属于 Summary 节点的 Parameters → Configure。报告的“添加内容”只提交新增选项，调用 Application 更新同一份节点参数并执行；忙碌或失败期间继续显示原报告。已选检验直接展示本次执行结果，图表缩放、分页和布局显隐仅影响查看。报告布局只能绑定本次已选内容，不能通过布局导入启用额外计算。
 

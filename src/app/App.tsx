@@ -25,9 +25,6 @@ const SourceInspectorWindow = React.lazy(() =>
 const LogWindow = React.lazy(() =>
   import("@/modules/logs/public").then((m) => ({ default: m.LogWindow })),
 );
-const InfoWindow = React.lazy(() =>
-  import("@/modules/results/public").then((m) => ({ default: m.InfoWindow })),
-);
 const WorkbenchComposition = React.lazy(() =>
   import("./windows/workbench/WorkbenchComposition").then((m) => ({
     default: m.WorkbenchComposition,
@@ -56,7 +53,6 @@ function AppRouter() {
         <Route path="/database" element={<DatabaseEditorWindow />} />
         <Route path="/inspect" element={<SourceInspectorWindow />} />
         <Route path="/logs" element={<LogWindow />} />
-        <Route path="/info" element={<InfoWindow />} />
         <Route path="*" element={<ProjectPickerScreen />} />
       </Routes>
     </Suspense>

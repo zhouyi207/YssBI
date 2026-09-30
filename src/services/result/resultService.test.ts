@@ -42,6 +42,11 @@ const readyDescriptor = {
 describe("result DTO parsers", () => {
   it("parses available result descriptors and rejects unrecognized fields", () => {
     expect(parseResultDescriptor(readyDescriptor)).toEqual(readyDescriptor);
+    const structured = {
+      ...readyDescriptor,
+      presentation: { kind: "report", report: "structured" },
+    };
+    expect(parseResultDescriptor(structured)).toEqual(structured);
     expect(() => parseResultDescriptor({ ...readyDescriptor, extra: true })).toThrow();
   });
 

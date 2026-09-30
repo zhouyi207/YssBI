@@ -1837,6 +1837,11 @@ export const zhCN = {
     cancelled: "结果计算已取消",
   },
   sourceInspector: {
+    viewMode: "查看方式",
+    numericView: "数值",
+    reportView: "报告",
+    previous: "上一页",
+    next: "下一页",
     title: "结果查看",
     loading: "加载中…",
     missingResultId: "URL 中缺少结果 ID",
