@@ -22,6 +22,7 @@
 - [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`，`yss-application::ipc` 也有既有诊断。数值循环/模型参数重构需结合 SCI golden tests；传输参数和 wire 枚举须保持 IPC 契约，不能为消除 lint 随意改协议。
 - [ ] 评估前端既有的 14 条 Oxlint 警告；涉及遍历集合副本和测试 observer 的条目应先确认快照/回调语义，再决定简化或注明必要原因。
 - [ ] immer, zod, zustand, json patch 前端可以充分利用这些库来实现优化
+- [ ] codex resume 01a0f185-385c-7531-b9f2-bc5013a7078b
 
 ## Routed roadmaps
 
