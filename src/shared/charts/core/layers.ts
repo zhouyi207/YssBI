@@ -1,6 +1,7 @@
-import { select, type Selection } from "d3";
+import { select, type BaseType, type Selection } from "d3";
 import type { ChartThemeColors } from "@/shared/theme/chartTheme";
 import type { ChartBox } from "./domain";
+import type { ReferenceLineModel } from "../ChartModel";
 
 type ChartGroup = Selection<SVGGElement, unknown, null, undefined>;
 type ChartSvg = Selection<SVGSVGElement, unknown, null, undefined>;
@@ -52,13 +53,34 @@ export function updateHorizontalGrid(
     .attr("stroke-dasharray", "2,3");
 }
 
-export function styleChartAxis(
-  layer: ChartGroup,
+export function styleChartAxis<Datum, Parent extends BaseType, ParentDatum>(
+  layer: Selection<SVGGElement, Datum, Parent, ParentDatum>,
   colors: Pick<ChartThemeColors, "axis" | "tick">,
 ): void {
   layer.select(".domain").attr("stroke", colors.axis);
   layer.selectAll(".tick line").attr("stroke", colors.axis);
   layer.selectAll(".tick text").attr("fill", colors.tick).attr("font-size", "10px");
+}
+
+export function updateReferenceLines(
+  layer: ChartGroup,
+  lines: readonly ReferenceLineModel[],
+  x: (value: number) => number,
+  y: (value: number) => number,
+  color: string,
+): void {
+  layer
+    .selectAll<SVGLineElement, ReferenceLineModel>('line[data-chart-reference="annotation"]')
+    .data(lines)
+    .join("line")
+    .attr("data-chart-reference", "annotation")
+    .attr("x1", (value) => x(value.start.x))
+    .attr("x2", (value) => x(value.end.x))
+    .attr("y1", (value) => y(value.start.y))
+    .attr("y2", (value) => y(value.end.y))
+    .attr("stroke", color)
+    .attr("stroke-width", 1)
+    .attr("stroke-dasharray", "5,4");
 }
 
 export function updateCartesianLabels(

@@ -11,10 +11,20 @@ function axes(data: XySeriesPlotDTO): { xAxis: AxisModel; yAxis: AxisModel } {
 export function toResultChartModel(payload: ParsedPlotPayload): ChartModel {
   switch (payload.kind) {
     case "scatter":
-    case "plot":
-      return { kind: "scatter", points: payload.data.data, ...axes(payload.data) };
+      return {
+        kind: "scatter",
+        points: payload.data.data,
+        referenceLines: payload.data.referenceLines,
+        ...axes(payload.data),
+      };
     case "line":
-      return { kind: "line", points: payload.data.data, ...axes(payload.data), showPoints: true };
+      return {
+        kind: "line",
+        points: payload.data.data,
+        referenceLines: payload.data.referenceLines,
+        ...axes(payload.data),
+        showPoints: true,
+      };
     case "histogram":
       return {
         kind: "histogram",
@@ -39,6 +49,67 @@ export function toResultChartModel(payload: ParsedPlotPayload): ChartModel {
         acf: payload.data.acf,
         pacf: payload.data.pacf,
         ciHalfWidth: payload.data.ciHalfWidth,
+      };
+    case "boxplot":
+    case "violin":
+      return { kind: payload.kind, groups: payload.data.groups };
+    case "wordcloud":
+      return { kind: "wordcloud", words: payload.data.words };
+    case "errorbar":
+      return { kind: "errorbar", data: payload.data.data };
+    case "coefficient":
+      return { kind: "coefficient", data: payload.data.data };
+    case "pareto":
+      return { kind: "pareto", data: payload.data.data };
+    case "combination":
+      return {
+        kind: "combination",
+        labels: payload.data.labels,
+        bars: payload.data.bars,
+        line: payload.data.line,
+        dualAxis: payload.data.dualAxis,
+      };
+    case "heatmap":
+      return {
+        kind: "heatmap",
+        xLabels: payload.data.xLabels,
+        yLabels: payload.data.yLabels,
+        matrix: payload.data.matrix,
+      };
+    case "bubble":
+      return {
+        kind: "scatter",
+        points: payload.data.data,
+        pointSizes: payload.data.data.map((point) => point.size),
+        xAxis: { label: "X", valueType: "number" },
+        yAxis: { label: "Y", valueType: "number" },
+      };
+    case "quadrant":
+      return {
+        kind: "scatter",
+        points: payload.data.data,
+        referenceLines: payload.data.referenceLines,
+        ...axes(payload.data),
+      };
+    case "ppQq":
+      return {
+        kind: "scatter",
+        points: payload.data.data,
+        referenceLines: payload.data.referenceLines,
+        ...axes(payload.data),
+        ...(payload.data.mode === "pp"
+          ? { xDomain: [0, 1] as [number, number], yDomain: [0, 1] as [number, number] }
+          : {}),
+      };
+    case "roc":
+      return {
+        kind: "line",
+        points: payload.data.data,
+        referenceLines: payload.data.referenceLines,
+        ...axes(payload.data),
+        showPoints: false,
+        xDomain: [0, 1],
+        yDomain: [0, 1],
       };
   }
 }

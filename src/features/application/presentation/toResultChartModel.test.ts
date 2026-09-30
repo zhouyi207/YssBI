@@ -11,14 +11,14 @@ describe("isResultPlotKind", () => {
 });
 
 describe("toResultChartModel", () => {
-  it("normalizes a generic plot payload to scatter data-space semantics", () => {
+  it("preserves scatter coordinates and axis value types", () => {
     const xyPayload: XySeriesPlotDTO = {
       data: [{ x: 1, y: 4 }],
       xLabel: "Time",
       yLabel: "Value",
       yFormat: "date",
     };
-    const payload: ParsedPlotPayload = { kind: "plot", data: xyPayload };
+    const payload: ParsedPlotPayload = { kind: "scatter", data: xyPayload };
 
     expect(toResultChartModel(payload)).toEqual({
       kind: "scatter",

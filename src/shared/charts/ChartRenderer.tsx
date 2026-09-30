@@ -8,6 +8,11 @@ import { useChartTheme } from "./core/theme";
 import type { ChartSurfaceVariant } from "./core/types";
 import { CorrelationMatrixChart } from "./statistical/CorrelationMatrixChart";
 import { CorrelogramChart } from "./statistical/CorrelogramChart";
+import { DistributionChart } from "./statistical/DistributionChart";
+import { IntervalChart } from "./statistical/IntervalChart";
+import { CompositeChart } from "./cartesian/CompositeChart";
+import { HeatmapChart } from "./statistical/HeatmapChart";
+import { WordCloudChart } from "./categorical/WordCloudChart";
 import type { ChartModel } from "@/shared/charts/ChartModel";
 
 type ChartModelKind = ChartModel["kind"];
@@ -28,6 +33,10 @@ const chartRenderers = {
       zeroLine={model.zeroLine}
       highlightIndices={model.highlightIndices ? new Set(model.highlightIndices) : undefined}
       surface={surface}
+      referenceLines={model.referenceLines}
+      pointSizes={model.pointSizes}
+      xDomain={model.xDomain}
+      yDomain={model.yDomain}
     />
   ),
   line: ({ model, surface }) => (
@@ -43,6 +52,9 @@ const chartRenderers = {
         xAxis={model.xAxis}
         yAxis={model.yAxis}
         showPoints={model.showPoints}
+        referenceLines={model.referenceLines}
+        xDomain={model.xDomain}
+        yDomain={model.yDomain}
       />
     </div>
   ),
@@ -96,6 +108,18 @@ const chartRenderers = {
       </div>
     );
   },
+  boxplot: ({ model, surface }) => (
+    <DistributionChart groups={model.groups} violin={false} surface={surface} />
+  ),
+  violin: ({ model, surface }) => (
+    <DistributionChart groups={model.groups} violin surface={surface} />
+  ),
+  wordcloud: ({ model, surface }) => <WordCloudChart words={model.words} surface={surface} />,
+  errorbar: ({ model, surface }) => <IntervalChart model={model} surface={surface} />,
+  coefficient: ({ model, surface }) => <IntervalChart model={model} surface={surface} />,
+  pareto: ({ model, surface }) => <CompositeChart model={model} surface={surface} />,
+  combination: ({ model, surface }) => <CompositeChart model={model} surface={surface} />,
+  heatmap: ({ model, surface }) => <HeatmapChart model={model} surface={surface} />,
 } satisfies ChartRendererMap;
 
 export interface ChartRendererProps {

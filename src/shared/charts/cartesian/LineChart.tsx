@@ -6,12 +6,13 @@ import {
   styleChartAxis,
   updateCartesianLabels,
   updateHorizontalGrid,
+  updateReferenceLines,
 } from "@/shared/charts/core/layers";
 import { DEFAULT_CARTESIAN_MARGIN } from "@/shared/charts/core/margins";
 import { useChartTheme } from "@/shared/charts/core/theme";
 import type { ChartMargin } from "@/shared/charts/core/types";
 import { useChartContainerSize } from "@/shared/charts/core/useChartContainerSize";
-import type { AxisModel, XYPoint } from "@/shared/charts/ChartModel";
+import type { AxisModel, ReferenceLineModel, XYPoint } from "@/shared/charts/ChartModel";
 import { plotAxisTickFormatter } from "./axisFormat";
 
 export interface LineChartProps {
@@ -24,6 +25,9 @@ export interface LineChartProps {
   height?: number;
   margin?: ChartMargin;
   className?: string;
+  referenceLines?: ReferenceLineModel[];
+  xDomain?: [number, number];
+  yDomain?: [number, number];
 }
 
 export function LineChart({
@@ -36,6 +40,9 @@ export function LineChart({
   height: heightProp,
   margin = DEFAULT_CARTESIAN_MARGIN,
   className,
+  referenceLines,
+  xDomain,
+  yDomain,
 }: LineChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const { containerRef, size } = useChartContainerSize();
@@ -79,20 +86,28 @@ export function LineChart({
 
     const xScale = scaleLinear()
       .domain(
-        paddedNumericDomain(
-          data.map((point) => point.x),
-          0.06,
-          1,
-        ),
+        xDomain ??
+          paddedNumericDomain(
+            [
+              ...data.map((point) => point.x),
+              ...(referenceLines ?? []).flatMap((value) => [value.start.x, value.end.x]),
+            ],
+            0.06,
+            1,
+          ),
       )
       .range([0, box.plotWidth]);
     const yScale = scaleLinear()
       .domain(
-        paddedNumericDomain(
-          data.map((point) => point.y),
-          0.06,
-          1,
-        ),
+        yDomain ??
+          paddedNumericDomain(
+            [
+              ...data.map((point) => point.y),
+              ...(referenceLines ?? []).flatMap((value) => [value.start.y, value.end.y]),
+            ],
+            0.06,
+            1,
+          ),
       )
       .range([box.plotHeight, 0]);
 
@@ -116,6 +131,13 @@ export function LineChart({
     layers.yAxis.call(yAxisGenerator);
     styleChartAxis(layers.yAxis, chartTheme);
     updateCartesianLabels(layers.labels, box, { x: xLabel, y: yLabel }, chartTheme.label);
+    updateReferenceLines(
+      layers.marks,
+      referenceLines ?? [],
+      (value) => xScale(value),
+      (value) => yScale(value),
+      chartTheme.zeroLine,
+    );
 
     const pathGenerator = line<XYPoint>()
       .x((point) => xScale(point.x))
@@ -149,6 +171,9 @@ export function LineChart({
   }, [
     chartTheme,
     data,
+    referenceLines,
+    xDomain,
+    yDomain,
     heightProp,
     margin,
     plotColor,

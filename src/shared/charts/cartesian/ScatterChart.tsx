@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { axisBottom, axisLeft, scaleLinear, select } from "d3";
+import { axisBottom, axisLeft, max, scaleLinear, scaleSqrt, select } from "d3";
 import { cn } from "@/lib/utils";
 import { paddedNumericDomain, resolveChartBox } from "@/shared/charts/core/domain";
 import {
@@ -7,12 +7,13 @@ import {
   styleChartAxis,
   updateCartesianLabels,
   updateHorizontalGrid,
+  updateReferenceLines,
 } from "@/shared/charts/core/layers";
 import { DEFAULT_CARTESIAN_MARGIN } from "@/shared/charts/core/margins";
 import { useChartTheme } from "@/shared/charts/core/theme";
 import type { ChartMargin, ChartSurfaceVariant } from "@/shared/charts/core/types";
 import { useChartContainerSize } from "@/shared/charts/core/useChartContainerSize";
-import type { AxisModel, XYPoint } from "@/shared/charts/ChartModel";
+import type { AxisModel, ReferenceLineModel, XYPoint } from "@/shared/charts/ChartModel";
 import { plotAxisTickFormatter } from "./axisFormat";
 
 export interface ScatterChartProps {
@@ -29,6 +30,10 @@ export interface ScatterChartProps {
   highlightColor?: string;
   surface?: ChartSurfaceVariant;
   className?: string;
+  referenceLines?: ReferenceLineModel[];
+  pointSizes?: number[];
+  xDomain?: [number, number];
+  yDomain?: [number, number];
 }
 
 function symmetricDomain(data: XYPoint[]): [number, number] {
@@ -54,6 +59,10 @@ export function ScatterChart({
   highlightColor,
   surface = "card",
   className,
+  referenceLines,
+  pointSizes,
+  xDomain: fixedXDomain,
+  yDomain: fixedYDomain,
 }: ScatterChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const { containerRef, size } = useChartContainerSize();
@@ -97,18 +106,29 @@ export function ScatterChart({
 
     layers.root.attr("display", null).attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const xDomain = paddedNumericDomain(
-      data.map((point) => point.x),
-      0.06,
-      1,
-    );
-    const yDomain = symmetricY
-      ? symmetricDomain(data)
-      : paddedNumericDomain(
-          data.map((point) => point.y),
-          0.06,
-          1,
-        );
+    const references = referenceLines ?? [];
+    const xDomain =
+      fixedXDomain ??
+      paddedNumericDomain(
+        [
+          ...data.map((point) => point.x),
+          ...references.flatMap((value) => [value.start.x, value.end.x]),
+        ],
+        0.06,
+        1,
+      );
+    const yDomain =
+      fixedYDomain ??
+      (symmetricY
+        ? symmetricDomain(data)
+        : paddedNumericDomain(
+            [
+              ...data.map((point) => point.y),
+              ...references.flatMap((value) => [value.start.y, value.end.y]),
+            ],
+            0.06,
+            1,
+          ));
     const xScale = scaleLinear().domain(xDomain).range([0, box.plotWidth]);
     const yScale = scaleLinear().domain(yDomain).range([box.plotHeight, 0]);
 
@@ -136,6 +156,19 @@ export function ScatterChart({
     layers.yAxis.call(yAxisGenerator);
     styleChartAxis(layers.yAxis, chartTheme);
     updateCartesianLabels(layers.labels, box, { x: xLabel, y: yLabel }, chartTheme.label);
+    updateReferenceLines(
+      layers.marks,
+      references,
+      (value) => xScale(value),
+      (value) => yScale(value),
+      chartTheme.zeroLine,
+    );
+    const largestSize = max(pointSizes ?? []) ?? 0;
+    const sizeRadius = pointSizes
+      ? scaleSqrt()
+          .domain([0, largestSize || 1])
+          .range([0, 16])
+      : null;
 
     layers.marks
       .selectAll<SVGLineElement, number>('line[data-chart-reference="zero"]')
@@ -157,7 +190,7 @@ export function ScatterChart({
       .attr("data-highlighted", (_, index) => (highlightIndices?.has(index) ? "true" : "false"))
       .attr("cx", (point) => xScale(point.x))
       .attr("cy", (point) => yScale(point.y))
-      .attr("r", radius)
+      .attr("r", (_, index) => (sizeRadius ? sizeRadius(pointSizes?.[index] ?? 0) : radius))
       .attr("fill", (_, index) => (highlightIndices?.has(index) ? plotHighlightColor : plotColor))
       .attr("fill-opacity", 0.7)
       .attr("stroke", (_, index) => (highlightIndices?.has(index) ? plotHighlightColor : plotColor))
@@ -166,6 +199,10 @@ export function ScatterChart({
   }, [
     chartTheme,
     data,
+    referenceLines,
+    pointSizes,
+    fixedXDomain,
+    fixedYDomain,
     heightProp,
     highlightIndices,
     margin,

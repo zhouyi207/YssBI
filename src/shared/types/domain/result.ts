@@ -58,12 +58,23 @@ export interface ResultLease {
 export const RESULT_PLOT_KINDS = [
   "scatter",
   "line",
-  "plot",
   "ecdf",
   "kde",
   "histogram",
   "correlation",
   "correlogram",
+  "boxplot",
+  "wordcloud",
+  "errorbar",
+  "ppQq",
+  "roc",
+  "quadrant",
+  "pareto",
+  "combination",
+  "bubble",
+  "violin",
+  "heatmap",
+  "coefficient",
 ] as const;
 
 export type ResultPlotKind = (typeof RESULT_PLOT_KINDS)[number];

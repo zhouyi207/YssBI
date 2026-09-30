@@ -5,6 +5,11 @@ export interface XYPoint {
   y: number;
 }
 
+export interface ReferenceLineModel {
+  start: XYPoint;
+  end: XYPoint;
+}
+
 export interface AxisModel {
   label?: string;
   valueType: AxisValueType;
@@ -31,6 +36,10 @@ export type ChartModel =
       symmetricY?: boolean;
       zeroLine?: boolean;
       highlightIndices?: number[];
+      referenceLines?: ReferenceLineModel[];
+      pointSizes?: number[];
+      xDomain?: [number, number];
+      yDomain?: [number, number];
     }
   | {
       kind: "line";
@@ -38,6 +47,9 @@ export type ChartModel =
       xAxis: AxisModel;
       yAxis: AxisModel;
       showPoints: boolean;
+      referenceLines?: ReferenceLineModel[];
+      xDomain?: [number, number];
+      yDomain?: [number, number];
     }
   | {
       kind: "histogram";
@@ -59,4 +71,19 @@ export type ChartModel =
       acf: CorrelogramPoint[];
       pacf: CorrelogramPoint[];
       ciHalfWidth: number;
-    };
+    }
+  | { kind: "boxplot"; groups: DistributionGroupPlotDTO[] }
+  | { kind: "violin"; groups: DistributionGroupPlotDTO[] }
+  | { kind: "wordcloud"; words: WordCountPlotDTO[] }
+  | { kind: "errorbar"; data: IntervalPointPlotDTO[] }
+  | { kind: "coefficient"; data: CoefficientPointPlotDTO[] }
+  | { kind: "pareto"; data: ParetoCategoryPlotDTO[] }
+  | { kind: "combination"; labels: string[]; bars: number[]; line: number[]; dualAxis: boolean }
+  | { kind: "heatmap"; xLabels: string[]; yLabels: string[]; matrix: number[][] };
+import type {
+  DistributionGroupPlotDTO,
+  WordCountPlotDTO,
+  IntervalPointPlotDTO,
+  ParetoCategoryPlotDTO,
+  CoefficientPointPlotDTO,
+} from "@/shared/types/domain/plotPayload";

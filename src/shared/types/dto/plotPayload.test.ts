@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixture from "@/tests/fixtures/node-system-contracts/plot-payloads.json";
+import visualizationFixture from "@/tests/fixtures/node-system-contracts/visualization-payloads.json";
 import type { ResultPlotKind } from "./result";
 import {
   parseCorrelationPlot,
@@ -105,8 +106,8 @@ describe("parseCorrelogramPlot", () => {
     });
   });
 
-  it("requires both statistics on every correlogram series", () => {
-    for (const series of ["acf", "pacf"]) {
+  it("requires Ljung-Box statistics on ACF while accepting absent PACF inference", () => {
+    for (const series of ["acf"]) {
       for (const field of ["qStat", "pValue"]) {
         const payload = structuredClone(fixtureByKind.correlogram) as unknown as Record<
           string,
@@ -116,6 +117,11 @@ describe("parseCorrelogramPlot", () => {
         expect(parseCorrelogramPlot(payload)).toBeNull();
       }
     }
+    const payload = {
+      ...fixtureByKind.correlogram,
+      pacf: [{ lag: 1, value: 0.4, qStat: null, pValue: null }],
+    };
+    expect(parseCorrelogramPlot(payload)?.pacf[0].pValue).toBeUndefined();
   });
 });
 
@@ -148,6 +154,33 @@ describe("parseCorrelationPlot", () => {
 });
 
 describe("parsePlotPayload", () => {
+  it("accepts all numerical visualization payloads emitted by the SCI example", () => {
+    for (const record of visualizationFixture.payloads) {
+      expect(
+        parsePlotPayload(record.chart as ResultPlotKind, record.data)?.kind,
+        record.chart,
+      ).toBe(record.chart);
+    }
+  });
+
+  it("rejects invalid matrix dimensions, interval order and ROC endpoints", () => {
+    expect(
+      parsePlotPayload("heatmap", { xLabels: ["A", "B"], yLabels: ["1"], matrix: [[1]] }),
+    ).toBeNull();
+    expect(parsePlotPayload("errorbar", { data: [{ x: 1, y: 2, lower: 3, upper: 4 }] })).toBeNull();
+    expect(
+      parsePlotPayload("roc", {
+        data: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.8 },
+        ],
+        auc: 0.8,
+        positives: 1,
+        negatives: 1,
+      }),
+    ).toBeNull();
+  });
+
   it("rejects malformed data through the public dispatcher", () => {
     expect(parsePlotPayload("scatter", { data: [] })).toBeNull();
   });

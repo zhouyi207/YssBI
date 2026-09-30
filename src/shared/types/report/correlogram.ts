@@ -12,10 +12,10 @@ export interface CorrelogramBarDTO {
   value: number;
 }
 
-/** Plot 窗口 correlogram 柱条（Rust 必填 qStat / pValue） */
+/** ACF carries Ljung–Box statistics; PACF has no corresponding Q test. */
 export interface PlotCorrelogramBarDTO extends CorrelogramBarDTO {
-  qStat: number;
-  pValue: number;
+  qStat?: number;
+  pValue?: number;
 }
 
 export function parsePlotCorrelogramBar(raw: unknown): PlotCorrelogramBarDTO | null {
@@ -27,12 +27,19 @@ export function parsePlotCorrelogramBar(raw: unknown): PlotCorrelogramBarDTO | n
   if (
     !isNonNegativeInteger(lag) ||
     !isFiniteNumber(value) ||
-    !isFiniteNumber(qStat) ||
-    !isFiniteNumber(pValue)
+    (qStat !== undefined && qStat !== null && (!isFiniteNumber(qStat) || qStat < 0)) ||
+    (pValue !== undefined &&
+      pValue !== null &&
+      (!isFiniteNumber(pValue) || pValue < 0 || pValue > 1))
   ) {
     return null;
   }
-  return { lag, value, qStat, pValue };
+  return {
+    lag,
+    value,
+    qStat: isFiniteNumber(qStat) ? qStat : undefined,
+    pValue: isFiniteNumber(pValue) ? pValue : undefined,
+  };
 }
 
 export function acfSeriesToBars(acf: readonly number[]): CorrelogramBarDTO[] {

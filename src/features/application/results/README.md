@@ -106,3 +106,8 @@ Application 的 `query_result_projection` 返回有界强类型投影；普通�
 内联回归报告校验拟合值与残差、滞后残差对、设计矩阵与系数的维度；IV 过度识别检验按 `test_type` 要求对应统计量和 P 值。缺失的可选指标显示为空缺，绘图与检验不会用零补齐不完整数据。
 
 报告组件与 JSON 布局见 [Results views](../../../modules/results/README.md)。
+
+可视化结果仍使用 scalar Plot 查询与租约，不通过数列分页取第一页作为整张图。
+Graph 的 19 类 `plot.data` 输出按 descriptor 的 chart kind 校验和绘制；KDE 也归 Plot。
+chart kind 使用实际图形名称，散点图为 `scatter`；`plot` 仅表示 presentation kind。
+完整样本计算和展示抽样在 SCI 完成，前端保留观测数、AUC、分组或区间信息。
