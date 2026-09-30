@@ -5,7 +5,7 @@ import type { ReportKind, ResultDescriptor } from "@/features/application/result
 import { validateReportPayload } from "@/shared/types/report/reportValidation";
 import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
 import { LinearResultBindings } from "./LinearResultBindings";
-import { ResultReportPage } from "./ResultReportPage";
+import { StructuredResult } from "./StructuredResult";
 import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 
 interface ReportViewProps {
@@ -46,11 +46,7 @@ export function ReportView({ descriptor, report, data, onValueChange }: ReportVi
           onValueChange={onValueChange}
         />
       ) : (
-        <ResultReportPage
-          reference={descriptor}
-          data={{}}
-          bindings={{ result: { type: "structured", value: validation.value } }}
-        />
+        <StructuredResult reference={descriptor} value={validation.value} />
       );
   }
 

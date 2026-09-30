@@ -49,6 +49,10 @@ Spec 只包含 `root` 和按稳定 ID 索引的 `elements`；每个元素有 `co
 
 普通结构化结果使用 [templates/mod.rs](../yss-application/src/presentation/templates/mod.rs) 的默认页面，将 `structured` 绑定到 `result`。组件递归组合键值表、表格和章节，不按统计方法选择页面。绑定的数值直接来自既有 Results 查询，Spec 中不复制结果；布局校验只允许当前默认页面授予的绑定及组件类型。线性回归继续使用有界表引用和已选分析，Fit 模型不授予这些报告能力。
 
+结构化报告的数组统一保持 Results 数据引用，不因数组较小而内联。默认展示引用的行数，
+用户展开“查看数据”时才挂载 Results 分页消费者；引用读取及缓存仍由 Results owner
+负责，通用 `StructuredData` 通过绑定方提供的引用渲染器呈现，不直接调用 IPC。
+
 模板条目直接关联 Summary 的内容选项，仅为已选内容构造元素及子树；同一份生成结果用于默认页、重置和绑定能力校验。
 
 `binding` 是当前报告登记的数据名称，按组件类型校验；未知绑定、类型不匹配和超出当前结果能力的绑定在提交前被拒绝。原生回归报告的 `presentation` 字段提供 `summary` 键值条目、`anova` 列和行、`conditionNumber` 指标，数值保持原始类型并带格式标记。`coefficients` / `observations` 沿用分页表引用；公式、图表和分析绑定由 Results 交付，系数表与系数图可独立排序、显隐。绑定目标始终是页面的当前结果，Spec 不携带可覆盖 Results 的数值或查询参数。

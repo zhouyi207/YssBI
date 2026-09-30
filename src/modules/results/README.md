@@ -5,6 +5,10 @@
 > Canonical owners: 本模块拥有呈现；查询与租约由 Application results 维护，数值由 Rust ResultStore 拥有
 > Update when: 结果视图、报告渲染或页面布局接入改变时
 
+结构化报告的数组以数据引用呈现，无论数组大小。默认只展示行数，用户展开“查看数据”
+才通过现有 Results 查询协调器读取有界数据页；折叠时卸载读取组件。概览、分页与
+嵌套数据使用同一结果引用和租约，不新建数据存储，也不自动读取引用中的数组。
+
 [public.ts](public.ts) 提供结果面板入口，报告组件位于 [internal/ui/info](internal/ui/info/)。
 读取、分页、分析和结果生命周期见 [Results application](../../features/application/results/README.md)；
 组件目录、受控动作与增量协议见 [UI contract](../../../src-tauri/crates/yss-ui-contract/README.md)。

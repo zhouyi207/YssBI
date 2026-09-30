@@ -1839,6 +1839,7 @@ export const zhCN = {
     cancelled: "结果计算已取消",
   },
   sourceInspector: {
+    inspectRows: "查看数据（{{count}} 行）",
     viewMode: "查看方式",
     numericView: "数值",
     reportView: "报告",

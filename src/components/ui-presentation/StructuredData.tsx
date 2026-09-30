@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { isRecord } from "@/shared/types/report/guards";
@@ -8,6 +8,7 @@ import { KeyValue } from "./KeyValue";
 import { Section } from "./Section";
 
 const PAGE_SIZE = 100;
+export type StructuredReferenceRenderer = (value: unknown) => ReactNode;
 const scalar = (value: unknown): boolean => value === null || typeof value !== "object";
 const cell = (value: unknown): UiValue =>
   typeof value === "number" || typeof value === "string" ? value : String(value);
@@ -57,12 +58,24 @@ function tableFor(values: readonly unknown[]): Omit<UiTableData, "kind"> | null 
   return null;
 }
 
-function StructuredList({ values, depth }: { values: readonly unknown[]; depth: number }) {
+function StructuredList({
+  values,
+  depth,
+  renderReference,
+}: {
+  values: readonly unknown[];
+  depth: number;
+  renderReference?: StructuredReferenceRenderer;
+}) {
   const { t } = useTranslation();
   const [page, setPage] = useState(0);
   const offset = Math.min(page, Math.max(0, Math.ceil(values.length / PAGE_SIZE) - 1)) * PAGE_SIZE;
   const visible = useMemo(() => values.slice(offset, offset + PAGE_SIZE), [values, offset]);
-  const table = useMemo(() => tableFor(visible), [visible]);
+  const table = useMemo(
+    () =>
+      visible.some((value) => renderReference?.(value) !== undefined) ? null : tableFor(visible),
+    [visible, renderReference],
+  );
   return (
     <div className="min-w-0 space-y-3">
       {table ? (
@@ -70,7 +83,7 @@ function StructuredList({ values, depth }: { values: readonly unknown[]; depth: 
       ) : (
         visible.map((value, index) => (
           <Section key={offset + index} title={String(offset + index + 1)} collapsible>
-            <StructuredData value={value} depth={depth + 1} />
+            <StructuredData value={value} depth={depth + 1} renderReference={renderReference} />
           </Section>
         ))
       )}
@@ -102,9 +115,23 @@ function StructuredList({ values, depth }: { values: readonly unknown[]; depth: 
 }
 
 /** Present the result's JSON shape without a statistical-method-specific view. */
-export function StructuredData({ value, depth = 0 }: { value: unknown; depth?: number }) {
+export function StructuredData({
+  value,
+  depth = 0,
+  renderReference,
+}: {
+  value: unknown;
+  depth?: number;
+  renderReference?: StructuredReferenceRenderer;
+}) {
+  const reference = renderReference?.(value);
+  if (reference !== undefined) return reference;
   if (Array.isArray(value)) {
-    return value.length ? <StructuredList values={value} depth={depth} /> : <code>[]</code>;
+    return value.length ? (
+      <StructuredList values={value} depth={depth} renderReference={renderReference} />
+    ) : (
+      <code>[]</code>
+    );
   }
   if (isRecord(value)) {
     const entries = Object.entries(value);
@@ -118,7 +145,7 @@ export function StructuredData({ value, depth = 0 }: { value: unknown; depth?: n
           .filter(([, item]) => !scalar(item))
           .map(([key, item]) => (
             <Section key={key} title={key} collapsible={depth > 0}>
-              <StructuredData value={item} depth={depth + 1} />
+              <StructuredData value={item} depth={depth + 1} renderReference={renderReference} />
             </Section>
           ))}
         {entries.length === 0 && <code>{"{}"}</code>}

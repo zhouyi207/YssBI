@@ -2005,6 +2005,7 @@ export const enUS = {
     cancelled: "Result computation was cancelled",
   },
   sourceInspector: {
+    inspectRows: "Inspect data ({{count}} rows)",
     viewMode: "View mode",
     numericView: "Values",
     reportView: "Report",
