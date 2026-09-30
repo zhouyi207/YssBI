@@ -1,8 +1,6 @@
-import {
-  useGraphProjectionStore,
-  getGraphDocumentProjection,
-} from "@/features/core/dataStore/graphProjectionStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { GraphConstantDto } from "@/shared/types/domain/editorMutation";
+import type { NodePositionDto } from "@/shared/types/domain/editorProjection";
 import type { ValueType } from "@/shared/types/domain/valueType";
 import { getDefaultValue } from "@/shared/types/domain/valueType";
 import type { DataValue } from "@/shared/types/domain/dataValue";
@@ -96,14 +94,7 @@ export function deleteGraphConstant(graphPath: string, id: string) {
   });
 }
 
-export function insertConstantReference(graphPath: string, id: string) {
-  const nodes = Object.values(getGraphDocumentProjection(graphPath)?.nodes ?? {});
-  const position = nodes.length
-    ? {
-        x: Math.min(...nodes.map((node) => node.position.x)) - 240,
-        y: Math.min(...nodes.map((node) => node.position.y)),
-      }
-    : { x: 80, y: 80 };
+export function createGraphConstantNode(graphPath: string, id: string, position: NodePositionDto) {
   return applyGraphMutation({
     graphPath,
     mutation: { type: "insertConstantReference", payload: { id, position } },

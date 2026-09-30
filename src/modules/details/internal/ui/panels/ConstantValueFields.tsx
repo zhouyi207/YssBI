@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VscEdit } from "react-icons/vsc";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/shared/ui";
 import {
   dataTypeKind,
+  dataTypeDisplay,
   dataTypeFromKey,
   isPrimitiveType,
   isComplexType,
@@ -13,10 +15,7 @@ import {
   DATA_SERIES_ELEMENT_TYPE_KINDS,
 } from "@/shared/types/domain/valueType";
 import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
-import { DetailFieldRow } from "../shared/DetailFieldRow";
-import { DetailCommitInput, DetailForm } from "../shared/DetailForm";
-import { DetailText } from "../shared/DetailText";
-import { detailInlineInputClass } from "../shared/detailStyles";
+import { DetailCommitInput } from "../shared/DetailForm";
 import { ConstantValueEditorModal } from "../constantValue/ConstantValueEditorModal";
 import { formatConstantValueSummary } from "../constantValue/constantValueUtils";
 
@@ -34,8 +33,17 @@ interface ConstantValueFieldsProps {
 
 export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsProps) {
   const { t } = useTranslation();
+  const typeInputId = useId();
   const [valueEditorOpen, setValueEditorOpen] = useState(false);
   const numeric = dataTypeKind(constant.dataType) === "Numeric";
+  const typeOptions = CONSTANT_SELECTABLE_DATA_TYPE_KINDS.flatMap((kind) =>
+    kind === "DataSeries"
+      ? DATA_SERIES_ELEMENT_TYPE_KINDS.map((inner) => `DataSeries<${inner}>`)
+      : [kind],
+  );
+  if (constant.dataType.kind === "Array") {
+    typeOptions.push(...DATA_SERIES_ELEMENT_TYPE_KINDS.map((inner) => `Array<${inner}>`));
+  }
 
   const valueSummary = formatConstantValueSummary(
     constant.dataType,
@@ -45,95 +53,76 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
 
   return (
     <>
-      <DetailForm>
-        <DetailFieldRow label={t("detail.fields.name")}>
-          <DetailCommitInput value={constant.name} onCommit={(name) => onUpdate({ name })} />
-        </DetailFieldRow>
-        <DetailFieldRow label={t("detail.fields.type")}>
-          <Select
-            value={dataTypeKind(constant.dataType)}
-            options={CONSTANT_SELECTABLE_DATA_TYPE_KINDS.map((kind) => ({
-              label: kind,
-              value: kind,
-            }))}
-            onChange={(val) =>
-              onUpdate({
-                dataType: dataTypeFromKey(val, {
-                  kind: "Scalar",
-                  inner: "Numeric",
-                }),
-              })
-            }
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] items-center gap-1">
+        <label className="min-w-0">
+          <span className="sr-only">{t("detail.fields.name")}</span>
+          <DetailCommitInput
+            className="h-7 min-w-0 px-2 text-xs shadow-none"
+            value={constant.name}
+            onCommit={(name) => onUpdate({ name })}
           />
-        </DetailFieldRow>
-        {(constant.dataType.kind === "Array" || constant.dataType.kind === "DataSeries") && (
-          <DetailFieldRow label={t("detail.fields.elementType")}>
-            <Select
-              value={dataTypeKind(constant.dataType.inner)}
-              options={DATA_SERIES_ELEMENT_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
-              onChange={(value) =>
-                onUpdate({
-                  dataType: {
-                    kind: constant.dataType.kind as "Array" | "DataSeries",
-                    inner: dataTypeFromKey(value),
-                  },
-                })
-              }
-            />
-          </DetailFieldRow>
-        )}
+        </label>
+        <div className="min-w-0">
+          <Label htmlFor={typeInputId} className="sr-only">
+            {t("detail.fields.type")}
+          </Label>
+          <Select
+            id={typeInputId}
+            className="min-w-0 gap-1 px-2 text-xs shadow-none [&_[data-slot=select-value]]:truncate [&_svg]:size-3"
+            value={dataTypeDisplay(constant.dataType)}
+            options={typeOptions}
+            onChange={(value) => onUpdate({ dataType: dataTypeFromKey(value) })}
+          />
+        </div>
         {isPrimitiveType(constant.dataType) && (
-          <DetailFieldRow label={t("detail.fields.value")}>
+          <div className="min-w-0">
             {dataTypeKind(constant.dataType) === "Binary" ? (
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex h-7 items-center gap-1.5 px-2">
                 <Checkbox
                   id={`constant-bool-${constant.id}`}
+                  aria-label={t("detail.fields.value")}
                   checked={!!dataValueToRaw(constant.dataValue)}
                   onCheckedChange={(checked) =>
                     onUpdate({ dataValue: dataValueFromRaw(checked === true, constant.dataType) })
                   }
                 />
-                <Label htmlFor={`constant-bool-${constant.id}`} className="text-sm font-normal">
+                <Label htmlFor={`constant-bool-${constant.id}`} className="text-xs font-normal">
                   {String(!!dataValueToRaw(constant.dataValue))}
                 </Label>
               </div>
             ) : (
-              <DetailCommitInput
-                className={detailInlineInputClass}
-                type={numeric ? "number" : "text"}
-                value={
-                  numeric && "value" in constant.dataValue
-                    ? String(constant.dataValue.value)
-                    : String(dataValueToRaw(constant.dataValue) ?? "")
-                }
-                onCommit={(draft) =>
-                  onUpdate({ dataValue: dataValueFromRaw(draft, constant.dataType) })
-                }
-              />
+              <label className="block min-w-0">
+                <span className="sr-only">{t("detail.fields.value")}</span>
+                <DetailCommitInput
+                  className="h-7 min-w-0 px-2 text-xs shadow-none"
+                  type={numeric ? "number" : "text"}
+                  value={
+                    numeric && "value" in constant.dataValue
+                      ? String(constant.dataValue.value)
+                      : String(dataValueToRaw(constant.dataValue) ?? "")
+                  }
+                  onCommit={(draft) =>
+                    onUpdate({ dataValue: dataValueFromRaw(draft, constant.dataType) })
+                  }
+                />
+              </label>
             )}
-          </DetailFieldRow>
+          </div>
         )}
         {isComplexType(constant.dataType) && (
-          <DetailFieldRow label={t("detail.fields.value")}>
-            <div className="flex min-w-0 items-center gap-2">
-              <DetailText
-                tone="muted"
-                className="min-h-8 min-w-0 flex-1 truncate rounded-md border border-transparent px-3 py-1 font-mono text-xs"
-              >
-                {valueSummary}
-              </DetailText>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setValueEditorOpen(true)}
-              >
-                {t("detail.constantValue.edit")}
-              </Button>
-            </div>
-          </DetailFieldRow>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 min-w-0 justify-between px-2 font-mono"
+            aria-label={`${t("detail.constantValue.edit")}: ${valueSummary}`}
+            onClick={() => setValueEditorOpen(true)}
+          >
+            <span className="truncate">{valueSummary}</span>
+            <VscEdit aria-hidden />
+          </Button>
         )}
-      </DetailForm>
+      </div>
 
       <ConstantValueEditorModal
         open={valueEditorOpen}

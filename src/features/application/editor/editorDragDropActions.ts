@@ -19,8 +19,7 @@ import {
 import {
   getSidebarDragOverlayLabel,
   isGraphResourceDragPayload,
-  isNodeTemplateDragData,
-  isNodeTemplateDragState,
+  isGraphConstantDragPayload,
   isSidebarSpawnDrag,
   parseCanvasDragPayload,
   readDragModifiers,
@@ -29,6 +28,13 @@ import {
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+
+let activeDragProject: ProjectIdentitySnapshot | null = null;
 
 export function useActivityEditorDragOverlayLabel(): string | null {
   const activeDrag = useSidebarDragUi((state) => state.activeDrag);
@@ -38,6 +44,11 @@ export function useActivityEditorDragOverlayLabel(): string | null {
 export function beginActivityEditorDrag(event: DragStartEvent): boolean {
   const activeData = parseCanvasDragPayload(event.active.data.current);
   if (!isSidebarSpawnDrag(activeData)) return false;
+  try {
+    activeDragProject = captureProjectIdentity();
+  } catch {
+    return false;
+  }
   const activatorEvent = event.activatorEvent as PointerEvent;
   sidebarDragUi.setActiveDrag(
     buildSidebarDragState(activeData, activatorEvent?.clientX ?? 0, activatorEvent?.clientY ?? 0),
@@ -51,6 +62,7 @@ export function updateActivityEditorDragPointer(event: PointerEvent): void {
 }
 
 export function finishActivityEditorDrag(): void {
+  activeDragProject = null;
   sidebarDragUi.setActiveDrag(null);
 }
 
@@ -102,9 +114,14 @@ async function executeSidebarSpawnDragEnd(
   const modifiers = readEditorDragModifiers(event);
   const dropPointer = resolveDropPointerFromDragEnd(event);
   const capturedSidebarDrag = useSidebarDragStore.getState().activeDrag;
+  const project = activeDragProject;
   options.finishSidebarDrag();
 
-  if (!isSidebarSpawnDropAllowed(activeData, dropPointer)) {
+  if (
+    !project ||
+    !isCurrentProjectIdentity(project) ||
+    !isSidebarSpawnDropAllowed(activeData, dropPointer)
+  ) {
     return;
   }
 
@@ -126,16 +143,16 @@ async function executeSidebarSpawnDragEnd(
     return;
   }
 
-  if (isNodeTemplateDragData(activeData)) {
-    const target = resolveCanvasDropTarget(event, dropPointer);
-    if (target && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
-      if (!(await workbenchLayoutControl.activate(target.panelInstanceId))) {
-        return;
-      }
-      const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
-      if (handler) await handler(capturedSidebarDrag, modifiers);
-    }
-  }
+  const target = resolveCanvasDropTarget(event, dropPointer);
+  if (!target || !capturedSidebarDrag || capturedSidebarDrag.type !== activeData.type) return;
+  if (isGraphConstantDragPayload(activeData) && activeData.graphPath !== target.graphPath) return;
+  if (
+    !(await workbenchLayoutControl.activate(target.panelInstanceId)) ||
+    !isCurrentProjectIdentity(project)
+  )
+    return;
+  const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
+  if (handler) await handler({ ...capturedSidebarDrag, ...dropPointer }, modifiers);
 }
 
 /** Handle only sidebar-to-editor DnD; FlexLayout owns tab/group drag, order, move, and split. */
@@ -145,6 +162,7 @@ export async function executeEditorDragEnd(
 ): Promise<void> {
   const activeData = parseCanvasDragPayload(event.active.data.current);
   if (!isSidebarSpawnDrag(activeData)) {
+    options.finishSidebarDrag();
     return;
   }
 

@@ -1,16 +1,18 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ComponentProps } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { useTranslation } from "react-i18next";
-import { VscAdd, VscRemove, VscReferences } from "react-icons/vsc";
+import { VscAdd, VscGripper, VscRemove } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   createGraphConstant,
   deleteGraphConstant,
   editableConstantValue,
-  insertConstantReference,
   updateGraphConstant,
   useGraphConstants,
 } from "@/features/application/graphEditing/graphConstantActions";
 import type { ApplyGraphMutationOutcome } from "@/features/application/graphEditing/graphEditCoordinator";
+import { DRAG_TYPES, type GraphConstantDragPayload } from "@/features/core/dnd";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { ConstantValueFields } from "./ConstantValueFields";
 
@@ -46,8 +48,8 @@ export function GraphConstantsPanel({ graphPath }: { graphPath: string }) {
   };
   return (
     <DetailCollapsibleSection title={t("detail.constants.title")} defaultOpen>
-      <fieldset disabled={busy || saving || !loaded} className="min-w-0 space-y-2">
-        <div className="flex justify-end px-3">
+      <fieldset disabled={busy || saving || !loaded} className="min-w-0 space-y-1">
+        <div className="flex justify-end">
           <Button
             size="sm"
             variant="ghost"
@@ -60,36 +62,14 @@ export function GraphConstantsPanel({ graphPath }: { graphPath: string }) {
           </Button>
         </div>
         {editableConstants.map((constant) => (
-          <div
+          <GraphConstantRow
             key={constant.id}
-            data-constant-id={constant.id}
-            className="border-t border-border/50"
-          >
-            <ConstantValueFields
-              constant={constant}
-              onUpdate={(patch) =>
-                void run(() => updateGraphConstant(graphPath, constant.id, patch))
-              }
-            />
-            <div className="flex justify-end gap-1 px-3 pb-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void run(() => insertConstantReference(graphPath, constant.id))}
-              >
-                <VscReferences aria-hidden />
-                {t("detail.constants.insertReference")}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void run(() => deleteGraphConstant(graphPath, constant.id))}
-                aria-label={t("detail.constants.remove", { name: constant.name })}
-              >
-                <VscRemove aria-hidden />
-              </Button>
-            </div>
-          </div>
+            graphPath={graphPath}
+            constant={constant}
+            disabled={busy || saving || !loaded}
+            onUpdate={(patch) => void run(() => updateGraphConstant(graphPath, constant.id, patch))}
+            onRemove={() => void run(() => deleteGraphConstant(graphPath, constant.id))}
+          />
         ))}
         {loaded && Object.keys(constants).length === 0 && (
           <p className="px-3 text-xs text-muted-foreground">{t("detail.constants.empty")}</p>
@@ -101,5 +81,76 @@ export function GraphConstantsPanel({ graphPath }: { graphPath: string }) {
         </p>
       )}
     </DetailCollapsibleSection>
+  );
+}
+
+function GraphConstantRow({
+  graphPath,
+  constant,
+  disabled,
+  onUpdate,
+  onRemove,
+}: {
+  graphPath: string;
+  constant: ComponentProps<typeof ConstantValueFields>["constant"];
+  disabled: boolean;
+  onUpdate: ComponentProps<typeof ConstantValueFields>["onUpdate"];
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+    id: `graph-constant-${graphPath}-${constant.id}`,
+    data: {
+      type: DRAG_TYPES.GRAPH_CONSTANT,
+      graphPath,
+      constantId: constant.id,
+      name: constant.name,
+    } satisfies GraphConstantDragPayload,
+    disabled,
+  });
+  const dragLabel = t("detail.constants.dragToCanvas", { name: constant.name });
+  const removeLabel = t("detail.constants.remove", { name: constant.name });
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-constant-id={constant.id}
+      data-dragging={isDragging || undefined}
+      className="flex min-w-0 items-center gap-1 border-t border-border/50 py-1 data-[dragging=true]:opacity-50"
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            className="touch-none cursor-grab text-muted-foreground active:cursor-grabbing"
+            disabled={disabled}
+            aria-label={dragLabel}
+          >
+            <VscGripper className="size-3.5" aria-hidden />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{dragLabel}</TooltipContent>
+      </Tooltip>
+      <ConstantValueFields constant={constant} onUpdate={onUpdate} />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            onClick={onRemove}
+            aria-label={removeLabel}
+          >
+            <VscRemove aria-hidden />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{removeLabel}</TooltipContent>
+      </Tooltip>
+    </div>
   );
 }

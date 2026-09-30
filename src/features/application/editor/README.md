@@ -168,6 +168,8 @@ undo/redo and node-switch behavior. UI unit tests are not added for this flow.
 `useDetailPanelModel` reads the existing editor collections and produces one discriminated
 model for rendering; the chart branch includes its path, name and document. There is no
 separate Details target-resolution or resource-projection facade.
+When a focused graph node disappears from the published projection, the model uses
+that graph's resource identity to display Event/Function Details instead of a missing-node message.
 
 Mind activation publishes its file path, owning panel ID and resolved topic ID to that
 same Details context. Its topic selection and collapsed branches use the existing pane
@@ -189,6 +191,15 @@ Use the narrow capability matching the caller:
 ```tsx
 const { constants, loaded, saving } = useGraphConstants(graphPath);
 ```
+
+Event/Function Details displays each graph constant in one row. Only its leading handle
+starts a dnd-kit drag, leaving the name, type and value controls editable. The shared
+workbench drag flow carries the graph path and constant ID, displays the constant name,
+activates the target canvas and uses that pane's viewport to convert the release point.
+Dropping on another graph, outside a canvas, after project replacement, or with an
+unavailable target or constant does not create a node. Valid drops submit the existing
+Rust constant-node mutation through the Graph edit FIFO; values remain owned by the
+graph constant. Saving gates the mutation, and Escape cancels the drag and its overlay.
 
 Project Explorer obtains its active resource through
 `features/application/sidebar/useActiveProjectResource.ts`.

@@ -5,6 +5,7 @@ import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useL
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import {
+  isGraphConstantDragState,
   isGraphResourceDragState,
   isNodeTemplateDragState,
   type SidebarDragState,
@@ -16,6 +17,7 @@ import {
   spawnNodeFromTemplate,
   type CreateNodeFn,
 } from "./canvasDrop";
+import { dropGraphConstantIntoCanvas } from "./canvasDrop/dropGraphConstant";
 
 interface UseCanvasDropParams {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
@@ -88,8 +90,10 @@ export function useCanvasDrop({
   const handleSidebarCanvasDrop = useCallback(
     async (dragState: SidebarDragState) => {
       const canvas = canvasElementRef.current;
-      if (!canvas || !graphPath || !isPointInsideCanvas(canvas, dragState.x, dragState.y))
-        return false;
+      if (!canvas || !graphPath) return false;
+      if (isGraphConstantDragState(dragState))
+        return dropGraphConstantIntoCanvas(canvas, panelInstanceId, groupId, graphPath, dragState);
+      if (!isPointInsideCanvas(canvas, dragState.x, dragState.y)) return false;
 
       let template = isNodeTemplateDragState(dragState) ? dragState.template : null;
       if (isGraphResourceDragState(dragState)) {
@@ -121,7 +125,7 @@ export function useCanvasDrop({
       );
       return spawnNodeFromTemplate(template, worldPosition, { createNode });
     },
-    [canvasElementRef, catalog, createNode, graphPath, groupId, refreshCatalog],
+    [canvasElementRef, catalog, createNode, graphPath, groupId, panelInstanceId, refreshCatalog],
   );
 
   useEffect(() => {

@@ -4,6 +4,8 @@ import { buildSidebarDragData } from "@/features/application/sidebar/buildSideba
 import {
   buildSidebarDragState,
   DRAG_TYPES,
+  getSidebarDragOverlayLabel,
+  isGraphConstantDragState,
   isGraphResourceDragPayload,
   isNodeTemplateDragData,
   isNodeTemplateDragState,
@@ -12,6 +14,23 @@ import {
 } from "./dndContracts";
 
 describe("parseCanvasDragPayload", () => {
+  it("carries a graph constant's source identity and name through the drag state", () => {
+    const payload = {
+      type: DRAG_TYPES.GRAPH_CONSTANT,
+      graphPath: "events/Main.yssbi-event",
+      constantId: "constant-1",
+      name: "Threshold",
+    } as const;
+    expect(parseCanvasDragPayload(payload)).toBe(payload);
+    expect(isSidebarSpawnDrag(payload)).toBe(true);
+    const state = buildSidebarDragState(payload, 10, 20);
+    expect(isGraphConstantDragState(state)).toBe(true);
+    expect(state).toEqual({ ...payload, x: 10, y: 20 });
+    expect(getSidebarDragOverlayLabel(state)).toBe("Threshold");
+    expect(parseCanvasDragPayload({ ...payload, constantId: "" })).toBeNull();
+    expect(parseCanvasDragPayload({ ...payload, graphPath: null })).toBeNull();
+  });
+
   it("accepts sidebar database spawn data only with a backend descriptor", () => {
     const descriptor = {
       kind: "resourceBound" as const,

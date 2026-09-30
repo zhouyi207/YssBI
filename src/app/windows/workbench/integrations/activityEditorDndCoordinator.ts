@@ -37,5 +37,8 @@ export function useActivityEditorDndCoordinator(): RootLayoutDndCoordinator {
     [finishDrag],
   );
 
-  return useMemo(() => ({ onDragStart, onDragEnd }), [onDragEnd, onDragStart]);
+  return useMemo(
+    () => ({ onDragStart, onDragEnd, onDragCancel: finishDrag }),
+    [finishDrag, onDragEnd, onDragStart],
+  );
 }

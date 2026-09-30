@@ -281,6 +281,10 @@ publication transaction 可以在准备期间等待业务查询。提交前重�
 
 ### 5.1 拖动与订阅
 
+侧栏与 Details 到画布的 dnd-kit 拖放复用根 `DndContext` 和 drag overlay。
+`RootLayoutDndCoordinator` 提供开始、结束与取消回调；取消时 Application 清理拖动状态和指针监听。
+常量的目标图校验与节点创建由[编辑器应用层](../../features/application/editor/README.md)负责。
+
 Layout 通过 `subscribeModel` 只订阅 Model 实例替换；Model 内部动作由 FlexLayout 自己处理。所有带 `isAdjusting()` 标记的中间动作统一延迟应用通知，全由中间动作组成的嵌套 GroupAction 同样处理，不再维护手势动作名称清单。原生几何路径继续实时更新，结束动作再提交通知；无论是否通知，每次动作都推进绑定 revision，避免拖动期间的旧候选覆盖新布局。活动分组补全也跳过中间动作，避免空中央区时逐帧扫描布局。
 
 提交后从原生 Model 生成轻量面板、分组和边栏只读投影，复用未变化的记录与嵌套字段引用，按实际状态变化通知消费者。没有 JSON 签名、全量字符串序列化或面板排序，也不根据动作名称猜测影响：
@@ -434,6 +438,8 @@ Tauri 主窗口创建尺寸与项目管理页默认尺寸一致；保存位置�
 ## 9. 样式与标签
 
 直接加载 flexlayout-react/style/combined.css，使用 alpha_light / alpha_dark 原生主题，随应用主题切换。标签选中、关闭按钮、边栏、分隔条、拖放指示和最大化按钮均使用库的设计。
+
+标签溢出数字按钮的弹出菜单复用项目 ContextMenu 的主题样式，包括背景、圆角、阴影、字号、行距和悬停/键盘焦点高亮，随应用明暗主题切换。菜单仍由 FlexLayout 管理定位、选择、关闭和拖出标签，保留标签图标与未保存标记；长标题在菜单宽度内省略。
 
 工作台横向标签栏移除首部 spacer 和叠加的左侧 padding，使首个 tab button 与 tab content 的外边缘对齐；按钮自身内距和标签之间的间隔保留原生样式。该规则不作用于侧栏或底部 border 的标签，底栏与中央区的列对齐保持独立。
 

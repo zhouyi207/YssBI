@@ -1,3 +1,5 @@
+@reference "./App.css";
+
 /* FlexLayout owns tabs, borders, splitters and drop indicators. */
 .workbench-layout-host {
   /* Native floats stay below application dialogs and their backdrops. */
@@ -21,6 +23,43 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+}
+
+/* Match ContextMenu styling while preserving native overflow selection and drag-out. */
+.workbench-layout-host .flexlayout__popup_menu_container {
+  @apply min-w-32 max-w-[min(13.5rem,calc(100vw-1rem))] overflow-x-hidden rounded-md border-0 bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10;
+}
+.workbench-layout-host .flexlayout__popup_menu {
+  @apply font-sans text-xs/relaxed font-normal;
+}
+.workbench-layout-host .flexlayout__popup_menu_item {
+  @apply flex min-h-7 cursor-default items-center gap-2 rounded-sm px-2 py-1 outline-hidden select-none;
+}
+.workbench-layout-host
+  .flexlayout__popup_menu_item:is(:hover, :focus-visible, .flexlayout__popup_menu_item--selected) {
+  @apply bg-accent text-accent-foreground;
+}
+.workbench-layout-host .flexlayout__popup_menu_item--disabled {
+  @apply opacity-50;
+}
+.workbench-layout-host .flexlayout__popup_menu_divider {
+  @apply -mx-1 my-1 bg-border/50;
+}
+.workbench-layout-host .flexlayout__popup_menu .flexlayout__tab_button_stamp,
+.workbench-layout-host .flexlayout__popup_menu .flexlayout__tab_button_content {
+  @apply min-w-0;
+}
+.workbench-layout-host .flexlayout__popup_menu .workbench-tab-label {
+  @apply max-w-full gap-2;
+}
+.workbench-layout-host .flexlayout__popup_menu .workbench-tab-label > svg {
+  @apply size-3.5 text-muted-foreground opacity-100;
+}
+.workbench-layout-host
+  .flexlayout__popup_menu_item:is(:hover, :focus-visible, .flexlayout__popup_menu_item--selected)
+  .workbench-tab-label
+  > svg {
+  @apply text-accent-foreground;
 }
 
 /* Align the first horizontal tab button with its content, without a leading gutter. */

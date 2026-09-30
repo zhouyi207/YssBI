@@ -108,15 +108,7 @@ export const NodeDetailPanel = memo(function NodeDetailPanel({
     };
   }, [pins]);
 
-  if (!node) {
-    return (
-      <DetailPanelShell>
-        <DetailText as="div" tone="muted" className="p-4">
-          {t("detail.nodeNotFound")}
-        </DetailText>
-      </DetailPanelShell>
-    );
-  }
+  if (!node) return null;
 
   const catalogItem = catalog?.items.find((item) => item.nodeTypeId === node.nodeType);
   const documentation = catalogItem?.documentation;

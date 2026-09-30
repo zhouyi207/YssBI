@@ -5,6 +5,7 @@ import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDi
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { setNodeParameters } from "@/features/application/editor/setNodeParameters";
 import type { ValueType } from "@/shared/types/domain/valueType";
@@ -34,7 +35,7 @@ function optionLabel(key: string, option: string, t: TFunction): string {
     return t(`theil.${option}`);
   if (key === "column_match" && ["by_name", "by_position"].includes(option))
     return t(`tableComposition.${option}`);
-  if (key === "join_type" && ["inner", "left", "right", "full"].includes(option))
+  if (key === "join_type" && ["inner", "left", "right", "full", "semi", "anti"].includes(option))
     return t(`tableComposition.${option}`);
   if (key === "target_type") {
     const labels: Record<string, string> = {
@@ -270,6 +271,15 @@ function ParameterValueEditor({
     );
   }
   if (
+    parameter.valueType?.kind === "DataSeries" &&
+    parameter.valueType.inner.kind === "Scalar" &&
+    ["Text", "Numeric"].includes(parameter.valueType.inner.inner)
+  ) {
+    return (
+      <ListValueEditor parameter={parameter} pending={pending} errors={errors} onCommit={commit} />
+    );
+  }
+  if (
     parameter.editor.kind === "number" ||
     parameter.editor.kind === "text" ||
     (parameter.editor.kind === "select" &&
@@ -297,6 +307,153 @@ interface OrdinaryValueEditorProps {
   pending: boolean;
   errors: readonly string[];
   onCommit(value: unknown, callbacks?: CommitCallbacks): void;
+}
+
+function ListValueEditor({ parameter, pending, errors, onCommit }: OrdinaryValueEditorProps) {
+  const { t } = useTranslation();
+  const errorId = useId();
+  const values = Array.isArray(parameter.value) ? parameter.value : [];
+  const signature = JSON.stringify(values);
+  const latest = useRef(values);
+  latest.current = values;
+  const [projection, setProjection] = useState(signature);
+  const [draft, setDraft] = useState<string[]>(() => values.map(String));
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  if (projection !== signature) {
+    setProjection(signature);
+    setDraft(values.map(String));
+    setParseError(null);
+  }
+  const numeric =
+    parameter.valueType?.kind === "DataSeries" &&
+    parameter.valueType.inner.kind === "Scalar" &&
+    parameter.valueType.inner.inner === "Numeric";
+  const reset = () => {
+    setDraft(latest.current.map(String));
+    setParseError(null);
+  };
+  const submit = (next: string[]) => {
+    if (pending) return;
+    const parsed: (number | string)[] = [];
+    for (const value of next) {
+      if (numeric) {
+        const result = parseNumberDraft(value, { kind: "Scalar", inner: "Numeric" });
+        if (!result.ok) {
+          setParseError(numberDraftErrorMessage(result.error, t));
+          return;
+        }
+        parsed.push(result.value);
+      } else parsed.push(value);
+    }
+    setParseError(null);
+    if (JSON.stringify(parsed) !== signature) onCommit(parsed, { onRejected: reset });
+  };
+  const change = (next: string[]) => {
+    setDraft(next);
+    submit(next);
+  };
+  const lastPage = Math.max(0, Math.ceil(draft.length / 50) - 1);
+  const shownPage = Math.min(page, lastPage);
+  const visibleErrors = parseError ? [...errors, parseError] : errors;
+  return (
+    <div
+      className="space-y-2"
+      onBlur={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        )
+          return;
+        submit(draft);
+      }}
+    >
+      <div className="max-h-64 space-y-1 overflow-y-auto">
+        {draft.slice(shownPage * 50, shownPage * 50 + 50).map((value, row) => {
+          const index = shownPage * 50 + row;
+          return (
+            <div key={index} className="flex items-center gap-1">
+              <Input
+                className={detailInlineInputClass}
+                value={value}
+                disabled={pending}
+                aria-label={`${parameter.display.title} ${index + 1}`}
+                aria-invalid={visibleErrors.length > 0}
+                aria-describedby={visibleErrors.length ? errorId : undefined}
+                inputMode={numeric ? "decimal" : undefined}
+                onChange={(event) => {
+                  setDraft(
+                    draft.map((entry, item) => (item === index ? event.target.value : entry)),
+                  );
+                  setParseError(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    reset();
+                  }
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    submit(draft);
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                aria-label={`${t("conversion.removeValue")} ${index + 1}`}
+                onClick={() => change(draft.filter((_, item) => item !== index))}
+              >
+                {t("conversion.removeValue")}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+      {lastPage > 0 && (
+        <div className="flex items-center gap-2 text-xs">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={shownPage === 0}
+            onClick={() => setPage(shownPage - 1)}
+          >
+            {t("conversion.previousValues")}
+          </Button>
+          <span>
+            {shownPage + 1}/{lastPage + 1}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={shownPage === lastPage}
+            onClick={() => setPage(shownPage + 1)}
+          >
+            {t("conversion.nextValues")}
+          </Button>
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={() => {
+          const next = [...draft, ""];
+          setDraft(next);
+          setPage(Math.floor((next.length - 1) / 50));
+          if (!numeric) submit(next);
+        }}
+      >
+        {t("conversion.addValue")}
+      </Button>
+      <ParameterErrorList id={errorId} errors={visibleErrors} />
+    </div>
+  );
 }
 
 function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryValueEditorProps) {

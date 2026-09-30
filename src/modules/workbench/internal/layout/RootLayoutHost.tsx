@@ -64,6 +64,7 @@ const layoutIcons = {
   maximize: <VscChromeMaximize size={14} aria-hidden />,
   restore: <VscChromeRestore size={14} aria-hidden />,
 };
+
 const layoutLabelKeys: Readonly<Record<string, string>> = {
   [I18nLabel.Maximize]: "tabBar.toolbar.maximizeGroup",
   [I18nLabel.Restore]: "tabBar.toolbar.restoreGroup",
@@ -77,6 +78,7 @@ const layoutLabelKeys: Readonly<Record<string, string>> = {
 export interface RootLayoutDndCoordinator {
   readonly onDragStart: (event: DragStartEvent) => void;
   readonly onDragEnd: (event: DragEndEvent) => void;
+  readonly onDragCancel: () => void;
 }
 export type RootPanelActivationCoordinator = (panel: RootPanelActivationTarget) => void;
 export interface RootLayoutHostProps {
@@ -235,6 +237,7 @@ export const RootLayoutHost = memo(
           sensors={sensors}
           onDragStart={dndCoordinator.onDragStart}
           onDragEnd={dndCoordinator.onDragEnd}
+          onDragCancel={dndCoordinator.onDragCancel}
         >
           <div
             ref={ref}
