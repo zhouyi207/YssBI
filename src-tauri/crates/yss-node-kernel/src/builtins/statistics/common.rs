@@ -4,6 +4,10 @@ use yss_data_contract::TabularScalar;
 
 mod finite;
 
+// Charge the temporary JSON representation and the resulting runtime containers together.
+pub(super) const STRUCTURED_VALUE_BYTES: usize = 128;
+pub(super) const STRUCTURED_VALUE_COPIES: usize = 3;
+
 pub(crate) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a str, KernelError> {
     match inv.parameter(key) {
         Some(RuntimeValue::Scalar(TabularScalar::String(v))) => Ok(v),
@@ -75,10 +79,10 @@ pub(in crate::builtins) fn value(
             serde_json::Value::String(s) => s.len(),
             _ => 0,
         };
-        children.checked_add(128)
+        children.checked_add(STRUCTURED_VALUE_BYTES)
     }
     inv.control
-        .check_bytes(charge(&data).and_then(|n| n.checked_mul(3)))?;
+        .check_bytes(charge(&data).and_then(|n| n.checked_mul(STRUCTURED_VALUE_COPIES)))?;
     fn convert(
         v: serde_json::Value,
         inv: &KernelInvocation<'_>,

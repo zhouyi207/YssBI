@@ -218,6 +218,46 @@ fn regression_category_nodes_execute_catalog_defaults_and_conditional_parameters
 }
 
 #[test]
+fn poisson_regression_fits_53940_rows_with_the_default_memory_budget() {
+    // Each predictor group has a known Poisson mean: 2 at x=0, 4 at x=1.
+    let rows = 53_940;
+    let case = serde_json::json!({
+        "y": (0..rows).map(|i| [1, 2, 3, 2, 4, 6][i % 6]).collect::<Vec<_>>(),
+        "x": [(0..rows).map(|i| i % 6 / 3).collect::<Vec<_>>()],
+    });
+    let RuntimeValue::Record(result) = run_model(
+        "yssbi.statistics.regression.poisson",
+        &case,
+        serde_json::json!({}),
+    ) else {
+        panic!("regression result");
+    };
+    assert_eq!(
+        result["observations"],
+        TabularScalar::Integer(rows as i64).into()
+    );
+    for key in ["fitted", "residuals"] {
+        let RuntimeValue::List(values) = &result[key] else {
+            panic!("{key}");
+        };
+        assert_eq!(values.len(), rows);
+    }
+    let RuntimeValue::List(coefficients) = &result["coefficients"] else {
+        panic!("coefficients");
+    };
+    assert_eq!(coefficients.len(), 2);
+    for coefficient in coefficients.iter() {
+        let RuntimeValue::Record(coefficient) = coefficient else {
+            panic!("coefficient");
+        };
+        let RuntimeValue::Scalar(TabularScalar::Float64(estimate)) = coefficient["estimate"] else {
+            panic!("estimate");
+        };
+        assert!((estimate.as_f64() - 2f64.ln()).abs() < 1e-6);
+    }
+}
+
+#[test]
 fn regression_models_reject_unaligned_relation_domains_and_mixed_columns() {
     use arrow::{
         array::Float64Array,

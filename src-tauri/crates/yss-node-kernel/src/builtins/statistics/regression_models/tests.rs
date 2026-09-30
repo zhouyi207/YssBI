@@ -181,3 +181,57 @@ fn regression_admission_checks_shapes_budget_and_cancellation_before_estimation(
         Err(KernelError::ShapeMismatch)
     ));
 }
+
+#[test]
+fn hierarchical_admission_counts_actual_retained_models() {
+    let rows = 1024;
+    let column = |f: fn(usize) -> f64| RuntimeValue::List((0..rows).map(|i| float(f(i))).collect());
+    let inputs = [
+        (
+            "response",
+            column(|i| {
+                3.0 + (i % 7) as f64
+                    + (i % 11) as f64 * 0.5
+                    + (i % 13) as f64 * 0.25
+                    + (i % 3) as f64 * 0.1
+            }),
+        ),
+        ("predictors", column(|i| (i % 7) as f64)),
+        ("predictors", column(|i| (i % 11) as f64)),
+        ("predictors", column(|i| (i % 13) as f64)),
+    ];
+    let mut bounded = control();
+    bounded.max_input_bytes = 2 * 1024 * 1024;
+    let parameters = |blocks: &[f64]| {
+        [
+            ("constant", TabularScalar::Bool(true).into()),
+            (
+                "block_sizes",
+                RuntimeValue::List(blocks.iter().copied().map(float).collect()),
+            ),
+        ]
+    };
+    let output = invoke(
+        "yssbi.statistics.regression.hierarchical",
+        &inputs,
+        &parameters(&[3.0]),
+        &bounded,
+    )
+    .unwrap();
+    let RuntimeValue::Record(result) = &output[0] else {
+        panic!("workflow");
+    };
+    let RuntimeValue::List(stages) = &result["stages"] else {
+        panic!("stages");
+    };
+    assert_eq!(stages.len(), 1);
+    assert!(matches!(
+        invoke(
+            "yssbi.statistics.regression.hierarchical",
+            &inputs,
+            &parameters(&[1.0, 1.0, 1.0]),
+            &bounded,
+        ),
+        Err(KernelError::BudgetExceeded)
+    ));
+}

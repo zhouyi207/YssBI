@@ -1,6 +1,6 @@
 use super::{
     Input,
-    common::{boolean, check_fit_workspace, integer, number, text, value},
+    common::{boolean, integer, number, text, value},
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
@@ -12,6 +12,8 @@ use yss_sci_contract::execution::{
 };
 use yss_sci_contract::regression::models::*;
 use yss_sci_runtime::regression::models as sci;
+
+mod budget;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     let methods = &[
@@ -156,7 +158,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
-                std::num::NonZeroU32::new(1).unwrap(),
+                std::num::NonZeroU32::new(2).unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )
@@ -345,24 +347,6 @@ fn response_link(inv: &KernelInvocation<'_>, key: &str) -> Result<GlmLink, Kerne
 fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     inv.check_control()?;
     let data = typed_columns(inv)?;
-    let n = data.first().map_or(0, |c| c.values.len());
-    let stages = if matches!(
-        method,
-        "regression.hierarchical" | "workflow.regression.univariate_multivariable"
-    ) {
-        MAX_REGRESSION_PREDICTORS + 1
-    } else {
-        1
-    };
-    inv.control.check_bytes(
-        n.checked_mul(data.len() + 4 * stages)
-            .and_then(|v| v.checked_mul(16 * size_of::<RuntimeValue>()))
-            .and_then(|v| {
-                v.checked_add(
-                    4 * MAX_REGRESSION_PARAMETERS * MAX_REGRESSION_PARAMETERS * size_of::<f64>(),
-                )
-            }),
-    )?;
     let predictors = inv
         .input_keys
         .iter()
@@ -386,13 +370,6 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     } else {
         false
     };
-    check_fit_workspace(
-        n,
-        predictors.len() + inflation.len() + MAX_REGRESSION_CATEGORIES,
-        constant,
-        "OLS",
-        inv,
-    )?;
     let response = &data[0];
     let categorical = matches!(
         method,
@@ -419,6 +396,14 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         .position(|k| *k == "groups")
         .map(|i| categories(&data[i], false, MAX_REGRESSION_GROUPS, inv))
         .transpose()?;
+    budget::check(
+        method,
+        inv,
+        &data,
+        constant,
+        labels.len(),
+        group.as_ref().map_or(0, |(_, labels)| labels.len()),
+    )?;
     let model = match method {
         "regression.robust" => sci::robust(
             &y,
