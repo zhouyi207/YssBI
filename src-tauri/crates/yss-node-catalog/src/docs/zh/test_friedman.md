@@ -23,6 +23,6 @@ $t_{ig}$ 为对象 $i$ 内第 $g$ 个并列组的大小。$C$ 须大于零，不
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic` 为修正后的 $Q$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各条件的对象数 `[n, …, n]`。估计值和标准误为空。
+`result` 为结构化结果。`statistic` 为修正后的 $Q$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各条件的对象数 `[n, …, n]`。估计值和标准误为空。
 
 $p<\alpha$ 支持条件间差异；不自动提供条件之间的成对比较。

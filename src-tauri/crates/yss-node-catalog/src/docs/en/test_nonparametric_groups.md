@@ -51,6 +51,6 @@ $O_{ij}$ are observed counts and $E_{ij}$ expectations under independence. Curre
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report. `method` names the actual method. `statistic` is $U_1$, $H$, or $X^2$, respectively. `degrees_of_freedom` is empty for Mann–Whitney and `[k−1]` otherwise; `sample_sizes` lists input group sizes. Mann–Whitney's `details.u_complement` gives the other U, while Mood's `details.pooled_median` gives the pooled median. Estimate and standard error are null.
+`result` contains the structured result. `method` names the actual method. `statistic` is $U_1$, $H$, or $X^2$, respectively. `degrees_of_freedom` is empty for Mann–Whitney and `[k−1]` otherwise; `sample_sizes` lists input group sizes. Mann–Whitney's `details.u_complement` gives the other U, while Mood's `details.pooled_median` gives the pooled median. Estimate and standard error are null.
 
 For a valid selected method, reject its null when `p_value` is below $\alpha$. The selector does not choose a method automatically or run post-hoc pairwise tests or multiplicity adjustments.

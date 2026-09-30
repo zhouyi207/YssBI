@@ -59,9 +59,7 @@ pub use function_validation::{
 use derived_ports::{derived_port_address, derived_port_members};
 use schema_resolution::resolve_graph_schemas;
 
-pub use result_category::{
-    GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind, result_category_for_node,
-};
+pub use result_category::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 pub use type_resolution::{GraphSemanticCache, type_patterns_can_connect};
 
 #[derive(Clone, Debug, PartialEq)]

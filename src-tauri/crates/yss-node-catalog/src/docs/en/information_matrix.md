@@ -52,7 +52,7 @@ Each uses an asymptotic chi-square upper-tail p-value with its corresponding deg
 
 ## Outputs and usage
 
-`result` and `report` are identical: `test=information_matrix` with inner `result` components `heteroskedasticity`, `skewness`, `kurtosis` and `total`, each containing `chi2`, `df` and `p_value`.
+`result` contains the structured result: `test=information_matrix` with inner `result` components `heteroskedasticity`, `skewness`, `kurtosis` and `total`, each containing `chi2`, `df` and `p_value`.
 
 WLS replaces only the heteroskedasticity component with White's test on $w_i u_i^2$; skewness and kurtosis retain unweighted original residuals. The sample must meet White's full-expansion requirement. Components help locate problems and receive no multiplicity correction.
 

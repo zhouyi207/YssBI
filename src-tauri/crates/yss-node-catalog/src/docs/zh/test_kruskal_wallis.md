@@ -23,6 +23,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic` 为修正后的 $H$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各组样本量。估计值和标准误为空。
+`result` 为结构化结果。`statistic` 为修正后的 $H$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各组样本量。估计值和标准误为空。
 
 $p<\alpha$ 表示至少一组不同；本节点不指出具体哪两组不同，也不执行事后多重比较。

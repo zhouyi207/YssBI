@@ -18,6 +18,6 @@ Here $n$ is the number of pairs and $\bar d,s_d$ are the mean and sample standar
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is t, `estimate` is the mean `before−after` difference, `standard_error` is $s_d/\sqrt n$, `degrees_of_freedom` is `[n−1]`, and `sample_sizes` is `[n]`.
+`result` contains the structured result. `statistic` is t, `estimate` is the mean `before−after` difference, `standard_error` is $s_d/\sqrt n$, `degrees_of_freedom` is `[n−1]`, and `sample_sizes` is `[n]`.
 
 `greater` tests whether the before mean exceeds the after mean; `less` tests the reverse. Reject zero mean difference when `p_value` is below $\alpha$.

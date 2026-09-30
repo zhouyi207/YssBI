@@ -23,6 +23,6 @@ For $n\le20$ nonzero differences, p-values use exact sign enumeration. Larger sa
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic_name` is `signed_rank`, but `statistic` contains standardized $Z$. The raw $W^+$ is `details.positive_rank_sum`. `details.exact_p_value_used` is `1` for exact enumeration and `0` for normal approximation. `sample_sizes` is `[n]` after excluding zero differences. Degrees of freedom are empty; estimate and standard error are null.
+`result` contains the structured result. `statistic_name` is `signed_rank`, but `statistic` contains standardized $Z$. The raw $W^+$ is `details.positive_rank_sum`. `details.exact_p_value_used` is `1` for exact enumeration and `0` for normal approximation. `sample_sizes` is `[n]` after excluding zero differences. Degrees of freedom are empty; estimate and standard error are null.
 
 Reject the specified symmetric center when `p_value` is below $\alpha$. Many zero differences reduce the effective sample size.

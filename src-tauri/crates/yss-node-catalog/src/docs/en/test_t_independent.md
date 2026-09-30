@@ -28,4 +28,4 @@ Both use the $t_\nu$ reference distribution and require a positive standard erro
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report: `statistic` is t, `estimate` is the group-1 minus group-2 mean, `standard_error` is the selected standard error, `degrees_of_freedom` is `[ν]`, and `sample_sizes` is `[n1, n2]`. Reject $H_0$ when `p_value` is below $\alpha$ for the selected alternative.
+`result` contains the structured result: `statistic` is t, `estimate` is the group-1 minus group-2 mean, `standard_error` is the selected standard error, `degrees_of_freedom` is `[ν]`, and `sample_sizes` is `[n1, n2]`. Reject $H_0$ when `p_value` is below $\alpha$ for the selected alternative.

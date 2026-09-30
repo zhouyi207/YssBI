@@ -24,7 +24,7 @@ The node requires $n>k+q$ and full rank after augmentation. RHS mode excludes co
 
 ## Outputs and interpretation
 
-`result` and `report` are identical: `test=reset` with inner `result` fields `f_stat`, `df1=q`, `df2=n-k-q` and `p_value`.
+`result` contains the structured result: `test=reset` with inner `result` fields `f_stat`, `df1=q`, `df2=n-k-q` and `p_value`.
 
 The p-value uses the F upper tail. $p<\alpha$ indicates joint significance of the selected powers and motivates checking the mean equation, without identifying a specific variable to add. Upstream robust covariance does not switch this node to robust RESET.
 

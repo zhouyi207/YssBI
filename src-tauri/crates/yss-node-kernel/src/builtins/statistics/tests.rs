@@ -34,9 +34,7 @@ fn run(
     );
     let outputs = (0..count)
         .map(|i| KernelOutputSpec {
-            data_type: if id == "yssbi.statistics.inequality.theil" && i == 0 {
-                ValueType::number()
-            } else if (count == 3 && i > 0) || id.ends_with("predict") {
+            data_type: if (count == 3 && i > 0) || id.ends_with("predict") {
                 ValueType::DataSeries(Box::new(ValueType::number()))
             } else {
                 ValueType::Struct("statistics.report".into())
@@ -75,7 +73,7 @@ fn noise(n: usize) -> Vec<f64> {
 }
 
 #[test]
-fn theil_node_enforces_form_weights_and_returns_scalar_and_report() {
+fn theil_node_enforces_form_weights_and_returns_structured_result() {
     let id = "yssbi.statistics.inequality.theil";
     let grouped = run(
         id,
@@ -84,21 +82,26 @@ fn theil_node_enforces_form_weights_and_returns_scalar_and_report() {
             ("weights", series(&[3., 1.])),
         ],
         &[("theil_form", string("grouped"))],
-        2,
+        1,
     )
     .unwrap();
     let individual = run(
         id,
         &[("series", series(&[1., 1., 1., 3.]))],
         &[("theil_form", string("individual"))],
-        2,
+        1,
     )
     .unwrap();
     let scalar = |v: &RuntimeValue| super::super::numeric_input(Some(v)).unwrap();
-    assert!((scalar(&grouped[0]) - scalar(&individual[0])).abs() < 1e-12);
-    assert_eq!(field(&grouped[1], "theil_t").unwrap(), &grouped[0]);
-    assert_eq!(field(&grouped[1], "form").unwrap(), &string("grouped"));
-    assert_eq!(field(&grouped[1], "observations").unwrap(), &int(2));
+    assert!(
+        (scalar(field(&grouped[0], "theil_t").unwrap())
+            - scalar(field(&individual[0], "theil_t").unwrap()))
+        .abs()
+            < 1e-12
+    );
+    assert_eq!(grouped.len(), 1);
+    assert_eq!(field(&grouped[0], "form").unwrap(), &string("grouped"));
+    assert_eq!(field(&grouped[0], "observations").unwrap(), &int(2));
     for (form, weights) in [
         ("individual", Some(series(&[1., 1.]))),
         ("grouped", None),
@@ -109,7 +112,7 @@ fn theil_node_enforces_form_weights_and_returns_scalar_and_report() {
             inputs.push(("weights", weights));
         }
         assert!(matches!(
-            run(id, &inputs, &[("theil_form", string(form))], 2),
+            run(id, &inputs, &[("theil_form", string(form))], 1),
             Err(KernelError::InvalidParameter)
         ));
     }
@@ -118,7 +121,7 @@ fn theil_node_enforces_form_weights_and_returns_scalar_and_report() {
             id,
             &[("series", series(&[1., 3.])), ("weights", series(&[1.]))],
             &[("theil_form", string("grouped"))],
-            2,
+            1,
         ),
         Err(KernelError::ShapeMismatch)
     ));
@@ -130,7 +133,7 @@ fn theil_node_enforces_form_weights_and_returns_scalar_and_report() {
                 RuntimeValue::List(vec![number(1.), TabularScalar::Null.into()].into())
             )],
             &[("theil_form", string("individual"))],
-            2,
+            1,
         ),
         Err(KernelError::InvalidNumericInput)
     ));
@@ -146,7 +149,7 @@ fn acf_pacf_nodes_return_finite_correlations_for_large_finite_inputs() {
             &format!("yssbi.statistics.timeseries.{method}"),
             &[("series", series(&[1e308, -1e308, 1e308, -1e308]))],
             &[("lags", int(1))],
-            2,
+            1,
         )
         .unwrap();
         assert_eq!(
@@ -154,7 +157,7 @@ fn acf_pacf_nodes_return_finite_correlations_for_large_finite_inputs() {
             &RuntimeValue::List(expected.into())
         );
         assert_eq!(field(&result[0], "observations").unwrap(), &int(4));
-        assert_eq!(result[0], result[1]);
+        assert_eq!(result.len(), 1);
     }
 }
 
@@ -165,7 +168,7 @@ fn nonfinite_diagnostic_results_fail_instead_of_returning_null_reports() {
             "yssbi.statistics.diagnostic.durbin_watson",
             &[("series", series(&[1e308, -1e308, 1e308, -1e308]))],
             &[],
-            2,
+            1,
         ),
         Err(KernelError::NonFiniteResult)
     ));
@@ -258,7 +261,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
             &format!("yssbi.statistics.{method}.summary"),
             &[("model", fit[0].clone())],
             &[],
-            2,
+            1,
         )
         .unwrap();
         assert!(field(&fit[0], "report").is_err());
@@ -306,7 +309,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
             "yssbi.statistics.prais.summary",
             &[("model", fit[0].clone())],
             &[],
-            2,
+            1,
         )
         .unwrap();
         assert!(field(field(&summary[0], "diagnostic_info").unwrap(), "prais_info").is_ok());
@@ -359,7 +362,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
             &format!("yssbi.statistics.iv.{method}.summary"),
             &[("model", fit[0].clone())],
             &options,
-            2,
+            1,
         )
         .unwrap();
         assert_eq!(
@@ -379,7 +382,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
                 "yssbi.statistics.diagnostic.hausman",
                 &[("model", fit[0].clone())],
                 &[],
-                2,
+                1,
             )
             .unwrap();
             assert_eq!(
@@ -396,7 +399,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
             &format!("yssbi.statistics.iv.{method}.summary"),
             &[("model", fit[0].clone())],
             &options,
-            2,
+            1,
         )
         .unwrap();
         assert!(field(&basic[0], "firstStage").is_err());
@@ -465,7 +468,7 @@ fn panel_nodes_select_each_implemented_estimator_and_reject_unsupported_combinat
                     ("effects_statistics", flag(true)),
                     ("estimator_statistics", flag(true)),
                 ],
-                2,
+                1,
             )
             .unwrap();
             assert!(field(&report[0], "coefficients").is_ok());
@@ -501,7 +504,7 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
             } else {
                 vec![("steps", int(4))]
             },
-            2,
+            1,
         )
         .unwrap();
         assert!(field(&fit[0], field_name).is_err());
@@ -542,7 +545,7 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
             ("stability", flag(true)),
             ("serial_lags", int(2)),
         ],
-        2,
+        1,
     )
     .unwrap();
     assert!(field(&summary[0], "lagExclusion").is_ok());
@@ -559,7 +562,7 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
             ("stability", flag(false)),
             ("serial_lags", int(2)),
         ],
-        2,
+        1,
     )
     .unwrap();
     assert!(field(&basic[0], "serialTests").is_err());
@@ -575,7 +578,7 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
         "yssbi.statistics.adf.test",
         &[("series", series(&x))],
         &[("lags", int(0)), ("regression", string("constant"))],
-        2,
+        1,
     )
     .unwrap();
     for i in 1..n {
@@ -607,7 +610,7 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
             ("stability", flag(true)),
             ("serial_lags", int(2)),
         ],
-        2,
+        1,
     )
     .unwrap();
     assert!(field(&report[0], "cointegration").is_ok());
@@ -655,7 +658,7 @@ fn breusch_pagan_fitted_and_rhs_agree_for_one_predictor() {
                     "yssbi.statistics.diagnostic.breusch_pagan",
                     &[("model", fit[0].clone())],
                     &[("rhs", flag(rhs)), ("koenker", flag(koenker))],
-                    2,
+                    1,
                 )
                 .unwrap()
             });
@@ -721,7 +724,7 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
             &format!("yssbi.statistics.diagnostic.{test}"),
             &[("model", fit[0].clone())],
             &parameters,
-            2,
+            1,
         )
         .unwrap_or_else(|e| panic!("{test}: {e:?}"));
         if test == "vif" {
@@ -749,7 +752,7 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
             &format!("yssbi.statistics.{id}"),
             &[("series", fit[2].clone())],
             &params,
-            2,
+            1,
         )
         .unwrap();
     }
@@ -817,20 +820,20 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
         "yssbi.statistics.panel.did.randomization",
         &inputs,
         &parameters,
-        2,
+        1,
     )
     .unwrap();
     let second = run(
         "yssbi.statistics.panel.did.randomization",
         &inputs,
         &parameters,
-        2,
+        1,
     )
     .unwrap();
     assert_eq!(first, second);
     assert_eq!(field(&first[0], "available").unwrap(), &flag(true));
     assert_eq!(field(&first[0], "n_perm_valid").unwrap(), &int(20));
-    run(
+    let did = run(
         "yssbi.statistics.panel.did.twfe",
         &[
             ("response", series(&y)),
@@ -842,7 +845,10 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
             ),
         ],
         &[],
-        2,
+        1,
     )
     .unwrap();
+    assert_eq!(did.len(), 1);
+    assert!(field(&did[0], "model").is_ok());
+    assert!(field(&did[0], "summary").is_ok());
 }

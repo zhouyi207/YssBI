@@ -20,6 +20,6 @@ The denominator must be positive, requiring within-subject variation across cond
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is $Q$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains subjects per condition. Estimate and standard error are null.
+`result` contains the structured result. `statistic` is $Q$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains subjects per condition. Estimate and standard error are null.
 
 Reject equal condition probabilities when $p<\alpha$. The node does not identify which condition pairs differ.

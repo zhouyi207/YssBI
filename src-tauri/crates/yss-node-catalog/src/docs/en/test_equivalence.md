@@ -25,6 +25,6 @@ Here $n,\bar x,s$ are sample size, mean, and sample standard deviation. Observat
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is $t_L$ and `details.t_upper_bound` is $t_U$. `details.p_lower_bound` and `details.p_upper_bound` contain the one-sided p-values. `p_value` is their maximum, `estimate` is the mean, `standard_error` is $SE$, degrees of freedom are `[n−1]`, and sample size is `[n]`.
+`result` contains the structured result. `statistic` is $t_L$ and `details.t_upper_bound` is $t_U$. `details.p_lower_bound` and `details.p_upper_bound` contain the one-sided p-values. `p_value` is their maximum, `estimate` is the mean, `standard_error` is $SE$, degrees of freedom are `[n−1]`, and sample size is `[n]`.
 
 Equivalence is supported only when both one-sided tests reject at level $\alpha$. A nonsignificant ordinary difference test is not evidence of equivalence.

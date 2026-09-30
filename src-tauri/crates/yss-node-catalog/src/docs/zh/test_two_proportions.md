@@ -24,4 +24,4 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic` 为 z，`estimate` 为 $\hat p_1-\hat p_2-\delta_0$，`standard_error` 为所用标准误，`sample_sizes` 为 `[n1, n2]`，自由度为空。根据所选方向解读 `p_value`；$p<\alpha$ 时拒绝 $H_0$。
+`result` 为结构化结果。`statistic` 为 z，`estimate` 为 $\hat p_1-\hat p_2-\delta_0$，`standard_error` 为所用标准误，`sample_sizes` 为 `[n1, n2]`，自由度为空。根据所选方向解读 `p_value`；$p<\alpha$ 时拒绝 $H_0$。

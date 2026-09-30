@@ -16,7 +16,7 @@ $n$ is observation count and $\hat\rho_k$ the lag-$k$ sample autocorrelation aft
 
 ## Outputs and interpretation
 
-`result` and `report` are identical, containing `stat=Q`, `p_value` and `lags=h`. P-values use the chi-square upper tail; $p<\alpha$ rejects joint zero correlation through lag $h$, not lag $h$ alone.
+`result` contains the structured result, containing `stat=Q`, `p_value` and `lags=h`. P-values use the chi-square upper tail; $p<\alpha$ rejects joint zero correlation through lag $h$, not lag $h$ alone.
 
 This series-only node does not adjust degrees of freedom for estimated model parameters; account for this when testing fitted residuals. Constant series fail, and non-rejection does not establish independence.
 

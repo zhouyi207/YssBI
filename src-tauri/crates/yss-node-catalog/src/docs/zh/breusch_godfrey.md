@@ -24,7 +24,7 @@ $R_{\mathrm{aux}}^2$ 使用非中心化分母 $\sum u_t^2$。补零时辅助样�
 
 ## 输出与判读
 
-`result`、`report` 相同，含 `stat=LM`、`p_value`、`lags=h`。p 值取卡方右尾；$p<\alpha$ 拒绝前 $h$ 阶联合无相关。
+`result` 为结构化结果，含 `stat=LM`、`p_value`、`lags=h`。p 值取卡方右尾；$p<\alpha$ 拒绝前 $h$ 阶联合无相关。
 
 WLS/GLS 输入仍使用原始残差、原设计的无权重辅助回归，不自动加权或白化。删除初始行时另需 $n-h>k+h$（$k$ 为设计列数），辅助设计奇异时无法计算。
 

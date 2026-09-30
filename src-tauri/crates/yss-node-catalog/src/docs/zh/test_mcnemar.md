@@ -24,6 +24,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic` 为 $X^2$，自由度字段为 `[1]`；`p_value` 与 `details.exact_binomial_p_value` 是精确 p 值。`details.discordant_0_to_1`、`details.discordant_1_to_0` 分别给出 $b,c$，`sample_sizes` 为总配对数。估计值和标准误为空。
+`result` 为结构化结果。`statistic` 为 $X^2$，自由度字段为 `[1]`；`p_value` 与 `details.exact_binomial_p_value` 是精确 p 值。`details.discordant_0_to_1`、`details.discordant_1_to_0` 分别给出 $b,c$，`sample_sizes` 为总配对数。估计值和标准误为空。
 
 $p<\alpha$ 时拒绝边际概率相等；检验只利用不一致配对的信息。

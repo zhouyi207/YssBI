@@ -19,7 +19,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             &format!("yssbi.statistics.diagnostic.{name}"),
             vec![Input::fixed("model")],
             parameters,
-            2,
+            1,
             move |inv| model_test(name, inv),
         );
     }
@@ -43,7 +43,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             id,
             vec![Input::fixed("series")],
             parameters,
-            2,
+            1,
             move |inv| series_test(name, inv),
         );
     }
@@ -62,7 +62,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             } else {
                 &[]
             },
-            2,
+            1,
             move |inv| postestimation(method, inv),
         );
     }
@@ -123,7 +123,7 @@ fn postestimation(
         };
         value(report, inv)?
     };
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 
 fn model_test(name: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -193,7 +193,7 @@ fn model_test(name: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue
             inv,
         )?
     };
-    Ok(vec![result.clone(), result])
+    Ok(vec![result])
 }
 
 fn series_test(name: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -278,5 +278,5 @@ fn series_test(name: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
         }
         _ => return Err(KernelError::InvalidParameter),
     };
-    Ok(vec![result.clone(), result])
+    Ok(vec![result])
 }

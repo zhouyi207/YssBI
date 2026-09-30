@@ -14,7 +14,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.t.one_sample",
         vec![Input::fixed("series")],
         &["null_mean", "alternative"],
-        2,
+        1,
         |inv| {
             let values: Vec<f64> = columns(&group(inv, "series"), inv, 0)?.remove(0);
             execute(
@@ -32,7 +32,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.t.independent",
         vec![Input::fixed("group1"), Input::fixed("group2")],
         &["alternative", "equal_variance"],
-        2,
+        1,
         |inv| {
             let first = columns(&group(inv, "group1"), inv, 0)?.remove(0);
             let second = columns(&group(inv, "group2"), inv, 0)?.remove(0);
@@ -52,7 +52,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.t.paired",
         vec![Input::fixed("before"), Input::fixed("after")],
         &["alternative"],
-        2,
+        1,
         |inv| {
             let before = columns(&group(inv, "before"), inv, 0)?.remove(0);
             let after = columns(&group(inv, "after"), inv, 0)?.remove(0);
@@ -71,7 +71,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.t.summary_input",
         vec![Input::fixed("series")],
         &["design", "null_value", "alternative", "equal_variance"],
-        2,
+        1,
         |inv| {
             let values: Vec<f64> = columns(&group(inv, "series"), inv, 0)?.remove(0);
             let design = match text(inv, "design")? {
@@ -121,7 +121,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.z.mean",
         vec![Input::fixed("series")],
         &["null_mean", "population_sd", "alternative"],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "series"), inv, 0)?.remove(0);
             execute(
@@ -140,7 +140,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.z.proportion",
         vec![Input::fixed("series")],
         &["null_probability", "alternative"],
-        2,
+        1,
         |inv| {
             let (successes, trials) = binary_counts(inv, "series")?;
             execute(
@@ -159,7 +159,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.binomial",
         vec![Input::fixed("series")],
         &["null_probability", "alternative"],
-        2,
+        1,
         |inv| {
             let (successes, trials) = binary_counts(inv, "series")?;
             execute(
@@ -178,7 +178,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.proportion.two",
         vec![Input::fixed("group1"), Input::fixed("group2")],
         &["null_difference", "alternative"],
-        2,
+        1,
         |inv| {
             let (first_successes, first_trials) = binary_counts(inv, "group1")?;
             let (second_successes, second_trials) = binary_counts(inv, "group2")?;
@@ -200,7 +200,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.chisquare.crosstab",
         vec![Input::fixed("row"), Input::fixed("column")],
         &[],
-        2,
+        1,
         |inv| {
             ensure_aligned(inv, &["row", "column"])?;
             execute_categorical(
@@ -217,7 +217,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.chisquare.general",
         vec![Input::fixed("counts")],
         &["rows", "columns"],
-        2,
+        1,
         |inv| {
             let observed = columns(&group(inv, "counts"), inv, 0)?.remove(0);
             execute_categorical(
@@ -235,7 +235,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.chisquare.goodness_of_fit",
         vec![Input::fixed("observed"), Input::fixed("expected")],
         &[],
-        2,
+        1,
         |inv| {
             let observed = columns(&group(inv, "observed"), inv, 0)?.remove(0);
             let expected = columns(&group(inv, "expected"), inv, 0)?.remove(0);
@@ -250,7 +250,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.fisher_exact",
         vec![Input::fixed("row"), Input::fixed("column")],
         &[],
-        2,
+        1,
         |inv| {
             ensure_aligned(inv, &["row", "column"])?;
             execute_categorical(
@@ -267,7 +267,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.mcnemar",
         vec![Input::fixed("before"), Input::fixed("after")],
         &[],
-        2,
+        1,
         |inv| {
             execute_categorical(
                 CategoricalHypothesisTest::McNemar {
@@ -287,7 +287,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             Input::fixed("strata"),
         ],
         &[],
-        2,
+        1,
         |inv| {
             ensure_aligned(inv, &["exposed", "outcome", "strata"])?;
             execute_categorical(
@@ -305,7 +305,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.proportion.multiple",
         vec![Input::fixed("successes_and_trials")],
         &[],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "successes_and_trials"), inv, 0)?.remove(0);
             execute_categorical(
@@ -321,7 +321,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.poisson",
         vec![Input::fixed("series")],
         &["null_rate", "alternative"],
-        2,
+        1,
         |inv| {
             execute(
                 ClassicalHypothesisTest::PoissonRate {
@@ -338,7 +338,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.equivalence",
         vec![Input::fixed("series")],
         &["lower_bound", "upper_bound"],
-        2,
+        1,
         |inv| {
             execute(
                 ClassicalHypothesisTest::Equivalence {
@@ -355,7 +355,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.wilcoxon.one_sample",
         vec![Input::fixed("series")],
         &["null_median", "alternative"],
-        2,
+        1,
         |inv| {
             execute_rank(
                 RankHypothesisTest::WilcoxonOneSample {
@@ -372,7 +372,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.wilcoxon.paired",
         vec![Input::fixed("before"), Input::fixed("after")],
         &["alternative"],
-        2,
+        1,
         |inv| {
             let values = columns(&[group(inv, "before")[0], group(inv, "after")[0]], inv, 0)?;
             execute_rank(
@@ -390,7 +390,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.mann_whitney",
         vec![Input::fixed("group1"), Input::fixed("group2")],
         &["alternative"],
-        2,
+        1,
         |inv| {
             let values = columns(&[group(inv, "group1")[0], group(inv, "group2")[0]], inv, 0)?;
             execute_rank(
@@ -408,7 +408,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.kruskal_wallis",
         vec![Input::repeated("groups", 2..=16)],
         &[],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "groups"), inv, 0)?;
             execute_rank(RankHypothesisTest::KruskalWallis { groups: values }, inv)
@@ -419,7 +419,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.mood_median",
         vec![Input::repeated("groups", 2..=16)],
         &[],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "groups"), inv, 0)?;
             execute_rank(RankHypothesisTest::MoodMedian { groups: values }, inv)
@@ -430,7 +430,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.friedman",
         vec![Input::repeated("conditions", 3..=16)],
         &[],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "conditions"), inv, 0)?;
             execute_rank(RankHypothesisTest::Friedman { conditions: values }, inv)
@@ -441,7 +441,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.cochran_q",
         vec![Input::repeated("conditions", 3..=16)],
         &[],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "conditions"), inv, 0)?;
             execute_rank(RankHypothesisTest::CochranQ { conditions: values }, inv)
@@ -452,7 +452,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.runs",
         vec![Input::fixed("series")],
         &[],
-        2,
+        1,
         |inv| {
             execute_rank(
                 RankHypothesisTest::Runs {
@@ -467,7 +467,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.mann_kendall",
         vec![Input::fixed("series")],
         &["alternative"],
-        2,
+        1,
         |inv| {
             execute_rank(
                 RankHypothesisTest::MannKendall {
@@ -483,7 +483,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.nonparametric.family",
         vec![Input::repeated("groups", 2..=16)],
         &["method"],
-        2,
+        1,
         |inv| {
             let values = columns(&group(inv, "groups"), inv, 0)?;
             match text(inv, "method")? {
@@ -510,7 +510,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.levene",
         vec![Input::repeated("groups", 2..=16)],
         &[],
-        2,
+        1,
         |inv| {
             execute_variance(
                 VarianceHomogeneityTest::Levene {
@@ -525,7 +525,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.brown_forsythe",
         vec![Input::repeated("groups", 2..=16)],
         &[],
-        2,
+        1,
         |inv| {
             execute_variance(
                 VarianceHomogeneityTest::BrownForsythe {
@@ -540,7 +540,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.test.bartlett",
         vec![Input::repeated("groups", 2..=16)],
         &[],
-        2,
+        1,
         |inv| {
             execute_variance(
                 VarianceHomogeneityTest::Bartlett {
@@ -568,7 +568,7 @@ fn execute(
     let report = yss_sci_runtime::hypothesis::sample_mean_test(test)
         .map_err(|_| KernelError::InvalidNumericInput)?;
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 
 fn execute_categorical(
@@ -578,7 +578,7 @@ fn execute_categorical(
     let report = yss_sci_runtime::hypothesis::categorical_test(test)
         .map_err(|_| KernelError::InvalidNumericInput)?;
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 
 fn execute_rank(
@@ -588,7 +588,7 @@ fn execute_rank(
     let report = yss_sci_runtime::hypothesis::rank_test(test)
         .map_err(|_| KernelError::InvalidNumericInput)?;
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 
 fn execute_variance(
@@ -598,7 +598,7 @@ fn execute_variance(
     let report = yss_sci_runtime::hypothesis::variance_test(test)
         .map_err(|_| KernelError::InvalidNumericInput)?;
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 
 fn binary_counts(inv: &KernelInvocation<'_>, key: &str) -> Result<(usize, usize), KernelError> {

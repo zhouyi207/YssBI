@@ -52,7 +52,7 @@ $$
 
 ## 输出与使用说明
 
-`result`、`report` 相同，`test=information_matrix`；内层 `result` 的 `heteroskedasticity`、`skewness`、`kurtosis`、`total` 均含 `chi2`、`df`、`p_value`。
+`result` 为结构化结果，`test=information_matrix`；内层 `result` 的 `heteroskedasticity`、`skewness`、`kurtosis`、`total` 均含 `chi2`、`df`、`p_value`。
 
 WLS 仅将异方差分量改为对 $w_i u_i^2$ 的 White 检验，偏度与峰度仍使用未加权原始残差。样本须满足 White 完整展开的要求；分量用于定位问题，不作多重检验校正。
 

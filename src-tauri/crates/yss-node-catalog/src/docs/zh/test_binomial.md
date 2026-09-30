@@ -19,4 +19,4 @@ $$
 
 ## 输出与判读
 
-`result` 和 `report` 相同。`statistic_name` 为 `successes`，`statistic` 和 `details.successes` 为成功次数；`estimate` 为 $x/n$，`sample_sizes` 为 `[n]`。`standard_error` 为空，自由度为空。`p_value` 小于 $\alpha$ 时拒绝 $H_0$。
+`result` 为结构化结果。`statistic_name` 为 `successes`，`statistic` 和 `details.successes` 为成功次数；`estimate` 为 $x/n$，`sample_sizes` 为 `[n]`。`standard_error` 为空，自由度为空。`p_value` 小于 $\alpha$ 时拒绝 $H_0$。

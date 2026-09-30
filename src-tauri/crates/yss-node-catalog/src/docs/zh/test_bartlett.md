@@ -24,6 +24,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic_name` 为 `chi_squared`，`statistic` 为 $B$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各组样本量。估计值和标准误为空。
+`result` 为结构化结果。`statistic_name` 为 `chi_squared`，`statistic` 为 $B$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各组样本量。估计值和标准误为空。
 
 在正态性条件合理时，$p<\alpha$ 支持方差不齐。对明显非正态的数据，可考虑 Levene 或 Brown–Forsythe 检验。

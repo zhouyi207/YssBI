@@ -310,8 +310,7 @@ pub(crate) fn fixture_with_options(
             }
         })
         .collect::<Vec<_>>();
-    assert_eq!(reports.len(), 3);
-    assert!(Arc::ptr_eq(&reports[0].1.model, &reports[2].1.model));
+    assert_eq!(reports.len(), 2);
     assert!(Arc::ptr_eq(&reports[0].1.model, &reports[1].1.model));
     let fit = reports
         .iter()

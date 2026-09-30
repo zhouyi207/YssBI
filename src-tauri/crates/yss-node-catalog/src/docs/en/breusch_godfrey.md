@@ -24,7 +24,7 @@ $R_{\mathrm{aux}}^2$ uses the uncentered denominator $\sum u_t^2$. Auxiliary sam
 
 ## Outputs and interpretation
 
-`result` and `report` are identical, containing `stat=LM`, `p_value` and `lags=h`. P-values use the chi-square upper tail; $p<\alpha$ rejects joint zero serial correlation through lag $h$.
+`result` contains the structured result, containing `stat=LM`, `p_value` and `lags=h`. P-values use the chi-square upper tail; $p<\alpha$ rejects joint zero serial correlation through lag $h$.
 
 WLS/GLS inputs still use an unweighted auxiliary regression on original residuals and design, without automatic weighting or whitening. Dropping initial rows additionally requires $n-h>k+h$, where $k$ is the design column count. Singular auxiliary designs prevent calculation.
 

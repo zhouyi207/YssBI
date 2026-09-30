@@ -40,7 +40,7 @@ $q$ 为约束数，p 值取 F 分布右尾。多约束仅支持等式，冗余�
 
 ## 输出与判读
 
-`result`、`report` 相同，含 `test_type`、`h0_form`、`h1_form`、`alternative`、`stat`、`df1`、`df2`、`p_value` 和 `r_beta_minus_r`。Wald 的 `stat` 是 **F 统计量**；多约束时 `r_beta_minus_r` 为占位值 0。
+`result` 为结构化结果，含 `test_type`、`h0_form`、`h1_form`、`alternative`、`stat`、`df1`、`df2`、`p_value` 和 `r_beta_minus_r`。Wald 的 `stat` 是 **F 统计量**；多约束时 `r_beta_minus_r` 为占位值 0。
 
 $p<\alpha$ 拒绝对应原假设；联合拒绝只说明至少一个约束不成立。上游稳健或聚类协方差沿用原模型的 $V$ 和 $\nu$，按相应近似解释。
 

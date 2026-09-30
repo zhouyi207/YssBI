@@ -24,6 +24,6 @@ Observations and groups must be independent. The test is sensitive to non-normal
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic_name` is `chi_squared`, `statistic` is $B$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains group sizes. Estimate and standard error are null.
+`result` contains the structured result. `statistic_name` is `chi_squared`, `statistic` is $B$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains group sizes. Estimate and standard error are null.
 
 When normality is plausible, $p<\alpha$ supports unequal variances. Consider Levene or Brown–Forsythe tests for clearly non-normal data.

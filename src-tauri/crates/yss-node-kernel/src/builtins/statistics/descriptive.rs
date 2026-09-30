@@ -9,7 +9,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         "yssbi.statistics.inequality.theil",
         vec![Input::fixed("series"), Input::repeated("weights", 0..=1)],
         &["theil_form"],
-        2,
+        1,
         execute,
     );
 }
@@ -38,6 +38,5 @@ fn execute(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
         ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
         ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
     })?;
-    let result = RuntimeValue::float64(report.theil_t).map_err(|_| KernelError::NonFiniteResult)?;
-    Ok(vec![result, value(report, inv)?])
+    Ok(vec![value(report, inv)?])
 }

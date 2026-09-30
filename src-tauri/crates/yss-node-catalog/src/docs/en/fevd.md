@@ -14,7 +14,7 @@ $\Theta_s$ is the VAR orthogonal impulse-response matrix at horizon $s$, $K$ the
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `fevd[s][i][j]` indexes **accumulation index, response variable, shock variable**, with dimensions `(steps+1) × K × K`.
+`result` contains the structured result. `fevd[s][i][j]` indexes **accumulation index, response variable, shock variable**, with dimensions `(steps+1) × K × K`.
 
 **Array index $s$ corresponds to forecast horizon $h=s+1$**: `fevd[0]` is a one-step decomposition and `fevd[steps]` represents `steps+1` forecast steps. Values are proportions: 0.25 means 25%. Consult IRF for response direction.
 

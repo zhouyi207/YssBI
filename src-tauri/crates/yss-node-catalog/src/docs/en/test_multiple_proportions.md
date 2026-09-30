@@ -20,6 +20,6 @@ $O_{ij}$ represents success/failure contingency counts and $N$ the total trial c
 
 ## Outputs and current limitation
 
-`result` and `report` are identical. `statistic` is Pearson chi-square, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains total trials. `details.overall_proportion` is the overall success proportion; `details.minimum_expected_count` is the constructed table's minimum expected count. Estimate and standard error fields are null.
+`result` contains the structured result. `statistic` is Pearson chi-square, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains total trials. `details.overall_proportion` is the overall success proportion; `details.minimum_expected_count` is the constructed table's minimum expected count. Estimate and standard error fields are null.
 
 Currently, interleaved group success/failure counts are reshaped into two rows without preserving group margins correctly. The output should therefore not yet be used to infer equal group proportions. Instead, arrange one row per group with success and failure columns and use the Pearson chi-square contingency node.

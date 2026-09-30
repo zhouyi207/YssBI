@@ -25,6 +25,6 @@ The node uses a tie-corrected normal approximation with no exact method or conti
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is group 1's $U_1$, `details.u_complement` is $n_1n_2-U_1$, `p_value` uses the selected tail of $Z$, and `sample_sizes` contains both group sizes. Degrees of freedom are empty; estimate and standard error are null.
+`result` contains the structured result. `statistic` is group 1's $U_1$, `details.u_complement` is $n_1n_2-U_1$, `p_value` uses the selected tail of $Z$, and `sample_sizes` contains both group sizes. Degrees of freedom are empty; estimate and standard error are null.
 
 Reject equal distributions when $p<\alpha$. Do not interpret this unconditionally as a difference in means.

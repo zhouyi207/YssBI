@@ -40,7 +40,7 @@ $q$ is the constraint count. P-values use the F upper tail. Joint tests support 
 
 ## Outputs and interpretation
 
-`result` and `report` are identical, containing `test_type`, `h0_form`, `h1_form`, `alternative`, `stat`, `df1`, `df2`, `p_value` and `r_beta_minus_r`. Wald `stat` is an **F statistic**. For joint constraints, `r_beta_minus_r` is a zero placeholder.
+`result` contains the structured result, containing `test_type`, `h0_form`, `h1_form`, `alternative`, `stat`, `df1`, `df2`, `p_value` and `r_beta_minus_r`. Wald `stat` is an **F statistic**. For joint constraints, `r_beta_minus_r` is a zero placeholder.
 
 Reject the corresponding null when $p<\alpha$. Joint rejection means at least one restriction fails. Robust or clustered upstream fits retain their $V$ and $\nu$ and require the corresponding approximate interpretation.
 

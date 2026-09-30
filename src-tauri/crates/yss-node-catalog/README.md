@@ -71,10 +71,12 @@ KDE 已接入数值执行，`result` 输出为包含 256 个密度点的 `statis
 
 现有 IV 和 DID 节点归入“计量与因果分析”，Panel 模型归入“面板模型”；ADF、VAR、VEC 与协整检验归入“时间序列”。现有 Predict 节点归入“预测与估计后分析”；Summary 跟随方法所在主分类，不因包含诊断指标就归入“模型诊断与比较”。尚无节点的分类保留注册，展示与筛选由通用目录树处理。
 
-所有统计 Summary 的唯一输入为对应方法的已拟合 `model`，输出 `result` 和 `report`，不接收原始数据或估计参数。
+所有统计 Summary 的唯一输入为对应方法的已拟合 `model`，只输出结构化 `result`，不接收原始数据或估计参数。统计检验、诊断和描述结果同样不另设 `report` 端口；Inspect 在同一结果上切换数值与 JSON 报告。Fit 的模型、拟合值与残差等独立数据输出保留各自契约。
+
+独立的 Panel DID (TWFE) 使用 `statistics.result.panel_did` 类型的唯一 `result`，其 `model` 与 `summary` 字段分别保留拟合模型和汇总。
 Linear Summary 在 Parameters 的 Configure 分组声明内容开关及条件可见的检验参数，默认选模型概览、系数表、方程和 ANOVA。IV、Panel、VAR、VEC Summary 同样按所选内容组装报告；IV/VAR/VEC 的可选诊断默认关闭，仅在勾选后计算。Panel 默认包含模型、系数、效应及估计器统计，VEC 默认包含协整统计。内容选择是图参数，参与语义失效、历史与保存。Logit/Probit/Prais Summary 投影拟合统计，不在模型中重复保存完整报告。
 原始输入与估计配置属于 Fit；IV 2SLS、IV LIML、Panel、VAR 均有对应 Fit 定义，Panel DID 的 TWFE 节点也属于 Fit。
-ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验，输出 `statistics.result.adf` 类型的 `result` 和 `report`。
+ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验，唯一输出为 `statistics.result.adf` 类型的结构化 `result`。
 `adf.summary` 已删除，不提供旧节点或旧端口的兼容转换。上述方法及 Logit/Probit/Prais、VEC 的模型节点均已注册执行内核。Logit/Probit 的截距、迭代次数和容差，Prais 的 Prais–Winsten/Cochrane–Orcutt 变换，以及 IV 的非稳健/HC0–HC3 和 small 参数均进入实际计算。IV 支持多个内生变量与排除工具变量，外生自变量可为空；Summary 可选择第一阶段与过度识别检验，2SLS 还可选择内生性检验。OLS/WLS 的 Cluster 标准误使用可选 `clusters` 输入，只有选择 Cluster 时才允许且必须连接。
 
 Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 entity/time/two_way 维度。FD 仅支持 entity，Between 不支持 two_way；MLE/Between 仅支持 nonrobust，LSDV 必须有截距。不适用组合明确拒绝。Panel、VAR、VEC 输出模型；TWFE DID 输出模型和报告。它们不声明尚无正确数列投影的 fitted/residuals 端口。VAR 使用截距和连续滞后；IRF/FEVD 独立节点的 steps 默认 8，可选 1–1000。VAR/VEC Summary 的残差诊断启用后使用 serial_lags，默认 2，可选 1–40。VEC/协整秩支持 none/constant/trend。TWFE DID 的 treatment 是已构造的 Treat×Post，伪处理组随机化另用独立节点输入 treat/post、置换次数和种子；没有事件研究参数。
@@ -84,7 +86,7 @@ Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 ent
 方法清单中的统计入口由 `src/statistics/inventory/entries.rs` 维护，运行时不读取规划 CSV。频数与描述已归入数据处理，分类汇总由 GroupBy 承接，独立基线分析入口已移除；FEVD 的两条来源共享一个入口。
 这些来源记录继续保留方法身份；已经实现的诊断及后估计由 `statistics/analyses.rs`、描述统计由 `statistics/descriptive.rs` 完善原 ID 的端口、参数和内核绑定，不重复生成骨架。其余入口保留名称、搜索别名、分类、用途、来源编号和范围说明，尚无内核，仍在目录中显示为不可用且不进入 AI 可执行节点搜索。
 
-泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。`result` 为 Numeric 标量，`report` 为包含指数、形式和输入观测数的结构化报告。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
+泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
 工作流模板、模型预设、结果指标、统计专用绘图和原理说明也按本轮要求登记入口；该登记不表示模板执行、参数预设或绘图能力已经实现。普通数据处理、缺失数据处理、通用绘图和 AI 模块未纳入本轮统计入口。
 实现某项方法时直接完善其既有定义及内核绑定；只有存在可复用模型时才提供 Fit/Summary 分工，不从入口名称推断或批量生成端口契约。
 

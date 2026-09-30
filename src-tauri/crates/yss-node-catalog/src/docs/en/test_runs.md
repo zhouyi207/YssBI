@@ -23,6 +23,6 @@ Variance must be positive. The node uses a two-sided normal approximation withou
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic_name` is `runs_z` and `statistic` is $Z$, not the raw run count. `p_value` is two-sided and `sample_sizes` is `[n]`. Degrees of freedom are empty; estimate and standard error are null.
+`result` contains the structured result. `statistic_name` is `runs_z` and `statistic` is $Z$, not the raw run count. `p_value` is two-sided and `sample_sizes` is `[n]`. Degrees of freedom are empty; estimate and standard error are null.
 
 $p<\alpha$ indicates nonrandom ordering. A nonsignificant result does not prove independence.

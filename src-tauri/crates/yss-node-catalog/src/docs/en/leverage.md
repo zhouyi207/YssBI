@@ -13,7 +13,7 @@ $X$ is the original design, $x_i'$ its row $i$, and $W$ the diagonal matrix of o
 
 ## Outputs and usage
 
-`result` and `report` are identical: `test=leverage` with an inner `result` array of $h_i$ in fitted-row order. No p-value or automatic observation removal is provided.
+`result` contains the structured result: `test=leverage` with an inner `result` array of $h_i$ in fitted-row order. No p-value or automatic observation removal is provided.
 
 For full rank, leverage sums to the column count $k$ and averages $k/n$. Examine residuals alongside high leverage. Preserve the model's actual sample order when matching to the original table. Singular designs prevent calculation.
 

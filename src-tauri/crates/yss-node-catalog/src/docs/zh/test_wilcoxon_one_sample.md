@@ -23,6 +23,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic_name` 为 `signed_rank`，`statistic` 存放标准化的 $Z$；原始 $W^+$ 在 `details.positive_rank_sum`。`details.exact_p_value_used` 为 `1` 时使用精确法，为 `0` 时使用正态近似。`sample_sizes` 为去除零差值后的 `[n]`，自由度为空，估计值和标准误为空。
+`result` 为结构化结果。`statistic_name` 为 `signed_rank`，`statistic` 存放标准化的 $Z$；原始 $W^+$ 在 `details.positive_rank_sum`。`details.exact_p_value_used` 为 `1` 时使用精确法，为 `0` 时使用正态近似。`sample_sizes` 为去除零差值后的 `[n]`，自由度为空，估计值和标准误为空。
 
 `p_value` 小于 $\alpha$ 时拒绝指定对称中心；大量零差值会降低实际使用的样本量。

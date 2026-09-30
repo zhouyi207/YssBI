@@ -41,4 +41,4 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 返回同一报告。`method` 标明实际设计，`statistic` 为 t，`estimate` 为 $\hat\theta-\theta_0$，`standard_error` 为 $SE$，`degrees_of_freedom` 为 `[ν]`。`sample_sizes` 是一组或两组的样本量。按 `p_value` 判读，$p<\alpha$ 时拒绝 $H_0$。
+`result` 为结构化结果。`method` 标明实际设计，`statistic` 为 t，`estimate` 为 $\hat\theta-\theta_0$，`standard_error` 为 $SE$，`degrees_of_freedom` 为 `[ν]`。`sample_sizes` 是一组或两组的样本量。按 `p_value` 判读，$p<\alpha$ 时拒绝 $H_0$。

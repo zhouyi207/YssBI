@@ -20,6 +20,6 @@ $$
 
 ## 输出与判读
 
-`result` 与 `report` 相同。`statistic` 为 $Q$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各条件的对象数。估计值和标准误为空。
+`result` 为结构化结果。`statistic` 为 $Q$，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为各条件的对象数。估计值和标准误为空。
 
 $p<\alpha$ 时拒绝所有条件成功概率相等；不自动确定具体有差异的条件对。

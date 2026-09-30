@@ -23,6 +23,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic_name` 为 `runs_z`，`statistic` 是 $Z$ 而不是原始游程数，`p_value` 为双侧 p 值，`sample_sizes` 为 `[n]`。自由度为空，估计值和标准误为空。
+`result` 为结构化结果。`statistic_name` 为 `runs_z`，`statistic` 是 $Z$ 而不是原始游程数，`p_value` 为双侧 p 值，`sample_sizes` 为 `[n]`。自由度为空，估计值和标准误为空。
 
 $p<\alpha$ 表示顺序偏离随机排列；不显著并不能证明序列独立。

@@ -102,6 +102,14 @@ mod tests {
             id.as_str().starts_with("yssbi.statistics.") && id.as_str().ends_with(".summary")
         }) {
             let summary = system.registry.protocol(id).unwrap();
+            let outputs: Vec<_> = summary
+                .interface
+                .ports
+                .iter()
+                .filter(|port| port.direction == PortDirection::Output)
+                .collect();
+            assert_eq!(outputs.len(), 1, "{id}");
+            assert_eq!(outputs[0].key.as_str(), "result", "{id}");
             let inputs: Vec<_> = summary
                 .interface
                 .ports
@@ -154,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn adf_test_consumes_series_and_emits_result_and_report() {
+    fn adf_test_consumes_series_and_emits_structured_result() {
         use yss_node_protocol::{PortDirection, TypeExpr};
         let system = build_builtin_node_system().unwrap();
         let adf = system
@@ -171,17 +179,12 @@ mod tests {
             ports,
             [
                 ("series", PortDirection::Input),
-                ("result", PortDirection::Output),
-                ("report", PortDirection::Output)
+                ("result", PortDirection::Output)
             ]
         );
         assert_eq!(
             adf.interface.ports[1].value_type,
             TypeExpr::Concrete("statistics.result.adf".parse().unwrap())
-        );
-        assert_eq!(
-            adf.interface.ports[2].value_type,
-            TypeExpr::Concrete("statistics.report".parse().unwrap())
         );
         assert!(
             system
@@ -189,6 +192,32 @@ mod tests {
                 .protocol(&NodeTypeId::new("yssbi.statistics.adf.summary").unwrap())
                 .is_none()
         );
+    }
+
+    #[test]
+    fn standalone_statistics_preserve_one_structured_result_port() {
+        use yss_node_protocol::{PortDirection, TypeExpr};
+        let system = build_builtin_node_system().unwrap();
+        for name in [
+            "yssbi.statistics.panel.did.twfe",
+            "yssbi.statistics.inequality.theil",
+        ] {
+            let node = system
+                .registry
+                .protocol(&NodeTypeId::new(name).unwrap())
+                .unwrap();
+            let outputs: Vec<_> = node
+                .interface
+                .ports
+                .iter()
+                .filter(|port| port.direction == PortDirection::Output)
+                .collect();
+            assert_eq!(outputs.len(), 1, "{name}");
+            assert_eq!(outputs[0].key.as_str(), "result", "{name}");
+            assert!(
+                matches!(&outputs[0].value_type, TypeExpr::Concrete(id) if id.as_str().starts_with("statistics."))
+            );
+        }
     }
 
     #[test]

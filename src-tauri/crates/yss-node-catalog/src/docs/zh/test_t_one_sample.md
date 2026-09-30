@@ -18,6 +18,6 @@ $n$ 为样本量，$\bar x$ 为均值，$s$ 为样本标准差。观测应独立
 
 ## 输出与判读
 
-`result` 和 `report` 返回同一报告。`statistic` 为 t 值，`degrees_of_freedom` 为 `[n−1]`，`p_value` 对应所选备择。`estimate` 是 $\bar x-\mu_0$，`standard_error` 是 $s/\sqrt n$，`sample_sizes` 为 `[n]`。
+`result` 为结构化结果。`statistic` 为 t 值，`degrees_of_freedom` 为 `[n−1]`，`p_value` 对应所选备择。`estimate` 是 $\bar x-\mu_0$，`standard_error` 是 $s/\sqrt n$，`sample_sizes` 为 `[n]`。
 
 $p<\alpha$ 时拒绝给定均值假设；否则表示证据不足以拒绝。

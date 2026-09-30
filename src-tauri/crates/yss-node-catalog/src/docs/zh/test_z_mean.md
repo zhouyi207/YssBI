@@ -18,4 +18,4 @@ $n$ 是观测数，$\sigma$ 是 `population_sd`。观测应独立；正态总体
 
 ## 输出与判读
 
-`result` 和 `report` 相同。`statistic` 为 z，`estimate` 为 $\bar x-\mu_0$，`standard_error` 为 $\sigma/\sqrt n$，`sample_sizes` 为 `[n]`，`degrees_of_freedom` 为空。`p_value` 按所选方向计算，$p<\alpha$ 时拒绝 $H_0$。
+`result` 为结构化结果。`statistic` 为 z，`estimate` 为 $\bar x-\mu_0$，`standard_error` 为 $\sigma/\sqrt n$，`sample_sizes` 为 `[n]`，`degrees_of_freedom` 为空。`p_value` 按所选方向计算，$p<\alpha$ 时拒绝 $H_0$。

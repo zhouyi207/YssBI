@@ -28,4 +28,4 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 返回相同报告：`statistic` 为 t，`estimate` 为第一组均值减第二组均值，`standard_error` 为所用标准误，`degrees_of_freedom` 为 `[ν]`，`sample_sizes` 为 `[n1, n2]`。按 `p_value` 与所选备择判断均值差异；$p<\alpha$ 时拒绝 $H_0$。
+`result` 为结构化结果：`statistic` 为 t，`estimate` 为第一组均值减第二组均值，`standard_error` 为所用标准误，`degrees_of_freedom` 为 `[ν]`，`sample_sizes` 为 `[n1, n2]`。按 `p_value` 与所选备择判断均值差异；$p<\alpha$ 时拒绝 $H_0$。

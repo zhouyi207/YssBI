@@ -519,19 +519,8 @@ fn plot_kind(kind: PlotDataKind) -> &'static str {
 
 fn report_kind(kind: StatisticalReportKind) -> &'static str {
     match kind {
+        StatisticalReportKind::Structured => "structured",
         StatisticalReportKind::LinearRegressionSummary => "linear_regression_summary",
-        StatisticalReportKind::BinarySummary => "binary_summary",
-        StatisticalReportKind::Iv2slsSummary => "iv_2sls_summary",
-        StatisticalReportKind::IvLimlSummary => "iv_liml_summary",
-        StatisticalReportKind::PraisSummary => "prais_summary",
-        StatisticalReportKind::VarSummary => "var_summary",
-        StatisticalReportKind::VarSoc => "var_soc",
-        StatisticalReportKind::PanelSummary => "panel_summary",
-        StatisticalReportKind::PanelDid => "panel_did",
-        StatisticalReportKind::DfAdfSummary => "df_adf_summary",
-        StatisticalReportKind::DfAdfSummaryList => "df_adf_summary_list",
-        StatisticalReportKind::VecSummary => "vec_summary",
-        StatisticalReportKind::VecRankSummary => "vec_rank_summary",
     }
 }
 

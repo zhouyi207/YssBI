@@ -41,4 +41,4 @@ Standard error must be positive. Independence, pairing, and small-sample normali
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report. `method` identifies the design, `statistic` is t, `estimate` is $\hat\theta-\theta_0$, `standard_error` is $SE$, and `degrees_of_freedom` is `[ν]`. `sample_sizes` contains one or two sample sizes. Reject $H_0$ when `p_value` is below $\alpha$.
+`result` contains the structured result. `method` identifies the design, `statistic` is t, `estimate` is $\hat\theta-\theta_0$, `standard_error` is $SE$, and `degrees_of_freedom` is `[ν]`. `sample_sizes` contains one or two sample sizes. Reject $H_0$ when `p_value` is below $\alpha$.

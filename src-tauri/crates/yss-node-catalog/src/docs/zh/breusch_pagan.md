@@ -39,7 +39,7 @@ WLS 保留原权重 $w_i$：BP 对 $u_i^2/(\sum_iw_i u_i^2/n)-1$ 作加权辅助
 
 ## 输出与判读
 
-`result`、`report` 相同，`test=breusch_pagan`，内层 `result` 含 `lm_stat`、`df`、`p_value`。每次仅运行所选变体，p 值取对应卡方右尾；$p<\alpha$ 拒绝同方差。
+`result` 为结构化结果，`test=breusch_pagan`，内层 `result` 含 `lm_stat`、`df`、`p_value`。每次仅运行所选变体，p 值取对应卡方右尾；$p<\alpha$ 拒绝同方差。
 
 默认至少 4 个观测，RHS 要求样本数至少为设计列数加 2。残差方差为零或辅助设计奇异时无法计算。
 

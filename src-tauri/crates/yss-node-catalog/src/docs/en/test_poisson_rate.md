@@ -21,6 +21,6 @@ The two-sided p-value sums Poisson probability masses no greater than the observ
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report. `estimate` is $S/n$, `standard_error` is $\sqrt{S/n}/\sqrt n$, and `sample_sizes` is `[n]`. `details.event_count` and `details.expected_event_count` are $S$ and $m$.
+`result` contains the structured result. `estimate` is $S/n$, `standard_error` is $\sqrt{S/n}/\sqrt n$, and `sample_sizes` is `[n]`. `details.event_count` and `details.expected_event_count` are $S$ and $m$.
 
 `statistic_name` is `count_score`, with value $(S-m)/\max(\sqrt m,1)$. `p_value` comes from Poisson probabilities, not a normal approximation to this score. Degrees of freedom are empty. Reject the specified rate when $p<\alpha$.

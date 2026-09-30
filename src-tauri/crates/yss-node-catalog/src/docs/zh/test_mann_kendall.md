@@ -25,6 +25,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic_name` 为 `S_corrected_z`，`statistic` 为 $Z$，`details.s_statistic` 为 $S$；`details.kendall_tau` 为 $S/\binom n2$，不是并列修正的 tau-b。`p_value` 使用所选方向，`sample_sizes` 为 `[n]`；自由度为空，估计值和标准误为空。
+`result` 为结构化结果。`statistic_name` 为 `S_corrected_z`，`statistic` 为 $Z$，`details.s_statistic` 为 $S$；`details.kendall_tau` 为 $S/\binom n2$，不是并列修正的 tau-b。`p_value` 使用所选方向，`sample_sizes` 为 `[n]`；自由度为空，估计值和标准误为空。
 
 在参考条件成立时，$p<\alpha$ 支持单调趋势；节点不估计变化斜率。

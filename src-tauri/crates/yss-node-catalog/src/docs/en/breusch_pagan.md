@@ -39,7 +39,7 @@ WLS retains original weights $w_i$. BP uses a weighted auxiliary regression of $
 
 ## Outputs and interpretation
 
-`result` and `report` are identical: `test=breusch_pagan` with inner `result` fields `lm_stat`, `df` and `p_value`. Only the selected variant runs. P-values use the corresponding chi-square upper tail; $p<\alpha$ rejects homoskedasticity.
+`result` contains the structured result: `test=breusch_pagan` with inner `result` fields `lm_stat`, `df` and `p_value`. Only the selected variant runs. P-values use the corresponding chi-square upper tail; $p<\alpha$ rejects homoskedasticity.
 
 Default mode requires four observations; RHS mode requires at least the design column count plus two. Zero residual variance or singular auxiliary designs prevent calculation.
 

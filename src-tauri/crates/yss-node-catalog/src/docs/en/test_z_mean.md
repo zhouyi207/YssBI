@@ -18,4 +18,4 @@ Here $n$ is sample size and $\sigma$ is `population_sd`. Observations must be in
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is z, `estimate` is $\bar x-\mu_0$, `standard_error` is $\sigma/\sqrt n$, `sample_sizes` is `[n]`, and `degrees_of_freedom` is empty. `p_value` uses the selected direction; reject $H_0$ when $p<\alpha$.
+`result` contains the structured result. `statistic` is z, `estimate` is $\bar x-\mu_0$, `standard_error` is $\sigma/\sqrt n$, `sample_sizes` is `[n]`, and `degrees_of_freedom` is empty. `p_value` uses the selected direction; reject $H_0$ when $p<\alpha$.

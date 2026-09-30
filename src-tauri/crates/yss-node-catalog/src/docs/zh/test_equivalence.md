@@ -25,6 +25,6 @@ $n,\bar x,s$ 分别为样本量、均值和样本标准差。观测应独立，�
 
 ## 输出与判读
 
-`result` 与 `report` 相同。`statistic` 为 $t_L$，`details.t_upper_bound` 为 $t_U$；`details.p_lower_bound`、`details.p_upper_bound` 保存两个单侧 p 值。`p_value` 是二者最大值，`estimate` 是均值，`standard_error` 是 $SE$，自由度为 `[n−1]`，样本量为 `[n]`。
+`result` 为结构化结果。`statistic` 为 $t_L$，`details.t_upper_bound` 为 $t_U$；`details.p_lower_bound`、`details.p_upper_bound` 保存两个单侧 p 值。`p_value` 是二者最大值，`estimate` 是均值，`standard_error` 是 $SE$，自由度为 `[n−1]`，样本量为 `[n]`。
 
 只有两个单侧检验都在 $\alpha$ 水平拒绝时才支持等价。普通差异检验不显著不能代替等价结论。

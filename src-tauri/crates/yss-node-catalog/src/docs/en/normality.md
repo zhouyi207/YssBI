@@ -27,7 +27,7 @@ $Z_S$ and $Z_K$ are the sample-size-adjusted standardized skewness and kurtosis 
 
 ## Outputs and interpretation
 
-`result` and `report` return identical results:
+`result` return identical results:
 
 | Field                                      | Meaning                            |
 | ------------------------------------------ | ---------------------------------- |

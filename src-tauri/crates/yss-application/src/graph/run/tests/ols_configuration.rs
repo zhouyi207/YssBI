@@ -273,7 +273,7 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
     }
     let local = execute(&document);
     let model_key = port(fit, "model").to_string();
-    let report_key = port(summary, "report").to_string();
+    let report_key = port(summary, "result").to_string();
     let RuntimeValue::LinearRegression(model) = &local[&model_key] else {
         panic!("model must be a native linear regression result");
     };

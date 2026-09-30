@@ -23,6 +23,6 @@ Ties receive average ranks and $C$ must be positive. A location interpretation r
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is corrected $H$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains group sizes. Estimate and standard error are null.
+`result` contains the structured result. `statistic` is corrected $H$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains group sizes. Estimate and standard error are null.
 
 $p<\alpha$ indicates that at least one group differs. The node does not identify the differing pairs or run post-hoc multiple comparisons.

@@ -23,7 +23,7 @@ $\hat\rho_k$ is sample autocorrelation at lag $k$ and $\phi_{k,j}$ the recursion
 
 ## Outputs and interpretation
 
-`result` and `report` are identical, containing `function=pacf`, `observations=n` and `values`. The array starts at **lag one**: `values[0]` is lag-one PACF. Its usual length is $h$; a constant series returns an empty array.
+`result` contains the structured result, containing `function=pacf`, `observations=n` and `values`. The array starts at **lag one**: `values[0]` is lag-one PACF. Its usual length is $h$; a constant series returns an empty array.
 
 Lags use row positions without automatic sorting or gap filling. Values help explore time-series structure but include no confidence bands or p-values. Uncomputable recursion fails.
 

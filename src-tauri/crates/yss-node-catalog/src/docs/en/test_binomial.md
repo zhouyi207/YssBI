@@ -19,4 +19,4 @@ The two-sided p-value sums outcomes whose probabilities do not exceed that of th
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic_name` is `successes`; `statistic` and `details.successes` are the success count. `estimate` is $x/n$, and `sample_sizes` is `[n]`. `standard_error` is null and degrees of freedom are empty. Reject $H_0$ when `p_value` is below $\alpha$.
+`result` contains the structured result. `statistic_name` is `successes`; `statistic` and `details.successes` are the success count. `estimate` is $x/n$, and `sample_sizes` is `[n]`. `standard_error` is null and degrees of freedom are empty. Reject $H_0$ when `p_value` is below $\alpha$.

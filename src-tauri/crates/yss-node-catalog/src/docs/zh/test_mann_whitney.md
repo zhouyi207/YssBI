@@ -25,6 +25,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic` 为第一组 $U_1$，`details.u_complement` 为 $n_1n_2-U_1$，`p_value` 由 $Z$ 的所选尾部计算，`sample_sizes` 给出两组样本量。自由度为空，估计值和标准误为空。
+`result` 为结构化结果。`statistic` 为第一组 $U_1$，`details.u_complement` 为 $n_1n_2-U_1$，`p_value` 由 $Z$ 的所选尾部计算，`sample_sizes` 给出两组样本量。自由度为空，估计值和标准误为空。
 
 $p<\alpha$ 时拒绝分布相同；不能不加条件地解释为均值差异。

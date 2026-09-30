@@ -24,6 +24,6 @@ $$
 
 ## 输出与判读
 
-`result` 与 `report` 相同，`statistic` 为 CMH 卡方统计量，`degrees_of_freedom` 为 `[1]`，`p_value` 为右尾概率，`sample_sizes` 为总观测数。`estimate`、`standard_error` 为空，不输出共同优势比估计。
+`result` 为结构化结果，`statistic` 为 CMH 卡方统计量，`degrees_of_freedom` 为 `[1]`，`p_value` 为右尾概率，`sample_sizes` 为总观测数。`estimate`、`standard_error` 为空，不输出共同优势比估计。
 
 $p<\alpha$ 支持控制分层后的关联；它不自动排除其他混杂因素。

@@ -24,6 +24,6 @@ No continuity correction is used. Single-subject strata provide no information; 
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is CMH chi-square, `degrees_of_freedom` is `[1]`, `p_value` is the upper tail, and `sample_sizes` contains total observations. `estimate` and `standard_error` are null; no common odds-ratio estimate is returned.
+`result` contains the structured result. `statistic` is CMH chi-square, `degrees_of_freedom` is `[1]`, `p_value` is the upper tail, and `sample_sizes` contains total observations. `estimate` and `standard_error` are null; no common odds-ratio estimate is returned.
 
 $p<\alpha$ supports association after stratification; it does not automatically rule out other confounders.

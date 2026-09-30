@@ -406,7 +406,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             _ => unreachable!(),
         };
         ports.push(data_output("result", "Result", report_type()?)?);
-        ports.push(data_output("report", "Report", report_type()?)?);
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id, NodeTypeId::new)?,
@@ -433,7 +432,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             (
                 "en-US",
                 en,
-                "Test a statistical hypothesis using observations or summary data. Outputs the result and report; see the help for required inputs and assumptions.",
+                "Test a statistical hypothesis using observations or summary data. Outputs a structured result; see the help for required inputs and assumptions.",
             ),
             (
                 "zh-CN",

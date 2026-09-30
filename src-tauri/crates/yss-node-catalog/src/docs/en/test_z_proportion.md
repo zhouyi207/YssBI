@@ -18,4 +18,4 @@ Trials must be independent with a common success probability. Normal approximati
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report. `statistic` is z, `estimate` is $\hat p-p_0$, `standard_error` uses the null probability, `sample_sizes` is `[n]`, and degrees of freedom are empty. Reject the specified success probability when `p_value` is below $\alpha$.
+`result` contains the structured result. `statistic` is z, `estimate` is $\hat p-p_0$, `standard_error` uses the null probability, `sample_sizes` is `[n]`, and degrees of freedom are empty. Reject the specified success probability when `p_value` is below $\alpha$.

@@ -12,7 +12,7 @@ enum Method {
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     use Method::*;
     for (id, method, params, outputs) in [
-        ("adf.test", Adf, &["lags", "regression"][..], 2),
+        ("adf.test", Adf, &["lags", "regression"][..], 1),
         ("var.fit", Var, &["lags"][..], 1),
         ("var.lag_order", LagOrder, &["max_lags"][..], 1),
         ("vec.fit", Vec, &["rank", "lags", "trend"][..], 1),
@@ -43,7 +43,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "stability",
             "serial_lags",
         ],
-        2,
+        1,
         var_summary,
     );
     install(
@@ -58,7 +58,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "stability",
             "serial_lags",
         ],
-        2,
+        1,
         vec_summary,
     );
 }
@@ -95,11 +95,7 @@ fn run(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, 
     }
     .map_err(sci)?;
     let result = value(result, inv)?;
-    Ok(if matches!(method, Method::Adf) {
-        vec![result.clone(), result]
-    } else {
-        vec![result]
-    })
+    Ok(vec![result])
 }
 
 fn var_summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -125,7 +121,7 @@ fn var_summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
         yss_sci_runtime::time_series::var_summary(&fit, options).map_err(sci)?,
         inv,
     )?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 fn vec_summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let fit: yss_sci_contract::time_series::vec::VecFit = decode_model(inv)?;
@@ -150,7 +146,7 @@ fn vec_summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
         yss_sci_runtime::time_series::vec_summary(&fit, options).map_err(sci)?,
         inv,
     )?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 fn serial_lags(inv: &KernelInvocation<'_>) -> Result<usize, KernelError> {
     let lags = integer(inv, "serial_lags")?;

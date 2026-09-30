@@ -130,8 +130,8 @@ pub(super) fn implemented(id: &str) -> bool {
 fn help(id: &str) -> (&'static str, &'static str) {
     match id.rsplit('.').next().unwrap_or_default() {
         "breusch_pagan" => (
-            "Connect an OLS or WLS model. By default, tests residual variance against fitted values. rhs uses explanatory variables; koenker selects the studentized variant. Reuses the fitted sample and original WLS weights. Outputs the computed statistic, degrees of freedom and p-value as result/report; failed diagnostics are errors.",
-            "连接 OLS 或 WLS 模型，默认以拟合值检验残差异方差。rhs 改用解释变量，koenker 选择学生化变体。复用拟合样本和原 WLS 权重，result/report 输出统计量、自由度和 p 值；无法计算时明确报错。",
+            "Connect an OLS or WLS model. By default, tests residual variance against fitted values. rhs uses explanatory variables; koenker selects the studentized variant. Reuses the fitted sample and original WLS weights. Outputs the computed statistic, degrees of freedom and p-value as result; failed diagnostics are errors.",
+            "连接 OLS 或 WLS 模型，默认以拟合值检验残差异方差。rhs 改用解释变量，koenker 选择学生化变体。复用拟合样本和原 WLS 权重，result 输出统计量、自由度和 p 值；无法计算时明确报错。",
         ),
         "reset" => (
             "Connect an OLS or WLS model. RESET augments the regression with powers of fitted values, or explanatory variables when rhs is enabled. Reuses fitted observations and WLS weights. Outputs the F statistic, degrees of freedom and p-value. Rank-deficient expansions or insufficient observations fail explicitly.",
@@ -174,8 +174,8 @@ fn help(id: &str) -> (&'static str, &'static str) {
             "连接 nonrobust IV 2SLS 模型，复用其观测、设计列及 IV 系数计算 Hausman 内生性检验。本节点不是面板 FE/RE 比较；不可计算的检验会报错。",
         ),
         _ => (
-            "Connect an OLS or WLS model for the White heteroskedasticity test or Cameron–Trivedi information-matrix decomposition. Uses fitted observations, original design columns and WLS weights. Outputs actual test statistics, degrees of freedom and p-values as result/report. GLS and unavailable diagnostics fail explicitly.",
-            "连接 OLS 或 WLS 模型，进行 White 异方差检验或 Cameron–Trivedi 信息矩阵分解。复用拟合观测、原设计列和 WLS 权重，result/report 输出统计量、自由度和 p 值。GLS 及不可计算的诊断明确报错。",
+            "Connect an OLS or WLS model for the White heteroskedasticity test or Cameron–Trivedi information-matrix decomposition. Uses fitted observations, original design columns and WLS weights. Outputs actual test statistics, degrees of freedom and p-values as result. GLS and unavailable diagnostics fail explicitly.",
+            "连接 OLS 或 WLS 模型，进行 White 异方差检验或 Cameron–Trivedi 信息矩阵分解。复用拟合观测、原设计列和 WLS 权重，result 输出统计量、自由度和 p 值。GLS 及不可计算的诊断明确报错。",
         ),
     }
 }
@@ -236,11 +236,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 },
                 interface: assembled_interface(
                     id,
-                    vec![
-                        port,
-                        data_output("result", "Result", report_type()?)?,
-                        data_output("report", "Report", report_type()?)?,
-                    ],
+                    vec![port, data_output("result", "Result", report_type()?)?],
                     vec![],
                     vec![],
                 )?,

@@ -51,6 +51,6 @@ $O_{ij}$ 为观测计数，$E_{ij}$ 为独立性下的期望计数。当前超�
 
 ## 输出与判读
 
-`result`、`report` 返回同一报告。`method` 标明实际方法；`statistic` 分别为 $U_1$、$H$ 或 $X^2$。`degrees_of_freedom` 在 Mann–Whitney 中为空，其余为 `[k−1]`；`sample_sizes` 为各组输入样本量。Mann–Whitney 的 `details.u_complement` 给出另一组 U；Mood 的 `details.pooled_median` 给出合并中位数。估计值和标准误为空。
+`result` 为结构化结果。`method` 标明实际方法；`statistic` 分别为 $U_1$、$H$ 或 $X^2$。`degrees_of_freedom` 在 Mann–Whitney 中为空，其余为 `[k−1]`；`sample_sizes` 为各组输入样本量。Mann–Whitney 的 `details.u_complement` 给出另一组 U；Mood 的 `details.pooled_median` 给出合并中位数。估计值和标准误为空。
 
 对有效的所选方法，`p_value` 小于 $\alpha$ 表示拒绝相应原假设。选择器不自动挑选方法，不作成对事后检验或多重校正。

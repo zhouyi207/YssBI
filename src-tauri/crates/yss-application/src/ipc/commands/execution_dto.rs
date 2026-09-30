@@ -71,19 +71,8 @@ pub enum ResultPlotKindDto {
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ResultReportKindDto {
+    Structured,
     LinearRegressionSummary,
-    BinarySummary,
-    Iv2slsSummary,
-    IvLimlSummary,
-    PraisSummary,
-    VarSummary,
-    VarSoc,
-    PanelSummary,
-    PanelDid,
-    DfAdfSummary,
-    DfAdfSummaryList,
-    VecSummary,
-    VecRankSummary,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -178,44 +167,11 @@ fn result_presentation(
         yss_graph_execution::plan::ResultCategory::StatisticalReport(kind) => {
             ResultPresentationDto::Report {
                 report: match kind {
+                    yss_graph_execution::plan::StatisticalReportKind::Structured => {
+                        ResultReportKindDto::Structured
+                    }
                     yss_graph_execution::plan::StatisticalReportKind::LinearRegressionSummary => {
                         ResultReportKindDto::LinearRegressionSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::BinarySummary => {
-                        ResultReportKindDto::BinarySummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::Iv2slsSummary => {
-                        ResultReportKindDto::Iv2slsSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::IvLimlSummary => {
-                        ResultReportKindDto::IvLimlSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::PraisSummary => {
-                        ResultReportKindDto::PraisSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::VarSummary => {
-                        ResultReportKindDto::VarSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::VarSoc => {
-                        ResultReportKindDto::VarSoc
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::PanelSummary => {
-                        ResultReportKindDto::PanelSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::PanelDid => {
-                        ResultReportKindDto::PanelDid
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::DfAdfSummary => {
-                        ResultReportKindDto::DfAdfSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::DfAdfSummaryList => {
-                        ResultReportKindDto::DfAdfSummaryList
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::VecSummary => {
-                        ResultReportKindDto::VecSummary
-                    }
-                    yss_graph_execution::plan::StatisticalReportKind::VecRankSummary => {
-                        ResultReportKindDto::VecRankSummary
                     }
                 },
             }

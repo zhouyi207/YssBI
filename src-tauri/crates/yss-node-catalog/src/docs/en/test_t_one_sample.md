@@ -18,6 +18,6 @@ Here $n$ is sample size, $\bar x$ the mean, and $s$ the sample standard deviatio
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report. `statistic` is t, `degrees_of_freedom` is `[n−1]`, and `p_value` uses the selected alternative. `estimate` is $\bar x-\mu_0$, `standard_error` is $s/\sqrt n$, and `sample_sizes` is `[n]`.
+`result` contains the structured result. `statistic` is t, `degrees_of_freedom` is `[n−1]`, and `p_value` uses the selected alternative. `estimate` is $\bar x-\mu_0$, `standard_error` is $s/\sqrt n$, and `sample_sizes` is `[n]`.
 
 Reject the hypothesized mean when $p<\alpha$; otherwise there is insufficient evidence to reject it.

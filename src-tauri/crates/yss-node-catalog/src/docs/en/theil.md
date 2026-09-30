@@ -11,7 +11,7 @@ $$T=\sum_{i:q_i>0} q_i\ln(q_i/p_i).$$
 
 Values and weights must be finite and nonnegative. Zero values contribute zero; zero-weight groups are ignored. The total weight and weighted mean must be positive. Empty inputs, missing values, negative values, or mismatched lengths fail explicitly. Relational series must share a proven row domain; in-memory series align by position. Filter the common sample upstream instead of dropping values from each series independently.
 
-**Theil T** outputs a numeric scalar for downstream calculations. **Report** contains `theil_t`, `form`, and `observations` (the number of supplied individuals or groups, including zero-weight groups). Equal positive values produce zero up to floating-point roundoff; larger values indicate more inequality. The index is not restricted to 0–1.
+The single **Result** output contains structured data with `theil_t`, `form`, and `observations` (the number of supplied individuals or groups, including zero-weight groups). Equal positive values produce zero up to floating-point roundoff; larger values indicate more inequality. The index is not restricted to 0–1.
 
 Group means measure **between-group inequality**. Without within-group information, this does not recover overall inequality or a within/between decomposition. For example, group means `[1, 3]` and weights `[3, 1]` give the same index as individual values `[1, 1, 1, 3]`, approximately `0.1438410362`.
 

@@ -23,7 +23,7 @@ $\hat\rho_k$ 为 $k$ 阶样本自相关，$\phi_{k,j}$ 为递推系数。PACF �
 
 ## 输出与判读
 
-`result`、`report` 相同，含 `function=pacf`、`observations=n`、`values`。数组从 **1 阶**开始，`values[0]` 为 1 阶 PACF，通常长度为 $h$；常量序列返回空数组。
+`result` 为结构化结果，含 `function=pacf`、`observations=n`、`values`。数组从 **1 阶**开始，`values[0]` 为 1 阶 PACF，通常长度为 $h$；常量序列返回空数组。
 
 节点按行位置计算滞后，不自动排序或补齐时间。输出可辅助探索时序结构，但不提供置信带或 p 值；递推不可计算时失败。
 

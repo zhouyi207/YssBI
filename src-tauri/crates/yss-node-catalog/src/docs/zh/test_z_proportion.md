@@ -18,4 +18,4 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 返回相同报告。`statistic` 为 z，`estimate` 为 $\hat p-p_0$，`standard_error` 使用原假设概率，`sample_sizes` 为 `[n]`，自由度为空。`p_value` 小于 $\alpha$ 时拒绝给定成功概率。
+`result` 为结构化结果。`statistic` 为 z，`estimate` 为 $\hat p-p_0$，`standard_error` 使用原假设概率，`sample_sizes` 为 `[n]`，自由度为空。`p_value` 小于 $\alpha$ 时拒绝给定成功概率。

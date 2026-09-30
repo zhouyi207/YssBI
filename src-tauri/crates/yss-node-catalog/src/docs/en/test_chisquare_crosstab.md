@@ -20,6 +20,6 @@ $O_{ij}$ is an observed count, $O_{i+},O_{+j}$ are marginal totals, and $N$ is t
 
 ## Outputs and interpretation
 
-`result` and `report` are identical: `statistic` is $X^2$, `degrees_of_freedom` is `[(r−1)(c−1)]`, `p_value` is the upper chi-square tail, and `sample_sizes` is `[N]`. `details.minimum_expected_count` gives the smallest expected count. `estimate` and `standard_error` are null.
+`result` contains the structured result: `statistic` is $X^2$, `degrees_of_freedom` is `[(r−1)(c−1)]`, `p_value` is the upper chi-square tail, and `sample_sizes` is `[N]`. `details.minimum_expected_count` gives the smallest expected count. `estimate` and `standard_error` are null.
 
 $p<\alpha$ provides evidence of association, not causation. Fisher's exact test is an alternative for sparse $2\times2$ tables.

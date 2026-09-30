@@ -26,7 +26,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "effects_statistics",
             "estimator_statistics",
         ],
-        2,
+        1,
         summary,
     );
 }
@@ -43,7 +43,7 @@ fn summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
         },
     );
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 fn fit(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let mut data = columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, 0)?;

@@ -25,6 +25,6 @@ Observations must be independent. The node does not correct serial correlation o
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic_name` is `S_corrected_z`, `statistic` is $Z$, and `details.s_statistic` is $S$. `details.kendall_tau` is $S/\binom n2$, not tie-adjusted tau-b. `p_value` uses the selected direction and `sample_sizes` is `[n]`. Degrees of freedom are empty; estimate and standard error are null.
+`result` contains the structured result. `statistic_name` is `S_corrected_z`, `statistic` is $Z$, and `details.s_statistic` is $S$. `details.kendall_tau` is $S/\binom n2$, not tie-adjusted tau-b. `p_value` uses the selected direction and `sample_sizes` is `[n]`. Degrees of freedom are empty; estimate and standard error are null.
 
 When the reference assumptions hold, $p<\alpha$ supports monotonic trend. No trend slope is estimated.

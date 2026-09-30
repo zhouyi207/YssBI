@@ -40,7 +40,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                     "overidentification",
                 ]
             },
-            2,
+            1,
             move |inv| summary(kind, inv),
         );
     }
@@ -55,7 +55,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             Input::fixed("treatment"),
         ],
         &[],
-        2,
+        1,
         did,
     );
     install(
@@ -70,7 +70,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             Input::fixed("post"),
         ],
         &["repetitions", "seed"],
-        2,
+        1,
         randomization,
     );
 }
@@ -105,7 +105,7 @@ fn randomization(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Kernel
     );
     inv.check_control()?;
     let result = value(result.map_err(|_| KernelError::ScientificFailure)?, inv)?;
-    Ok(vec![result.clone(), result])
+    Ok(vec![result])
 }
 
 fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -155,7 +155,13 @@ fn did(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
         yss_sci_runtime::panel::summary(&fit, Default::default()),
         inv,
     )?;
-    Ok(vec![value(fit, inv)?, report])
+    Ok(vec![RuntimeValue::Record(std::sync::Arc::new(
+        [
+            ("model".into(), value(fit, inv)?),
+            ("summary".into(), report),
+        ]
+        .into(),
+    ))])
 }
 
 fn summary(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -182,5 +188,5 @@ fn summary(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     }
     let report = yss_sci_runtime::causal::iv::summary(&fit, options).map_err(sci)?;
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }

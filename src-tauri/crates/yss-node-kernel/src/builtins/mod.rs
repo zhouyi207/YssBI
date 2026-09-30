@@ -300,7 +300,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 "hypothesis_test",
                 "hypothesis",
             ],
-            2..=2,
+            1..=1,
         ),
         (
             "yssbi.statistics.linear.predict",
@@ -521,7 +521,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                         | series::SeriesKernel::InverseStandardize,
                     ) => 3,
                     Boolean(_) => 3,
-                    Statistical(Summary) => 7,
+                    Statistical(Summary) => 8,
                     Statistical(Predict) => 4,
                     Convert => 7,
                     Series(series::SeriesKernel::Lag) => 3,

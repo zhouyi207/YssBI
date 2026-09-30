@@ -26,6 +26,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 相同。`statistic` 为 $F$，`degrees_of_freedom` 依次给出分子、分母自由度 `[k−1, N−k]`，`p_value` 为 F 分布右尾概率，`sample_sizes` 为各组样本量。估计值和标准误为空。
+`result` 为结构化结果。`statistic` 为 $F$，`degrees_of_freedom` 依次给出分子、分母自由度 `[k−1, N−k]`，`p_value` 为 F 分布右尾概率，`sample_sizes` 为各组样本量。估计值和标准误为空。
 
 $p<\alpha$ 时拒绝方差齐性；不显著表示证据不足，不能证明各方差完全相同。

@@ -22,7 +22,7 @@ $V_{\mathrm{IV}}$ and $V_{\mathrm{OLS}}$ use a common OLS disturbance variance, 
 
 ## Outputs and interpretation
 
-`result` and `report` are identical, containing `hausman` with `stat`, `df` and `p_value`. P-values use the chi-square upper tail; $p<\alpha$ rejects exogeneity.
+`result` contains the structured result, containing `hausman` with `stat`, `df` and `p_value`. P-values use the chi-square upper tail; $p<\alpha$ rejects exogeneity.
 
 Inference requires valid, relevant instruments and identification. Non-rejection does not establish exogeneity. Robust/clustered covariance or an unavailable valid OLS comparison fails.
 

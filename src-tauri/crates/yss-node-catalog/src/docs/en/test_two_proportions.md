@@ -24,4 +24,4 @@ For a nonzero difference, use $SE=\sqrt{\hat p_1(1-\hat p_1)/n_1+\hat p_2(1-\hat
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is z, `estimate` is $\hat p_1-\hat p_2-\delta_0$, `standard_error` is the selected standard error, `sample_sizes` is `[n1, n2]`, and degrees of freedom are empty. Interpret `p_value` in the selected direction; reject $H_0$ when $p<\alpha$.
+`result` contains the structured result. `statistic` is z, `estimate` is $\hat p_1-\hat p_2-\delta_0$, `standard_error` is the selected standard error, `sample_sizes` is `[n1, n2]`, and degrees of freedom are empty. Interpret `p_value` in the selected direction; reject $H_0$ when $p<\alpha$.

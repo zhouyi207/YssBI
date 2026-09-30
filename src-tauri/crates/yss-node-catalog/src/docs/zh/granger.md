@@ -23,7 +23,7 @@ $b$ 为被检验的滞后系数向量，$V_b$ 为其协方差子矩阵；$m$ 为
 
 ## 输出与判读
 
-`result`、`report` 相同，`vargranger` 数组每行含 `eq_name`（响应方程）、`excluded`（被检验变量或 `ALL`）、`chi2`、`df`、`p_value`。
+`result` 为结构化结果，`vargranger` 数组每行含 `eq_name`（响应方程）、`excluded`（被检验变量或 `ALL`）、`chi2`、`df`、`p_value`。
 
 p 值取对应卡方右尾；$p<\alpha$ 表示拒绝该变量或变量组没有额外预测作用。方向为 `excluded` → `eq_name`，不是干预意义上的因果效应。节点不作多重检验校正；单位根或协整序列应先选择适当的建模方式。
 

@@ -21,6 +21,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 返回同一报告。`estimate` 为 $S/n$，`standard_error` 为 $\sqrt{S/n}/\sqrt n$，`sample_sizes` 为 `[n]`。`details.event_count` 与 `details.expected_event_count` 分别是 $S$、$m$。
+`result` 为结构化结果。`estimate` 为 $S/n$，`standard_error` 为 $\sqrt{S/n}/\sqrt n$，`sample_sizes` 为 `[n]`。`details.event_count` 与 `details.expected_event_count` 分别是 $S$、$m$。
 
 `statistic_name` 为 `count_score`，其值为 $(S-m)/\max(\sqrt m,1)$；`p_value` 来自 Poisson 概率，而非该分数的正态近似。自由度为空。$p<\alpha$ 时拒绝给定发生率。

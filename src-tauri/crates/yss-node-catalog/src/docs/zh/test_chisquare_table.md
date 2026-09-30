@@ -22,6 +22,6 @@ $O_{ij}$ 为输入频数，$N$ 为总频数，$r,c$ 为行列数。使用未作�
 
 ## 输出与判读
 
-`result` 与 `report` 相同。`statistic` 为 $X^2$，`degrees_of_freedom` 为 `[(r−1)(c−1)]`，`sample_sizes` 为 `[N]`，`details.minimum_expected_count` 是最小期望频数。`estimate`、`standard_error` 为空。
+`result` 为结构化结果。`statistic` 为 $X^2$，`degrees_of_freedom` 为 `[(r−1)(c−1)]`，`sample_sizes` 为 `[N]`，`details.minimum_expected_count` 是最小期望频数。`estimate`、`standard_error` 为空。
 
 `p_value` 为卡方右尾概率；$p<\alpha$ 时拒绝独立性。

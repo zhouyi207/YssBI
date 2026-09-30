@@ -497,23 +497,10 @@ fn map_result_category(category: GraphResultCategory) -> crate::plan::ResultCate
         }),
         GraphResultCategory::StatisticalReport(kind) => {
             ResultCategory::StatisticalReport(match kind {
+                GraphStatisticalReportKind::Structured => StatisticalReportKind::Structured,
                 GraphStatisticalReportKind::LinearRegressionSummary => {
                     StatisticalReportKind::LinearRegressionSummary
                 }
-                GraphStatisticalReportKind::BinarySummary => StatisticalReportKind::BinarySummary,
-                GraphStatisticalReportKind::Iv2slsSummary => StatisticalReportKind::Iv2slsSummary,
-                GraphStatisticalReportKind::IvLimlSummary => StatisticalReportKind::IvLimlSummary,
-                GraphStatisticalReportKind::PraisSummary => StatisticalReportKind::PraisSummary,
-                GraphStatisticalReportKind::VarSummary => StatisticalReportKind::VarSummary,
-                GraphStatisticalReportKind::VarSoc => StatisticalReportKind::VarSoc,
-                GraphStatisticalReportKind::PanelSummary => StatisticalReportKind::PanelSummary,
-                GraphStatisticalReportKind::PanelDid => StatisticalReportKind::PanelDid,
-                GraphStatisticalReportKind::DfAdfSummary => StatisticalReportKind::DfAdfSummary,
-                GraphStatisticalReportKind::DfAdfSummaryList => {
-                    StatisticalReportKind::DfAdfSummaryList
-                }
-                GraphStatisticalReportKind::VecSummary => StatisticalReportKind::VecSummary,
-                GraphStatisticalReportKind::VecRankSummary => StatisticalReportKind::VecRankSummary,
             })
         }
     }

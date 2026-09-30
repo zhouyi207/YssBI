@@ -18,6 +18,6 @@ $$
 
 ## 输出与判读
 
-`result`、`report` 返回同一报告，`p_value` 是双侧条件精确 p 值。`details` 中的 `a`、`b`、`c`、`d` 给出按类别编码顺序形成的表，`sample_sizes` 为 `[N]`。`estimate`、`standard_error` 为空，自由度为空。
+`result` 为结构化结果，`p_value` 是双侧条件精确 p 值。`details` 中的 `a`、`b`、`c`、`d` 给出按类别编码顺序形成的表，`sample_sizes` 为 `[N]`。`estimate`、`standard_error` 为空，自由度为空。
 
 当前 `statistic_name` 标为 `odds_ratio`，但 `statistic` 实际存放 $ad-bc$，不能按比值比解释。应依据 `p_value` 判读独立性，$p<\alpha$ 时拒绝 $H_0$。

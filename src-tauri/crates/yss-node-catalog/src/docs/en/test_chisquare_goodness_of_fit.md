@@ -21,6 +21,6 @@ Here $k$ is the category count and $O_i,E_i$ are observed and expected frequenci
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is $X^2$, `degrees_of_freedom` is fixed at `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains the observed total. `estimate` and `standard_error` are null.
+`result` contains the structured result. `statistic` is $X^2$, `degrees_of_freedom` is fixed at `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` contains the observed total. `estimate` and `standard_error` are null.
 
 $p<\alpha$ indicates departure from the specified distribution. If expectations were fitted to the same data, the unadjusted `k−1` degrees of freedom do not support that conclusion directly.

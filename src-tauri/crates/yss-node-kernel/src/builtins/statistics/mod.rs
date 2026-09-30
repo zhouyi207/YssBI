@@ -65,9 +65,9 @@ pub(super) fn install(
                     || id.ends_with(".hausman")
                     || id.ends_with(".breusch_pagan")
                 {
-                    3
+                    4
                 } else {
-                    2
+                    3
                 },
             )
             .unwrap(),

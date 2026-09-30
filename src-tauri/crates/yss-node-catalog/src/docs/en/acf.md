@@ -15,7 +15,7 @@ $n$ is observation count and $\bar x$ the series mean. All lags use the full-sam
 
 ## Outputs and interpretation
 
-`result` and `report` are identical, containing `function=acf`, `observations=n` and `values`. The array starts at lag zero and normally has length $h+1$. A constant series returns only `[1]`.
+`result` contains the structured result, containing `function=acf`, `observations=n` and `values`. The array starts at lag zero and normally has length $h+1$. A constant series returns only `[1]`.
 
 Positive values indicate same-direction linear association and negative values opposite-direction association. No confidence bands or p-values are output. Use Ljung–Box for a joint zero-autocorrelation test.
 

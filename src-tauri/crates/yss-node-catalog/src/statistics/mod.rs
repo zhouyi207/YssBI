@@ -160,16 +160,17 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
             Some(1),
         )?);
     }
-    ports.push(data_output("model", "Model", model_type(spec)?)?);
+    if spec.family == Family::PanelDid {
+        ports.push(data_output("result", "Result", result_type(spec.family)?)?);
+    } else {
+        ports.push(data_output("model", "Model", model_type(spec)?)?);
+    }
     if !matches!(
         spec.family,
         Family::Panel | Family::PanelDid | Family::Var | Family::Vec
     ) {
         ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
         ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
-    }
-    if spec.family == Family::PanelDid {
-        ports.push(data_output("report", "Report", report_type()?)?);
     }
     Ok(ports)
 }
@@ -178,7 +179,6 @@ fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
     Ok(vec![
         data_input("model", "Model", model_type(spec)?)?,
         data_output("result", "Result", result_type(spec.family)?)?,
-        data_output("report", "Report", report_type()?)?,
     ])
 }
 
@@ -208,9 +208,6 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         _ => ports.push(data_input("series", "DataSeries", series_type()?)?),
     }
     ports.push(data_output("result", "Result", result_type(family)?)?);
-    if matches!(family, Family::Adf | Family::PanelDid) {
-        ports.push(data_output("report", "Report", report_type()?)?);
-    }
     Ok(ports)
 }
 
@@ -756,8 +753,8 @@ fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
             "types.statistics_model_panel.title",
         ),
         (
-            "statistics.model.panel_did",
-            "types.statistics_model_panel_did.title",
+            "statistics.result.panel_did",
+            "types.statistics_result_panel_did.title",
         ),
         ("statistics.model.var", "types.statistics_model_var.title"),
         ("statistics.result.adf", "types.statistics_result_adf.title"),
@@ -903,7 +900,7 @@ fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
         Family::Iv2sls => "statistics.model.iv_2sls",
         Family::IvLiml => "statistics.model.iv_liml",
         Family::Panel => "statistics.model.panel",
-        Family::PanelDid => "statistics.model.panel_did",
+        Family::PanelDid => "statistics.result.panel_did",
         Family::Var => "statistics.model.var",
         Family::Adf | Family::VecRank => {
             return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
@@ -950,7 +947,7 @@ fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
         Family::Probit => "statistics.result.probit",
         Family::Prais => "statistics.result.prais",
         Family::Panel => "statistics.model.panel",
-        Family::PanelDid => "statistics.model.panel_did",
+        Family::PanelDid => "statistics.result.panel_did",
         Family::Var => "statistics.model.var",
         Family::Vec => "statistics.model.vec",
         Family::VecRank => "statistics.model.vec_rank",
@@ -1099,9 +1096,9 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "面板模型",
         ),
         (
-            "types.statistics_model_panel_did.title",
-            "Panel DID Model",
-            "面板 DID 模型",
+            "types.statistics_result_panel_did.title",
+            "Panel DID Result",
+            "面板 DID 结果",
         ),
         ("types.statistics_model_var.title", "VAR Model", "VAR 模型"),
         (

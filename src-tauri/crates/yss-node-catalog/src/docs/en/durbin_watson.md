@@ -17,7 +17,7 @@ $e_t$ are input residuals. Values near 2 suggest little first-order correlation;
 
 ## Outputs and interpretation
 
-`result` and `report` are identical and contain only `d`, without a p-value or critical value. The null distribution depends on the original regression design, so `d` alone does not establish significance. Classical DW inference is unsuitable for direct use with lagged dependent variables; consider Breusch–Godfrey.
+`result` contains the structured result and contain only `d`, without a p-value or critical value. The null distribution depends on the original regression design, so `d` alone does not establish significance. Classical DW inference is unsuitable for direct use with lagged dependent variables; consider Breusch–Godfrey.
 
 All-zero residuals currently return `d=2` as a degenerate convention, not a valid test pass.
 

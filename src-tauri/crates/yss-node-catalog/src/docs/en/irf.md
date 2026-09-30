@@ -14,7 +14,7 @@ $A_\ell$ are fitted VAR lag matrices, $p$ the maximum lag, and omitted lags are 
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `oirf[s][i][j]` indexes **horizon, response variable, shock variable**, with dimensions `(steps+1) × K × K` for $K$ variables. Horizon zero is the impact period, and `oirf[0]` equals $G$.
+`result` contains the structured result. `oirf[s][i][j]` indexes **horizon, response variable, shock variable**, with dimensions `(steps+1) × K × K` for $K$ variables. Horizon zero is the impact period, and `oirf[0]` equals $G$.
 
 Responses are in the response variable's units and are not cumulative. Ordering follows the fitted model and generally affects orthogonal responses. Innovation covariance must be positive definite.
 

@@ -23,17 +23,6 @@ pub enum PlotDataKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum StatisticalReportKind {
+    Structured,
     LinearRegressionSummary,
-    BinarySummary,
-    Iv2slsSummary,
-    IvLimlSummary,
-    PraisSummary,
-    VarSummary,
-    VarSoc,
-    PanelSummary,
-    PanelDid,
-    DfAdfSummary,
-    DfAdfSummaryList,
-    VecSummary,
-    VecRankSummary,
 }

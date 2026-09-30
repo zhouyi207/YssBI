@@ -26,6 +26,6 @@ The method is more robust to non-normality than Bartlett's test, although mean c
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is $F$, `degrees_of_freedom` lists numerator and denominator degrees as `[k−1, N−k]`, `p_value` is the upper F tail, and `sample_sizes` contains group sizes. Estimate and standard error are null.
+`result` contains the structured result. `statistic` is $F$, `degrees_of_freedom` lists numerator and denominator degrees as `[k−1, N−k]`, `p_value` is the upper F tail, and `sample_sizes` contains group sizes. Estimate and standard error are null.
 
 Reject equal variances when $p<\alpha$. A nonsignificant result is insufficient evidence against equality, not proof of identical variances.

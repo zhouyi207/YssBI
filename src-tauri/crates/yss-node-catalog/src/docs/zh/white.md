@@ -21,6 +21,6 @@ WLS 将被解释量改为 $w_i u_i^2$，仍对原 $Z$ 作无权重辅助回归�
 
 ## 输出与判读
 
-`result`、`report` 相同，`test=white`，内层 `result` 含 `lm_stat`、`df`、`p_value`。p 值取卡方右尾；$p<\alpha$ 拒绝同方差，未拒绝只表示证据不足。
+`result` 为结构化结果，`test=white`，内层 `result` 含 `lm_stat`、`df`、`p_value`。p 值取卡方右尾；$p<\alpha$ 拒绝同方差，未拒绝只表示证据不足。
 
 方法细节：[White 检验](https://www.statsmodels.org/stable/generated/statsmodels.stats.diagnostic.het_white.html)。

@@ -15,7 +15,7 @@ $n$ 为观测数，$\bar x$ 为序列均值。各阶使用完整样本分母，�
 
 ## 输出与判读
 
-`result`、`report` 相同，含 `function=acf`、`observations=n`、`values`。数组从 0 阶开始，通常长度为 $h+1$；常量序列仅返回 `[1]`。
+`result` 为结构化结果，含 `function=acf`、`observations=n`、`values`。数组从 0 阶开始，通常长度为 $h+1$；常量序列仅返回 `[1]`。
 
 正值表示同向线性关联，负值表示反向关联。节点不输出置信带或 p 值；若需联合检验前若干阶相关为零，可使用 Ljung–Box。
 

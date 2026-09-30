@@ -27,10 +27,7 @@ pub(crate) fn execute(
             };
             let summary =
                 Arc::new(model.summarize(summary_options(invocation)?, invocation.control)?);
-            vec![
-                RuntimeValue::LinearRegression(summary.clone()),
-                RuntimeValue::LinearRegression(summary),
-            ]
+            vec![RuntimeValue::LinearRegression(summary)]
         }
         LinearKernel::Predict => {
             let Some(RuntimeValue::LinearRegression(model)) = invocation.inputs.first() else {
@@ -628,7 +625,7 @@ mod tests {
                 assert_eq!(model.report.model_basic_info.model_type, method);
                 assert!((model.fitted[2] - intercept - 3.0 * expected).abs() < 1e-10);
                 assert!((model.residuals[2] - (5.0 - intercept - 3.0 * expected)).abs() < 1e-10);
-                let summary = run("summary", &outputs[..1], &[None], method, 2, constant).unwrap();
+                let summary = run("summary", &outputs[..1], &[None], method, 1, constant).unwrap();
                 for value in summary {
                     let RuntimeValue::LinearRegression(result) = value else {
                         panic!("native result");

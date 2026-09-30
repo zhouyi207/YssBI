@@ -18,6 +18,6 @@ $n$ 为配对数，$\bar d$、$s_d$ 为差值均值和样本标准差。不同�
 
 ## 输出与判读
 
-`result` 与 `report` 相同。`statistic` 为 t，`estimate` 为平均 `before−after` 差，`standard_error` 为 $s_d/\sqrt n$，`degrees_of_freedom` 为 `[n−1]`，`sample_sizes` 为 `[n]`。
+`result` 为结构化结果。`statistic` 为 t，`estimate` 为平均 `before−after` 差，`standard_error` 为 $s_d/\sqrt n$，`degrees_of_freedom` 为 `[n−1]`，`sample_sizes` 为 `[n]`。
 
 `greater` 检验前测总体均值高于后测，`less` 方向相反。`p_value` 小于 $\alpha$ 时拒绝零均值差。

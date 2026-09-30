@@ -39,7 +39,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             &format!("yssbi.statistics.{name}.summary"),
             vec![Input::fixed("model")],
             &[],
-            2,
+            1,
             summary,
         );
         if let Method::Binary(link) = method {
@@ -112,7 +112,7 @@ fn summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
     let fit = decode_model(inv)?;
     let report = yss_sci_runtime::regression::report::regression_report(&fit).map_err(sci)?;
     let report = value(report, inv)?;
-    Ok(vec![report.clone(), report])
+    Ok(vec![report])
 }
 
 fn predict(

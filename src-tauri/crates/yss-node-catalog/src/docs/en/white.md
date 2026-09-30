@@ -21,6 +21,6 @@ WLS replaces the dependent quantity with $w_i u_i^2$, retaining an unweighted au
 
 ## Outputs and interpretation
 
-`result` and `report` are identical: `test=white` with inner `result` fields `lm_stat`, `df` and `p_value`. P-values use the chi-square upper tail; $p<\alpha$ rejects homoskedasticity. Non-rejection means insufficient evidence.
+`result` contains the structured result: `test=white` with inner `result` fields `lm_stat`, `df` and `p_value`. P-values use the chi-square upper tail; $p<\alpha$ rejects homoskedasticity. Non-rejection means insufficient evidence.
 
 Method details: [White test](https://www.statsmodels.org/stable/generated/statsmodels.stats.diagnostic.het_white.html).

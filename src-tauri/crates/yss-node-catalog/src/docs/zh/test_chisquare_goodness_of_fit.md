@@ -21,6 +21,6 @@ $k$ 为类别数，$O_i,E_i$ 是对应观测和期望频数。参考分布假设
 
 ## 输出与判读
 
-`result` 和 `report` 相同。`statistic` 为 $X^2$，`degrees_of_freedom` 固定为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为观测频数总和。`estimate`、`standard_error` 为空。
+`result` 为结构化结果。`statistic` 为 $X^2$，`degrees_of_freedom` 固定为 `[k−1]`，`p_value` 为卡方右尾概率，`sample_sizes` 为观测频数总和。`estimate`、`standard_error` 为空。
 
 $p<\alpha$ 表示观测分布与指定分布不符。若期望值由同一数据拟合，不能直接使用未调整的 `k−1` 自由度作结论。

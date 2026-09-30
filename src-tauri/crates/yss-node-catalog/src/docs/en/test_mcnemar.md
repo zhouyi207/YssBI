@@ -24,6 +24,6 @@ The displayed $X^2$ has an asymptotic $\chi^2_1$ reference, but the reported p-v
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is $X^2$ and the degrees-of-freedom field is `[1]`. `p_value` and `details.exact_binomial_p_value` are exact p-values. `details.discordant_0_to_1` and `details.discordant_1_to_0` give $b,c$; `sample_sizes` contains the total pair count. Estimate and standard error are null.
+`result` contains the structured result. `statistic` is $X^2$ and the degrees-of-freedom field is `[1]`. `p_value` and `details.exact_binomial_p_value` are exact p-values. `details.discordant_0_to_1` and `details.discordant_1_to_0` give $b,c$; `sample_sizes` contains the total pair count. Estimate and standard error are null.
 
 Reject equal marginal probabilities when $p<\alpha$. Only discordant pairs contribute to this test.

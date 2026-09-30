@@ -23,7 +23,7 @@ Use the same Wald formula with $b$ containing all other variables' lag coefficie
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. Each `vargranger` row contains `eq_name` (response), `excluded` (tested variable or `ALL`), `chi2`, `df` and `p_value`.
+`result` contains the structured result. Each `vargranger` row contains `eq_name` (response), `excluded` (tested variable or `ALL`), `chi2`, `df` and `p_value`.
 
 P-values use the corresponding chi-square upper tail. $p<\alpha$ rejects no additional predictive contribution from that variable or group. The direction is `excluded` → `eq_name`, not intervention-based causality. No multiplicity correction is applied; unit-root or cointegrated series require appropriate model specification.
 

@@ -23,6 +23,6 @@ $t_{ig}$ is the size of tied group $g$ within subject $i$. $C$ must be positive.
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is corrected $Q$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` is `[n, …, n]` for the conditions. Estimate and standard error are null.
+`result` contains the structured result. `statistic` is corrected $Q$, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper chi-square tail, and `sample_sizes` is `[n, …, n]` for the conditions. Estimate and standard error are null.
 
 $p<\alpha$ supports a condition difference. Pairwise comparisons are not produced automatically.

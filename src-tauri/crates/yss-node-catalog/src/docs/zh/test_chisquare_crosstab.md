@@ -20,6 +20,6 @@ $O_{ij}$ 是观测频数，$O_{i+},O_{+j}$ 是行、列合计，$N$ 是观测总
 
 ## 输出与判读
 
-`result`、`report` 相同：`statistic` 为 $X^2$，`degrees_of_freedom` 为 `[(r−1)(c−1)]`，`p_value` 是卡方右尾概率，`sample_sizes` 为 `[N]`。`details.minimum_expected_count` 给出最小期望频数；`estimate`、`standard_error` 为空。
+`result` 为结构化结果：`statistic` 为 $X^2$，`degrees_of_freedom` 为 `[(r−1)(c−1)]`，`p_value` 是卡方右尾概率，`sample_sizes` 为 `[N]`。`details.minimum_expected_count` 给出最小期望频数；`estimate`、`standard_error` 为空。
 
 $p<\alpha$ 表示存在关联证据，不表示因果关系。稀疏的 $2\times2$ 表可改用 Fisher 精确检验。

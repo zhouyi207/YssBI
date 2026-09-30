@@ -22,6 +22,6 @@ $O_{ij}$ is an input count, $N$ the total count, and $r,c$ the table dimensions.
 
 ## Outputs and interpretation
 
-`result` and `report` are identical. `statistic` is $X^2$, `degrees_of_freedom` is `[(r−1)(c−1)]`, `sample_sizes` is `[N]`, and `details.minimum_expected_count` is the minimum expected count. `estimate` and `standard_error` are null.
+`result` contains the structured result. `statistic` is $X^2$, `degrees_of_freedom` is `[(r−1)(c−1)]`, `sample_sizes` is `[N]`, and `details.minimum_expected_count` is the minimum expected count. `estimate` and `standard_error` are null.
 
 `p_value` is the upper chi-square tail. Reject independence when $p<\alpha$.

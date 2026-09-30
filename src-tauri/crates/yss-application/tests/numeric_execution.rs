@@ -76,9 +76,14 @@ fn theil_node_executes_individual_defaults_and_grouped_relational_means() {
             },
         );
     }
-    let numeric = |value| match value {
-        RuntimeValue::Scalar(TabularScalar::Float64(value)) => value.as_f64(),
-        _ => panic!("Theil must return a numeric scalar"),
+    let numeric = |value| {
+        let RuntimeValue::Record(result) = value else {
+            panic!("Theil must return a structured result")
+        };
+        match &result["theil_t"] {
+            RuntimeValue::Scalar(TabularScalar::Float64(value)) => value.as_f64(),
+            _ => panic!("Theil T must be numeric"),
+        }
     };
     let individual = numeric(execute(&document, THEIL).unwrap());
     let expected = 0.25 * 0.5_f64.ln() + 0.75 * 1.5_f64.ln();

@@ -18,6 +18,6 @@ The two-sided p-value sums all feasible tables whose probability does not exceed
 
 ## Outputs and interpretation
 
-`result` and `report` contain the same report. `p_value` is the two-sided conditional exact p-value. `details.a`, `b`, `c`, and `d` contain the table formed in category-code order; `sample_sizes` is `[N]`. `estimate` and `standard_error` are null and degrees of freedom are empty.
+`result` contains the structured result. `p_value` is the two-sided conditional exact p-value. `details.a`, `b`, `c`, and `d` contain the table formed in category-code order; `sample_sizes` is `[N]`. `estimate` and `standard_error` are null and degrees of freedom are empty.
 
 Currently `statistic_name` is `odds_ratio`, but `statistic` stores $ad-bc$, not an odds ratio. Interpret independence through `p_value`; reject $H_0$ when $p<\alpha$.

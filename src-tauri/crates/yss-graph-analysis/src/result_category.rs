@@ -21,55 +21,23 @@ pub enum GraphPlotDataKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GraphStatisticalReportKind {
+    Structured,
     LinearRegressionSummary,
-    BinarySummary,
-    Iv2slsSummary,
-    IvLimlSummary,
-    PraisSummary,
-    VarSummary,
-    VarSoc,
-    PanelSummary,
-    PanelDid,
-    DfAdfSummary,
-    DfAdfSummaryList,
-    VecSummary,
-    VecRankSummary,
 }
 
 pub(crate) fn result_category_for_output(
     node_type_id: &str,
     port_key: &str,
 ) -> GraphResultCategory {
-    let report = match (node_type_id, port_key) {
-        ("yssbi.statistics.linear.summary", "report") => {
-            GraphStatisticalReportKind::LinearRegressionSummary
-        }
-        ("yssbi.statistics.logit.summary" | "yssbi.statistics.probit.summary", "report") => {
-            GraphStatisticalReportKind::BinarySummary
-        }
-        ("yssbi.statistics.prais.summary", "report") => GraphStatisticalReportKind::PraisSummary,
-        // These kernels currently emit numerical records, not dedicated report payloads.
-        // The generic inspector preserves those computed facts without a mismatched renderer.
-        _ => return plot_category_for_output(node_type_id, port_key),
-    };
-    GraphResultCategory::StatisticalReport(report)
-}
-
-pub fn result_category_for_node(node_type_id: &str) -> GraphResultCategory {
-    let output_key = match node_type_id {
-        "yssbi.statistics.linear.summary"
-        | "yssbi.statistics.logit.summary"
-        | "yssbi.statistics.probit.summary"
-        | "yssbi.statistics.prais.summary" => "report",
-        "yssbi.plot.scatter.view"
-        | "yssbi.plot.line.view"
-        | "yssbi.plot.ecdf.view"
-        | "yssbi.plot.histogram.view"
-        | "yssbi.plot.correlation.view"
-        | "yssbi.plot.correlogram.view" => "result",
-        _ => "result",
-    };
-    result_category_for_output(node_type_id, output_key)
+    if port_key == "result" && node_type_id == "yssbi.statistics.linear.summary" {
+        GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::LinearRegressionSummary)
+    } else if port_key == "result"
+        && (node_type_id.starts_with("yssbi.statistics.") || node_type_id == "yssbi.plot.kde.view")
+    {
+        GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::Structured)
+    } else {
+        plot_category_for_output(node_type_id, port_key)
+    }
 }
 
 fn plot_category_for_output(node_type_id: &str, port_key: &str) -> GraphResultCategory {
@@ -94,45 +62,37 @@ mod tests {
 
     #[test]
     fn real_output_categories_are_output_specific() {
-        let report_cases = [
-            (
-                "yssbi.statistics.linear.summary",
-                "report",
-                GraphStatisticalReportKind::LinearRegressionSummary,
+        assert_eq!(
+            result_category_for_output("yssbi.statistics.linear.summary", "result"),
+            GraphResultCategory::StatisticalReport(
+                GraphStatisticalReportKind::LinearRegressionSummary
             ),
-            (
-                "yssbi.statistics.logit.summary",
-                "report",
-                GraphStatisticalReportKind::BinarySummary,
-            ),
-            (
-                "yssbi.statistics.probit.summary",
-                "report",
-                GraphStatisticalReportKind::BinarySummary,
-            ),
-            (
-                "yssbi.statistics.prais.summary",
-                "report",
-                GraphStatisticalReportKind::PraisSummary,
-            ),
-        ];
-        for (node_type, output_key, report) in report_cases {
+        );
+        for node in [
+            "yssbi.statistics.logit.summary",
+            "yssbi.statistics.probit.summary",
+            "yssbi.statistics.prais.summary",
+            "yssbi.statistics.iv.2sls.summary",
+            "yssbi.statistics.iv.liml.summary",
+            "yssbi.statistics.panel.summary",
+            "yssbi.statistics.panel.did.twfe",
+            "yssbi.statistics.panel.did.randomization",
+            "yssbi.statistics.var.summary",
+            "yssbi.statistics.var.lag_order",
+            "yssbi.statistics.vec.summary",
+            "yssbi.statistics.vec.rank_test",
+            "yssbi.statistics.adf.test",
+            "yssbi.statistics.diagnostic.reset",
+            "yssbi.statistics.inequality.theil",
+            "yssbi.plot.kde.view",
+        ] {
             assert_eq!(
-                result_category_for_output(node_type, output_key),
-                GraphResultCategory::StatisticalReport(report),
-                "{node_type}:{output_key}",
+                result_category_for_output(node, "result"),
+                GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::Structured),
+                "{node}"
             );
         }
-        assert_eq!(
-            result_category_for_node("yssbi.statistics.adf.test"),
-            GraphResultCategory::Value,
-        );
-        assert_eq!(
-            result_category_for_output("yssbi.statistics.adf.test", "result"),
-            GraphResultCategory::Value,
-        );
-
-        let plot_cases = [
+        for (node, kind) in [
             ("yssbi.plot.scatter.view", GraphPlotDataKind::Scatter),
             ("yssbi.plot.line.view", GraphPlotDataKind::Line),
             ("yssbi.plot.ecdf.view", GraphPlotDataKind::Ecdf),
@@ -145,51 +105,21 @@ mod tests {
                 "yssbi.plot.correlogram.view",
                 GraphPlotDataKind::Correlogram,
             ),
-        ];
-        for (node_type, plot) in plot_cases {
-            assert_eq!(
-                result_category_for_output(node_type, "result"),
-                GraphResultCategory::PlotData(plot),
-                "{node_type}:result",
-            );
-        }
-
-        for (node, port) in [
-            ("yssbi.statistics.iv.2sls.summary", "report"),
-            ("yssbi.statistics.iv.liml.summary", "report"),
-            ("yssbi.statistics.panel.summary", "report"),
-            ("yssbi.statistics.panel.did.twfe", "report"),
-            ("yssbi.statistics.panel.did.randomization", "report"),
-            ("yssbi.statistics.var.summary", "report"),
-            ("yssbi.statistics.var.lag_order", "result"),
-            ("yssbi.statistics.vec.fit", "model"),
-            ("yssbi.statistics.vec.summary", "report"),
-            ("yssbi.statistics.vec.rank_test", "result"),
-            ("yssbi.statistics.adf.test", "report"),
-            ("yssbi.statistics.diagnostic.reset", "report"),
-            ("yssbi.plot.kde.view", "result"),
         ] {
             assert_eq!(
-                result_category_for_output(node, port),
-                GraphResultCategory::Value,
-                "{node}:{port}"
-            );
-            assert_eq!(
-                result_category_for_node(node),
-                GraphResultCategory::Value,
-                "{node}"
+                result_category_for_output(node, "result"),
+                GraphResultCategory::PlotData(kind)
             );
         }
-        for output_key in ["fitted", "residuals", "report"] {
+        for output in ["model", "fitted", "residuals"] {
             assert_eq!(
-                result_category_for_output("yssbi.statistics.vec.fit", output_key),
-                GraphResultCategory::Value,
-                "vec.fit:{output_key}",
+                result_category_for_output("yssbi.statistics.linear.fit", output),
+                GraphResultCategory::Value
             );
         }
         assert_eq!(
             result_category_for_output("yssbi.plot.scatter.view", "other"),
-            GraphResultCategory::Value,
+            GraphResultCategory::Value
         );
     }
 }

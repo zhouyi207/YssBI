@@ -22,6 +22,6 @@ $k$ 为组数，$N$ 是删除中位数并列值后的计数总和。要求独立
 
 ## 输出与当前限制
 
-`result`、`report` 相同，`statistic` 为卡方统计量，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为右尾概率，`details.pooled_median` 为 $m$。`sample_sizes` 保留删除中位数并列值之前的各组样本量。估计值和标准误为空。
+`result` 为结构化结果，`statistic` 为卡方统计量，`degrees_of_freedom` 为 `[k−1]`，`p_value` 为右尾概率，`details.pooled_median` 为 $m$。`sample_sizes` 保留删除中位数并列值之前的各组样本量。估计值和标准误为空。
 
 当前构表顺序在两组时给出等价的独立性检验；超过两组时未正确保留组别边际，结果不宜用于多组中位数推断。两组有效结果中，$p<\alpha$ 支持中位数不同。
