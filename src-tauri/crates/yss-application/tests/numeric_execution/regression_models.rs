@@ -2,7 +2,11 @@ use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
 
-fn node(document: &mut GraphDocument, kind: &str, parameters: serde_json::Value) -> NodeId {
+pub(super) fn node(
+    document: &mut GraphDocument,
+    kind: &str,
+    parameters: serde_json::Value,
+) -> NodeId {
     let id = NodeId::new();
     document.nodes.insert(
         id,
@@ -16,7 +20,7 @@ fn node(document: &mut GraphDocument, kind: &str, parameters: serde_json::Value)
     );
     id
 }
-fn connect(document: &mut GraphDocument, from: NodeId, output: &str, to: PortAddress) {
+pub(super) fn connect(document: &mut GraphDocument, from: NodeId, output: &str, to: PortAddress) {
     let id = ConnectionId::new();
     document.connections.insert(
         id,
@@ -28,7 +32,7 @@ fn connect(document: &mut GraphDocument, from: NodeId, output: &str, to: PortAdd
         },
     );
 }
-fn selector(document: &mut GraphDocument, source: NodeId, column: &str) -> NodeId {
+pub(super) fn selector(document: &mut GraphDocument, source: NodeId, column: &str) -> NodeId {
     let id = node(
         document,
         "yssbi.dataframe.series.select",

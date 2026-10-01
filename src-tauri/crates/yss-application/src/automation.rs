@@ -521,6 +521,7 @@ fn plot_kind(kind: PlotDataKind) -> &'static str {
         PlotDataKind::Violin => "violin",
         PlotDataKind::Heatmap => "heatmap",
         PlotDataKind::Coefficient => "coefficient",
+        PlotDataKind::Nomogram => "nomogram",
     }
 }
 
@@ -637,6 +638,7 @@ mod tests {
             PlotDataKind::Violin,
             PlotDataKind::Heatmap,
             PlotDataKind::Coefficient,
+            PlotDataKind::Nomogram,
         ] {
             let wire = serde_json::to_value(kind).unwrap();
             assert_eq!(Some(plot_kind(kind)), wire.as_str());

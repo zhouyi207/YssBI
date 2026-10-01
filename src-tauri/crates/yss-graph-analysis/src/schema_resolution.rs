@@ -465,6 +465,43 @@ impl EditorSchemaResolver<'_> {
             }
             SchemaExpr::Filter { input, .. } => self.resolve_expression(node_id, input),
             SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.statistics.diagnostic.schema.observations" =>
+            {
+                Ok([
+                    "observation",
+                    "fitted",
+                    "residual",
+                    "weighted_residual",
+                    "leverage",
+                    "standardized_residual",
+                    "studentized_residual",
+                    "cooks_distance",
+                ]
+                .into_iter()
+                .map(|name| SchemaField {
+                    name: SchemaColumnRef(name.into()),
+                    scalar_type: RelationalScalarType::Known(
+                        yss_data_contract::SemanticType::Numeric,
+                    ),
+                    lineage: None,
+                })
+                .collect())
+            }
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.statistics.survival.schema.predictions" =>
+            {
+                Ok(["time", "event", "risk"]
+                    .into_iter()
+                    .map(|name| SchemaField {
+                        name: SchemaColumnRef(name.into()),
+                        scalar_type: RelationalScalarType::Known(
+                            yss_data_contract::SemanticType::Numeric,
+                        ),
+                        lineage: None,
+                    })
+                    .collect())
+            }
+            SchemaExpr::Derived { resolver, .. }
                 if resolver.as_str() == "yssbi.statistics.multivariate.schema.coordinates" =>
             {
                 self.resolve_multivariate_coordinates(node_id)

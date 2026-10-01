@@ -9,12 +9,18 @@ use yss_data_contract::DataValue;
 mod analyses;
 mod anova;
 mod association;
+mod causal_models;
 mod classical;
 mod descriptive;
 mod families;
 mod inventory;
+mod longitudinal;
 mod multivariate;
+mod panel_models;
 mod regression_models;
+mod spatial;
+mod survival;
+mod time_series;
 
 pub(crate) use inventory::documentation as inventory_documentation;
 
@@ -46,11 +52,17 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ..ProviderFragment::default()
     };
     inventory::append(&mut fragment)?;
+    time_series::append(&mut fragment)?;
+    longitudinal::append(&mut fragment)?;
     analyses::append(&mut fragment)?;
     anova::append(&mut fragment)?;
     multivariate::append(&mut fragment)?;
     association::append(&mut fragment)?;
     regression_models::append(&mut fragment)?;
+    panel_models::append(&mut fragment)?;
+    causal_models::append(&mut fragment)?;
+    spatial::append(&mut fragment)?;
+    survival::append(&mut fragment)?;
     classical::append(&mut fragment)?;
     descriptive::append(&mut fragment)?;
     Ok(fragment)
@@ -734,6 +746,19 @@ fn nonnegative_integer_parameter(
     Ok(p)
 }
 
+fn minimum_integer_parameter(
+    key: &'static str,
+    default: i64,
+    min: i64,
+) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut parameter = positive_integer_parameter(key, default)?;
+    parameter.constraints = vec![ParameterConstraint::IntegerRange {
+        min: Some(min),
+        max: None,
+    }];
+    Ok(parameter)
+}
+
 fn bounded_integer_parameter(
     key: &'static str,
     default: i64,
@@ -871,6 +896,15 @@ fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
         ("statistics.result.probit", "types.statistics_result.title"),
         ("statistics.result.prais", "types.statistics_result.title"),
         ("statistics.report", "types.statistics_report.title"),
+        ("statistics.model.cox", "types.statistics_model_cox.title"),
+        (
+            "statistics.design.spatial_weights",
+            "types.statistics_spatial_weights.title",
+        ),
+        (
+            "statistics.result.treatment_effect",
+            "types.statistics_result_treatment_effect.title",
+        ),
     ]
     .into_iter()
     .map(|(id, title)| {

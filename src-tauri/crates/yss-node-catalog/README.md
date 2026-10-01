@@ -31,6 +31,25 @@ GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配�
 配对输入需要已证明的行对齐，箱线/小提琴组可为独立样本；缺失值不隐式删除。
 KDE 默认 256 个网格点，系数图接收线性 Fit 的 OLS/WLS/GLS 模型。所有节点均有中英文帮助，说明参数、计算和展示点数限制。
 
+“时间序列”分类的 ARIMA/SARIMA、ECM、ARCH/GARCH/EGARCH/GJR-GARCH、
+指数平滑/ETS/Holt–Winters、灰色与马尔可夫预测、PP/KPSS 以及时序图/相关图
+由 `statistics/time_series.rs` 提供可执行接口，保留原清单 ID。算法形式、默认参数、
+条件初始化、样本要求、检验原假设和输出索引均在双语帮助中说明。没有固定样本行数
+上限；相关图仅沿用现有显示滞后预算。图形入口输出 `plot.data`，其余输出 `statistics.report`。
+
+“生存分析”分类由 `statistics/survival.rs` 实现 15 个原有入口：KM、NA、Log-rank、
+Cox、四种参数生存回归、AFT、Aalen–Johansen 竞争风险、时变 Cox、分层 Cox 亚组、
+列线图、校准和决策曲线。静态 Cox 的 `result` 为 `statistics.model.cox`，可接列线图；
+Cox 和参数模型另输出 `predictions` 表（`time`、`event`、`risk`），供评估节点保持行对齐。
+
+“空间分析”分类由 `statistics/spatial.rs` 实现 10 个原有入口：权重、Moran、
+OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
+`statistics.design.spatial_weights`，下游通过地区标识显式对齐；其余节点输出
+`statistics.report`。权重支持平面 K 近邻、距离阈值与反距离；空间面板支持平衡
+实体固定效应的 SLM/SEM。双语帮助说明稳定区间、推断、效应和结果索引。
+三个绘图入口输出 `plot.data`，其余分析输出结构化报告，沿用原节点 ID 和分类。
+完整的删失约定、风险集、检验及限制由映射的中英帮助说明。
+
 统计节点的 `Family` 表示方法族，`Stage` 表示对该方法执行的操作，目录分类表示用户在哪里找到节点。
 线性回归的 Fit、Summary、Predict 均使用 `Family::Linear`，预测由 `Stage::Predict` 表达。
 当前操作还包括独立统计检验使用的 `Test`；独立诊断与后估计由 `statistics/analyses.rs` 按实际输入模型或序列定义，不新增伪造的模型方法族。
@@ -70,6 +89,20 @@ KDE 默认 256 个网格点，系数图接收线性 Fit 的 OLS/WLS/GLS 模型�
 | 模型诊断与比较       | `statistics.diagnostics`      | 残差诊断、模型检验、模型比较                     |
 | 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等               |
 
+问卷多选题统计与单选/多选题型交叉组合不设独立目录入口。量表题项诊断入口显示为
+“题项分析（区分度）”（`yssbi.statistics.psychometrics.item_analysis`），支持“题项分析”
+和“区分度分析”搜索别名；当前仍为尚未接入执行内核的目录项。
+
+“纵向与多层模型”的十个既有 ID 由 `statistics/longitudinal.rs` 提供完整接口及内核绑定。
+GEE 支持 Gaussian/二项/Poisson，独立或可交换工作相关，输出按组稳健协方差。
+LMM、随机截距和随机斜率使用 ML/REML；随机斜率采用独立方差分量，HLM 支持从低到高的
+一个或多个嵌套分组，交叉模型支持至少两个分组。GLMM 及 Logistic/Poisson/NB2 预设提供
+单分组随机截距的 Laplace ML，NB2 同时估计过度离散参数。
+默认含固定截距，可选固定自变量；每因素至少两个实际组，不设固定行数、列数或组数上限。
+数据规模由可识别性与执行预算决定；独立相关的 GEE 支持单行组。
+唯一 `result` 保留推断、方差、原分组标签及原行序拟合/残差数组，复用 Inspect；
+完整输入边界、近似推断和协方差约定见已注册的中英文节点帮助。
+
 “方差分析”的七个既有入口均由 `statistics/anova.rs` 完善为可执行节点，保留原 ID。
 单因素、双因素和三因素分别要求 1、2、3 个分类因素；多因素与 ANCOVA/MANOVA 支持一个或多个因素。
 因素输入接受数值编码、分类、有序、二元、文本及标识符数列，每项有 至少两个观测类别。
@@ -96,9 +129,27 @@ Linear Summary 在 Parameters 的 Configure 分组声明内容开关及条件可
 ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验，唯一输出为 `statistics.result.adf` 类型的结构化 `result`。
 `adf.summary` 已删除，不提供旧节点或旧端口的兼容转换。上述方法及 Logit/Probit/Prais、VEC 的模型节点均已注册执行内核。Logit/Probit 的截距、迭代次数和容差，Prais 的 Prais–Winsten/Cochrane–Orcutt 变换，以及 IV 的非稳健/HC0–HC3 和 small 参数均进入实际计算。IV 支持多个内生变量与排除工具变量，外生自变量可为空；Summary 可选择第一阶段与过度识别检验，2SLS 还可选择内生性检验。OLS/WLS 的 Cluster 标准误使用可选 `clusters` 输入，只有选择 Cluster 时才允许且必须连接。
 
-Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 entity/time/two_way 维度。FD 仅支持 entity，Between 不支持 two_way；MLE/Between 仅支持 nonrobust，LSDV 必须有截距。不适用组合明确拒绝。Panel、VAR、VEC 输出模型；TWFE DID 输出模型和报告。它们不声明尚无正确数列投影的 fitted/residuals 端口。VAR 使用截距和连续滞后；IRF/FEVD 独立节点的 steps 默认 8，可选 1–1000。VAR/VEC Summary 的残差诊断启用后使用 serial_lags，默认 2，可选 1–40。VEC/协整秩支持 none/constant/trend。TWFE DID 的 treatment 是已构造的 Treat×Post，伪处理组随机化另用独立节点输入 treat/post、置换次数和种子；没有事件研究参数。
+Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 entity/time/two_way 维度。FD 仅支持 entity，Between 不支持 two_way；MLE/Between 仅支持 nonrobust，LSDV 必须有截距。不适用组合明确拒绝。通用 Panel Fit 输出模型及估计尺度的 fitted/residuals；源行分组保留在模型中。VAR 使用截距和连续滞后；IRF/FEVD 独立节点的 steps 默认 8，可选 1–1000。VAR/VEC Summary 的残差诊断启用后使用 serial_lags，默认 2，可选 1–40。VEC/协整秩支持 none/constant/trend。TWFE DID 的 treatment 是已构造的 Treat×Post，伪处理组随机化另用独立节点输入 treat/post、置换次数和种子；没有事件研究参数。
+
+`statistics/panel_models.rs` 完善“面板模型”中七个既有 `econometrics.panel.*` ID。
+FE、RE FGLS、FD、Between 复用 Panel 估计器，唯一 `model` 可直接连接现有 Summary/Predict；
+四者支持一个或多个自变量，实体和时间继续使用数值数列。动态面板输出结构化 `result`，采用
+折叠工具的一步 Arellano–Bond 差分 GMM，支持可选的严格外生自变量及实体稳健/非稳健协方差。
+它要求平衡、连续的整数期次、至少四期，实体数大于工具数；不声明系统/两步 GMM 或工具有效性检验。
+面板单位根为 Fisher–ADF，协整为 Fisher–Engle–Granger（1–5 个自变量），均返回各实体检验与合并结果。
+两项检验支持非平衡面板，但实体内部须连续；合并推断要求横截面独立，使用正确的 MacKinnon 校准。协整的五自变量上限来自校准表适用维度；ADF 滞后由实际样本自由度约束。
+这三项的期次、缺失、重复键、秩、资源预算及执行控制明确校验，14 篇中英文帮助说明默认参数、
+输出坐标、假设与范围；不从原占位名称推定其他面板检验方法。
 
 独立 BP/White/IM/RESET/VIF/杠杆值/BG/系数 t–Wald 节点接收线性模型；正态性、DW、Ljung–Box、ACF/PACF 接收数值序列。VAR Granger/IRF/FEVD 接收已拟合 VAR，IV Hausman 接收非稳健 2SLS 模型，不代替面板 FE/RE Hausman。检验和后估计输出可查看的结构化统计结果及报告，复用实际拟合事实。
+
+“模型诊断与比较”的其余 11 个入口由 `statistics/analyses/models.rs` 提供完整契约，沿用原 ID。
+共线性接收数值设计列；Harman 明确使用未旋转相关矩阵 PCA；NRI/IDI 接收同一验证样本的
+二元结局和两组概率，提供连续/风险分类 NRI 与 IDI 点估计。AIC/BIC 和 LR/Score/嵌套比较
+支持 OLS/WLS、Logit/Probit，比较校验同方法、响应行序、相对权重及设计嵌套。
+残差和 Cook 距离接收 OLS/WLS 模型，另输出 `observations` 数据表供分页与下游选列。
+PH 节点从原始对齐列拟合静态无分层 Cox，使用与拟合一致的 Efron/Breslow 时间交互 Score。
+22 篇中英文帮助明确公式、推断、默认值及未定义值；新增接口不设置固定样本行数上限。
 
 方法清单中的统计入口由 `src/statistics/inventory/entries.rs` 维护，运行时不读取规划 CSV。频数与描述已归入数据处理，分类汇总由 GroupBy 承接，独立基线分析入口已移除；FEVD 的两条来源共享一个入口。
 这些来源记录继续保留方法身份；已经实现的诊断及后估计由 `statistics/analyses.rs`、描述统计由 `statistics/descriptive.rs` 完善原 ID 的端口、参数和内核绑定，不重复生成骨架。其余入口保留名称、搜索别名、分类、用途、来源编号和范围说明，尚无内核，仍在目录中显示为不可用且不进入 AI 可执行节点搜索。
@@ -182,6 +233,17 @@ GroupBy 必选一个或多个分组键，始终输出 `row_count`，并可分别
 Catalog 消费 Protocol、Registry 和 SCI 的中立配置契约。
 图文档与语义快照属于 Graph，计划构建与缓存属于 Execution；图诊断定义、校验和前端模板生成
 属于 Graph 诊断链路，不会装配进节点目录。
+
+## 计量与因果分析节点
+
+`statistics/causal_models.rs` 将该类别余下 13 个既有 ID 接入真实内核：线性 IV GMM、
+锐断点 RDD、PSM、Heckman 两步法、组间处理效应异质性、半正态 SFA、SUR、IPW、RA、
+AIPW、ATE、ATT 和合成控制。原有 IV/DID 入口继续使用其方法族。
+四种处理效应估计器返回 `statistics.result.treatment_effect`；ATE/ATT 仅从该类型提取
+对应目标量及已有推断，不从原始均值构造因果结论。其他入口返回单个结构化 `result`，
+通过通用 Inspect 查看。SUR 用参数中的一基索引列表指定各方程的自变量。
+输入行对齐、选择样本空值、估计范围、默认值与推断限制由配套中英文 `causal_*.md` 帮助说明。
+重复输入没有固定数量上限，仍受可识别条件与执行预算约束。
 
 ## 参数声明
 

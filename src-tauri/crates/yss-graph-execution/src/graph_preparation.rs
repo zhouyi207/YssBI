@@ -505,6 +505,7 @@ fn map_result_category(category: GraphResultCategory) -> crate::plan::ResultCate
             GraphPlotDataKind::Violin => PlotDataKind::Violin,
             GraphPlotDataKind::Heatmap => PlotDataKind::Heatmap,
             GraphPlotDataKind::Coefficient => PlotDataKind::Coefficient,
+            GraphPlotDataKind::Nomogram => PlotDataKind::Nomogram,
         }),
         GraphResultCategory::StatisticalReport(kind) => {
             ResultCategory::StatisticalReport(match kind {

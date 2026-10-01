@@ -1,4 +1,10 @@
 use super::common::field;
+mod causal_models;
+mod diagnostics;
+mod panel_models;
+mod spatial;
+mod survival;
+mod time_series;
 use crate::*;
 use std::{
     borrow::Cow,
@@ -76,6 +82,88 @@ fn noise(n: usize) -> Vec<f64> {
             ((state >> 32) as u32) as f64 / u32::MAX as f64 - 0.5
         })
         .collect()
+}
+
+#[test]
+fn longitudinal_adapter_preserves_wide_labels_and_rejects_nulls_shapes_and_excess_budget() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../yss-sci/src/longitudinal/fixtures/reference.json"
+    ))
+    .unwrap();
+    let y: Vec<f64> = serde_json::from_value(fixture["cases"]["lmm_reml"]["y"].clone()).unwrap();
+    let x: Vec<f64> = serde_json::from_value(fixture["x"][0].clone()).unwrap();
+    let labels = RuntimeValue::List(
+        fixture["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| int(9_007_199_254_740_992 + g.as_i64().unwrap()))
+            .collect(),
+    );
+    let mut inputs = vec![
+        ("response", series(&y)),
+        ("predictors", series(&x)),
+        ("groups", labels.clone()),
+    ];
+    let parameters = [
+        ("constant", flag(true)),
+        ("max_iterations", int(500)),
+        ("tolerance", number(1e-7)),
+        ("mixed_estimation", string("reml")),
+    ];
+    let id = "yssbi.statistics.mixed.random_intercept";
+    let result = run(id, &inputs, &parameters, 1).unwrap();
+    let RuntimeValue::List(groups) = field(&result[0], "group_labels").unwrap() else {
+        panic!("groups")
+    };
+    let RuntimeValue::List(levels) = &groups[0] else {
+        panic!("levels")
+    };
+    assert_eq!(levels.len(), 18);
+    assert_eq!(levels[0], int(9_007_199_254_740_992));
+    assert_eq!(levels[1], int(9_007_199_254_740_993));
+    inputs[2].1 = RuntimeValue::List(vec![TabularScalar::Null.into(); y.len()].into());
+    assert!(matches!(
+        run(id, &inputs, &parameters, 1),
+        Err(KernelError::InvalidNumericInput)
+    ));
+    inputs[2].1 = series(&[0., 1.]);
+    assert!(matches!(
+        run(id, &inputs, &parameters, 1),
+        Err(KernelError::ShapeMismatch)
+    ));
+    inputs[2].1 = labels;
+    let mut control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    // Input columns fit, but the admitted dense mixed-model workspace does not.
+    control.max_input_bytes = 512 * 1024;
+    let inputs = inputs.into_iter().map(|(_, v)| v).collect::<Vec<_>>();
+    let outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let inv = KernelInvocation {
+        relations: &crate::tests::relations(),
+        inputs: &inputs,
+        input_keys: &["response", "predictors", "groups"],
+        parameters: parameters
+            .iter()
+            .map(|(k, v)| {
+                (
+                    KernelParameterKey::new((*k).into()).unwrap(),
+                    Cow::Borrowed(v),
+                )
+            })
+            .collect(),
+        outputs: &outputs,
+        control: &control,
+    };
+    assert!(matches!(
+        KernelRegistry::default().execute(&KernelId::new(id.into()).unwrap(), &inv),
+        Err(KernelError::BudgetExceeded)
+    ));
 }
 
 #[test]
@@ -463,7 +551,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
     for method in ["logit", "probit"] {
         let parameters = [
             ("constant", flag(false)),
-            ("max_iterations", int(100)),
+            ("max_iterations", int(20000)),
             ("tolerance", number(1e-8)),
         ];
         let fit = run(
@@ -541,7 +629,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
             &[("response", series(&py)), ("predictors", series(&px))],
             &[
                 ("constant", flag(true)),
-                ("max_iterations", int(100)),
+                ("max_iterations", int(20000)),
                 ("tolerance", number(1e-6)),
                 ("transform", string(transform)),
             ],
@@ -1333,4 +1421,161 @@ fn validate_display(root: &RuntimeValue) {
             }
         }
     }
+}
+
+#[test]
+fn scale_limits_gee_accepts_large_full_rank_design_and_singleton_clusters() {
+    let n = 1024usize;
+    let x = (1..=70)
+        .map(|j| {
+            (0..n)
+                .map(|i| {
+                    if (i & j).count_ones().is_multiple_of(2) {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let y = (0..n)
+        .map(|i| {
+            3.0 + 0.25 * x[0][i]
+                + 0.1 * x[1][i]
+                + if (i & 127).count_ones().is_multiple_of(2) {
+                    0.2
+                } else {
+                    -0.2
+                }
+        })
+        .collect::<Vec<_>>();
+    let mut inputs = vec![("response", series(&y))];
+    inputs.extend(x.iter().map(|v| ("predictors", series(v))));
+    inputs.push((
+        "groups",
+        RuntimeValue::List((0..n).map(|i| int(i as i64)).collect()),
+    ));
+    let result = run(
+        "yssbi.statistics.longitudinal.gee",
+        &inputs,
+        &[
+            ("constant", flag(true)),
+            ("max_iterations", int(20000)),
+            ("tolerance", number(1e-7)),
+            ("longitudinal_family", string("gaussian")),
+            ("working_correlation", string("independence")),
+        ],
+        1,
+    )
+    .unwrap();
+    let report = &result[0];
+    assert_eq!(field(report, "observations").unwrap(), &int(n as i64));
+    let RuntimeValue::List(coefficients) = field(report, "coefficients").unwrap() else {
+        panic!("coefficients")
+    };
+    assert_eq!(coefficients.len(), 71);
+    for (row, expected) in coefficients.iter().zip([3.0, 0.25, 0.1]) {
+        let actual = super::super::numeric_input(Some(field(row, "estimate").unwrap())).unwrap();
+        assert!((actual - expected).abs() < 1e-8);
+    }
+}
+
+#[test]
+fn scale_limits_mixed_estimators_preserve_replicated_reference_fits() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../yss-sci/src/longitudinal/fixtures/reference.json"
+    ))
+    .unwrap();
+    let x: Vec<f64> = serde_json::from_value(fixture["x"][0].clone()).unwrap();
+    let groups: Vec<i64> = serde_json::from_value(fixture["groups"].clone()).unwrap();
+    for (id, case, copies) in [
+        ("mixed.poisson", "glmm_poisson", 8),
+        ("mixed.random_intercept", "lmm_ml", 4),
+    ] {
+        let y: Vec<f64> = serde_json::from_value(fixture["cases"][case]["y"].clone()).unwrap();
+        let labels = RuntimeValue::List(
+            (0..copies)
+                .flat_map(|copy| groups.iter().map(move |g| int(g + 18 * copy as i64)))
+                .collect(),
+        );
+        let mut parameters = vec![
+            ("constant", flag(true)),
+            ("max_iterations", int(20000)),
+            ("tolerance", number(1e-7)),
+        ];
+        if case == "lmm_ml" {
+            parameters.push(("mixed_estimation", string("ml")));
+        }
+        let result = run(
+            &format!("yssbi.statistics.{id}"),
+            &[
+                ("response", series(&y.repeat(copies))),
+                ("predictors", series(&x.repeat(copies))),
+                ("groups", labels),
+            ],
+            &parameters,
+            1,
+        )
+        .unwrap();
+        let report = &result[0];
+        assert_eq!(
+            field(report, "observations").unwrap(),
+            &int((y.len() * copies) as i64)
+        );
+        let RuntimeValue::List(coefficients) = field(report, "coefficients").unwrap() else {
+            panic!("coefficients")
+        };
+        for (i, row) in coefficients.iter().enumerate() {
+            let actual =
+                super::super::numeric_input(Some(field(row, "estimate").unwrap())).unwrap();
+            let expected = fixture["cases"][case]["coefficients"][i].as_f64().unwrap();
+            assert!(
+                (actual - expected).abs() < 5e-4,
+                "{id}: {actual} != {expected}"
+            );
+        }
+    }
+}
+
+#[test]
+fn scale_limits_classification_and_classical_groups_keep_valid_results() {
+    let first = (0..600).map(|i| (i % 300) as f64).collect::<Vec<_>>();
+    let second = (0..600)
+        .map(|i| {
+            if i % 10 == 0 {
+                ((i + 1) % 300) as f64
+            } else {
+                first[i]
+            }
+        })
+        .collect::<Vec<_>>();
+    let result = run(
+        "yssbi.statistics.test.kappa",
+        &[("ratings", series(&first)), ("ratings", series(&second))],
+        &[
+            ("kappa_method", string("cohen")),
+            ("kappa_weighting", string("none")),
+            ("confidence_level", number(0.95)),
+        ],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(categories) = field(&result[0], "categories").unwrap() else {
+        panic!("categories")
+    };
+    assert_eq!(categories.len(), 300);
+    let observed =
+        super::super::numeric_input(Some(field(&result[0], "observed_agreement").unwrap()))
+            .unwrap();
+    assert!((observed - 0.9).abs() < 1e-12);
+    let groups = (0..17)
+        .map(|i| {
+            (
+                "groups",
+                series(&[i as f64, i as f64 + 1.0, i as f64 + 2.0]),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(run("yssbi.statistics.test.bartlett", &groups, &[], 1).is_ok());
 }

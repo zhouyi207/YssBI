@@ -1,8 +1,10 @@
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_sci_contract::panel::{PanelEffects as Effects, PanelEstimator as Estimator, PanelOptions};
+mod models;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    models::register(builder);
     install(
         builder,
         "yssbi.statistics.panel.predict",

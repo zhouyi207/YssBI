@@ -1,9 +1,11 @@
 use super::{Input, common::*, install};
+mod models;
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_sci_contract::diagnostics::residual::ResidualDiagnostic as Test;
 use yss_sci_contract::regression::summary::LinearSummaryOptions;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    models::register(builder);
     for (name, parameters) in [
         ("breusch_pagan", &["rhs", "koenker"][..]),
         ("white", &[][..]),

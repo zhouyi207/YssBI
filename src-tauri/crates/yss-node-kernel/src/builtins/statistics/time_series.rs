@@ -1,5 +1,6 @@
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
+mod forecast;
 
 #[derive(Clone, Copy)]
 enum Method {
@@ -10,6 +11,7 @@ enum Method {
     Rank,
 }
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    forecast::register(builder);
     use Method::*;
     for (id, method, params, outputs) in [
         ("adf.test", Adf, &["lags", "regression"][..], 1),

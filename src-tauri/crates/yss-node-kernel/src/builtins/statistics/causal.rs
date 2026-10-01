@@ -1,8 +1,10 @@
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_sci_contract::{causal::iv::InstrumentalVariableKind as IvKind, regression::OlsOptions};
+mod models;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    models::register(builder);
     for (name, kind) in [
         ("2sls", IvKind::TwoStageLeastSquares),
         ("liml", IvKind::LimitedInformationMaximumLikelihood),

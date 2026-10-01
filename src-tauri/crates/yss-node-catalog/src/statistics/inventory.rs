@@ -19,7 +19,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 }
 
 fn implemented(id: &str) -> bool {
-    super::analyses::implemented(id)
+    super::time_series::implemented(id)
+        || super::analyses::implemented(id)
+        || super::causal_models::implemented(id)
+        || super::spatial::implemented(id)
+        || super::survival::implemented(id)
+        || super::panel_models::implemented(id)
+        || super::longitudinal::implemented(id)
         || super::regression_models::implemented(id)
         || super::anova::implemented(id)
         || super::multivariate::implemented(id)

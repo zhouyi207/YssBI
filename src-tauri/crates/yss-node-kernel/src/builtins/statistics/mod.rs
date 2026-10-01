@@ -7,10 +7,13 @@ pub(super) mod common;
 mod descriptive;
 mod diagnostics;
 mod linear;
+mod longitudinal;
 mod multivariate;
 mod panel;
 mod regression;
 mod regression_models;
+mod spatial;
+mod survival;
 #[cfg(test)]
 mod tests;
 mod time_series;
@@ -20,12 +23,15 @@ use crate::{KernelContract, KernelId, KernelParameterKey, KernelRegistryBuilder}
 pub(crate) use linear::{LinearKernel, execute};
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    longitudinal::register(builder);
     anova::register(builder);
     multivariate::register(builder);
     regression::register(builder);
     regression_models::register(builder);
     association::register(builder);
     causal::register(builder);
+    spatial::register(builder);
+    survival::register(builder);
     panel::register(builder);
     time_series::register(builder);
     diagnostics::register(builder);

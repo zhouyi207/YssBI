@@ -5,6 +5,10 @@
 > Canonical owners: 本 crate、Graph Document 与 Editor 的源码拥有相应类型和解析事实
 > Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
 
+时间序列分类中的 `yssbi.statistics.plot.time_series` 与
+`yssbi.statistics.plot.correlogram` 分别解析为 Line / Correlogram 图形结果。
+它们优先于统计节点的通用结构化报告分类，继续使用既有绘图结果契约。
+
 ## Semantic resolution
 
 ```mermaid
@@ -40,6 +44,15 @@ Schema 输出缓存校验 registry、节点参数、常量内容、输入地址�
 Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Workflow。
 
 统计节点的 `result` 输出统一支持数值与 JSON 报告。线性 Summary 的类别保留原生分页/分析查询身份，其余统计 `result` 使用通用结构化报告类别；不再按统计方法分派专用报告页面。Fit 的 `model`、`fitted`、`residuals` 仍是普通数据，KDE 等绘图输出使用各自图形契约。
+
+生存模型的 `predictions` 由 `yssbi.statistics.survival.schema.predictions` 推导固定 Numeric
+列 `time`、`event`、`risk`，不读取拟合数据。列线图结果分类为 `Nomogram`，生存校准与
+决策曲线复用 `Line`；静态 Cox 模型仍可作为结构化报告读取。
+
+残差/Cook 的 `observations` 由 `yssbi.statistics.diagnostic.schema.observations` 推导
+固定 Numeric 列 `observation`、`fitted`、`residual`、`weighted_residual`、`leverage`、
+`standardized_residual`、`studentized_residual`、`cooks_distance`，编辑时不读取模型观测。
+摘要 `result` 沿用通用结构化报告；观测表可分页并连接选列等数据处理节点。
 
 多元分析的得分/坐标表由 `schema_resolution::multivariate` 消费 `components` 的有效参数，推导 Numeric 的 `axis1`…`axisK`；CCA 推导同表的 `x_axis1`…与 `y_axis1`…。
 Schema 依赖参数并参与既有缓存失效，维数编辑同步更新下游选列选项；编辑时不读取观测或拟合模型。判别预测的类别元素类型通过已有泛型端口从训练标签解析。

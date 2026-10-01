@@ -9,6 +9,38 @@
 
 ## 调用边界
 
+`builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
+AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型
+解码；原始列共同物化并证明对齐，二元结局支持 Bool 与 0/1。模型、矩阵、编码和观测表
+合并预算准入，取消和期限传给 SCI。残差/Cook 的逐行数组物化为一个可分页关系，
+摘要只含汇总字段；未定义的影响指标为 Null。算法及推断由 SCI 拥有。
+
+`builtins/statistics/spatial` 注册空间分析的 10 个入口。权重对象携带精确地区标识，
+下游共同物化观测列后复用分类编码匹配地区，拒绝重复、未知地区及不平衡面板，
+不以向量长度代替地区对应关系。计算按权重地区顺序、时期首次出现顺序组织，
+观测结果恢复输入行序；地区效应保持权重顺序。密集权重、矩阵分解、似然 Hessian、
+物化输入和结构化输出合并预算准入，并向 SCI 传递取消和期限。结果复用现有报告页面。
+
+`builtins/statistics/time_series/forecast` 注册时间序列分类的 16 个新增入口。
+共享物化路径证明列对齐，保留现有行顺序；SCI 接收取消和期限，工作区、预测长度、
+Markov 状态平方矩阵与结构化结果均在计算前按预算准入，不设置固定行数上限。
+Markov 恢复原始状态标签，时序图可省略时间列并使用从 1 开始的横坐标；
+显式时间须严格递增。时序图与相关图复用现有 SCI 绘图数据，其他入口返回结构化报告。
+
+`builtins/statistics/causal/models` 适配新增计量与因果分析入口，复用共享列对齐、
+精确分组编码和有限结果序列化。Heckman 仅在未入选行允许空结果；其余输入不静默删行。
+SUR 将方程自变量索引解析为中立列表，并按所有方程的总参数规模预算密集系统。
+数值工作区、bootstrap 顺序重拟合、结构化输出与常驻输入合并准入，取消和期限传递给 SCI。
+ATE/ATT 复用预算化结果解码，保留上游处理效应的方法、目标样本数及可空推断，
+不会将普通报告或原始数列解释为处理效应结果。
+
+`builtins/statistics/longitudinal` 注册 GEE、HLM、LMM、GLMM 及六个设计/分布预设。
+复用 `statistics/common/inputs` 的对齐物化、精确标签编码与数值读取，分组标签不转换为浮点。
+按算法估算输入、工作区与结构化结果峰值；Gaussian 混合模型计入密集协方差与方差分量秩检查，
+GEE/GLMM 按组计算，不计入未使用的全样本平方矩阵。保留 SCI 的取消、期限和未收敛失败。
+返回单个结构化结果，分组标签按首次出现排序、随机效应通过从 1 开始的分组/级别位置引用；
+所有观测数组保持输入行序。算法、边界与推断由 SCI/Contract 拥有，不新增结果页面。
+
 `builtins/statistics/regression_models` 为回归目录的 31 个新增入口提供无图适配：
 按本地输入键共同物化并证明行域对齐，将分类响应和分组编码交给 SCI，返回时恢复
 原始标签和声明的有序级别。输入、密集工作区、批量模型结果和结构化序列化均执行
@@ -52,6 +84,12 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 `KernelError` 表达维度、参数、行对齐、预算、调用契约、科学计算、取消和超时等稳定原因，不携带图地址。Execution 的 `OperationExecutionError` 补充图来源与阶段，IPC 和前端保留对应 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
 
+`statistics/survival` 适配 15 个生存分析节点，复用统计输入的联合物化、精确分类标签、
+预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
+静态 Cox 和 AFT 将原行序的时间、事件和风险一起物化为 `predictions` 关系，供下游
+评估节点选列；不把无血缘的内存预测向量与数据表按相同行数强行对齐。
+列线图只解码静态 Cox 类型，并由 SCI 计算刻度；Graph 负责图形类别。
+
 ## 模块
 
 | 模块                                           | 职责                                                      |
@@ -69,6 +107,12 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 | [transforms](src/builtins/transforms.rs)       | 数列变换、排序、筛选、重塑与标量聚合结果消费              |
 
 科学计算继续调用 `yss-sci-runtime`，数值算法属于 SCI，关系执行使用 `yss-relational-contract` 的句柄。这里不直接依赖 Graph、Project、Application、Tauri、DataFusion 或 Linalg。
+
+`statistics::panel::models` 绑定七个 `econometrics.panel.*` 入口。数值输入复用共同物化和行域证明，
+FE/RE/FD/Between 直接取得共享 `PanelFit`，恢复列名并输出可连接现有 Summary 的模型。
+动态面板及两项 Fisher 检验消费中立 `PanelData` 和执行控制；适配器按输入、设计/矩条件工作区和
+结构化结果合计检查预算，再调用 Runtime。它不构造 GMM 矩阵或在图编辑时读取数据。
+动态拟合保留真实列名及原始行索引；检验保留原数值实体编号，有限性验证先于 JSON 编码。
 
 `statistics::multivariate` 注册多元分析的七个目录 ID；数值列共同消费并证明行域，分类训练标签用 `TabularScalar::compare` 精确编码。
 判别的新预测组独立验证其自身对齐，复用训练尺度并恢复原始标签/语义。输入、密集工作区及得分的运行值/Arrow 转换一起准入，再调用 Runtime。

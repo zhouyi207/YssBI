@@ -28,6 +28,7 @@ pub enum GraphPlotDataKind {
     Violin,
     Heatmap,
     Coefficient,
+    Nomogram,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +43,15 @@ pub(crate) fn result_category_for_output(
 ) -> GraphResultCategory {
     if port_key == "result" && node_type_id == "yssbi.statistics.linear.summary" {
         GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::LinearRegressionSummary)
+    } else if matches!(
+        node_type_id,
+        "yssbi.statistics.plot.time_series"
+            | "yssbi.statistics.plot.correlogram"
+            | "yssbi.statistics.plot.nomogram"
+            | "yssbi.statistics.plot.calibration"
+            | "yssbi.statistics.plot.decision_curve"
+    ) {
+        plot_category_for_output(node_type_id, port_key)
     } else if port_key == "result" && node_type_id.starts_with("yssbi.statistics.") {
         GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::Structured)
     } else {
@@ -55,7 +65,7 @@ fn plot_category_for_output(node_type_id: &str, port_key: &str) -> GraphResultCa
     }
     let plot = match node_type_id {
         "yssbi.plot.scatter.view" => GraphPlotDataKind::Scatter,
-        "yssbi.plot.line.view" => GraphPlotDataKind::Line,
+        "yssbi.plot.line.view" | "yssbi.statistics.plot.time_series" => GraphPlotDataKind::Line,
         "yssbi.plot.ecdf.view" => GraphPlotDataKind::Ecdf,
         "yssbi.plot.kde.view" => GraphPlotDataKind::Kde,
         "yssbi.plot.boxplot.view" => GraphPlotDataKind::Boxplot,
@@ -70,9 +80,15 @@ fn plot_category_for_output(node_type_id: &str, port_key: &str) -> GraphResultCa
         "yssbi.plot.violin.view" => GraphPlotDataKind::Violin,
         "yssbi.plot.heatmap.view" => GraphPlotDataKind::Heatmap,
         "yssbi.plot.coefficient.view" => GraphPlotDataKind::Coefficient,
+        "yssbi.statistics.plot.nomogram" => GraphPlotDataKind::Nomogram,
+        "yssbi.statistics.plot.calibration" | "yssbi.statistics.plot.decision_curve" => {
+            GraphPlotDataKind::Line
+        }
         "yssbi.plot.histogram.view" => GraphPlotDataKind::Histogram,
         "yssbi.plot.correlation.view" => GraphPlotDataKind::Correlation,
-        "yssbi.plot.correlogram.view" => GraphPlotDataKind::Correlogram,
+        "yssbi.plot.correlogram.view" | "yssbi.statistics.plot.correlogram" => {
+            GraphPlotDataKind::Correlogram
+        }
         _ => return GraphResultCategory::Value,
     };
     GraphResultCategory::PlotData(plot)
@@ -115,6 +131,15 @@ mod tests {
         }
         for (node, kind) in [
             ("yssbi.plot.scatter.view", GraphPlotDataKind::Scatter),
+            (
+                "yssbi.statistics.plot.nomogram",
+                GraphPlotDataKind::Nomogram,
+            ),
+            ("yssbi.statistics.plot.calibration", GraphPlotDataKind::Line),
+            (
+                "yssbi.statistics.plot.decision_curve",
+                GraphPlotDataKind::Line,
+            ),
             ("yssbi.plot.line.view", GraphPlotDataKind::Line),
             ("yssbi.plot.ecdf.view", GraphPlotDataKind::Ecdf),
             ("yssbi.plot.kde.view", GraphPlotDataKind::Kde),

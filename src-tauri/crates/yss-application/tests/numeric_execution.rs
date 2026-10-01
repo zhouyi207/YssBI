@@ -1,6 +1,20 @@
 use std::collections::BTreeMap;
+#[path = "numeric_execution/causal_models.rs"]
+mod causal_models;
+#[path = "numeric_execution/diagnostics.rs"]
+mod diagnostics;
+#[path = "numeric_execution/longitudinal.rs"]
+mod longitudinal;
+#[path = "numeric_execution/panel_models.rs"]
+mod panel_models;
 #[path = "numeric_execution/regression_models.rs"]
 mod regression_models;
+#[path = "numeric_execution/spatial.rs"]
+mod spatial;
+#[path = "numeric_execution/survival.rs"]
+mod survival;
+#[path = "numeric_execution/time_series.rs"]
+mod time_series;
 #[path = "numeric_execution/transforms.rs"]
 mod transforms;
 #[path = "numeric_execution/visualization.rs"]
@@ -1538,7 +1552,12 @@ fn execute(
     );
     let package = state
         .prepare_graph_package(&graph, &analysis, basis)
-        .unwrap();
+        .unwrap_or_else(|error| {
+            panic!(
+                "{output_node_type}: {error:?}; {:?}",
+                analysis.semantic_snapshot().diagnostics()
+            )
+        });
     let requested_output = package
         .plan()
         .operations()

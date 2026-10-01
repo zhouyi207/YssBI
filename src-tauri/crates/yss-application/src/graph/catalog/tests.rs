@@ -524,6 +524,52 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
 }
 
 #[test]
+fn implemented_diagnostic_causal_and_panel_categories_are_available_in_both_catalog_projections() {
+    let session = staged_session(
+        ProjectData::new(),
+        "implemented-causal-panel-availability",
+        GraphRuntimeTestControl::default(),
+    );
+    let project_instance_id = session.session.project_instance_id().clone();
+    let catalog = session
+        .application
+        .localized_node_catalog(LocalizedCatalogRequest::new(
+            project_instance_id.clone(),
+            "zh-CN",
+        ))
+        .unwrap();
+    let snapshot = session
+        .application
+        .query_project_index(project_instance_id, "zh-CN", true)
+        .unwrap();
+    for category in [
+        "statistics.diagnostics",
+        "statistics.causal",
+        "statistics.panel",
+    ] {
+        let items = catalog
+            .catalog
+            .items
+            .iter()
+            .filter(|item| item.category_id.as_ref() == category)
+            .collect::<Vec<_>>();
+        assert!(!items.is_empty(), "missing category {category}");
+        for item in &items {
+            assert!(item.available, "{} ({})", item.title, item.node_type_id);
+            assert!(snapshot.activity_panels.iter().flat_map(|panel| &panel.rows).any(
+                |row| matches!(
+                    &row.content,
+                    crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Node {
+                        creation: yss_node_catalog::NodeCreation::Static { node_type_id }, available: true, ..
+                    }) if node_type_id.as_str() == item.node_type_id.as_ref()
+                )
+            ), "sidebar must expose {} as available", item.node_type_id);
+        }
+        println!("{category}: {} available, 0 unavailable", items.len());
+    }
+}
+
+#[test]
 fn compatible_catalog_filters_against_unsaved_draft_source() {
     let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
     let source_node = NodeId::new();

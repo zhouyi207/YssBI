@@ -77,6 +77,7 @@ pub enum ResultPlotKindDto {
     Violin,
     Heatmap,
     Coefficient,
+    Nomogram,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -162,6 +163,7 @@ fn result_presentation(
         yss_graph_execution::plan::ResultCategory::PlotData(kind) => ResultPresentationDto::Plot {
             chart: match kind {
                 yss_graph_execution::plan::PlotDataKind::Scatter => ResultPlotKindDto::Scatter,
+                yss_graph_execution::plan::PlotDataKind::Nomogram => ResultPlotKindDto::Nomogram,
                 yss_graph_execution::plan::PlotDataKind::Line => ResultPlotKindDto::Line,
                 yss_graph_execution::plan::PlotDataKind::Ecdf => ResultPlotKindDto::Ecdf,
                 yss_graph_execution::plan::PlotDataKind::Kde => ResultPlotKindDto::Kde,
@@ -308,6 +310,7 @@ mod tests {
             (PlotDataKind::Violin, "violin"),
             (PlotDataKind::Heatmap, "heatmap"),
             (PlotDataKind::Coefficient, "coefficient"),
+            (PlotDataKind::Nomogram, "nomogram"),
             (PlotDataKind::Kde, "kde"),
         ] {
             let wire =

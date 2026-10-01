@@ -1,5 +1,6 @@
 //! Executable diagnostics and post-estimation protocols.
 use super::*;
+mod models;
 
 const SPECS: &[(&str, &str, &str, &str, &str)] = &[
     (
@@ -124,7 +125,7 @@ const SPECS: &[(&str, &str, &str, &str, &str)] = &[
 ];
 
 pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|spec| spec.0 == id)
+    SPECS.iter().any(|spec| spec.0 == id) || models::implemented(id)
 }
 
 fn help(id: &str) -> (&'static str, &'static str) {
@@ -181,6 +182,7 @@ fn help(id: &str) -> (&'static str, &'static str) {
 }
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    models::append(fragment)?;
     for &(id, en, zh, category, input) in SPECS {
         let port = if input == "series" {
             data_input("series", "DataSeries", series_type()?)?

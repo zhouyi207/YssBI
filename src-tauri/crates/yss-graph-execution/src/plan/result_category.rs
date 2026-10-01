@@ -29,6 +29,7 @@ pub enum PlotDataKind {
     Violin,
     Heatmap,
     Coefficient,
+    Nomogram,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
