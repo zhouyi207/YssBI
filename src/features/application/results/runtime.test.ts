@@ -136,8 +136,14 @@ describe("current result lifecycle", () => {
   it("isolates analysis parameters, failures and recovery for independent consumers", async () => {
     const reference = resultReferenceFixture("1");
     const release = resultQueryCoordinator.retainPayload(reference);
-    const first = { reference, analysis: { kind: "residualPlot" as const, maxPoints: 2 } };
-    const second = { reference, analysis: { kind: "residualPlot" as const, maxPoints: 3 } };
+    const first = {
+      reference,
+      analysis: { kind: "residualPlot" as const, adjacent: false, maxPoints: 2 },
+    };
+    const second = {
+      reference,
+      analysis: { kind: "residualPlot" as const, adjacent: false, maxPoints: 3 },
+    };
     const service = vi
       .spyOn(ResultService, "analyze")
       .mockImplementation(async (_ref, analysis) => ({
@@ -145,12 +151,13 @@ describe("current result lifecycle", () => {
         value: {
           points: Array.from(
             { length: analysis.kind === "residualPlot" ? analysis.maxPoints : 0 },
-            (_, index) => ({ observation: index + 1, x: index, y: index }),
+            (_, index) => ({ observation: index + 1, x: index, y: index, highlighted: false }),
           ),
           sampled: true,
           totalCount: 10,
           matchedCount: 10,
           sampling: "systematic",
+          highlightAvailable: true,
         },
       }));
     expect(

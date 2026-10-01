@@ -100,19 +100,10 @@ pub enum ToolEffect {
     External,
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ApprovalPolicy {
-    Automatic,
-    Configurable,
-    Required,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CapabilityDescriptor {
     pub id: CapabilityId,
     pub effect: ToolEffect,
-    pub approval: ApprovalPolicy,
     pub maximum_results: u16,
 }
 
@@ -132,109 +123,91 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 18] = [
     CapabilityDescriptor {
         id: CapabilityId::InspectGraph,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 2_000,
     },
     CapabilityDescriptor {
         id: CapabilityId::SearchNodeCatalog,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: MAX_CATALOG_RESULTS,
     },
     CapabilityDescriptor {
         id: CapabilityId::InspectDatasetSchema,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 4_096,
     },
     CapabilityDescriptor {
         id: CapabilityId::InspectDatasetProfile,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 1,
     },
     CapabilityDescriptor {
         id: CapabilityId::InspectResult,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 100,
     },
     CapabilityDescriptor {
         id: CapabilityId::InspectProject,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 2_000,
     },
     CapabilityDescriptor {
         id: CapabilityId::ApplyGraphEdit,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 200,
     },
     CapabilityDescriptor {
         id: CapabilityId::ValidateGraph,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 200,
     },
     CapabilityDescriptor {
         id: CapabilityId::ExecuteGraph,
         effect: ToolEffect::Compute,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 100,
     },
     CapabilityDescriptor {
         id: CapabilityId::SaveGraph,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 1,
     },
     CapabilityDescriptor {
         id: CapabilityId::ListGraphResults,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 100,
     },
     CapabilityDescriptor {
         id: CapabilityId::InspectUi,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 128,
     },
     CapabilityDescriptor {
         id: CapabilityId::UpdateUi,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 128,
     },
     CapabilityDescriptor {
         id: CapabilityId::RequestUiIntent,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 1,
     },
     CapabilityDescriptor {
         id: CapabilityId::InspectResource,
         effect: ToolEffect::Inspect,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 500,
     },
     CapabilityDescriptor {
         id: CapabilityId::ManageResource,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 2_000,
     },
     CapabilityDescriptor {
         id: CapabilityId::EditResource,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 500,
     },
     CapabilityDescriptor {
         id: CapabilityId::ExportDataset,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Automatic,
         maximum_results: 1,
     },
 ];

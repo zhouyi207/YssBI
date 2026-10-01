@@ -105,6 +105,19 @@ pub fn run_hypothesis_test(
     input: HypothesisTestInput,
 ) -> Result<HypothesisTestOutput, HypothesisError> {
     let k = input.betas.len();
+    if input.cov_beta.len() != k
+        || input.cov_beta.iter().any(|r| r.len() != k)
+        || input
+            .param_names
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != k
+    {
+        return Err(HypothesisError::InvalidInput(
+            "coefficient names or covariance shape are invalid".into(),
+        ));
+    }
     if input.param_names.len() != k {
         return Err(HypothesisError::InvalidInput(format!(
             "param_names 长度 {} 与 betas 长度 {} 不一致",
@@ -172,6 +185,33 @@ pub fn run_hypothesis_test(
             })
         }
     }
+}
+
+/// Asymptotic coefficient inference shares the validated contrast calculation,
+/// replacing only the finite-sample reference distribution.
+pub fn run_asymptotic_hypothesis_test(
+    input: HypothesisTestInput,
+) -> Result<HypothesisTestOutput, HypothesisError> {
+    use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
+    let mut result = run_hypothesis_test(input)?;
+    if result.test_type == "t" {
+        let normal =
+            Normal::new(0.0, 1.0).map_err(|e| HypothesisError::InvalidInput(e.to_string()))?;
+        result.p_value = if result.alternative == "two_sided" {
+            2.0 * normal.sf(result.stat.abs())
+        } else {
+            normal.sf(result.stat)
+        };
+        result.test_type = "z".into();
+    } else {
+        result.stat *= result.df1 as f64;
+        let distribution = ChiSquared::new(result.df1 as f64)
+            .map_err(|e| HypothesisError::InvalidInput(e.to_string()))?;
+        result.p_value = distribution.sf(result.stat);
+        result.test_type = "chi2".into();
+    }
+    result.df2 = 0;
+    Ok(result)
 }
 
 /// Parse margins `at()` specs such as `x1 = 0, x2 = 1.5` into param -> value.

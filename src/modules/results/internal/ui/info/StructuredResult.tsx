@@ -1,3 +1,9 @@
+import type { UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
+import {
+  parseReportDisplay,
+  structuredValueAt,
+} from "@/shared/types/domain/structuredReportDisplay";
+import { StructuredReportTable } from "./StructuredReportBindings";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -86,11 +92,29 @@ export function StructuredResult({
       </Section>
     );
   };
-  return (
-    <ResultReportPage
-      reference={reference}
-      data={{}}
-      bindings={{ result: { type: "structured", value, renderReference } }}
-    />
-  );
+  const bindings: Record<string, UiResultBindings[string]> = {
+    result: { type: "structured", value, renderReference },
+  };
+  for (const [id, section] of Object.entries(parseReportDisplay(value))) {
+    const target = structuredValueAt(value, section.path);
+    if (section.kind === "equation") {
+      if (typeof target !== "string" || new TextEncoder().encode(target).length > 16384)
+        throw new Error("invalid_report_equation");
+      bindings[`report_${id}`] = {
+        type: "equation",
+        content: (
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/30 p-4 font-mono text-sm">
+            {target}
+          </pre>
+        ),
+      };
+    } else {
+      if (!isStructuredTableReference(target)) throw new Error("invalid_report_table");
+      bindings[`report_${id}`] = {
+        type: section.kind === "stability" ? "chart" : "table",
+        content: <StructuredReportTable reference={reference} table={target} section={section} />,
+      };
+    }
+  }
+  return <ResultReportPage reference={reference} data={{}} bindings={bindings} />;
 }

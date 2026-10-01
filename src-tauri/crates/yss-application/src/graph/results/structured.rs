@@ -19,7 +19,7 @@ pub(super) fn supports(snapshot: &StoredResultSnapshot) -> bool {
 #[path = "tests/structured.rs"]
 mod tests;
 
-pub(super) fn path_tokens(path: &str) -> Option<Vec<String>> {
+pub(crate) fn path_tokens(path: &str) -> Option<Vec<String>> {
     if !path.starts_with('/') || path.len() > 4096 {
         return None;
     }
@@ -50,7 +50,7 @@ fn child_path(path: &str, key: &str) -> String {
     format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"))
 }
 
-pub(super) fn project(value: &RuntimeValue) -> Result<RuntimeValue, ResultQueryApplicationError> {
+pub(crate) fn project(value: &RuntimeValue) -> Result<RuntimeValue, ResultQueryApplicationError> {
     let mut remaining = MAX_INLINE_PROJECTION_BYTES;
     project_at(value, "", 0, &mut remaining)
 }
@@ -111,6 +111,22 @@ fn project_at(
     }
 }
 
+pub(crate) fn at_path<'a>(root: &'a RuntimeValue, path: &str) -> Option<&'a RuntimeValue> {
+    let mut value = root;
+    for token in path_tokens(path)? {
+        value = match value.unannotated() {
+            RuntimeValue::Record(fields) => fields.get(token.as_str()),
+            RuntimeValue::List(values) => token
+                .parse::<usize>()
+                .ok()
+                .filter(|index| index.to_string() == token)
+                .and_then(|index| values.get(index)),
+            _ => None,
+        }?;
+    }
+    Some(value.unannotated())
+}
+
 pub(super) fn page(
     root: &RuntimeValue,
     path: &str,
@@ -121,19 +137,7 @@ pub(super) fn page(
         return Err(ResultQueryApplicationError::InvalidPageRequest);
     }
     let tokens = path_tokens(path).ok_or(ResultQueryApplicationError::InvalidPageRequest)?;
-    let mut value = root;
-    for token in &tokens {
-        value = match value.unannotated() {
-            RuntimeValue::Record(fields) => fields.get(token.as_str()),
-            RuntimeValue::List(values) => token
-                .parse::<usize>()
-                .ok()
-                .filter(|index| index.to_string() == *token)
-                .and_then(|index| values.get(index)),
-            _ => None,
-        }
-        .ok_or(ResultQueryApplicationError::InvalidPageRequest)?;
-    }
+    let value = at_path(root, path).ok_or(ResultQueryApplicationError::InvalidPageRequest)?;
     let RuntimeValue::List(values) = value.unannotated() else {
         return Err(ResultQueryApplicationError::InvalidPageRequest);
     };

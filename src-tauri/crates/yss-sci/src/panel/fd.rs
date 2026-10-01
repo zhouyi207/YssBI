@@ -110,6 +110,22 @@ pub fn fit_panel_fd(
         .len();
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "first_difference".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_fd".into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {

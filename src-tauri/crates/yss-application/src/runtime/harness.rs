@@ -49,7 +49,6 @@ impl IdGeneratorPort for HarnessIdGenerator {
             AutomationIdKind::AgentRun => "agent",
             AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
-            AutomationIdKind::CapabilityInvocation => "capability",
             AutomationIdKind::MemoryRecord => "memory",
             AutomationIdKind::ApprovalGrant => "approval",
         };

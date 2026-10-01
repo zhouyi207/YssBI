@@ -107,13 +107,14 @@ it("loads an OLS overview and reads selected analyses and expanded plots by refe
         kind: "residualPlot",
         value: {
           points: [
-            { observation: 1, x: 1, y: -1 },
-            { observation: 53940, x: 2, y: 1 },
+            { observation: 1, x: 1, y: -1, highlighted: false },
+            { observation: 53940, x: 2, y: 1, highlighted: false },
           ],
           totalCount: 53940,
           matchedCount: 53940,
           sampled: true,
           sampling: "systematic",
+          highlightAvailable: true,
         },
       };
     if (analysis.kind === "hypothesis")
@@ -180,8 +181,10 @@ it("loads an OLS overview and reads selected analyses and expanded plots by refe
     });
     expect(ResultService.analyze).toHaveBeenCalledWith(report.resultRef, {
       kind: "residualPlot",
+      adjacent: false,
       maxPoints: 2000,
       xRange: undefined,
+      highlightTopPercent: undefined,
     });
     expect(host.textContent).toContain("sampled observations of 53940");
 

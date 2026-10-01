@@ -77,6 +77,14 @@ pub fn fit_instrumental_variables(
     }
     .map_err(|_| computation_failed(op))?;
     Ok(InstrumentalVariableFit {
+        response_name: "response".into(),
+        parameter_names: std::iter::once("_cons".into())
+            .take(usize::from(options.constant))
+            .chain((0..exogenous.len() + endogenous.len()).map(|j| format!("x{}", j + 1)))
+            .collect(),
+        instrument_names: (0..instrument_columns.len())
+            .map(|j| format!("z{}", j + 1))
+            .collect(),
         family: match kind {
             InstrumentalVariableKind::TwoStageLeastSquares => "iv_2sls",
             InstrumentalVariableKind::LimitedInformationMaximumLikelihood => "iv_liml",

@@ -41,7 +41,13 @@ export function resultAnalysisParameters(request: ResultAnalysisQuery): string {
   const analysis = request.analysis;
   switch (analysis.kind) {
     case "residualPlot":
-      return JSON.stringify([analysis.maxPoints, analysis.xRange ?? null]);
+      return JSON.stringify([
+        analysis.maxPoints,
+        analysis.xRange ?? null,
+        analysis.adjacent,
+        analysis.highlightTopPercent ?? null,
+      ]);
+    case "diagnostics":
     case "acfPacf":
     case "serialTests":
     case "hypothesis":

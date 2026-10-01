@@ -6,17 +6,18 @@ fn near(actual: f64, expected: f64) {
 }
 
 #[test]
-fn unified_gls_identity_estimates_scale_like_ols() {
-    use yss_sci::regression::fit::fit_regression;
-    use yss_sci_contract::regression::fit::{RegressionKind, RegressionStatistics};
+fn gls_identity_estimates_scale_like_ols() {
+    use yss_sci::regression::linear::fit::fit_linear_regression;
+    use yss_sci_contract::regression::fit::RegressionStatistics;
+    use yss_sci_contract::regression::linear::LinearRegressionMethod;
     use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
 
-    let fit = |kind| {
-        fit_regression(
-            kind,
+    let fit = |method| {
+        fit_linear_regression(
             vec![1., 2., 1., 4., 3.],
-            vec![vec![0., 1., 2., 3., 4.]],
-            None,
+            &[vec![0., 1., 2., 3., 4.]],
+            Default::default(),
+            method,
             StatisticalObservationMetadata {
                 original_observation_count: 5,
                 used_observation_count: 5,
@@ -27,8 +28,12 @@ fn unified_gls_identity_estimates_scale_like_ols() {
         )
         .unwrap()
     };
-    let ols = fit(RegressionKind::Ols);
-    let gls = fit(RegressionKind::Gls);
+    let ols = fit(LinearRegressionMethod::Ols);
+    let gls = fit(LinearRegressionMethod::Gls {
+        sigma: (0..5)
+            .map(|i| (0..5).map(|j| f64::from(i == j)).collect())
+            .collect(),
+    });
     assert_eq!(gls.family, "gls");
     let (
         RegressionStatistics::Linear {

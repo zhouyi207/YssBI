@@ -80,8 +80,11 @@ pub enum ResultAnalysisRequestDto {
     ResidualPlot {
         max_points: usize,
         x_range: Option<[f64; 2]>,
+        adjacent: bool,
+        highlight_top_percent: Option<f64>,
     },
     // Struct variants enforce deny_unknown_fields for these parameter-free reads.
+    Diagnostics {},
     AcfPacf {},
     SerialTests {},
     Hypothesis {},
@@ -93,10 +96,15 @@ impl From<ResultAnalysisRequestDto> for ResultAnalysisRequest {
             ResultAnalysisRequestDto::ResidualPlot {
                 max_points,
                 x_range,
+                adjacent,
+                highlight_top_percent,
             } => Self::ResidualPlot {
                 max_points,
                 x_range,
+                adjacent,
+                highlight_top_percent,
             },
+            ResultAnalysisRequestDto::Diagnostics {} => Self::Diagnostics,
             ResultAnalysisRequestDto::AcfPacf {} => Self::AcfPacf,
             ResultAnalysisRequestDto::SerialTests {} => Self::SerialTests,
             ResultAnalysisRequestDto::Hypothesis {} => Self::Hypothesis,
@@ -112,6 +120,7 @@ pub struct ResidualPlotDto {
     matched_count: usize,
     sampled: bool,
     sampling: &'static str,
+    highlight_available: bool,
 }
 
 #[derive(Serialize)]
@@ -119,12 +128,14 @@ pub struct ResidualPlotPointDto {
     observation: usize,
     x: f64,
     y: f64,
+    highlighted: bool,
 }
 
 #[derive(Serialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ResultAnalysisResponseDto {
     ResidualPlot(ResidualPlotDto),
+    Diagnostics(yss_node_kernel::LinearDiagnostics),
     AcfPacf(AcfPacfResponseDto),
     SerialTests(SerialTestsResponseDto),
     Hypothesis(HypothesisTestResponseDto),
@@ -141,13 +152,16 @@ impl From<ResultAnalysisProjection> for ResultAnalysisResponseDto {
                         observation: point.observation,
                         x: point.x,
                         y: point.y,
+                        highlighted: point.highlighted,
                     })
                     .collect(),
                 total_count: value.total_count,
                 matched_count: value.matched_count,
                 sampled: value.sampled,
                 sampling: "systematic",
+                highlight_available: value.highlight_available,
             }),
+            ResultAnalysisProjection::Diagnostics(value) => Self::Diagnostics(value),
             ResultAnalysisProjection::AcfPacf(value) => Self::AcfPacf(AcfPacfResponseDto {
                 acf: value.acf,
                 pacf: value.pacf,
@@ -261,7 +275,7 @@ mod tests {
         );
         assert!(matches!(
             serde_json::from_value::<ResultAnalysisRequestDto>(
-                serde_json::json!({ "kind": "residualPlot", "maxPoints": 100, "xRange": [0, 1] })
+                serde_json::json!({ "kind": "residualPlot", "adjacent": false, "maxPoints": 100, "xRange": [0, 1] })
             )
             .unwrap(),
             ResultAnalysisRequestDto::ResidualPlot {

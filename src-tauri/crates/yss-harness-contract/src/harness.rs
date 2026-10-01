@@ -493,7 +493,6 @@ pub enum AutomationIdKind {
     AgentRun,
     WorkflowRun,
     ToolInvocation,
-    CapabilityInvocation,
     MemoryRecord,
     ApprovalGrant,
 }

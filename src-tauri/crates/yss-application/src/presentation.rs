@@ -513,7 +513,9 @@ fn report_spec(session: &ApplicationSession, source: &UiSource) -> Result<UiSpec
             let summary = model.summary.as_ref().ok_or(UiError::Unavailable)?;
             Ok(templates::regression::spec_for(&summary.options))
         }
-        RuntimeValue::Record(_) => Ok(templates::structured()),
+        RuntimeValue::Record(_) => {
+            templates::spec_for(result.value().value()).map_err(|_| UiError::Invalid)
+        }
         _ => Err(UiError::Unavailable),
     }
 }

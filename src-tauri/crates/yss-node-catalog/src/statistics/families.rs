@@ -39,6 +39,24 @@ pub(super) struct NodeSpec {
 
 pub(super) const NODES: &[NodeSpec] = &[
     node(
+        "yssbi.statistics.panel.predict",
+        "Panel estimation-scale prediction",
+        "面板估计尺度预测",
+        &["panel predict"],
+        &["面板预测"],
+        Family::Panel,
+        Stage::Predict,
+    ),
+    node(
+        "yssbi.statistics.panel.compare",
+        "Compare panel estimators",
+        "比较面板估计器",
+        &["panel comparison"],
+        &["多模型比较"],
+        Family::Panel,
+        Stage::Fit,
+    ),
+    node(
         "yssbi.statistics.panel.did.randomization",
         "DID fake-group randomization",
         "DID 伪处理组随机化检验",
@@ -141,7 +159,13 @@ pub(super) const NODES: &[NodeSpec] = &[
         "yssbi.statistics.logit.summary",
         "Logit Summary",
         "Logit 汇总",
-        &["logit report", "odds", "maximum likelihood"],
+        &[
+            "logit report",
+            "odds",
+            "odds_ratio",
+            "marginal_effects",
+            "maximum likelihood",
+        ],
         &["Logit 报告", "胜算", "极大似然"],
         Family::Logit,
         Stage::Summary,
@@ -231,7 +255,12 @@ pub(super) const NODES: &[NodeSpec] = &[
         "yssbi.statistics.probit.summary",
         "Probit Summary",
         "Probit 汇总",
-        &["probit report", "marginal effects", "maximum likelihood"],
+        &[
+            "probit report",
+            "marginal effects",
+            "marginal_effects",
+            "maximum likelihood",
+        ],
         &["Probit 报告", "边际效应", "极大似然"],
         Family::Probit,
         Stage::Summary,

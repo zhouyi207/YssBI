@@ -1,26 +1,16 @@
-//! Regression-family dispatch and report encoding.
+//! Regression-family entry points and report encoding.
 pub mod discrete;
 pub mod linear;
 pub mod models;
 pub mod report;
-use yss_sci_contract::regression::fit::{RegressionFit, RegressionKind};
-use yss_sci_contract::{SciError, StatisticalObservationMetadata};
-
-pub fn fit_regression(
-    kind: RegressionKind,
-    response: Vec<f64>,
-    predictors: Vec<Vec<f64>>,
-    weights: Option<Vec<f64>>,
-    metadata: StatisticalObservationMetadata,
-) -> Result<RegressionFit, SciError> {
-    yss_sci::regression::fit::fit_regression(kind, response, predictors, weights, metadata)
-}
-
 #[cfg(test)]
 mod tests {
     use super::report::regression_report;
     use super::*;
-    use yss_sci_contract::regression::fit::RegressionStatistics;
+    use std::time::{Duration, Instant};
+    use yss_sci_contract::execution::{ScientificCancellationToken, ScientificExecutionControl};
+    use yss_sci_contract::regression::fit::{BinaryRegressionLink, RegressionStatistics};
+    use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
     use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
 
     fn regression_metadata(observations: usize) -> StatisticalObservationMetadata {
@@ -35,26 +25,44 @@ mod tests {
 
     #[test]
     fn regression_reports_expose_hypothesis_inputs() {
-        for (kind, method) in [
-            (RegressionKind::Ols, "OLS"),
-            (RegressionKind::Wls, "WLS"),
-            (RegressionKind::Gls, "GLS"),
+        for (method, label) in [
+            (LinearRegressionMethod::Ols, "OLS"),
+            (
+                LinearRegressionMethod::Wls {
+                    weights: vec![1.0; 6],
+                },
+                "WLS",
+            ),
+            (
+                LinearRegressionMethod::Gls {
+                    sigma: (0..6)
+                        .map(|i| (0..6).map(|j| f64::from(i == j)).collect())
+                        .collect(),
+                },
+                "GLS",
+            ),
         ] {
             let response = vec![1.0, 2.1, 2.9, 4.2, 5.1, 5.9];
             let predictor = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
-            let fit = fit_regression(
-                kind,
-                response.clone(),
-                vec![predictor],
-                Some(vec![1.0; response.len()]),
-                regression_metadata(response.len()),
+            let fit = linear::linear_regression(
+                LinearRegressionRequest {
+                    method,
+                    response,
+                    predictors: vec![predictor],
+                    options: Default::default(),
+                },
+                &ScientificExecutionControl {
+                    cancellation: ScientificCancellationToken::new(),
+                    deadline: Instant::now() + Duration::from_secs(5),
+                },
             )
             .unwrap();
 
-            let report = regression_report(&fit).expect("regression report must serialize");
+            let report =
+                serde_json::to_value(&fit.report).expect("regression report must serialize");
 
             assert_eq!(report["title"], "Linear Regression Summary");
-            assert_eq!(report["model_basic_info"]["model_type"], method);
+            assert_eq!(report["model_basic_info"]["model_type"], label);
             assert_eq!(
                 report["coefficients"]
                     .as_array()
@@ -81,14 +89,14 @@ mod tests {
         let predictor = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
 
         for (kind, expected_link) in [
-            (RegressionKind::Logit, "logit"),
-            (RegressionKind::Probit, "probit"),
+            (BinaryRegressionLink::Logit, "logit"),
+            (BinaryRegressionLink::Probit, "probit"),
         ] {
-            let fit = fit_regression(
+            let fit = discrete::fit_binary(
                 kind,
                 response.clone(),
-                vec![predictor.clone()],
-                None,
+                std::slice::from_ref(&predictor),
+                Default::default(),
                 regression_metadata(response.len()),
             )
             .unwrap();
@@ -154,11 +162,10 @@ mod tests {
     fn prais_regression_report_preserves_autocorrelation_statistics() {
         let response = vec![1.0, 1.8, 2.7, 3.9, 5.4, 6.8, 8.5, 10.1];
         let predictor = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let fit = fit_regression(
-            RegressionKind::Prais,
+        let fit = linear::prais::fit_prais(
             response.clone(),
-            vec![predictor],
-            None,
+            &[predictor],
+            Default::default(),
             regression_metadata(response.len()),
         )
         .unwrap();

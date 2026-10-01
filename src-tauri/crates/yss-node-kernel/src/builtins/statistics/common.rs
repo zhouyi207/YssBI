@@ -195,3 +195,11 @@ pub(super) fn decode_model<T: serde::de::DeserializeOwned>(
     inv.check_control()?;
     Ok(result)
 }
+
+/// Preserve a relation column's actual label; constants have no column metadata.
+pub(super) fn input_label(value: &RuntimeValue, fallback: String) -> String {
+    match value.unannotated() {
+        RuntimeValue::Series(s) => s.column().to_owned(),
+        _ => fallback,
+    }
+}

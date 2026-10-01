@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coerceFiniteNumber, formatNum, formatNullableNum, formatPercent } from "./formatStat";
+import { coerceFiniteNumber, formatNum } from "./formatStat";
 
 describe("formatStat", () => {
   it("coerceFiniteNumber rejects nested objects", () => {
@@ -16,15 +16,5 @@ describe("formatStat", () => {
 
   it("formatNum handles infinity", () => {
     expect(formatNum(Infinity)).toBe("Inf");
-  });
-
-  it("formatNullableNum preserves explicit fallback", () => {
-    expect(formatNullableNum(null)).toBe("—");
-    expect(formatNullableNum(undefined, 2, "N/A")).toBe("N/A");
-  });
-
-  it("formatPercent scales finite values", () => {
-    expect(formatPercent(0.4567)).toBe("45.67%");
-    expect(formatPercent({})).toBe("—");
   });
 });

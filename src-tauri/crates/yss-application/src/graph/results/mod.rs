@@ -16,7 +16,7 @@ use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 pub mod report;
 mod retention;
 mod structure;
-mod structured;
+pub(crate) mod structured;
 pub(crate) use structure::ResultStructure;
 
 pub struct ResultPinQuery {

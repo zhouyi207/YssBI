@@ -179,6 +179,15 @@ pub fn fit_linear_regression(
         }
     }?;
     fit.constant = config.constant;
+    fit.parameter_names = (0..fit.coefficients.len())
+        .map(|i| {
+            if config.constant && i == 0 {
+                "_cons".into()
+            } else {
+                format!("x{}", i + usize::from(!config.constant))
+            }
+        })
+        .collect();
     Ok(fit)
 }
 
@@ -223,6 +232,19 @@ pub(crate) fn fit_ols_design(
     .fit()
     .map_err(|_| computation_failed(SciOperationCode::Regression))?;
     Ok(RegressionFit {
+        parameter_names: (0..x.ncols())
+            .map(|i| {
+                if i == 0 && config.constant {
+                    "_cons".into()
+                } else {
+                    format!("x{}", i + usize::from(!config.constant))
+                }
+            })
+            .collect(),
+        response_name: "response".into(),
+        design: (0..x.ncols())
+            .map(|j| x.col(j).iter().copied().collect())
+            .collect(),
         constant: config.constant,
         family: "ols".into(),
         coefficients: result.betas.iter().copied().collect::<Vec<_>>(),
@@ -276,6 +298,19 @@ fn linear_fit(
         .copied()
         .collect::<Vec<_>>();
     Ok(RegressionFit {
+        parameter_names: (0..x.ncols())
+            .map(|i| {
+                if i == 0 && x.col(0).iter().all(|v| *v == 1.0) {
+                    "_cons".into()
+                } else {
+                    format!("x{}", i + usize::from(!x.col(0).iter().all(|v| *v == 1.0)))
+                }
+            })
+            .collect(),
+        response_name: "response".into(),
+        design: (0..x.ncols())
+            .map(|j| x.col(j).iter().copied().collect())
+            .collect(),
         constant: true,
         family: family.into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
@@ -308,6 +343,7 @@ pub(crate) fn fit_prais_design(
     config: PraisConfig,
 ) -> Result<RegressionFit, SciError> {
     let constant = config.constant;
+    let transform = format!("{:?}", config.transform);
     let result = Prais {
         endog: y.clone(),
         exog: x.clone(),
@@ -352,6 +388,9 @@ pub(crate) fn fit_prais_design(
                     condition_number: result.cond_no,
                 },
                 rho: result.rho,
+                iteration_log: result.iteration_log,
+                rho_history: result.rho_history,
+                transform,
                 durbin_watson_original: result.dw_original,
                 durbin_watson_transformed: result.dw_transformed,
                 iterations: result.iterations,
@@ -360,5 +399,14 @@ pub(crate) fn fit_prais_design(
         metadata,
     )?;
     fit.constant = constant;
+    fit.parameter_names = (0..fit.coefficients.len())
+        .map(|i| {
+            if constant && i == 0 {
+                "_cons".into()
+            } else {
+                format!("x{}", i + usize::from(!constant))
+            }
+        })
+        .collect();
     Ok(fit)
 }

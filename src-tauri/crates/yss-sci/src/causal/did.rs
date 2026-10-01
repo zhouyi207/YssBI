@@ -394,19 +394,36 @@ pub fn randomization_test(
             return Err(DidFakeGroupError::LengthMismatch);
         }
     }
-    let ncols = input.predictors.len() + 2;
+    if !matches!(
+        input.covariance.as_str(),
+        "nonrobust" | "HC0" | "HC1" | "HC2" | "HC3" | "cluster"
+    ) {
+        return Err(DidFakeGroupError::FitFailed {
+            diagnostic: "unsupported covariance".into(),
+        });
+    }
+    let offset = usize::from(input.constant);
+    let ncols = input.predictors.len() + 1 + offset;
     let exog = Mat::from_fn(n, ncols, |row, col| {
-        if col == 0 {
+        if input.constant && col == 0 {
             1.0
         } else if col + 1 == ncols {
             input.treat[row] * input.post[row]
         } else {
-            input.predictors[col - 1][row]
+            input.predictors[col - offset][row]
         }
     });
     let y = Col::from_iter(input.response.iter().copied());
-    let fit = fit_panel_fe_twoway(&y, &exog, &entity_id, &time_id, true, "cluster", None)
-        .map_err(|diagnostic| DidFakeGroupError::FitFailed { diagnostic })?;
+    let fit = fit_panel_fe_twoway(
+        &y,
+        &exog,
+        &entity_id,
+        &time_id,
+        input.constant,
+        &input.covariance,
+        None,
+    )
+    .map_err(|diagnostic| DidFakeGroupError::FitFailed { diagnostic })?;
     if fit
         .omitted_indices
         .as_ref()
@@ -436,13 +453,13 @@ pub fn randomization_test(
         treat: input.treat,
         post: input.post,
         did_label: "did".into(),
-        observed_coef: *fit
-            .coefficients
-            .iter()
-            .last()
-            .ok_or(DidFakeGroupError::CoefficientIndex)?,
-        constant: true,
-        cov_type: "cluster".into(),
+        observed_coef: input.observed_coefficient.unwrap_or(
+            *fit.coefficients
+                .last()
+                .ok_or(DidFakeGroupError::CoefficientIndex)?,
+        ),
+        constant: input.constant,
+        cov_type: input.covariance,
     };
     compute_fake_group_ri_controlled(&payload, input.repetitions, input.seed, Some(control))
 }

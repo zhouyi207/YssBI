@@ -90,7 +90,6 @@ export const linearRegressionReportField = refineField(
 );
 
 export const linearCoefficientField = objectField<Coefficient>({
-  category: optionalField(stringField),
   variable: stringField,
   coef: numberField,
   std_err: numberField,
@@ -101,21 +100,42 @@ export const linearCoefficientField = objectField<Coefficient>({
   is_significant: booleanField,
 });
 
+const nullableField = <T>(field: ReportField<T>): ReportField<T | null> => ({
+  read: (value, path) => (value === null ? { ok: true, value: null } : field.read(value, path)),
+});
+
 const serialTestField = objectField({
   stat: numberField,
   p_value: numberField,
   lags: integerField,
 });
 const analysisFields = {
+  diagnostics: objectField({
+    tests: arrayField(
+      objectField({
+        name: stringField,
+        value: { read: (value: unknown) => ({ ok: true as const, value }) },
+        unavailable_reason: nullableField(stringField),
+      }),
+    ),
+    leverage_density: arrayField(objectField({ x: numberField, y: numberField })),
+    leverage_unavailable_reason: nullableField(stringField),
+  }),
   residualPlot: refineField(
     objectField({
       points: arrayField(
-        objectField({ observation: integerField, x: numberField, y: numberField }),
+        objectField({
+          observation: integerField,
+          x: numberField,
+          y: numberField,
+          highlighted: booleanField,
+        }),
       ),
       totalCount: integerField,
       matchedCount: integerField,
       sampled: booleanField,
       sampling: literalField("systematic"),
+      highlightAvailable: booleanField,
     }),
     (value) =>
       value.matchedCount <= value.totalCount &&
@@ -158,12 +178,14 @@ function read<T>(field: ReportField<T>, value: unknown): T {
 export function parseResultAnalysis(raw: unknown): ResultAnalysis {
   const envelope = read(
     objectField({
-      kind: literalField("residualPlot", "acfPacf", "serialTests", "hypothesis"),
+      kind: literalField("residualPlot", "diagnostics", "acfPacf", "serialTests", "hypothesis"),
       value: { read: (value) => ({ ok: true as const, value }) },
     }),
     raw,
   );
   switch (envelope.kind) {
+    case "diagnostics":
+      return { kind: envelope.kind, value: read(analysisFields.diagnostics, envelope.value) };
     case "residualPlot":
       return { kind: envelope.kind, value: read(analysisFields.residualPlot, envelope.value) };
     case "acfPacf":

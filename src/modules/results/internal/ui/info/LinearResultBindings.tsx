@@ -24,6 +24,7 @@ import {
 import { ReadOnlyDataGrid } from "@/features/application/results/components/ReadOnlyDataGrid";
 import { ResultPageToolbar } from "@/features/application/results/components/ResultPageToolbar";
 import { ResultReadError } from "@/features/application/results/components/ResultReadError";
+import { StructuredData } from "@/components/ui-presentation/StructuredData";
 import { Section } from "@/components/ui-presentation/Section";
 import { Chart } from "@/components/ui-presentation/Chart";
 import type { ChartModel } from "@/shared/charts/ChartModel";
@@ -80,6 +81,8 @@ const FITTED_AXIS = { label: "Fitted Values", valueType: "number" } as const;
 const RESIDUAL_AXIS = { label: "Residuals", valueType: "number" } as const;
 
 function LinearResidualPlot({ reference }: { reference: ResultReference }) {
+  const [adjacent, setAdjacent] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
   const [xRange, setXRange] = useState<[number, number] | undefined>();
@@ -87,18 +90,22 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
     kind: "residualPlot",
     maxPoints: 2000,
     xRange,
+    adjacent,
+    highlightTopPercent: highlight || undefined,
   });
   const plot = query.value?.kind === "residualPlot" ? query.value.value : null;
   const model = useMemo<ChartModel>(
     () => ({
       kind: "scatter",
       points: plot?.points.map((point) => ({ x: point.x, y: point.y })) ?? [],
-      xAxis: FITTED_AXIS,
+      xAxis: adjacent ? { label: "Previous residual", valueType: "number" } : FITTED_AXIS,
+      highlightIndices:
+        plot?.points.flatMap((point, index) => (point.highlighted ? [index] : [])) ?? [],
       yAxis: RESIDUAL_AXIS,
       symmetricY: true,
       zeroLine: true,
     }),
-    [plot?.points],
+    [plot?.points, adjacent],
   );
   const validRange =
     min.trim() !== "" &&
@@ -109,20 +116,47 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setAdjacent(!adjacent);
+            setXRange(undefined);
+            setMin("");
+            setMax("");
+          }}
+        >
+          {adjacent ? "Residuals vs previous residual" : "Residuals vs fitted"}
+        </Button>
+        <label className="flex items-center gap-2 text-sm">
+          Highlight top leverage (%)
+          <Input
+            className="w-20"
+            type="number"
+            min={0}
+            max={100}
+            disabled={query.loading || !plot?.highlightAvailable}
+            value={highlight}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value) && value >= 0 && value <= 100) setHighlight(value);
+            }}
+          />
+        </label>
         <Input
-          aria-label="Minimum fitted value"
+          aria-label="Minimum horizontal value"
           type="number"
           value={min}
           onChange={(event) => setMin(event.target.value)}
-          placeholder="Min fitted"
+          placeholder="Min x"
           className="w-32"
         />
         <Input
-          aria-label="Maximum fitted value"
+          aria-label="Maximum horizontal value"
           type="number"
           value={max}
           onChange={(event) => setMax(event.target.value)}
-          placeholder="Max fitted"
+          placeholder="Max x"
           className="w-32"
         />
         <Button
@@ -145,6 +179,11 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
           Reset
         </Button>
       </div>
+      {plot && !plot.highlightAvailable && (
+        <p className="text-xs text-muted-foreground">
+          Leverage highlighting is unavailable for this model.
+        </p>
+      )}
       {query.error ? (
         <ResultReadError error={query.error} onRetry={() => void query.reload()} />
       ) : null}
@@ -162,6 +201,45 @@ function LinearResidualPlot({ reference }: { reference: ResultReference }) {
             <Chart model={model} />
           </>
         )
+      )}
+    </div>
+  );
+}
+
+function LinearDiagnostics({ reference }: { reference: ResultReference }) {
+  const query = useResultAnalysisQuery(reference, { kind: "diagnostics" });
+  const value = query.value?.kind === "diagnostics" ? query.value.value : null;
+  return (
+    <div className="space-y-4">
+      {query.error && <ResultReadError error={query.error} onRetry={() => void query.reload()} />}
+      {query.loading && <p className="text-sm text-muted-foreground">Loading diagnostics…</p>}
+      {value?.tests.map((test) => (
+        <Section key={test.name} title={test.name} collapsible>
+          {test.unavailable_reason ? (
+            <p className="text-sm text-muted-foreground">Unavailable: {test.unavailable_reason}</p>
+          ) : (
+            <StructuredData value={test.value} />
+          )}
+        </Section>
+      ))}
+      {value && (
+        <Section title="Leverage density" collapsible>
+          {value.leverage_unavailable_reason ? (
+            <p className="text-sm text-muted-foreground">
+              Unavailable: {value.leverage_unavailable_reason}
+            </p>
+          ) : (
+            <Chart
+              model={{
+                kind: "kde",
+                points: [...value.leverage_density],
+                xAxis: { label: "Leverage", valueType: "number" },
+                yAxis: { label: "Density", valueType: "number" },
+                xMin: 0,
+              }}
+            />
+          )}
+        </Section>
       )}
     </div>
   );
@@ -248,7 +326,7 @@ function LinearCoefficientsSection({
             {coefficients.filter((coefficient) => coefficient.is_significant).length}/
             {coefficients.length} significant on this page
           </p>
-          <CoefficientTable coefficients={coefficients} hasCategorical={false} />
+          <CoefficientTable coefficients={coefficients} />
         </>
       )}
       <PageToolbar page={page} />
@@ -315,6 +393,11 @@ function LinearRegressionReport({
         type: "chart",
         available: data.summary.coefficient_chart,
         content: <LinearCoefficientsSection data={data} mode="chart" />,
+      },
+      diagnosticTests: {
+        type: "analysis",
+        available: data.summary.diagnostics,
+        content: <LinearDiagnostics reference={data.resultRef} />,
       },
       residualPlot: {
         type: "chart",

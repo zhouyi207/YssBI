@@ -8,8 +8,13 @@ pub fn augmented_dickey_fuller(
     regression: &str,
 ) -> Result<serde_json::Value, SciError> {
     let result = yss_sci::time_series::models::augmented_dickey_fuller(series, lags, regression)?;
-    serde_json::to_value(serde_json::json!({
+    let mut report = serde_json::json!({
         "operation": "adf",
+        "regression": regression,
+        "useTDistribution": result.use_t_distribution,
+        "laggedLevelCoefficient": result.coef_lagged,
+        "laggedLevelStandardError": result.std_err_lagged,
+        "regressionTable": result.regression_table.iter().map(|r|serde_json::json!({"variable":r.variable,"coefficient":r.coef,"standardError":r.std_err,"t":r.t,"pValue":r.p_value,"ciLower":r.ci_lower,"ciUpper":r.ci_upper})).collect::<Vec<_>>(),
         "statistic": result.test_statistic,
         "pValue": result.p_value,
         "observations": result.num_obs,
@@ -19,8 +24,24 @@ pub fn augmented_dickey_fuller(
             "5%": result.critical_value_5pct,
             "10%": result.critical_value_10pct,
         }
-    }))
-    .map_err(|_| computation_failed(SciOperationCode::Adf))
+    });
+    crate::report_display::section(
+        &mut report,
+        "auxiliary_regression",
+        "ADF auxiliary regression",
+        "table",
+        "/regressionTable",
+        &[
+            ("variable", "Variable"),
+            ("coefficient", "Coefficient"),
+            ("standardError", "Std. error"),
+            ("t", "t"),
+            ("pValue", "Auxiliary-regression p-value"),
+            ("ciLower", "95% CI lower"),
+            ("ciUpper", "95% CI upper"),
+        ],
+    );
+    Ok(report)
 }
 
 pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, SciError> {
@@ -53,6 +74,29 @@ pub fn vec_rank_test(
 ) -> Result<serde_json::Value, SciError> {
     let result = yss_sci::time_series::models::vec_rank_test(series, lags, trend)?;
     serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VecRank))
+}
+
+pub fn var_fit_configured(
+    series: Vec<Vec<f64>>,
+    exogenous: Vec<Vec<f64>>,
+    options: yss_sci_contract::time_series::var::VarOptions,
+) -> Result<serde_json::Value, SciError> {
+    serde_json::to_value(yss_sci::time_series::models::var_fit_configured(
+        series, exogenous, options,
+    )?)
+    .map_err(|_| computation_failed(SciOperationCode::VarFit))
+}
+pub fn vec_fit_named(
+    series: Vec<Vec<f64>>,
+    rank: usize,
+    lags: usize,
+    trend: &str,
+    names: Vec<String>,
+) -> Result<serde_json::Value, SciError> {
+    serde_json::to_value(yss_sci::time_series::models::vec_fit_named(
+        series, rank, lags, trend, names,
+    )?)
+    .map_err(|_| computation_failed(SciOperationCode::VecFit))
 }
 
 #[cfg(test)]

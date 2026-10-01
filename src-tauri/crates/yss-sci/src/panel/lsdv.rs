@@ -193,6 +193,22 @@ pub fn fit_panel_lsdv(
     let ms_total = result.ss_total / df_total as f64;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "original".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_lsdv".into(),
         coefficients: (result.betas.clone()).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {
@@ -411,6 +427,22 @@ pub fn fit_panel_lsdv_time(
     let ms_total = result.ss_total / df_total as f64;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "original".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_lsdv_time".into(),
         coefficients: (result.betas.clone()).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {
@@ -638,6 +670,22 @@ pub fn fit_panel_lsdv_twoway(
     let ms_total = result.ss_total / df_total as f64;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "original".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_lsdv_twoway".into(),
         coefficients: (result.betas.clone()).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {

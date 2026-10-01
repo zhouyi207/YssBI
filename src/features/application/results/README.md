@@ -68,7 +68,7 @@ Pin 查询与当前结果搜索重新验证数据库内容及函数依赖；报�
 前端清理 project-scoped 面板并通知独立报告窗口关闭。跨窗口通道只通知会话结束，不再把输出失效广播成结果销毁。
 旧会话引用不能读取新会话中的同号结果。运行失败摘要与 Results 的生命周期独立，清除 Output 中的错误不清除 Results。
 
-统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
+Rust 的线性与二元统计摘要各自保留对应模型字段。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
 
 线性回归统一使用 `yssbi.statistics.linear.fit`、`linear.summary` 与 `linear.predict`。Fit 在配置中选择 OLS/WLS/GLS，输出 `model`、`fitted`、`residuals`；Summary 只接收 `model`，无拟合参数，也不重新估计；Predict 使用同一模型的系数与截距。
 
@@ -107,12 +107,12 @@ GUI 默认只显示引用的行数，用户展开“查看数据”后才挂载�
 消费者用自己的请求代次控制迟到回执和 loading；value/page/analysis 分别订阅数据和错误。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
 分页 Hook 统一交付 `rows` 和 `pageSize`，不再并列暴露无消费者的原始 `values` 与 `limit`；底层分页请求和 wire 字段仍由查询协议拥有。
 假设检验的参数提示读取 Rust 提供的完整 `paramNames`，与系数表当前页无关。独立窗口的图类型直接读取 descriptor，不通过 URL 传递副本。
-展示窗口从 presentation kind 一次映射到 inspect/plot/info 窗口类型，并据此生成路由，不接受任意路由字符串或未知路由回退。
+展示窗口从 presentation kind 一次映射到 inspect/plot 窗口类型；报告与数值检查共用 inspect，并据此生成路由，不接受任意路由字符串或未知路由回退。
 报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。
 
-报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。
+报告校验直接使用 descriptor 的 `ResultReportKind`，只区分 `structured` 与 `linearRegressionSummary`。`parseReportPayloadResult` 验证通用结构化对象，或由 `parseLinearRegression` 校验原生线性报告的内容选择、展示字段、表引用及标题；`reportValidation` 同时核对线性报告的结果引用。其他统计方法保留 Rust 输出的结构，不再经过专用报告 DTO 或旧方法解析器。
 
-内联回归报告校验拟合值与残差、滞后残差对、设计矩阵与系数的维度；IV 过度识别检验按 `test_type` 要求对应统计量和 P 值。缺失的可选指标显示为空缺，绘图与检验不会用零补齐不完整数据。
+线性系数页与已选分析分别通过 `linearCoefficientField` 和 `parseResultAnalysis` 校验。缺失的可选指标显示为空缺，绘图与检验不会用零补齐不完整数据。
 
 报告组件与 JSON 布局见 [Results views](../../../modules/results/README.md)。
 

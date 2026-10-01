@@ -1,4 +1,6 @@
 pub(super) mod regression;
+mod structured_report;
+pub(super) use structured_report::spec_for;
 
 use yss_ui_contract::{InvalidUiSpec, UiComponent, UiElement, UiSpec};
 

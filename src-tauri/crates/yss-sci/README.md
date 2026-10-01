@@ -41,8 +41,8 @@ are separate calls over those facts. A node's Fit/Summary/Predict stage does not
 create a second algorithm owner. Runtime owns selected report projections; Contract
 owns neutral options and results. Linalg remains a shared numerical foundation.
 
-`regression::fit` only dispatches regression methods. Numerical entry points live
-in `regression::linear::fit`, `regression::discrete::fit`, `panel::fit` and
+Numerical entry points live in `regression::linear::fit`,
+`regression::discrete::fit`, `panel::fit` and
 `causal::iv::fit`. `time_series::models` prepares ADF/VAR/VEC computations.
 `regression::design`, covariance and collinearity calculations are reused by
 the estimators that need them. DID calls the existing panel estimator, which
@@ -283,8 +283,8 @@ GLS takes a relative error covariance structure `sigma`: `Var(error) = scale * s
 It estimates scale from whitened residual sums of squares divided by residual
 degrees of freedom. Parameter covariance includes that scale; coefficient tests
 use Student-t and the overall test uses F. The report labels this estimated-scale
-contract. `fit_regression(Gls)` supplies identity structure and therefore agrees
-with ordinary OLS inference. A fully known absolute covariance mode is not exposed.
+contract. An explicitly supplied identity `sigma` agrees with ordinary OLS
+inference. A fully known absolute covariance mode is not exposed.
 
 WLS, GLS and Prais compute total variation in the transformed space, centering
 along the transformed intercept when one is configured. Their shared
@@ -300,3 +300,19 @@ use the shared OLS configuration. Result organization does not change solver or
 convergence policy.
 
 Classical hypothesis tests are organized under `hypothesis`: `sample_mean` owns mean, proportion, Poisson and equivalence tests; `categorical` owns count-table tests; `nonparametric` owns rank and sequence tests; and `variance` owns variance-homogeneity tests. These functions accept neutral contract requests and return common result records. The node catalog and kernel own graph-facing interfaces and dispatch.
+
+Binary postestimation lives in `regression::discrete::postestimation`: Logit odds
+ratios transform coefficient intervals and retain the coefficient-null z test;
+Logit/Probit continuous-regressor margins support AME, MEM, explicit at values and
+four derivative/elasticity scales with analytic delta-method covariance. Margins
+check shared execution control in observation loops; Kernel admits retained design,
+quadratic workspace and cubic work before dispatch. Classifier diagnostics use
+`p >= cutoff` and optional values for zero-denominator rates. Probit IRLS uses the
+inverse-link derivative in its working response; default MLE covariance uses
+observed information. A checked-in statsmodels 0.14.6 fixture verifies both links.
+
+Panel fits retain the actual estimation-scale design/response/fitted/residual
+sample with its transformation name and source-row groups. Estimation-scale
+prediction reuses those coefficients; it does not claim to predict absorbed effects
+for new entities. Selected-lag VAR fits retain exogenous labels, covariance divisor
+choice and complete source rows. Prais retains the full rho iteration sequence.

@@ -51,12 +51,6 @@ export function optionalField<T>(field: ReportField<T>): ReportField<T | undefin
   };
 }
 
-export function nullableField<T>(field: ReportField<T>): ReportField<T | null> {
-  return {
-    read: (value, path) => (value === null ? { ok: true, value } : field.read(value, path)),
-  };
-}
-
 export function arrayField<T>(field: ReportField<T>): ReportField<T[]> {
   return {
     read(value, path) {
@@ -120,9 +114,4 @@ export function parsedField<T>(
       return parsed === null ? invalid(value, path, expected) : { ok: true, value: parsed };
     },
   };
-}
-
-export function readReportField<T>(field: ReportField<T>, value: unknown): T | null {
-  const parsed = field.read(value, "$");
-  return parsed.ok ? parsed.value : null;
 }

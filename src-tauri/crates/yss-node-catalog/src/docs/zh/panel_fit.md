@@ -10,4 +10,4 @@
 - maximum_likelihood 支持三种效应维度，仅接受 nonrobust。
 - lsdv 必须包含截距。其他受支持估计器可选 nonrobust、HC0–HC3 或 cluster。
 
-无效组合或估计失败会明确报错。唯一输出 model 保留系数、协方差及对应方法的推断/分组统计，连接 Panel Summary 查看；当前不提供逐观测 fitted/residuals 数列。
+无效组合或估计失败会明确报错。输出 model 保留系数、协方差及方法推断/分组统计，并输出明确标记的估计尺度 fitted/residuals 数列；其源行及预测含义见 Panel Summary。

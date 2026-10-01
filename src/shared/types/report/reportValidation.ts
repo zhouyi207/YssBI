@@ -1,14 +1,17 @@
-import { isResultReference, type ResultDescriptor } from "@/shared/types/domain/result";
+import {
+  isResultReference,
+  type ResultDescriptor,
+  type ResultReportKind,
+} from "@/shared/types/domain/result";
 import { isRecord } from "./guards";
 import { parseReportPayloadResult } from "./parseReportPayload";
-import type { ReportPayloadKind } from "./reportKinds";
 
 export interface ReportValidationDiagnostic {
   resultId: string;
   runId: string;
   nodeId: string;
   outputPinId: string | null;
-  presentation: { kind: "report"; report: ReportPayloadKind };
+  presentation: { kind: "report"; report: ResultReportKind };
   valueKind: ResultDescriptor["valueKind"];
   fieldPath: string;
   reason: string;
@@ -26,7 +29,7 @@ function outputPinId(descriptor: ResultDescriptor): string | null {
 
 export function validateReportPayload(
   descriptor: ResultDescriptor,
-  report: ReportPayloadKind,
+  report: ResultReportKind,
   raw: unknown,
 ): ReportValidationResult {
   const parsed = parseReportPayloadResult(report, raw);

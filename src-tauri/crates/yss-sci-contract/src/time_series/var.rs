@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 pub struct VarFit {
     pub var_names: Vec<String>,
     pub lags: Vec<usize>,
+    pub constant: bool,
+    pub dfk: bool,
+    pub exogenous_names: Vec<String>,
+    /// Zero-based source rows used for every equation.
+    pub sample_rows: Vec<usize>,
     /// Equation-major coefficients and residuals.
     pub coefficients: Vec<Vec<f64>>,
     pub residuals: Vec<Vec<f64>>,
@@ -37,4 +42,13 @@ impl Default for VarSummaryOptions {
             serial_lags: 2,
         }
     }
+}
+
+/// Explicit selected-lag VAR design; columns stay in input order.
+pub struct VarOptions {
+    pub lags: Vec<usize>,
+    pub constant: bool,
+    pub dfk: bool,
+    pub variable_names: Vec<String>,
+    pub exogenous_names: Vec<String>,
 }

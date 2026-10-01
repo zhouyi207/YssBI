@@ -145,7 +145,28 @@ mod tests {
                         .any(|parameter| parameter.key.as_str() == "constant")
                 );
             } else {
-                assert!(summary.parameters.is_empty(), "{id}");
+                let keys = summary
+                    .parameters
+                    .iter()
+                    .map(|p| p.key.as_str())
+                    .collect::<Vec<_>>();
+                assert!(
+                    keys.contains(&"hypothesis_test") && keys.contains(&"hypothesis"),
+                    "{id}"
+                );
+                assert!(
+                    !keys
+                        .iter()
+                        .any(|k| matches!(*k, "constant" | "max_iterations" | "tolerance")),
+                    "{id}"
+                );
+                if id.as_str() != "yssbi.statistics.prais.summary" {
+                    assert!(keys.contains(&"marginal_effects") && keys.contains(&"classification"));
+                }
+                assert_eq!(
+                    keys.contains(&"odds_ratios"),
+                    id.as_str() == "yssbi.statistics.logit.summary"
+                );
             }
             let fit_id = NodeTypeId::new(format!(
                 "{}.fit",

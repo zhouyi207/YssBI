@@ -15,6 +15,22 @@ struct AnalysisCache {
     acf: Option<(usize, Arc<AcfPacfResult>)>,
     serial: Option<((usize, bool), Arc<SerialTestsOutput>)>,
     hypothesis: Option<(String, Arc<HypothesisTestOutput>)>,
+    diagnostics: Option<Arc<LinearDiagnostics>>,
+    leverage: Option<Arc<Vec<f64>>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LinearDiagnosticEntry {
+    pub name: String,
+    pub value: Option<serde_json::Value>,
+    pub unavailable_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LinearDiagnostics {
+    pub tests: Vec<LinearDiagnosticEntry>,
+    pub leverage_density: Vec<yss_sci_contract::visualization::PlotPoint>,
+    pub leverage_unavailable_reason: Option<String>,
 }
 
 #[derive(Debug)]
@@ -23,6 +39,8 @@ pub struct LinearSummary {
     pub acf: Option<Arc<AcfPacfResult>>,
     pub serial: Option<Arc<SerialTestsOutput>>,
     pub hypothesis: Option<Arc<HypothesisTestOutput>>,
+    pub diagnostics: Option<Arc<LinearDiagnostics>>,
+    pub leverage: Option<Arc<Vec<f64>>>,
 }
 
 #[derive(Debug)]
@@ -85,7 +103,144 @@ impl LinearRegressionValue {
             acf: None,
             serial: None,
             hypothesis: None,
+            diagnostics: None,
+            leverage: None,
         };
+        if summary.options.diagnostics || summary.options.residual_plot {
+            use yss_sci_contract::diagnostics::residual::{
+                ResidualDiagnostic as Test, ResidualDiagnosticResult,
+            };
+            let n = self.residuals.len();
+            let k = self.design.len();
+            let expanded = if summary.options.diagnostics {
+                k.checked_mul(k + 4).ok_or(KernelError::BudgetExceeded)?
+            } else {
+                k + 1
+            };
+            control.check_bytes(n.checked_mul(expanded).and_then(|v| v.checked_mul(64)))?;
+            let cached = self
+                .cache
+                .lock()
+                .map_err(|_| KernelError::Failed)?
+                .leverage
+                .clone();
+            let (leverage, leverage_error) = if let Some(values) = cached {
+                (Some(values), None)
+            } else {
+                match yss_sci_runtime::diagnostics::residual::diagnose(self, Test::Leverage) {
+                    Ok(ResidualDiagnosticResult::Leverage(values)) => {
+                        let values = Arc::new(values);
+                        self.cache.lock().map_err(|_| KernelError::Failed)?.leverage =
+                            Some(values.clone());
+                        (Some(values), None)
+                    }
+                    Err(reason) => (None, Some(reason)),
+                    _ => return Err(KernelError::ScientificFailure),
+                }
+            };
+            control.check()?;
+            summary.leverage = leverage.clone();
+            if summary.options.diagnostics {
+                let cached = self
+                    .cache
+                    .lock()
+                    .map_err(|_| KernelError::Failed)?
+                    .diagnostics
+                    .clone();
+                let diagnostics = if let Some(value) = cached {
+                    value
+                } else {
+                    let mut tests = Vec::new();
+                    for (name, test) in [
+                        (
+                            "Breusch–Pagan (fitted values, classical)",
+                            Test::BreuschPagan {
+                                rhs: false,
+                                koenker: false,
+                            },
+                        ),
+                        ("White", Test::White),
+                        ("Information matrix", Test::InformationMatrix),
+                        ("RESET (fitted powers)", Test::Reset { rhs: false }),
+                        ("Variance inflation factors", Test::Vif),
+                    ] {
+                        control.check()?;
+                        let result = yss_sci_runtime::diagnostics::residual::diagnose(self, test)
+                            .and_then(|v| {
+                                let mut value =
+                                    serde_json::to_value(v).map_err(|e| e.to_string())?;
+                                if matches!(test, Test::Vif)
+                                    && let Some(rows) = value["result"].as_array_mut()
+                                {
+                                    for (row, coefficient) in
+                                        rows.iter_mut().zip(&self.report.coefficients)
+                                    {
+                                        row["variable"] = coefficient.variable.clone().into();
+                                    }
+                                }
+                                Ok(value)
+                            });
+                        tests.push(match result {
+                            Ok(value) => LinearDiagnosticEntry {
+                                name: name.into(),
+                                value: Some(value),
+                                unavailable_reason: None,
+                            },
+                            Err(reason) => LinearDiagnosticEntry {
+                                name: name.into(),
+                                value: None,
+                                unavailable_reason: Some(reason),
+                            },
+                        });
+                    }
+                    let normality =
+                        yss_sci_runtime::diagnostics::residual::normality(&self.residuals)
+                            .and_then(|v| serde_json::to_value(v).map_err(|e| e.to_string()));
+                    tests.push(match normality {
+                        Ok(value) => LinearDiagnosticEntry {
+                            name: "Residual normality".into(),
+                            value: Some(value),
+                            unavailable_reason: None,
+                        },
+                        Err(reason) => LinearDiagnosticEntry {
+                            name: "Residual normality".into(),
+                            value: None,
+                            unavailable_reason: Some(reason),
+                        },
+                    });
+                    let (density, reason) = if let Some(values) = &leverage {
+                        match yss_sci_runtime::visualization::kde(
+                            values,
+                            128,
+                            &ScientificExecutionControl::from_shared(
+                                control.cancellation.clone(),
+                                control.deadline,
+                            ),
+                        ) {
+                            Ok(plot) => (plot.data, None),
+                            Err(error) => {
+                                control.check()?;
+                                (Vec::new(), Some(error.to_string()))
+                            }
+                        }
+                    } else {
+                        (Vec::new(), leverage_error)
+                    };
+                    control.check()?;
+                    let value = Arc::new(LinearDiagnostics {
+                        tests,
+                        leverage_density: density,
+                        leverage_unavailable_reason: reason,
+                    });
+                    self.cache
+                        .lock()
+                        .map_err(|_| KernelError::Failed)?
+                        .diagnostics = Some(value.clone());
+                    value
+                };
+                summary.diagnostics = Some(diagnostics);
+            }
+        }
         if summary.options.acf_pacf {
             let lag = summary.options.acf_max_lag;
             let cached = self

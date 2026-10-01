@@ -70,6 +70,15 @@ fn entries(
             },
         ),
         (
+            options.diagnostics,
+            "diagnosticTests",
+            Some("Model diagnostics"),
+            true,
+            UiComponent::Analysis {
+                binding: "diagnosticTests".into(),
+            },
+        ),
+        (
             options.residual_plot,
             "residualPlot",
             Some("Residuals vs Fitted"),

@@ -1,0 +1,288 @@
+//! Binary-link postestimation. Effects are derivatives for numeric regressors;
+//! the delta method differentiates the averaged effect, not observation-wise SEs.
+use statrs::distribution::{Continuous, ContinuousCDF, Normal};
+use yss_sci_contract::regression::{discrete::*, fit::*};
+use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+fn invalid() -> SciError {
+    SciError::InvalidInput {
+        operation: SciOperationCode::Regression,
+        violation: SciInputViolation::ParameterOutOfRange,
+    }
+}
+fn link(fit: &RegressionFit) -> Result<BinaryRegressionLink, SciError> {
+    match fit.statistics {
+        RegressionStatistics::Binary { link, .. } => Ok(link),
+        _ => Err(invalid()),
+    }
+}
+fn validate(fit: &RegressionFit) -> Result<(), SciError> {
+    link(fit)?;
+    let k = fit.coefficients.len();
+    let n = fit.fitted.len();
+    if n == 0
+        || k == 0
+        || fit.parameter_names.len() != k
+        || fit.design.len() != k
+        || fit
+            .design
+            .iter()
+            .any(|x| x.len() != n || x.iter().any(|v| !v.is_finite()))
+        || fit.coefficients.iter().any(|v| !v.is_finite())
+        || fit.statistics.coefficient_statistics().covariance.len() != k
+        || fit
+            .statistics
+            .coefficient_statistics()
+            .covariance
+            .iter()
+            .any(|r| r.len() != k || r.iter().any(|v| !v.is_finite()))
+    {
+        return Err(invalid());
+    }
+    let stats = fit.statistics.coefficient_statistics();
+    if [
+        stats.standard_errors.len(),
+        stats.statistic_values.len(),
+        stats.p_values.len(),
+        stats.confidence_interval_lower.len(),
+        stats.confidence_interval_upper.len(),
+    ]
+    .iter()
+    .any(|n| *n != k)
+        || stats
+            .standard_errors
+            .iter()
+            .chain(&stats.statistic_values)
+            .chain(&stats.p_values)
+            .chain(&stats.confidence_interval_lower)
+            .chain(&stats.confidence_interval_upper)
+            .any(|v| !v.is_finite())
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+pub fn odds_ratios(fit: &RegressionFit) -> Result<Vec<EffectInference>, SciError> {
+    validate(fit)?;
+    if link(fit)? != BinaryRegressionLink::Logit {
+        return Err(invalid());
+    }
+    let stats = fit.statistics.coefficient_statistics();
+    fit.coefficients
+        .iter()
+        .enumerate()
+        .map(|(j, b)| {
+            let estimate = b.exp();
+            let standard_error = estimate * stats.standard_errors[j];
+            let ci_lower = stats.confidence_interval_lower[j].exp();
+            let ci_upper = stats.confidence_interval_upper[j].exp();
+            if [estimate, standard_error, ci_lower, ci_upper]
+                .iter()
+                .any(|v| !v.is_finite())
+            {
+                return Err(invalid());
+            }
+            // The null is OR=1; use beta's z, not (exp(beta)-1)/delta-SE.
+            Ok(EffectInference {
+                variable: if fit.constant && j == 0 {
+                    "Baseline odds (_cons)".into()
+                } else {
+                    fit.parameter_names[j].clone()
+                },
+                estimate,
+                standard_error,
+                z_value: Some(stats.statistic_values[j]),
+                p_value: Some(stats.p_values[j]),
+                ci_lower,
+                ci_upper,
+            })
+        })
+        .collect()
+}
+pub fn classification(fit: &RegressionFit, cutoff: f64) -> Result<BinaryClassification, SciError> {
+    link(fit)?;
+    if !cutoff.is_finite()
+        || !(0.0..=1.0).contains(&cutoff)
+        || fit.fitted.is_empty()
+        || fit.fitted.len() != fit.residuals.len()
+    {
+        return Err(invalid());
+    }
+    let (mut tp, mut fp, mut fn_, mut tn) = (0, 0, 0, 0);
+    for (&p, &r) in fit.fitted.iter().zip(&fit.residuals) {
+        let y = p + r;
+        if !p.is_finite()
+            || !(0.0..=1.0).contains(&p)
+            || !y.is_finite()
+            || (y.abs() > 1e-12 && (y - 1.0).abs() > 1e-12)
+        {
+            return Err(invalid());
+        }
+        match (p >= cutoff, y > 0.5) {
+            (true, true) => tp += 1,
+            (true, false) => fp += 1,
+            (false, true) => fn_ += 1,
+            (false, false) => tn += 1,
+        }
+    }
+    let ratio = |a: usize, b: usize| (b > 0).then(|| a as f64 / b as f64);
+    let n = fit.fitted.len() as f64;
+    Ok(BinaryClassification {
+        cutoff,
+        true_positive: tp,
+        false_positive: fp,
+        false_negative: fn_,
+        true_negative: tn,
+        sensitivity: ratio(tp, tp + fn_),
+        specificity: ratio(tn, tn + fp),
+        positive_predictive_value: ratio(tp, tp + fp),
+        negative_predictive_value: ratio(tn, tn + fn_),
+        accuracy: (tp + tn) as f64 / n,
+        error_rate: (fp + fn_) as f64 / n,
+    })
+}
+pub fn marginal_effects(
+    fit: &RegressionFit,
+    options: MarginalOptions,
+    control: &yss_sci_contract::execution::ScientificExecutionControl,
+) -> Result<MarginalEffects, yss_sci_contract::execution::ScientificComputationError> {
+    use yss_sci_contract::execution::{ScientificComputationError, ScientificInputViolation};
+    let invalid = || ScientificComputationError::InvalidInput {
+        violation: ScientificInputViolation::ParameterOutOfRange,
+    };
+    control.check()?;
+    validate(fit).map_err(|_| invalid())?;
+    let link = link(fit).map_err(|_| invalid())?;
+    let k = fit.coefficients.len();
+    let n = fit.fitted.len();
+    let normal = Normal::new(0.0, 1.0).map_err(|_| invalid())?;
+    let mut overrides = vec![None; k];
+    for (name, &v) in &options.at {
+        let j = fit
+            .parameter_names
+            .iter()
+            .position(|s| s == name)
+            .ok_or_else(invalid)?;
+        if !v.is_finite() || (fit.constant && j == 0) {
+            return Err(invalid());
+        }
+        overrides[j] = Some(v);
+    }
+    let means: Vec<f64> = fit
+        .design
+        .iter()
+        .map(|c| c.iter().sum::<f64>() / n as f64)
+        .collect();
+    let rows = if options.evaluation == MarginalEvaluation::Average {
+        n
+    } else {
+        1
+    };
+    let mut values = vec![0.0; k];
+    let mut gradients = vec![vec![0.0; k]; k];
+    for i in 0..rows {
+        control.check()?;
+        let x: Vec<f64> = (0..k)
+            .map(|j| {
+                overrides[j].unwrap_or_else(|| {
+                    if options.evaluation == MarginalEvaluation::Average {
+                        fit.design[j][i]
+                    } else {
+                        means[j]
+                    }
+                })
+            })
+            .collect();
+        let eta: f64 = x.iter().zip(&fit.coefficients).map(|(x, b)| x * b).sum();
+        let (p, d, dd, logit_q) = match link {
+            BinaryRegressionLink::Logit => {
+                let p = if eta >= 0.0 {
+                    1.0 / (1.0 + (-eta).exp())
+                } else {
+                    eta.exp() / (1.0 + eta.exp())
+                };
+                let q = if eta >= 0.0 {
+                    (-eta).exp() / (1.0 + (-eta).exp())
+                } else {
+                    1.0 / (1.0 + eta.exp())
+                };
+                let d = p * q;
+                (p, d, d * (q - p), q)
+            }
+            BinaryRegressionLink::Probit => {
+                let p = normal.cdf(eta);
+                let d = normal.pdf(eta);
+                (p, d, -eta * d, 0.0)
+            }
+        };
+        let log_y = matches!(options.method, MarginalMethod::Eyex | MarginalMethod::Eydx);
+        if log_y && p <= 0.0 && link == BinaryRegressionLink::Probit {
+            return Err(invalid());
+        }
+        let (h, dh) = if log_y && link == BinaryRegressionLink::Logit {
+            (logit_q, -d)
+        } else if log_y {
+            (d / p, dd / p - (d / p) * (d / p))
+        } else {
+            (d, dd)
+        };
+        for j in usize::from(fit.constant)..k {
+            let multiplier =
+                if matches!(options.method, MarginalMethod::Eyex | MarginalMethod::Dyex) {
+                    x[j]
+                } else {
+                    1.0
+                };
+            values[j] += fit.coefficients[j] * h * multiplier / rows as f64;
+            for (l, &xl) in x.iter().enumerate() {
+                gradients[j][l] += (f64::from(l == j) * h + fit.coefficients[j] * dh * xl)
+                    * multiplier
+                    / rows as f64;
+            }
+        }
+    }
+    let cov = &fit.statistics.coefficient_statistics().covariance;
+    let critical = normal.inverse_cdf(0.975);
+    let mut coefficients = Vec::new();
+    for j in usize::from(fit.constant)..k {
+        control.check()?;
+        let (variance, absolute_sum) = (0..k)
+            .flat_map(|a| (0..k).map(move |b| (a, b)))
+            .map(|(a, b)| gradients[j][a] * cov[a][b] * gradients[j][b])
+            .fold((0.0, 0.0), |(sum, scale), term| {
+                (sum + term, scale + term.abs())
+            });
+        // Roundoff scales with the absolute quadratic-form terms; a tiny but
+        // materially negative variance must not be hidden by an absolute floor.
+        let roundoff = 8.0 * f64::EPSILON * (k as f64).powi(2) * absolute_sum;
+        if !variance.is_finite()
+            || !absolute_sum.is_finite()
+            || variance < -roundoff
+            || !values[j].is_finite()
+        {
+            return Err(invalid());
+        }
+        let se = variance.max(0.0).sqrt();
+        let z = (se > 0.0).then(|| values[j] / se);
+        if z.is_some_and(|value| !value.is_finite())
+            || !(values[j] - critical * se).is_finite()
+            || !(values[j] + critical * se).is_finite()
+        {
+            return Err(invalid());
+        }
+        coefficients.push(EffectInference {
+            variable: fit.parameter_names[j].clone(),
+            estimate: values[j],
+            standard_error: se,
+            z_value: z,
+            p_value: z.map(|z| 2.0 * normal.sf(z.abs())),
+            ci_lower: values[j] - critical * se,
+            ci_upper: values[j] + critical * se,
+        });
+    }
+    Ok(MarginalEffects {
+        evaluation: options.evaluation,
+        method: options.method,
+        at: options.at,
+        coefficients,
+    })
+}

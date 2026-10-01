@@ -83,6 +83,19 @@ pub(crate) fn fit_logit_design(
     let adjusted_pseudo_r2 =
         1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
     Ok(RegressionFit {
+        parameter_names: (0..x.ncols())
+            .map(|i| {
+                if i == 0 && constant {
+                    "_cons".into()
+                } else {
+                    format!("x{}", i + usize::from(!constant))
+                }
+            })
+            .collect(),
+        response_name: "response".into(),
+        design: (0..x.ncols())
+            .map(|j| x.col(j).iter().copied().collect())
+            .collect(),
         constant,
         family: "logit".into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
@@ -144,6 +157,19 @@ pub(crate) fn fit_probit_design(
     let adjusted_pseudo_r2 =
         1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
     Ok(RegressionFit {
+        parameter_names: (0..x.ncols())
+            .map(|i| {
+                if i == 0 && constant {
+                    "_cons".into()
+                } else {
+                    format!("x{}", i + usize::from(!constant))
+                }
+            })
+            .collect(),
+        response_name: "response".into(),
+        design: (0..x.ncols())
+            .map(|j| x.col(j).iter().copied().collect())
+            .collect(),
         constant,
         family: "probit".into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),

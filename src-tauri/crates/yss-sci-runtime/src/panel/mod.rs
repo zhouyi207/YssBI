@@ -16,7 +16,7 @@ pub fn fit_panel(
 pub fn summary(
     fit: &yss_sci_contract::panel::PanelFit,
     options: yss_sci_contract::panel::PanelSummaryOptions,
-) -> serde_json::Value {
+) -> Result<serde_json::Value, SciError> {
     let mut report = serde_json::Map::new();
     if options.model_summary {
         report.insert(
@@ -28,7 +28,8 @@ pub fn summary(
         report.insert(
             "coefficients".into(),
             serde_json::json!({
-                "estimates": fit.coefficients, "inference": fit.inference,
+                "labels":fit.parameter_names,"categories":fit.parameter_categories,"estimates": fit.coefficients, "inference": fit.inference,
+                "omittedTerms":fit.omitted_terms,
                 "recoveredConstant": fit.recovered_constant,
                 "recoveredConstantStandardError": fit.recovered_constant_standard_error,
                 "omittedIndices": fit.omitted_indices,
@@ -44,5 +45,45 @@ pub fn summary(
             serde_json::json!(fit.estimator_statistics),
         );
     }
-    report.into()
+    report.insert("estimationSample".into(), serde_json::json!(fit.estimation));
+    report.insert("responseName".into(), serde_json::json!(fit.response_name));
+    let mut report: serde_json::Value = report.into();
+    if options.coefficient_table {
+        report["coefficient_rows"] = serde_json::json!(crate::report_display::coefficient_rows(
+            &fit.parameter_names,
+            &fit.coefficients,
+            &fit.inference
+        )?);
+        if let Some(rows) = report["coefficient_rows"].as_array_mut() {
+            for (i, row) in rows.iter_mut().enumerate() {
+                row["category"] =
+                    serde_json::json!(fit.parameter_categories.get(i).cloned().flatten());
+            }
+        }
+        let mut columns = crate::report_display::COEFFICIENT_COLUMNS.to_vec();
+        columns.push(("category", "Category"));
+        crate::report_display::section(
+            &mut report,
+            "coefficients",
+            "Panel coefficients",
+            "table",
+            "/coefficient_rows",
+            &columns,
+        );
+        crate::report_display::section(
+            &mut report,
+            "omitted",
+            "Omitted terms",
+            "table",
+            "/coefficients/omittedTerms",
+            &[
+                ("variable", "Variable"),
+                ("category", "Category"),
+                ("reason", "Omission reason"),
+            ],
+        );
+    }
+    Ok(report)
 }
+
+pub use yss_sci::panel::fit::predict;

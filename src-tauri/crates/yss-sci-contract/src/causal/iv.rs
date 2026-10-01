@@ -12,6 +12,9 @@ pub enum InstrumentalVariableKind {
 #[serde(rename_all = "camelCase")]
 pub struct InstrumentalVariableFit {
     pub family: String,
+    pub response_name: String,
+    pub parameter_names: Vec<String>,
+    pub instrument_names: Vec<String>,
     pub options: OlsOptions,
     pub small: bool,
     pub coefficients: Vec<f64>,

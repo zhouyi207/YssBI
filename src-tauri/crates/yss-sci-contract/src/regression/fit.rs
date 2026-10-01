@@ -2,20 +2,14 @@
 use crate::StatisticalObservationMetadata;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegressionKind {
-    Ols,
-    Gls,
-    Logit,
-    Probit,
-    Prais,
-    Wls,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegressionFit {
     pub constant: bool,
+    pub parameter_names: Vec<String>,
+    pub response_name: String,
+    /// Column-major estimation design, retained for postestimation.
+    pub design: Vec<Vec<f64>>,
     pub family: String,
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,
@@ -84,6 +78,9 @@ pub struct PraisRegressionStatistics {
     #[serde(flatten)]
     pub linear: LinearRegressionStatistics,
     pub rho: f64,
+    pub iteration_log: Vec<String>,
+    pub rho_history: Vec<f64>,
+    pub transform: String,
     pub durbin_watson_original: f64,
     pub durbin_watson_transformed: f64,
     pub iterations: usize,
@@ -120,5 +117,21 @@ impl RegressionStatistics {
             | Self::Binary { coefficients, .. }
             | Self::Prais { coefficients, .. } => coefficients,
         }
+    }
+}
+
+impl RegressionCoefficientStatistics {
+    pub fn has_shape(&self, k: usize) -> bool {
+        [
+            self.standard_errors.len(),
+            self.statistic_values.len(),
+            self.p_values.len(),
+            self.confidence_interval_lower.len(),
+            self.confidence_interval_upper.len(),
+        ]
+        .iter()
+        .all(|n| *n == k)
+            && self.covariance.len() == k
+            && self.covariance.iter().all(|r| r.len() == k)
     }
 }

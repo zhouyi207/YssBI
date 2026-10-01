@@ -58,17 +58,20 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(
-                if id.starts_with("yssbi.plot.")
+                if id.contains(".logit.")
+                    || id.contains(".probit.")
+                    || id.contains(".prais.")
                     || id.contains(".iv.")
                     || id.contains(".panel.")
                     || id.contains(".var.")
                     || id.contains(".vec.")
-                    || id.contains(".logit.")
-                    || id.contains(".probit.")
-                    || id.contains(".prais.")
-                    || id.ends_with(".granger")
+                    || id.contains(".adf.")
                     || id.ends_with(".irf")
                     || id.ends_with(".fevd")
+                {
+                    5
+                } else if id.starts_with("yssbi.plot.")
+                    || id.ends_with(".granger")
                     || id.ends_with(".hausman")
                     || id.ends_with(".breusch_pagan")
                 {

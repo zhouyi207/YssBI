@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct PanelFit {
     pub family: String,
+    pub parameter_names: Vec<String>,
+    pub parameter_categories: Vec<Option<String>>,
+    pub response_name: String,
+    pub omitted_terms: Vec<PanelOmittedTerm>,
+    pub estimation: PanelEstimationSample,
     pub coefficients: Vec<f64>,
     pub inference: RegressionCoefficientStatistics,
     pub statistics: PanelModelStatistics,
@@ -138,4 +143,27 @@ impl Default for PanelOptions {
             covariance: "cluster".into(),
         }
     }
+}
+
+/// Every column is on the estimator's actual scale (within, quasi-demeaned,
+/// first-difference, between-group means, or original LSDV observations).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelEstimationSample {
+    pub space: String,
+    pub constant: bool,
+    pub response: Vec<f64>,
+    pub design: Vec<Vec<f64>>,
+    pub coefficients: Vec<f64>,
+    pub fitted: Vec<f64>,
+    pub residuals: Vec<f64>,
+    /// One source row per ordinary observation; two for differences; groups for means.
+    pub source_rows: Vec<Vec<usize>>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PanelOmittedTerm {
+    pub index: usize,
+    pub variable: String,
+    pub category: Option<String>,
+    pub reason: String,
 }

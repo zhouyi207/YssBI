@@ -42,25 +42,31 @@ fn run(
             fields: None,
         })
         .collect::<Vec<_>>();
-    KernelRegistry::default().execute(
-        &KernelId::new(id.into()).unwrap(),
-        &KernelInvocation {
-            relations: &crate::tests::relations(),
-            inputs: &inputs.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>(),
-            input_keys: &inputs.iter().map(|(k, _)| *k).collect::<Vec<_>>(),
-            parameters: parameters
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        KernelParameterKey::new((*k).into()).unwrap(),
-                        Cow::Borrowed(v),
-                    )
-                })
-                .collect(),
-            outputs: &outputs,
-            control: &control,
-        },
-    )
+    KernelRegistry::default()
+        .execute(
+            &KernelId::new(id.into()).unwrap(),
+            &KernelInvocation {
+                relations: &crate::tests::relations(),
+                inputs: &inputs.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>(),
+                input_keys: &inputs.iter().map(|(k, _)| *k).collect::<Vec<_>>(),
+                parameters: parameters
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            KernelParameterKey::new((*k).into()).unwrap(),
+                            Cow::Borrowed(v),
+                        )
+                    })
+                    .collect(),
+                outputs: &outputs,
+                control: &control,
+            },
+        )
+        .inspect(|values| {
+            for value in values {
+                validate_display(value);
+            }
+        })
 }
 fn noise(n: usize) -> Vec<f64> {
     let mut state = 177u64;
@@ -479,10 +485,28 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
         let summary = run(
             &format!("yssbi.statistics.{method}.summary"),
             &[("model", fit[0].clone())],
-            &[],
+            &{
+                let mut p = vec![
+                    ("marginal_effects", flag(true)),
+                    ("marginal_evaluation", string("average")),
+                    ("marginal_method", string("dydx")),
+                    ("marginal_at", string("")),
+                    ("classification", flag(true)),
+                    ("cutoff", number(0.5)),
+                    ("hypothesis_test", flag(false)),
+                    ("hypothesis", string("x1 = 0")),
+                ];
+                if method == "logit" {
+                    p.push(("odds_ratios", flag(true)));
+                }
+                p
+            },
             1,
         )
         .unwrap();
+        assert!(field(&summary[0], "marginal_effects").is_ok());
+        assert!(field(&summary[0], "classification").is_ok());
+        assert_eq!(field(&summary[0], "odds_ratios").is_ok(), method == "logit");
         assert!(field(&fit[0], "report").is_err());
         assert_eq!(
             field(&summary[0], "betas").unwrap(),
@@ -527,7 +551,10 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
         let summary = run(
             "yssbi.statistics.prais.summary",
             &[("model", fit[0].clone())],
-            &[],
+            &[
+                ("hypothesis_test", flag(false)),
+                ("hypothesis", string("x1 = 0")),
+            ],
             1,
         )
         .unwrap();
@@ -569,6 +596,8 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         assert!(field(&fit[0], "hausman").is_err());
         assert!(field(&fit[0], "firstStage").is_err());
         let mut options = vec![
+            ("hypothesis_test", flag(false)),
+            ("hypothesis", string("x1 = 0")),
             ("model_summary", flag(true)),
             ("coefficient_table", flag(true)),
             ("first_stage", flag(true)),
@@ -609,8 +638,24 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
                 field(field(&summary[0], "endogeneity").unwrap(), "hausman").unwrap()
             );
         }
+        let mut malformed = fit[0].clone();
+        if let RuntimeValue::Record(fields) = &mut malformed {
+            Arc::make_mut(fields).insert(
+                "parameterNames".into(),
+                RuntimeValue::List(Vec::new().into()),
+            );
+        }
+        assert!(
+            run(
+                &format!("yssbi.statistics.iv.{method}.summary"),
+                &[("model", malformed)],
+                &options,
+                1
+            )
+            .is_err()
+        );
         for (key, val) in &mut options {
-            if !matches!(*key, "model_summary" | "coefficient_table") {
+            if !matches!(*key, "model_summary" | "coefficient_table" | "hypothesis") {
                 *val = flag(false);
             }
         }
@@ -669,7 +714,7 @@ fn panel_nodes_select_each_implemented_estimator_and_reject_unsupported_combinat
                     ("effects", string(effects)),
                     ("covariance", string("nonrobust")),
                 ],
-                1,
+                3,
             );
             if (estimator == "between" && effects == "two_way")
                 || (estimator == "first_difference" && effects != "entity")
@@ -713,7 +758,18 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
         y[i] = 0.3 * y[i - 1] + 0.2 * x[i - 1] + eps[n + i];
     }
     let inputs = [("variables", series(&x)), ("variables", series(&y))];
-    let fit = run("yssbi.statistics.var.fit", &inputs, &[("lags", int(1))], 1).unwrap();
+    let fit = run(
+        "yssbi.statistics.var.fit",
+        &inputs,
+        &[
+            ("lags", int(1)),
+            ("selected_lags", string("")),
+            ("constant", flag(true)),
+            ("dfk", flag(false)),
+        ],
+        1,
+    )
+    .unwrap();
     for (id, field_name) in [("granger", "vargranger"), ("irf", "oirf"), ("fevd", "fevd")] {
         let report = run(
             &format!("yssbi.statistics.timeseries.{id}"),
@@ -1040,7 +1096,14 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
         ("treat", series(&treat)),
         ("post", series(&post)),
     ];
-    let parameters = [("repetitions", int(20)), ("seed", int(42))];
+    let parameters = [
+        ("repetitions", int(20)),
+        ("seed", int(42)),
+        ("constant", flag(true)),
+        ("covariance", string("cluster")),
+        ("use_observed_coefficient", flag(false)),
+        ("observed_coefficient", number(0.)),
+    ];
     let first = run(
         "yssbi.statistics.panel.did.randomization",
         &inputs,
@@ -1058,6 +1121,24 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
     assert_eq!(first, second);
     assert_eq!(field(&first[0], "available").unwrap(), &flag(true));
     assert_eq!(field(&first[0], "n_perm_valid").unwrap(), &int(20));
+    let mut no_constant = parameters.clone();
+    for (name, value) in &mut no_constant {
+        if *name == "constant" {
+            *value = flag(false);
+        }
+    }
+    let no_constant = run(
+        "yssbi.statistics.panel.did.randomization",
+        &inputs,
+        &no_constant,
+        1,
+    )
+    .unwrap();
+    assert_eq!(field(&no_constant[0], "available").unwrap(), &flag(true));
+    assert_eq!(
+        field(&no_constant[0], "observed_coef").unwrap(),
+        field(&first[0], "observed_coef").unwrap()
+    );
     let did = run(
         "yssbi.statistics.panel.did.twfe",
         &[
@@ -1076,4 +1157,180 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
     assert_eq!(did.len(), 1);
     assert!(field(&did[0], "model").is_ok());
     assert!(field(&did[0], "summary").is_ok());
+}
+
+// Two separate boundary regressions: estimator-scale panel prediction and partial
+// comparison failure; selected-lag/exogenous VAR and multi-series ADF projection.
+#[test]
+fn panel_estimation_predictions_and_comparison_failures_are_explicit() {
+    let n = 60;
+    let e = noise(120);
+    let entity = (0..n).map(|i| (i / 6) as f64).collect::<Vec<_>>();
+    let time = (0..n).map(|i| (i % 6) as f64).collect::<Vec<_>>();
+    let x = e[..n].to_vec();
+    let y = (0..n)
+        .map(|i| 1.0 + entity[i] + 0.4 * time[i] + 2.0 * x[i] + e[n + i] * 0.2)
+        .collect::<Vec<_>>();
+    let inputs = [
+        ("response", series(&y)),
+        ("predictors", series(&x)),
+        ("entity", series(&entity)),
+        ("time", series(&time)),
+    ];
+    let fit = run(
+        "yssbi.statistics.panel.fit",
+        &inputs,
+        &[
+            ("constant", flag(true)),
+            ("estimator", string("fixed_effects")),
+            ("effects", string("two_way")),
+            ("covariance", string("nonrobust")),
+        ],
+        3,
+    )
+    .unwrap();
+    let estimation = field(&fit[0], "estimation").unwrap();
+    assert_eq!(field(estimation, "space").unwrap(), &string("within"));
+    let RuntimeValue::List(design) = field(estimation, "design").unwrap() else {
+        panic!("design");
+    };
+    let prediction = run(
+        "yssbi.statistics.panel.predict",
+        &[("model", fit[0].clone()), ("predictors", design[0].clone())],
+        &[],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(actual) = &prediction[0] else {
+        panic!()
+    };
+    let RuntimeValue::List(expected) = &fit[1] else {
+        panic!()
+    };
+    for (a, b) in actual.iter().zip(expected.iter()) {
+        assert!(
+            (crate::builtins::numeric_input(Some(a)).unwrap()
+                - crate::builtins::numeric_input(Some(b)).unwrap())
+            .abs()
+                < 1e-12
+        );
+    }
+    let comparison = run(
+        "yssbi.statistics.panel.compare",
+        &inputs,
+        &[
+            ("constant", flag(true)),
+            ("estimators", string("fixed_effects,between")),
+            ("effects", string("two_way")),
+            ("covariance", string("nonrobust")),
+        ],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(statuses) = field(&comparison[0], "model_statuses").unwrap() else {
+        panic!()
+    };
+    assert_eq!(field(&statuses[0], "status").unwrap(), &string("success"));
+    assert_eq!(field(&statuses[1], "status").unwrap(), &string("failed"));
+    assert!(field(&statuses[1], "failure").is_ok());
+}
+#[test]
+fn selected_lag_var_and_adf_collections_keep_real_sample_and_failure_information() {
+    let n = 100;
+    let e = noise(300);
+    let x = e[..n].to_vec();
+    let y = e[n..2 * n].to_vec();
+    let z = e[2 * n..].to_vec();
+    let fit = run(
+        "yssbi.statistics.var.fit",
+        &[
+            ("variables", series(&x)),
+            ("variables", series(&y)),
+            ("exogenous", series(&z)),
+        ],
+        &[
+            ("lags", int(1)),
+            ("selected_lags", string("1,3")),
+            ("constant", flag(false)),
+            ("dfk", flag(true)),
+        ],
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        field(&fit[0], "lags").unwrap(),
+        &RuntimeValue::List(vec![int(1), int(3)].into())
+    );
+    assert_eq!(field(&fit[0], "constant").unwrap(), &flag(false));
+    assert_eq!(field(&fit[0], "dfk").unwrap(), &flag(true));
+    let RuntimeValue::List(rows) = field(&fit[0], "sample_rows").unwrap() else {
+        panic!()
+    };
+    assert_eq!(rows.len(), 97);
+    assert_eq!(rows[0], int(3));
+    let adf = run(
+        "yssbi.statistics.adf.test",
+        &[("series", series(&x)), ("series", series(&vec![1.; n]))],
+        &[("lags", int(1)), ("regression", string("constant"))],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(rows) = field(&adf[0], "test_rows").unwrap() else {
+        panic!()
+    };
+    assert_eq!(rows.len(), 2);
+    assert_eq!(field(&rows[0], "status").unwrap(), &string("success"));
+    assert_eq!(field(&rows[1], "status").unwrap(), &string("failed"));
+    let RuntimeValue::List(tests) = field(&adf[0], "tests").unwrap() else {
+        panic!()
+    };
+    assert_eq!(field(&tests[0], "series").unwrap(), &string("series1"));
+    assert_eq!(field(&tests[0], "seriesIndex").unwrap(), &int(0));
+    assert!(field(&adf[0], "report_display").is_ok());
+}
+
+// Validate real emitted descriptor data, including serde field renames, instead
+// of accepting a template whose table columns do not exist in its payload.
+fn validate_display(root: &RuntimeValue) {
+    let Ok(display) = field(root, "report_display") else {
+        return;
+    };
+    let RuntimeValue::Record(sections) = field(display, "sections").unwrap() else {
+        panic!("sections")
+    };
+    for (id, section) in sections.iter() {
+        let RuntimeValue::Scalar(TabularScalar::String(path)) = field(section, "path").unwrap()
+        else {
+            panic!("path")
+        };
+        let target = path.split('/').skip(1).fold(root, |value, key| {
+            field(value, &key.replace("~1", "/").replace("~0", "~"))
+                .unwrap_or_else(|_| panic!("missing {id}: {path}"))
+        });
+        let RuntimeValue::Scalar(TabularScalar::String(kind)) = field(section, "kind").unwrap()
+        else {
+            panic!("kind")
+        };
+        if kind.as_ref() == "equation" {
+            assert!(matches!(
+                target,
+                RuntimeValue::Scalar(TabularScalar::String(_))
+            ));
+            continue;
+        }
+        let RuntimeValue::List(rows) = target else {
+            panic!("{id} is not a table")
+        };
+        let RuntimeValue::Record(columns) = field(section, "columns").unwrap() else {
+            panic!("columns")
+        };
+        for row in rows.iter() {
+            for name in columns.keys() {
+                assert!(
+                    matches!(field(row, name), Ok(RuntimeValue::Scalar(_))),
+                    "{id}: missing/scalar column {name}"
+                );
+            }
+        }
+    }
 }

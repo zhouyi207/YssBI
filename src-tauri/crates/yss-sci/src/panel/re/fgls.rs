@@ -397,6 +397,19 @@ pub fn fit_panel_re_fgls(
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "quasi_demeaned".into(), constant: ols_re.config.constant,
+            response: ols_re.endog.iter().copied().collect(),
+            design: (0..ols_re.exog.ncols()).map(|j|ols_re.exog.col(j).iter().copied().collect()).collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_re_fgls".into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {

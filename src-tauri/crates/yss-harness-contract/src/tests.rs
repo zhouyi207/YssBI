@@ -80,12 +80,14 @@ fn identities_and_requests_reject_ambiguous_or_unbounded_input() {
 
 #[test]
 fn capability_registry_is_closed_and_schema_generation_is_available() {
-    assert!(CAPABILITY_DESCRIPTORS[..6].iter().all(|descriptor| {
-        descriptor.effect == ToolEffect::Inspect && descriptor.approval == ApprovalPolicy::Automatic
-    }));
+    assert!(
+        CAPABILITY_DESCRIPTORS[..6]
+            .iter()
+            .all(|descriptor| descriptor.effect == ToolEffect::Inspect)
+    );
     assert_eq!(
-        CapabilityId::ApplyGraphEdit.descriptor().approval,
-        ApprovalPolicy::Automatic
+        CapabilityId::ApplyGraphEdit.descriptor().effect,
+        ToolEffect::Mutate
     );
     assert_eq!(
         CapabilityId::InspectDatasetSchema.descriptor().id,

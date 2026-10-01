@@ -1,7 +1,7 @@
 //! Binary Probit model via IRLS (Iteratively Reweighted Least Squares)
 //!
 //! P(y=1|x) = Φ(x'β) where Φ is the standard normal CDF.
-//! IRLS uses weight w = φ(η)² / [Φ(η)(1-Φ(η))] and working response z = η + (y-p)/w.
+//! IRLS uses weight w = φ(η)² / [Φ(η)(1-Φ(η))] and working response z = η + (y-p)/φ(η).
 
 use statrs::distribution::{ChiSquared, Continuous, ContinuousCDF, Normal};
 use yss_sci_linalg::{Col, Mat};
@@ -87,8 +87,11 @@ impl Probit {
                 (phii * phii / (pi * (1.0 - pi))).max(1e-10)
             });
 
-            // z = η + (y-p)/w
-            let z: Col<f64> = Col::from_fn(n, |i| eta[i] + (self.endog[i] - p[i]) / w[i]);
+            // The working-response denominator is dp/dη, not the IRLS weight.
+            if phi.iter().any(|v| *v <= 0.0 || !v.is_finite()) {
+                return Err("Probit: saturated link derivative".into());
+            }
+            let z: Col<f64> = Col::from_fn(n, |i| eta[i] + (self.endog[i] - p[i]) / phi[i]);
 
             let sqrt_w: Col<f64> = w.map(|&wi| wi.sqrt());
 
@@ -127,12 +130,17 @@ impl Probit {
             if diff < self.config.tolerance {
                 let eta_final = self.exog.as_ref() * beta.as_ref();
                 let p_final: Col<f64> = eta_final.map(|&e| normal.cdf(e).clamp(EPS, 1.0 - EPS));
-                let phi_final: Col<f64> = eta_final.map(|&e| normal.pdf(e));
+                // Observed Bernoulli-probit information: λ(qη)[λ(qη)+qη],
+                // q=2y-1, λ(a)=φ(a)/Φ(a). Unlike logit it differs from expected information.
                 let w_final: Col<f64> = Col::from_fn(n, |i| {
-                    let pi = p_final[i];
-                    let phii = phi_final[i];
-                    (phii * phii / (pi * (1.0 - pi))).max(1e-10)
+                    let signed_eta = (2.0 * self.endog[i] - 1.0) * eta_final[i];
+                    let probability = normal.cdf(signed_eta);
+                    let ratio = normal.pdf(signed_eta) / probability;
+                    ratio * (ratio + signed_eta)
                 });
+                if w_final.iter().any(|v| !v.is_finite() || *v < 0.0) {
+                    return Err("Probit: invalid observed information".into());
+                }
 
                 let mut xw_final = self.exog.clone();
                 for (i, mut row) in xw_final.row_iter_mut().enumerate() {

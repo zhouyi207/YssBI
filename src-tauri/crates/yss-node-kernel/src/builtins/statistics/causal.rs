@@ -31,6 +31,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                     "first_stage",
                     "overidentification",
                     "endogeneity",
+                    "hypothesis_test",
+                    "hypothesis",
                 ]
             } else {
                 &[
@@ -38,6 +40,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                     "coefficient_table",
                     "first_stage",
                     "overidentification",
+                    "hypothesis_test",
+                    "hypothesis",
                 ]
             },
             1,
@@ -69,7 +73,14 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             Input::fixed("treat"),
             Input::fixed("post"),
         ],
-        &["repetitions", "seed"],
+        &[
+            "repetitions",
+            "seed",
+            "constant",
+            "covariance",
+            "use_observed_coefficient",
+            "observed_coefficient",
+        ],
         1,
         randomization,
     );
@@ -89,6 +100,13 @@ fn randomization(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Kernel
     }
     let result = yss_sci_runtime::causal::did::randomization_test(
         yss_sci_contract::causal::did::DidRandomizationInput {
+            constant: boolean(inv, "constant")?,
+            covariance: text(inv, "covariance")?.into(),
+            observed_coefficient: if boolean(inv, "use_observed_coefficient")? {
+                Some(number(inv, "observed_coefficient")?)
+            } else {
+                None
+            },
             response,
             predictors: data,
             entity,
@@ -104,7 +122,46 @@ fn randomization(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Kernel
         ),
     );
     inv.check_control()?;
-    let result = value(result.map_err(|_| KernelError::ScientificFailure)?, inv)?;
+    let mut report = serde_json::to_value(result.map_err(|_| KernelError::ScientificFailure)?)
+        .map_err(|_| KernelError::ScientificFailure)?;
+    report["estimand"] = serde_json::json!("ATT (TWFE treatment-by-post coefficient)");
+    report["treatName"] = serde_json::json!(input_label(group(inv, "treat")[0], "treat".into()));
+    report["postName"] = serde_json::json!(input_label(group(inv, "post")[0], "post".into()));
+    report["covariance"] = serde_json::json!(text(inv, "covariance")?);
+    report["constant"] = serde_json::json!(boolean(inv, "constant")?);
+    let mut row = report.clone();
+    for key in [
+        "observed_coef",
+        "p_value_ri",
+        "perm_coef_mean",
+        "perm_coef_std",
+        "unavailableCode",
+    ] {
+        if row.get(key).is_none() {
+            row[key] = serde_json::Value::Null;
+        }
+    }
+    report["ri_table"] = serde_json::json!([row]);
+    yss_sci_runtime::report_display::section(
+        &mut report,
+        "randomization",
+        "DID randomization inference",
+        "table",
+        "/ri_table",
+        &[
+            ("available", "Available"),
+            ("observed_coef", "Observed ATT"),
+            ("p_value_ri", "Randomization p-value"),
+            ("n_perm", "Requested permutations"),
+            ("n_perm_valid", "Valid permutations"),
+            ("n_entities", "Entities"),
+            ("n_treated_entities", "Treated entities"),
+            ("perm_coef_mean", "Permutation mean"),
+            ("perm_coef_std", "Permutation SD"),
+            ("unavailableCode", "Unavailable reason"),
+        ],
+    );
+    let result = value(report, inv)?;
     Ok(vec![result])
 }
 
@@ -116,7 +173,7 @@ fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Ker
     let constant = boolean(inv, "constant")?;
     // IV first-stage and identification diagnostics form dense observation projections.
     check_fit_workspace(response.len(), data.len(), constant, "GLS", inv)?;
-    let fit = yss_sci_runtime::causal::iv::fit_instrumental_variables(
+    let mut encoded = yss_sci_runtime::causal::iv::fit_instrumental_variables(
         kind,
         response,
         &data[..exog],
@@ -129,7 +186,27 @@ fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Ker
         boolean(inv, "small")?,
     )
     .map_err(sci)?;
-    let model = value(fit, inv)?;
+    encoded["responseName"] = serde_json::json!(input_label(&inv.inputs[0], "response".into()));
+    encoded["parameterNames"] = serde_json::json!(
+        std::iter::once("_cons".to_string())
+            .take(usize::from(constant))
+            .chain(
+                group(inv, "predictors")
+                    .into_iter()
+                    .chain(group(inv, "endogenous"))
+                    .enumerate()
+                    .map(|(j, v)| input_label(v, format!("x{}", j + 1)))
+            )
+            .collect::<Vec<_>>()
+    );
+    encoded["instrumentNames"] = serde_json::json!(
+        group(inv, "instruments")
+            .iter()
+            .enumerate()
+            .map(|(j, v)| input_label(v, format!("z{}", j + 1)))
+            .collect::<Vec<_>>()
+    );
+    let model = value(encoded, inv)?;
     Ok(vec![
         model.clone(),
         field(&model, "fitted")?.clone(),
@@ -149,19 +226,36 @@ fn did(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     check_fit_workspace(response.len(), data.len() + 1, true, "GLS", inv)?;
     let result = yss_sci_runtime::causal::did::fit_did(response, data, entity, time, treatment)
         .map_err(sci)?;
-    let fit: yss_sci_contract::panel::PanelFit =
+    let mut fit: yss_sci_contract::panel::PanelFit =
         serde_json::from_value(result).map_err(|_| KernelError::ScientificFailure)?;
-    let report = value(
-        yss_sci_runtime::panel::summary(&fit, Default::default()),
-        inv,
-    )?;
-    Ok(vec![RuntimeValue::Record(std::sync::Arc::new(
-        [
-            ("model".into(), value(fit, inv)?),
-            ("summary".into(), report),
-        ]
-        .into(),
-    ))])
+    let treatment_index = group(inv, "predictors").len() + 1;
+    let treatment_label = format!("x{treatment_index}");
+    if fit
+        .omitted_terms
+        .iter()
+        .any(|t| t.variable == treatment_label)
+    {
+        return Err(KernelError::ScientificFailure);
+    }
+    for name in &mut fit.parameter_names {
+        if *name == treatment_label {
+            *name = "ATT".into();
+        }
+    }
+    super::panel::name_fit(&mut fit, inv);
+    let summary = yss_sci_runtime::panel::summary(&fit, Default::default()).map_err(sci)?;
+    let mut report = serde_json::json!({"model":fit,"summary":summary,"estimand":"TWFE treatment coefficient; ATT interpretation requires the DID identification assumptions","treatmentName":input_label(group(inv,"treatment")[0],"treatment".into())});
+    if let Some(mut display) = report["summary"].get("report_display").cloned() {
+        if let Some(sections) = display["sections"].as_object_mut() {
+            for section in sections.values_mut() {
+                if let Some(path) = section["path"].as_str() {
+                    section["path"] = serde_json::json!(format!("/summary{path}"));
+                }
+            }
+        }
+        report["report_display"] = display;
+    }
+    Ok(vec![value(report, inv)?])
 }
 
 fn summary(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -186,7 +280,24 @@ fn summary(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             inv,
         )?;
     }
-    let report = yss_sci_runtime::causal::iv::summary(&fit, options).map_err(sci)?;
+    let mut report = yss_sci_runtime::causal::iv::summary(&fit, options).map_err(sci)?;
+    if boolean(inv, "hypothesis_test")? {
+        let input = yss_sci_contract::hypothesis::HypothesisTestInput {
+            betas: fit.coefficients.clone(),
+            cov_beta: fit.inference.covariance.clone(),
+            df_residual: fit.statistics.df_residual,
+            param_names: fit.parameter_names.clone(),
+            hypothesis: text(inv, "hypothesis")?.into(),
+        };
+        let result = if fit.small {
+            yss_sci_runtime::hypothesis::run_hypothesis_test(input)
+        } else {
+            yss_sci_runtime::hypothesis::run_asymptotic_hypothesis_test(input)
+        }
+        .map_err(|_| KernelError::InvalidParameter)?;
+        report["hypothesisTest"] =
+            serde_json::to_value(result).map_err(|_| KernelError::ScientificFailure)?;
+    }
     let report = value(report, inv)?;
     Ok(vec![report])
 }

@@ -538,12 +538,12 @@ pub fn fit_panel_re_mle(
     )
     .map_err(|error| error.to_string())?;
 
-    let mut result = OLS {
+    let final_ols = OLS {
         endog: y_star,
         exog: x_star_use,
         config,
-    }
-    .fit()?;
+    };
+    let mut result = final_ols.fit()?;
 
     // OIM: Var(β̂) = σ²_e (X*'X*)^{-1}. OLS gives cov = ms_residual * (X*'X*)^{-1}.
     if result.ms_residual > 1e-300 {
@@ -699,6 +699,19 @@ pub fn fit_panel_re_mle(
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "quasi_demeaned".into(), constant: final_ols.config.constant,
+            response: final_ols.endog.iter().copied().collect(),
+            design: (0..final_ols.exog.ncols()).map(|j|final_ols.exog.col(j).iter().copied().collect()).collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_re_mle".into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {

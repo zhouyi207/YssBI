@@ -114,6 +114,15 @@ fn ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 }
 
 fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
+    if spec.id == "yssbi.statistics.panel.compare" {
+        let mut ports = regression_inputs(Family::Panel)?;
+        ports.push(data_output(
+            "result",
+            "Model comparison",
+            result_type(Family::Panel)?,
+        )?);
+        return Ok(ports);
+    }
     let mut ports = Vec::new();
     if matches!(spec.family, Family::Vec | Family::Var) {
         ports.push(user_data_input(
@@ -124,6 +133,14 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         )?);
     } else {
         ports.extend(regression_inputs(spec.family)?);
+    }
+    if spec.family == Family::Var {
+        ports.push(user_data_input(
+            "exogenous",
+            "Exogenous",
+            series_type()?,
+            0,
+        )?);
     }
     if matches!(spec.family, Family::Iv2sls | Family::IvLiml) {
         ports.push(bounded_user_data_input(
@@ -173,10 +190,7 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     } else {
         ports.push(data_output("model", "Model", model_type(spec)?)?);
     }
-    if !matches!(
-        spec.family,
-        Family::Panel | Family::PanelDid | Family::Var | Family::Vec
-    ) {
+    if !matches!(spec.family, Family::PanelDid | Family::Var | Family::Vec) {
         ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
         ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
     }
@@ -206,7 +220,7 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
             ports.push(data_input("treat", "Treated group (0/1)", series_type()?)?);
             ports.push(data_input("post", "Post period (0/1)", series_type()?)?);
         }
-        Family::Adf => ports.push(data_input("series", "DataSeries", series_type()?)?),
+        Family::Adf => ports.push(user_data_input("series", "DataSeries", series_type()?, 1)?),
         Family::Var | Family::VecRank => ports.push(user_data_input(
             "variables",
             "Variables",
@@ -241,6 +255,21 @@ fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErr
 }
 
 fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
+    if spec.id == "yssbi.statistics.panel.compare" {
+        let mut parameters = configure_parameters(Family::Panel)?;
+        parameters.retain(|p| p.key.as_str() != "estimator");
+        parameters.push(parameter(
+            "estimators",
+            concrete("core.text")?,
+            ParameterEditorSpec::Text { multiline: false },
+            DataValue::String("fixed_effects,random_effects,between".into()),
+            vec![ParameterConstraint::Length {
+                min: Some(1),
+                max: Some(256),
+            }],
+        )?);
+        return Ok(parameters);
+    }
     if spec.stage == Stage::Summary {
         return if spec.family == Family::Linear {
             linear_summary_parameters()
@@ -252,6 +281,14 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
         Stage::Test if spec.family == Family::PanelDid => vec![
             bounded_integer_parameter("repetitions", 100, 10, 2000)?,
             nonnegative_integer_parameter("seed", 42)?,
+            toggle_parameter("constant", true)?,
+            choice_parameter(
+                "covariance",
+                "cluster",
+                &["nonrobust", "HC0", "HC1", "HC2", "HC3", "cluster"],
+            )?,
+            toggle_parameter("use_observed_coefficient", false)?,
+            decimal_parameter("observed_coefficient", "0")?,
         ],
         Stage::Test if spec.family == Family::Adf => vec![
             bounded_integer_parameter("lags", 1, 0, 1000)?,
@@ -270,7 +307,21 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
             choice_parameter("trend", "constant", &["none", "constant", "trend"])?,
         ],
         Stage::Fit if spec.family == Family::Var => {
-            vec![bounded_integer_parameter("lags", 1, 1, 1000)?]
+            vec![
+                bounded_integer_parameter("lags", 1, 1, 1000)?,
+                toggle_parameter("constant", true)?,
+                toggle_parameter("dfk", false)?,
+                parameter(
+                    "selected_lags",
+                    concrete("core.text")?,
+                    ParameterEditorSpec::Text { multiline: false },
+                    DataValue::String("".into()),
+                    vec![ParameterConstraint::Length {
+                        min: None,
+                        max: Some(4096),
+                    }],
+                )?,
+            ]
         }
         Stage::Fit if spec.family == Family::PanelDid => vec![],
         _ => vec![],
@@ -298,6 +349,38 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
 }
 
 fn model_summary_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
+    if matches!(family, Family::Logit | Family::Probit | Family::Prais) {
+        let text_field = |key, default: &str| {
+            parameter(
+                key,
+                concrete("core.text")?,
+                ParameterEditorSpec::Text { multiline: false },
+                DataValue::String(default.into()),
+                vec![ParameterConstraint::Length {
+                    min: None,
+                    max: Some(4096),
+                }],
+            )
+        };
+        let mut parameters = vec![
+            toggle_parameter("hypothesis_test", false)?,
+            text_field("hypothesis", "x1 = 0")?,
+        ];
+        if family != Family::Prais {
+            if family == Family::Logit {
+                parameters.push(toggle_parameter("odds_ratios", true)?);
+            }
+            parameters.extend([
+                toggle_parameter("marginal_effects", false)?,
+                choice_parameter("marginal_evaluation", "average", &["average", "at_means"])?,
+                choice_parameter("marginal_method", "dydx", &["dydx", "eyex", "eydx", "dyex"])?,
+                text_field("marginal_at", "")?,
+                toggle_parameter("classification", true)?,
+                decimal_parameter("cutoff", "0.5")?,
+            ]);
+        }
+        return Ok(parameters);
+    }
     let toggles = match family {
         Family::Iv2sls | Family::IvLiml => {
             let defaults = yss_sci_contract::causal::iv::IvSummaryOptions::default();
@@ -347,6 +430,19 @@ fn model_summary_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAss
         .into_iter()
         .map(|(key, default)| toggle_parameter(key, default))
         .collect::<Result<Vec<_>, _>>()?;
+    if matches!(family, Family::Iv2sls | Family::IvLiml) {
+        parameters.push(toggle_parameter("hypothesis_test", false)?);
+        parameters.push(parameter(
+            "hypothesis",
+            concrete("core.text")?,
+            ParameterEditorSpec::Text { multiline: false },
+            DataValue::String("x1 = 0".into()),
+            vec![ParameterConstraint::Length {
+                min: Some(1),
+                max: Some(4096),
+            }],
+        )?);
+    }
     let serial_lags = match family {
         Family::Var => {
             Some(yss_sci_contract::time_series::var::VarSummaryOptions::default().serial_lags)
@@ -929,11 +1025,11 @@ fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyErro
         Family::Linear => "statistics.model.linear",
         Family::Logit => "statistics.model.logit",
         Family::Probit => "statistics.model.probit",
+        Family::Panel => "statistics.model.panel",
         Family::Adf
         | Family::Iv2sls
         | Family::IvLiml
         | Family::Prais
-        | Family::Panel
         | Family::PanelDid
         | Family::Var
         | Family::Vec
@@ -1168,10 +1264,37 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         "seed",
         "rhs",
         "koenker",
+        "odds_ratios",
+        "marginal_effects",
+        "marginal_evaluation",
+        "marginal_method",
+        "marginal_at",
+        "classification",
+        "cutoff",
+        "selected_lags",
+        "dfk",
+        "estimators",
+        "use_observed_coefficient",
+        "observed_coefficient",
     ] {
         let title = format!("parameters.statistics.{key}.title");
         let description = format!("parameters.statistics.{key}.description");
         let (en, zh) = match key {
+            "odds_ratios" => ("Odds ratios", "胜算比"),
+            "marginal_effects" => ("Marginal effects", "边际效应"),
+            "marginal_evaluation" => ("Margins evaluation", "边际效应求值方式"),
+            "marginal_method" => ("Derivative / elasticity", "导数或弹性"),
+            "marginal_at" => ("at() values", "at() 指定值"),
+            "classification" => ("Classification table", "分类表"),
+            "cutoff" => ("Classification cutoff", "分类阈值"),
+            "selected_lags" => ("Selected lags (comma separated)", "指定滞后阶（逗号分隔）"),
+            "dfk" => (
+                "VAR covariance degrees-of-freedom adjustment",
+                "VAR 协方差自由度修正",
+            ),
+            "estimators" => ("Estimators (comma separated)", "估计器（逗号分隔）"),
+            "use_observed_coefficient" => ("Specify observed coefficient", "指定观测系数"),
+            "observed_coefficient" => ("Observed treatment coefficient", "观测处理效应系数"),
             "method" => ("Estimation method", "估计方法"),
             "constant" => ("Include intercept", "包含常数项"),
             "covariance" => (

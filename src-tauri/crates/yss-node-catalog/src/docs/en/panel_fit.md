@@ -10,4 +10,4 @@ Select estimator, effects, intercept and covariance:
 - maximum_likelihood supports all three effect dimensions and only nonrobust covariance.
 - lsdv requires an intercept. Other supported estimators allow nonrobust, HC0–HC3 or cluster covariance.
 
-Invalid combinations and failed estimation are reported explicitly. Output model contains coefficients, covariance and estimator-specific inference/group statistics. Connect it to Panel Summary. Observation-level fitted/residual series are not exposed.
+Invalid combinations and failed estimation are reported explicitly. Output model contains coefficients, covariance and estimator-specific inference/group statistics. Connect it to Panel Summary. Fitted/residual outputs are exposed on the explicitly labeled estimation scale; see Panel Summary for prediction and row-coordinate semantics.

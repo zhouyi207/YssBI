@@ -535,7 +535,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                     Series(_) => 4,
                     Statistical(Fit) => 7,
                     Boolean(_) => 3,
-                    Statistical(Summary) => 8,
+                    Statistical(Summary) => 9,
                     Statistical(Predict) => 4,
                     Convert => 7,
                     Constant => 5,

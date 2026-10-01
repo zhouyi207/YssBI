@@ -12,7 +12,6 @@ import {
 export type FormulaMappingRow = {
   symbol: string;
   variable: string;
-  category?: string | null;
   coef?: number;
 };
 
@@ -23,13 +22,9 @@ function formatCoef(coef: number | undefined): string {
 
 export function FormulaMappingTable({
   mappings,
-  hasCat,
-  showCoef = true,
   renderSymbol,
 }: {
   mappings: FormulaMappingRow[];
-  hasCat: boolean;
-  showCoef?: boolean;
   renderSymbol: (symbol: string) => ReactNode;
 }) {
   return (
@@ -42,16 +37,9 @@ export function FormulaMappingTable({
           <TableHead className="h-auto px-3 py-1.5 text-left font-medium text-muted-foreground">
             Variable
           </TableHead>
-          {hasCat && (
-            <TableHead className="h-auto px-3 py-1.5 text-left font-medium text-muted-foreground">
-              Category
-            </TableHead>
-          )}
-          {showCoef && (
-            <TableHead className="h-auto w-28 px-3 py-1.5 text-right font-medium text-muted-foreground">
-              Coefficient
-            </TableHead>
-          )}
+          <TableHead className="h-auto w-28 px-3 py-1.5 text-right font-medium text-muted-foreground">
+            Coefficient
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -62,22 +50,9 @@ export function FormulaMappingTable({
           >
             <TableCell className="px-3 py-1.5">{renderSymbol(m.symbol)}</TableCell>
             <TableCell className="px-3 py-1.5 font-mono text-foreground">{m.variable}</TableCell>
-            {hasCat && (
-              <TableCell className="px-3 py-1.5">
-                {m.category != null ? (
-                  <span className="inline-flex items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-mono text-indigo-700 dark:text-indigo-300">
-                    {m.category}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
-            )}
-            {showCoef && (
-              <TableCell className="px-3 py-1.5 text-right font-mono text-muted-foreground">
-                {formatCoef(m.coef)}
-              </TableCell>
-            )}
+            <TableCell className="px-3 py-1.5 text-right font-mono text-muted-foreground">
+              {formatCoef(m.coef)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

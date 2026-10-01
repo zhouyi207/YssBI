@@ -38,3 +38,5 @@ pub fn parse_at_values(
 ) -> Result<HashMap<String, f64>, HypothesisError> {
     yss_sci::hypothesis::linear_hypothesis::parse_at_values(at_spec, param_names)
 }
+
+pub use yss_sci::hypothesis::linear_hypothesis::run_asymptotic_hypothesis_test;

@@ -28,19 +28,3 @@ export function formatNum(value: unknown, decimals = 4): string {
   if (Math.abs(n) < 0.0001 && n !== 0) return n.toExponential(3);
   return n.toFixed(decimals);
 }
-
-export function formatNullableNum(
-  value: unknown,
-  decimals = 4,
-  fallback: string = FALLBACK,
-): string {
-  if (value === null || value === undefined) return fallback;
-  const formatted = formatNum(value, decimals);
-  return formatted === FALLBACK ? fallback : formatted;
-}
-
-export function formatPercent(value: unknown, decimals = 2): string {
-  const n = coerceFiniteNumber(value);
-  if (n === null) return FALLBACK;
-  return `${(n * 100).toFixed(decimals)}%`;
-}

@@ -525,6 +525,8 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
             ResultAnalysisRequest::ResidualPlot {
                 max_points: 32,
                 x_range: None,
+                adjacent: false,
+                highlight_top_percent: None,
             },
         )
         .unwrap()
@@ -620,5 +622,71 @@ fn weighted_graph_inputs_reach_the_shared_report_query() {
     assert!(
         (wls.report.model_basic_info.r_squared - gls.report.model_basic_info.r_squared).abs()
             < 1e-10
+    );
+}
+
+#[test]
+fn diagnostic_queries_return_computed_tests_and_highlight_complete_population() {
+    let (app, reference, fit) = fixture_with_options(
+        48,
+        "OLS",
+        LinearSummaryOptions {
+            diagnostics: true,
+            residual_plot: true,
+            ..Default::default()
+        },
+    );
+    let ResultAnalysisProjection::Diagnostics(diagnostics) = app
+        .analyze_result(reference, ResultAnalysisRequest::Diagnostics)
+        .unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(diagnostics.tests.len(), 6);
+    assert!(
+        diagnostics
+            .tests
+            .iter()
+            .any(|test| test.name.starts_with("Breusch") && test.value.is_some())
+    );
+    assert_eq!(diagnostics.leverage_density.len(), 128);
+    let ResultAnalysisProjection::ResidualPlot(plot) = app
+        .analyze_result(
+            reference,
+            ResultAnalysisRequest::ResidualPlot {
+                max_points: 100,
+                x_range: None,
+                adjacent: true,
+                highlight_top_percent: Some(100.0),
+            },
+        )
+        .unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(plot.matched_count, 47);
+    assert_eq!(plot.points[0].observation, 2);
+    for point in &plot.points {
+        assert_eq!(point.x, fit.residuals[point.observation - 2]);
+        assert_eq!(point.y, fit.residuals[point.observation - 1]);
+        assert!(point.highlighted);
+    }
+    assert!(
+        app.analyze_result(
+            reference,
+            ResultAnalysisRequest::ResidualPlot {
+                max_points: 100,
+                x_range: None,
+                adjacent: true,
+                highlight_top_percent: Some(101.0)
+            }
+        )
+        .is_err()
+    );
+    let (unselected, other, _) = fixture(48);
+    assert!(
+        unselected
+            .analyze_result(other, ResultAnalysisRequest::Diagnostics)
+            .is_err()
     );
 }

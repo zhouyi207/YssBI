@@ -112,7 +112,7 @@ fn postestimation(
                 (steps + 1)
                     .checked_mul(k)
                     .and_then(|n| n.checked_mul(k))
-                    .and_then(|n| n.checked_mul(256)),
+                    .and_then(|n| n.checked_mul(1024)),
             )?;
             if method == "irf" {
                 yss_sci_runtime::time_series::var_impulse_responses(&fit, steps).map_err(sci)?

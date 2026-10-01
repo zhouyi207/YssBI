@@ -169,5 +169,126 @@ pub fn fit_panel(
     };
     let mut result = result.map_err(|_| computation_failed(op))?;
     result.family = family.into();
+    result.statistics.time_periods = times
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let mut labels: Vec<(String, Option<String>)> = std::iter::once(("_cons".into(), None))
+        .take(usize::from(c))
+        .chain((0..predictors.len()).map(|j| (format!("x{}", j + 1), None)))
+        .collect();
+    if options.estimator == Estimator::Lsdv {
+        for (variable, values, applies) in [
+            ("entity", &entity, options.effects != Effects::Time),
+            ("time", &time, options.effects != Effects::Entity),
+        ] {
+            if applies {
+                let mut levels = values.clone();
+                levels.sort_by(f64::total_cmp);
+                levels.dedup();
+                labels.extend(
+                    levels
+                        .iter()
+                        .skip(1)
+                        .map(|v| (format!("{variable}[{v}]"), Some(v.to_string()))),
+                );
+            }
+        }
+    }
+    let omitted = result.omitted_indices.clone().unwrap_or_default();
+    result.omitted_terms = omitted
+        .iter()
+        .map(|&index| yss_sci_contract::panel::PanelOmittedTerm {
+            index,
+            variable: labels[index].0.clone(),
+            category: labels[index].1.clone(),
+            reason: if options.estimator == Estimator::FixedEffects {
+                "absorbed_or_collinear"
+            } else {
+                "collinear"
+            }
+            .into(),
+        })
+        .collect();
+    if options.estimator == Estimator::FirstDifference && c {
+        result
+            .omitted_terms
+            .push(yss_sci_contract::panel::PanelOmittedTerm {
+                index: 0,
+                variable: "_cons".into(),
+                category: None,
+                reason: "removed_by_differencing".into(),
+            });
+    }
+    let retained = labels
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| {
+            !(omitted.contains(i)
+                || (options.estimator == Estimator::FirstDifference && c && *i == 0))
+        })
+        .map(|(_, v)| v)
+        .collect::<Vec<_>>();
+    result.parameter_names = retained.iter().map(|v| v.0.clone()).collect();
+    result.parameter_categories = retained.into_iter().map(|v| v.1).collect();
+    if result.parameter_names.len() != result.coefficients.len() {
+        return Err(computation_failed(op));
+    }
+    result.estimation.source_rows = match options.estimator {
+        Estimator::FirstDifference => order
+            .windows(2)
+            .filter(|w| entity[w[0]] == entity[w[1]] && time[w[1]] - time[w[0]] == 1.0)
+            .map(|w| w.to_vec())
+            .collect(),
+        Estimator::Between => {
+            let ids = if options.effects == Effects::Entity {
+                &entities
+            } else {
+                &times
+            };
+            let count = ids.iter().max().map_or(0, |v| v + 1);
+            (0..count)
+                .map(|id| {
+                    order
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| ids[*i] == id)
+                        .map(|(_, r)| *r)
+                        .collect()
+                })
+                .collect()
+        }
+        _ => order.iter().map(|i| vec![*i]).collect(),
+    };
+    if result.estimation.source_rows.len() != result.estimation.fitted.len() {
+        return Err(computation_failed(op));
+    }
     Ok(result)
+}
+
+/// Predict on the exact estimator scale. Absorbed effects are not extrapolated;
+/// callers provide within/quasi-demeaned/differenced/mean inputs as appropriate.
+pub fn predict(fit: &PanelFit, predictors: &[Vec<f64>]) -> Result<Vec<f64>, SciError> {
+    let n = predictors.first().map_or(0, Vec::len);
+    let x = design_matrix(
+        predictors,
+        n,
+        fit.estimation.constant,
+        SciOperationCode::Panel,
+    )?;
+    if x.ncols() != fit.estimation.coefficients.len()
+        || fit.estimation.coefficients.iter().any(|v| !v.is_finite())
+    {
+        return Err(invalid_input(
+            SciOperationCode::Panel,
+            SciInputViolation::ShapeMismatch,
+        ));
+    }
+    Ok(
+        (&x * &Col::from_iter(fit.estimation.coefficients.iter().copied()))
+            .iter()
+            .copied()
+            .collect(),
+    )
 }

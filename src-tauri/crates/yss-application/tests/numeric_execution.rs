@@ -4022,3 +4022,150 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         assert!((actual - expected).abs() < 1e-10);
     }
 }
+
+#[test]
+fn migrated_var_reports_preserve_real_relation_column_labels() {
+    use arrow::{
+        array::Float64Array,
+        datatypes::{DataType, Field, Schema},
+        record_batch::RecordBatch,
+    };
+    use std::borrow::Cow;
+    use yss_data_contract::ValueType;
+    use yss_node_kernel::{
+        KernelControl, KernelId, KernelInvocation, KernelOutputSpec, KernelParameterKey,
+        KernelRegistry,
+    };
+    let relations: Arc<dyn yss_relational_contract::RelationFactory> =
+        yss_database_runtime::dataset_query_engine().unwrap();
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    let outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let base = KernelInvocation {
+        relations: &relations,
+        inputs: &[],
+        input_keys: &[],
+        parameters: Default::default(),
+        outputs: &outputs,
+        control: &control,
+    };
+    let mut seed = 42u64;
+    let mut noise = || {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        ((seed >> 32) as u32) as f64 / u32::MAX as f64 - 0.5
+    };
+    let (mut income, mut consumption) = (Vec::new(), Vec::new());
+    let (mut a, mut b) = (0.0, 0.0);
+    for _ in 0..96 {
+        let next_a = 0.5 * a + noise();
+        let next_b = 0.2 * b + 0.3 * a + noise();
+        a = next_a;
+        b = next_b;
+        income.push(a);
+        consumption.push(b);
+    }
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("收入", DataType::Float64, false),
+            Field::new("消费", DataType::Float64, false),
+        ])),
+        vec![
+            Arc::new(Float64Array::from(income)),
+            Arc::new(Float64Array::from(consumption)),
+        ],
+    )
+    .unwrap();
+    let relation = relations
+        .clone()
+        .materialize(batch, &base.relation_control())
+        .unwrap();
+    let inputs = [
+        RuntimeValue::Series(relation.select_series("收入").unwrap()),
+        RuntimeValue::Series(relation.select_series("消费").unwrap()),
+    ];
+    let parameters = [
+        ("lags", TabularScalar::Integer(1).into()),
+        ("selected_lags", TabularScalar::String("".into()).into()),
+        ("constant", TabularScalar::Bool(true).into()),
+        ("dfk", TabularScalar::Bool(false).into()),
+    ];
+    let invocation = KernelInvocation {
+        inputs: &inputs,
+        input_keys: &["variables", "variables"],
+        parameters: parameters
+            .iter()
+            .map(|(k, v)| {
+                (
+                    KernelParameterKey::new((*k).into()).unwrap(),
+                    Cow::Borrowed(v),
+                )
+            })
+            .collect(),
+        ..base
+    };
+    let registry = KernelRegistry::default();
+    let fit = registry
+        .execute(
+            &KernelId::new("yssbi.statistics.var.fit".into()).unwrap(),
+            &invocation,
+        )
+        .unwrap();
+    let RuntimeValue::Record(model) = &fit[0] else {
+        panic!()
+    };
+    let names = RuntimeValue::List(
+        [
+            TabularScalar::String("收入".into()).into(),
+            TabularScalar::String("消费".into()).into(),
+        ]
+        .into(),
+    );
+    assert_eq!(model.get("var_names"), Some(&names));
+    let parameters = [
+        ("model_summary", TabularScalar::Bool(true).into()),
+        ("coefficient_table", TabularScalar::Bool(true).into()),
+        ("lag_exclusion", TabularScalar::Bool(false).into()),
+        ("serial_tests", TabularScalar::Bool(false).into()),
+        ("stability", TabularScalar::Bool(true).into()),
+        ("serial_lags", TabularScalar::Integer(1).into()),
+    ];
+    let invocation = KernelInvocation {
+        relations: &relations,
+        inputs: &fit,
+        input_keys: &["model"],
+        parameters: parameters
+            .iter()
+            .map(|(k, v)| {
+                (
+                    KernelParameterKey::new((*k).into()).unwrap(),
+                    Cow::Borrowed(v),
+                )
+            })
+            .collect(),
+        outputs: &outputs,
+        control: &control,
+    };
+    let report = registry
+        .execute(
+            &KernelId::new("yssbi.statistics.var.summary".into()).unwrap(),
+            &invocation,
+        )
+        .unwrap();
+    let RuntimeValue::Record(report) = &report[0] else {
+        panic!()
+    };
+    let RuntimeValue::Record(model) = &report["model"] else {
+        panic!()
+    };
+    assert_eq!(model.get("variables"), Some(&names));
+    let RuntimeValue::Scalar(TabularScalar::String(equations)) = &report["model_equations"] else {
+        panic!()
+    };
+    assert!(equations.contains("收入") && equations.contains("消费"));
+    assert!(report.contains_key("report_display"));
+}

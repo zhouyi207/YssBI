@@ -29,7 +29,21 @@ pub fn summary(
     options: yss_sci_contract::causal::iv::IvSummaryOptions,
 ) -> Result<serde_json::Value, SciError> {
     use yss_sci::causal::iv::fit as analysis;
+    if fit.parameter_names.len() != fit.coefficients.len()
+        || fit.instrument_names.len() != fit.design.instruments.len()
+        || !fit.inference.has_shape(fit.coefficients.len())
+    {
+        return Err(yss_sci_contract::SciError::InvalidInput {
+            operation: SciOperationCode::InstrumentalVariables,
+            violation: yss_sci_contract::SciInputViolation::ShapeMismatch,
+        });
+    }
     let mut report = serde_json::Map::new();
+    report.insert("responseName".into(), serde_json::json!(fit.response_name));
+    report.insert(
+        "statisticDistribution".into(),
+        serde_json::json!(if fit.small { "t" } else { "z" }),
+    );
     if options.model_summary {
         report.insert(
             "model".into(),
@@ -39,11 +53,21 @@ pub fn summary(
     if options.coefficient_table {
         report.insert(
             "coefficients".into(),
-            serde_json::json!({"estimates": fit.coefficients, "inference": fit.inference}),
+            serde_json::json!({"labels":fit.parameter_names,"estimates": fit.coefficients, "inference": fit.inference}),
         );
     }
     if options.first_stage {
-        let (equations, statistics) = analysis::first_stage(fit)?;
+        let (mut equations, statistics) = analysis::first_stage(fit)?;
+        let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
+        let labels = fit.parameter_names[..included]
+            .iter()
+            .chain(&fit.instrument_names)
+            .cloned()
+            .collect::<Vec<_>>();
+        for (j, equation) in equations.iter_mut().enumerate() {
+            equation.endog_name = fit.parameter_names[included + j].clone();
+            equation.var_names = labels.clone();
+        }
         report.insert(
             "firstStage".into(),
             serde_json::json!({"equations": equations, "statistics": statistics}),
@@ -55,16 +79,143 @@ pub fn summary(
         } else {
             serde_json::json!(analysis::overidentification(fit)?)
         };
+        if result.is_null() {
+            report.insert(
+                "overidentificationUnavailable".into(),
+                serde_json::json!(
+                    if fit.design.instruments.len() == fit.design.endogenous.len() {
+                        "exact_identification"
+                    } else if fit.family == "iv_liml"
+                        && fit.statistics.covariance_type != "nonrobust"
+                    {
+                        "requires_nonrobust_covariance"
+                    } else {
+                        "insufficient_residual_variation_or_degrees_of_freedom"
+                    }
+                ),
+            );
+        }
         report.insert("overidentification".into(), result);
     }
     if options.endogeneity {
         let (hausman, endogenous) = analysis::endogeneity(fit)?;
+        if hausman.is_none() && endogenous.is_none() {
+            report.insert(
+                "endogeneityUnavailable".into(),
+                serde_json::json!("requires_nonrobust_covariance"),
+            );
+        }
         report.insert(
             "endogeneity".into(),
             serde_json::json!({"hausman": hausman, "endogenous": endogenous}),
         );
     }
-    Ok(report.into())
+    let mut report: serde_json::Value = report.into();
+    use crate::report_display::{COEFFICIENT_COLUMNS, coefficient_rows, equation, section};
+    if options.coefficient_table {
+        report["coefficient_rows"] = serde_json::json!(coefficient_rows(
+            &fit.parameter_names,
+            &fit.coefficients,
+            &fit.inference
+        )?);
+        report["structural_equation"] = serde_json::json!(equation(
+            &fit.response_name,
+            &fit.parameter_names,
+            &fit.coefficients
+        ));
+        section(
+            &mut report,
+            "coefficients",
+            "Structural coefficients",
+            "table",
+            "/coefficient_rows",
+            COEFFICIENT_COLUMNS,
+        );
+        section(
+            &mut report,
+            "equation",
+            "Structural equation",
+            "equation",
+            "/structural_equation",
+            &[],
+        );
+    }
+    if let Some(equations) = report["firstStage"]["equations"].as_array() {
+        let mut rows = Vec::new();
+        let mut texts = Vec::new();
+        for e in equations {
+            let labels = e["var_names"].as_array().expect("first-stage labels");
+            let names = labels
+                .iter()
+                .map(|v| v.as_str().unwrap_or("").to_string())
+                .collect::<Vec<_>>();
+            let betas = e["betas"]
+                .as_array()
+                .expect("first-stage coefficients")
+                .iter()
+                .map(|v| v.as_f64().unwrap_or(0.0))
+                .collect::<Vec<_>>();
+            texts.push(equation(
+                e["endog_name"].as_str().unwrap_or(""),
+                &names,
+                &betas,
+            ));
+            for (j, name) in labels.iter().enumerate() {
+                rows.push(serde_json::json!({"equation":e["endog_name"],"variable":name,"estimate":e["betas"][j],"standard_error":e["stds"][j],"statistic":e["tvalues"][j],"p_value":e["pvalues"][j],"ci_lower":e["conf_int_left"][j],"ci_upper":e["conf_int_right"][j]}));
+            }
+        }
+        report["first_stage_rows"] = serde_json::json!(rows);
+        report["first_stage_equations"] = serde_json::json!(texts.join("\n"));
+        section(
+            &mut report,
+            "first_stage",
+            "First-stage equations",
+            "table",
+            "/first_stage_rows",
+            &[
+                ("equation", "Response"),
+                ("variable", "Variable"),
+                ("estimate", "Coefficient"),
+                ("standard_error", "Std. error"),
+                ("statistic", "t"),
+                ("p_value", "p-value"),
+            ],
+        );
+        section(
+            &mut report,
+            "first_stage_equations",
+            "First-stage model equations",
+            "equation",
+            "/first_stage_equations",
+            &[],
+        );
+        let stats = &report["firstStage"]["statistics"];
+        report["weak_instrument_rows"] = serde_json::json!([{"min_eigenvalue":stats["min_eigenvalue"],"partial_r2":stats["partial_r2"],"f_stat":stats["f_stat"],"f_p_value":stats["f_p_value"],"critical_values_unavailable_reason":stats["min_eigenvalue_cv_note"],"size_10":stats["min_eigenvalue_cv"]["size"]["pct_10"],"size_15":stats["min_eigenvalue_cv"]["size"]["pct_15"],"size_20":stats["min_eigenvalue_cv"]["size"]["pct_20"],"size_25":stats["min_eigenvalue_cv"]["size"]["pct_25"],"bias_5":stats["min_eigenvalue_cv"]["bias"]["pct_5"],"bias_10":stats["min_eigenvalue_cv"]["bias"]["pct_10"],"bias_20":stats["min_eigenvalue_cv"]["bias"]["pct_20"],"bias_30":stats["min_eigenvalue_cv"]["bias"]["pct_30"],"bias_unavailable_reason":if stats["min_eigenvalue_cv"]["bias"].is_null(){serde_json::json!("not_tabulated_for_this_identification_or_covariance")}else{serde_json::Value::Null}}]);
+        section(
+            &mut report,
+            "weak_instruments",
+            "Weak-instrument diagnostics",
+            "table",
+            "/weak_instrument_rows",
+            &[
+                ("min_eigenvalue", "Minimum eigenvalue"),
+                ("partial_r2", "Partial R²"),
+                ("f_stat", "First-stage F"),
+                ("f_p_value", "F p-value"),
+                ("size_10", "10% size critical value"),
+                ("size_15", "15% size critical value"),
+                ("size_20", "20% size critical value"),
+                ("size_25", "25% size critical value"),
+                ("critical_values_unavailable_reason", "Unavailable reason"),
+                ("bias_5", "5% relative-bias critical value"),
+                ("bias_10", "10% relative-bias critical value"),
+                ("bias_20", "20% relative-bias critical value"),
+                ("bias_30", "30% relative-bias critical value"),
+                ("bias_unavailable_reason", "Bias-table unavailable reason"),
+            ],
+        );
+    }
+    Ok(report)
 }
 
 pub fn hausman(

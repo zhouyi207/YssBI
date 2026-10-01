@@ -10,21 +10,16 @@ export function CoeffBarChart({ coefficients }: { coefficients: Coefficient[] })
       {coefficients.map((coeff, idx) => {
         const pct = (Math.abs(coeff.coef) / maxAbs) * 100;
         const isPositive = coeff.coef >= 0;
-        const label =
-          coeff.category != null ? `${coeff.variable}[${coeff.category}]` : coeff.variable;
 
         return (
-          <div
-            key={`${coeff.variable}-${coeff.category ?? ""}-${idx}`}
-            className="flex items-center gap-3"
-          >
+          <div key={`${coeff.variable}-${idx}`} className="flex items-center gap-3">
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="text-xs font-mono text-muted-foreground w-28 text-right shrink-0 truncate cursor-default">
-                  {label}
+                  {coeff.variable}
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="top">{label}</TooltipContent>
+              <TooltipContent side="top">{coeff.variable}</TooltipContent>
             </Tooltip>
             <div className="flex-1 flex items-center h-5">
               <div className="w-1/2 flex justify-end">

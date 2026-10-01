@@ -360,7 +360,7 @@ mod tests {
         );
     }
     #[test]
-    fn materialized_node_results_publish_matching_descriptor_and_table_pages() {
+    fn sequence_node_results_publish_matching_descriptors_and_pages() {
         use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState};
         use std::collections::BTreeMap;
         use std::sync::Arc;
@@ -393,22 +393,48 @@ mod tests {
         let session =
             PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into());
         let graph = GraphResourcePath::new("events/materialized.yssbi-event").unwrap();
+        struct ExpectedSequence {
+            physical_type: &'static str,
+            count: usize,
+            lazy: bool,
+            page_totals: [Option<usize>; 4],
+        }
         let mut document = GraphDocument::default();
-        for (kind, config) in [
+        let mut expected_results = BTreeMap::new();
+        for (kind, config, expected) in [
             (
                 "yssbi.dataframe.series.int_range",
                 serde_json::json!({"start": 1, "end": 4, "step": 1}),
+                ExpectedSequence {
+                    physical_type: "Int64",
+                    count: 3,
+                    lazy: true,
+                    page_totals: [None, None, Some(3), None],
+                },
             ),
             (
                 "yssbi.dataframe.series.int_range",
                 serde_json::json!({"start": 1, "end": 1, "step": 1}),
+                ExpectedSequence {
+                    physical_type: "Int64",
+                    count: 0,
+                    lazy: true,
+                    page_totals: [Some(0), None, None, None],
+                },
             ),
             (
                 "yssbi.distribution.normal.sample",
                 serde_json::json!({"mean":0, "standard_deviation":1, "sample_count":3}),
+                ExpectedSequence {
+                    physical_type: "Numeric",
+                    count: 3,
+                    lazy: false,
+                    page_totals: [Some(3); 4],
+                },
             ),
         ] {
             let id = NodeId::new();
+            expected_results.insert(id, expected);
             document.nodes.insert(
                 id,
                 DocumentNode {
@@ -482,12 +508,31 @@ mod tests {
                 serde_json::to_value(ResultDescriptorDto::from_execution(id, &snapshot).unwrap())
                     .unwrap();
             assert_eq!(descriptor["valueKind"], "sequence");
-            assert_eq!(descriptor["metadata"]["columns"][0]["type"], "Numeric");
+            let address: yss_graph_document::PortAddress = output_dto(snapshot.output())
+                .unwrap()
+                .port
+                .try_into()
+                .unwrap();
+            let expected = &expected_results[&address.node_id];
+            assert_eq!(
+                descriptor["metadata"]["columns"].as_array().unwrap().len(),
+                1
+            );
+            assert_eq!(
+                descriptor["metadata"]["columns"][0]["type"],
+                expected.physical_type
+            );
+            // Describing a lazy relation does not count/scan it. A materialized
+            // list already owns its exact length, including empty sequences.
+            assert_eq!(
+                descriptor["totalCount"],
+                serde_json::json!((!expected.lazy).then_some(expected.count))
+            );
             let reference = ResultReference {
                 execution_session_id: captured.execution_session_id(),
                 result_id: id,
             };
-            for offset in [0, 1, 2, 9] {
+            for (offset, expected_total) in [0, 1, 2, 9].into_iter().zip(expected.page_totals) {
                 let page = app
                     .query_result_page(reference, offset, 1)
                     .unwrap()
@@ -496,10 +541,35 @@ mod tests {
                     .unwrap();
                 assert_eq!(descriptor["metadata"], page["metadata"]);
                 assert_eq!(descriptor["valueKind"], page["valueKind"]);
-                assert_eq!(descriptor["totalCount"], page["totalCount"]);
-                for row in page["values"].as_array().unwrap() {
+                // Only an observed terminal relation page establishes a count;
+                // an empty out-of-range page cannot establish the unseen end.
+                assert_eq!(page["totalCount"], serde_json::json!(expected_total));
+                let actual_count = usize::from(offset < expected.count);
+                let has_more = offset + actual_count < expected.count;
+                assert_eq!(page["actualCount"], actual_count);
+                assert_eq!(page["hasMore"], has_more);
+                assert_eq!(
+                    page["nextOffset"],
+                    serde_json::json!(has_more.then_some(offset + actual_count))
+                );
+                assert_eq!(
+                    page["offset"],
+                    if expected.lazy {
+                        offset
+                    } else {
+                        offset.min(expected.count)
+                    }
+                );
+                assert_eq!(page["requestedLimit"], 1);
+                let rows = page["values"].as_array().unwrap();
+                assert_eq!(rows.len(), actual_count);
+                for row in rows {
                     assert_eq!(row.as_array().unwrap().len(), 1);
-                    assert!(row[0].is_number());
+                    if expected.lazy {
+                        assert_eq!(row[0].as_i64(), Some((offset + 1) as i64));
+                    } else {
+                        assert!(row[0].as_f64().is_some_and(f64::is_finite));
+                    }
                 }
             }
         }

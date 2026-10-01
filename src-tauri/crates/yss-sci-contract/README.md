@@ -89,3 +89,9 @@ regression checks between stages, without interrupting a running decomposition.
 Scheduling, concurrency and the budget remain caller-owned.
 
 `hypothesis` carries neutral requests and result records for classical mean, proportion, count-table, rank/sequence and variance-homogeneity tests. Requests encode design and alternatives; the report keeps the statistic, reference degrees of freedom, p-value, sample sizes and method-specific finite details without depending on a node ID or backend type.
+
+Binary effect/classification records retain nullable inference for undefined rates;
+regression fits retain named numeric designs for postestimation. Panel estimation
+samples explicitly describe transformed coordinates and source-row groups. VAR
+records retain selected lags, covariance divisor, exogenous names and sample rows.
+These neutral records do not contain graph addresses or UI-specific types.

@@ -236,3 +236,14 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 数据存储与查询边界见 [Dataset store](../yss-database-store/README.md)，局部性能测量见[数据引擎基准](../../../docs/benchmark/DATA_ENGINE_BENCHMARK.md)。
 
 The built-in classical hypothesis-test adapters live in `builtins/statistics/classical.rs`. They translate node inputs into neutral `yss-sci-contract::hypothesis` requests, invoke stateless SCI runtime functions, and expose one structured `result` output. The catalog owns localized node definitions and help; kernels do not duplicate formulas.
+
+Binary Summary computes selected odds ratios (Logit only), continuous-regressor
+margins, in-sample classification and coefficient restrictions through SCI. Prais
+and IV Summary share the existing contrast engine with estimator-appropriate t/F
+or normal/chi-square distributions. Data-series labels are captured at Fit.
+Panel Fit emits estimator-scale fitted/residual lists and retains source-row groups;
+Panel Predict consumes that scale, while Panel Compare reports each requested
+estimator's success or scientific failure independently. ADF accepts multiple aligned
+series with per-series outcomes. VAR exposes selected lag lists, contemporaneous
+exogenous columns, intercept and covariance df adjustment. These changes directly
+replace the current unpublished contracts; no compatibility path is maintained.

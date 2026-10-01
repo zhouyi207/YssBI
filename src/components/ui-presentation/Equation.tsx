@@ -16,7 +16,6 @@ type EquationMode = "expanded" | "symbolic";
 interface VariableMapping {
   symbol: string;
   variable: string;
-  category?: string;
   coef: number;
 }
 
@@ -32,12 +31,7 @@ function buildExpandedLatex(endogName: string, coefficients: Coefficient[]): str
     }
     const absCoef = formatNum(Math.abs(c.coef));
     const sign = c.coef >= 0 ? "+" : "-";
-    let varLabel: string;
-    if (c.category != null) {
-      varLabel = `\\mathbb{1}(\\text{${escapeLatex(c.variable)}} = \\text{${escapeLatex(c.category)}})`;
-    } else {
-      varLabel = `\\text{${escapeLatex(c.variable)}}`;
-    }
+    const varLabel = `\\text{${escapeLatex(c.variable)}}`;
 
     if (terms.length === 0) {
       terms.push(`${coefStr} \\cdot ${varLabel}`);
@@ -49,18 +43,7 @@ function buildExpandedLatex(endogName: string, coefficients: Coefficient[]): str
   return `${lhs} = ${terms.join(" ")} + \\varepsilon`;
 }
 
-function buildExpandedLatexWithAR1(
-  endogName: string,
-  coefficients: Coefficient[],
-  rho: number,
-): string {
-  const mainEq = buildExpandedLatex(endogName, coefficients).replace("+ \\varepsilon", "+ u_t");
-  const rhoStr = formatNum(rho);
-  return `${mainEq},\\quad u_t = ${rhoStr} \\cdot u_{t-1} + e_t`;
-}
-
-function buildSymbolicData(endogName: string, coefficients: Coefficient[], ar1Rho?: number) {
-  const hasAR1 = ar1Rho != null;
+function buildSymbolicData(endogName: string, coefficients: Coefficient[]) {
   const mappings: VariableMapping[] = [];
   const terms: string[] = [];
   let xi = 1;
@@ -75,22 +58,12 @@ function buildSymbolicData(endogName: string, coefficients: Coefficient[], ar1Rh
     }
     const sym = `x_{${xi}}`;
     const beta = `\\beta_{${xi}}`;
-    mappings.push({ symbol: sym, variable: c.variable, category: c.category, coef: c.coef });
+    mappings.push({ symbol: sym, variable: c.variable, coef: c.coef });
     terms.push(`${beta} ${sym}`);
     xi++;
   }
 
-  if (hasAR1) {
-    mappings.push({ symbol: "\\rho", variable: "rho", coef: ar1Rho ?? NaN });
-  }
-  const latex = hasAR1
-    ? buildSymbolicLatexWithAR1(terms)
-    : `y = ${terms.join(" + ")} + \\varepsilon`;
-  return { latex, mappings };
-}
-
-function buildSymbolicLatexWithAR1(terms: string[]): string {
-  return `y = ${terms.join(" + ")} + u_t,\\quad u_t = \\rho \\, u_{t-1} + e_t`;
+  return { latex: `y = ${terms.join(" + ")} + \\varepsilon`, mappings };
 }
 
 function renderKatex(latex: string, displayMode = true): string | null {
@@ -108,27 +81,20 @@ function renderInlineKatex(latex: string): string | null {
 interface EquationProps {
   endogName: string;
   coefficients: Coefficient[];
-  /** AR(1) 自相关参数 ρ，Prais-Winsten/Cochrane-Orcutt 时传入 */
-  ar1Rho?: number;
 }
 
-const Equation: React.FC<EquationProps> = ({ endogName, coefficients, ar1Rho }) => {
+const Equation: React.FC<EquationProps> = ({ endogName, coefficients }) => {
   const [mode, setMode] = useState<EquationMode>("symbolic");
 
   const expandedHtml = useMemo(
-    () =>
-      ar1Rho != null
-        ? renderKatex(buildExpandedLatexWithAR1(endogName, coefficients, ar1Rho))
-        : renderKatex(buildExpandedLatex(endogName, coefficients)),
-    [endogName, coefficients, ar1Rho],
+    () => renderKatex(buildExpandedLatex(endogName, coefficients)),
+    [endogName, coefficients],
   );
 
   const { symbolicHtml, mappings } = useMemo(() => {
-    const { latex, mappings } = buildSymbolicData(endogName, coefficients, ar1Rho);
+    const { latex, mappings } = buildSymbolicData(endogName, coefficients);
     return { symbolicHtml: renderKatex(latex), mappings };
-  }, [endogName, coefficients, ar1Rho]);
-
-  const hasCat = useMemo(() => mappings.some((m) => m.category != null), [mappings]);
+  }, [endogName, coefficients]);
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -162,7 +128,6 @@ const Equation: React.FC<EquationProps> = ({ endogName, coefficients, ar1Rho }) 
           </div>
           <FormulaMappingTable
             mappings={mappings}
-            hasCat={hasCat}
             renderSymbol={(symbol) => {
               const symHtml = renderInlineKatex(symbol);
               return symHtml ? (

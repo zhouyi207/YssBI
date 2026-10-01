@@ -261,7 +261,9 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.statistics.logit.predict" => markdown!("logit_predict"),
         "yssbi.statistics.logit.summary" => markdown!("logit_summary"),
         "yssbi.statistics.panel.fit" => markdown!("panel_fit"),
-        "yssbi.statistics.panel.summary" => markdown!("panel_summary"),
+        "yssbi.statistics.panel.predict"
+        | "yssbi.statistics.panel.compare"
+        | "yssbi.statistics.panel.summary" => markdown!("panel_summary"),
         "yssbi.statistics.panel.did.twfe" => markdown!("panel_did"),
         "yssbi.statistics.panel.did.randomization" => markdown!("did_randomization"),
         "yssbi.statistics.prais.fit" => markdown!("prais"),

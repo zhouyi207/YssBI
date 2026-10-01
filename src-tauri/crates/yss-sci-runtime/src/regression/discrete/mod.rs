@@ -24,3 +24,7 @@ pub fn predict_binary(
 ) -> Result<Vec<f64>, SciError> {
     yss_sci::regression::discrete::fit::predict_binary(link, coefficients, predictors, constant)
 }
+
+pub use yss_sci::regression::discrete::postestimation::{
+    classification, marginal_effects, odds_ratios,
+};

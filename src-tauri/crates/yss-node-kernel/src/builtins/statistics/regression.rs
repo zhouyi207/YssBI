@@ -38,7 +38,32 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             builder,
             &format!("yssbi.statistics.{name}.summary"),
             vec![Input::fixed("model")],
-            &[],
+            if matches!(method, Method::Binary(BinaryRegressionLink::Probit)) {
+                &[
+                    "marginal_effects",
+                    "marginal_evaluation",
+                    "marginal_method",
+                    "marginal_at",
+                    "classification",
+                    "cutoff",
+                    "hypothesis_test",
+                    "hypothesis",
+                ]
+            } else if matches!(method, Method::Binary(_)) {
+                &[
+                    "odds_ratios",
+                    "marginal_effects",
+                    "marginal_evaluation",
+                    "marginal_method",
+                    "marginal_at",
+                    "classification",
+                    "cutoff",
+                    "hypothesis_test",
+                    "hypothesis",
+                ]
+            } else {
+                &["hypothesis_test", "hypothesis"]
+            },
             1,
             summary,
         );
@@ -69,7 +94,11 @@ fn fit(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, 
         return Err(KernelError::InvalidParameter);
     }
     check_fit_workspace(n, data.len(), constant, "OLS", inv)?;
-    let fit = match method {
+    inv.control.check_bytes(
+        n.checked_mul(data.len() + usize::from(constant))
+            .and_then(|v| v.checked_mul(STRUCTURED_VALUE_BYTES * STRUCTURED_VALUE_COPIES)),
+    )?;
+    let mut fit = match method {
         Method::Binary(link) => yss_sci_runtime::regression::discrete::fit_binary(
             link,
             response,
@@ -99,6 +128,17 @@ fn fit(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, 
         ),
     }
     .map_err(sci)?;
+    fit.response_name = input_label(&inv.inputs[0], "response".into());
+    fit.parameter_names = std::iter::once("_cons".to_string())
+        .take(usize::from(constant))
+        .chain(
+            inv.inputs
+                .iter()
+                .skip(1)
+                .enumerate()
+                .map(|(i, v)| input_label(v, format!("x{}", i + 1))),
+        )
+        .collect();
     inv.check_control()?;
     let model = value(fit, inv)?;
     Ok(vec![
@@ -109,10 +149,111 @@ fn fit(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, 
 }
 
 fn summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
-    let fit = decode_model(inv)?;
-    let report = yss_sci_runtime::regression::report::regression_report(&fit).map_err(sci)?;
-    let report = value(report, inv)?;
-    Ok(vec![report])
+    use yss_sci_contract::regression::{
+        discrete::*,
+        fit::{RegressionFit, RegressionStatistics},
+    };
+    let fit: RegressionFit = decode_model(inv)?;
+    let mut report = yss_sci_runtime::regression::report::regression_report(&fit).map_err(sci)?;
+    if let RegressionStatistics::Binary { link, .. } = fit.statistics {
+        check_fit_workspace(fit.fitted.len(), fit.coefficients.len(), false, "OLS", inv)?;
+        if link == BinaryRegressionLink::Logit && boolean(inv, "odds_ratios")? {
+            report["odds_ratios"] = serde_json::to_value(
+                yss_sci_runtime::regression::discrete::odds_ratios(&fit).map_err(sci)?,
+            )
+            .map_err(|_| KernelError::ScientificFailure)?;
+        }
+        if boolean(inv, "marginal_effects")? {
+            let k = fit.coefficients.len();
+            let n = fit.fitted.len();
+            inv.control.check_bytes(
+                n.checked_mul(k)
+                    .and_then(|v| v.checked_add(k.checked_mul(k)?))
+                    .and_then(|v| v.checked_mul(16)),
+            )?;
+            // Bound O(n*k² + k³) delta-method work independently of output size.
+            if n.checked_add(k)
+                .and_then(|v| v.checked_mul(k))
+                .and_then(|v| v.checked_mul(k))
+                .is_none_or(|v| v > 100_000_000)
+            {
+                return Err(KernelError::BudgetExceeded);
+            }
+
+            let options = MarginalOptions {
+                evaluation: match text(inv, "marginal_evaluation")? {
+                    "average" => MarginalEvaluation::Average,
+                    "at_means" => MarginalEvaluation::AtMeans,
+                    _ => return Err(KernelError::InvalidParameter),
+                },
+                method: match text(inv, "marginal_method")? {
+                    "dydx" => MarginalMethod::Dydx,
+                    "eyex" => MarginalMethod::Eyex,
+                    "eydx" => MarginalMethod::Eydx,
+                    "dyex" => MarginalMethod::Dyex,
+                    _ => return Err(KernelError::InvalidParameter),
+                },
+                at: yss_sci_runtime::hypothesis::parse_at_values(
+                    text(inv, "marginal_at")?,
+                    &fit.parameter_names,
+                )
+                .map_err(|_| KernelError::InvalidParameter)?,
+            };
+            report["marginal_effects"] = serde_json::to_value(
+                yss_sci_runtime::regression::discrete::marginal_effects(
+                    &fit,
+                    options,
+                    &yss_sci_contract::execution::ScientificExecutionControl::from_shared(
+                        inv.control.cancellation.clone(),
+                        inv.control.deadline,
+                    ),
+                )
+                .map_err(|error| match error {
+                    yss_sci_contract::execution::ScientificComputationError::Cancelled => {
+                        KernelError::Cancelled
+                    }
+                    yss_sci_contract::execution::ScientificComputationError::DeadlineExceeded => {
+                        KernelError::DeadlineExceeded
+                    }
+                    _ => KernelError::InvalidParameter,
+                })?,
+            )
+            .map_err(|_| KernelError::ScientificFailure)?;
+        }
+        if boolean(inv, "classification")? {
+            report["classification"] = serde_json::to_value(
+                yss_sci_runtime::regression::discrete::classification(&fit, number(inv, "cutoff")?)
+                    .map_err(sci)?,
+            )
+            .map_err(|_| KernelError::ScientificFailure)?;
+        }
+    }
+    if boolean(inv, "hypothesis_test")? {
+        let input = yss_sci_contract::hypothesis::HypothesisTestInput {
+            betas: fit.coefficients.clone(),
+            cov_beta: fit.statistics.coefficient_statistics().covariance.clone(),
+            df_residual: match &fit.statistics {
+                RegressionStatistics::Prais { model, .. } => model.linear.df_residual,
+                RegressionStatistics::Linear { model, .. } => model.df_residual,
+                _ => fit
+                    .metadata
+                    .used_observation_count
+                    .saturating_sub(fit.coefficients.len()),
+            },
+            param_names: fit.parameter_names.clone(),
+            hypothesis: text(inv, "hypothesis")?.into(),
+        };
+        let result = if matches!(fit.statistics, RegressionStatistics::Binary { .. }) {
+            yss_sci_runtime::hypothesis::run_asymptotic_hypothesis_test(input)
+        } else {
+            yss_sci_runtime::hypothesis::run_hypothesis_test(input)
+        }
+        .map_err(|_| KernelError::InvalidParameter)?;
+        report["hypothesis_test"] =
+            serde_json::to_value(result).map_err(|_| KernelError::ScientificFailure)?;
+    }
+    yss_sci_runtime::regression::report::decorate_report(&mut report);
+    Ok(vec![value(report, inv)?])
 }
 
 fn predict(

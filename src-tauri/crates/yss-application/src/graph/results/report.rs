@@ -54,7 +54,10 @@ pub enum ResultAnalysisRequest {
     ResidualPlot {
         max_points: usize,
         x_range: Option<[f64; 2]>,
+        adjacent: bool,
+        highlight_top_percent: Option<f64>,
     },
+    Diagnostics,
     AcfPacf,
     SerialTests,
     Hypothesis,
@@ -64,6 +67,7 @@ pub struct ResidualPlotPoint {
     pub observation: usize,
     pub x: f64,
     pub y: f64,
+    pub highlighted: bool,
 }
 
 pub struct ResidualPlotProjection {
@@ -71,10 +75,12 @@ pub struct ResidualPlotProjection {
     pub total_count: usize,
     pub matched_count: usize,
     pub sampled: bool,
+    pub highlight_available: bool,
 }
 
 pub enum ResultAnalysisProjection {
     ResidualPlot(ResidualPlotProjection),
+    Diagnostics(yss_node_kernel::LinearDiagnostics),
     AcfPacf(AcfPacfResult),
     SerialTests(SerialTestsOutput),
     Hypothesis(HypothesisTestOutput),
@@ -139,9 +145,24 @@ impl ApplicationState {
             ResultAnalysisRequest::ResidualPlot {
                 max_points,
                 x_range,
-            } if summary.options.residual_plot => Ok(ResultAnalysisProjection::ResidualPlot(
-                residual_plot(result, max_points, x_range)?,
-            )),
+                adjacent,
+                highlight_top_percent,
+            } if summary.options.residual_plot => {
+                Ok(ResultAnalysisProjection::ResidualPlot(residual_plot(
+                    result,
+                    summary.leverage.as_deref().map(Vec::as_slice),
+                    max_points,
+                    x_range,
+                    adjacent,
+                    highlight_top_percent,
+                )?))
+            }
+            ResultAnalysisRequest::Diagnostics => summary
+                .diagnostics
+                .as_deref()
+                .cloned()
+                .map(ResultAnalysisProjection::Diagnostics)
+                .ok_or(ReportQueryError::InvalidRequest),
             ResultAnalysisRequest::AcfPacf => summary
                 .acf
                 .as_deref()
@@ -323,21 +344,47 @@ fn table_page(
 
 fn residual_plot(
     result: &LinearRegressionResult,
+    leverage: Option<&[f64]>,
     max_points: usize,
     x_range: Option<[f64; 2]>,
+    adjacent: bool,
+    highlight_top_percent: Option<f64>,
 ) -> Result<ResidualPlotProjection, ReportQueryError> {
-    if !(2..=4096).contains(&max_points)
+    if highlight_top_percent.is_some_and(|p| !p.is_finite() || !(0.0..=100.0).contains(&p))
+        || !(2..=4096).contains(&max_points)
         || x_range.is_some_and(|[min, max]| !min.is_finite() || !max.is_finite() || min > max)
     {
         return Err(ReportQueryError::InvalidRequest);
     }
     let matches = |x: f64| x_range.is_none_or(|[min, max]| x >= min && x <= max);
-    let matched_count = result.fitted.iter().filter(|x| matches(**x)).count();
+    let start = usize::from(adjacent);
+    let x_at = |row: usize| {
+        if adjacent {
+            result.residuals[row - 1]
+        } else {
+            result.fitted[row]
+        }
+    };
+    let matched_count = (start..result.residuals.len())
+        .filter(|row| matches(x_at(*row)))
+        .count();
+    let mut highlighted = std::collections::HashSet::new();
+    if let Some(percent) = highlight_top_percent.filter(|p| *p > 0.0) {
+        let values = leverage
+            .filter(|v| v.len() == result.residuals.len())
+            .ok_or(ReportQueryError::InvalidRequest)?;
+        let mut order = (0..values.len()).collect::<Vec<_>>();
+        order.sort_by(|a, b| values[*b].total_cmp(&values[*a]).then(a.cmp(b)));
+        let count = (values.len() as f64 * percent / 100.0).ceil() as usize;
+        highlighted.extend(order.into_iter().take(count));
+    }
     let take = matched_count.min(max_points);
     let mut points = Vec::with_capacity(take);
     if take > 0 {
         let mut matched = 0usize;
-        for (row, (&x, &y)) in result.fitted.iter().zip(&result.residuals).enumerate() {
+        for row in start..result.residuals.len() {
+            let x = x_at(row);
+            let y = result.residuals[row];
             if !matches(x) {
                 continue;
             }
@@ -349,6 +396,7 @@ fn residual_plot(
                     observation: row + 1,
                     x,
                     y,
+                    highlighted: highlighted.contains(&row),
                 });
             }
             matched += 1;
@@ -359,6 +407,7 @@ fn residual_plot(
         total_count: result.residuals.len(),
         matched_count,
         sampled: take < matched_count,
+        highlight_available: leverage.is_some(),
     })
 }
 

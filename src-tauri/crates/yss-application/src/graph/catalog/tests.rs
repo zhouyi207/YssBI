@@ -487,7 +487,11 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     for (id, expected) in [
         ("yssbi.statistics.linear.fit", true),
         ("yssbi.statistics.logit.fit", true),
-        ("yssbi.statistics.inequality.gini", false),
+        ("yssbi.statistics.inequality.gini", true),
+        (
+            "yssbi.statistics.postestimation.adjusted_predictions",
+            false,
+        ),
     ] {
         assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
             &row.content,

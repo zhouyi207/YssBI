@@ -334,7 +334,7 @@ Rig adapter 显式启用 `rig-core` 的 Reqwest 和 Rustls 功能，以支持 HT
 配置的 OpenAI-compatible 服务显式使用 Chat Completions API，在 base URL 下请求 `/chat/completions`；不使用 Rig 默认的 Responses API。Base URL 应填写 API 根路径（如 `https://api.openai.com/v1`），不包含具体接口路径。
 模型工具参数均为对象；`yss-harness-contract::capability_input_schema` 在生成 `ToolDescriptor.input_schema` 时统一声明根级 `type: object`，同时保留 typed schema 的 `oneOf`、`$defs` 等约束。Rig adapter 将 descriptor 中的完整 schema 序列化为 function parameters。内部参数解码契约不变。
 
-模型工具签名仅包含 capability identity 与输入 schema；未参与执行的工具版本、输出 schema、声明式 data-access/idempotency 字段已移除。效果、调用时限和条目上限继续取自共享 CapabilityDescriptor；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现。
+模型工具签名仅包含 capability identity 与输入 schema。共享 `CapabilityDescriptor` 只保存能力身份、效果和条目上限，并按效果提供调用时限；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现；显式批准执行由 `ApprovalService` 校验并消费精确绑定请求的 grant，不使用声明式审批元数据。
 模型调用使用 Rig 多轮 streaming 接口；首段立即发布，后续短片段按 40ms 或 4KiB 合并，工具边界和终止前刷新。工具生命周期由 Core executor 发布，不能用 Rig 的批次完成事件代替实时工具状态。取消和超时停止读取模型流，保留已产生的文本并等待已接纳工具完成清理。Manager 的 `finalText` 保存整轮公开文本，不在流结束时再发送一份完整 TextDelta。Worker 进度使用带 run ID 的独立事件；其交付报告只解析 Rig 最后一条模型响应，避免把工具前的进度文字混进 JSON 报告。输出模式和控制工具由 Core 在请求中明确提供，Rig 不根据角色自行决定权限。
 实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
 

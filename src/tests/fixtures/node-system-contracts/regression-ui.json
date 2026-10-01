@@ -215,11 +215,33 @@
         "coefficientMagnitude",
         "hypothesisTest",
         "diagnostics",
+        "diagnosticTests",
         "residualPlot",
         "observations",
         "acfPacf",
         "serialTests"
       ]
+    },
+    "diagnosticTests": {
+      "component": {
+        "type": "section",
+        "props": {
+          "title": "Model diagnostics",
+          "collapsible": true
+        }
+      },
+      "visible": true,
+      "children": ["diagnosticTests-content"]
+    },
+    "diagnosticTests-content": {
+      "component": {
+        "type": "analysis",
+        "props": {
+          "binding": "diagnosticTests"
+        }
+      },
+      "visible": true,
+      "children": []
     }
   }
 }

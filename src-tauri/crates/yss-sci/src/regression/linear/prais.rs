@@ -49,6 +49,7 @@ pub struct PraisResult {
     pub iterations: usize,
     /// Iteration log: "iteration N: rho = X.XXXX" for each step
     pub iteration_log: Vec<String>,
+    pub rho_history: Vec<f64>,
 }
 
 /// Estimate ρ from residuals using rhotype(regress): u_t = ρ u_{t-1} + e_t
@@ -118,12 +119,18 @@ impl Prais {
         let mut xtx_inv_s;
         let mut cond_no: f64;
         let mut iteration_log: Vec<String> = Vec::new();
+        let mut rho_history = Vec::new();
 
         loop {
             let rho_old = rho;
             rho = estimate_rho_regress(&residuals)?;
 
-            iteration_log.push(format!("Prais iteration {}: rho = {:.4}", iterations, rho));
+            iteration_log.push(format!(
+                "Prais iteration {}: rho = {:.4}",
+                iterations + 1,
+                rho
+            ));
+            rho_history.push(rho);
 
             let scale = (1.0 - rho * rho).sqrt();
             if scale <= 1e-10 {
@@ -270,6 +277,7 @@ impl Prais {
                     dw_transformed,
                     iterations,
                     iteration_log,
+                    rho_history,
                 });
             }
 

@@ -18,3 +18,5 @@ pub mod time_series;
 pub mod visualization;
 
 mod error;
+
+pub mod report_display;

@@ -283,6 +283,10 @@ impl VAR {
         Ok(VarFit {
             var_names,
             lags: lags.clone(),
+            constant,
+            dfk: self.config.dfk,
+            exogenous_names: self.exog_names.clone().unwrap_or_else(||(0..n_exog).map(|j|format!("exog{j}")).collect()),
+            sample_rows: row_indices,
             coefficients,
             residuals,
             design: covariance_rows(&z),

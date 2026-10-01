@@ -99,21 +99,34 @@ export interface HypothesisTestResult {
 }
 
 export interface ResidualPlotResult {
-  points: { observation: number; x: number; y: number }[];
+  points: { observation: number; x: number; y: number; highlighted: boolean }[];
   totalCount: number;
   matchedCount: number;
   sampled: boolean;
   sampling: "systematic";
+  highlightAvailable: boolean;
 }
 
 export type ResultAnalysisRequest =
-  | { kind: "residualPlot"; maxPoints: number; xRange?: [number, number] }
+  | {
+      kind: "residualPlot";
+      maxPoints: number;
+      xRange?: [number, number];
+      adjacent: boolean;
+      highlightTopPercent?: number;
+    }
+  | { kind: "diagnostics" }
   | { kind: "acfPacf" }
   | { kind: "serialTests" }
   | { kind: "hypothesis" };
 
 export type ResultAnalysisValues = {
   residualPlot: ResidualPlotResult;
+  diagnostics: {
+    tests: { name: string; value: unknown; unavailable_reason: string | null }[];
+    leverage_density: { x: number; y: number }[];
+    leverage_unavailable_reason: string | null;
+  };
   acfPacf: AcfPacfResult;
   serialTests: SerialTestsResponseDTO;
   hypothesis: HypothesisTestResult;

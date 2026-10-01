@@ -96,6 +96,9 @@ pub struct ComputeDidFakeGroupRequest {
 }
 
 pub struct DidRandomizationInput {
+    pub constant: bool,
+    pub covariance: String,
+    pub observed_coefficient: Option<f64>,
     pub response: Vec<f64>,
     pub predictors: Vec<Vec<f64>>,
     pub entity: Vec<f64>,

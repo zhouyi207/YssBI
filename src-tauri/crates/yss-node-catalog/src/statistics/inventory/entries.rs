@@ -825,17 +825,6 @@ pub(super) const ENTRIES: &[Entry] = &[
         scope_note: "",
     },
     Entry {
-        id: "yssbi.statistics.postestimation.odds_ratio",
-        method: "postestimation.odds_ratio",
-        source_ids: &[91],
-        category: "statistics.postestimation",
-        en: "Postestimation Odds Ratio",
-        zh: "OR值",
-        aliases: &["postestimation.odds_ratio", "OR值"],
-        product_form: "结果指标",
-        scope_note: "区分列联表 OR 和 Logit 系数指数化；当前找到的是后者的前端展示。",
-    },
-    Entry {
         id: "yssbi.statistics.transform.rcs",
         method: "transform.rcs",
         source_ids: &[92],
@@ -2676,20 +2665,6 @@ pub(super) const ENTRIES: &[Entry] = &[
         aliases: &["diagnostic.nested_comparison", "嵌套模型比较"],
         product_form: "估计后能力/节点",
         scope_note: "明确相同样本、嵌套约束和可用检验类型。",
-    },
-    Entry {
-        id: "yssbi.statistics.postestimation.marginal_effects",
-        method: "postestimation.marginal_effects",
-        source_ids: &[285],
-        category: "statistics.postestimation",
-        en: "Postestimation Marginal Effects",
-        zh: "边际效应Marginal Effects",
-        aliases: &[
-            "postestimation.marginal_effects",
-            "边际效应Marginal Effects",
-        ],
-        product_form: "估计后能力/节点",
-        scope_note: "前端有边际效应计算；后续应迁入后端能力并补不确定性估计与适用范围。",
     },
     Entry {
         id: "yssbi.statistics.postestimation.adjusted_predictions",

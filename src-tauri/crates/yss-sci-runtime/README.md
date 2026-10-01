@@ -6,8 +6,7 @@
 > Update when: 计算入口、输入输出契约或调用边界改变时
 
 Stateless scientific computation entry points over `yss-sci`, called directly
-by `yss-node-kernel`, `yss-graph-execution`'s focused SCI benchmark,
-and `yss-application::ipc::commands`.
+by `yss-node-kernel` and `yss-graph-execution`'s focused SCI benchmark.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
 faer or `yss-sci-linalg` dependency and does not construct numerical matrices or own
@@ -17,8 +16,7 @@ Tabular transformations and time/panel alignment use native relation plans in
 Runtime receives prepared neutral inputs and has no Arrow dependency.
 
 `regression::linear::linear_regression` and `time_series::acf_pacf` accept neutral requests and `ScientificExecutionControl` from
-`yss-sci-contract`. Fit and Summary kernels forward the execution cancellation and deadline;
-standalone IPC ACF/PACF uses a blocking worker with a 60-second deadline that includes queue time.
+`yss-sci-contract`. Fit and Summary kernels forward the execution cancellation and deadline.
 
 `acf_pacf` applies the report policy (at least four observations and a positive requested
 lag, capped at `min(n / 2 - 1, 40)`), then passes slices and the same control to
@@ -27,8 +25,8 @@ joint numerical calculation: one ACF feeds the PACF recursion. It checks cancell
 and deadlines throughout input/numerical loops and before returning. The runtime
 rechecks control and rejects nonfinite ACF/PACF coefficients before delivering the shared `AcfPacfResult`; no duplicate runtime request/result
 records are maintained. SCI itself permits lags through `n - 1`; 40 is a report budget.
-Application declares this dependency for its IPC commands. Desktop composition
-and other application modules do not call it or construct/inject a backend object.
+Application queries retained results and does not depend on SCI runtime. Desktop composition
+does not call it or construct/inject a backend object.
 The runtime has no Execution dependency.
 Linear regression checks cancellation and deadlines during input validation, before
 SCI dispatch, before report projection and before returning the result;
@@ -45,7 +43,7 @@ Entry points and method-specific report records live in their owning domains.
 
 | Module                 | Responsibility                                                                                          |
 | ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| `regression`           | Regression-family dispatch and result serialization                                                     |
+| `regression`           | Regression-family entry points and result serialization                                                     |
 | `regression::linear`   | Controlled OLS/WLS/GLS and configurable Prais computation, linear model records                         |
 | `regression::discrete` | Configurable Logit/Probit fits and prediction from existing coefficients                                |
 | `regression::models`   | Stateless exports of controlled robust, penalized, GLM/likelihood, nonlinear and model-building entries |
@@ -133,12 +131,11 @@ Tauri commands, frontend state, Julia processes or Bayesian worker lifecycle.
 
 ## 宿主调用与数值所有权
 
-科学计算使用独立的中性契约。Node Kernel 负责拟合与汇总分析，Execution 仅在独立 OLS benchmark 中直接调用 runtime，IPC Command 提供独立统计命令：
+科学计算使用独立的中性契约。Node Kernel 负责拟合与汇总分析，Execution 仅在独立 OLS benchmark 中直接调用 runtime；IPC Command 通过 Application 读取已计算的结果：
 
 ```text
 Application → yss-graph-execution → yss-node-kernel → yss-sci-runtime (stateless functions)
 OLS benchmark (dev dependency) → yss-sci-runtime
-IPC Command → yss-sci-runtime
 yss-sci-runtime → yss-sci algorithms → yss-sci-linalg Mat / Col / views / checked factors → faer
 yss-sci algorithms → shared model options/results in yss-sci-contract
 Plugin Manager → framed IPC → Julia extension → Bayes worker port → Julia adapter
@@ -153,3 +150,10 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 [`yss-sci`](../yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel、causal、diagnostics 等领域组织入口；表格准备由 Node Kernel 与数据库引擎承担，runtime 与核心算法均不依赖 Arrow 或 Polars。线性回归报告由 runtime 映射 OLS/WLS/GLS 拟合结果，预测值和残差使用模型已计算的事实。`regression::linear::linear_regression`、`time_series::acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
 
 SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随机化推断和核密度计算。假设检验也归 SCI：复用 `yss-math-expr` 解析，完成约束线性化、参数列序、矩阵构造与 t/Wald 分派；Application 保留结果身份和项目状态检查。Julia 插件不依赖任何 SCI crate，输入值、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。
+
+`report_display` assembles bounded declarative section metadata pointing to ordinary
+result paths. Flat named coefficient, first-stage, response/impulse and covariance
+rows remain scientific result data; Application owns allowed presentation bindings
+and lazy table paging. Formula strings are backend formatting, not frontend math.
+Section and equation-size limits are explicit, and array shape mismatches fail.
+Binary Summary, Prais, IV, panel, ADF and VAR/VEC use this current report path.

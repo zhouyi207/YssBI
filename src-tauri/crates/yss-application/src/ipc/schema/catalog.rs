@@ -423,7 +423,11 @@ mod tests {
         assert_eq!(item["available"], true);
         for (id, expected) in [
             ("yssbi.statistics.logit.fit", true),
-            ("yssbi.statistics.inequality.gini", false),
+            ("yssbi.statistics.inequality.gini", true),
+            (
+                "yssbi.statistics.postestimation.adjusted_predictions",
+                false,
+            ),
         ] {
             let node = wire["items"]
                 .as_array()
@@ -471,7 +475,11 @@ mod tests {
         assert_eq!(function["item"]["available"], true);
         for (id, expected) in [
             ("yssbi.statistics.logit.fit", true),
-            ("yssbi.statistics.inequality.gini", false),
+            ("yssbi.statistics.inequality.gini", true),
+            (
+                "yssbi.statistics.postestimation.adjusted_predictions",
+                false,
+            ),
         ] {
             assert!(
                 rows.iter()

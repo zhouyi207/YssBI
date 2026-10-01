@@ -287,7 +287,37 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
     assert_ne!(default_results[&model_key], local[&model_key]);
     assert_ne!(default_results[&report_key], local[&report_key]);
     let saved = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
-    assert_eq!(local, execute(&saved));
+    let restored = execute(&saved);
+    assert_eq!(
+        local.keys().collect::<Vec<_>>(),
+        restored.keys().collect::<Vec<_>>()
+    );
+    let read_control = yss_relational_contract::RelationControl {
+        cancellation: Arc::new(AtomicBool::new(false)),
+        deadline: Instant::now() + Duration::from_secs(30),
+        max_input_bytes: 1024 * 1024,
+    };
+    for (key, before) in &local {
+        match (before, &restored[key]) {
+            (RuntimeValue::Series(before), RuntimeValue::Series(after)) => {
+                // Handles identify plans, not data across independent executions.
+                // Verify every original column/row on both sides of the save/load.
+                let before = before
+                    .as_relation()
+                    .unwrap()
+                    .page(0, 7, &read_control)
+                    .unwrap();
+                let after = after
+                    .as_relation()
+                    .unwrap()
+                    .page(0, 7, &read_control)
+                    .unwrap();
+                assert!(!before.has_more && !after.has_more);
+                assert_eq!(before, after, "{key}");
+            }
+            (before, after) => assert_eq!(before, after, "{key}"),
+        }
+    }
     // Isolate covariance from the intercept setting: coefficients stay fixed,
     // while the uncertainty reported by the real scientific backend changes.
     {

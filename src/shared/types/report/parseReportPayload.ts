@@ -1,37 +1,33 @@
-import type { ReportPayloadKind } from "./reportKinds";
-import { parsedField, type ReportField, type ReportFieldResult } from "./fields";
-import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from "./parseDfadf";
-import { panelDidResultDataField, panelSummaryField } from "./parsePanel";
-import { binaryRegressionReportField, inlineRegressionReportField } from "./parseRegression";
+import { parseReportDisplay } from "@/shared/types/domain/structuredReportDisplay";
+import type { ResultReportKind } from "@/shared/types/domain/result";
+import type { ReportField, ReportFieldResult } from "./fields";
 import { linearRegressionReportField } from "./parseLinearRegression";
-import { varSocResultDataField, varSummaryResultDataField } from "./parseVar";
-import { vecRankResultDataField, vecSummaryResultDataField } from "./parseVec";
 import { isRecord } from "./guards";
 
 const reportFields = {
   structured: {
-    read: (raw: unknown, fieldPath: string) =>
-      isRecord(raw)
-        ? { ok: true as const, value: raw }
-        : { ok: false as const, issue: { fieldPath, reason: "expected structured result data" } },
+    read: (raw: unknown, fieldPath: string) => {
+      if (!isRecord(raw))
+        return {
+          ok: false as const,
+          issue: { fieldPath, reason: "expected structured result data" },
+        };
+      try {
+        parseReportDisplay(raw);
+      } catch {
+        return {
+          ok: false as const,
+          issue: { fieldPath: "report_display", reason: "invalid structured report bindings" },
+        };
+      }
+      return { ok: true as const, value: raw };
+    },
   },
   linearRegressionSummary: linearRegressionReportField,
-  binarySummary: binaryRegressionReportField,
-  iv2slsSummary: inlineRegressionReportField,
-  ivLimlSummary: inlineRegressionReportField,
-  praisSummary: inlineRegressionReportField,
-  varSummary: varSummaryResultDataField,
-  varSoc: varSocResultDataField,
-  panelSummary: panelSummaryField,
-  panelDid: panelDidResultDataField,
-  dfAdfSummary: parsedField(parseDfAdfSummaryResultData, "DF/ADF report"),
-  dfAdfSummaryList: parsedField(parseDfAdfSummaryListResultData, "DF/ADF reports"),
-  vecSummary: vecSummaryResultDataField,
-  vecRankSummary: vecRankResultDataField,
-} satisfies Record<ReportPayloadKind, ReportField<unknown>>;
+} satisfies Record<ResultReportKind, ReportField<unknown>>;
 
 export function parseReportPayloadResult(
-  report: ReportPayloadKind,
+  report: ResultReportKind,
   raw: unknown,
 ): ReportFieldResult<unknown> {
   if (!Object.prototype.hasOwnProperty.call(reportFields, report)) {

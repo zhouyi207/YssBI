@@ -1,9 +1,4 @@
-/**
- * 序列相关检验 DTO（对齐 Rust `ipc/schema/statistics.rs` 中的结果结构）
- * 当前结果分析边界由 `parseResultAnalysis` 校验。
- */
-
-import { isFiniteNumber, isNonNegativeInteger, isRecord } from "./guards";
+/** Selected serial-test result data, validated at the result-analysis boundary. */
 
 export interface SerialTestWithLagDTO {
   stat: number;
@@ -20,44 +15,4 @@ export interface SerialTestsResponseDTO {
   bg?: SerialTestWithLagDTO;
   q?: SerialTestWithLagDTO;
   dw: DurbinWatsonResultDTO;
-}
-
-export interface SerialTestsRequestDTO {
-  residuals: number[];
-  lags: number;
-  exog?: number[][];
-  bg_nomiss0?: boolean;
-}
-
-function normalizeSerialTestWithLag(raw: unknown): SerialTestWithLagDTO | undefined {
-  if (!isRecord(raw)) return undefined;
-  const stat = raw.stat;
-  const p_value = raw.p_value;
-  const lags = raw.lags;
-  if (
-    !isFiniteNumber(stat) ||
-    !isFiniteNumber(p_value) ||
-    !isNonNegativeInteger(lags) ||
-    lags < 1
-  ) {
-    return undefined;
-  }
-  return { stat, p_value, lags };
-}
-
-export function normalizeDurbinWatsonResult(raw: unknown): DurbinWatsonResultDTO | null {
-  if (!isRecord(raw) || !isFiniteNumber(raw.d)) return null;
-  return { d: raw.d };
-}
-
-/** 窄化序列相关检验结果；拒绝 `dw` 为裸 number 等漂移形态。 */
-export function normalizeSerialTestsResponse(raw: unknown): SerialTestsResponseDTO | null {
-  if (!isRecord(raw)) return null;
-  const dw = normalizeDurbinWatsonResult(raw.dw);
-  if (!dw) return null;
-  const bg = raw.bg === undefined ? undefined : normalizeSerialTestWithLag(raw.bg);
-  if (raw.bg !== undefined && !bg) return null;
-  const q = raw.q === undefined ? undefined : normalizeSerialTestWithLag(raw.q);
-  if (raw.q !== undefined && !q) return null;
-  return { bg, q, dw };
 }

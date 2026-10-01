@@ -44,12 +44,12 @@ pub fn fit_panel_re_be(
     )
     .map_err(|error| error.to_string())?;
 
-    let result = OLS {
+    let final_ols = OLS {
         endog: y_b.clone(),
         exog: x_b_use.clone(),
         config,
-    }
-    .fit()?;
+    };
+    let result = final_ols.fit()?;
 
     let omitted_indices = if omitted_be.is_empty() {
         None
@@ -166,6 +166,19 @@ pub fn fit_panel_re_be(
     });
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "between".into(), constant: final_ols.config.constant,
+            response: final_ols.endog.iter().copied().collect(),
+            design: (0..final_ols.exog.ncols()).map(|j|final_ols.exog.col(j).iter().copied().collect()).collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_re_be".into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {

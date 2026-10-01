@@ -209,3 +209,52 @@ fn test_fe_cluster_reports_stata_style_stats() {
     assert!(fe.covariance_nonrobust.is_some());
     assert!((fe.coefficients[1] - 2.0).abs() < 0.05);
 }
+
+/// A no-intercept request previously indexed the absent leading column while
+/// recovering FE constants; all effect dimensions must retain identical slopes.
+#[test]
+fn fixed_effects_without_intercept_preserves_slopes_and_omission_coordinates() {
+    use yss_sci_contract::panel::{PanelEffects, PanelEstimator, PanelOptions};
+    let n = 48;
+    let entity = (0..n).map(|i| (i / 6) as f64).collect::<Vec<_>>();
+    let time = (0..n).map(|i| (i % 6) as f64).collect::<Vec<_>>();
+    let x = (0..n)
+        .map(|i| ((i * 17 % 31) as f64).sin())
+        .collect::<Vec<_>>();
+    let y = (0..n)
+        .map(|i| {
+            3.0 + entity[i] * 0.3 + time[i] * 0.2 + 1.4 * x[i] + 0.1 * ((i * 7 % 13) as f64).cos()
+        })
+        .collect::<Vec<_>>();
+    for effects in [
+        PanelEffects::Entity,
+        PanelEffects::Time,
+        PanelEffects::TwoWay,
+    ] {
+        let fit = |constant| {
+            yss_sci::panel::fit::fit_panel(
+                y.clone(),
+                vec![x.clone()],
+                entity.clone(),
+                time.clone(),
+                PanelOptions {
+                    estimator: PanelEstimator::FixedEffects,
+                    effects,
+                    constant,
+                    covariance: "nonrobust".into(),
+                },
+            )
+            .unwrap()
+        };
+        let with = fit(true);
+        let without = fit(false);
+        assert_eq!(without.parameter_names, vec!["x1"]);
+        assert_eq!(without.coefficients.len(), 1);
+        assert!((without.coefficients[0] - with.coefficients[1]).abs() < 1e-12);
+        assert!(
+            (without.inference.covariance[0][0] - with.inference.covariance[1][1]).abs() < 1e-12
+        );
+        assert_eq!(without.estimation.residuals, with.estimation.residuals);
+        assert_eq!(without.recovered_constant, None);
+    }
+}

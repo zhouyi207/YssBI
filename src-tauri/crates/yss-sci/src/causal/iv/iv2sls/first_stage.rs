@@ -188,7 +188,7 @@ pub(crate) fn compute_first_stage_summary(
     } else if k_endog >= 3 {
         Some("k_endog_gt_2".to_string())
     } else {
-        None
+        Some("not_tabulated".to_string())
     };
 
     let (

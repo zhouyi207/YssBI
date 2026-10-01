@@ -132,3 +132,26 @@ Spec 本身不取得结果租约、不保存 Project、不持久化 FlexLayout�
 
 本轮沿用 Rust serde / schemars、前端类型与既有状态设施，没有新增 npm 依赖。json-render 的目录模式可作参考，但目前不需要其独立状态/动作运行时；Zod 不是必需条件，校验仍不可省略；已有 Zustand 继续服务其他投影，无需复制页面权威状态。
 JSON Patch 是候选协议/实现库，不是必选依赖；当前受限的稳定元素差分足以支持首个页面场景。参考 [json-render catalog](https://json-render.dev/docs/catalog) 与 [RFC 6902](https://www.rfc-editor.org/rfc/rfc6902)。
+
+### Structured statistical report bindings
+
+A selected statistical summary may include bounded `report_display.sections` metadata.
+Each named section declares a title, a result JSON Pointer, and a display kind:
+`table` with a field-to-label `columns` map, `equation` with backend-authored plain text,
+or `stability` with computed complex roots (`re`, `im`, `modulus`). This is display
+metadata over the same result, not another statistical model or a source of values.
+Application validates at most 24 sections and 32 columns per table, checks target types,
+and grants only those bindings in the existing UiSpec. Unknown fields and missing targets
+are rejected. Equations are bounded text, never HTML or executable expressions.
+The existing structured array references and 100-row reader provide lazy table and root
+pages. The stability circle is a view of the current page of computed roots; it does not
+compute eigenvalues or infer a model's statistical conclusion. The raw structured result
+remains available beneath the report. GUI/Harness editing retains the same revision and
+binding-capability checks.
+
+For native linear summaries, `diagnostics` selects existing SCI BP, White, IM, RESET,
+VIF and normality calculations plus leverage density during node execution. Results
+queries only read these cached values; unsupported model/test combinations return an
+explicit unavailable reason instead of fabricated statistics. `residual_plot` supports
+fitted versus residual and previous-residual versus residual coordinates, with paired
+observation sampling and optional highest-leverage highlighting based on the complete fit.

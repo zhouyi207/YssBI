@@ -504,6 +504,15 @@ pub fn fit_panel_fe(
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelFit, String> {
+    if !constant {
+        // A constant vanishes under the within transformation. Reuse that same
+        // slope fit, then omit the recovered normalization intercept from output.
+        let augmented = Mat::from_fn(exog.nrows(), exog.ncols() + 1, |i, j| {
+            if j == 0 { 1.0 } else { exog[(i, j - 1)] }
+        });
+        return fit_panel_fe(endog, &augmented, entity_id, true, cov_type, cov_params)
+            .map(without_recovered_intercept);
+    }
     let n = endog.nrows();
     if exog.nrows() != n {
         return Err(format!(
@@ -736,6 +745,22 @@ pub fn fit_panel_fe(
     )?;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "within".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_fe".into(),
         coefficients: (betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {
@@ -791,6 +816,17 @@ pub fn fit_panel_fe_time(
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelFit, String> {
+    if !constant {
+        // A constant vanishes under the within transformation. Reuse that same
+        // slope fit, then omit the recovered normalization intercept from output.
+        let augmented = Mat::from_fn(exog.nrows(), exog.ncols() + 1, |i, j| {
+            if j == 0 { 1.0 } else { exog[(i, j - 1)] }
+        });
+        return fit_panel_fe_time(
+            endog, &augmented, entity_id, time_id, true, cov_type, cov_params,
+        )
+        .map(without_recovered_intercept);
+    }
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel FE (Time): lengths must match".to_string());
@@ -1011,6 +1047,22 @@ pub fn fit_panel_fe_time(
     )?;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "within".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_fe_time".into(),
         coefficients: (betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {
@@ -1063,6 +1115,17 @@ pub fn fit_panel_fe_twoway(
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelFit, String> {
+    if !constant {
+        // A constant vanishes under the within transformation. Reuse that same
+        // slope fit, then omit the recovered normalization intercept from output.
+        let augmented = Mat::from_fn(exog.nrows(), exog.ncols() + 1, |i, j| {
+            if j == 0 { 1.0 } else { exog[(i, j - 1)] }
+        });
+        return fit_panel_fe_twoway(
+            endog, &augmented, entity_id, time_id, true, cov_type, cov_params,
+        )
+        .map(without_recovered_intercept);
+    }
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel FE (Two-Way): lengths must match".to_string());
@@ -1281,6 +1344,22 @@ pub fn fit_panel_fe_twoway(
     )?;
 
     Ok(super::PanelFit {
+        parameter_names: vec![],
+        parameter_categories: vec![],
+        response_name: "response".into(),
+        omitted_terms: vec![],
+        estimation: yss_sci_contract::panel::PanelEstimationSample {
+            space: "within".into(),
+            constant: ols.config.constant,
+            response: ols.endog.iter().copied().collect(),
+            design: (0..ols.exog.ncols())
+                .map(|j| ols.exog.col(j).iter().copied().collect())
+                .collect(),
+            coefficients: result.betas.iter().copied().collect(),
+            fitted: result.fitted.iter().copied().collect(),
+            residuals: result.residuals.iter().copied().collect(),
+            source_rows: vec![],
+        },
         family: "panel_fe_twoway".into(),
         coefficients: (betas).iter().copied().collect(),
         inference: super::RegressionCoefficientStatistics {
@@ -1321,4 +1400,33 @@ pub fn fit_panel_fe_twoway(
         estimator_statistics: super::PanelEstimatorStatistics::LeastSquares,
         covariance_nonrobust: Some(super::covariance_rows(&(cov_nr))),
     })
+}
+
+fn without_recovered_intercept(mut fit: super::PanelFit) -> super::PanelFit {
+    fit.coefficients.remove(0);
+    let statistics = &mut fit.inference;
+    statistics.standard_errors.remove(0);
+    statistics.statistic_values.remove(0);
+    statistics.p_values.remove(0);
+    statistics.confidence_interval_lower.remove(0);
+    statistics.confidence_interval_upper.remove(0);
+    statistics.covariance.remove(0);
+    for row in &mut statistics.covariance {
+        row.remove(0);
+    }
+    if let Some(covariance) = &mut fit.covariance_nonrobust {
+        covariance.remove(0);
+        for row in covariance {
+            row.remove(0);
+        }
+    }
+    fit.omitted_indices = fit.omitted_indices.map(|indices| {
+        indices
+            .into_iter()
+            .filter_map(|i| i.checked_sub(1))
+            .collect()
+    });
+    fit.recovered_constant = None;
+    fit.recovered_constant_standard_error = None;
+    fit
 }
