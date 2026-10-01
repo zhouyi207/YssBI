@@ -562,3 +562,33 @@ fn invalid_domains_identifiability_nonconvergence_and_control_remain_failures() 
         Err(Error::DeadlineExceeded)
     );
 }
+
+#[test]
+fn scale_limits_multinomial_keeps_all_observed_response_categories() {
+    let y = (0..200).map(|i| (i % 10) as f64).collect::<Vec<_>>();
+    let fit = likelihood(
+        &y,
+        &[],
+        &[],
+        None,
+        LikelihoodOptions {
+            method: LikelihoodMethod::MultinomialLogit,
+            constant: true,
+            lower: 0.0,
+            upper: None,
+            iteration: IterationOptions {
+                max_iterations: 20000,
+                ..Default::default()
+            },
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(fit.categories.len(), 10);
+    assert_eq!(fit.coefficients.len(), 9);
+    for row in fit.probabilities {
+        for probability in row {
+            close(probability, 0.1, 1e-8);
+        }
+    }
+}

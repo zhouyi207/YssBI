@@ -1,14 +1,6 @@
 //! Neutral designs and reports for univariate, multivariate and repeated ANOVA.
 use serde::{Deserialize, Serialize};
 
-pub const MAX_ANOVA_FACTORS: usize = 8;
-pub const MAX_ANOVA_LEVELS: usize = 32;
-pub const MAX_ANOVA_COLUMNS: usize = 256;
-pub const MAX_ANOVA_COVARIATES: usize = 32;
-pub const MAX_MANOVA_RESPONSES: usize = 16;
-pub const MAX_REPEATED_FACTORS: usize = 4;
-pub const MAX_REPEATED_CELLS: usize = 256;
-
 /// Observed levels are contiguous codes; tabular labels remain adapter-owned.
 #[derive(Debug, Clone)]
 pub struct Factor {
@@ -25,11 +17,7 @@ pub enum FactorialModel {
 
 /// Checked dense-design width, including the intercept and parallel covariates.
 pub fn design_columns(levels: &[usize], covariates: usize, model: FactorialModel) -> Option<usize> {
-    if levels.is_empty()
-        || levels.len() > MAX_ANOVA_FACTORS
-        || covariates > MAX_ANOVA_COVARIATES
-        || levels.iter().any(|&n| !(2..=MAX_ANOVA_LEVELS).contains(&n))
-    {
+    if levels.is_empty() || levels.iter().any(|&n| n < 2) {
         return None;
     }
     let columns = match model {
@@ -41,7 +29,7 @@ pub fn design_columns(levels: &[usize], covariates: usize, model: FactorialModel
             .try_fold(1usize, |n, &level| n.checked_mul(level))?,
     }
     .checked_add(covariates)?;
-    (columns <= MAX_ANOVA_COLUMNS).then_some(columns)
+    Some(columns)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 # Redundancy analysis (RDA)
 
-Provide 1–16 numeric **Response** and 1–16 numeric **Constraint** series in aligned rows, sharing a relational row domain. Missing data are rejected. With $p$ responses, $r$ constraints and $n$ observations, constraints must be nonconstant and full rank, and $n>r+1$.
+Provide one or more numeric **Response** and one or more numeric **Constraint** series in aligned rows, sharing a relational row domain. Missing data are rejected. With $p$ responses, $r$ constraints and $n$ observations, constraints must be nonconstant and full rank, and $n>r+1$.
 
 **Retained dimensions** defaults to 1 and cannot exceed $\min(p,r)$. **Standardize variables** defaults to disabled: responses are centered in original units; enabling it divides responses by sample standard deviations. Constraints are always centered/scaled without changing their spanned space. Positive total response variation is required.
 

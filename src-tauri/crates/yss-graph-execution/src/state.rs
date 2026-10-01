@@ -33,6 +33,7 @@ use yss_node_kernel::{KernelControl, KernelError, KernelRegistry};
 pub struct RunExecutionControl {
     pub(crate) cancellation: Arc<AtomicBool>,
     pub(crate) deadline: Instant,
+    max_input_bytes: usize,
 }
 
 impl RunExecutionControl {
@@ -41,6 +42,7 @@ impl RunExecutionControl {
         Self {
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline,
+            max_input_bytes: yss_node_kernel::DEFAULT_MAX_INPUT_BYTES,
         }
     }
 
@@ -48,7 +50,14 @@ impl RunExecutionControl {
         Self {
             cancellation,
             deadline,
+            max_input_bytes: yss_node_kernel::DEFAULT_MAX_INPUT_BYTES,
         }
+    }
+
+    /// Per-node input, workspace and result admission budget for this execution.
+    pub fn with_memory_budget(mut self, bytes: usize) -> Self {
+        self.max_input_bytes = bytes;
+        self
     }
 
     fn check(&self, phase: RunPhase) -> Result<(), ExecutePreparedError> {
@@ -285,8 +294,9 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     .then_some(operation_index)
             })
             .collect::<VecDeque<_>>();
-        let kernel_control =
+        let mut kernel_control =
             KernelControl::new(Arc::clone(&control.cancellation), control.deadline);
+        kernel_control.max_input_bytes = control.max_input_bytes;
         let mut completed_count = 0usize;
         let mut results = Vec::new();
         while let Some(operation_index) = ready.pop_front() {

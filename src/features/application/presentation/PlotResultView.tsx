@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { ChartRenderer } from "@/shared/charts/ChartRenderer";
 import type { ParsedPlotPayload } from "@/shared/types/dto/plotPayload";
 import { LinePlotControls } from "./LinePlotControls";
@@ -34,11 +35,27 @@ function PlotInvalidState({ children }: { children: ReactNode }) {
 
 export function PlotResultView({ payload, invalidContent }: PlotResultViewProps) {
   const { t } = useTranslation();
-  if (!payload) {
+  const [pagination, setPagination] = useState({ payload, index: 0 });
+  if (pagination.payload !== payload) setPagination({ payload, index: 0 });
+  const pageSize = 100;
+  const rowCount =
+    payload?.kind === "pareto" || payload?.kind === "coefficient" ? payload.data.data.length : 0;
+  const pageCount = Math.max(1, Math.ceil(rowCount / pageSize));
+  const page = pagination.payload === payload ? Math.min(pagination.index, pageCount - 1) : 0;
+  const model = useMemo(() => {
+    if (!payload) return null;
+    const full = toResultChartModel(payload);
+    const start = page * pageSize;
+    if (full.kind === "coefficient")
+      return { ...full, data: full.data.slice(start, start + pageSize) };
+    // Cumulative shares remain the backend's full-sample values on every page.
+    if (full.kind === "pareto") return { ...full, data: full.data.slice(start, start + pageSize) };
+    return full;
+  }, [payload, page]);
+  if (!payload || !model) {
     return <PlotInvalidState>{invalidContent}</PlotInvalidState>;
   }
 
-  const model = toResultChartModel(payload);
   const metadata = "metadata" in payload.data ? payload.data.metadata : undefined;
   const information: ReactNode[] = [];
   if (metadata)
@@ -83,6 +100,29 @@ export function PlotResultView({ payload, invalidContent }: PlotResultViewProps)
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+      {pageCount > 1 && (
+        <div className="flex shrink-0 items-center justify-end gap-2 text-xs text-muted-foreground">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page === 0}
+            onClick={() => setPagination({ payload, index: page - 1 })}
+          >
+            {t("sourceInspector.previous")}
+          </Button>
+          <span aria-live="polite">
+            {page * pageSize + 1}–{Math.min((page + 1) * pageSize, rowCount)} / {rowCount}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page + 1 >= pageCount}
+            onClick={() => setPagination({ payload, index: page + 1 })}
+          >
+            {t("sourceInspector.next")}
+          </Button>
+        </div>
+      )}
       {information.length > 0 && (
         <div className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {information.map((value, i) => (

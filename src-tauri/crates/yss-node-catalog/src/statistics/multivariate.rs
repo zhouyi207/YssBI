@@ -1,6 +1,5 @@
 //! Executable multivariate analyses and parameter-derived coordinate tables.
 use super::*;
-use yss_sci_contract::multivariate::*;
 
 const RESOLVER: &str = "yssbi.statistics.multivariate.schema.coordinates";
 const SPECS: &[(&str, &str, &str)] = &[
@@ -47,9 +46,8 @@ fn numeric_group(
     key: &'static str,
     label: &'static str,
     min: u16,
-    max: usize,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    bounded_user_data_input(key, label, series_type()?, min, Some(max as u16))
+    bounded_user_data_input(key, label, series_type()?, min, None)
 }
 fn coordinate_output(
     key: &'static str,
@@ -81,45 +79,24 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let label = TypeExpr::Generic(sid("class_label", TypeParameterId::new)?);
         let mut ports = match method {
             "canonical" => vec![
-                numeric_group("x", "X variable", 1, MAX_CANONICAL_VARIABLES - 1)?,
-                numeric_group("y", "Y variable", 1, MAX_CANONICAL_VARIABLES - 1)?,
+                numeric_group("x", "X variable", 1)?,
+                numeric_group("y", "Y variable", 1)?,
             ],
-            "correspondence" => vec![numeric_group(
-                "columns",
-                "Count column",
-                2,
-                MAX_CORRESPONDENCE_CATEGORIES,
-            )?],
+            "correspondence" => vec![numeric_group("columns", "Count column", 2)?],
             "discriminant" => vec![
                 data_input("groups", "Class", data_series_type(label.clone()))?,
-                numeric_group(
-                    "variables",
-                    "Training variable",
-                    1,
-                    MAX_MULTIVARIATE_VARIABLES,
-                )?,
-                numeric_group(
-                    "new_variables",
-                    "New variable",
-                    0,
-                    MAX_MULTIVARIATE_VARIABLES,
-                )?,
+                numeric_group("variables", "Training variable", 1)?,
+                numeric_group("new_variables", "New variable", 0)?,
             ],
             "rda" => vec![
-                numeric_group("responses", "Response", 1, MAX_MULTIVARIATE_VARIABLES)?,
-                numeric_group("constraints", "Constraint", 1, MAX_MULTIVARIATE_VARIABLES)?,
+                numeric_group("responses", "Response", 1)?,
+                numeric_group("constraints", "Constraint", 1)?,
             ],
-            "mds" => vec![numeric_group(
-                "variables",
-                "Variable / distance column",
-                1,
-                MAX_MDS_OBSERVATIONS,
-            )?],
+            "mds" => vec![numeric_group("variables", "Variable / distance column", 1)?],
             _ => vec![numeric_group(
                 "variables",
                 "Variable",
                 if method == "exploratory_factor" { 3 } else { 2 },
-                MAX_MULTIVARIATE_VARIABLES,
             )?],
         };
         ports.push(data_output("result", "Result", report_type()?)?);
@@ -154,18 +131,16 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 decimal_parameter("shrinkage", "0")?,
             ]
         } else {
-            vec![bounded_integer_parameter(
+            vec![positive_integer_parameter(
                 "components",
                 default_components,
-                1,
-                if method == "canonical" { 8 } else { 16 },
             )?]
         };
         match method {
             "pca" => parameters.push(toggle_parameter("standardize", true)?),
             "exploratory_factor" => parameters.extend([
                 choice_parameter("rotation", "varimax", &["none", "varimax"])?,
-                bounded_integer_parameter("max_iterations", 500, 1, 10000)?,
+                positive_integer_parameter("max_iterations", 500)?,
                 decimal_parameter("tolerance", "0.000001")?,
             ]),
             "rda" => parameters.extend([
@@ -310,8 +285,8 @@ fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'sta
         "max_iterations" => (
             "Maximum iterations",
             "最大迭代次数",
-            "Principal-axis and rotation iteration limit; default 500, maximum 10000.",
-            "主轴因子与旋转的迭代上限，默认 500，最大 10000。",
+            "Principal-axis and rotation iteration limit; default 500, positive integer.",
+            "主轴因子与旋转的迭代上限，默认 500，正整数。",
         ),
         "tolerance" => (
             "Convergence tolerance",

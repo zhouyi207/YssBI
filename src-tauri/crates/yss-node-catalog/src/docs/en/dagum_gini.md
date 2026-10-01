@@ -1,6 +1,6 @@
 # Dagum Gini decomposition
 
-Connect individual **Values** and observation-level **Group labels**. The columns must have equal lengths and aligned rows. Relational series require one proven row domain and cannot be mixed with independent in-memory series. Labels may be Text, Identifier, Numeric, Categorical, Ordinal, or Binary and retain their original values. Missing labels fail. At most 64 groups are supported.
+Connect individual **Values** and observation-level **Group labels**. The columns must have equal lengths and aligned rows. Relational series require one proven row domain and cannot be mixed with independent in-memory series. Labels may be Text, Identifier, Numeric, Categorical, Ordinal, or Binary and retain their original values. Missing labels fail.
 
 Equal-weight empirical Gini, without a small-sample correction, decomposes as
 

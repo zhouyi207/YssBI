@@ -4,7 +4,7 @@ Compares independent-group medians through position relative to the pooled media
 
 ## Inputs and parameters
 
-Add 2–16 nonempty finite numeric series under `groups`. The current node requires equal lengths; relational series must share a row domain. Missing values are rejected. There are no parameters.
+Add at least two nonempty finite numeric series under `groups`. The current node requires equal lengths; relational series must share a row domain. Missing values are rejected. There are no parameters.
 
 Compute the pooled median $m$, then count observations strictly above and strictly below $m$ in each group. Observations exactly equal to $m$ are excluded from the test table.
 

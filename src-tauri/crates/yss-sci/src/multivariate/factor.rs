@@ -17,7 +17,7 @@ pub fn exploratory_factor(
     if p < 3
         || n <= p
         || (p - k) * (p - k) < p + k
-        || !(1..=10000).contains(&options.max_iterations)
+        || options.max_iterations == 0
         || !options.tolerance.is_finite()
         || !(0.0..=0.1).contains(&options.tolerance)
         || options.tolerance == 0.0

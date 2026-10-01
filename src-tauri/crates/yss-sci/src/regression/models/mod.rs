@@ -1,5 +1,5 @@
 //! Regression estimators, sharing controlled numerical preparation and structured results.
-mod common;
+pub(crate) mod common;
 mod likelihood;
 mod nonlinear;
 mod regularized;

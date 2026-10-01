@@ -4,7 +4,7 @@ use yss_sci_linalg::{Mat, MatrixExt, Solve, matrix_rank};
 
 pub(super) struct Term {
     pub name: String,
-    pub components: u64,
+    pub components: Vec<usize>,
     pub columns: Vec<usize>,
 }
 pub(super) struct Design {
@@ -13,14 +13,27 @@ pub(super) struct Design {
     pub covariate_means: Vec<f64>,
 }
 
-pub(super) fn masks(count: usize) -> Vec<usize> {
-    let mut masks = (1..1usize << count).collect::<Vec<_>>();
-    masks.sort_by_key(|mask| (mask.count_ones(), *mask));
-    masks
+// Enumerate by interaction order, then colexicographically, preserving report order.
+// Additive designs visit only singleton terms and never allocate a power set.
+pub(super) fn factor_terms(count: usize, interactions: bool) -> impl Iterator<Item = Vec<usize>> {
+    std::iter::successors((count > 0).then(|| vec![0]), move |term| {
+        let mut next = term.clone();
+        for i in 0..next.len() {
+            let end = next.get(i + 1).copied().unwrap_or(count);
+            if next[i] + 1 < end {
+                next[i] += 1;
+                for (j, value) in next.iter_mut().take(i).enumerate() {
+                    *value = j;
+                }
+                return Some(next);
+            }
+        }
+        (interactions && term.len() < count).then(|| (0..=term.len()).collect())
+    })
 }
-pub(super) fn term_name(mask: usize, count: usize) -> String {
-    (0..count)
-        .filter(|i| mask & (1 << i) != 0)
+pub(super) fn term_name(components: &[usize]) -> String {
+    components
+        .iter()
         .map(|i| format!("factor{}", i + 1))
         .collect::<Vec<_>>()
         .join(":")
@@ -28,21 +41,20 @@ pub(super) fn term_name(mask: usize, count: usize) -> String {
 pub(super) fn validate_factors(
     n: usize,
     factors: &[Factor],
-    max: usize,
     control: &ScientificExecutionControl,
 ) -> Result<()> {
     control.check()?;
     if n == 0 {
         return Err(invalid(ScientificInputViolation::EmptyInput));
     }
-    if factors.is_empty() || factors.len() > max {
+    if factors.is_empty() {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }
     for factor in factors {
         if factor.values.len() != n {
             return Err(invalid(ScientificInputViolation::ShapeMismatch));
         }
-        if !(2..=MAX_ANOVA_LEVELS).contains(&factor.levels) {
+        if factor.levels < 2 || factor.levels > n {
             return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
         }
         let mut observed = vec![false; factor.levels];
@@ -70,7 +82,7 @@ impl Design {
         model: FactorialModel,
         control: &ScientificExecutionControl,
     ) -> Result<Self> {
-        validate_factors(n, factors, MAX_ANOVA_FACTORS, control)?;
+        validate_factors(n, factors, control)?;
         let width = design_columns(
             &factors.iter().map(|f| f.levels).collect::<Vec<_>>(),
             covariates.len(),
@@ -102,26 +114,20 @@ impl Design {
             }
             terms.push(Term {
                 name: format!("covariate{}", index + 1),
-                components: 1 << (MAX_ANOVA_FACTORS + index),
+                components: vec![factors.len() + index],
                 columns: vec![columns.len()],
             });
             columns.push((0..n).map(|i| matrix[(i, 0)] / spread).collect());
         }
-        for mask in masks(factors.len()) {
-            if model == FactorialModel::MainEffects && mask.count_ones() > 1 {
-                continue;
-            }
+        for involved in factor_terms(factors.len(), model == FactorialModel::FullFactorial) {
             control.check()?;
-            let involved = (0..factors.len())
-                .filter(|i| mask & (1 << i) != 0)
-                .collect::<Vec<_>>();
             let count = involved
                 .iter()
                 .map(|&i| factors[i].levels - 1)
                 .product::<usize>();
             let mut term = Term {
-                name: term_name(mask, factors.len()),
-                components: mask as u64,
+                name: term_name(&involved),
+                components: involved.clone(),
                 columns: Vec::with_capacity(count),
             };
             for code in 0..count {
@@ -262,7 +268,7 @@ pub(super) fn term_indices(
         let include = match kind {
             SumsOfSquares::TypeI => i <= index,
             SumsOfSquares::TypeII => {
-                i == index || other.components & term.components != term.components
+                i == index || !term.components.iter().all(|c| other.components.contains(c))
             }
             SumsOfSquares::TypeIII => true,
         };

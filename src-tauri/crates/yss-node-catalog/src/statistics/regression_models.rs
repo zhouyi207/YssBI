@@ -1,6 +1,5 @@
 //! Executable estimators and model-building analyses in the regression category.
 use super::*;
-use yss_sci_contract::regression::models::*;
 const SPECS: &[(&str, &str, &str, &str)] = &[
     (
         "yssbi.statistics.regression.robust",
@@ -377,7 +376,7 @@ fn text_field(key: &'static str, default: &'static str) -> Result<Parameter, Bui
 }
 fn iteration(max: i64) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     Ok(vec![
-        bounded_integer_parameter("max_iterations", max, 1, 10000)?,
+        positive_integer_parameter("max_iterations", max)?,
         decimal_parameter("tolerance", "0.0000001")?,
     ])
 }
@@ -424,7 +423,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
             "Predictor",
             series_type()?,
             1,
-            Some(MAX_REGRESSION_PREDICTORS as u16),
+            None,
         )?);
     }
     if matches!(
@@ -449,7 +448,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
             "Inflation predictor",
             series_type()?,
             0,
-            Some(MAX_REGRESSION_PREDICTORS as u16),
+            None,
         )?);
     }
     ports.push(data_output("result", "Result", report_type()?)?);
@@ -485,7 +484,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
             }
         }
         "regression.pls" => params.extend([
-            bounded_integer_parameter("components", 1, 1, 16)?,
+            positive_integer_parameter("components", 1)?,
             toggle_parameter("standardize", true)?,
         ]),
         "regression.curve" => params.extend([
@@ -607,8 +606,8 @@ fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'sta
         "max_iterations" => (
             "Maximum iterations",
             "最大迭代次数",
-            "1–10000; nonconvergence fails the calculation.",
-            "1–10000；不收敛时计算失败。",
+            "Positive integer; nonconvergence fails the calculation.",
+            "正整数；不收敛时计算失败。",
         ),
         "tolerance" => (
             "Convergence tolerance",
@@ -643,8 +642,8 @@ fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'sta
         "components" => (
             "PLS components",
             "PLS 成分数",
-            "1–16, at most the predictor count; univariate response.",
-            "1–16，不能超过自变量数；当前为单响应 PLS。",
+            "Positive integer, at most the predictor count; univariate response.",
+            "正整数，不能超过自变量数；当前为单响应 PLS。",
         ),
         "curve_family" => (
             "Curve family",

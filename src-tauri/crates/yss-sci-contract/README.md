@@ -13,7 +13,7 @@ Cross-domain execution and observation contracts remain shared.
 
 - `execution`: `ScientificExecutionControl`, cancellation and computation errors.
   These types contain no execution-plan or project identities, and define no backend trait.
-- `anova`: coded categorical factors, bounded design dimensions, factorial and
+- `anova`: coded categorical factors, checked design dimensions, factorial and
   sums-of-squares options, univariate/ANCOVA tables, MANOVA tests/SSCP and
   within-subject tables with Greenhouse–Geisser correction. Generic factor labels
   allow adapters to restore exact tabular values; optional MANOVA inference fields
@@ -27,7 +27,7 @@ Cross-domain execution and observation contracts remain shared.
   `discrete::BinaryOptions` owns binary-model intercept/convergence settings;
   `prais` owns AR(1) transform and convergence settings. Linear results retain
   optional original WLS weights for downstream diagnostics.
-  `models` owns bounded predictor/category dimensions, estimator/convergence
+  `models` owns predictor/category contracts, estimator/convergence
   options and structured coefficient/model/workflow results for the additional
   regression methods. Method-specific facts use `RegressionDetails`; undefined
   inference/metrics use optional fields. Generic category/group labels preserve
@@ -67,8 +67,7 @@ Cross-domain execution and observation contracts remain shared.
   intervals, ROC/AUC, category frequencies, rectangular matrices and coefficient
   intervals. Display bounds and sampling metadata contain no pixel layout,
   graph identity or result/window lifecycle.
-- `descriptive`: empirical `GiniResult`, Dagum group/pair/component statistics, and the
-  64-group report bound. Group labels are generic so the node adapter can replace
+- `descriptive`: empirical `GiniResult`, Dagum group/pair/component statistics. Group labels are generic so the node adapter can replace
   numerical group IDs with original scalar labels without changing statistics.
 - `distribution`: probability distribution parameters and typed samples.
 - `observation`: observation metadata, missing-value policy and category roles,

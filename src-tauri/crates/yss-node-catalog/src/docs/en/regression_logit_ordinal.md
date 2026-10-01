@@ -1,10 +1,10 @@
 # Regression Logit Ordinal
 
-Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts 1–16 numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
+Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts one or more numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
 
 ## Method and options
 
-Proportional-odds ordered logit has no separate intercept. Ordinal metadata determines order; plain numeric responses use ascending scores. No implicit text order. Unobserved declared levels are omitted. At most 8 observed categories/64 parameters; 500 iterations, tolerance 1e-7. `cut[c|c+1]` are increasing actual thresholds with delta covariance. Positive slopes favor higher categories. Probabilities/predicted labels follow `categories`; numeric residuals and RSS/RMSE are unavailable. Wald inference uses observed information and standard normal reference. Constant predictors/separation/singular information fail.
+Proportional-odds ordered logit has no separate intercept. Ordinal metadata determines order; plain numeric responses use ascending scores. No implicit text order. Unobserved declared levels are omitted. At least two observed categories and more observations than parameters are required; 500 iterations, tolerance 1e-7. `cut[c|c+1]` are increasing actual thresholds with delta covariance. Positive slopes favor higher categories. Probabilities/predicted labels follow `categories`; numeric residuals and RSS/RMSE are unavailable. Wald inference uses observed information and standard normal reference. Constant predictors/separation/singular information fail.
 
 $$
 \operatorname{logit}P(Y\le c\mid x)=\theta_c-x^T\beta,\quad\theta_0<\theta_1<\cdots<\theta_{K-2}.

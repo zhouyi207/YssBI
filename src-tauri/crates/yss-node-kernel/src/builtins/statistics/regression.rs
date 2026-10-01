@@ -90,7 +90,7 @@ fn fit(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, 
     let constant = boolean(inv, "constant")?;
     let max_iterations = integer(inv, "max_iterations")?;
     let tolerance = number(inv, "tolerance")?;
-    if !(1..=10000).contains(&max_iterations) || tolerance <= 0.0 {
+    if max_iterations == 0 || tolerance <= 0.0 {
         return Err(KernelError::InvalidParameter);
     }
     check_fit_workspace(n, data.len(), constant, "OLS", inv)?;

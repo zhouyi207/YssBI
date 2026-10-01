@@ -1,7 +1,7 @@
 use super::super::{numeric_input, series};
 use super::{
     Input,
-    common::{text, value},
+    common::{materialize, text, value},
 };
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use std::cmp::Ordering;
@@ -26,13 +26,13 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         ("one_way", OneWay, 1, 1),
         ("two_way", TwoWay, 2, 2),
         ("three_way", ThreeWay, 3, 3),
-        ("factorial", Factorial, 1, MAX_ANOVA_FACTORS),
-        ("ancova", Ancova, 1, MAX_ANOVA_FACTORS),
-        ("manova", Manova, 1, MAX_ANOVA_FACTORS),
-        ("repeated_measures", Repeated, 1, MAX_REPEATED_FACTORS),
+        ("factorial", Factorial, 1, usize::MAX),
+        ("ancova", Ancova, 1, usize::MAX),
+        ("manova", Manova, 1, usize::MAX),
+        ("repeated_measures", Repeated, 1, usize::MAX),
     ] {
         let mut inputs = if method == Manova {
-            vec![Input::repeated("responses", 2..=MAX_MANOVA_RESPONSES)]
+            vec![Input::repeated("responses", 2..=usize::MAX)]
         } else {
             vec![Input::fixed("response")]
         };
@@ -41,7 +41,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         }
         inputs.push(Input::repeated("factors", min..=max));
         if method == Ancova {
-            inputs.push(Input::repeated("covariates", 1..=MAX_ANOVA_COVARIATES));
+            inputs.push(Input::repeated("covariates", 1..=usize::MAX));
         }
         let parameters = match method {
             OneWay => &[][..],
@@ -92,69 +92,6 @@ fn options(method: Method, inv: &KernelInvocation<'_>) -> Result<AnovaOptions, K
     })
 }
 
-fn materialize(inv: &KernelInvocation<'_>) -> Result<(Vec<series::Column>, usize), KernelError> {
-    inv.check_control()?;
-    let columns = if inv
-        .inputs
-        .iter()
-        .all(|v| matches!(v.unannotated(), RuntimeValue::Series(_)))
-    {
-        let handles = inv
-            .inputs
-            .iter()
-            .map(|v| match v.unannotated() {
-                RuntimeValue::Series(handle) => handle.clone(),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        series::load(&handles, inv)?
-    } else {
-        let Some(RuntimeValue::List(first)) = inv.inputs.first().map(RuntimeValue::unannotated)
-        else {
-            return Err(KernelError::UnalignedSeries);
-        };
-        for input in inv.inputs {
-            let RuntimeValue::List(column) = input.unannotated() else {
-                return Err(KernelError::UnalignedSeries);
-            };
-            if column.len() != first.len() {
-                return Err(KernelError::ShapeMismatch);
-            }
-        }
-        inv.control.check_bytes(
-            first
-                .len()
-                .checked_mul(inv.inputs.len())
-                .and_then(|n| n.checked_mul(size_of::<RuntimeValue>() * 8)),
-        )?;
-        inv.inputs
-            .iter()
-            .map(|v| series::column(v, inv))
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    let n = columns.first().map_or(0, |column| column.values.len());
-    let mut retained = inv.control.check_bytes(
-        n.checked_mul(columns.len())
-            .and_then(|n| n.checked_mul(size_of::<RuntimeValue>() * 8)),
-    )?;
-    for column in &columns {
-        for (i, scalar) in column.values.iter().enumerate() {
-            if i.is_multiple_of(1024) {
-                inv.check_control()?;
-            }
-            if let TabularScalar::String(label) = scalar {
-                retained = inv.control.check_bytes(
-                    label
-                        .len()
-                        .checked_mul(8)
-                        .and_then(|n| retained.checked_add(n)),
-                )?;
-            }
-        }
-    }
-    Ok((columns, retained))
-}
-
 fn numerical(column: &series::Column, inv: &KernelInvocation<'_>) -> Result<Vec<f64>, KernelError> {
     let mut values = inv.control.reserve(column.values.len())?;
     for (i, scalar) in column.values.iter().enumerate() {
@@ -170,30 +107,7 @@ fn factor(
     column: &series::Column,
     inv: &KernelInvocation<'_>,
 ) -> Result<(Factor, Vec<TabularScalar>), KernelError> {
-    let mut labels = Vec::<TabularScalar>::new();
-    let mut values = inv.control.reserve(column.values.len())?;
-    for (i, scalar) in column.values.iter().enumerate() {
-        if i.is_multiple_of(1024) {
-            inv.check_control()?;
-        }
-        if matches!(scalar, TabularScalar::Null) {
-            return Err(KernelError::InvalidNumericInput);
-        }
-        let index = match labels
-            .iter()
-            .position(|label| label.compare(scalar) == Some(Ordering::Equal))
-        {
-            Some(index) => index,
-            None => {
-                if labels.len() == MAX_ANOVA_LEVELS {
-                    return Err(KernelError::InvalidParameter);
-                }
-                labels.push(scalar.clone());
-                labels.len() - 1
-            }
-        };
-        values.push(index);
-    }
+    let (values, labels) = super::common::categories(column, false, inv)?;
     Ok((
         Factor {
             values,
@@ -276,7 +190,6 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
         levels
             .iter()
             .try_fold(1usize, |n, &level| n.checked_mul(level))
-            .filter(|&n| n <= MAX_REPEATED_CELLS)
             .ok_or(KernelError::InvalidParameter)?
     } else {
         design_columns(&levels, covariates.len(), options.model)

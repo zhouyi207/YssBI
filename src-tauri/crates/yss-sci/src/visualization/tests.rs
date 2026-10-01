@@ -210,3 +210,17 @@ fn plot_computation_rejects_shape_nonfinite_and_cancelled_inputs() {
         Err(ScientificComputationError::Cancelled)
     );
 }
+
+#[test]
+fn scale_limits_plot_data_keeps_all_categories_and_coefficients_for_paging() {
+    let labels = (0..2200).map(|i| format!("term{i}")).collect::<Vec<_>>();
+    let pareto = pareto(&labels, &control()).unwrap();
+    assert_eq!(pareto.data.len(), 2200);
+    assert_eq!(pareto.data.last().unwrap().cumulative, 1.0);
+    let values = (0..2200).map(|i| i as f64).collect::<Vec<_>>();
+    let coefficients =
+        coefficients(&labels, &values, &vec![0.5; 2200], 50.0, 0.95, &control()).unwrap();
+    assert_eq!(coefficients.data.len(), 2200);
+    assert_eq!(coefficients.data[2199].value, 2199.0);
+    assert!(coefficients.data[2199].lower < 2199.0);
+}

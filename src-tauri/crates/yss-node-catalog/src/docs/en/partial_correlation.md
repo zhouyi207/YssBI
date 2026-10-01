@@ -1,6 +1,6 @@
 # Partial correlation
 
-Connect aligned Numeric **X**, **Y**, and one or more **Control variable** inputs. Add controls in Details. All columns must share the same sample; at most 16 controls are supported. If there are $q$ controls, require $n>q+2$ observations.
+Connect aligned Numeric **X**, **Y**, and one or more **Control variable** inputs. Add controls in Details. All columns must share the same sample. If there are $q$ controls, require $n>q+2$ observations.
 
 Regress X and Y on an intercept and the controls, then compute Pearson correlation $r_{XY\cdot C}$ between their residuals. Constant or linearly dependent controls, or zero residual variation, fail explicitly; columns are not dropped automatically.
 

@@ -40,9 +40,7 @@ pub fn kappa(
     control.check()?;
     level(options.confidence_level)?;
     let m = ratings.len();
-    if !(2..=MAX_ASSOCIATION_RATERS).contains(&m)
-        || !(2..=MAX_ASSOCIATION_CATEGORIES).contains(&categories)
-    {
+    if m < 2 || categories < 2 {
         return Err(invalid());
     }
     let n = ratings[0].len();

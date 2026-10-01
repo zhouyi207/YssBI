@@ -1,12 +1,6 @@
 //! Neutral multivariate options, summaries and row-major coordinate outputs.
 use serde::{Deserialize, Serialize};
 
-pub const MAX_MULTIVARIATE_VARIABLES: usize = 16;
-pub const MAX_CANONICAL_VARIABLES: usize = 16;
-pub const MAX_CORRESPONDENCE_CATEGORIES: usize = 32;
-pub const MAX_DISCRIMINANT_CLASSES: usize = 8;
-pub const MAX_MDS_OBSERVATIONS: usize = 512;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrdinationOutput<R> {
     pub report: R,

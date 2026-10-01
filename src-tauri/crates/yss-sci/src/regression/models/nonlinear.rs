@@ -117,7 +117,6 @@ pub fn nonlinear_formula(
     check_iteration(iteration)?;
     let p = initial.len();
     if p == 0
-        || p > MAX_REGRESSION_PREDICTORS
         || y.len() <= p
         || initial.iter().any(|v| !v.is_finite())
         || (!lower.is_empty() && lower.len() != p)

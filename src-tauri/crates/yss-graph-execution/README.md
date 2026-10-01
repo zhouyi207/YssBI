@@ -13,6 +13,10 @@ Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` �
 
 Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline、预算及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
 
+`RunExecutionControl::with_memory_budget(bytes)` 由执行调用方配置每个节点的输入、工作区及结果编码准入预算，
+默认沿用 Kernel 的 128 MiB。调度器向所有节点转发同一预算；它是规模估算边界，不是整次运行的总内存或进程 RSS 上限。
+取消和 deadline 仍独立生效；此入口不增加前端设置。
+
 同一运行的 demand selection 和 producer 索引从准入传给调度器，不重复构建。最终结果在持有 ResultStore 写锁前已成为 `Arc<StoredResult>`，发布只增加引用。GraphAnalysis 的语义快照也按引用共享，展示投影修改时才取得独立内容。协议指纹显式排除展示字段，保留配置对象校验、条件和资源解释；不会递归删除用户数据中的同名字段。
 
 内核的 `KernelError` 不携带图地址、运行阶段或项目状态；Execution 的 `OperationExecutionError` 负责节点定位，并保持已有 RunFailure 错误码和取消/超时终态。RuntimeValue、KernelId、KernelParameterKey 和 KernelFingerprint 由 Node Kernel 拥有，ResultStore 与结果租约仍属于 Execution。

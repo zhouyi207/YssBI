@@ -1,6 +1,6 @@
 # Kappa agreement
 
-Each **Rater** input is an aligned classification column over the same subjects. Add raters in Details, up to 64. Numeric, categorical, ordinal, binary, text, and identifier codes are supported; missing ratings fail. Codes retain their original values, including wide integer labels. Up to 256 categories are supported.
+Each **Rater** input is an aligned classification column over the same subjects. Add raters in Details. Numeric, categorical, ordinal, binary, text, and identifier codes are supported; missing ratings fail. Codes retain their original values, including wide integer labels.
 
 **Kappa definition** defaults to `cohen`, which requires exactly two raters. Choose `fleiss` for interchangeable raters with the same complete number of ratings per subject. Cohen uses each rater's category margins; Fleiss uses pooled margins.
 

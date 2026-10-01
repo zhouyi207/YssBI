@@ -2,9 +2,6 @@
 use crate::hypothesis::Alternative;
 use serde::Serialize;
 
-pub const MAX_ASSOCIATION_RATERS: usize = 64;
-pub const MAX_ASSOCIATION_CONTROLS: usize = 16;
-pub const MAX_ASSOCIATION_CATEGORIES: usize = 256;
 pub const MAX_EXACT_RANK_OBSERVATIONS: usize = 9;
 pub const MAX_BLAND_ALTMAN_POINTS: usize = 2000;
 

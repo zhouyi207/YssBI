@@ -1,6 +1,6 @@
 # Intraclass correlation (ICC)
 
-Each **Rater** input is a Numeric measurement column. Rows identify the same subjects across all columns. At least two subjects and two raters are required; at most 64 raters are supported. Use complete aligned data.
+Each **Rater** input is a Numeric measurement column. Rows identify the same subjects across all columns. At least two subjects and two raters are required. Use complete aligned data.
 
 **ICC definition** defaults to `ICC2`:
 

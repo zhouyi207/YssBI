@@ -558,7 +558,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "多因素方差分析",
         aliases: &["anova.factorial", "多因素方差"],
         product_form: "独立节点",
-        scope_note: "1–8 个分类因素，含截距的设计矩阵最多 256 列。",
+        scope_note: "一个或多个分类因素，含截距的满秩设计须保留正残差自由度。",
     },
     Entry {
         id: "yssbi.statistics.anova.ancova",
@@ -580,7 +580,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "多元方差分析（MANOVA）",
         aliases: &["anova.manova", "多元方差MANOVA"],
         product_form: "独立节点",
-        scope_note: "2–16 个联合响应，输出四种多元检验与 SSCP 矩阵。",
+        scope_note: "至少两个联合响应，输出四种多元检验与 SSCP 矩阵。",
     },
     Entry {
         id: "yssbi.statistics.anova.repeated_measures",
@@ -800,7 +800,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "多维尺度分析（MDS）",
         aliases: &["multivariate.mds", "多维尺度MDS"],
         product_form: "独立节点",
-        scope_note: "经典度量 MDS，支持观测欧氏距离或显式距离矩阵，最多 512 个点。",
+        scope_note: "经典度量 MDS，支持观测欧氏距离或显式距离矩阵，按输入规模和可用执行预算计算。",
     },
     Entry {
         id: "yssbi.statistics.survival.kaplan_meier",

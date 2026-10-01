@@ -1,10 +1,10 @@
 # Regression Nonlinear Formula
 
-Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts 1–16 numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
+Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts one or more numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
 
 ## Method and options
 
-`formula` defaults to `b1 + b2*x1`; x1,x2,… follow predictor ports, b1,b2,… follow `initial_values` (default `[0,1]`, at most 16). Supports `+ - * / ^`, parentheses, `exp ln sqrt abs sin cos min max`. Each nonempty `lower_bounds`/`upper_bounds` list gives one finite bound per parameter; require lower<upper and starts within bounds. Empty means unbounded on that side. Free parameters continue optimizing at active bounds. Default 500 iterations, tolerance 1e-7. Require n>p and full-rank J. Interior inference uses Student t(n−p); at active bounds covariance/inference is null. Nondifferentiability and local minima can prevent fitting.
+`formula` defaults to `b1 + b2*x1`; x1,x2,… follow predictor ports, b1,b2,… follow `initial_values` (default `[0,1]`). Supports `+ - * / ^`, parentheses, `exp ln sqrt abs sin cos min max`. Each nonempty `lower_bounds`/`upper_bounds` list gives one finite bound per parameter; require lower<upper and starts within bounds. Empty means unbounded on that side. Free parameters continue optimizing at active bounds. Default 500 iterations, tolerance 1e-7. Require n>p and full-rank J. Interior inference uses Student t(n−p); at active bounds covariance/inference is null. Nondifferentiability and local minima can prevent fitting.
 
 $$
 \hat\theta=\arg\min_\theta\sum_i[y_i-f(x_i,\theta)]^2,\quad\widehat{\operatorname{Cov}}(\hat\theta)=\frac{RSS}{n-p}(J^TJ)^{-1}.

@@ -468,7 +468,7 @@ fn anova_rejects_singular_incomplete_nonfinite_and_out_of_bounds_designs() {
     ));
     assert_eq!(
         design_columns(&[17, 17], 0, FactorialModel::FullFactorial),
-        None
+        Some(289)
     );
     let within = [Factor {
         values: vec![0, 1, 0, 1],
@@ -539,4 +539,70 @@ fn anova_entries_preserve_cancellation_and_deadline_failures() {
             expected
         );
     }
+}
+
+#[test]
+fn scale_limits_anova_uses_dynamic_terms_and_repeated_cells() {
+    let n = 128usize;
+    let factors = (1..=70)
+        .map(|j| Factor {
+            values: (0..n).map(|i| (i & j).count_ones() as usize % 2).collect(),
+            levels: 2,
+        })
+        .collect::<Vec<_>>();
+    let y = (0..n)
+        .map(|i| {
+            1.0 + 2.0 * (1.0 - 2.0 * factors[0].values[i] as f64)
+                + if (i & 127).count_ones().is_multiple_of(2) {
+                    0.2
+                } else {
+                    -0.2
+                }
+        })
+        .collect::<Vec<_>>();
+    let result = anova(
+        &y,
+        &factors,
+        &[],
+        AnovaOptions {
+            model: FactorialModel::MainEffects,
+            sums_of_squares: SumsOfSquares::TypeII,
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(result.table.len(), 70);
+    assert_eq!(result.table[69].term, "factor70");
+    close(result.table[0].f_statistic, 5700.0);
+    assert_eq!(result.error.df, 57);
+
+    let cells = 512usize;
+    let subjects = (0..3)
+        .flat_map(|i| std::iter::repeat_n(i, cells))
+        .collect::<Vec<_>>();
+    let factors = (0..9)
+        .map(|j| Factor {
+            values: (0..subjects.len()).map(|i| (i % cells >> j) & 1).collect(),
+            levels: 2,
+        })
+        .collect::<Vec<_>>();
+    let mut state = 37u64;
+    let y = (0..subjects.len())
+        .map(|_| {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            (state >> 32) as f64 / u32::MAX as f64
+        })
+        .collect::<Vec<_>>();
+    let result = repeated_measures(
+        &y,
+        &subjects,
+        &factors,
+        SphericityCorrection::None,
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(result.cells_per_subject, cells);
+    assert_eq!(result.table.len(), cells - 1);
+    assert!(result.table.iter().all(|term| term.p_value.is_finite()));
+    assert!(design_columns(&[usize::MAX, 2], 0, FactorialModel::FullFactorial).is_none());
 }

@@ -1,8 +1,8 @@
 # Exploratory factor analysis
 
-Provide 3–16 aligned numeric **Variable** series sharing a relational row domain. Missing values and constant columns are rejected. Iterative principal-axis factoring uses a correlation matrix and squared-multiple-correlation initial communalities. PCA extraction and maximum likelihood are not used. The observation count must exceed the variable count $p$, with positive-definite correlation.
+Provide at least three aligned numeric **Variable** series sharing a relational row domain. Missing values and constant columns are rejected. Iterative principal-axis factoring uses a correlation matrix and squared-multiple-correlation initial communalities. PCA extraction and maximum likelihood are not used. The observation count must exceed the variable count $p$, with positive-definite correlation.
 
-**Retained dimensions** defaults to 1 factor. The factor count $k$ must satisfy $k<p$ and identification condition $[(p-k)^2-(p+k)]/2\ge0$. **Maximum iterations** defaults to 500 (1–10000); **convergence tolerance** defaults to $10^{-6}$ in $(0,0.1]$. Extraction and rotation use the same limit. Nonconvergence and Heywood solutions with communality at least 1 fail.
+**Retained dimensions** defaults to 1 factor. The factor count $k$ must satisfy $k<p$ and identification condition $[(p-k)^2-(p+k)]/2\ge0$. **Maximum iterations** defaults to 500 (positive integer); **convergence tolerance** defaults to $10^{-6}$ in $(0,0.1]$. Extraction and rotation use the same limit. Nonconvergence and Heywood solutions with communality at least 1 fail.
 
 Replacing correlation diagonal entries with communalities, the leading $k$ nonnegative eigenvalues/vectors produce loadings $L$ and updates $h_i^2=\sum_jL_{ij}^2$. **Factor rotation** defaults to orthogonal `varimax`, with `none` available and no Kaiser normalization:
 

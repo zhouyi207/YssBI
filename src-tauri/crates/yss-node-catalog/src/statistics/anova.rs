@@ -1,6 +1,5 @@
 //! Executable variance-analysis nodes retain their inventory identities.
 use super::*;
-use yss_sci_contract::anova::*;
 
 const METHODS: &[(&str, &str, &str)] = &[
     ("one_way", "One-way ANOVA", "单因素方差分析"),
@@ -58,7 +57,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "Response",
                 series_type()?,
                 2,
-                Some(MAX_MANOVA_RESPONSES as u16),
+                None,
             )?]
         } else {
             vec![data_input("response", "Response", series_type()?)?]
@@ -67,18 +66,17 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(data_input("subjects", "Subject", label_series()?)?);
         }
         let (min, max) = match method {
-            "one_way" => (1, 1),
-            "two_way" => (2, 2),
-            "three_way" => (3, 3),
-            "repeated_measures" => (1, MAX_REPEATED_FACTORS),
-            _ => (1, MAX_ANOVA_FACTORS),
+            "one_way" => (1, Some(1)),
+            "two_way" => (2, Some(2)),
+            "three_way" => (3, Some(3)),
+            _ => (1, None),
         };
         ports.push(bounded_user_data_input(
             "factors",
             "Factor",
             label_series()?,
             min as u16,
-            Some(max as u16),
+            max,
         )?);
         if method == "ancova" {
             ports.push(bounded_user_data_input(
@@ -86,7 +84,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "Covariate",
                 series_type()?,
                 1,
-                Some(MAX_ANOVA_COVARIATES as u16),
+                None,
             )?);
         }
         ports.push(data_output("result", "Result", report_type()?)?);

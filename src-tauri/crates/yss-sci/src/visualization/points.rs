@@ -308,7 +308,6 @@ pub fn coefficients(
 ) -> Result<CoefficientPlot> {
     let length = aligned(&[values, standard_errors], control)?;
     if labels.len() != length
-        || length > MAX_PLOT_POINTS
         || !(0.0..1.0).contains(&confidence)
         || confidence == 0.0
         || !degrees_of_freedom.is_finite()

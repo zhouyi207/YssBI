@@ -1,6 +1,6 @@
 # Kendall concordance W
 
-Each **Rater** input is an aligned Numeric or Ordinal column, with each row identifying the same subject. At least two subjects and two raters are required, with at most 64 raters. Ordinal columns use their own explicit order; missing ratings fail.
+Each **Rater** input is an aligned Numeric or Ordinal column, with each row identifying the same subject. At least two subjects and two raters are required. Ordinal columns use their own explicit order; missing ratings fail.
 
 Each rater's observations are ranked across subjects, averaging ties. With m raters, n subjects, summed subject ranks $R_i$, and $T=\sum_j\sum_g(t_{jg}^3-t_{jg})$,
 

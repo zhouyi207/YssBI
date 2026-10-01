@@ -116,7 +116,7 @@ fn gini_and_dagum_match_pairwise_definitions_and_decomposition() {
 }
 
 #[test]
-fn gini_inputs_and_group_limits_fail_explicitly_and_honor_control() {
+fn gini_validates_inputs_supports_many_groups_and_honors_control() {
     let control = control();
     for values in [
         vec![],
@@ -140,16 +140,8 @@ fn gini_inputs_and_group_limits_fail_explicitly_and_honor_control() {
             violation: ScientificInputViolation::ShapeMismatch
         })
     );
-    assert_eq!(
-        dagum_gini(
-            &vec![1.; MAX_DAGUM_GROUPS + 1],
-            &(0..=MAX_DAGUM_GROUPS).collect::<Vec<_>>(),
-            &control
-        ),
-        Err(Error::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange
-        })
-    );
+    let many_groups = dagum_gini(&vec![1.; 65], &(0..65).collect::<Vec<_>>(), &control).unwrap();
+    assert_eq!(many_groups.groups.len(), 65);
     let expired = ScientificExecutionControl {
         deadline: Instant::now(),
         ..control

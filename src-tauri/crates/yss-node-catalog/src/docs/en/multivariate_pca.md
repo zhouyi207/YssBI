@@ -1,6 +1,6 @@
 # Principal component analysis (PCA)
 
-Provide 2–16 numeric **Variable** series with observations in aligned rows. Relational series must share a row domain; missing values are rejected. **Retained dimensions** defaults to 2, with $1\le k\le\min(p,n-1)$ for $p$ variables and $n$ observations.
+Provide at least two numeric **Variable** series with observations in aligned rows. Relational series must share a row domain; missing values are rejected. **Retained dimensions** defaults to 2, with $1\le k\le\min(p,n-1)$ for $p$ variables and $n$ observations.
 
 **Standardize variables** defaults to enabled: center and divide by sample standard deviations with denominator $n-1$. Disabling it uses covariance PCA in centered original units. Standardized PCA rejects constant columns; original-unit PCA permits them but requires positive total variance.
 

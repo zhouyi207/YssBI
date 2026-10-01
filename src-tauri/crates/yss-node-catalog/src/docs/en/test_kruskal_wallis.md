@@ -4,7 +4,7 @@ Compares distributions of independent groups using pooled ranks.
 
 ## Inputs and parameters
 
-Add 2–16 numeric inputs under `groups`. Each must be nonempty, finite, and nonmissing. The current node requires equal column lengths; relational series must share a row domain. There are no parameters. Observations must be independent within and between groups.
+Add at least two numeric inputs under `groups`. Each must be nonempty, finite, and nonmissing. The current node requires equal column lengths; relational series must share a row domain. There are no parameters. Observations must be independent within and between groups.
 
 ## Hypotheses and statistic
 

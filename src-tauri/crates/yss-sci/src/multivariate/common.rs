@@ -1,4 +1,4 @@
-use yss_sci_contract::{execution::*, multivariate::MAX_MULTIVARIATE_VARIABLES};
+use yss_sci_contract::execution::*;
 use yss_sci_linalg::{Mat, SymmetricEigen, matrix_rank};
 
 pub(super) type Result<T> = std::result::Result<T, ScientificComputationError>;
@@ -16,7 +16,7 @@ pub(super) fn finite(value: f64) -> Result<f64> {
     }
 }
 pub(super) fn check_components(k: usize, bound: usize) -> Result<()> {
-    if k == 0 || k > bound || k > MAX_MULTIVARIATE_VARIABLES {
+    if k == 0 || k > bound {
         Err(invalid(ScientificInputViolation::ParameterOutOfRange))
     } else {
         Ok(())
@@ -24,11 +24,10 @@ pub(super) fn check_components(k: usize, bound: usize) -> Result<()> {
 }
 pub(super) fn validate(
     columns: &[Vec<f64>],
-    max: usize,
     control: &ScientificExecutionControl,
 ) -> Result<usize> {
     control.check()?;
-    if columns.is_empty() || columns.len() > max {
+    if columns.is_empty() {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }
     let n = columns[0].len();
@@ -62,7 +61,7 @@ pub(super) fn prepare(
     standardize: bool,
     control: &ScientificExecutionControl,
 ) -> Result<Prepared> {
-    let n = validate(columns, MAX_MULTIVARIATE_VARIABLES, control)?;
+    let n = validate(columns, control)?;
     if n < 2 {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }

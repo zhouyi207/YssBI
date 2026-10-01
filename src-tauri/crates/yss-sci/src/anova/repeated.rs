@@ -1,6 +1,6 @@
 use super::{
     Result,
-    design::{masks, term_name, validate_factors},
+    design::{factor_terms, term_name, validate_factors},
     f_probability, factor_levels, finite, invalid,
 };
 use yss_sci_contract::{anova::*, execution::*};
@@ -14,14 +14,13 @@ pub fn repeated_measures(
     control: &ScientificExecutionControl,
 ) -> Result<RepeatedMeasuresResult> {
     control.check()?;
-    validate_factors(response.len(), factors, MAX_REPEATED_FACTORS, control)?;
+    validate_factors(response.len(), factors, control)?;
     if subjects.len() != response.len() {
         return Err(invalid(ScientificInputViolation::ShapeMismatch));
     }
     let cells = factors
         .iter()
         .try_fold(1usize, |n, f| n.checked_mul(f.levels))
-        .filter(|&n| n <= MAX_REPEATED_CELLS)
         .ok_or_else(|| invalid(ScientificInputViolation::ParameterOutOfRange))?;
     let subject_count = subjects
         .iter()
@@ -76,12 +75,12 @@ pub fn repeated_measures(
         }
     }
     let mut table = Vec::new();
-    for mask in masks(factors.len()) {
+    for involved in factor_terms(factors.len(), true) {
         control.check()?;
         let df = factors
             .iter()
             .enumerate()
-            .filter(|(i, _)| mask & (1 << i) != 0)
+            .filter(|(i, _)| involved.contains(i))
             .map(|(_, factor)| factor.levels - 1)
             .product::<usize>();
         let mut scores = vec![vec![0.0; subject_count]; df];
@@ -91,7 +90,7 @@ pub fn repeated_measures(
                 .iter()
                 .enumerate()
                 .map(|(i, factor)| {
-                    if mask & (1 << i) == 0 {
+                    if !involved.contains(&i) {
                         None
                     } else {
                         let choice = code % (factor.levels - 1);
@@ -189,7 +188,7 @@ pub fn repeated_measures(
         let sum_squares = finite((ss * scale) * scale)?;
         let error_sum_squares = finite((error_ss * scale) * scale)?;
         table.push(RepeatedTerm {
-            term: term_name(mask, factors.len()),
+            term: term_name(&involved),
             sum_squares,
             error_sum_squares,
             df,

@@ -4,12 +4,12 @@ Selects one independent-group nonparametric test through `method`. Each executio
 
 ## Inputs and parameters
 
-Add 2–16 nonempty finite numeric series under `groups`, with no missing values. The current node requires equal lengths; relational series must share a row domain. `method` defaults to `mann_whitney`:
+Add at least two nonempty finite numeric series under `groups`, with no missing values. The current node requires equal lengths; relational series must share a row domain. `method` defaults to `mann_whitney`:
 
 | `method`         | Groups and purpose                                                         |
 | ---------------- | -------------------------------------------------------------------------- |
 | `mann_whitney`   | Exactly 2 groups, two-sided distribution/location comparison               |
-| `kruskal_wallis` | 2–16 groups, distribution comparison                                       |
+| `kruskal_wallis` | at least two groups, distribution comparison                               |
 | `mood_median`    | Median comparison; current valid table construction is limited to 2 groups |
 
 There is no `alternative` parameter. Groups are not treated as paired differences. Observations must be independent within and between groups.

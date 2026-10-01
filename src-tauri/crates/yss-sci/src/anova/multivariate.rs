@@ -14,7 +14,7 @@ pub fn manova(
     control: &ScientificExecutionControl,
 ) -> Result<ManovaResult> {
     control.check()?;
-    if !(2..=MAX_MANOVA_RESPONSES).contains(&responses.len()) {
+    if responses.len() < 2 {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }
     let n = responses[0].len();

@@ -1,10 +1,10 @@
 # Workflow Regression Grouped
 
-Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts 1–16 numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
+Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts one or more numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
 
 ## Method and options
 
-Add aligned `groups`, at most 64 observed labels. Fit independent OLS in each group using all predictors; `constant=true`. Each group requires full rank and more rows than coefficients. `stages.label` restores original labels; `observation_indices` gives original one-based row positions, which also order fitted/residual arrays. Coefficient t tests use group residual degrees. Independent fits do not test differences between group coefficients and imply no pooling/multilevel structure.
+Add aligned `groups`. Fit independent OLS in each group using all predictors; `constant=true`. Each group requires full rank and more rows than coefficients. `stages.label` restores original labels; `observation_indices` gives original one-based row positions, which also order fitted/residual arrays. Coefficient t tests use group residual degrees. Independent fits do not test differences between group coefficients and imply no pooling/multilevel structure.
 
 $$
 \hat\beta=\arg\min_\beta\sum_i(y_i-x_i^T\beta)^2.

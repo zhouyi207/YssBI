@@ -1,7 +1,7 @@
 use super::*;
 use yss_sci_contract::association::{
-    CorrelationOptions, CorrelationResult, MAX_ASSOCIATION_CONTROLS, MAX_EXACT_RANK_OBSERVATIONS,
-    RankCorrelationOptions, RankInference,
+    CorrelationOptions, CorrelationResult, MAX_EXACT_RANK_OBSERVATIONS, RankCorrelationOptions,
+    RankInference,
 };
 use yss_sci_linalg::{Mat, MatrixExt, Solve, matrix_rank};
 
@@ -62,7 +62,7 @@ pub fn partial(
     level(options.confidence_level)?;
     let q = controls.len();
     let n = x.len();
-    if q == 0 || q > MAX_ASSOCIATION_CONTROLS || n <= q + 2 {
+    if q == 0 || n <= q + 2 {
         return Err(invalid());
     }
     let mut columns = Vec::with_capacity(q);

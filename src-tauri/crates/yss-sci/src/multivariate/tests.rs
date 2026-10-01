@@ -582,3 +582,50 @@ fn all_multivariate_entries_preserve_cancellation_and_deadline_errors() {
         );
     }
 }
+
+#[test]
+fn scale_limits_multivariate_retains_wide_axes_and_large_distance_geometry() {
+    let n = 64usize;
+    let columns = (1..=20)
+        .map(|j| {
+            (0..n)
+                .map(|i| {
+                    if (i & j).count_ones().is_multiple_of(2) {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let fit = pca(
+        &columns,
+        PcaOptions {
+            components: 20,
+            standardize: true,
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(fit.report.rank, 20);
+    assert_eq!(fit.coordinates[0].len(), 20);
+    close(fit.report.retained_variance_ratio, 1.0, 1e-10);
+    let x = (0..600).map(|i| i as f64 / 10.0).collect::<Vec<_>>();
+    let result = mds(
+        &[x],
+        MdsOptions {
+            components: 1,
+            ..Default::default()
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(result.coordinates.len(), 600);
+    close(
+        (result.coordinates[0][0] - result.coordinates[599][0]).abs(),
+        59.9,
+        1e-8,
+    );
+    assert!(result.report.stress < 1e-8);
+}

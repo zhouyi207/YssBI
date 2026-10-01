@@ -19,7 +19,7 @@
 `f64` 计费。分阶段回归按本次配置保留的模型数计费，分组回归的观测结果按各组总行数
 计费；分类概率、样条基列和结构化编码另计。输入常驻内存加上拟合与结果编码两阶段
 的较大估算值用于准入，编码估算复用 `common::value` 的容器计费口径。节点的默认
-128 MiB 预算和查询引擎的独立内存池限制继续生效；估算仍不是进程 RSS 的精确上限。
+128 MiB 预算可由 `KernelControl.max_input_bytes` 配置，查询引擎的独立内存池限制继续生效；估算仍不是进程 RSS 的精确上限。
 
 `KernelInvocation` 接收已求值输入、固定端口或重复组的局部键、有序输出类型/字段、已解析参数、`KernelControl` 和中立 `RelationFactory`。参数可以借用现有 literal 和已授权的资源运行值。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`；注册表在调用前检查输入布局，在返回后检查输出数量和外层载体，不重新推导 Graph 的元素语义。
 
@@ -82,14 +82,15 @@ CCA 的 X/Y 轴组合成一张得分表以支持相互比较。观测数据不�
 
 泰尔指数适配位于 `statistics::descriptive`：个体形式只接收 `series`，分组形式必须另接一个 `weights` 数列（组人数或人口占比）。输入通过共用 `columns` 执行受控物化和行对齐检查，再调用 SCI Runtime；唯一输出为包含指数及描述字段的结构化 result。分组输入为组均值，仅计算组间差异。切换形式后，不适用或缺失的 weights 明确报错。
 
-同一适配模块注册 Gini 和 Dagum Gini。Gini 复用数值列读取；Dagum 复用 `series::load` 联合投影数值与标签、证明行对齐，内存列复用 `series::column`。标签使用 `TabularScalar::compare` 精确分组，再以中立组编号调用 SCI，输出时恢复原始标签，宽整数不转为浮点。输入、排序缓冲和组对输出在调用前共同检查预算；最多 64 组。仅在执行时读取数据，算法与中断控制继续由 SCI 拥有。
+同一适配模块注册 Gini 和 Dagum Gini。Gini 复用数值列读取；Dagum 复用 `series::load` 联合投影数值与标签、证明行对齐，内存列复用 `series::column`。标签使用 `TabularScalar::compare` 精确分组，再以中立组编号调用 SCI，输出时恢复原始标签，宽整数不转为浮点。输入、排序缓冲和组对输出在调用前共同检查预算，不以固定组数截断。仅在执行时读取数据，算法与中断控制继续由 SCI 拥有。
 
 统计结果进入 `common::value` 时保留原有数值类型；转换入口在 JSON 编码前遍历并拒绝
 非有限浮点数，返回 `NonFiniteResult`，合法 `Option::None` 仍转换为空值。
 ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误抹成 Null。
 已经构造的 JSON 无法恢复被抹去的数值类型，生成这类报告的 owner 必须在编码前完成检查。
 
-相关与一致性适配位于 `statistics::association`。数值列复用 `columns`，Ordinal/分类列复用 `series::load/column` 和语义元数据；配对列共同投影验证行域，Ridit 的独立样本分别读取。加权 Kappa 要求明确类别顺序，宽整数类别通过精确比较编码并在输出时恢复；不以 Float64 合并标签。Kappa 和 rwg 的条件参数在声明、内核可选性与执行校验中保持一致，inactive 参数不进入调用。排序、残差化、置换、方差与推断属于 SCI；调用前检查工作区，执行中转发取消/deadline。
+相关与一致性适配位于 `statistics::association`。数值列复用 `columns`，Ordinal/分类列复用 `series::load/column` 和语义元数据；配对列共同投影验证行域，Ridit 的独立样本分别读取。加权 Kappa 要求明确类别顺序，宽整数类别通过精确比较编码并在输出时恢复；不以 Float64 合并标签。Kappa 和 rwg 的条件参数在声明、内核可选性与执行校验中保持一致，inactive 参数不进入调用。排序、残差化、置换、方差与推断属于 SCI；调用前按实际规模检查工作区（包括 Cohen Kappa 的类别平方表和判别分析的类别协方差），执行中转发取消/deadline。
+共享分类编码使用精确标量排序索引，避免逐行线性扫描全部类别，保留首次出现与显式有序元数据顺序。
 
 ## 注册与扩展
 

@@ -26,15 +26,6 @@ fn logadd(a: f64, b: f64) -> f64 {
         m + ((a - m).exp() + (b - m).exp()).ln()
     }
 }
-fn normal_log_cdf(z: f64) -> f64 {
-    if z < -10.0 {
-        let t = 1.0 / (z * z);
-        -0.5 * z * z - (-z).ln() - 0.5 * (2.0 * std::f64::consts::PI).ln()
-            + (1.0 - t + 3.0 * t * t - 15.0 * t.powi(3) + 105.0 * t.powi(4)).ln()
-    } else {
-        Normal::new(0.0, 1.0).expect("normal").cdf(z).ln()
-    }
-}
 fn mean_link(eta: f64, link: GlmLink) -> Result<(f64, f64)> {
     let (mu, d) = match link {
         GlmLink::Identity => (eta, 1.0),
@@ -546,13 +537,11 @@ pub fn likelihood(
                 return Err(parameter());
             }
             let maximum = y.iter().copied().fold(0.0, f64::max);
-            if maximum >= MAX_REGRESSION_CATEGORIES as f64 {
+            if maximum >= n as f64 {
                 return Err(parameter());
             }
             categories = maximum as usize + 1;
-            if !(2..=MAX_REGRESSION_CATEGORIES).contains(&categories)
-                || (0..categories).any(|c| !y.contains(&(c as f64)))
-            {
+            if categories < 2 || (0..categories).any(|c| !y.contains(&(c as f64))) {
                 return Err(parameter());
             }
         }
@@ -564,13 +553,10 @@ pub fn likelihood(
             if g.len() != n {
                 return Err(parameter());
             }
-            if g.iter().any(|&group| group >= MAX_REGRESSION_GROUPS) {
+            if g.iter().any(|&group| group >= n) {
                 return Err(parameter());
             }
             let count = g.iter().copied().max().ok_or_else(parameter)? + 1;
-            if count > MAX_REGRESSION_GROUPS {
-                return Err(parameter());
-            }
             group_rows = vec![vec![]; count];
             for (i, &j) in g.iter().enumerate() {
                 group_rows[j].push(i);
@@ -624,13 +610,15 @@ pub fn likelihood(
             | LikelihoodMethod::Beta
     ));
     let size = if options.method == LikelihoodMethod::MultinomialLogit {
-        (categories - 1) * p
+        (categories - 1).checked_mul(p).ok_or_else(parameter)?
     } else if options.method == LikelihoodMethod::OrdinalLogit {
-        p + categories - 1
+        p.checked_add(categories - 1).ok_or_else(parameter)?
     } else {
-        p + zp + extra
+        p.checked_add(zp)
+            .and_then(|p| p.checked_add(extra))
+            .ok_or_else(parameter)?
     };
-    if size > MAX_REGRESSION_PARAMETERS || n <= size {
+    if n <= size {
         return Err(parameter());
     }
     let mut initial = vec![0.0; size];

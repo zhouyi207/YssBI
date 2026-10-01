@@ -2,7 +2,6 @@
 use serde::Serialize;
 
 /// Bounds the number of pairwise rows in a Dagum report.
-pub const MAX_DAGUM_GROUPS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GiniResult {

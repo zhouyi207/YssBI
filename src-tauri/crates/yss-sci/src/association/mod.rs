@@ -67,9 +67,8 @@ fn paired(x: &[f64], y: &[f64], minimum: usize, control: &Control) -> Result<(),
     validate(y, minimum, control)
 }
 fn matrix(columns: &[Vec<f64>], minimum_columns: usize, control: &Control) -> Result<usize, Error> {
-    use yss_sci_contract::association::MAX_ASSOCIATION_RATERS;
     control.check()?;
-    if columns.len() < minimum_columns || columns.len() > MAX_ASSOCIATION_RATERS {
+    if columns.len() < minimum_columns {
         return Err(invalid());
     }
     let rows = columns[0].len();

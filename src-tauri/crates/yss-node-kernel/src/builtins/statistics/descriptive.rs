@@ -2,7 +2,6 @@ use super::common::{columns, group, text, value};
 use super::{Input, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::descriptive::MAX_DAGUM_GROUPS;
 use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
@@ -117,9 +116,6 @@ fn dagum_gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelErr
         {
             Some(index) => index,
             None => {
-                if labels.len() == MAX_DAGUM_GROUPS {
-                    return Err(KernelError::InvalidParameter);
-                }
                 labels.push(group);
                 labels.len() - 1
             }

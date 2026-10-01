@@ -10,13 +10,6 @@ pub fn canonical_correlation(
     control: &ScientificExecutionControl,
 ) -> Result<CanonicalOutput> {
     control.check()?;
-    if x_columns
-        .len()
-        .checked_add(y_columns.len())
-        .is_none_or(|n| n > MAX_CANONICAL_VARIABLES)
-    {
-        return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
-    }
     let x = prepare(x_columns, true, control)?;
     let y = prepare(y_columns, true, control)?;
     let n = x.matrix.nrows();

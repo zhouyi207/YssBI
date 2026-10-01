@@ -7,7 +7,7 @@ use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
     KernelRegistryBuilder, RuntimeValue,
 };
-use std::{cmp::Ordering, sync::Arc};
+use std::sync::Arc;
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::{execution::*, multivariate::*};
 use yss_sci_runtime::multivariate as sci;
@@ -29,14 +29,14 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "yssbi.statistics.multivariate.pca",
             Pca,
-            vec![Input::repeated("variables", 2..=MAX_MULTIVARIATE_VARIABLES)],
+            vec![Input::repeated("variables", 2..=usize::MAX)],
             &["components", "standardize"][..],
             2,
         ),
         (
             "yssbi.statistics.multivariate.exploratory_factor",
             Factor,
-            vec![Input::repeated("variables", 3..=MAX_MULTIVARIATE_VARIABLES)],
+            vec![Input::repeated("variables", 3..=usize::MAX)],
             &["components", "rotation", "max_iterations", "tolerance"][..],
             2,
         ),
@@ -44,8 +44,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "yssbi.statistics.association.canonical",
             Canonical,
             vec![
-                Input::repeated("x", 1..=MAX_CANONICAL_VARIABLES - 1),
-                Input::repeated("y", 1..=MAX_CANONICAL_VARIABLES - 1),
+                Input::repeated("x", 1..=usize::MAX),
+                Input::repeated("y", 1..=usize::MAX),
             ],
             &["components"][..],
             2,
@@ -53,10 +53,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "yssbi.statistics.multivariate.correspondence",
             Correspondence,
-            vec![Input::repeated(
-                "columns",
-                2..=MAX_CORRESPONDENCE_CATEGORIES,
-            )],
+            vec![Input::repeated("columns", 2..=usize::MAX)],
             &["components"][..],
             3,
         ),
@@ -65,8 +62,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             Discriminant,
             vec![
                 Input::fixed("groups"),
-                Input::repeated("variables", 1..=MAX_MULTIVARIATE_VARIABLES),
-                Input::repeated("new_variables", 0..=MAX_MULTIVARIATE_VARIABLES),
+                Input::repeated("variables", 1..=usize::MAX),
+                Input::repeated("new_variables", 0..=usize::MAX),
             ],
             &["discriminant_method", "class_priors", "shrinkage"][..],
             2,
@@ -75,8 +72,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "yssbi.statistics.multivariate.rda",
             Rda,
             vec![
-                Input::repeated("responses", 1..=MAX_MULTIVARIATE_VARIABLES),
-                Input::repeated("constraints", 1..=MAX_MULTIVARIATE_VARIABLES),
+                Input::repeated("responses", 1..=usize::MAX),
+                Input::repeated("constraints", 1..=usize::MAX),
             ],
             &["components", "standardize", "permutations", "seed"][..],
             2,
@@ -84,7 +81,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "yssbi.statistics.multivariate.mds",
             Mds,
-            vec![Input::repeated("variables", 1..=MAX_MDS_OBSERVATIONS)],
+            vec![Input::repeated("variables", 1..=usize::MAX)],
             &["components", "input_kind", "standardize"][..],
             2,
         ),
@@ -224,7 +221,6 @@ fn classification(
     control: &ScientificExecutionControl,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let input = selected(inv, &["groups", "variables"]);
-    let mut retained = 0usize;
     let typed = if input
         .iter()
         .all(|v| matches!(v.unannotated(), RuntimeValue::Series(_)))
@@ -260,38 +256,41 @@ fn classification(
             .map(|v| series::column(v, inv))
             .collect::<Result<Vec<_>, _>>()?
     };
-    let mut labels = Vec::<TabularScalar>::new();
-    let mut groups = inv.control.reserve(typed[0].values.len())?;
+    let mut retained = inv.control.check_bytes(
+        typed[0]
+            .values
+            .len()
+            .checked_mul(typed.len())
+            .and_then(|n| n.checked_mul(size_of::<TabularScalar>())),
+    )?;
     for (i, scalar) in typed[0].values.iter().enumerate() {
         if i.is_multiple_of(1024) {
             inv.check_control()?;
-        }
-        if matches!(scalar, TabularScalar::Null) {
-            return Err(KernelError::InvalidNumericInput);
         }
         if let TabularScalar::String(label) = scalar {
             retained = inv.control.check_bytes(
                 label
                     .len()
                     .checked_mul(8)
-                    .and_then(|n| retained.checked_add(n)),
+                    .and_then(|bytes| retained.checked_add(bytes)),
             )?;
         }
-        let index = match labels
-            .iter()
-            .position(|label| label.compare(scalar) == Some(Ordering::Equal))
-        {
-            Some(index) => index,
-            None => {
-                if labels.len() == MAX_DISCRIMINANT_CLASSES {
-                    return Err(KernelError::InvalidParameter);
-                }
-                labels.push(scalar.clone());
-                labels.len() - 1
-            }
-        };
-        groups.push(index);
     }
+    let (groups, labels) = super::common::categories(&typed[0], false, inv)?;
+    // Class-specific covariance factors and the confusion report have independent
+    // dimensions; admitting only the observation matrix misses many-class inputs.
+    let retained = inv.control.check_bytes((|| {
+        let classes = labels.len();
+        let p = typed.len().checked_sub(1)?;
+        let factors = classes.checked_mul(p)?.checked_mul(p)?.checked_mul(32)?;
+        let report = classes
+            .checked_mul(classes)?
+            .checked_add(classes.checked_mul(p)?)?
+            .checked_mul(
+                super::common::STRUCTURED_VALUE_BYTES * super::common::STRUCTURED_VALUE_COPIES,
+            )?;
+        retained.checked_add(factors)?.checked_add(report)
+    })())?;
     workspace(inv, groups.len(), typed.len(), 1, false, retained)?;
     let mut variables = Vec::new();
     for column in &typed[1..] {
@@ -374,7 +373,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
         return classification(inv, &control);
     }
     let k = integer(inv, "components")?;
-    if !(1..=MAX_MULTIVARIATE_VARIABLES).contains(&k) {
+    if k == 0 {
         return Err(KernelError::InvalidParameter);
     }
     let data = numeric(

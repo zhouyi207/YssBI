@@ -1,6 +1,6 @@
 # Factorial ANOVA
 
-Provide one numeric **Response** and 1–8 **Factor** series; numeric factor values are category codes. Columns must align row by row and relational series must share a row domain. Missing values are rejected. Each factor needs 2–32 observed levels; the design must have full rank, include an intercept and have at most 256 columns, with more observations than columns and positive residual variance.
+Provide one numeric **Response** and one or more **Factor** series; numeric factor values are category codes. Columns must align row by row and relational series must share a row domain. Missing values are rejected. Each factor needs at least two observed levels; the design must have full rank, include an intercept, with more observations than columns and positive residual variance.
 
 **Factor terms** defaults to `full_factorial`, testing all main effects and interactions of every order; `main_effects` fits additive effects. **Sums of squares** defaults to `type_iii`: I is sequential, ordering main effects by input position before interactions of increasing order; II adjusts for other terms except higher-order relatives; III adjusts for all other terms. Sum-to-zero contrasts make type III main effects comparisons of equally weighted marginal category means. Type I depends on order; types II and III answer different questions in the presence of interactions.
 

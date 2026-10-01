@@ -1,6 +1,6 @@
 # Discriminant analysis
 
-Provide aligned training **Class** labels and 1–16 numeric **Training variable** series. Labels accept materializable base scalars and are grouped exactly by value. Missing labels are rejected. Support 2–8 classes with at least 2 observations each; relational training inputs must share a row domain.
+Provide aligned training **Class** labels and one or more numeric **Training variable** series. Labels accept materializable base scalars and are grouped exactly by value. Missing labels are rejected. Support at least two classes with at least 2 observations each; relational training inputs must share a row domain.
 
 Optional **New variable** inputs must match training variables in count, order and meaning. New observations may come from another row domain, but their columns must align internally. Without new data, predictions classify training observations. Missing numbers and constant training variables are rejected.
 

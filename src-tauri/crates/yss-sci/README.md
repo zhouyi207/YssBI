@@ -177,7 +177,9 @@ Arrow or backend-specific type crosses the neutral scientific result contract.
 `anova` owns sum-contrast categorical designs with additive centered ANCOVA
 covariates. Main-effect/full-factorial models support type I sequential, type II
 marginality and type III adjusted nested-model tests, sharing checked rank and
-Cholesky least squares from Linalg. Full designs must be identifiable with positive
+Cholesky least squares from Linalg. Factor terms use dynamic index sets, including
+additive designs with more than 64 factors, and generate interactions on demand.
+Full designs must be identifiable with positive
 residual degrees of freedom; missing/nonfinite observations are rejected.
 
 MANOVA reuses those designs and residual SSCP matrices, whitens each hypothesis
@@ -205,7 +207,7 @@ overall mean are rejected.
 shares, subgroup statistics and pairwise rows through `yss-sci-contract::descriptive`.
 Directed differences are integrated over merged sorted group samples without an
 observation-pair matrix. Complexity is O(n log n + kn) for n observations and k groups;
-the report supports at most 64 groups. Undefined zero-subgroup statistics and zero-Gini
+group-pair output is admitted against the caller's workspace budget. Undefined zero-subgroup statistics and zero-Gini
 contribution shares use `None`, not NaN. Sorting boundaries, input scans and numerical
 loops check cancellation/deadlines. Sort itself is not cooperatively interruptible.
 
@@ -224,7 +226,8 @@ Runtime forwards functions and execution control. KDE, Pearson correlation and
 ACF/PACF reuse their existing numerical owners. Node Kernel prepares tabular inputs;
 D3 owns pixels, axes, colors and word placement. SCI retains no graph or window state.
 
-Distribution summaries and ROC AUC use complete samples. Point displays are bounded
+Coefficient and Pareto results retain every term/category; the presentation layer
+paginates those displays. Distribution summaries and ROC AUC use complete samples. Point displays are bounded
 at 2048, heatmaps at 128 rows and grouped displays at 64 columns; sampling metadata
 preserves original observation counts. Coefficient intervals consume fitted model
 facts and residual degrees of freedom without refitting.

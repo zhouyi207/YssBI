@@ -1,6 +1,6 @@
 # Canonical correlation
 
-Provide aligned numeric **X variable** and **Y variable** groups, at least one column each and at most 16 combined. Relational inputs must share a row domain. Missing values, constant columns and within-group rank deficiency are rejected. With $p,q$ variables, require $n>p+q$ observations. **Retained dimensions** defaults to 1, with $1\le k\le\min(p,q)$.
+Provide aligned numeric **X variable** and **Y variable** groups, at least one column each. Relational inputs must share a row domain. Missing values, constant columns and within-group rank deficiency are rejected. With $p,q$ variables, require $n>p+q$ observations. **Retained dimensions** defaults to 1, with $1\le k\le\min(p,q)$.
 
 Variables are standardized using sample means and standard deviations. Whitening correlation blocks $R_{xx},R_{yy},R_{xy}$ gives canonical correlations $\rho_i$ and coefficients $a_i,b_i$:
 

@@ -50,9 +50,6 @@ pub fn word_cloud(
 
 pub fn pareto(labels: &[String], control: &ScientificExecutionControl) -> Result<ParetoPlot> {
     let counts = counts(labels, control)?;
-    if counts.len() > MAX_PLOT_WORDS {
-        return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
-    }
     let mut cumulative = 0usize;
     let data = counts
         .into_iter()

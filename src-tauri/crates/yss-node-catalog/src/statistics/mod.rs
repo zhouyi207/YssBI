@@ -523,7 +523,7 @@ fn configure_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAssembl
     let mut parameters = vec![toggle_parameter("constant", true)?];
     match family {
         Family::Logit | Family::Probit => {
-            parameters.push(bounded_integer_parameter("max_iterations", 100, 1, 10000)?);
+            parameters.push(positive_integer_parameter("max_iterations", 100)?);
             parameters.push(tolerance_parameter("0.00000001")?);
         }
         Family::Iv2sls | Family::IvLiml => {
@@ -564,7 +564,7 @@ fn configure_parameters(family: Family) -> Result<Vec<Parameter>, BuiltinAssembl
                 "prais_winsten",
                 &["prais_winsten", "cochrane_orcutt"],
             )?);
-            parameters.push(bounded_integer_parameter("max_iterations", 100, 1, 10000)?);
+            parameters.push(positive_integer_parameter("max_iterations", 100)?);
             parameters.push(tolerance_parameter("0.000001")?);
         }
         _ => {}

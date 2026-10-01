@@ -1,12 +1,11 @@
 use super::{
     Input,
-    common::{boolean, integer, number, text, value},
+    common::{boolean, categories, integer, number, numeric, text, value},
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
     KernelRegistryBuilder, RuntimeValue,
 };
-use yss_data_contract::{SemanticType, TabularScalar};
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
@@ -59,7 +58,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             if single {
                 Input::fixed("predictor")
             } else {
-                Input::repeated("predictors", 1..=MAX_REGRESSION_PREDICTORS)
+                Input::repeated("predictors", 1..=usize::MAX)
             },
         ];
         if matches!(
@@ -75,10 +74,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             method,
             "regression.zero_inflated_poisson" | "regression.zero_inflated_negative_binomial"
         ) {
-            inputs.push(Input::repeated(
-                "inflation_predictors",
-                0..=MAX_REGRESSION_PREDICTORS,
-            ));
+            inputs.push(Input::repeated("inflation_predictors", 0..=usize::MAX));
         }
         let mut keys = vec![];
         if !matches!(
@@ -216,115 +212,13 @@ fn typed_columns(
     )?;
     inv.inputs.iter().map(|v| series::column(v, inv)).collect()
 }
-fn numeric(
-    column: &super::super::series::Column,
-    binary: bool,
-    inv: &KernelInvocation<'_>,
-) -> Result<Vec<f64>, KernelError> {
-    column
-        .values
-        .iter()
-        .enumerate()
-        .map(|(i, v)| {
-            if i % 1024 == 0 {
-                inv.check_control()?;
-            }
-            if binary && let TabularScalar::Bool(v) = v {
-                return Ok(f64::from(u8::from(*v)));
-            }
-            super::super::numeric_input(Some(&RuntimeValue::Scalar(v.clone())))
-        })
-        .collect()
-}
-fn category_code(v: &TabularScalar) -> Result<String, KernelError> {
-    Ok(match v {
-        TabularScalar::Null => return Err(KernelError::InvalidNumericInput),
-        TabularScalar::Bool(v) => v.to_string(),
-        TabularScalar::Integer(v) => v.to_string(),
-        TabularScalar::Unsigned(v) => v.to_string(),
-        TabularScalar::Float64(v) => v.as_f64().to_string(),
-        TabularScalar::String(v) => v.to_string(),
-    })
-}
-fn categories(
-    column: &super::super::series::Column,
-    ordered: bool,
-    max: usize,
-    inv: &KernelInvocation<'_>,
-) -> Result<(Vec<usize>, Vec<TabularScalar>), KernelError> {
-    let mut labels: Vec<TabularScalar> = vec![];
-    for (i, v) in column.values.iter().enumerate() {
-        if i % 1024 == 0 {
-            inv.check_control()?;
-        }
-        if matches!(v, TabularScalar::Null) {
-            return Err(KernelError::InvalidNumericInput);
-        }
-        if !labels
-            .iter()
-            .any(|s| s.compare(v) == Some(std::cmp::Ordering::Equal))
-        {
-            if labels.len() == max {
-                return Err(KernelError::InvalidParameter);
-            }
-            labels.push(v.clone());
-        }
-    }
-    if ordered {
-        if let Some(metadata) = column
-            .metadata
-            .as_ref()
-            .filter(|m| m.semantic.kind == SemanticType::Ordinal)
-        {
-            let order = metadata
-                .semantic
-                .values
-                .iter()
-                .map(|v| v.value.as_str())
-                .collect::<Vec<_>>();
-            let codes = labels
-                .iter()
-                .map(category_code)
-                .collect::<Result<Vec<_>, _>>()?;
-            if order.is_empty() || codes.iter().any(|c| !order.contains(&c.as_str())) {
-                return Err(KernelError::InvalidParameter);
-            }
-            labels.sort_by_key(|v| {
-                order
-                    .iter()
-                    .position(|&code| code == category_code(v).expect("validated category"))
-                    .expect("declared category")
-            });
-        } else {
-            if labels.iter().any(|v| matches!(v, TabularScalar::String(_)))
-                || labels
-                    .first()
-                    .is_some_and(|a| labels.iter().any(|b| a.compare(b).is_none()))
-            {
-                return Err(KernelError::InvalidParameter);
-            }
-            labels.sort_by(|a, b| a.compare(b).expect("comparable categories"));
-        }
-    }
-    let codes = column
-        .values
-        .iter()
-        .map(|v| {
-            labels
-                .iter()
-                .position(|s| s.compare(v) == Some(std::cmp::Ordering::Equal))
-                .ok_or(KernelError::InvalidNumericInput)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok((codes, labels))
-}
+
 fn list(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<f64>, KernelError> {
     let Some(RuntimeValue::List(v)) = inv.parameter(key).map(RuntimeValue::unannotated) else {
         return Err(KernelError::InvalidParameter);
     };
-    if v.len() > MAX_REGRESSION_PARAMETERS {
-        return Err(KernelError::InvalidParameter);
-    }
+    inv.control
+        .check_bytes(v.len().checked_mul(size_of::<f64>()))?;
     v.iter()
         .map(|v| super::super::numeric_input(Some(v)).map_err(|_| KernelError::InvalidParameter))
         .collect()
@@ -376,12 +270,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         "regression.logit.multinomial" | "regression.logit.ordinal"
     );
     let (y, labels) = if categorical {
-        let (codes, labels) = categories(
-            response,
-            method.ends_with("ordinal"),
-            MAX_REGRESSION_CATEGORIES,
-            inv,
-        )?;
+        let (codes, labels) = categories(response, method.ends_with("ordinal"), inv)?;
         (codes.into_iter().map(|v| v as f64).collect(), labels)
     } else {
         let binary = matches!(
@@ -394,7 +283,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         .input_keys
         .iter()
         .position(|k| *k == "groups")
-        .map(|i| categories(&data[i], false, MAX_REGRESSION_GROUPS, inv))
+        .map(|i| categories(&data[i], false, inv))
         .transpose()?;
     budget::check(
         method,
@@ -538,9 +427,10 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             let sizes = if sizes.is_empty() {
                 vec![1; predictors.len()]
             } else {
-                if sizes.iter().any(|v| {
-                    v.fract() != 0.0 || !(1.0..=MAX_REGRESSION_PREDICTORS as f64).contains(v)
-                }) {
+                if sizes
+                    .iter()
+                    .any(|v| v.fract() != 0.0 || !(1.0..=predictors.len() as f64).contains(v))
+                {
                     return Err(KernelError::InvalidParameter);
                 }
                 sizes.iter().map(|v| *v as usize).collect()

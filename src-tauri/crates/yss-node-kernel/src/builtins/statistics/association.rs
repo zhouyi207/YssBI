@@ -45,7 +45,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             vec![
                 Input::fixed("x"),
                 Input::fixed("y"),
-                Input::repeated("controls", 1..=MAX_ASSOCIATION_CONTROLS),
+                Input::repeated("controls", 1..=usize::MAX),
             ],
             &["alternative", "confidence_level"][..],
             &[][..],
@@ -67,14 +67,14 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "test.kappa",
             Kappa,
-            vec![Input::repeated("ratings", 2..=MAX_ASSOCIATION_RATERS)],
+            vec![Input::repeated("ratings", 2..=usize::MAX)],
             &["kappa_method", "kappa_weighting", "confidence_level"][..],
             &["kappa_weighting"][..],
         ),
         (
             "association.icc",
             Icc,
-            vec![Input::repeated("ratings", 2..=MAX_ASSOCIATION_RATERS)],
+            vec![Input::repeated("ratings", 2..=usize::MAX)],
             &["icc_type", "confidence_level"][..],
             &[][..],
         ),
@@ -88,7 +88,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "test.kendall_w",
             KendallW,
-            vec![Input::repeated("ratings", 2..=MAX_ASSOCIATION_RATERS)],
+            vec![Input::repeated("ratings", 2..=usize::MAX)],
             &[][..],
             &[][..],
         ),
@@ -102,7 +102,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "association.rwg",
             Rwg,
-            vec![Input::repeated("items", 1..=MAX_ASSOCIATION_RATERS)],
+            vec![Input::repeated("items", 1..=usize::MAX)],
             &["null_distribution", "scale_points", "expected_variance"][..],
             &["scale_points", "expected_variance"][..],
         ),
@@ -349,9 +349,6 @@ fn encode_categories(
     };
     let mut labels = Vec::<TabularScalar>::new();
     if let Some(order) = declared {
-        if order.len() > MAX_ASSOCIATION_CATEGORIES {
-            return Err(KernelError::InvalidNumericInput);
-        }
         let example = columns[0]
             .values
             .iter()
@@ -374,9 +371,6 @@ fn encode_categories(
                     .iter()
                     .any(|label| label.compare(scalar) == Some(std::cmp::Ordering::Equal))
                 {
-                    if labels.len() == MAX_ASSOCIATION_CATEGORIES {
-                        return Err(KernelError::InvalidNumericInput);
-                    }
                     labels.push(scalar.clone());
                 }
             }
@@ -505,6 +499,29 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             let columns = typed_columns(inv, true)?;
             let (ratings, labels) =
                 encode_categories(inv, &columns, weighting != KappaWeighting::None)?;
+            // Cohen's contingency table and weights grow with categories squared;
+            // Fleiss keeps rater/category counts instead of a dense category table.
+            inv.control.check_bytes((|| {
+                let categories = labels.len();
+                let rows = ratings.first()?.len();
+                let input = rows
+                    .checked_mul(ratings.len())?
+                    .checked_mul(size_of::<RuntimeValue>() * 8)?;
+                let counts = categories.checked_mul(ratings.len())?.checked_mul(8)?;
+                let table = if kind == KappaMethod::Cohen {
+                    categories.checked_mul(categories)?.checked_mul(
+                        super::common::STRUCTURED_VALUE_BYTES
+                            * super::common::STRUCTURED_VALUE_COPIES
+                            + 32,
+                    )?
+                } else {
+                    0
+                };
+                input
+                    .checked_add(counts)?
+                    .checked_add(table)?
+                    .checked_add(categories.checked_mul(1024)?)
+            })())?;
             let options = KappaOptions {
                 method: kind,
                 weighting,
@@ -554,6 +571,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
         Ridit => {
             let columns = typed_columns(inv, false)?;
             let (codes, labels) = encode_categories(inv, &columns, true)?;
+            inv.control.check_bytes(labels.len().checked_mul(8192))?;
             value(
                 sci::ridit(
                     &codes[0],

@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 use yss_data_contract::{ColumnSemantic, ConversionMetadata, SemanticValue, ValueType};
+use yss_data_contract::{SemanticType, TabularScalar};
 
 fn control() -> KernelControl {
     KernelControl::new(

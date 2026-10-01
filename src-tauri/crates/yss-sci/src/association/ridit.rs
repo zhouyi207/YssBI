@@ -1,5 +1,5 @@
 use super::*;
-use yss_sci_contract::association::{MAX_ASSOCIATION_CATEGORIES, RiditCategory, RiditResult};
+use yss_sci_contract::association::{RiditCategory, RiditResult};
 
 pub fn ridit(
     sample: &[usize],
@@ -10,11 +10,7 @@ pub fn ridit(
     control: &Control,
 ) -> Result<RiditResult, Error> {
     control.check()?;
-    if sample.is_empty()
-        || reference.is_empty()
-        || categories == 0
-        || categories > MAX_ASSOCIATION_CATEGORIES
-    {
+    if sample.is_empty() || reference.is_empty() || categories == 0 {
         return Err(invalid());
     }
     let mut a = vec![0usize; categories];

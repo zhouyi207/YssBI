@@ -1,8 +1,6 @@
 //! Inequality measures for individual observations or population-weighted group means.
 use std::collections::BTreeMap;
-use yss_sci_contract::descriptive::{
-    DagumGroup, DagumPair, DagumResult, GiniResult, MAX_DAGUM_GROUPS,
-};
+use yss_sci_contract::descriptive::{DagumGroup, DagumPair, DagumResult, GiniResult};
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl, ScientificInputViolation,
 };
@@ -37,11 +35,6 @@ pub fn dagum_gini(
     for (i, (&value, &group)) in values.iter().zip(groups).enumerate() {
         if i % 1024 == 0 {
             control.check()?;
-        }
-        if !samples.contains_key(&group) && samples.len() == MAX_DAGUM_GROUPS {
-            return Err(Error::InvalidInput {
-                violation: ScientificInputViolation::ParameterOutOfRange,
-            });
         }
         samples.entry(group).or_default().push(value);
     }

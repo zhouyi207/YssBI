@@ -71,18 +71,18 @@ KDE 默认 256 个网格点，系数图接收线性 Fit 的 OLS/WLS/GLS 模型�
 | 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等               |
 
 “方差分析”的七个既有入口均由 `statistics/anova.rs` 完善为可执行节点，保留原 ID。
-单因素、双因素和三因素分别要求 1、2、3 个分类因素；多因素与 ANCOVA/MANOVA 支持 1–8 个因素。
-因素输入接受数值编码、分类、有序、二元、文本及标识符数列，每项有 2–32 个观测类别。
-多因素模型可选主效应或完整因素交互及 I/II/III 型平方和，默认完整交互与 III 型；设计含截距且最多 256 列，秩亏或无残差自由度明确拒绝。
-ANCOVA 另接 1–32 个连续协变量，使用中心化的加性平行斜率；MANOVA 接 2–16 个响应，输出 Wilks/Pillai/Hotelling–Lawley/Roy 检验和 SSCP。
-重复测量使用长表的 response、subjects 与 1–4 个受试者内因素，要求每个受试者在全部组合上恰好一行、最多 256 个组合，默认 Greenhouse–Geisser 校正。
+单因素、双因素和三因素分别要求 1、2、3 个分类因素；多因素与 ANCOVA/MANOVA 支持一个或多个因素。
+因素输入接受数值编码、分类、有序、二元、文本及标识符数列，每项有 至少两个观测类别。
+多因素模型可选主效应或完整因素交互及 I/II/III 型平方和，默认完整交互与 III 型；设计含截距，秩亏或无残差自由度明确拒绝。
+ANCOVA 另接 至少一个连续协变量，使用中心化的加性平行斜率；MANOVA 接 至少两个响应，输出 Wilks/Pillai/Hotelling–Lawley/Roy 检验和 SSCP。
+重复测量使用长表的 response、subjects 与 一个或多个受试者内因素，要求每个受试者在全部组合上恰好一行，默认 Greenhouse–Geisser 校正。
 七者均只输出可由 Inspect 查看数值与 JSON 的结构化 `result`，完整中英文帮助由 `src/documentation.rs` 映射。
 
 “多元分析”的七个既有 ID 由 `statistics/multivariate.rs` 完善：典型相关、探索性因子、PCA、对应分析、判别分析、RDA 和 MDS。
 典型相关保留 `yssbi.statistics.association.canonical`，目录位置为 `statistics.multivariate`；聚类与分层聚类仍属于机器学习分类。
 每个节点输出结构化 `result`；PCA、主轴因子、CCA 和 RDA 另有得分表，CA 有行/列主坐标表，经典 MDS 有坐标表，LDA/QDA 有保留原类别语义的预测数列。
 得分与坐标字段由 `components` 参数在 Graph 中推导，编辑不扫描数据；可继续选列及绘图，观测得分不塞入摘要 JSON。CCA 将 X/Y 得分置于同一表以保留可证明的相互对齐。
-数值变量通常最多 16 列，CCA 两组合计最多 16，CA 最多 32 行/列，判别最多 8 类，经典 MDS 最多 512 点；计算仍受内存及执行控制约束。
+数值列、类别和观测数不设固定上限；保留维数由实际数据维度、秩及方法的可识别性确定，计算受内存预算及执行控制约束。
 PCA 支持相关/协方差形式；主轴因子支持无旋转/正交 varimax、KMO/Bartlett 与回归得分；LDA/QDA 支持先验、收缩和可选独立新数据；RDA 提供可复现行置换。
 各方法的范围、默认值、假设、报告口径与可连接数据输出见已注册的中英文 `multivariate_*.md` 帮助。
 
@@ -105,7 +105,7 @@ Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 ent
 
 泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
 
-Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistics.inequality.dagum_gini`，均已注册执行内核，使用个体等权、未经小样本修正的经验 Gini。Gini 输入 `series`；Dagum 另需同一行域的 `groups` 标签列，支持数值、文本、标识符及分类语义，最多 64 组。唯一结构化 `result` 可通过既有 Inspect 查看数值或报告；Dagum 返回组内、组间净差异、超变密度、贡献占比及分组/组对明细。全零子组的未定义 Gini 和零总体差异下的贡献占比保留为 null，非正总体均值拒绝计算。输入与解释见各节点中英文帮助。
+Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistics.inequality.dagum_gini`，均已注册执行内核，使用个体等权、未经小样本修正的经验 Gini。Gini 输入 `series`；Dagum 另需同一行域的 `groups` 标签列，支持数值、文本、标识符及分类语义。唯一结构化 `result` 可通过既有 Inspect 查看数值或报告；Dagum 返回组内、组间净差异、超变密度、贡献占比及分组/组对明细。全零子组的未定义 Gini 和零总体差异下的贡献占比保留为 null，非正总体均值拒绝计算。输入与解释见各节点中英文帮助。
 
 `statistics/association.rs` 完善原“相关与一致性”目录的 10 个 ID：Pearson、偏相关、Spearman、Kendall tau-b、Kappa、ICC、Bland–Altman、Kendall W、Ridit、rwg。全部只有结构化 `result`，复用 Inspect。配对和评定者列必须对齐，Ridit 的样本/参考总体允许独立读取。Spearman/Kendall/W 支持显式 Ordinal 顺序；Kappa 支持 Cohen（含线性/二次加权）和 Fleiss，ICC 显式选择六种常用模型/测量定义，rwg 显式选择均匀或指定方差的零假设。秩检验自动在不超过 9 个观测时使用精确位置置换，否则采用渐近方法；Bland–Altman 统计量用完整样本，展示点最多 2000 个。方法定义、样本要求与推断限制由 20 篇中英文节点帮助维护，不另建专用报告页面。
 工作流模板、模型预设、结果指标、统计专用绘图和原理说明也按本轮要求登记入口；该登记不表示模板执行、参数预设或绘图能力已经实现。普通数据处理、缺失数据处理、通用绘图和 AI 模块未纳入本轮统计入口。

@@ -127,22 +127,20 @@ pub fn grouped(
     if groups.len() != y.len() {
         return Err(parameter());
     }
-    if groups.iter().any(|&group| group >= MAX_REGRESSION_GROUPS) {
+    if groups.iter().any(|&group| group >= y.len()) {
         return Err(parameter());
     }
     let count = groups.iter().copied().max().ok_or_else(parameter)? + 1;
-    if count > MAX_REGRESSION_GROUPS {
-        return Err(parameter());
+    let mut grouped_rows = vec![Vec::new(); count];
+    for (i, &group) in groups.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            control.check()?;
+        }
+        grouped_rows[group].push(i);
     }
     let mut stages = vec![];
-    for group in 0..count {
+    for (group, rows) in grouped_rows.into_iter().enumerate() {
         control.check()?;
-        let rows = groups
-            .iter()
-            .enumerate()
-            .filter(|(_, g)| **g == group)
-            .map(|(i, _)| i)
-            .collect::<Vec<_>>();
         if rows.is_empty() {
             return Err(parameter());
         }

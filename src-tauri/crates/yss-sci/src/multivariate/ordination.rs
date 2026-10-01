@@ -59,9 +59,9 @@ pub fn correspondence(
     components: usize,
     control: &ScientificExecutionControl,
 ) -> Result<CorrespondenceOutput> {
-    let r = validate(columns, MAX_CORRESPONDENCE_CATEGORIES, control)?;
+    let r = validate(columns, control)?;
     let c = columns.len();
-    if r > MAX_CORRESPONDENCE_CATEGORIES || c < 2 {
+    if c < 2 {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }
     check_components(components, (r - 1).min(c - 1))?;
@@ -285,10 +285,7 @@ pub fn mds(
     options: MdsOptions,
     control: &ScientificExecutionControl,
 ) -> Result<OrdinationOutput<MdsReport>> {
-    let n = validate(columns, MAX_MDS_OBSERVATIONS, control)?;
-    if n > MAX_MDS_OBSERVATIONS {
-        return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
-    }
+    let n = validate(columns, control)?;
     check_components(options.components, n - 1)?;
     let (mut distances, scale) = match options.input {
         MdsInput::Observations => {

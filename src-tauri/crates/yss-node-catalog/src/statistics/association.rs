@@ -1,6 +1,5 @@
 //! Executable correlation and inter-rater agreement nodes.
 use super::*;
-use yss_sci_contract::association::{MAX_ASSOCIATION_CONTROLS, MAX_ASSOCIATION_RATERS};
 
 const SPECS: &[(&str, &str, &str, &str, &str, &str)] = &[
     (
@@ -218,7 +217,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                     _ => series_type()?,
                 },
                 2,
-                Some(MAX_ASSOCIATION_RATERS as u16),
+                None,
             )?],
             "ridit" => vec![
                 data_input("sample", "Ordered sample", rank_type()?)?,
@@ -229,7 +228,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "Scale item",
                 series_type()?,
                 1,
-                Some(MAX_ASSOCIATION_RATERS as u16),
+                None,
             )?],
             _ => unreachable!(),
         };
@@ -239,7 +238,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "Control variable",
                 series_type()?,
                 1,
-                Some(MAX_ASSOCIATION_CONTROLS as u16),
+                None,
             )?);
         }
         ports.push(data_output("result", "Result", report_type()?)?);

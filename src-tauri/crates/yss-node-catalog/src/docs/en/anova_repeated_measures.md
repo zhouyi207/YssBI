@@ -1,6 +1,6 @@
 # Repeated-measures ANOVA
 
-Provide long-format numeric **Response**, **Subject** identifiers and 1–4 within-subject **Factor** series. At least two subjects are required. Each factor needs 2–32 observed categories; every subject must have exactly one observation in every factorial cell, up to 256 cells. Columns must align and relational series must share a row domain. Missing values, duplicate cells and incomplete designs are rejected without implicit aggregation or deletion. This node analyzes within-subject factors, excluding between-subject and mixed designs.
+Provide long-format numeric **Response**, **Subject** identifiers and one or more within-subject **Factor** series. At least two subjects are required. Each factor needs at least two observed categories; every subject must have exactly one observation in every factorial cell. Columns must align and relational series must share a row domain. Missing values, duplicate cells and incomplete designs are rejected without implicit aggregation or deletion. This node analyzes within-subject factors, excluding between-subject and mixed designs.
 
 All main effects and interactions are tested. Each term's $H_0$ sets all corresponding within-subject contrast means to zero, versus at least one nonzero mean. Orthogonal contrasts separate effects from their subject-interaction errors:
 

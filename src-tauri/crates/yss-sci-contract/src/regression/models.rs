@@ -1,11 +1,6 @@
 //! Options and structured results for regression estimators and model-building workflows.
 use serde::{Deserialize, Serialize};
 
-pub const MAX_REGRESSION_PREDICTORS: usize = 16;
-pub const MAX_REGRESSION_PARAMETERS: usize = 64;
-pub const MAX_REGRESSION_CATEGORIES: usize = 8;
-pub const MAX_REGRESSION_GROUPS: usize = 64;
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IterationOptions {
     pub max_iterations: usize,
@@ -125,7 +120,7 @@ pub enum SelectionCriterion {
     Bic,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RegressionCoefficient {
     pub term: String,
     pub estimate: f64,

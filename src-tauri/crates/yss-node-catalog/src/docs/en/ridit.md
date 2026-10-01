@@ -1,6 +1,6 @@
 # Ridit analysis
 
-Connect an ordered **Sample** and **Reference**. Each is a Numeric category code series or an Ordinal series with an explicit level order. Samples may have different lengths and come from separate populations; they are not treated as paired observations. Both must be nonempty and complete, with at most 256 categories. Ordinal inputs require the same declared code order. Numerical codes are ordered increasingly.
+Connect an ordered **Sample** and **Reference**. Each is a Numeric category code series or an Ordinal series with an explicit level order. Samples may have different lengths and come from separate populations; they are not treated as paired observations. Both must be nonempty and complete. Ordinal inputs require the same declared code order. Numerical codes are ordered increasingly.
 
 For reference category proportion $p_j$,
 

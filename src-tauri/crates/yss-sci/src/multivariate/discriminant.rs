@@ -16,7 +16,8 @@ pub fn discriminant(
     if groups.len() != n {
         return Err(invalid(ScientificInputViolation::ShapeMismatch));
     }
-    if !(2..=MAX_DISCRIMINANT_CLASSES).contains(&class_count)
+    if class_count < 2
+        || class_count > groups.len()
         || !options.shrinkage.is_finite()
         || !(0.0..=1.0).contains(&options.shrinkage)
     {
@@ -153,7 +154,7 @@ pub fn discriminant(
         if columns.len() != p {
             return Err(invalid(ScientificInputViolation::ShapeMismatch));
         }
-        let count = validate(columns, MAX_MULTIVARIATE_VARIABLES, control)?;
+        let count = validate(columns, control)?;
         let mut data = Mat::zeros(count, p);
         for i in 0..count {
             if i.is_multiple_of(1024) {

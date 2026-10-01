@@ -406,7 +406,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.kruskal_wallis",
-        vec![Input::repeated("groups", 2..=16)],
+        vec![Input::repeated("groups", 2..=usize::MAX)],
         &[],
         1,
         |inv| {
@@ -417,7 +417,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.mood_median",
-        vec![Input::repeated("groups", 2..=16)],
+        vec![Input::repeated("groups", 2..=usize::MAX)],
         &[],
         1,
         |inv| {
@@ -428,7 +428,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.friedman",
-        vec![Input::repeated("conditions", 3..=16)],
+        vec![Input::repeated("conditions", 3..=usize::MAX)],
         &[],
         1,
         |inv| {
@@ -439,7 +439,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.cochran_q",
-        vec![Input::repeated("conditions", 3..=16)],
+        vec![Input::repeated("conditions", 3..=usize::MAX)],
         &[],
         1,
         |inv| {
@@ -481,7 +481,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.nonparametric.family",
-        vec![Input::repeated("groups", 2..=16)],
+        vec![Input::repeated("groups", 2..=usize::MAX)],
         &["method"],
         1,
         |inv| {
@@ -508,7 +508,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.levene",
-        vec![Input::repeated("groups", 2..=16)],
+        vec![Input::repeated("groups", 2..=usize::MAX)],
         &[],
         1,
         |inv| {
@@ -523,7 +523,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.brown_forsythe",
-        vec![Input::repeated("groups", 2..=16)],
+        vec![Input::repeated("groups", 2..=usize::MAX)],
         &[],
         1,
         |inv| {
@@ -538,7 +538,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.test.bartlett",
-        vec![Input::repeated("groups", 2..=16)],
+        vec![Input::repeated("groups", 2..=usize::MAX)],
         &[],
         1,
         |inv| {

@@ -6,25 +6,34 @@ use yss_sci_contract::execution::{
 use yss_sci_contract::regression::models::*;
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 
-pub(super) type Result<T> = std::result::Result<T, Error>;
-pub(super) fn invalid(violation: Violation) -> Error {
+pub(crate) type Result<T> = std::result::Result<T, Error>;
+pub(crate) fn invalid(violation: Violation) -> Error {
     Error::InvalidInput { violation }
 }
-pub(super) fn parameter() -> Error {
+pub(crate) fn parameter() -> Error {
     invalid(Violation::ParameterOutOfRange)
 }
-pub(super) fn failed() -> Error {
+pub(crate) fn failed() -> Error {
     Error::ComputationFailed
 }
-pub(super) fn finite(value: f64) -> Result<f64> {
+pub(crate) fn finite(value: f64) -> Result<f64> {
     if value.is_finite() {
         Ok(value)
     } else {
         Err(failed())
     }
 }
-pub(super) fn check_iteration(options: IterationOptions) -> Result<()> {
-    if !(1..=10000).contains(&options.max_iterations)
+pub(crate) fn normal_log_cdf(z: f64) -> f64 {
+    if z < -10.0 {
+        let t = 1.0 / (z * z);
+        -0.5 * z * z - (-z).ln() - 0.5 * (2.0 * std::f64::consts::PI).ln()
+            + (1.0 - t + 3.0 * t * t - 15.0 * t.powi(3) + 105.0 * t.powi(4)).ln()
+    } else {
+        Normal::new(0.0, 1.0).expect("normal").cdf(z).ln()
+    }
+}
+pub(crate) fn check_iteration(options: IterationOptions) -> Result<()> {
+    if options.max_iterations == 0
         || !options.tolerance.is_finite()
         || !(1e-12..=0.01).contains(&options.tolerance)
     {
@@ -32,13 +41,12 @@ pub(super) fn check_iteration(options: IterationOptions) -> Result<()> {
     }
     Ok(())
 }
-pub(super) fn validate(y: &[f64], predictors: &[Vec<f64>], control: &Control) -> Result<()> {
+pub(crate) fn validate(y: &[f64], predictors: &[Vec<f64>], control: &Control) -> Result<()> {
     control.check()?;
     if y.is_empty() {
         return Err(invalid(Violation::EmptyInput));
     }
-    if predictors.len() > MAX_REGRESSION_PREDICTORS || predictors.iter().any(|x| x.len() != y.len())
-    {
+    if predictors.iter().any(|x| x.len() != y.len()) {
         return Err(invalid(Violation::ShapeMismatch));
     }
     for x in std::iter::once(y).chain(predictors.iter().map(Vec::as_slice)) {
@@ -69,7 +77,7 @@ pub(super) fn median(x: &[f64]) -> f64 {
         x[n / 2]
     }
 }
-pub(super) fn names(p: usize, constant: bool) -> Vec<String> {
+pub(crate) fn names(p: usize, constant: bool) -> Vec<String> {
     (0..p + usize::from(constant))
         .map(|i| {
             if constant && i == 0 {
@@ -80,7 +88,7 @@ pub(super) fn names(p: usize, constant: bool) -> Vec<String> {
         })
         .collect()
 }
-pub(super) struct Design {
+pub(crate) struct Design {
     pub x: Mat<f64>,
     pub means: Vec<f64>,
     pub scales: Vec<f64>,
@@ -97,7 +105,7 @@ impl Design {
     ) -> Result<Self> {
         control.check()?;
         let p = predictors.len() + usize::from(constant);
-        if p == 0 || p > MAX_REGRESSION_PARAMETERS || n < 2 || (rank && n <= p) {
+        if p == 0 || n < 2 || (rank && n <= p) {
             return Err(parameter());
         }
         let mut means = Vec::with_capacity(predictors.len());
@@ -167,7 +175,7 @@ pub(super) fn transform(
     let covariance = covariance.map(|c| j.as_ref() * c.as_ref() * j.transpose());
     (b.iter().copied().collect(), covariance)
 }
-pub(super) fn fitted(x: &Mat<f64>, beta: &[f64]) -> Vec<f64> {
+pub(crate) fn fitted(x: &Mat<f64>, beta: &[f64]) -> Vec<f64> {
     (0..x.nrows())
         .map(|i| (0..x.ncols()).map(|j| x[(i, j)] * beta[j]).sum())
         .collect()
@@ -196,12 +204,12 @@ pub(super) fn gram(x: &Mat<f64>, weights: Option<&[f64]>, control: &Control) -> 
     }
     Ok(a)
 }
-pub(super) fn inverse(a: &Mat<f64>) -> Result<Mat<f64>> {
+pub(crate) fn inverse(a: &Mat<f64>) -> Result<Mat<f64>> {
     a.checked_cholesky()
         .map_err(|_| failed())
         .map(|f| f.solve(&Mat::identity(a.ncols(), a.ncols())))
 }
-pub(super) fn least_squares(
+pub(crate) fn least_squares(
     x: &Mat<f64>,
     y: &[f64],
     weights: Option<&[f64]>,
@@ -220,7 +228,7 @@ pub(super) fn least_squares(
     }
     Ok((beta.iter().copied().collect(), inv))
 }
-pub(super) fn coefficient_table(
+pub(crate) fn coefficient_table(
     beta: &[f64],
     names: Vec<String>,
     covariance: Option<&Mat<f64>>,
@@ -348,7 +356,7 @@ pub(super) fn result(
         details,
     })
 }
-pub(super) fn ols(
+pub(crate) fn ols(
     y: &[f64],
     predictors: &[Vec<f64>],
     constant: bool,
@@ -432,7 +440,7 @@ pub(super) fn likelihood_statistics(r: &mut RegressionModelResult, ll: f64, para
     r.statistics.aic = Some(-2.0 * ll + 2.0 * parameters as f64);
     r.statistics.bic = Some(-2.0 * ll + (r.observations as f64).ln() * parameters as f64);
 }
-pub(super) struct Minimum {
+pub(crate) struct Minimum {
     pub beta: Vec<f64>,
     pub value: f64,
     pub iterations: usize,
@@ -456,7 +464,7 @@ pub(super) fn gradient(
     }
     Ok(g)
 }
-pub(super) fn minimize(
+pub(crate) fn minimize(
     f: &impl Fn(&[f64]) -> Result<f64>,
     initial: Vec<f64>,
     options: IterationOptions,
@@ -465,7 +473,7 @@ pub(super) fn minimize(
     check_iteration(options)?;
     control.check()?;
     let p = initial.len();
-    if p == 0 || p > MAX_REGRESSION_PARAMETERS {
+    if p == 0 {
         return Err(parameter());
     }
     let mut beta = initial;
@@ -538,7 +546,7 @@ pub(super) fn minimize(
     }
     Err(failed())
 }
-pub(super) fn hessian(
+pub(crate) fn hessian(
     f: &impl Fn(&[f64]) -> Result<f64>,
     beta: &[f64],
     control: &Control,

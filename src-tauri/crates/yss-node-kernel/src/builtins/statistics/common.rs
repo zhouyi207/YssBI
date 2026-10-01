@@ -3,6 +3,8 @@ use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
 
 mod finite;
+mod inputs;
+pub(super) use inputs::{categories, materialize, numeric};
 
 // Charge the temporary JSON representation and the resulting runtime containers together.
 pub(super) const STRUCTURED_VALUE_BYTES: usize = 128;
@@ -129,6 +131,12 @@ pub(super) fn decode_model<T: serde::de::DeserializeOwned>(
     inv: &KernelInvocation<'_>,
 ) -> Result<T, KernelError> {
     let model = inv.inputs.first().ok_or(KernelError::InvalidNumericInput)?;
+    decode_model_value(model, inv)
+}
+pub(super) fn decode_model_value<T: serde::de::DeserializeOwned>(
+    model: &RuntimeValue,
+    inv: &KernelInvocation<'_>,
+) -> Result<T, KernelError> {
     if !matches!(model, RuntimeValue::Record(_)) {
         return Err(KernelError::InvalidNumericInput);
     }

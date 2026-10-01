@@ -387,7 +387,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "Independent samples",
                 series_type()?,
                 2,
-                Some(16),
+                None,
             )?],
             "wilcoxon_one" | "runs" | "mann_kendall" => {
                 vec![data_input("series", "Observations", series_type()?)?]
@@ -401,7 +401,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "Repeated conditions",
                 series_type()?,
                 3,
-                Some(16),
+                None,
             )?],
             _ => unreachable!(),
         };

@@ -8,4 +8,4 @@ $$F=\frac{SS_{\mathrm{between}}/(k-1)}{SS_{\mathrm{within}}/(n-k)}\sim F_{k-1,n-
 
 $n$ 为观测数，$k$ 为组数，组间与组内平方和分别表示组均值差异和组内变异。经典推断假定观测独立、各组误差近似正态且方差相同；该节点采用经典 ANOVA，不计算 Welch 检验。
 
-唯一 **Result** 包含 `table` 的平方和、自由度、均方、F、p 值与偏 $\eta^2=SS_{\mathrm{effect}}/(SS_{\mathrm{effect}}+SS_{\mathrm{error}})$，以及 `error`、总平方和、总自由度、$R^2$ 和原始因素标签。小 p 值支持组均值存在差异，不能据此判定具体哪两组不同。每个因素最多 32 个观测类别。
+唯一 **Result** 包含 `table` 的平方和、自由度、均方、F、p 值与偏 $\eta^2=SS_{\mathrm{effect}}/(SS_{\mathrm{effect}}+SS_{\mathrm{error}})$，以及 `error`、总平方和、总自由度、$R^2$ 和原始因素标签。小 p 值支持组均值存在差异，不能据此判定具体哪两组不同。
