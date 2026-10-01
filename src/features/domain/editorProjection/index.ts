@@ -5,6 +5,5 @@ export {
   pinDisplayTitle,
   resolveNodePinDisplayLabel,
 } from "./displayLabels";
-export { toProjectionEntities } from "./toProjectionEntities";
-export type * from "./types";
+export type * from "@/shared/types/domain/editorProjection";
 export type * from "./graphRuntimeTypes";

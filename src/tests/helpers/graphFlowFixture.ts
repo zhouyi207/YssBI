@@ -21,6 +21,8 @@ export function makeGraphFlowFixture(): GraphEntityBucket {
     basis: base.basis,
     outcome: base.outcome,
     diagnostics: [],
+    blockedConnectionIds: {},
+    primaryPortDiagnostics: {},
     hasBlockingDiagnostics: false,
     graphNodes: ["source", "target", "managed"],
     nodes: Object.fromEntries(

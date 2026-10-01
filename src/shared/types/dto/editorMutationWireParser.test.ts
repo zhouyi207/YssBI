@@ -1,6 +1,13 @@
 import { parseEditorGraphProjectionDto } from "../domain/editorProjectionParser";
 import { describe, expect, it } from "vitest";
-import { parseGraphProjectionReplacementDto } from "./editorMutationWireParser";
+import { produce } from "immer";
+import { freezePublishedValue } from "@/shared/types/deepReadonly";
+import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
+import projectionWire from "@/tests/fixtures/node-system-contracts/editor-projection.json";
+import {
+  parseGraphEditorSessionDto,
+  parseGraphProjectionReplacementDto,
+} from "./editorMutationWireParser";
 
 const graphPath = "events/Main.yssbi-event";
 const functionPath = "functions/Forecast.yssbi-function";
@@ -112,6 +119,58 @@ function functionEditorProjection(revision = 5) {
 }
 
 describe("editor mutation wire parser", () => {
+  it("revalidates mutable inputs and changed branches around cached immutable DTOs", () => {
+    const session = makeGraphEditorSession(
+      parseEditorGraphProjectionDto(structuredClone(projectionWire)),
+    );
+    const node = session.projection.nodes[0];
+    session.document.nodes[node.nodeId] = {
+      id: node.nodeId,
+      node_type: node.nodeTypeId,
+      position: { ...node.position },
+      parameters: {},
+      user_label: null,
+    };
+    parseGraphEditorSessionDto(session);
+    node.position.x = NaN;
+    expect(() => parseGraphEditorSessionDto(session)).toThrow("projection is malformed");
+    node.position.x = 0;
+    Object.freeze(node);
+    parseGraphEditorSessionDto(session);
+    node.position.x = Infinity;
+    expect(() => parseGraphEditorSessionDto(session)).toThrow("projection is malformed");
+    node.position.x = 0;
+    const output = { ...session.resultState.outputs[0] };
+    session.resultState = { ...session.resultState, outputs: [output] };
+    parseGraphEditorSessionDto(session);
+    output.state = "valid";
+    expect(() => parseGraphEditorSessionDto(session)).toThrow("output result identity");
+    output.state = "missing";
+
+    freezePublishedValue(session);
+    parseGraphEditorSessionDto(session);
+    expect(parseGraphEditorSessionDto(session).resultState).toBe(session.resultState);
+    const invalidPosition = produce(session, (draft) => {
+      draft.projection.nodes[0].position.x = NaN;
+    });
+    expect(() => parseGraphEditorSessionDto(invalidPosition)).toThrow("projection is malformed");
+    const rebound = produce(session, (draft) => {
+      draft.document.nodes["00000000-0000-0000-0000-000000000099"] =
+        session.document.nodes[node.nodeId];
+    });
+    expect(() => parseGraphEditorSessionDto(rebound)).toThrow("document is malformed");
+    const invalidResult = produce(session, (draft) => {
+      draft.resultState.outputs[0].state = "valid";
+    });
+    expect(() => parseGraphEditorSessionDto(invalidResult)).toThrow("output result identity");
+    const mismatched = produce(session, (draft) => {
+      draft.projection.basis.semanticInputHash = "f".repeat(64);
+    });
+    expect(() => parseGraphEditorSessionDto(mismatched)).toThrow(
+      "does not match its semantic projection",
+    );
+  });
+
   it("requires the exact managed-only node ownership projection", () => {
     const valid = parseEditorGraphProjectionDto(
       projectionWithTypeState({

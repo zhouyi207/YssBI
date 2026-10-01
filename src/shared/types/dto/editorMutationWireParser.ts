@@ -1,4 +1,5 @@
 import { parseGraphResultState } from "./resultParser";
+import { isPublishedValue } from "@/shared/types/deepReadonly";
 import type {
   GraphDocumentDto,
   GraphSaveResultDto,
@@ -18,6 +19,9 @@ import {
 } from "./editorProjectionGuards";
 
 type UnknownRecord = Record<string, unknown>;
+const validatedDocuments = new WeakMap<object, GraphDocumentDto>();
+const validatedDocumentNodes = new WeakSet<object>();
+const validatedDocumentConnections = new WeakSet<object>();
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,15 +71,17 @@ function isDocumentPortAddress(value: unknown): boolean {
 }
 
 function isDocumentNode(value: unknown): boolean {
-  return (
+  if (isRecord(value) && validatedDocumentNodes.has(value)) return true;
+  const valid =
     isRecord(value) &&
     hasExactKeys(value, ["id", "node_type", "position", "parameters", "user_label"]) &&
     isUuid(value.id) &&
     typeof value.node_type === "string" &&
     isPosition(value.position) &&
     isRecord(value.parameters) &&
-    isNullableString(value.user_label)
-  );
+    isNullableString(value.user_label);
+  if (valid && isPublishedValue(value)) validatedDocumentNodes.add(value);
+  return valid;
 }
 
 function isDynamicMemberLocator(value: unknown): boolean {
@@ -153,14 +159,16 @@ function isDynamicPortBinding(value: unknown): boolean {
 }
 
 function isDocumentConnection(value: unknown): boolean {
-  return (
+  if (isRecord(value) && validatedDocumentConnections.has(value)) return true;
+  const valid =
     isRecord(value) &&
     hasExactKeys(value, ["id", "output", "input", "order"]) &&
     isUuid(value.id) &&
     isDocumentPortAddress(value.output) &&
     isDocumentPortAddress(value.input) &&
-    isNullableString(value.order)
-  );
+    isNullableString(value.order);
+  if (valid && isPublishedValue(value)) validatedDocumentConnections.add(value);
+  return valid;
 }
 
 function isInputState(value: unknown): boolean {
@@ -227,6 +235,8 @@ export function isGraphConstant(
 }
 
 export function parseGraphDocumentDto(value: unknown): GraphDocumentDto {
+  const cached = isRecord(value) ? validatedDocuments.get(value) : undefined;
+  if (cached) return cached;
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [
@@ -273,7 +283,9 @@ export function parseGraphDocumentDto(value: unknown): GraphDocumentDto {
     throw new Error("Graph draft document is malformed");
   }
   // Validated IPC values are read projections; incremental delivery preserves unchanged references.
-  return value as unknown as GraphDocumentDto;
+  const document = value as unknown as GraphDocumentDto;
+  if (isPublishedValue(value)) validatedDocuments.set(value, document);
+  return document;
 }
 
 export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDto {

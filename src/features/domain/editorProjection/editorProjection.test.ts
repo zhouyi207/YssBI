@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { produce } from "immer";
+import { freezePublishedValue } from "@/shared/types/deepReadonly";
 import editorProjectionContract from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
@@ -181,6 +183,70 @@ describe("portAddressKey", () => {
 });
 
 describe("validateEditorGraphProjection", () => {
+  it("rechecks parameter changes after reusing an immutable node's shape validation", () => {
+    const projection = structuredClone(editorProjectionContract) as EditorGraphProjectionDto;
+    freezePublishedValue(projection);
+    expect(isEditorGraphProjectionDto(projection)).toBe(true);
+    expect(validateEditorGraphProjection(projection)).toBe(projection);
+
+    const duplicateGroup = produce(projection, (draft) => {
+      draft.nodes[0].parameterGroups.push(draft.nodes[0].parameterGroups[0]);
+    });
+    freezePublishedValue(duplicateGroup);
+    expect(() => validateEditorGraphProjection(duplicateGroup)).toThrow(
+      "duplicate parameter group",
+    );
+
+    const invalidEditor = produce(projection, (draft) => {
+      Object.assign(draft.nodes[0].parameterGroups[0].parameters[0].editor, { extra: true });
+    });
+    freezePublishedValue(invalidEditor);
+    expect(() => validateEditorGraphProjection(invalidEditor)).toThrow("parameter editor");
+  });
+
+  it("checks graph context and connection diagnostics when validated node objects are reused", () => {
+    const projection = validProjection();
+    freezePublishedValue(projection);
+    validateEditorGraphProjection(projection);
+    expect(() =>
+      validateEditorGraphProjection({
+        ...projection,
+        nodes: [...projection.nodes, ...projection.nodes],
+      }),
+    ).toThrow("duplicate node");
+    expect(() =>
+      validateEditorGraphProjection({
+        ...projection,
+        graphPath: "functions/other",
+        basis: { ...projection.basis, graphPath: "functions/other" },
+      }),
+    ).toThrow("does not match projection graph path");
+    expect(() => validateEditorGraphProjection({ ...projection, nodes: [] })).toThrow(
+      "references a missing port",
+    );
+    const blocked = produce(projection, (draft) => {
+      draft.nodes[0].ports[0].direction = "input";
+      draft.diagnostics = [
+        {
+          code: "test.direction",
+          messageKey: "test.direction",
+          arguments: {},
+          severity: "error",
+          blocking: true,
+          location: { kind: "connection", connectionId: draft.connections[0].connectionId },
+          related: [],
+        },
+      ];
+      draft.outcome = { type: "analysisBlocked" };
+      draft.hasBlockingDiagnostics = true;
+    });
+    freezePublishedValue(blocked);
+    validateEditorGraphProjection(blocked);
+    expect(() => validateEditorGraphProjection({ ...blocked, diagnostics: [] })).toThrow(
+      "endpoint direction is invalid",
+    );
+  });
+
   it("rejects duplicate group keys and parameter keys shared across groups", () => {
     const projection = parseEditorGraphProjectionDto(structuredClone(editorProjectionContract));
     const group = structuredClone(projection.nodes[0].parameterGroups[0]);

@@ -1,4 +1,5 @@
 import { SEMANTIC_TYPES } from "./database";
+import { isPublishedValue } from "@/shared/types/deepReadonly";
 import { isParameterEditorSpecDto } from "@/shared/types/domain/parameterEditorValidators";
 import type {
   DiagnosticLocationDto,
@@ -18,6 +19,9 @@ const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "
 const portStatuses = new Set(["resolved", "orphan"]);
 const parameterPresentations = new Set(["detailPanel", "inlineAndDetail"]);
 const diagnosticSeverities = new Set(["error", "warning", "information"]);
+// Shape checks have no graph context. Cross-entity checks remain in the projection validator.
+const validatedNodes = new WeakSet<object>();
+const validatedConnections = new WeakSet<object>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -368,8 +372,14 @@ function isDiagnostic(value: unknown): boolean {
   );
 }
 
+/** Includes parameter metadata and key uniqueness, and only certifies owned immutable nodes. */
+export function hasValidatedEditorNode(value: object): boolean {
+  return validatedNodes.has(value);
+}
+
 function isNode(value: unknown): boolean {
-  return (
+  if (isRecord(value) && validatedNodes.has(value)) return true;
+  const valid =
     hasExactKeys(value, [
       "graphPath",
       "nodeId",
@@ -394,18 +404,21 @@ function isNode(value: unknown): boolean {
     isParameterGroups(value.parameterGroups) &&
     isCapabilities(value.capabilities) &&
     Array.isArray(value.diagnostics) &&
-    value.diagnostics.every(isDiagnostic)
-  );
+    value.diagnostics.every(isDiagnostic);
+  if (valid && isPublishedValue(value)) validatedNodes.add(value);
+  return valid;
 }
 
 function isConnection(value: unknown): boolean {
-  return (
+  if (isRecord(value) && validatedConnections.has(value)) return true;
+  const valid =
     hasExactKeys(value, ["connectionId", "output", "input", "order"]) &&
     typeof value.connectionId === "string" &&
     isPortAddressDto(value.output) &&
     isPortAddressDto(value.input) &&
-    isStringOrNull(value.order)
-  );
+    isStringOrNull(value.order);
+  if (valid && isPublishedValue(value)) validatedConnections.add(value);
+  return valid;
 }
 
 function isResolutionOutcome(value: unknown): boolean {

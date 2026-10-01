@@ -111,7 +111,7 @@ GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操�
 
 普通编辑、撤销、运行、兼容节点查询或复制导出不上传完整图文档，而是携带图身份和后端 version。导入或粘贴等本身包含新内容的操作仍交付真实输入。过期版本被拒绝，不自动合并并行修改。
 
-编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove 路径批次，客户端在候选上应用并验证完整结构后发布。未变化的节点、端口及连线复用引用。该协议只交付读投影，不代替 Graph typed 编辑操作。
+编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove/splice 路径批次，客户端在候选上应用补丁、冻结并完成结构与引用一致性检查后发布。校验可以复用未变化且已验证的不可变对象，图身份、实体引用和跨字段约束仍针对当前候选检查，失败时不接纳该基线。未变化的节点、端口及连线复用引用；[前端投影 Store](../../../../../src/features/README.md)按变化实体更新索引并原子安装。该协议只交付读投影，不代替 Graph typed 编辑操作。
 
 `GraphEditorSessionDto.resultState` 与文档、语义投影来自同一次图操作。ResultStore 在更新输入依据的同一锁内捕获结果摘要，携带执行会话内的结果 revision；运行发布、运行准入和依赖重验推进该顺序，独立于图编辑 revision。前端要求摘要与投影的 semanticInputHash 一致，保留已安装的更高结果 revision，防止迟到的编辑/读取回执回退运行结果。
 

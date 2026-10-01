@@ -14,6 +14,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useExecutionStore } from "@/features/core/execution";
+import * as graphPresentation from "./graphPresentation";
 
 import {
   observeResultRunEvent,
@@ -93,6 +94,62 @@ beforeEach(() => {
 });
 
 describe("current result lifecycle", () => {
+  it("rebuilds result tables only for changed result branches or pending invalidations", async () => {
+    const aggregate = vi.spyOn(graphPresentation, "projectGraphResultCache");
+    const compose = vi.spyOn(graphPresentation, "projectGraphPresentation");
+    const latest = () => {
+      const result = compose.mock.results[compose.mock.results.length - 1];
+      if (result?.type !== "return") throw new Error("Graph presentation was not composed");
+      return result.value;
+    };
+    const store = useGraphProjectionStore.getState();
+    const current = store.resultStates[graphPath];
+    const stale: GraphResultState = {
+      ...current,
+      revision: "1",
+      outputs: current.outputs.map((entry) => ({ ...entry, state: "stale", resultId: null })),
+    };
+    store.setResultState(graphPath, stale);
+    expect(aggregate).toHaveBeenCalledTimes(1);
+    const initial = latest();
+    expect(initial.nodes[output.port.nodeId].cache).toBe("stale");
+    aggregate.mockClear();
+
+    const execution = useExecutionStore.getState();
+    execution.startExecution(graphPath);
+    execution.setActiveRunId(graphPath, "1");
+    execution.recordRunFailure(graphPath, {
+      runId: "1",
+      code: "kernelFailed",
+      phase: "execution",
+      source: { graphPath, nodeId: output.port.nodeId, portAddress: null },
+      incidentId: null,
+    });
+    const failed = latest();
+    expect(failed.failure?.code).toBe("kernelFailed");
+    expect(failed.nodes).toBe(initial.nodes);
+    expect(failed.outputs).toBe(initial.outputs);
+    expect(failed.connections).toBe(initial.connections);
+    execution.clearRunFailure(graphPath);
+    store.setResultState(graphPath, { ...stale, revision: "2" });
+    expect(aggregate).not.toHaveBeenCalled();
+    expect(latest().failure).toBeNull();
+
+    event("3", { type: "runStarted", outputs: [output] });
+    expect(aggregate).toHaveBeenCalledTimes(1);
+    const pending = latest();
+    expect(pending.nodes[output.port.nodeId].cache).toBe("new");
+    expect(pending.runningNodes.has(output.port.nodeId)).toBe(true);
+    aggregate.mockClear();
+    event("3", { type: "runCancelled" });
+    expect(aggregate).not.toHaveBeenCalled();
+    const stopped = latest();
+    expect(stopped.runningNodes.size).toBe(0);
+    expect(stopped.outputs).toBe(pending.outputs);
+    // Let the scheduled null summary settle before restoring spies in the next test.
+    await vi.waitFor(() => expect(ResultService.getGraphState).toHaveBeenCalled());
+  });
+
   it("does not publish another result update when a terminal event is delivered twice", () => {
     event("1", { type: "runStarted", outputs: [output] });
     event("1", { type: "runCancelled" });

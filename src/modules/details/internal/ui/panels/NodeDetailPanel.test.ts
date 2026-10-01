@@ -46,6 +46,8 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
       resourceVersions: {},
     },
     diagnostics: [],
+    blockedConnectionIds: {},
+    primaryPortDiagnostics: {},
     outcome: { type: "success" },
     hasBlockingDiagnostics: false,
     nodes: {

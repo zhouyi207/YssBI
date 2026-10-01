@@ -3,7 +3,11 @@ import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures
 import { bench, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import projectionFixture from "@/tests/fixtures/node-system-contracts/editor-projection.json";
-import { invokeGraphSync, clearGraphSyncBaselines } from "@/services/nodeSystem/graphEditorSync";
+import {
+  invokeGraphSync,
+  clearGraphSyncBaselines,
+  type GraphSyncReply,
+} from "@/services/nodeSystem/graphEditorSync";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -132,11 +136,104 @@ for (const count of [100, 1000, 5000]) {
       useGraphProjectionStore.getState().clearGraph(binding.graphPath);
       await install();
     },
-    { time: 500, iterations: 30, warmupTime: 100 },
+    {
+      time: 500,
+      iterations: 30,
+      warmupTime: 100,
+      setup: (task) => {
+        // Mock results otherwise retain every historical snapshot and distort GC costs.
+        task.opts.afterEach = () => {
+          vi.mocked(invoke).mockClear();
+        };
+      },
+    },
+  );
+  bench(
+    `${count} nodes: snapshot parse`,
+    async () => {
+      await invokeGraphSync("hydrate_editor_graph", binding, binding);
+    },
+    {
+      time: 500,
+      iterations: 30,
+      warmupTime: 100,
+      setup: (task) => {
+        task.opts.beforeEach = () => {
+          clearGraphSyncBaselines();
+          useGraphProjectionStore.getState().clearGraph(binding.graphPath);
+        };
+        task.opts.afterEach = () => {
+          vi.mocked(invoke).mockClear();
+        };
+      },
+    },
+  );
+  let preparedSnapshot: GraphSyncReply;
+  bench(
+    `${count} nodes: snapshot adoption`,
+    () => useGraphProjectionStore.getState().hydrate(binding.graphPath, preparedSnapshot.data),
+    {
+      time: 500,
+      iterations: 30,
+      warmupTime: 100,
+      setup: (task) => {
+        task.opts.beforeEach = async () => {
+          clearGraphSyncBaselines();
+          useGraphProjectionStore.getState().clearGraph(binding.graphPath);
+          preparedSnapshot = await invokeGraphSync("hydrate_editor_graph", binding, binding);
+        };
+        task.opts.afterEach = () => {
+          vi.mocked(invoke).mockClear();
+        };
+      },
+    },
   );
   bench(`${count} nodes: delta parse and adoption`, install, {
     time: 500,
     iterations: 30,
     warmupTime: 100,
+    setup: async (task) => {
+      await install();
+      task.opts.afterEach = () => {
+        vi.mocked(invoke).mockClear();
+      };
+    },
   });
+  bench(
+    `${count} nodes: delta parse`,
+    async () => {
+      await invokeGraphSync("hydrate_editor_graph", binding, binding);
+    },
+    {
+      time: 500,
+      iterations: 30,
+      warmupTime: 100,
+      setup: async (task) => {
+        await install();
+        task.opts.afterEach = () => {
+          vi.mocked(invoke).mockClear();
+        };
+      },
+    },
+  );
+  let prepared: GraphSyncReply;
+  bench(
+    `${count} nodes: delta adoption`,
+    () => useGraphProjectionStore.getState().hydrate(binding.graphPath, prepared.data),
+    {
+      time: 500,
+      iterations: 30,
+      warmupTime: 100,
+      setup: async (task) => {
+        await install();
+        task.opts.afterEach = () => {
+          vi.mocked(invoke).mockClear();
+        };
+        // Vitest exposes task hooks through setup; tinybench excludes them from each sample.
+        task.opts.beforeEach = async () => {
+          prepared = await invokeGraphSync("hydrate_editor_graph", binding, binding);
+        };
+      },
+    },
+  );
 }

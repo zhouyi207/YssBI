@@ -1,4 +1,5 @@
 import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectionGuards";
+import { isPublishedValue } from "@/shared/types/deepReadonly";
 import { portAddressKey } from "@/shared/types/domain/editorProjectionParser";
 import { isResultPlotKind, isResultReportKind } from "./result";
 import type {
@@ -19,6 +20,7 @@ type UnknownRecord = Record<string, unknown>;
 
 const DECIMAL_ID_PATTERN = /^(0|[1-9]\d*)$/;
 const VALUE_KINDS = new Set(["scalar", "sequence"]);
+const validatedGraphResults = new WeakMap<object, GraphResultState>();
 
 function fail(contract: string): never {
   throw new Error(`Invalid ${contract}`);
@@ -55,6 +57,8 @@ function parseGraphOutput(value: unknown): GraphOutputRefDto {
 }
 
 export function parseGraphResultState(value: unknown): GraphResultState {
+  const cached = isRecord(value) ? validatedGraphResults.get(value) : undefined;
+  if (cached) return cached;
   const isHash = (input: unknown): input is string =>
     typeof input === "string" && /^[0-9a-f]{64}$/.test(input);
   if (
@@ -113,7 +117,9 @@ export function parseGraphResultState(value: unknown): GraphResultState {
     connectionKeys.add(key);
   }
   // This is a validated read projection. Preserve untouched delta branches.
-  return value as unknown as GraphResultState;
+  const result = value as unknown as GraphResultState;
+  if (isPublishedValue(value)) validatedGraphResults.set(value, result);
+  return result;
 }
 
 export function parseResultPresentation(value: unknown): ResultPresentation {

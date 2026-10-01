@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { freezePublishedValue } from "@/shared/types/deepReadonly";
+import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
 import { applyGraphChanges, graphChangesSchema } from "./graphEditorChanges";
 import { invokeCommand, isIpcError } from "@/services/ipc";
 import {
@@ -87,9 +89,13 @@ function decode(value: GraphResponse, previous: Baseline | undefined): Baseline 
   else if (previous && update.baseCursor === previous.cursor)
     candidate = applyGraphChanges(previous.data, update.changes);
   else throw new Error("Graph delivery baseline is unavailable");
+  // Freeze the owned candidate before parsing so successful checks can be cached on the
+  // first pass. Neither the baseline nor the store sees it until validation has succeeded.
+  freezePublishedValue(candidate);
   const data = parseGraphEditorSessionDto(candidate);
   if (data.projection.graphPath !== value.graphPath)
     throw new Error("Graph projection identity mismatch");
+  validateEditorGraphProjection(data.projection);
   if (
     update.kind === "delta" &&
     previous &&
@@ -97,6 +103,8 @@ function decode(value: GraphResponse, previous: Baseline | undefined): Baseline 
       BigInt(data.editing.version.revision) < BigInt(previous.data.editing.version.revision))
   )
     throw new Error("Graph delivery editing session mismatch");
+  // Parsing creates a session/editing envelope; its DTO branches are already frozen.
+  freezePublishedValue(data);
   return { cursor: update.cursor, data, bytes: update.snapshotBytes };
 }
 

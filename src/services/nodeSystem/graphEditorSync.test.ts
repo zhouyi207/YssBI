@@ -200,6 +200,63 @@ it("applies a validated delta while retaining untouched projection objects", asy
   expect(invoke).toHaveBeenLastCalledWith("hydrate_editor_graph", { ...binding, cursor: "first" });
 });
 
+it.each(["semantic hash", "duplicate node"])(
+  "recovers a %s mismatch after immutable baseline branches have been cached",
+  async (fault) => {
+    const initial = data();
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(response({ kind: "snapshot", cursor: "first", data: initial }))
+      .mockResolvedValueOnce(
+        response({ kind: "delta", baseCursor: "first", cursor: "warm", changes: [] }),
+      )
+      .mockResolvedValueOnce(
+        response(
+          {
+            kind: "delta",
+            baseCursor: "warm",
+            cursor: "bad",
+            changes:
+              fault === "semantic hash"
+                ? [
+                    {
+                      kind: "set",
+                      path: ["projection", "basis", "semanticInputHash"],
+                      value: "f".repeat(64),
+                    },
+                  ]
+                : [
+                    {
+                      kind: "splice",
+                      path: ["projection", "nodes"],
+                      index: 0,
+                      deleteCount: 0,
+                      values: [initial.projection.nodes[0]],
+                    },
+                  ],
+          },
+          true,
+        ),
+      )
+      .mockResolvedValueOnce(response({ kind: "snapshot", cursor: "recovered", data: data() }));
+    const before = await invokeGraphSync("load_project_graph", {}, binding);
+    expect(Object.isFrozen(before.data.projection.nodes[0].position)).toBe(true);
+    const warm = await invokeGraphSync("hydrate_editor_graph", {}, binding);
+    expect(warm.data.resultState).toBe(before.data.resultState);
+    const recovered = await invokeGraphSync("edit_graph", { mutation: {} }, binding);
+    expect(recovered.data).toEqual(before.data);
+    expect(recovered.data.projection.basis.semanticInputHash).toBe(
+      before.data.resultState.semanticInputHash,
+    );
+    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
+      "load_project_graph",
+      "hydrate_editor_graph",
+      "edit_graph",
+      "hydrate_editor_graph",
+    ]);
+    expect(invoke).toHaveBeenLastCalledWith("hydrate_editor_graph", { ...binding, cursor: null });
+  },
+);
+
 it("recovers a bad mutation delta through one read without replaying the write", async () => {
   const initial = data();
   const recovered = data();

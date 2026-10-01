@@ -1,4 +1,5 @@
 import { shareProjection } from "@/features/core/state/readProjection";
+import { freezePublishedValue } from "@/shared/types/deepReadonly";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { RunFailureProjection } from "@/features/core/execution/executionTypes";
 import type { GraphResultState } from "@/shared/types/domain/result";
@@ -7,14 +8,14 @@ import type { ConnectionCacheState } from "@/shared/types/domain/result";
 export type GraphCacheAppearance = "new" | "stale" | "valid" | "partial";
 export type GraphElementState = "unexecuted" | "running" | "error" | "valid" | "stale" | "partial";
 
-/** Aggregate read-only facts per graph and retain unchanged element references. */
-export function projectGraphPresentation(
+const EMPTY_PENDING_OUTPUTS: ReadonlySet<string> = new Set();
+
+/** Aggregate only result facts; running/failure changes do not invalidate these tables. */
+export function projectGraphResultCache(
   cache: GraphResultState | undefined,
-  runningNodeIds: readonly string[],
-  failure: RunFailureProjection | null,
-  previous?: GraphResultPresentation,
-  pendingOutputs: ReadonlySet<string> = new Set(),
-): GraphResultPresentation {
+  pendingOutputs: ReadonlySet<string> = EMPTY_PENDING_OUTPUTS,
+  previous?: GraphCachePresentation,
+): GraphCachePresentation {
   const nodes: Record<
     string,
     { total: number; valid: number; stale: number; cache: GraphCacheAppearance }
@@ -23,21 +24,20 @@ export function projectGraphPresentation(
   const inputs: Record<string, GraphCacheAppearance> = {};
   const connections: Record<string, Record<string, ConnectionCacheState>> = {};
   for (const { output, state: cachedState } of cache?.outputs ?? []) {
-    const state = pendingOutputs.has(portAddressKey(output.port)) ? "missing" : cachedState;
+    const key = portAddressKey(output.port);
+    const state = pendingOutputs.has(key) ? "missing" : cachedState;
     const node = (nodes[output.port.nodeId] ??= { total: 0, valid: 0, stale: 0, cache: "new" });
     node.total++;
     if (state === "valid") node.valid++;
     if (state === "stale") node.stale++;
-    outputs[portAddressKey(output.port)] = state === "missing" ? "new" : state;
+    outputs[key] = state === "missing" ? "new" : state;
   }
   const outputNodes = new Set(Object.keys(nodes));
   for (const { output, input, state: cachedState } of cache?.connections ?? []) {
-    const state =
-      pendingOutputs.has(portAddressKey(output.port)) && cachedState === "valid"
-        ? "stale"
-        : cachedState;
+    const outputKey = portAddressKey(output.port);
+    const state = pendingOutputs.has(outputKey) && cachedState === "valid" ? "stale" : cachedState;
     const key = portAddressKey(input);
-    (connections[portAddressKey(output.port)] ??= {})[key] = state;
+    (connections[outputKey] ??= {})[key] = state;
     const previous = inputs[key];
     inputs[key] =
       previous === "stale" || state === "stale"
@@ -62,12 +62,24 @@ export function projectGraphPresentation(
             ? "stale"
             : "new";
   }
+  const result = shareProjection(previous, { nodes, inputs, outputs, connections });
+  // These wide scalar dictionaries have no child objects. Publish them as roots so the
+  // outer read projection can skip them when only execution appearance changes.
+  freezePublishedValue(result.inputs);
+  freezePublishedValue(result.outputs);
+  return result;
+}
+
+/** Compose live execution appearance with the existing, independently derived result tables. */
+export function projectGraphPresentation(
+  cache: GraphCachePresentation,
+  runningNodeIds: readonly string[],
+  failure: RunFailureProjection | null,
+  previous?: GraphResultPresentation,
+): GraphResultPresentation {
   const runningNodes = new Set(runningNodeIds);
   return shareProjection(previous, {
-    nodes,
-    inputs,
-    outputs,
-    connections,
+    ...cache,
     runningNodes:
       previous &&
       previous.runningNodes.size === runningNodes.size &&
@@ -78,13 +90,16 @@ export function projectGraphPresentation(
   });
 }
 
-export interface GraphResultPresentation {
+interface GraphCachePresentation {
   nodes: Readonly<
     Record<string, { total: number; valid: number; stale: number; cache: GraphCacheAppearance }>
   >;
   inputs: Readonly<Record<string, GraphCacheAppearance>>;
   outputs: Readonly<Record<string, GraphCacheAppearance>>;
   connections: Readonly<Record<string, Readonly<Record<string, ConnectionCacheState>>>>;
+}
+
+export interface GraphResultPresentation extends GraphCachePresentation {
   runningNodes: ReadonlySet<string>;
   failure: RunFailureProjection | null;
 }

@@ -29,7 +29,11 @@ import {
 } from "./resultQueryCoordinator";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { GraphResultState } from "@/shared/types/domain/result";
-import { projectGraphPresentation, type GraphResultPresentation } from "./graphPresentation";
+import {
+  projectGraphPresentation,
+  projectGraphResultCache,
+  type GraphResultPresentation,
+} from "./graphPresentation";
 
 interface OutputRun {
   runId: string;
@@ -260,11 +264,16 @@ let resultExecutionSessionId: string | null = null;
 
 const pendingGraphRefreshes = new Set<string>();
 
-const EMPTY_GRAPH_PRESENTATION = projectGraphPresentation(undefined, [], null);
+const EMPTY_GRAPH_PRESENTATION = projectGraphPresentation(
+  projectGraphResultCache(undefined),
+  [],
+  null,
+);
 const presentationInputs = new Map<
   string,
   {
-    cache: GraphResultState | undefined;
+    outputs: GraphResultState["outputs"] | undefined;
+    connections: GraphResultState["connections"] | undefined;
     running: string[];
     pending: string[];
     failure: GraphResultPresentation["failure"];
@@ -303,23 +312,35 @@ const graphPresentations = createReadProjection(() => {
     const pending = pendingByGraph[path] ?? [];
     const failure = executions[path]?.runFailure ?? null;
     const previous = presentationInputs.get(path);
+    const sameResults =
+      previous &&
+      previous.outputs === cache?.outputs &&
+      previous.connections === cache?.connections &&
+      shallow(previous.pending, pending);
     if (
       previous &&
-      previous.cache === cache &&
+      sameResults &&
       previous.failure === failure &&
-      shallow(previous.running, running) &&
-      shallow(previous.pending, pending)
+      shallow(previous.running, running)
     ) {
       next[path] = previous.value;
     } else {
       const value = projectGraphPresentation(
-        cache,
+        sameResults
+          ? previous.value
+          : projectGraphResultCache(cache, new Set(pending), previous?.value),
         running,
         failure,
         previous?.value,
-        new Set(pending),
       );
-      presentationInputs.set(path, { cache, running, pending, failure, value });
+      presentationInputs.set(path, {
+        outputs: cache?.outputs,
+        connections: cache?.connections,
+        running,
+        pending,
+        failure,
+        value,
+      });
       next[path] = value;
     }
   }

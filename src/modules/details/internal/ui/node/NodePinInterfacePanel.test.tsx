@@ -136,6 +136,8 @@ function graphBucket(): GraphEntityBucket {
     },
     diagnostics: [],
     outcome: { type: "success" },
+    blockedConnectionIds: {},
+    primaryPortDiagnostics: {},
     hasBlockingDiagnostics: false,
     nodes: {
       current: makeNode("current", "test.current", "Current node", [input.id], [output.id]),

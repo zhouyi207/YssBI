@@ -1,4 +1,5 @@
 import { freezePublishedValue } from "@/shared/types/deepReadonly";
+import { produce } from "immer";
 import { create } from "zustand";
 import type {
   ConnectionData,
@@ -15,9 +16,13 @@ import type {
   GraphEditorSessionDto,
   GraphEditVersionDto,
 } from "@/shared/types/domain/editorMutation";
-import type { ParameterGroupDto } from "@/shared/types/domain/editorProjection";
+import type {
+  EditorNodeProjectionDto,
+  ParameterGroupDto,
+} from "@/shared/types/domain/editorProjection";
 import type { GraphResultState } from "@/shared/types/domain/result";
-import { portAddressKey, toProjectionEntities } from "@/features/domain/editorProjection";
+import { portAddressKey } from "@/features/domain/editorProjection";
+import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
 import { shareProjection } from "@/features/core/state/readProjection";
 import {
   type GraphEntityBucket,
@@ -115,86 +120,216 @@ function buildProjectionBucket(
   graphPath: string,
   projection: EditorGraphProjectionDto,
   previous?: GraphEntityBucket,
+  previousProjection?: EditorGraphProjectionDto,
 ): GraphEntityBucket {
-  const entities = toProjectionEntities(projection);
-  if (entities.graphPath !== graphPath)
-    throw new Error(`Projection '${entities.graphPath}' does not match '${graphPath}'`);
-  const bucket: GraphEntityBucket = {
-    basis: entities.basis,
-    diagnostics: entities.diagnostics,
-    outcome: entities.outcome,
-    hasBlockingDiagnostics: entities.hasBlockingDiagnostics,
-    nodes: {},
-    pins: {},
-    connections: {},
+  // Keep the whole-graph identity/endpoint checks before publishing any derived indexes.
+  validateEditorGraphProjection(projection);
+  if (projection.graphPath !== graphPath)
+    throw new Error(`Projection '${projection.graphPath}' does not match '${graphPath}'`);
+  const base: GraphEntityBucket = previous ?? {
+    basis: projection.basis,
+    diagnostics: projection.diagnostics,
+    outcome: projection.outcome,
+    hasBlockingDiagnostics: projection.hasBlockingDiagnostics,
+    nodes: Object.create(null),
+    pins: Object.create(null),
+    connections: Object.create(null),
     graphNodes: [],
-    pinConnections: {},
+    pinConnections: Object.create(null),
+    blockedConnectionIds: Object.create(null),
+    primaryPortDiagnostics: Object.create(null),
   };
-  for (const node of Object.values(entities.nodes)) {
-    const before = previous?.nodes[node.nodeId];
-    const shared = {
-      id: node.nodeId,
-      graphPath: node.graphPath,
-      nodeType: node.nodeTypeId,
-      position: shareProjection(before?.position, node.position),
-      pinIds: shareItems(before?.pinIds, entities.portIdsByNodeId[node.nodeId]),
-      display: shareProjection(before?.display, node.display),
-      parameterGroups: shareParameterGroups(before?.parameterGroups, node.parameterGroups),
-      portInstanceAdditions: shareProjection(
-        before?.portInstanceAdditions,
-        node.portInstanceAdditions,
-      ),
-      capabilities: shareProjection(before?.capabilities, node.capabilities),
-      diagnostics: shareProjection(before?.diagnostics, node.diagnostics),
+  const update = (bucket: GraphEntityBucket) => {
+    const clearPortDiagnostics = (node: NodeData) => {
+      for (const diagnostic of node.diagnostics) {
+        const location = diagnostic.location;
+        if (location.kind === "port" && location.address.nodeId === node.id)
+          delete bucket.primaryPortDiagnostics[portAddressKey(location.address)];
+      }
     };
-    bucket.nodes[node.nodeId] = sameFields(before, shared) ? before : shared;
-    bucket.graphNodes.push(node.nodeId);
-  }
-  for (const [portId, port] of Object.entries(entities.ports)) {
-    bucket.pins[portId] = shareEntity(previous?.pins[portId], {
-      id: portId,
-      nodeId: port.address.nodeId,
-      name: port.display.instanceLabel ?? port.display.label,
-      direction: port.direction,
-      address: port.address,
-      display: port.display,
-      orphan: port.orphan,
-      canRemove: port.canRemove,
-      connections: port.connections,
-      input: port.input,
-      typeState: port.typeState,
-      resolvedSchema: port.resolvedSchema,
-      status: port.status,
-    });
-    bucket.pinConnections[portId] = shareItems(
-      previous?.pinConnections[portId],
-      entities.connectionIdsByPortId[portId],
-    );
-  }
-  for (const connection of Object.values(entities.connections)) {
-    const existing = previous?.connections[connection.connectionId];
-    const from = portAddressKey(connection.output),
-      to = portAddressKey(connection.input);
-    bucket.connections[connection.connectionId] = shareEntity(existing, {
-      id: connection.connectionId,
-      from,
-      to,
-      output: existing?.from === from ? existing.output : connection.output,
-      input: existing?.to === to ? existing.input : connection.input,
-      order: connection.order,
-    });
-  }
-  bucket.graphNodes = shareItems(previous?.graphNodes, bucket.graphNodes);
-  if (sameFields(previous?.nodes, bucket.nodes)) bucket.nodes = previous.nodes;
-  if (sameFields(previous?.pins, bucket.pins)) bucket.pins = previous.pins;
-  if (sameFields(previous?.connections, bucket.connections))
-    bucket.connections = previous.connections;
-  if (sameFields(previous?.pinConnections, bucket.pinConnections))
-    bucket.pinConnections = previous.pinConnections;
-  return sameFields(previous, bucket) ? previous : bucket;
+    bucket.basis = projection.basis;
+    bucket.diagnostics = projection.diagnostics;
+    bucket.outcome = projection.outcome;
+    bucket.hasBlockingDiagnostics = projection.hasBlockingDiagnostics;
+    if (!previous || projection.diagnostics !== previous.diagnostics) {
+      const blocked: Record<ConnectionId, true> = Object.create(null);
+      for (const diagnostic of projection.diagnostics) {
+        if (diagnostic.blocking && diagnostic.location.kind === "connection")
+          blocked[diagnostic.location.connectionId] = true;
+      }
+      bucket.blockedConnectionIds = shareEntity(previous?.blockedConnectionIds, blocked);
+    }
+    // Read the immutable source, not draft dictionaries: untouched entries need no proxies.
+    if (!previous || projection.nodes !== previousProjection?.nodes) {
+      const ids = shareItems(
+        base.graphNodes,
+        projection.nodes.map((node) => node.nodeId),
+      );
+      bucket.graphNodes = ids;
+      let previousNodesById: Map<NodeId, EditorNodeProjectionDto> | undefined;
+      for (const [index, node] of projection.nodes.entries()) {
+        const before = base.nodes[node.nodeId];
+        const atIndex = previousProjection?.nodes[index];
+        const source =
+          atIndex?.nodeId === node.nodeId
+            ? atIndex
+            : previousProjection &&
+              (previousNodesById ??= new Map(
+                previousProjection.nodes.map((entry) => [entry.nodeId, entry]),
+              )).get(node.nodeId);
+        if (before && node === source) continue;
+        let pinIds = before?.pinIds ?? [];
+        if (!before || node.ports !== source?.ports) {
+          pinIds = shareItems(
+            before?.pinIds,
+            node.ports.map((port) => portAddressKey(port.address)),
+          );
+          for (const [portIndex, port] of node.ports.entries()) {
+            const id = pinIds[portIndex];
+            bucket.pins[id] = shareEntity(base.pins[id], {
+              id,
+              nodeId: port.address.nodeId,
+              name: port.display.instanceLabel ?? port.display.label,
+              direction: port.direction,
+              address: port.address,
+              display: port.display,
+              orphan: port.orphan,
+              canRemove: port.canRemove,
+              connections: port.connections,
+              input: port.input,
+              typeState: port.typeState,
+              resolvedSchema: port.resolvedSchema,
+              status: port.status,
+            });
+            if (!base.pinConnections[id]) bucket.pinConnections[id] = [];
+          }
+          if (before && pinIds !== before.pinIds) {
+            const retained = new Set(pinIds);
+            for (const id of before.pinIds) {
+              if (retained.has(id)) continue;
+              delete bucket.pins[id];
+              delete bucket.pinConnections[id];
+            }
+          }
+        }
+        const shared: NodeData = {
+          id: node.nodeId,
+          graphPath: node.graphPath,
+          nodeType: node.nodeTypeId,
+          position: shareProjection(before?.position, node.position),
+          pinIds,
+          display: shareProjection(before?.display, node.display),
+          parameterGroups: shareParameterGroups(before?.parameterGroups, node.parameterGroups),
+          portInstanceAdditions: shareProjection(
+            before?.portInstanceAdditions,
+            node.portInstanceAdditions,
+          ),
+          capabilities: shareProjection(before?.capabilities, node.capabilities),
+          diagnostics: shareProjection(before?.diagnostics, node.diagnostics),
+        };
+        bucket.nodes[node.nodeId] = sameFields(before, shared) ? before : shared;
+        if (!before || shared.diagnostics !== before.diagnostics) {
+          // Fresh nodes populate the graph index directly; changed nodes stage only their entries.
+          const diagnostics: GraphEntityBucket["primaryPortDiagnostics"] = before
+            ? Object.create(null)
+            : bucket.primaryPortDiagnostics;
+          for (const diagnostic of shared.diagnostics) {
+            const location = diagnostic.location;
+            if (location.kind !== "port" || location.address.nodeId !== shared.id) continue;
+            const id = portAddressKey(location.address);
+            const selected = diagnostics[id];
+            // Preserve the old per-node lookup: first blocking, otherwise first matching.
+            if (!selected || (!selected.blocking && diagnostic.blocking))
+              diagnostics[id] = diagnostic;
+          }
+          if (before) {
+            for (const diagnostic of before.diagnostics) {
+              const location = diagnostic.location;
+              if (location.kind !== "port" || location.address.nodeId !== before.id) continue;
+              const id = portAddressKey(location.address);
+              if (!diagnostics[id]) delete bucket.primaryPortDiagnostics[id];
+            }
+            for (const id in diagnostics) {
+              if (base.primaryPortDiagnostics[id] !== diagnostics[id])
+                bucket.primaryPortDiagnostics[id] = diagnostics[id];
+            }
+          }
+        }
+      }
+      if (ids !== base.graphNodes) {
+        const retained = new Set(ids);
+        for (const id of base.graphNodes) {
+          if (retained.has(id)) continue;
+          for (const pinId of base.nodes[id].pinIds) {
+            delete bucket.pins[pinId];
+            delete bucket.pinConnections[pinId];
+          }
+          clearPortDiagnostics(base.nodes[id]);
+          delete bucket.nodes[id];
+        }
+      }
+    }
+    if (!previous || projection.connections !== previousProjection?.connections) {
+      const retained = new Set<ConnectionId>();
+      const affectedPorts = new Set<PinId>();
+      const connections: ConnectionData[] = [];
+      for (const [index, connection] of projection.connections.entries()) {
+        const id = connection.connectionId;
+        retained.add(id);
+        const existing = base.connections[id];
+        const atIndex = previousProjection?.connections[index];
+        const from =
+          existing && connection === atIndex ? existing.from : portAddressKey(connection.output);
+        const to =
+          existing && connection === atIndex ? existing.to : portAddressKey(connection.input);
+        const shared = shareEntity(existing, {
+          id,
+          from,
+          to,
+          output: existing?.from === from ? existing.output : connection.output,
+          input: existing?.to === to ? existing.input : connection.input,
+          order: connection.order,
+        });
+        bucket.connections[id] = shared;
+        connections.push(shared);
+        if (atIndex?.connectionId !== id || existing?.from !== from || existing?.to !== to) {
+          affectedPorts.add(from).add(to);
+          if (existing) affectedPorts.add(existing.from).add(existing.to);
+        }
+      }
+      for (const connection of previousProjection?.connections ?? []) {
+        if (retained.has(connection.connectionId)) continue;
+        const existing = base.connections[connection.connectionId];
+        affectedPorts.add(existing.from).add(existing.to);
+        delete bucket.connections[connection.connectionId];
+      }
+      // Only affected adjacency lists are rebuilt. Scan source order to preserve reordering,
+      // including duplicate endpoints on a diagnostic-blocked self connection.
+      const adjacency = new Map([...affectedPorts].map((id) => [id, [] as ConnectionId[]]));
+      for (const connection of connections) {
+        adjacency.get(connection.from)?.push(connection.id);
+        adjacency.get(connection.to)?.push(connection.id);
+      }
+      for (const [id, connectionIds] of adjacency) {
+        if (bucket.pins[id])
+          bucket.pinConnections[id] = shareItems(base.pinConnections[id], connectionIds);
+      }
+    }
+  };
+  if (previous) return produce(base, update);
+  // A fresh table has no readers yet. Populate it before the existing publication freeze,
+  // avoiding both per-entry proxies and a second deep freeze during initial load.
+  update(base);
+  return base;
 }
 
 let nextViewSessionId = 0;
+
+interface PreparedGraphSession {
+  session: GraphEditorState;
+  bucket: GraphEntityBucket;
+  resultState: GraphResultState;
+}
 
 function prepareSession(
   state: GraphProjectionData,
@@ -202,9 +337,9 @@ function prepareSession(
   input: GraphEditorSessionDto,
   saving?: boolean,
   renew = false,
-): GraphProjectionData {
+): PreparedGraphSession | undefined {
   const previous = state.sessions[graphPath];
-  if (!canAcceptGraphSession(previous, input)) return state;
+  if (!canAcceptGraphSession(previous, input)) return;
   if (input.resultState.semanticInputHash !== input.projection.basis.semanticInputHash) {
     throw new Error("Graph projection and result state must have the same semantic identity");
   }
@@ -229,43 +364,37 @@ function prepareSession(
     previous.canUndo === input.editing.canUndo &&
     previous.canRedo === input.editing.canRedo &&
     (saving === undefined || saving === previous.saving);
-  if (sessionUnchanged && resultState === state.resultStates[graphPath]) return state;
+  if (sessionUnchanged && resultState === state.resultStates[graphPath]) return;
   const bucket =
     projection === previous?.projection && state.graphEntities[graphPath]
       ? state.graphEntities[graphPath]
-      : buildProjectionBucket(graphPath, projection, state.graphEntities[graphPath]);
-  const next: GraphProjectionData = {
-    sessions: sessionUnchanged
-      ? state.sessions
+      : buildProjectionBucket(
+          graphPath,
+          projection,
+          state.graphEntities[graphPath],
+          previous?.projection,
+        );
+  return {
+    session: sessionUnchanged
+      ? previous
       : {
-          ...state.sessions,
-          [graphPath]: {
-            document,
-            projection,
-            version: shareProjection(previous?.version, input.editing.version),
-            sessionId:
-              !renew && previous?.version.sessionId === input.editing.version.sessionId
-                ? previous.sessionId
-                : ++nextViewSessionId,
-            projectionGeneration: (previous?.projectionGeneration ?? 0) + 1,
-            semanticInputHash: projection.basis.semanticInputHash,
-            saveDirty: input.editing.dirty,
-            canUndo: input.editing.canUndo,
-            canRedo: input.editing.canRedo,
-            saving: saving ?? previous?.saving ?? false,
-          },
+          document,
+          projection,
+          version: shareProjection(previous?.version, input.editing.version),
+          sessionId:
+            !renew && previous?.version.sessionId === input.editing.version.sessionId
+              ? previous.sessionId
+              : ++nextViewSessionId,
+          projectionGeneration: (previous?.projectionGeneration ?? 0) + 1,
+          semanticInputHash: projection.basis.semanticInputHash,
+          saveDirty: input.editing.dirty,
+          canUndo: input.editing.canUndo,
+          canRedo: input.editing.canRedo,
+          saving: saving ?? previous?.saving ?? false,
         },
-    graphEntities:
-      bucket === state.graphEntities[graphPath]
-        ? state.graphEntities
-        : { ...state.graphEntities, [graphPath]: bucket },
-    resultStates:
-      resultState === state.resultStates[graphPath]
-        ? state.resultStates
-        : { ...state.resultStates, [graphPath]: resultState },
+    bucket,
+    resultState,
   };
-  freezePublishedValue(next);
-  return next;
 }
 
 export interface PreparedGraphSessions {
@@ -275,7 +404,12 @@ export interface PreparedGraphSessions {
 
 /** Prepare all accepted sessions before a single publication, including project snapshots. */
 export function prepareGraphSessions(
-  replacements: readonly { graphPath: string; session: GraphEditorSessionDto }[],
+  replacements: readonly {
+    graphPath: string;
+    session: GraphEditorSessionDto;
+    saving?: boolean;
+    renew?: boolean;
+  }[],
   retainedGraphPaths?: ReadonlySet<string>,
   base: GraphProjectionData = useGraphProjectionStore.getState(),
 ): PreparedGraphSessions {
@@ -283,17 +417,42 @@ export function prepareGraphSessions(
     !retainedGraphPaths || Object.keys(values).every((path) => retainedGraphPaths.has(path))
       ? values
       : Object.fromEntries(Object.entries(values).filter(([path]) => retainedGraphPaths.has(path)));
-  let state: GraphProjectionData = {
+  const retained: GraphProjectionData = {
     graphEntities: retain(base.graphEntities),
     sessions: retain(base.sessions),
     resultStates: retain(base.resultStates),
   };
+  let sessions: Record<string, GraphEditorState> = retained.sessions;
+  let graphEntities = retained.graphEntities;
+  let resultStates: Record<string, GraphResultState> = retained.resultStates;
   const paths = new Set<string>();
-  for (const { graphPath, session } of replacements) {
+  for (const { graphPath, session, saving, renew } of replacements) {
     if (paths.has(graphPath)) throw new Error(`Duplicate graph session '${graphPath}'`);
     paths.add(graphPath);
-    state = prepareSession(state, graphPath, session);
+    const prepared = prepareSession(retained, graphPath, session, saving, renew);
+    if (!prepared) continue;
+    // Each project-level table is copied at most once. Tables already filtered by retain
+    // are owned by this unpublished batch; entity updates still use their existing owner.
+    if (prepared.session !== sessions[graphPath]) {
+      if (sessions === base.sessions) sessions = { ...sessions };
+      sessions[graphPath] = prepared.session;
+    }
+    if (prepared.bucket !== graphEntities[graphPath]) {
+      if (graphEntities === base.graphEntities) graphEntities = { ...graphEntities };
+      graphEntities[graphPath] = prepared.bucket;
+    }
+    if (prepared.resultState !== resultStates[graphPath]) {
+      if (resultStates === base.resultStates) resultStates = { ...resultStates };
+      resultStates[graphPath] = prepared.resultState;
+    }
   }
+  const state =
+    sessions === base.sessions &&
+    graphEntities === base.graphEntities &&
+    resultStates === base.resultStates
+      ? base
+      : { sessions, graphEntities, resultStates };
+  if (state !== base) freezePublishedValue(state);
   return { graphPaths: [...paths], state };
 }
 
@@ -326,8 +485,14 @@ export const useGraphProjectionStore = create<GraphProjectionStore>((set, get) =
   getGraphConnection: (graphPath, connectionId) =>
     getGraphConnection(get(), graphPath, connectionId),
   hasGraph: (graphPath) => hasGraphData(get(), graphPath),
-  install: (path, input) => set((state) => prepareSession(state, path, input, false, true)),
-  hydrate: (path, input, saving) => set((state) => prepareSession(state, path, input, saving)),
+  install: (graphPath, session) =>
+    set(
+      (state) =>
+        prepareGraphSessions([{ graphPath, session, saving: false, renew: true }], undefined, state)
+          .state,
+    ),
+  hydrate: (graphPath, session, saving) =>
+    set((state) => prepareGraphSessions([{ graphPath, session, saving }], undefined, state).state),
   setResultState: (path, result) =>
     set((state) => {
       if (

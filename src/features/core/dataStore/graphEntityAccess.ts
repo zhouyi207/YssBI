@@ -20,6 +20,10 @@ export interface GraphEntityBucket {
   connections: Record<ConnectionId, ConnectionData>;
   graphNodes: NodeId[];
   pinConnections: Record<PinId, ConnectionId[]>;
+  /** Derived from canonical diagnostics once per publication, for ID-scoped edge selectors. */
+  blockedConnectionIds: Record<ConnectionId, true>;
+  /** Sparse port index sharing the selected node-local diagnostic objects. */
+  primaryPortDiagnostics: Record<PinId, DiagnosticDto>;
   basis: ProjectionBasisDto;
   /** Complete canonical problem set copied from the same projection as the entities. */
   diagnostics: DiagnosticDto[];

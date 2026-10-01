@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
+import { createStore } from "zustand/vanilla";
 import { shallow } from "zustand/shallow";
 import { freezePublishedValue, type DeepReadonly } from "@/shared/types/deepReadonly";
 
@@ -8,28 +9,25 @@ export interface ReadProjection<T> {
   subscribe(listener: () => void): () => void;
 }
 
-/** Module-lifetime projection of existing owners, with no writable store or read-time cloning. */
+/** Module-lifetime projection of existing owners, with no public writes or read-time cloning. */
 export function createReadProjection<T extends object>(
   project: () => T,
   sources: readonly Pick<ReadProjection<unknown>, "subscribe">[],
 ): ReadProjection<DeepReadonly<T>> {
-  let snapshot = freezePublishedValue(project());
-  const listeners = new Set<() => void>();
+  // Zustand retains its initial state. Start empty so that it does not retain the first
+  // graph/resource snapshot after the owner replaces it or closes the project.
+  const projection = createStore<DeepReadonly<T> | undefined>(() => undefined);
   const refresh = () => {
     const next = project();
-    if (shallow<unknown>(snapshot, next)) return;
-    snapshot = freezePublishedValue(next);
-    for (const listener of Array.from(listeners)) listener();
+    if (shallow<unknown>(projection.getState(), next)) return;
+    projection.setState(freezePublishedValue(next), true);
   };
+  // Initialize before exposing readers or subscribing to the sources.
+  refresh();
   for (const source of sources) source.subscribe(refresh);
   return {
-    getSnapshot: () => snapshot,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: projection.getState as () => DeepReadonly<T>,
+    subscribe: projection.subscribe,
   };
 }
 
@@ -64,13 +62,14 @@ export function shareProjection<T>(previous: T | undefined, next: T): T {
   )
     return next;
   if (Array.isArray(previous) && Array.isArray(next)) {
-    const values = next.map((value, index) => shareProjection(previous[index], value));
-    return (
-      previous.length === values.length &&
-      values.every((value, index) => Object.is(value, previous[index]))
-        ? previous
-        : values
-    ) as T;
+    let equal = previous.length === next.length;
+    let values: unknown[] | undefined;
+    next.forEach((value, index) => {
+      const shared = shareProjection(previous[index], value);
+      if (!Object.is(shared, previous[index])) equal = false;
+      if (!Object.is(shared, value)) (values ??= next.slice())[index] = shared;
+    });
+    return (equal ? previous : (values ?? next)) as T;
   }
   if (
     Object.getPrototypeOf(previous) !== Object.prototype ||
@@ -81,13 +80,14 @@ export function shareProjection<T>(previous: T | undefined, next: T): T {
   const after = next as Record<string, unknown>;
   const keys = Object.keys(after);
   let equal = keys.length === Object.keys(before).length;
-  const values = Object.fromEntries(
-    keys.map((key) => {
-      const value = shareProjection(before[key], after[key]);
-      if (!Object.prototype.hasOwnProperty.call(before, key) || !Object.is(value, before[key]))
-        equal = false;
-      return [key, value];
-    }),
-  );
-  return (equal ? previous : values) as T;
+  let values: Record<string, unknown> | undefined;
+  for (const key of keys) {
+    const value = shareProjection(before[key], after[key]);
+    if (!Object.prototype.hasOwnProperty.call(before, key) || !Object.is(value, before[key]))
+      equal = false;
+    if (!Object.is(value, after[key])) (values ??= { ...after })[key] = value;
+  }
+  // Delta inputs may already share every unchanged child. Keep their immutable identity
+  // so publication and validation can reuse the same objects as the transport baseline.
+  return (equal ? previous : (values ?? next)) as T;
 }

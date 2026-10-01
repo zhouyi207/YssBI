@@ -42,7 +42,7 @@ import {
   type ResourceKey,
 } from "@/features/core/resource";
 
-import { toProjectionEntities } from "@/features/domain/editorProjection";
+import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
 import { ProjectService } from "@/services/project/projectService";
 import { ChartService } from "@/services/chart/chartService";
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
@@ -458,7 +458,10 @@ export class ProjectPublicationCoordinator {
               );
               this.assertCurrent(identity);
               if (session === null) continue;
-              if (!session || toProjectionEntities(session.projection).graphPath !== graph.path)
+              if (
+                !session ||
+                validateEditorGraphProjection(session.projection).graphPath !== graph.path
+              )
                 throw protocolError("graph projection identity is invalid");
               graphSessions.set(graph.path, session);
             }

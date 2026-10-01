@@ -11,12 +11,49 @@ import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
 import { buildFileResourceMeta, resourceKey } from "@/features/core/resource/resourceTypes";
+import { freezePublishedValue, isPublishedValue } from "@/shared/types/deepReadonly";
 
 afterEach(() => {
   useGraphProjectionStore.getState().clear();
   useGraphMetaStore.getState().clear();
   useResourceStore.getState().clear();
   useDocumentStateStore.getState().clear();
+});
+
+it("deep-freezes owned records and collections without treating a shallow freeze as publication", () => {
+  const inherited = { external: { value: 1 } };
+  const record = Object.assign(Object.create(inherited), { leaf: { value: 2 }, empty: [] });
+  const indexed = Object.assign(Object.create(null), { node: record });
+  const key = { id: "key" };
+  const mapped = { value: 3 };
+  const members = [{ value: 4 }];
+  const root = { indexed, list: [record], map: new Map([[key, mapped]]), set: new Set(members) };
+  record.parent = root;
+  Object.freeze(root);
+  expect(isPublishedValue(root)).toBe(false);
+
+  expect(freezePublishedValue(root)).toBe(root);
+  expect(isPublishedValue(root)).toBe(true);
+  for (const value of [
+    indexed,
+    record,
+    record.leaf,
+    record.empty,
+    root.list,
+    key,
+    mapped,
+    ...members,
+  ])
+    expect(Object.isFrozen(value)).toBe(true);
+  expect(() => {
+    record.leaf.value = 9;
+  }).toThrow(TypeError);
+  expect(Object.isFrozen(inherited.external)).toBe(false);
+  expect(freezePublishedValue(root)).toBe(root);
+
+  const leaf = { value: 5 };
+  freezePublishedValue(leaf);
+  expect(isPublishedValue(leaf)).toBe(true);
 });
 
 it("keeps unrelated graph and resource snapshots stable and freezes published store records without copying", () => {
