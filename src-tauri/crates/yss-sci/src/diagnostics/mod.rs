@@ -9,4 +9,8 @@ pub mod vif;
 pub mod weighted;
 pub mod white;
 
+pub mod comparison;
+pub mod design;
+pub mod influence;
+pub mod reclassification;
 pub mod residual;

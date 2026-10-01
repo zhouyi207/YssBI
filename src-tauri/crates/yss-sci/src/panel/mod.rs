@@ -1,8 +1,11 @@
 //! Panel data regression: FE (Within), LSDV, FD, RE
 
+mod data;
+mod dynamic;
 mod fd;
 mod fe;
 mod lsdv;
+mod nonstationary;
 mod re;
 
 pub use fd::fit_panel_fd;
@@ -23,3 +26,5 @@ use yss_sci_contract::regression::fit::{
 };
 
 pub mod fit;
+pub use dynamic::difference_gmm;
+pub use nonstationary::{fisher_cointegration, fisher_unit_root};

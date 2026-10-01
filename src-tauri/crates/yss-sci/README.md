@@ -12,6 +12,19 @@ use `yss-sci-contract`. The crate has no Arrow, Polars or chrono dependency.
 Tabular input alignment and transformations use `yss-database-engine` relation plans
 through [Node Kernel](../yss-node-kernel/README.md).
 
+## Survival analysis
+
+`survival` owns Kaplan–Meier/Nelson–Aalen curves, Log-rank, Aalen–Johansen
+incidence, Efron/Breslow Cox (including counting-process and stratified subgroup
+designs), four right-censored AFT distributions, calibration, decision curves and
+Cox nomogram scales. It reuses regression design/optimization/inference helpers
+and Linalg decompositions. Times are positive; no rows are silently dropped.
+Cox baselines are centered Breslow estimates; AFT covariance includes log(scale).
+`tests/survival_category.rs` checks independently generated statsmodels/SciPy
+references and risk-set, interval, prediction and cancellation conventions.
+Regenerate production plot payloads for parser checks and manual previews with
+`pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-sci --example survival -- src/tests/fixtures/node-system-contracts/survival-payloads.json`.
+
 ## Domain organization
 
 SCI, Runtime and Contract use the same domain names for capabilities they own.
@@ -19,27 +32,42 @@ The domains follow the [node catalog](../yss-node-catalog/README.md)'s main
 categories; a category gets a module when it has an implementation or contract.
 SCI does not depend on the catalog or use node IDs to select algorithms.
 
-| Node category / capability               | SCI module                                                         | Responsibility                                                                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Regression                               | `regression::linear`, `regression::discrete`, `regression::models` | Linear/binary fits, robust/penalized/PLS, GLM and likelihood models, nonlinear designs and model-building analyses |
-| Panel models                             | `panel`                                                            | Fixed/random effects, between and difference estimators, panel fit projection                                      |
-| Econometric and causal analysis          | `causal::iv`, `causal::did`                                        | 2SLS/LIML, TWFE DID and DID randomization inference                                                                |
-| Time series                              | `time_series`                                                      | ACF/PACF, ADF, VAR, VEC and cointegration rank                                                                     |
-| Hypothesis tests                         | `hypothesis`                                                       | Constraint parsing, linearization and t/Wald tests                                                                 |
-| Analysis of variance                     | `anova`                                                            | Factorial ANOVA/ANCOVA, MANOVA and complete within-subject designs                                                 |
-| Correlation and agreement                | `association`                                                      | Paired/rank/partial correlation, Kappa, ICC, concordance, Ridit and rwg                                            |
-| Multivariate analysis                    | `multivariate`                                                     | PCA, principal-axis factors, CCA, correspondence, LDA/QDA, RDA and classical MDS                                   |
-| Model diagnostics                        | `diagnostics`                                                      | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation                                         |
-| Probability distributions                | `distribution`                                                     | Sampling                                                                                                           |
-| Descriptive statistics                   | `descriptive`                                                      | Empirical Gini, Dagum decomposition and Theil T                                                                    |
-| Density estimation used by visualization | `density`                                                          | Kernel-density numerical computation                                                                               |
-| Visualization plot data                  | `visualization`                                                    | Controlled distributions, paired points, category frequencies and matrix projections                               |
+| Node category / capability               | SCI module                                                         | Responsibility                                                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Regression                               | `regression::linear`, `regression::discrete`, `regression::models` | Linear/binary fits, robust/penalized/PLS, GLM and likelihood models, nonlinear designs and model-building analyses       |
+| Panel models                             | `panel`                                                            | Fixed/random effects, between and difference estimators, panel fit projection                                            |
+| Spatial analysis                         | `spatial`                                                          | Coordinate weights, global Moran, OLS/SLX and Gaussian SLM/SEM/SAC/SDM/SDEM, balanced entity fixed-effect spatial panels |
+| Econometric and causal analysis          | `causal`                                                           | IV/DID, linear GMM, selection/frontier/SUR, local RDD, treatment effects, group interactions and synthetic controls      |
+| Time series                              | `time_series`                                                      | ACF/PACF, ADF, VAR, VEC and cointegration rank                                                                           |
+| Hypothesis tests                         | `hypothesis`                                                       | Constraint parsing, linearization and t/Wald tests                                                                       |
+| Analysis of variance                     | `anova`                                                            | Factorial ANOVA/ANCOVA, MANOVA and complete within-subject designs                                                       |
+| Correlation and agreement                | `association`                                                      | Paired/rank/partial correlation, Kappa, ICC, concordance, Ridit and rwg                                                  |
+| Multivariate analysis                    | `multivariate`                                                     | PCA, principal-axis factors, CCA, correspondence, LDA/QDA, RDA and classical MDS                                         |
+| Longitudinal and multilevel models       | `longitudinal`                                                     | GEE; Gaussian ML/REML with independent random slopes and nested/crossed intercepts; random-intercept GLMM Laplace ML     |
+| Model diagnostics                        | `diagnostics`                                                      | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation                                               |
+| Probability distributions                | `distribution`                                                     | Sampling                                                                                                                 |
+| Descriptive statistics                   | `descriptive`                                                      | Empirical Gini, Dagum decomposition and Theil T                                                                          |
+| Density estimation used by visualization | `density`                                                          | Kernel-density numerical computation                                                                                     |
+| Visualization plot data                  | `visualization`                                                    | Controlled distributions, paired points, category frequencies and matrix projections                                     |
 
 Each method owns its fitting, inference and postestimation modules. Fit results
 retain model facts and coefficient inference; optional diagnostics and postestimation
 are separate calls over those facts. A node's Fit/Summary/Predict stage does not
 create a second algorithm owner. Runtime owns selected report projections; Contract
 owns neutral options and results. Linalg remains a shared numerical foundation.
+
+`spatial` reuses regression design scaling, coefficient inference, controlled
+optimization and Linalg eigensystems/solves. Weights have zero diagonals and
+nonnegative entries; KNN, distance bands and inverse distance support union
+symmetrization and optional row normalization. Cross sections use Gaussian ML
+with full observed information, except OLS/SLX which use residual-df covariance.
+Spatial coefficients stay inside the sufficient stability interval set by the
+maximum row sum. Balanced panels use orthonormal Helmert time contrasts with
+`N*(T-1)` likelihood observations and restore entity effects afterward. Innovation
+Moran indices and spatial impacts are descriptive point results; standalone Moran
+provides normal/randomization moments and seeded two-sided permutations. Dense
+workspace admission belongs to Kernel. Independent NumPy/SciPy references and
+their generator live in `tests/fixtures/spatial_category_reference.*`.
 
 Numerical entry points live in `regression::linear::fit`,
 `regression::discrete::fit`, `panel::fit` and
@@ -65,6 +93,17 @@ execution checks between iterations.
 Diagnostics use ordinary Rust submodules with explicit imports for shared
 helpers. Residual normality belongs to `diagnostics::normality`; Durbin-Watson
 and other serial correlation tests belong to `diagnostics::serial_correlation`.
+`diagnostics::{comparison,influence,design,reclassification}` owns Gaussian/binary
+likelihood criteria and nested tests, OLS/WLS influence, collinearity/Harman PCA
+and paired binary NRI/IDI. Gaussian criteria count the estimated error variance;
+comparisons check reconstructed response rows, proportional precision weights and
+design-span nesting. Collinearity uses a thin SVD of the scaled design to retain
+small singular values without allocating a square observation matrix. Undefined
+influence and unbounded collinearity use optional values.
+`survival::cox::proportional_hazards` reuses the fitted Efron/Breslow event
+contributions for efficient time-interaction scores, including nuisance adjustment.
+Independent NumPy/statsmodels references and their generator are in
+`tests/fixtures/diagnostics_reference.*`; runtime golden tests exercise fitted-model inputs.
 `diagnostics::residual::diagnose` consumes the fitted linear result, including
 original WLS weights, and dispatches BP/White/IM/RESET/VIF/leverage. GLS is rejected
 for residual diagnostics requiring an untransformed or diagonal-weight design;
@@ -91,6 +130,71 @@ analyses, without embedding a complete report or precomputed postestimation arra
 matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `hypothesis::linear_test`.
 Project/result identity checks and report retrieval remain in Application.
+
+## Univariate time series
+
+`time_series::forecast` owns conditional ARIMA/SARIMA least squares with stable
+AR/invertible MA factors and integrated Gaussian prediction intervals, fixed-initial
+SES/additive ETS/Holt–Winters smoothing, Gaussian ARCH/GARCH/EGARCH/GJR likelihood,
+two-step ECM, GM(1,1), discrete Markov forecasts and PP/KPSS tests. It reuses the
+regression optimizer and least-squares design/inference; shared MacKinnon tau
+calibration lives in `time_series::mackinnon` and is also used by panel tests.
+ECM suppresses ordinary long-run OLS inference for cointegrating equations.
+EGARCH averages simulated variances with an explicit seed; other volatility models
+use analytic conditional-variance forecasts. KPSS reports its table-tail bounds.
+All new entry points accept execution control, reject invalid domains and preserve
+source-row alignment; admissibility comes from model identification and caller-owned
+workspace budgets rather than a fixed observation ceiling. Numerical references in
+`tests/fixtures/time_series_reference.py` use SciPy, statsmodels and arch; the Rust
+integration target is `time_series_category`.
+
+## Additional econometric and causal estimators
+
+`causal::econometrics` owns one/two-step linear IV GMM with HC0 sandwich and
+two-step overidentification inference, excluded-variable Heckman two-step,
+normal–half-normal production/cost likelihood and two-stage SUR with distinct
+equation designs. `causal::designs` owns sharp local-linear RDD with fixed-bandwidth
+HC3 inference, HC3 treatment-by-group Wald tests and pre-period-only simplex
+synthetic controls. SUR solves block normal equations without an observation-square
+Kronecker covariance; synthetic controls retain all periods only for predictions.
+
+`causal::treatment` reuses controlled Logit and OLS for nearest-neighbour propensity
+matching with replacement, normalized Hájek IPW, RA and AIPW. Matching includes exact
+distance ties and rejects caliper failures instead of changing the estimand by
+dropping rows. It returns no naive matching inference. Other treatment estimators
+and Heckman optionally resample independent rows and refit all nuisance stages;
+failed bootstrap fits abort rather than biasing inference by being discarded.
+The default is point estimation; bootstrap inference uses normal intervals.
+
+Shared regression designs, coefficient tables, stable normal log-CDF and controlled
+optimization remain owned by `regression::models::common`; all matrix arithmetic
+stays behind Linalg. Algorithms check cancellation/deadlines between scans and
+iterations. Nonidentification, nonconvergence and nonfinite computations fail;
+frontier boundary solutions are not mislabeled as regular interior inference.
+`tests/fixtures/causal_category_reference.py` reproduces independent SciPy,
+statsmodels and NumPy reference fits, covariance and effects for focused regression
+tests. The node help specifies actual estimator scope and statistical assumptions.
+
+## Additional panel analyses
+
+`panel::difference_gmm` owns one-step Arellano–Bond difference GMM with collapsed
+lag-level response instruments and strictly exogenous differenced predictors.
+It checks balanced consecutive period indices and identification, uses the
+first-difference iid error covariance for the first-step weight, and returns
+entity-score robust or conventional covariance with normal coefficient inference.
+Instrument count must be below entity count. It does not claim system/two-step GMM
+or supply instrument-validity tests. Matrices use the existing Linalg boundary.
+
+`panel::fisher_unit_root` reuses individual ADF regressions and applies the matching
+MacKinnon unit-root response surface. `fisher_cointegration` fits per-entity
+cointegrating equations, tests their residuals without deterministic terms, and
+uses the Engle–Granger response surface for the original deterministic terms and
+variable count. Both combine individual p-values under cross-sectional independence,
+allow different entity lengths, and reject gaps, duplicates and failed entity tests.
+Input/iteration stages honor execution control; decompositions are checked at their
+boundaries. Reference fixtures in `tests/fixtures/panel_category_reference.py`
+reproduce statsmodels/SciPy individual and Fisher tests and an independently
+optimized entity-moment GMM with general sandwich inference.
 
 ## Additional regression estimators
 
@@ -124,6 +228,31 @@ The neutral structured results retain actual models, original predictor/row
 positions, selection history, category probabilities and method-specific facts.
 Fixtures provide reproducible SciPy/statsmodels coefficients and inference;
 separate kernel/graph checks cover labels, budgets, alignment and authoring defaults.
+
+## Longitudinal and mixed models
+
+`longitudinal` reuses regression design scaling, coefficient inference and the
+controlled optimizer. GEE supports Gaussian identity, Bernoulli logit and Poisson
+log, with independence/exchangeable working correlations and uncorrected cluster
+sandwich covariance. Invalid moment correlations fail rather than being clipped.
+Gaussian mixed models profile fixed coefficients and residual scale in ML/REML,
+estimate independent random-term variances, and return GLS covariance and BLUPs.
+Nested group IDs must identify unique parents; redundant covariance designs fail.
+Independent slopes retain their original zero point and have no fitted correlations.
+
+GLMM supports a single Gaussian random intercept with Bernoulli, Poisson or NB2
+response. It optimizes a per-group Laplace likelihood using standard-normal modes,
+including zero-variance boundaries, and uses complete observed-information Wald
+inference. NB2 estimates alpha jointly. Fixed-only predictions are inverse-link
+values at zero random effects, not integrated population means. Mixed-model Wald
+inference is approximate normal; no small-sample degrees-of-freedom correction is
+claimed. Failed convergence and nonfinite computations remain explicit failures.
+
+Observation, predictor and group counts have no fixed caps. Kernel workspace
+admission accounts for dense Gaussian covariance separately from GEE/GLMM buffers. Input scans, iterations and likelihood/mode evaluations check
+cancellation/deadlines; decompositions are checked at their boundaries. Independent
+statsmodels and SciPy fixtures cover coefficients, covariance, variance components,
+likelihood and predictions, with generation code in `src/longitudinal/fixtures`.
 
 ## Correlation and agreement
 

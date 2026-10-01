@@ -167,3 +167,76 @@ pub struct PanelOmittedTerm {
     pub category: Option<String>,
     pub reason: String,
 }
+
+pub const MAX_COINTEGRATION_PREDICTORS: usize = 5;
+
+/// Aligned long-form observations. Time is an integer period index for lagged analyses.
+pub struct PanelData<'a> {
+    pub response: &'a [f64],
+    pub predictors: &'a [Vec<f64>],
+    pub entity: &'a [f64],
+    pub time: &'a [f64],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanelDeterministic {
+    None,
+    Constant,
+    Trend,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PanelTestOptions {
+    pub lags: usize,
+    pub deterministic: PanelDeterministic,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PanelEntityTest {
+    pub entity: f64,
+    pub observations: usize,
+    pub statistic: f64,
+    pub p_value: f64,
+    /// Cointegrating equation: intercept, optional trend, then predictors.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub cointegrating_coefficients: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PanelFisherTest {
+    pub method: String,
+    pub deterministic: PanelDeterministic,
+    pub lags: usize,
+    pub observations: usize,
+    /// None denotes an infinite Fisher statistic when an individual p-value underflows to zero.
+    pub statistic: Option<f64>,
+    pub degrees_of_freedom: usize,
+    pub p_value: f64,
+    pub entity_tests: Vec<PanelEntityTest>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DynamicPanelOptions {
+    /// Collapsed level instruments y[t-2], ..., y[t-max_instrument_lag].
+    pub max_instrument_lag: usize,
+    pub robust: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicPanelFit {
+    pub method: String,
+    pub covariance: String,
+    pub observations: usize,
+    pub entities: usize,
+    pub time_periods: usize,
+    pub instruments: usize,
+    pub max_instrument_lag: usize,
+    pub parameter_names: Vec<String>,
+    pub coefficients: Vec<f64>,
+    pub inference: RegressionCoefficientStatistics,
+    /// Original row indices of the retained differenced equations, in entity/time order.
+    pub source_rows: Vec<usize>,
+    pub fitted: Vec<f64>,
+    pub residuals: Vec<f64>,
+}

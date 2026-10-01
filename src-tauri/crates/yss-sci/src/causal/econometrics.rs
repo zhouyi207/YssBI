@@ -1,0 +1,509 @@
+//! Linear IV GMM, Heckman two-step, normal–half-normal frontiers and SUR.
+use super::common::*;
+use crate::regression::models::{common::normal_log_cdf, glm};
+use yss_sci_contract::causal::models::*;
+use yss_sci_contract::regression::models::{GlmFamily, GlmLink, GlmOptions};
+use yss_sci_linalg::matrix_rank;
+
+pub fn gmm(
+    y: &[f64],
+    predictors: &[Vec<f64>],
+    instruments: &[Vec<f64>],
+    options: GmmOptions,
+    control: &Control,
+) -> Result<GmmResult> {
+    validate(y, predictors, control)?;
+    validate(y, instruments, control)?;
+    let n = y.len();
+    let design = Design::new(predictors, n, options.constant, true, true, control)?;
+    let z_design = Design::new(instruments, n, options.constant, true, true, control)?;
+    let x = &design.x;
+    let z = &z_design.x;
+    let p = x.ncols();
+    let q = z.ncols();
+    if q < p {
+        return Err(parameter());
+    }
+    let cross = Mat::from_fn(q, p, |j, k| {
+        (0..n).map(|i| z[(i, j)] * x[(i, k)] / n as f64).sum()
+    });
+    let zy = Col::from_fn(q, |j| (0..n).map(|i| z[(i, j)] * y[i] / n as f64).sum());
+    let gram = Mat::from_fn(q, q, |j, k| {
+        (0..n).map(|i| z[(i, j)] * z[(i, k)] / n as f64).sum()
+    });
+    let mut weight = inverse(&gram)?;
+    let solve = |weight: &Mat<f64>| -> Result<(Vec<f64>, Mat<f64>)> {
+        control.check()?;
+        let a = cross.transpose() * weight.as_ref() * cross.as_ref();
+        let bread = inverse(&a)?;
+        let b = bread.as_ref() * cross.transpose() * weight.as_ref() * zy.as_ref();
+        Ok((b.iter().copied().collect(), bread))
+    };
+    let score_cov = |residuals: &[f64]| -> Result<Mat<f64>> {
+        let mut s = Mat::zeros(q, q);
+        for i in 0..n {
+            if i.is_multiple_of(256) {
+                control.check()?;
+            }
+            for j in 0..q {
+                for k in 0..q {
+                    s[(j, k)] += z[(i, j)] * z[(i, k)] * residuals[i].powi(2) / n as f64;
+                }
+            }
+        }
+        Ok(s)
+    };
+    let (mut beta, mut bread) = solve(&weight)?;
+    if options.two_step {
+        let f = fitted(x, &beta);
+        let residuals = y.iter().zip(f).map(|(y, f)| y - f).collect::<Vec<_>>();
+        weight = inverse(&score_cov(&residuals)?)?;
+        (beta, bread) = solve(&weight)?;
+    }
+    let predicted = fitted(x, &beta);
+    let residuals = y
+        .iter()
+        .zip(&predicted)
+        .map(|(y, f)| y - f)
+        .collect::<Vec<_>>();
+    let a = bread.as_ref() * cross.transpose() * weight.as_ref();
+    let cov = a.as_ref() * score_cov(&residuals)?.as_ref() * a.transpose();
+    let cov = Mat::from_fn(p, p, |i, j| cov[(i, j)] / n as f64);
+    let g = Col::from_fn(q, |j| {
+        (0..n).map(|i| z[(i, j)] * residuals[i] / n as f64).sum()
+    });
+    let hansen_j = if options.two_step && q > p {
+        let wg = weight.as_ref() * g.as_ref();
+        Some(chi_square(
+            n as f64 * g.iter().zip(wg.iter()).map(|(g, w)| g * w).sum::<f64>(),
+            q - p,
+        )?)
+    } else {
+        None
+    };
+    let mut moments = vec![];
+    if options.constant {
+        moments.push(mean(&residuals));
+    }
+    moments.extend(instruments.iter().map(|z| {
+        z.iter()
+            .zip(&residuals)
+            .map(|(z, e)| z * e / n as f64)
+            .sum::<f64>()
+    }));
+    let (beta, covariance) = design.raw(&beta, Some(cov));
+    let covariance = covariance.expect("covariance");
+    Ok(GmmResult {
+        observations: n,
+        instruments: q,
+        steps: if options.two_step { 2 } else { 1 },
+        coefficients: coefficient_table(
+            &beta,
+            names(predictors.len(), options.constant),
+            Some(&covariance),
+            None,
+        )?,
+        covariance: rows(&covariance),
+        fitted: predicted,
+        residuals,
+        moments,
+        hansen_j,
+    })
+}
+
+pub fn heckman(
+    y: &[Option<f64>],
+    selected: &[f64],
+    predictors: &[Vec<f64>],
+    selection_predictors: &[Vec<f64>],
+    options: HeckmanOptions,
+    control: &Control,
+) -> Result<HeckmanResult> {
+    let mut result = heckman_point(
+        y,
+        selected,
+        predictors,
+        selection_predictors,
+        options,
+        control,
+    )?;
+    let width = result.outcome_coefficients.len();
+    let covariance = bootstrap_covariance(y.len(), width, options.bootstrap, control, |indices| {
+        let sample = |v: &[f64]| indices.iter().map(|&i| v[i]).collect::<Vec<_>>();
+        let xs = predictors.iter().map(|v| sample(v)).collect::<Vec<_>>();
+        let zs = selection_predictors
+            .iter()
+            .map(|v| sample(v))
+            .collect::<Vec<_>>();
+        let ys = indices.iter().map(|&i| y[i]).collect::<Vec<_>>();
+        let fit = heckman_point(&ys, &sample(selected), &xs, &zs, options, control)?;
+        Ok(fit
+            .outcome_coefficients
+            .iter()
+            .map(|c| c.estimate)
+            .collect())
+    })?;
+    if let Some(covariance) = covariance {
+        result.outcome_coefficients = coefficient_table(
+            &result
+                .outcome_coefficients
+                .iter()
+                .map(|c| c.estimate)
+                .collect::<Vec<_>>(),
+            result
+                .outcome_coefficients
+                .iter()
+                .map(|c| c.term.clone())
+                .collect(),
+            Some(&covariance),
+            None,
+        )?;
+        result.outcome_covariance = Some(rows(&covariance));
+    }
+    result.bootstrap_replications = options.bootstrap.replications;
+    Ok(result)
+}
+
+fn heckman_point(
+    y: &[Option<f64>],
+    selected: &[f64],
+    predictors: &[Vec<f64>],
+    selection_predictors: &[Vec<f64>],
+    options: HeckmanOptions,
+    control: &Control,
+) -> Result<HeckmanResult> {
+    validate(selected, predictors, control)?;
+    validate(selected, selection_predictors, control)?;
+    let count = binary(selected)?;
+    if y.len() != selected.len() || selection_predictors.is_empty() {
+        return Err(parameter());
+    }
+    let n = y.len();
+    let base = Design::new(predictors, n, true, true, true, control)?;
+    let mut all = predictors.to_vec();
+    all.extend_from_slice(selection_predictors);
+    let full = Design::new(&all, n, true, true, false, control)?;
+    let (rank, _) = matrix_rank(full.x.as_ref()).map_err(|_| failed())?;
+    if rank <= base.x.ncols() {
+        return Err(parameter());
+    }
+    let selection = glm(
+        selected,
+        selection_predictors,
+        GlmOptions {
+            constant: true,
+            family: GlmFamily::Binomial,
+            link: GlmLink::Probit,
+            fractional: false,
+            iteration: options.iteration,
+        },
+        control,
+    )?;
+    let indices = (0..n).filter(|&i| selected[i] == 1.0).collect::<Vec<_>>();
+    let response = indices
+        .iter()
+        .map(|&i| y[i].filter(|v| v.is_finite()).ok_or_else(parameter))
+        .collect::<Result<Vec<_>>>()?;
+    let eta = (0..n)
+        .map(|i| {
+            selection.coefficients[0].estimate
+                + selection_predictors
+                    .iter()
+                    .enumerate()
+                    .map(|(j, x)| selection.coefficients[j + 1].estimate * x[i])
+                    .sum::<f64>()
+        })
+        .collect::<Vec<_>>();
+    let mills = indices
+        .iter()
+        .map(|&i| {
+            (-0.5 * eta[i] * eta[i]
+                - 0.5 * (2.0 * std::f64::consts::PI).ln()
+                - normal_log_cdf(eta[i]))
+            .exp()
+        })
+        .collect::<Vec<_>>();
+    let mut xs = predictors
+        .iter()
+        .map(|v| indices.iter().map(|&i| v[i]).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    xs.push(mills.clone());
+    let design = Design::new(&xs, count, true, true, true, control)?;
+    let (beta, _) = least_squares(&design.x, &response, None, control)?;
+    let predicted = fitted(&design.x, &beta);
+    let residuals = response
+        .iter()
+        .zip(&predicted)
+        .map(|(y, f)| y - f)
+        .collect::<Vec<_>>();
+    let (beta, _) = design.raw(&beta, None);
+    let lambda = *beta.last().expect("Mills coefficient");
+    let delta = indices
+        .iter()
+        .zip(&mills)
+        .map(|(&i, &m)| m * (m + eta[i]))
+        .collect::<Vec<_>>();
+    let variance = residuals.iter().map(|e| e * e / count as f64).sum::<f64>()
+        + lambda * lambda * mean(&delta);
+    let sigma = finite(variance.sqrt())?;
+    if sigma <= 0.0 {
+        return Err(failed());
+    }
+    let rho = finite(lambda / sigma)?;
+    // A two-step moment estimate outside the bivariate-normal parameter space is
+    // reported as a failure, rather than silently clipping the correlation.
+    if rho.abs() >= 1.0 {
+        return Err(failed());
+    }
+    let mut terms = names(predictors.len(), true);
+    terms.push("inverse_mills".into());
+    Ok(HeckmanResult {
+        observations: n,
+        selected_observations: count,
+        selection_coefficients: selection.coefficients,
+        outcome_coefficients: coefficient_table(&beta, terms, None, None)?,
+        outcome_covariance: None,
+        selection_probabilities: selection.fitted,
+        inverse_mills: mills,
+        selected_rows: indices.iter().map(|i| i + 1).collect(),
+        fitted_selected: predicted,
+        residuals_selected: residuals,
+        sigma,
+        rho,
+        bootstrap_replications: 0,
+    })
+}
+
+pub fn frontier(
+    y: &[f64],
+    predictors: &[Vec<f64>],
+    options: FrontierOptions,
+    control: &Control,
+) -> Result<FrontierResult> {
+    validate(y, predictors, control)?;
+    check_iteration(options.iteration)?;
+    let design = Design::new(predictors, y.len(), options.constant, true, true, control)?;
+    let x = &design.x;
+    let p = x.ncols();
+    if y.len() <= p + 2 {
+        return Err(parameter());
+    }
+    let (ols, _) = least_squares(x, y, None, control)?;
+    let residuals = y
+        .iter()
+        .zip(fitted(x, &ols))
+        .map(|(y, f)| y - f)
+        .collect::<Vec<_>>();
+    let sd = (residuals
+        .iter()
+        .map(|e| e * e / y.len() as f64)
+        .sum::<f64>())
+    .sqrt();
+    if !sd.is_finite() || sd <= 0.0 {
+        return Err(parameter());
+    }
+    let sign = if options.cost { -1.0 } else { 1.0 };
+    let objective = |b: &[f64]| -> Result<f64> {
+        control.check()?;
+        let su = b[p].exp();
+        let sv = b[p + 1].exp();
+        let sigma = su.hypot(sv);
+        if su <= 0.0 || sv <= 0.0 || !sigma.is_finite() {
+            return Err(failed());
+        }
+        let predicted = fitted(x, &b[..p]);
+        let mut loss = 0.0;
+        for (i, (&y, &f)) in y.iter().zip(&predicted).enumerate() {
+            if i.is_multiple_of(512) {
+                control.check()?;
+            }
+            let e = (y - f) / sigma;
+            loss += sigma.ln() + 0.5 * e * e + 0.5 * (2.0 * std::f64::consts::PI).ln()
+                - 2.0_f64.ln()
+                - normal_log_cdf(-sign * e * su / sv);
+        }
+        finite(loss / y.len() as f64)
+    };
+    let mut initial = ols;
+    if options.constant {
+        initial[0] += sign * sd * (2.0 / std::f64::consts::PI).sqrt();
+    }
+    initial.extend([sd.ln(), (sd * 0.7).ln()]);
+    let optimum = minimize(&objective, initial, options.iteration, control)?;
+    let su = optimum.beta[p].exp();
+    let sv = optimum.beta[p + 1].exp();
+    // A near-zero component has nonregular inference and no identified interior
+    // information matrix. Do not turn that boundary into ordinary Wald results.
+    if su / sv < 1e-5 || sv / su < 1e-5 {
+        return Err(failed());
+    }
+    let information = hessian(&objective, &optimum.beta, control)?;
+    let inv = inverse(&information)?;
+    let cov = Mat::from_fn(p, p, |i, j| inv[(i, j)] / y.len() as f64);
+    let predicted = fitted(x, &optimum.beta[..p]);
+    let residuals = y
+        .iter()
+        .zip(&predicted)
+        .map(|(y, f)| y - f)
+        .collect::<Vec<_>>();
+    let variance = su * su + sv * sv;
+    let conditional_sd = su * sv / variance.sqrt();
+    let mut inefficiency = Vec::with_capacity(y.len());
+    let mut efficiency = Vec::with_capacity(y.len());
+    for (i, &e) in residuals.iter().enumerate() {
+        if i.is_multiple_of(512) {
+            control.check()?;
+        }
+        let mu = -sign * e * su * su / variance;
+        let z = mu / conditional_sd;
+        let mills =
+            (-0.5 * z * z - 0.5 * (2.0 * std::f64::consts::PI).ln() - normal_log_cdf(z)).exp();
+        inefficiency.push(finite(mu + conditional_sd * mills)?);
+        efficiency.push(finite(
+            (-mu + 0.5 * conditional_sd.powi(2) + normal_log_cdf(z - conditional_sd)
+                - normal_log_cdf(z))
+            .exp(),
+        )?);
+    }
+    let (beta, cov) = design.raw(&optimum.beta[..p], Some(cov));
+    let cov = cov.expect("covariance");
+    Ok(FrontierResult {
+        observations: y.len(),
+        cost: options.cost,
+        coefficients: coefficient_table(
+            &beta,
+            names(predictors.len(), options.constant),
+            Some(&cov),
+            None,
+        )?,
+        covariance: rows(&cov),
+        sigma_u: su,
+        sigma_v: sv,
+        log_likelihood: -optimum.value * y.len() as f64,
+        iterations: optimum.iterations,
+        frontier: predicted,
+        residuals,
+        conditional_inefficiency: inefficiency,
+        efficiency,
+    })
+}
+
+pub fn sur(
+    responses: &[Vec<f64>],
+    predictors: &[Vec<f64>],
+    equation_predictors: &[Vec<usize>],
+    constant: bool,
+    control: &Control,
+) -> Result<SurResult> {
+    control.check()?;
+    let m = responses.len();
+    if m < 2 || equation_predictors.len() != m {
+        return Err(parameter());
+    }
+    let n = responses[0].len();
+    validate(&responses[0], responses, control)?;
+    validate(&responses[0], predictors, control)?;
+    let mut designs = Vec::with_capacity(m);
+    let mut errors = Vec::with_capacity(m);
+    let mut offsets = vec![0usize];
+    for (i, indices) in equation_predictors.iter().enumerate() {
+        control.check()?;
+        if indices.iter().any(|&j| j >= predictors.len())
+            || indices
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != indices.len()
+        {
+            return Err(parameter());
+        }
+        let xs = indices
+            .iter()
+            .map(|&j| predictors[j].clone())
+            .collect::<Vec<_>>();
+        let design = Design::new(&xs, n, constant, true, true, control)?;
+        let (beta, _) = least_squares(&design.x, &responses[i], None, control)?;
+        errors.push(
+            responses[i]
+                .iter()
+                .zip(fitted(&design.x, &beta))
+                .map(|(y, f)| y - f)
+                .collect::<Vec<_>>(),
+        );
+        offsets.push(
+            offsets[i]
+                .checked_add(design.x.ncols())
+                .ok_or_else(parameter)?,
+        );
+        designs.push(design);
+    }
+    let sigma = Mat::from_fn(m, m, |i, j| {
+        errors[i]
+            .iter()
+            .zip(&errors[j])
+            .map(|(a, b)| a * b / n as f64)
+            .sum()
+    });
+    let precision = inverse(&sigma)?;
+    let width = offsets[m];
+    let mut gram = Mat::zeros(width, width);
+    let mut rhs = Col::zeros(width);
+    for a in 0..m {
+        for b in 0..m {
+            control.check()?;
+            let xa = &designs[a].x;
+            let xb = &designs[b].x;
+            for j in 0..xa.ncols() {
+                rhs[offsets[a] + j] +=
+                    precision[(a, b)] * (0..n).map(|i| xa[(i, j)] * responses[b][i]).sum::<f64>();
+                for k in 0..xb.ncols() {
+                    gram[(offsets[a] + j, offsets[b] + k)] =
+                        precision[(a, b)] * (0..n).map(|i| xa[(i, j)] * xb[(i, k)]).sum::<f64>();
+                }
+            }
+        }
+    }
+    let covariance = inverse(&gram)?;
+    let beta = covariance.as_ref() * rhs.as_ref();
+    let mut jacobian = Mat::zeros(width, width);
+    let mut equations = vec![];
+    for i in 0..m {
+        control.check()?;
+        let start = offsets[i];
+        let p = offsets[i + 1] - start;
+        let b = (0..p).map(|j| beta[start + j]).collect::<Vec<_>>();
+        let cov = Mat::from_fn(p, p, |j, k| covariance[(start + j, start + k)]);
+        let predicted = fitted(&designs[i].x, &b);
+        let residuals = responses[i]
+            .iter()
+            .zip(&predicted)
+            .map(|(y, f)| y - f)
+            .collect();
+        let j = designs[i].raw_jacobian();
+        for a in 0..p {
+            for b in 0..p {
+                jacobian[(start + a, start + b)] = j[(a, b)];
+            }
+        }
+        let (b, cov) = designs[i].raw(&b, Some(cov));
+        let mut terms = if constant {
+            vec!["intercept".into()]
+        } else {
+            vec![]
+        };
+        terms.extend(equation_predictors[i].iter().map(|j| format!("x{}", j + 1)));
+        equations.push(SurEquation {
+            predictors: equation_predictors[i].iter().map(|j| j + 1).collect(),
+            coefficients: coefficient_table(&b, terms, cov.as_ref(), None)?,
+            fitted: predicted,
+            residuals,
+        });
+    }
+    let covariance = jacobian.as_ref() * covariance.as_ref() * jacobian.transpose();
+    Ok(SurResult {
+        observations: n,
+        equations,
+        error_covariance: rows(&sigma),
+        coefficient_covariance: rows(&covariance),
+    })
+}

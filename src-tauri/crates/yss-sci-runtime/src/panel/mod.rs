@@ -86,4 +86,6 @@ pub fn summary(
     Ok(report)
 }
 
+pub use yss_sci::panel::fit::fit_panel as fit_model;
 pub use yss_sci::panel::fit::predict;
+pub use yss_sci::panel::{difference_gmm, fisher_cointegration, fisher_unit_root};

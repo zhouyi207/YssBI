@@ -1,5 +1,8 @@
 # yss-sci-runtime
 
+`survival` exposes stateless `nonparametric`, `cox`, `parametric` and `evaluation`
+entries from SCI. It does not own result storage, input alignment or chart layout.
+
 > Status: Current
 > Scope: 同步科学计算入口、中立数值输入与 SCI 调用边界
 > Canonical owners: 本 crate 源码拥有适配与入口；数值算法和线性代数由对应 SCI crates 拥有
@@ -14,6 +17,10 @@ estimators. SCI converts numeric inputs into Linalg matrices and returns compute
 Tabular transformations and time/panel alignment use native relation plans in
 `yss-database-engine`, requested by [Node Kernel](../yss-node-kernel/README.md).
 Runtime receives prepared neutral inputs and has no Arrow dependency.
+
+`spatial` exposes stateless `weights`, `moran` and `regression` entry points from
+SCI. Unit identity, balanced-panel ordering and restoration to input row order
+belong to Kernel; the runtime does not infer alignment from vector lengths.
 
 `regression::linear::linear_regression` and `time_series::acf_pacf` accept neutral requests and `ScientificExecutionControl` from
 `yss-sci-contract`. Fit and Summary kernels forward the execution cancellation and deadline.
@@ -32,6 +39,16 @@ Linear regression checks cancellation and deadlines during input validation, bef
 SCI dispatch, before report projection and before returning the result;
 these checks do not promise cooperative interruption of a running matrix decomposition.
 
+`time_series` also forwards controlled univariate ARIMA/SARIMA, smoothing,
+volatility, ECM, grey/Markov prediction and PP/KPSS calls. It neither fits models
+nor duplicates their neutral result contracts.
+
+`diagnostics::{comparison,influence,design,reclassification}` forwards controlled
+model-comparison and influence/design/questionnaire computations to SCI. Cox PH
+score diagnostics are exposed through `survival::cox`. The fitted-model boundary
+is checked against independent references by
+`pnpm test:rs:package -p yss-sci-runtime --test diagnostics_models_golden`.
+
 ## Capability modules
 
 `visualization` exposes controlled, stateless plot-data computations over neutral
@@ -41,24 +58,26 @@ and rendering in D3. It does not create or retrieve results.
 Domain names follow [SCI's category mapping](../yss-sci/README.md#domain-organization).
 Entry points and method-specific report records live in their owning domains.
 
-| Module                 | Responsibility                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| `regression`           | Regression-family entry points and result serialization                                                     |
-| `regression::linear`   | Controlled OLS/WLS/GLS and configurable Prais computation, linear model records                         |
-| `regression::discrete` | Configurable Logit/Probit fits and prediction from existing coefficients                                |
-| `regression::models`   | Stateless exports of controlled robust, penalized, GLM/likelihood, nonlinear and model-building entries |
-| `regression::report`   | Report labels, fields and serialization                                                                 |
-| `hypothesis`           | Neutral hypothesis and margins `at()` entry points into SCI                                             |
-| `anova`                | Controlled ANOVA/ANCOVA, MANOVA and repeated-measures entry points                                      |
-| `association`          | Correlation, partial/rank correlation and inter-rater agreement entry points                            |
-| `multivariate`         | Controlled multivariate analyses with separate scores and summaries                                     |
-| `time_series`          | ACF/PACF, ADF, VAR and VEC entry points                                                                 |
-| `diagnostics`          | Residual/model and serial-correlation tests, neutral diagnostic records                                 |
-| `panel`                | Panel fitting and selected report projections                                                           |
-| `causal::iv`           | IV fitting, selected diagnostics and report projections                                                 |
-| `causal::did`          | TWFE DID fitting and randomization inference                                                            |
-| `descriptive`          | Gini, Dagum decomposition and Theil T entry points                                                      |
-| `distribution`         | Probability distribution sampling entry point                                                           |
+| Module                                                         | Responsibility                                                                                                |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `regression`                                                   | Regression-family entry points and result serialization                                                       |
+| `regression::linear`                                           | Controlled OLS/WLS/GLS and configurable Prais computation, linear model records                               |
+| `regression::discrete`                                         | Configurable Logit/Probit fits and prediction from existing coefficients                                      |
+| `regression::models`                                           | Stateless exports of controlled robust, penalized, GLM/likelihood, nonlinear and model-building entries       |
+| `regression::report`                                           | Report labels, fields and serialization                                                                       |
+| `hypothesis`                                                   | Neutral hypothesis and margins `at()` entry points into SCI                                                   |
+| `anova`                                                        | Controlled ANOVA/ANCOVA, MANOVA and repeated-measures entry points                                            |
+| `association`                                                  | Correlation, partial/rank correlation and inter-rater agreement entry points                                  |
+| `longitudinal`                                                 | Controlled GEE, Gaussian mixed ML/REML and random-intercept GLMM Laplace ML entries                           |
+| `multivariate`                                                 | Controlled multivariate analyses with separate scores and summaries                                           |
+| `time_series`                                                  | ACF/PACF, ADF, VAR and VEC entry points                                                                       |
+| `diagnostics`                                                  | Residual/model and serial-correlation tests, neutral diagnostic records                                       |
+| `panel`                                                        | Panel fitting and selected report projections                                                                 |
+| `causal::iv`                                                   | IV fitting, selected diagnostics and report projections                                                       |
+| `causal::did`                                                  | TWFE DID fitting and randomization inference                                                                  |
+| `causal::econometrics`, `causal::designs`, `causal::treatment` | Stateless controlled exports for GMM/Heckman/SFA/SUR, RDD/heterogeneity/synthetic control and PSM/IPW/RA/AIPW |
+| `descriptive`                                                  | Gini, Dagum decomposition and Theil T entry points                                                            |
+| `distribution`                                                 | Probability distribution sampling entry point                                                                 |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
 entry points call the corresponding SCI owner; report encoding stays here.
@@ -89,6 +108,11 @@ node adapter. Theil retains its form and observation-count projection here.
 Pearson/partial/Spearman/Kendall, Kappa, ICC, Bland–Altman, Kendall W, Ridit and rwg.
 It returns the shared contracts directly; node adapters own ordinal/category
 interpretation and label restoration, while Results owns storage and rendering.
+
+`longitudinal::{gee, linear_mixed, generalized_mixed}` forwards the shared
+`yss-sci-contract::longitudinal` options, grouping codes and execution control
+directly to SCI. It adds no estimator or parallel report model; Kernel restores
+exact original grouping labels alongside the neutral scientific result.
 
 ## Linear regression data flow
 
@@ -150,6 +174,11 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 [`yss-sci`](../yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel、causal、diagnostics 等领域组织入口；表格准备由 Node Kernel 与数据库引擎承担，runtime 与核心算法均不依赖 Arrow 或 Polars。线性回归报告由 runtime 映射 OLS/WLS/GLS 拟合结果，预测值和残差使用模型已计算的事实。`regression::linear::linear_regression`、`time_series::acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
 
 SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随机化推断和核密度计算。假设检验也归 SCI：复用 `yss-math-expr` 解析，完成约束线性化、参数列序、矩阵构造与 t/Wald 分派；Application 保留结果身份和项目状态检查。Julia 插件不依赖任何 SCI crate，输入值、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。
+
+`panel::fit_model` forwards the shared typed `PanelFit` for the FE/RE/FD/Between
+catalog entries. `difference_gmm`, `fisher_unit_root` and `fisher_cointegration`
+forward neutral long-form inputs and execution control directly to SCI. They do
+not build numerical matrices, recalibrate tests or keep a second result hierarchy.
 
 `report_display` assembles bounded declarative section metadata pointing to ordinary
 result paths. Flat named coefficient, first-stage, response/impulse and covariance

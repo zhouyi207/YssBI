@@ -7,4 +7,7 @@ pub mod var;
 pub mod vec;
 pub mod vec_vecrank_cv;
 
+pub mod forecast;
 pub mod models;
+
+pub(crate) mod mackinnon;
