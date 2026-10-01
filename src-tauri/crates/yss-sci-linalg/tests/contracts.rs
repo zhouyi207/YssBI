@@ -79,15 +79,19 @@ fn svd_orientation_rank_and_empty_matrix_conventions_are_stable() {
         mat![[1., 2., 3.], [4., 5., 6.]],
         mat![[1., 4.], [2., 5.], [3., 6.]],
     ] {
-        let svd = Svd::factor(matrix.as_ref()).unwrap();
-        let values = svd.values();
-        let count = values.nrows();
-        let diagonal = Mat::from_fn(count, count, |i, j| if i == j { values[i] } else { 0.0 });
-        let reconstructed = svd.left_vectors().subcols(0, count)
-            * diagonal
-            * svd.right_vectors().subcols(0, count).transpose();
-        near_matrix(reconstructed.as_ref(), matrix.as_ref());
-        assert!(values[0] >= values[1]);
+        for svd in [
+            Svd::factor(matrix.as_ref()).unwrap(),
+            Svd::factor_thin(matrix.as_ref()).unwrap(),
+        ] {
+            let values = svd.values();
+            let count = values.nrows();
+            let diagonal = Mat::from_fn(count, count, |i, j| if i == j { values[i] } else { 0.0 });
+            let reconstructed = svd.left_vectors().subcols(0, count)
+                * diagonal
+                * svd.right_vectors().subcols(0, count).transpose();
+            near_matrix(reconstructed.as_ref(), matrix.as_ref());
+            assert!(values[0] >= values[1]);
+        }
     }
     assert_eq!(matrix_rank(Mat::zeros(0, 3).as_ref()).unwrap(), (0, 1.));
     assert_eq!(matrix_rank(Mat::zeros(3, 0).as_ref()).unwrap(), (0, 1.));
@@ -125,4 +129,8 @@ fn rank_of_a_tall_design_does_not_require_square_singular_vectors() {
     let (rank, condition) = matrix_rank(design.as_ref()).unwrap();
     assert_eq!(rank, 2);
     assert!(condition.is_finite() && condition > 100.0 && condition < 120.0);
+    let svd = Svd::factor_thin(design.as_ref()).unwrap();
+    assert_eq!(svd.left_vectors().ncols(), 2);
+    assert_eq!(svd.right_vectors().ncols(), 2);
+    near(svd.values()[0] / svd.values()[1], condition);
 }

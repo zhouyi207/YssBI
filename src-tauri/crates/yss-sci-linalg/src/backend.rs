@@ -86,6 +86,15 @@ impl Svd {
         Ok(Self { factor })
     }
 
+    /// Retains only min(rows, cols) left/right singular vectors.
+    pub fn factor_thin(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
+        let factor = matrix
+            .0
+            .thin_svd()
+            .map_err(|_| LinalgError::DecompositionFailed)?;
+        Ok(Self { factor })
+    }
+
     pub fn left_vectors(&self) -> MatRef<'_, f64> {
         MatRef(self.factor.U())
     }

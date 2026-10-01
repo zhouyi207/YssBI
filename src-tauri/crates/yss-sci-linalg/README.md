@@ -25,6 +25,9 @@ let reconstructed = &a * &x;
   Cholesky reads the lower triangle. LU rejects an exactly zero pivot without
   applying an additional rank tolerance.
 - `Svd::factor` returns full left/right vectors and descending singular values.
+  `Svd::factor_thin` retains only `min(rows, cols)` vectors on each side; design
+  diagnostics use it to avoid squaring condition numbers or allocating an
+  observation-by-observation matrix.
   Views borrow the decomposition without copying its factors. `matrix_rank`
   requests singular values only, avoiding square left-vector allocation for tall
   matrices. Its tolerance is `max(rows, cols) * f64::EPSILON * largest_value`;
