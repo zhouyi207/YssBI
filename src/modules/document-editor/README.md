@@ -56,8 +56,8 @@ The domain can retain resource references; a reference picker and Mermaid import
 are not exposed by this editor.
 
 Doc starts with a full-width Markdown textarea. A floating top-right button overlays
-the content without reserving space and switches between editing and a rendered preview
-using the shared `MarkdownRenderer`, which supports GitHub Flavored Markdown
+the content without reserving space, leaves room for the native scrollbar, and switches
+between editing and a rendered preview using the shared `MarkdownRenderer`, which supports GitHub Flavored Markdown
 (including tables) and KaTeX math. Preview reads the current input buffer; the
 textarea stays mounted while hidden to retain editing state.
 Single tildes stay literal for regression model notation such as `y ~ x1 + x2`;
@@ -174,6 +174,8 @@ Manual acceptance on the desktop:
 3. In Doc, verify the floating top-right button reserves no content space, remains
    available while scrolling and switches between full-width editing and preview,
    renders current input and preserves text and native undo when returning to editing.
+   With long documents in both modes, verify a visible gap between the button and the
+   native scrollbar, including in narrow split panes, and that the scrollbar remains draggable.
    Verify Markdown tables render with their header, cells and column alignment,
    including inline math in cells and display math outside tables.
    Check `$x^2$` and `$\frac{a}{b}$` within prose and table cells: formulas stay inline,

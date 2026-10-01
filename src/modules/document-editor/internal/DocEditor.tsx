@@ -27,11 +27,12 @@ function MarkdownEditor({
   );
   return (
     <div className="relative isolate flex min-h-0 flex-1 flex-col">
+      {/* Leave room for the native scrollbar and a gap in both modes. */}
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="absolute right-3 top-2 z-10 bg-background shadow-sm dark:bg-background"
+        className="absolute right-8 top-2 z-10 bg-background shadow-sm dark:bg-background"
         onClick={() => setIsPreview((current) => !current)}
       >
         {t(isPreview ? "documents.edit" : "documents.preview")}
