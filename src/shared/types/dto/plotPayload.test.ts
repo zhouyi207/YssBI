@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fixture from "@/tests/fixtures/node-system-contracts/plot-payloads.json";
 import visualizationFixture from "@/tests/fixtures/node-system-contracts/visualization-payloads.json";
+import survivalFixture from "@/tests/fixtures/node-system-contracts/survival-payloads.json";
 import type { ResultPlotKind } from "./result";
 import {
   parseCorrelationPlot,
@@ -15,6 +16,22 @@ const fixtureByKind = Object.fromEntries(
 );
 
 describe("Rust plot payload contract", () => {
+  it("accepts production survival plots and rejects malformed nomogram scales", () => {
+    for (const record of survivalFixture.payloads) {
+      expect(parsePlotPayload(record.chart as ResultPlotKind, record.data)?.kind).toBe(
+        record.chart,
+      );
+    }
+    const nomogram = survivalFixture.payloads.find((record) => record.chart === "nomogram")!.data;
+    expect(parsePlotPayload("nomogram", { ...nomogram, horizon: 0 })).toBeNull();
+    expect(
+      parsePlotPayload("nomogram", {
+        ...nomogram,
+        axes: [{ label: "x", ticks: [{ position: 2, label: "1" }] }],
+      }),
+    ).toBeNull();
+    expect(parsePlotPayload("nomogram", { ...nomogram, pointsPerLogHazard: Infinity })).toBeNull();
+  });
   it("parses every current production plot kind", () => {
     expect(fixture.payloads.map((record) => record.chart).sort()).toEqual([
       "correlation",

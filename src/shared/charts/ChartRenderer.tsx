@@ -10,6 +10,7 @@ import { CorrelationMatrixChart } from "./statistical/CorrelationMatrixChart";
 import { CorrelogramChart } from "./statistical/CorrelogramChart";
 import { DistributionChart } from "./statistical/DistributionChart";
 import { IntervalChart } from "./statistical/IntervalChart";
+import { NomogramChart } from "./statistical/NomogramChart";
 import { CompositeChart } from "./cartesian/CompositeChart";
 import { HeatmapChart } from "./statistical/HeatmapChart";
 import { WordCloudChart } from "./categorical/WordCloudChart";
@@ -117,6 +118,7 @@ const chartRenderers = {
   wordcloud: ({ model, surface }) => <WordCloudChart words={model.words} surface={surface} />,
   errorbar: ({ model, surface }) => <IntervalChart model={model} surface={surface} />,
   coefficient: ({ model, surface }) => <IntervalChart model={model} surface={surface} />,
+  nomogram: ({ model, surface }) => <NomogramChart model={model} surface={surface} />,
   pareto: ({ model, surface }) => <CompositeChart model={model} surface={surface} />,
   combination: ({ model, surface }) => <CompositeChart model={model} surface={surface} />,
   heatmap: ({ model, surface }) => <HeatmapChart model={model} surface={surface} />,

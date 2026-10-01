@@ -75,6 +75,7 @@ export const RESULT_PLOT_KINDS = [
   "violin",
   "heatmap",
   "coefficient",
+  "nomogram",
 ] as const;
 
 export type ResultPlotKind = (typeof RESULT_PLOT_KINDS)[number];

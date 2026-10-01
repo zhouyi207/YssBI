@@ -77,6 +77,7 @@ export type ChartModel =
   | { kind: "wordcloud"; words: WordCountPlotDTO[] }
   | { kind: "errorbar"; data: IntervalPointPlotDTO[] }
   | { kind: "coefficient"; data: CoefficientPointPlotDTO[] }
+  | { kind: "nomogram"; axes: NomogramPlotDTO["axes"] }
   | { kind: "pareto"; data: ParetoCategoryPlotDTO[] }
   | { kind: "combination"; labels: string[]; bars: number[]; line: number[]; dualAxis: boolean }
   | { kind: "heatmap"; xLabels: string[]; yLabels: string[]; matrix: number[][] };
@@ -86,4 +87,5 @@ import type {
   IntervalPointPlotDTO,
   ParetoCategoryPlotDTO,
   CoefficientPointPlotDTO,
+  NomogramPlotDTO,
 } from "@/shared/types/domain/plotPayload";

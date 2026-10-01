@@ -59,6 +59,8 @@ export function toResultChartModel(payload: ParsedPlotPayload): ChartModel {
       return { kind: "errorbar", data: payload.data.data };
     case "coefficient":
       return { kind: "coefficient", data: payload.data.data };
+    case "nomogram":
+      return { kind: "nomogram", axes: payload.data.axes };
     case "pareto":
       return { kind: "pareto", data: payload.data.data };
     case "combination":

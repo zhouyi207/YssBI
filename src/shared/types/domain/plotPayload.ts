@@ -5,6 +5,25 @@
 
 import type { ResultPlotKind as PlotChart } from "@/shared/types/domain/result";
 import { type PlotCorrelogramBarDTO, parsePlotCorrelogramBar } from "@/shared/types/report";
+import { z } from "zod";
+
+const nomogramSchema = z.object({
+  axes: z
+    .array(
+      z.object({
+        label: z.string(),
+        ticks: z
+          .array(z.object({ position: z.number().finite().min(0).max(1), label: z.string() }))
+          .min(1),
+      }),
+    )
+    .min(4),
+  horizon: z.number().finite().positive(),
+  maximumTotalPoints: z.number().finite().positive(),
+  pointsPerLogHazard: z.number().finite().positive(),
+  baselineCumulativeHazard: z.number().finite().positive(),
+});
+export type NomogramPlotDTO = z.infer<typeof nomogramSchema>;
 
 export type AxisFormat = "date" | "datetime" | "number";
 
@@ -164,7 +183,8 @@ export type ParsedPlotPayload =
   | { kind: "combination"; data: CombinationPlotDTO }
   | { kind: "bubble"; data: BubblePlotDTO }
   | { kind: "heatmap"; data: HeatmapPlotDTO }
-  | { kind: "coefficient"; data: CoefficientPlotDTO };
+  | { kind: "coefficient"; data: CoefficientPlotDTO }
+  | { kind: "nomogram"; data: NomogramPlotDTO };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -617,6 +637,10 @@ export function parseCorrelationPlot(raw: unknown): CorrelationPlotDTO | null {
 /** 按 descriptor chart 窄化 plot payload；失败返回 null（由调用方渲染局部 invalid 状态）。 */
 export function parsePlotPayload(chart: PlotChart, raw: unknown): ParsedPlotPayload | null {
   switch (chart) {
+    case "nomogram": {
+      const parsed = nomogramSchema.safeParse(raw);
+      return parsed.success ? { kind: chart, data: parsed.data } : null;
+    }
     case "boxplot":
     case "violin": {
       const data = parseDistribution(raw, chart === "violin");

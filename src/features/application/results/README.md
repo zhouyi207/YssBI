@@ -117,6 +117,8 @@ GUI 默认只显示引用的行数，用户展开“查看数据”后才挂载�
 报告组件与 JSON 布局见 [Results views](../../../modules/results/README.md)。
 
 可视化结果仍使用 scalar Plot 查询与租约，不通过数列分页取第一页作为整张图。
-Graph 的 19 类 `plot.data` 输出按 descriptor 的 chart kind 校验和绘制；KDE 也归 Plot。
+Graph 的 20 类 `plot.data` 输出按 descriptor 的 chart kind 校验和绘制；KDE 也归 Plot。
+`nomogram` 经同一 payload parser、模型映射和共享 renderer 展示 Rust 计算的轴与刻度；
+校准和决策曲线复用折线及参考线，不在前端拟合或计算生存概率。
 chart kind 使用实际图形名称，散点图为 `scatter`；`plot` 仅表示 presentation kind。
 完整样本计算和展示抽样在 SCI 完成，前端保留观测数、AUC、分组或区间信息。
