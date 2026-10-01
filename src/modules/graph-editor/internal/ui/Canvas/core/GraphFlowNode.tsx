@@ -1,14 +1,14 @@
-import { memo, useLayoutEffect } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { GraphNodeController } from "../../Nodes/GraphNodeController";
 import { useGraphFlowContext, useGraphFlowInteraction } from "./GraphFlowContext";
-import type { GraphFlowNode as FlowNode } from "./graphFlowModel";
+import { getFlowPinFeedback, type GraphFlowNode as FlowNode } from "./graphFlowModel";
 
 function GraphFlowHandle({ pin }: { pin: PinData }) {
   const { interactive } = useGraphFlowContext();
   const feedback = useGraphFlowInteraction((state) =>
-    state.targetId === pin.id ? (state.pins[pin.id]?.feedback ?? null) : null,
+    state.targetId === pin.id ? getFlowPinFeedback(state, pin.id) : null,
   );
   const feedbackClass = feedback
     ? {
@@ -44,8 +44,12 @@ export const GraphFlowNode = memo(function GraphFlowNode({
 }: NodeProps<FlowNode>) {
   const { graphPath, groupId, contextMenuActions } = useGraphFlowContext();
   const updateNodeInternals = useUpdateNodeInternals();
-  // Reordering equal-sized dynamic rows does not trigger ResizeObserver.
+  const previousHandlesKey = useRef(data.handlesKey);
+  // React Flow's shared ResizeObserver measures mounts and size changes in one batch.
+  // Subsequent handle changes may keep the same size and need an explicit refresh.
   useLayoutEffect(() => {
+    if (previousHandlesKey.current === data.handlesKey) return;
+    previousHandlesKey.current = data.handlesKey;
     updateNodeInternals(id);
   }, [id, data.handlesKey, updateNodeInternals]);
   return (

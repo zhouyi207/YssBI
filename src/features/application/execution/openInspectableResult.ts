@@ -8,6 +8,7 @@ import {
   inspectableRefsFromPinView,
   type ResolvePinViewTargetParams,
 } from "@/features/core/execution/pinViewTarget";
+import { getGraphSnapshot } from "@/features/core/graph/read";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -80,7 +81,10 @@ export async function openInspectableResult(ref: InspectableResultRef): Promise<
 
 /** Open pin/context-menu targets; tries upstream pins in order for input direction. */
 export async function openPinInspectableView(params: ResolvePinViewTargetParams): Promise<boolean> {
-  const refs = inspectableRefsFromPinView(params);
+  const refs = inspectableRefsFromPinView(
+    params,
+    getGraphSnapshot().graphEntities[params.graphPath],
+  );
   for (const ref of refs) {
     if (await openInspectableResult(ref)) {
       return true;

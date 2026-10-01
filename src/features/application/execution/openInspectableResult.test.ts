@@ -3,7 +3,12 @@ import {
   resultReferenceFixture,
   resultLeaseIdFixture,
 } from "@/tests/helpers/resultFixture";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 import {
   clearProjectLifecycle,
@@ -47,7 +52,7 @@ vi.mock("@/features/application/results/runtime", () => ({
   },
 }));
 
-import { openInspectableResult } from "./openInspectableResult";
+import { openInspectableResult, openPinInspectableView } from "./openInspectableResult";
 
 const descriptor: ResultDescriptor = {
   resultId: "17",
@@ -92,7 +97,56 @@ beforeEach(() => {
   startProjectLifecycle("project-1");
 });
 
+afterEach(() => useGraphProjectionStore.getState().clear());
+
 describe("openInspectableResult", () => {
+  it("resolves input targets from the current graph at invocation and tries them in order", async () => {
+    const graphPath = "events/Main.yssbi-event";
+    const [first, second, target] = [1, 2, 3].map((id) =>
+      makeEditorProjectionFixture({
+        graphPath,
+        nodeId: `00000000-0000-0000-0000-${String(id).padStart(12, "0")}`,
+      }),
+    );
+    const connection = {
+      connectionId: "connection-1",
+      input: target.inputAddress,
+      output: first.outputAddress,
+      order: null,
+    };
+    const session = makeGraphEditorSession({
+      ...first.projection,
+      nodes: [first, second, target].flatMap((part) => part.projection.nodes),
+      connections: [connection],
+    });
+    useGraphProjectionStore.getState().install(graphPath, session);
+    const params = { graphPath, address: target.inputAddress, direction: "input" as const };
+    const updated = {
+      ...session,
+      editing: {
+        ...session.editing,
+        version: { ...session.editing.version, revision: "1" },
+      },
+      projection: {
+        ...session.projection,
+        connections: [
+          { ...connection, connectionId: "connection-2", output: second.outputAddress },
+          connection,
+        ],
+      },
+    };
+    useGraphProjectionStore.getState().install(graphPath, updated);
+    mocks.getPinResult.mockReturnValueOnce(null).mockReturnValueOnce(descriptor);
+
+    await expect(openPinInspectableView(params)).resolves.toBe(true);
+
+    expect(mocks.loadPinResult.mock.calls).toEqual([
+      [{ graphPath, output: second.outputAddress }],
+      [{ graphPath, output: first.outputAddress }],
+    ]);
+    expect(mocks.upsertResult).toHaveBeenCalledOnce();
+  });
+
   it("atomically upserts the logical Result panel", async () => {
     await expect(
       openInspectableResult({

@@ -40,6 +40,7 @@ export function GraphCanvasController({
     [graphKind, graphPath, groupId, panelInstanceId],
   );
   const canvas = useEditorCanvas({ mode, scope });
+  const viewport = useCanvasViewport(groupId, graphPath);
   const {
     commands: {
       copyNodes,
@@ -71,7 +72,6 @@ export function GraphCanvasController({
       ? isGraphProjectionExecutable(snapshot.graphEntities[activeResourceRef])
       : false,
   );
-  const { viewport, setViewport, commit } = useCanvasViewport(groupId, graphPath);
   const { handleContextMenu } = useCanvasDrop({
     canvasElementRef,
     panelInstanceId,
@@ -187,10 +187,8 @@ export function GraphCanvasController({
       groupId={groupId}
       interactive={interactive}
       canvas={canvas}
-      contextMenuActions={interactive ? contextMenuActions : null}
       viewport={viewport}
-      onViewportChange={setViewport}
-      onViewportCommit={commit}
+      contextMenuActions={interactive ? contextMenuActions : null}
       onContextMenu={handleContextMenu}
     />
   );

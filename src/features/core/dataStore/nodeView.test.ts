@@ -61,7 +61,7 @@ const outputPin = pin("pin-out", "output", "Result");
 
 describe("toUiNode", () => {
   it("reuses projected pins and their connection facts in the canvas node", () => {
-    const view = toUiNode(baseNode, [inputPin, outputPin]);
+    const view = toUiNode(baseNode, { [inputPin.id]: inputPin, [outputPin.id]: outputPin });
 
     expect(view).toMatchObject({
       id: "node-1",

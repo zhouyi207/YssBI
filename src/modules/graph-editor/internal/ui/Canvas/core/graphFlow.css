@@ -4,6 +4,11 @@
   --xy-selection-border: 1px solid var(--accent-color);
 }
 
+/* Reuse the scene's raster during mouse pans; release it for crisp subsequent zooms. */
+.yss-flow .react-flow__pane.dragging > .react-flow__viewport {
+  will-change: transform;
+}
+
 .yss-flow .react-flow__node-graph {
   border: 0;
   background: transparent;
@@ -40,6 +45,17 @@
   box-shadow: 0 0 0 2px var(--status-danger);
 }
 
+/* Uniform gesture dimming belongs to this canvas, not each edge's subscriptions.
+   Keep per-edge compositing and exclude the preview line and viewport portals. */
+.yss-flow[data-connection-active]
+  > .react-flow__renderer
+  > .react-flow__pane
+  > .react-flow__viewport
+  > .react-flow__edges
+  .graph-edge {
+  opacity: 0.25;
+}
+
 /* These states come from graph diagnostics, actual run demand, and Rust cache facts. */
 .graph-edge-line {
   transition:
@@ -52,6 +68,22 @@
 }
 .graph-edge[data-graph-state="valid"] .graph-edge-line {
   filter: drop-shadow(0 0 2px currentColor);
+}
+/* Moving many long SVG curves makes their decorative filters expensive to rasterize.
+   Use the renderer's drag lifecycle and keep the effect local to its own viewport. */
+.yss-flow
+  .react-flow__viewport:has(> .react-flow__nodes > .react-flow__node.dragging)
+  > .react-flow__edges
+  .graph-edge-line {
+  filter: none;
+}
+/* A node drag owns the pointer. Moving curves must not create incidental hover
+   updates; their hit regions become available again when the drag ends. */
+.yss-flow
+  .react-flow__viewport:has(> .react-flow__nodes > .react-flow__node.dragging)
+  > .react-flow__edges
+  [data-edge-hit-target] {
+  pointer-events: none;
 }
 .graph-edge[data-graph-state="stale"] .graph-edge-line {
   stroke-dasharray: 8 4 2 4;

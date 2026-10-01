@@ -30,6 +30,12 @@ export function pinTypeLabel(pin: PinSemanticsFields): string {
   return "unknown";
 }
 
+/** Color-only consumers do not need to materialize labels or the full pin visual spec. */
+export function pinTypeColorKey(pin: PinSemanticsFields): string {
+  const dataType = exactPinDataType(pin);
+  return dataType ? dataTypeToThemePinType(dataType) : "object";
+}
+
 /** Array / DataSeries 容器叠加层（签名编辑与 pin 视觉共用）。 */
 export function dataTypeContainerOverlay(
   dataType: DeepReadonly<ValueType> | undefined,

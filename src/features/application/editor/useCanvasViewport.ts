@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useMemo } from "react";
 import {
   editorViewportScope,
   getViewport,
@@ -9,19 +9,25 @@ import {
   type EditorViewport,
 } from "@/features/core/viewport";
 
-/** One viewport owner shared by the renderer, sidebar drops, and navigation commands. */
-export function useCanvasViewport(groupId: string, graphPath: string) {
-  const scope = useMemo(() => editorViewportScope(groupId, graphPath), [groupId, graphPath]);
-  const subscribe = useCallback(
-    (listener: () => void) => subscribeToViewport(scope, listener),
-    [scope],
-  );
-  const read = useCallback(() => getViewport(scope), [scope]);
-  const viewport = useSyncExternalStore(subscribe, read, read);
-  const setViewport = useCallback((next: EditorViewport) => setViewportLive(scope, next), [scope]);
-  const commit = useCallback(() => {
-    commitViewport(scope);
-    persistGraphViewport(scope);
-  }, [scope]);
-  return { viewport, setViewport, commit };
+export interface EditorCanvasViewportSession {
+  getViewport(): EditorViewport;
+  subscribe(listener: (viewport: EditorViewport) => void): () => void;
+  setViewport(viewport: EditorViewport): void;
+  commit(): void;
+}
+
+/** Stable access to the shared session; pointer frames do not render the canvas owner. */
+export function useCanvasViewport(groupId: string, graphPath: string): EditorCanvasViewportSession {
+  return useMemo(() => {
+    const scope = editorViewportScope(groupId, graphPath);
+    return {
+      getViewport: () => getViewport(scope),
+      subscribe: (listener) => subscribeToViewport(scope, listener),
+      setViewport: (next) => setViewportLive(scope, next),
+      commit: () => {
+        commitViewport(scope);
+        persistGraphViewport(scope);
+      },
+    };
+  }, [groupId, graphPath]);
 }

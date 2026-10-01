@@ -27,12 +27,17 @@ export function useConnectionCandidates({
   intent: ConnectionIntent;
   enabled: boolean;
 }) {
-  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  const version = useGraphProjectionStore((state) => state.sessions[graphPath]?.version);
-  const semanticInputHash = useGraphProjectionStore(
-    (state) => state.sessions[graphPath]?.semanticInputHash,
+  const active = enabled && sourcePort !== null;
+  // Idle canvases do not consume candidate invalidation signals. Enabling a gesture
+  // reads the current owners before constructing its request identity.
+  const projectInstanceId = useProjectIOStore((state) => (active ? state.projectInstanceId : null));
+  const version = useGraphProjectionStore((state) =>
+    active ? state.sessions[graphPath]?.version : undefined,
   );
-  const publicationRevision = useResourceStore((state) => state.indexRevision);
+  const semanticInputHash = useGraphProjectionStore((state) =>
+    active ? state.sessions[graphPath]?.semanticInputHash : undefined,
+  );
+  const publicationRevision = useResourceStore((state) => (active ? state.indexRevision : null));
   const sourceKey = sourcePort ? portAddressKey(sourcePort) : null;
   const key =
     projectInstanceId && version && semanticInputHash && sourceKey

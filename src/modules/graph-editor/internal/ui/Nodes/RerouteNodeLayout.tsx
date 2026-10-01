@@ -34,9 +34,8 @@ export function RerouteNodeLayout({
           <GraphPinController
             pin={input}
             graphPath={graphPath}
-
             contextMenuActions={contextMenuActions}
-            handleSlot={renderPinHandle?.(input)}
+            renderPinHandle={renderPinHandle}
           />
         </div>
       ) : null}
@@ -50,9 +49,8 @@ export function RerouteNodeLayout({
           <GraphPinController
             pin={output}
             graphPath={graphPath}
-
             contextMenuActions={contextMenuActions}
-            handleSlot={renderPinHandle?.(output)}
+            renderPinHandle={renderPinHandle}
           />
         </div>
       ) : null}

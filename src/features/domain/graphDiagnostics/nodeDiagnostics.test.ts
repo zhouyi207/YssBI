@@ -3,7 +3,6 @@ import { portAddressKey } from "@/features/domain/editorProjection";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
 import {
   collectGraphProblems,
-  findPrimaryPortDiagnostic,
   isUnboundInputDiagnostic,
   type GraphProblemsBucket,
 } from "./nodeDiagnostics";
@@ -185,15 +184,12 @@ describe("collectGraphProblems", () => {
 
   it("uses the projected port diagnostic to identify an unbound input", () => {
     const address = { kind: "declared" as const, nodeId: "node-a", portKey: "value" };
-    const unrelated = diagnostic("warning", "Other node", "node-b");
     const unbound: DiagnosticDto = {
       ...diagnostic("error", "Required input is unbound", "node-a"),
       code: "graph.input.unbound",
       location: { kind: "port", address },
     };
 
-    const selected = findPrimaryPortDiagnostic([unrelated, unbound], address);
-    expect(selected).toBe(unbound);
-    expect(isUnboundInputDiagnostic(selected)).toBe(true);
+    expect(isUnboundInputDiagnostic(unbound)).toBe(true);
   });
 });

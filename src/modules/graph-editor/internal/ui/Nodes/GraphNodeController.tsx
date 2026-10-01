@@ -38,18 +38,19 @@ export const GraphNodeController = memo(function GraphNodeController({
 }: GraphNodeControllerProps) {
   const { i18n, t } = useTranslation();
   const node = useNodeView(id, graphPath);
+  const diagnostics = node?.diagnostics;
+  // Execution notifications reuse the same diagnostic facts until the projection changes.
+  const primaryDiagnostic = useMemo(
+    () => diagnostics?.find((diagnostic) => diagnostic.blocking) ?? diagnostics?.[0],
+    [diagnostics],
+  );
   const inCanvas = useContext(GraphFlowContext) !== null;
   const [cached, executionState, failure] = useGraphResultPresentation(
     graphPath,
     useShallow((presentation) => {
       const cached = inCanvas ? presentation.nodes[id] : undefined;
       const state = inCanvas
-        ? graphElementState(
-            presentation,
-            id,
-            cached?.cache ?? "new",
-            node?.diagnostics.some((diagnostic) => diagnostic.blocking),
-          )
+        ? graphElementState(presentation, id, cached?.cache ?? "new", primaryDiagnostic?.blocking)
         : undefined;
       return [
         cached,
@@ -62,6 +63,13 @@ export const GraphNodeController = memo(function GraphNodeController({
   const isCompleted = cacheState === "valid";
   const hasError = executionState === "error";
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const diagnosticMessage = useMemo(
+    () =>
+      !hasError && primaryDiagnostic
+        ? formatGraphDiagnostic(primaryDiagnostic, i18n?.resolvedLanguage)
+        : undefined,
+    [hasError, primaryDiagnostic, i18n?.resolvedLanguage],
+  );
 
   const contentSlot = useMemo(() => {
     if (!node) return null;
@@ -78,9 +86,6 @@ export const GraphNodeController = memo(function GraphNodeController({
     );
   }, [node, graphPath, contextMenuActions, renderPinHandle]);
   if (!node) return null;
-  const hasLinks =
-    node.inputs.some((pin) => pin.connections.current > 0) ||
-    node.outputs.some((pin) => pin.connections.current > 0);
   const isReroute = isRerouteNodeView(node);
   const executionLabel = executionState ? t(`canvas.graphState.${executionState}`) : "";
   const failureLabel =
@@ -92,11 +97,14 @@ export const GraphNodeController = memo(function GraphNodeController({
   const cacheLabel = cached
     ? `${t(`canvas.graphState.${cacheState}`)} · ${t("canvas.resultCount", { valid: cached.valid, total: cached.total })}`
     : "";
+  const executionDescription = executionState
+    ? [executionLabel, failureLabel, cacheLabel].filter(Boolean).join(" · ")
+    : "";
   const executionBadgeSlot = executionState ? (
     <div
       className="graph-state-badge"
-      title={[executionLabel, failureLabel, cacheLabel].filter(Boolean).join(" · ")}
-      aria-label={[executionLabel, failureLabel, cacheLabel].filter(Boolean).join(" · ")}
+      title={executionDescription}
+      aria-label={executionDescription}
     >
       <span aria-hidden="true">
         {
@@ -117,8 +125,6 @@ export const GraphNodeController = memo(function GraphNodeController({
       )}
     </div>
   ) : null;
-  const primaryDiagnostic =
-    node.diagnostics.find((diagnostic) => diagnostic.blocking) ?? node.diagnostics[0];
   const diagnosticBadgeSlot =
     !hasError && primaryDiagnostic ? (
       <Tooltip>
@@ -131,12 +137,10 @@ export const GraphNodeController = memo(function GraphNodeController({
                   ? "bg-amber-400"
                   : "bg-blue-400"
             }`}
-            aria-label={formatGraphDiagnostic(primaryDiagnostic, i18n?.resolvedLanguage)}
+            aria-label={diagnosticMessage}
           />
         </TooltipTrigger>
-        <TooltipContent side="top">
-          {formatGraphDiagnostic(primaryDiagnostic, i18n?.resolvedLanguage)}
-        </TooltipContent>
+        <TooltipContent side="top">{diagnosticMessage}</TooltipContent>
       </Tooltip>
     ) : null;
   const contextMenuSlot =
@@ -144,7 +148,10 @@ export const GraphNodeController = memo(function GraphNodeController({
       <NodeContextMenu
         position={contextMenu}
         managed={node.capabilities.managed}
-        hasLinks={hasLinks}
+        hasLinks={
+          node.inputs.some((pin) => pin.connections.current > 0) ||
+          node.outputs.some((pin) => pin.connections.current > 0)
+        }
         onCopy={() => contextMenuActions.copyNode(node.id)}
         onCut={() => void contextMenuActions.cutNode(node.id)}
         onDuplicate={() => void contextMenuActions.duplicateNode(node.id)}

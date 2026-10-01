@@ -11,15 +11,23 @@ import {
   ReactFlow,
   ReactFlowProvider,
   ConnectionMode,
+  useStore,
   useStoreApi,
   useConnection,
   type Connection,
+  type EdgeMouseHandler,
   type NodeChange,
+  type NodeSelectionChange,
+  type NodeMouseHandler,
   type OnConnectStart,
   type OnConnectEnd,
-  type Viewport,
+  type OnMove,
 } from "@xyflow/react";
-import type { EditorCanvasSession, GraphContextMenuActions } from "@/features/application/editor";
+import type {
+  EditorCanvasSession,
+  EditorCanvasViewportSession,
+  GraphContextMenuActions,
+} from "@/features/application/editor";
 import { useGraphRead } from "@/features/core/graph/read";
 import { useConnectionCandidates } from "@/features/application/graphEditing/useConnectionCandidates";
 import type { ConnectionIntent } from "@/shared/types/domain/connectionCandidates";
@@ -36,15 +44,17 @@ import {
 } from "./GraphFlowContext";
 import { GraphFlowNode } from "./GraphFlowNode";
 import { GraphFlowEdge } from "./GraphFlowEdge";
+import { useGraphFlowNodes } from "./useGraphFlowNodes";
 import { GraphFlowConnection, PendingFlowConnection } from "./GraphFlowConnection";
 import {
-  buildGraphFlowModel,
+  createGraphFlowModelProjector,
+  createGraphFlowEdgeViewProjector,
+  getFlowPinFeedback,
   projectFlowInteraction,
-  type FlowInteractionProjection,
   resolveFlowPinAction,
+  type FlowInteractionProjection,
   type GraphFlowNode as FlowNode,
   type GraphFlowEdge as FlowEdge,
-  type GraphFlowModel,
 } from "./graphFlowModel";
 import "@xyflow/react/dist/base.css";
 import { flowCanvasInteractionProps } from "@/shared/ui/flowCanvasInteraction";
@@ -53,8 +63,6 @@ import "./graphFlow.css";
 const nodeTypes = { graph: GraphFlowNode };
 const edgeTypes = { graph: GraphFlowEdge };
 type GestureLease = NonNullable<ReturnType<EditorCanvasSession["interaction"]["beginGesture"]>>;
-type PositionPreview = { position: { x: number; y: number }; dragging: boolean; owner: object };
-type NodeMeasurement = { width: number; height: number };
 type SelectionPointerSnapshot = {
   nodeIds: string[];
   connectionIds: string[];
@@ -68,9 +76,7 @@ interface GraphFlowCanvasProps {
   interactive: boolean;
   contextMenuActions: GraphContextMenuActions | null;
   canvas: EditorCanvasSession;
-  viewport: EditorViewport;
-  onViewportChange(viewport: EditorViewport): void;
-  onViewportCommit(): void;
+  viewport: EditorCanvasViewportSession;
   onContextMenu(event: ReactMouseEvent | MouseEvent): void;
 }
 
@@ -89,6 +95,24 @@ function clientPoint(event: MouseEvent | TouchEvent) {
   return point ? { x: point.clientX, y: point.clientY } : null;
 }
 
+// Target changes only publish local decorations, without rerendering the canvas adapter.
+function GraphFlowFeedback({
+  store,
+  feedback,
+}: {
+  store: ReturnType<typeof createGraphFlowInteractionStore>;
+  feedback: FlowInteractionProjection;
+}) {
+  const targetId = useConnection((connection) => connection.toHandle?.id ?? null);
+  const target = targetId ? getFlowPinFeedback(feedback, targetId) : null;
+  const displacedIds = target?.kind === "replace" ? target.displacedConnectionIds : undefined;
+  const replacedConnectionIds = useMemo(() => new Set(displacedIds), [displacedIds]);
+  useLayoutEffect(() => {
+    store.setState({ ...feedback, targetId, replacedConnectionIds }, true);
+  }, [store, feedback, targetId, replacedConnectionIds]);
+  return null;
+}
+
 function GraphFlowRuntime({
   graphPath,
   groupId,
@@ -97,33 +121,51 @@ function GraphFlowRuntime({
   canvas,
   contextMenuActions,
   viewport,
-  onViewportChange,
-  onViewportCommit,
   onContextMenu,
 }: GraphFlowCanvasProps) {
   const flowStore = useStoreApi<FlowNode, FlowEdge>();
-  const viewportRef = useRef(viewport);
-  viewportRef.current = viewport;
-  const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
-  const projectedModel = useRef<GraphFlowModel | undefined>(undefined);
-  const model = useMemo(() => {
-    const next = buildGraphFlowModel(bucket, projectedModel.current);
-    projectedModel.current = next;
-    return next;
-  }, [bucket]);
+  const panZoom = useStore((state) => state.panZoom);
+  const [defaultViewport] = useState(() => {
+    const initial = viewport.getViewport();
+    return { x: initial.x, y: initial.y, zoom: initial.scale };
+  });
+  const synchronizeViewport = useCallback(
+    (next: EditorViewport) => {
+      const { panZoom, transform } = flowStore.getState();
+      // Also restore D3 after cancellation, even when the rendered transform already matches.
+      panZoom?.syncViewport({ x: next.x, y: next.y, zoom: next.scale });
+      if (transform[0] !== next.x || transform[1] !== next.y || transform[2] !== next.scale)
+        flowStore.setState({ transform: [next.x, next.y, next.scale] });
+    },
+    [flowStore],
+  );
+  useLayoutEffect(
+    () => viewport.subscribe(synchronizeViewport),
+    // Reapply navigation received before React Flow initialized its pan/zoom instance.
+    [viewport, synchronizeViewport, panZoom],
+  );
+  const projectModel = useMemo(createGraphFlowModelProjector, []);
+  const model = useGraphRead((snapshot) => projectModel(snapshot.graphEntities[graphPath]));
   const modelRef = useRef(model);
   modelRef.current = model;
   const { interaction, commands, workspace } = canvas;
-  const [positions, setPositions] = useState<Record<string, PositionPreview>>({});
-  const [measurements, setMeasurements] = useState<Record<string, NodeMeasurement>>({});
-  const renderedNodes = useRef(new Map<string, { projection: FlowNode; view: FlowNode }>());
-  const positionsRef = useRef(positions);
-  const drag = useRef<{ lease: GestureLease; owner: object } | null>(null);
   const pan = useRef<GestureLease | null>(null);
   const contextMenuPress = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const selectionGesture = useRef<GestureLease | null>(null);
   const selectionPointer = useRef<SelectionPointerSnapshot | null>(null);
   const suppressClick = useRef(false);
+  const onNodeDragCancel = useCallback(() => {
+    suppressClick.current = true;
+  }, []);
+  const { updateNodes, startNodeDrag, stopNodeDrag, isDragging, recoverCancelledDrag } =
+    useGraphFlowNodes({
+      graphPath,
+      model,
+      selectedNodeIds: workspace.selectedNodeIds,
+      interactive,
+      interaction,
+      onCancel: onNodeDragCancel,
+    });
   const connection = useRef<{
     lease: GestureLease;
     sourceId: string;
@@ -141,12 +183,8 @@ function GraphFlowRuntime({
     before: { nodeIds: Set<string>; connectionIds: Set<string> };
     temporary: { nodeIds: Set<string>; connectionIds: Set<string> };
   } | null>(null);
-  const mounted = useRef(true);
   useEffect(() => {
-    mounted.current = true;
     return () => {
-      mounted.current = false;
-      drag.current?.lease.finish();
       connection.current?.lease.finish();
       pan.current?.finish();
       selectionGesture.current?.finish();
@@ -155,67 +193,12 @@ function GraphFlowRuntime({
   useEffect(() => {
     if (!interactive) setEdgeMenu(null);
   }, [interactive]);
-  useEffect(() => {
-    setMeasurements((current) =>
-      Object.keys(current).some((id) => !model.nodeIds.has(id))
-        ? Object.fromEntries(Object.entries(current).filter(([id]) => model.nodeIds.has(id)))
-        : current,
-    );
-  }, [model.nodeIds]);
-
-  const clearPositions = useCallback((owner: object) => {
-    if (!mounted.current) return;
-    const next = Object.fromEntries(
-      Object.entries(positionsRef.current).filter(([, entry]) => entry.owner !== owner),
-    );
-    positionsRef.current = next;
-    setPositions(next);
-  }, []);
-  const nodes = useMemo(() => {
-    const selected = new Set(workspace.selectedNodeIds);
-    const nextCache = new Map<string, { projection: FlowNode; view: FlowNode }>();
-    const next = model.nodes.map((node) => {
-      const position = positions[node.id]?.position ?? node.position;
-      const dragging = positions[node.id]?.dragging ?? false;
-      const measured = measurements[node.id];
-      const isSelected = interactive && selected.has(node.id);
-      const selectable = interactive && node.selectable;
-      const draggable = interactive && node.draggable;
-      const previous = renderedNodes.current.get(node.id);
-      const view =
-        previous?.projection === node &&
-        previous.view.position.x === position.x &&
-        previous.view.position.y === position.y &&
-        previous.view.measured === measured &&
-        previous.view.dragging === dragging &&
-        previous.view.selected === isSelected &&
-        previous.view.selectable === selectable &&
-        previous.view.draggable === draggable
-          ? previous.view
-          : { ...node, position, measured, dragging, selected: isSelected, selectable, draggable };
-      nextCache.set(node.id, { projection: node, view });
-      return view;
-    });
-    renderedNodes.current = nextCache;
-    return next;
-  }, [model.nodes, positions, measurements, workspace.selectedNodeIds, interactive]);
-  const renderedEdges = useRef(new Map<string, { projection: FlowEdge; view: FlowEdge }>());
-  const edges = useMemo(() => {
-    const selected = new Set(workspace.selectedConnectionIds);
-    const nextCache = new Map<string, { projection: FlowEdge; view: FlowEdge }>();
-    const next = model.edges.map((edge) => {
-      const isSelected = interactive && selected.has(edge.id);
-      const previous = renderedEdges.current.get(edge.id);
-      const view =
-        previous?.projection === edge && previous.view.selected === isSelected
-          ? previous.view
-          : { ...edge, selected: isSelected };
-      nextCache.set(edge.id, { projection: edge, view });
-      return view;
-    });
-    renderedEdges.current = nextCache;
-    return next;
-  }, [model.edges, workspace.selectedConnectionIds, interactive]);
+  const projectEdgeViews = useMemo(createGraphFlowEdgeViewProjector, []);
+  const selectedConnectionIds = useMemo(
+    () => new Set(workspace.selectedConnectionIds),
+    [workspace.selectedConnectionIds],
+  );
+  const edges = projectEdgeViews(model.edges, selectedConnectionIds, interactive);
   const pendingSourceId = interaction.pendingConnection
     ? portAddressKey(interaction.pendingConnection)
     : undefined;
@@ -230,49 +213,14 @@ function GraphFlowRuntime({
   const candidatesRef = useRef(candidates);
   candidatesRef.current = candidates;
   const [connectionStore] = useState(createGraphFlowInteractionStore);
-  const previousFeedback = useRef<FlowInteractionProjection | undefined>(undefined);
-  const feedback = useMemo(() => {
-    const next = projectFlowInteraction(
-      model,
-      sourceId,
-      candidates.decisions,
-      previousFeedback.current,
-    );
-    previousFeedback.current = next;
-    return next;
-  }, [model, sourceId, candidates.decisions]);
-  const targetId = useConnection((connection) => connection.toHandle?.id ?? null);
-  const connectionState = useMemo(() => {
-    const target = targetId ? feedback.pins[targetId]?.feedback : null;
-    return {
-      ...feedback,
-      targetId,
-      replacedConnectionIds: new Set(
-        target?.kind === "replace" ? target.displacedConnectionIds : [],
-      ),
-    };
-  }, [feedback, targetId]);
-  useLayoutEffect(() => {
-    connectionStore.setState(connectionState, true);
-  }, [connectionStore, connectionState]);
+  const feedback = useMemo(
+    () => projectFlowInteraction(model.pins, model.nodeIds, sourceId, candidates.decisions),
+    [model.pins, model.nodeIds, sourceId, candidates.decisions],
+  );
   const context = useMemo(
     () => ({ graphPath, groupId, interactive, contextMenuActions }),
     [graphPath, groupId, interactive, contextMenuActions],
   );
-  const flowViewport = useMemo(
-    () => ({ x: viewport.x, y: viewport.y, zoom: viewport.scale }),
-    [viewport],
-  );
-
-  const startNodeDrag = useCallback(() => {
-    if (drag.current?.lease.isCurrent()) return;
-    const owner = {};
-    const lease = interaction.beginGesture("draggingNodes", () => {
-      suppressClick.current = true;
-      clearPositions(owner);
-    });
-    drag.current = lease ? { lease, owner } : null;
-  }, [interaction.beginGesture, clearPositions]);
 
   const resetSelectionOverlay = useCallback(() => {
     flowStore.setState({
@@ -281,72 +229,15 @@ function GraphFlowRuntime({
       nodesSelectionActive: false,
     });
   }, [flowStore]);
-  const stopNodeDrag = useCallback(() => {
-    const current = drag.current;
-    drag.current = null;
-    if (!current) return;
-    const submitted = Object.entries(positionsRef.current).flatMap(([nodeId, entry]) =>
-      entry.owner === current.owner ? [{ nodeId, position: entry.position }] : [],
-    );
-    const valid = current.lease.isCurrent();
-    current.lease.finish();
-    if (!valid || !submitted.length) {
-      clearPositions(current.owner);
-      return;
-    }
-    const settled = Object.fromEntries(
-      Object.entries(positionsRef.current).map(([id, entry]) => [
-        id,
-        entry.owner === current.owner ? { ...entry, dragging: false } : entry,
-      ]),
-    );
-    positionsRef.current = settled;
-    setPositions(settled);
-    void interaction.mutations
-      .submitNodePositions(graphPath, submitted)
-      .then((outcome) => {
-        if (outcome.status === "failed")
-          interaction.mutations.reportMutationFailure({
-            graphPath,
-            intent: "moveNodes",
-          });
-      })
-      .catch(() => interaction.mutations.reportMutationFailure({ graphPath, intent: "moveNodes" }))
-      .finally(() => clearPositions(current.owner));
-  }, [graphPath, interaction.mutations, clearPositions]);
   const onNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
-      // Controlled nodes must retain renderer measurements. Dropping them resets handle bounds
-      // and makes React Flow hide the node while measuring it again on every pointer frame.
-      const dimensions = changes.filter((change) => change.type === "dimensions");
-      if (dimensions.length)
-        setMeasurements((current) => {
-          let next = current;
-          for (const change of dimensions) {
-            const size = change.dimensions;
-            if (
-              !modelRef.current.nodeIds.has(change.id) ||
-              !size ||
-              !Number.isFinite(size.width) ||
-              !Number.isFinite(size.height) ||
-              size.width <= 0 ||
-              size.height <= 0
-            )
-              continue;
-            if (
-              current[change.id]?.width === size.width &&
-              current[change.id]?.height === size.height
-            )
-              continue;
-            if (next === current) next = { ...current };
-            next[change.id] = { width: size.width, height: size.height };
-          }
-          return next;
-        });
-      if (!interaction.isInteractive()) return;
-      const selectionChanges = changes.filter((change) => change.type === "select");
+      let selectionChanges: NodeSelectionChange[] | undefined;
+      for (const change of changes) {
+        if (change.type === "select") (selectionChanges ??= []).push(change);
+      }
       if (
-        selectionChanges.length &&
+        selectionChanges &&
+        interaction.isInteractive() &&
         (workspace.selectedNodeIds.length > 0 ||
           selectionChanges.some((change) => change.selected)) &&
         (!selectionGesture.current || selectionGesture.current.isCurrent())
@@ -360,35 +251,14 @@ function GraphFlowRuntime({
           return [...next];
         }, groupId);
       }
-      const current = drag.current;
-      if (!current?.lease.isCurrent()) return;
-      const next = { ...positionsRef.current };
-      let changed = false;
-      for (const change of changes) {
-        if (
-          change.type !== "position" ||
-          !change.position ||
-          !modelRef.current.draggableNodeIds.has(change.id)
-        )
-          continue;
-        if (!Number.isFinite(change.position.x) || !Number.isFinite(change.position.y)) continue;
-        next[change.id] = {
-          position: { ...change.position },
-          dragging: change.dragging ?? true,
-          owner: current.owner,
-        };
-        changed = true;
-      }
-      if (changed) {
-        positionsRef.current = next;
-        setPositions(next);
-      }
+      updateNodes(changes);
     },
     [
       commands.setSelectedNodeIds,
       groupId,
       interaction.isInteractive,
       workspace.selectedNodeIds.length,
+      updateNodes,
     ],
   );
 
@@ -499,92 +369,209 @@ function GraphFlowRuntime({
     [interaction.setContextMenu, interaction.setPendingConnection],
   );
 
+  // React Flow installs these callbacks in its store and memoized element renderers.
+  // Changing their identity on every pointer frame broadcasts to all nodes and handles.
+  const onMoveStart = useCallback<OnMove>(
+    (event) => {
+      // Session synchronization emits { sync: true }, not a user input event.
+      if (
+        !event ||
+        typeof event.type !== "string" ||
+        isDragging() ||
+        connection.current?.lease.isCurrent() ||
+        selectionGesture.current?.isCurrent()
+      )
+        return;
+      pan.current?.finish();
+      const start = viewport.getViewport();
+      pan.current = interaction.beginGesture("panning", () => {
+        suppressClick.current = true;
+        flowStore.setState({ paneDragging: false });
+        viewport.setViewport(start);
+        synchronizeViewport(start);
+      });
+    },
+    [interaction.beginGesture, flowStore, viewport, synchronizeViewport, isDragging],
+  );
+  const onMoveEnd = useCallback<OnMove>(
+    (event) => {
+      if (!event || typeof event.type !== "string") return;
+      const current = pan.current;
+      pan.current = null;
+      if (!current) return;
+      const valid = current.isCurrent();
+      current.finish();
+      if (valid) viewport.commit();
+      else {
+        // D3 still receives mouse moves until release; restore its private transform too.
+        synchronizeViewport(viewport.getViewport());
+      }
+    },
+    [viewport, synchronizeViewport],
+  );
+  const onMove = useCallback<OnMove>(
+    (event, next) => {
+      if (!event || typeof event.type !== "string") return;
+      // React Flow has already applied its transform. Publish coordinates without a React
+      // render/effect round trip; the session subscriber observes an unchanged transform.
+      if (pan.current?.isCurrent())
+        viewport.setViewport({ x: next.x, y: next.y, scale: next.zoom });
+      else synchronizeViewport(viewport.getViewport());
+      const press = contextMenuPress.current;
+      if (press && "clientX" in event && (event.buttons & 2) !== 0) {
+        press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
+      }
+    },
+    [viewport, synchronizeViewport],
+  );
+  const onNodeClick = useCallback<NodeMouseHandler<FlowNode>>(
+    (event, node) => {
+      if (
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        suppressClick.current ||
+        !interaction.isInteractive()
+      )
+        return;
+      void commands.revealNodeDetails(node.id);
+    },
+    [commands.revealNodeDetails, interaction.isInteractive],
+  );
+  const onSelectionStart = useCallback(() => {
+    const snapshot = selectionPointer.current ?? {
+      nodeIds: [...workspace.selectedNodeIds],
+      connectionIds: [...workspace.selectedConnectionIds],
+      shiftKey: false,
+    };
+    selectionPointer.current = snapshot;
+    selectionGesture.current = interaction.beginGesture("selecting", () => {
+      suppressClick.current = true;
+      resetSelectionOverlay();
+      if (snapshot.connectionIds.length)
+        commands.setSelectedConnectionIds(snapshot.connectionIds, groupId);
+      else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
+    });
+  }, [
+    workspace.selectedNodeIds,
+    workspace.selectedConnectionIds,
+    interaction.beginGesture,
+    resetSelectionOverlay,
+    commands.setSelectedConnectionIds,
+    commands.setSelectedNodeIds,
+    groupId,
+  ]);
+  const onPaneClick = useCallback(
+    (event: ReactMouseEvent) => {
+      if (!event.shiftKey && !suppressClick.current && interaction.isInteractive())
+        commands.setSelectedNodeIds([], groupId);
+    },
+    [commands.setSelectedNodeIds, interaction.isInteractive, groupId],
+  );
+  const onEdgeClick = useCallback<EdgeMouseHandler<FlowEdge>>(
+    (event, edge) => {
+      if (!interaction.isInteractive() || event.detail > 1) return;
+      const before = {
+        nodeIds: new Set(workspace.selectedNodeIds),
+        connectionIds: new Set(workspace.selectedConnectionIds),
+      };
+      const toggle = event.ctrlKey || event.metaKey || event.shiftKey;
+      const ids = toggle ? before.connectionIds : new Set<string>();
+      if (toggle && ids.has(edge.id)) ids.delete(edge.id);
+      else ids.add(edge.id);
+      const temporary = { nodeIds: new Set<string>(), connectionIds: new Set(ids) };
+      beforeEdgeClick.current = {
+        id: edge.id,
+        before: {
+          nodeIds: new Set(workspace.selectedNodeIds),
+          connectionIds: new Set(workspace.selectedConnectionIds),
+        },
+        temporary,
+      };
+      commands.setSelectedConnectionIds([...ids], groupId);
+      setEdgeMenu(null);
+    },
+    [
+      interaction.isInteractive,
+      workspace.selectedNodeIds,
+      workspace.selectedConnectionIds,
+      commands.setSelectedConnectionIds,
+      groupId,
+    ],
+  );
+  const onEdgeDoubleClick = useCallback<EdgeMouseHandler<FlowEdge>>(
+    (event, edge) => {
+      if (!interaction.isInteractive()) return;
+      const element = flowStore.getState().domNode;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const currentViewport = viewport.getViewport();
+      const position = {
+        x: (event.clientX - rect.left - currentViewport.x) / currentViewport.scale,
+        y: (event.clientY - rect.top - currentViewport.y) / currentViewport.scale,
+      };
+      const selected = {
+        nodeIds: new Set(workspace.selectedNodeIds),
+        connectionIds: new Set(workspace.selectedConnectionIds),
+      };
+      const pending = beforeEdgeClick.current;
+      const snapshot =
+        pending?.id === edge.id ? pending : { before: selected, temporary: selected };
+      beforeEdgeClick.current = null;
+      void interaction.insertRerouteAtConnection(edge.id, position, graphPath, groupId, snapshot);
+    },
+    [
+      interaction.isInteractive,
+      interaction.insertRerouteAtConnection,
+      flowStore,
+      viewport,
+      workspace.selectedNodeIds,
+      workspace.selectedConnectionIds,
+      graphPath,
+      groupId,
+    ],
+  );
+  const onEdgeContextMenu = useCallback<EdgeMouseHandler<FlowEdge>>(
+    (event, edge) => {
+      event.preventDefault();
+      if (!interaction.isInteractive()) return;
+      const ids = workspace.selectedConnectionIds.includes(edge.id)
+        ? workspace.selectedConnectionIds
+        : [edge.id];
+      commands.setSelectedConnectionIds(ids, groupId);
+      setEdgeMenu({ x: event.clientX, y: event.clientY, ids });
+    },
+    [
+      interaction.isInteractive,
+      workspace.selectedConnectionIds,
+      commands.setSelectedConnectionIds,
+      groupId,
+    ],
+  );
+
   return (
     <GraphFlowContext.Provider value={context}>
       <GraphFlowInteractionContext.Provider value={connectionStore}>
+        <GraphFlowFeedback store={connectionStore} feedback={feedback} />
         <ReactFlow<FlowNode, FlowEdge>
           id={panelInstanceId}
           className="yss-flow"
-          nodes={nodes}
+          data-connection-active={feedback.sourceId !== null || undefined}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          viewport={flowViewport}
-          onViewportChange={(next: Viewport) => {
-            if (!interaction.isInteractive() || !pan.current?.isCurrent()) return;
-            const nextViewport = { x: next.x, y: next.y, scale: next.zoom };
-            viewportRef.current = nextViewport;
-            onViewportChange(nextViewport);
-          }}
+          // Capture the grab point on press; threshold activation discards the first movement.
+          nodeDragThreshold={0}
+          defaultViewport={defaultViewport}
           minZoom={EDITOR_VIEWPORT_SCALE_LIMITS.min}
           maxZoom={EDITOR_VIEWPORT_SCALE_LIMITS.max}
-          onMoveStart={(event) => {
-            // Controlled viewport synchronization emits { sync: true }, not a user input event.
-            if (
-              !event ||
-              typeof event.type !== "string" ||
-              drag.current?.lease.isCurrent() ||
-              connection.current?.lease.isCurrent() ||
-              selectionGesture.current?.isCurrent()
-            )
-              return;
-            pan.current?.finish();
-            const start = viewportRef.current;
-            pan.current = interaction.beginGesture("panning", () => {
-              suppressClick.current = true;
-              flowStore.setState({ paneDragging: false });
-              viewportRef.current = start;
-              onViewportChange(start);
-              flowStore
-                .getState()
-                .panZoom?.syncViewport({ x: start.x, y: start.y, zoom: start.scale });
-            });
-          }}
-          onMoveEnd={(event) => {
-            if (!event || typeof event.type !== "string") return;
-            const current = pan.current;
-            pan.current = null;
-            if (!current) return;
-            const valid = current.isCurrent();
-            current.finish();
-            if (valid) onViewportCommit();
-            else {
-              // D3 still receives mouse moves until release; restore its private transform too.
-              const restored = viewportRef.current;
-              flowStore
-                .getState()
-                .panZoom?.syncViewport({ x: restored.x, y: restored.y, zoom: restored.scale });
-            }
-          }}
+          onMoveStart={onMoveStart}
+          onMoveEnd={onMoveEnd}
           onNodesChange={onNodesChange}
-          onNodeClick={(event, node) => {
-            if (
-              event.shiftKey ||
-              event.ctrlKey ||
-              event.metaKey ||
-              suppressClick.current ||
-              !interaction.isInteractive()
-            )
-              return;
-            void commands.revealNodeDetails(node.id);
-          }}
+          onNodeClick={onNodeClick}
           onNodeDragStart={startNodeDrag}
           onNodeDragStop={stopNodeDrag}
-          onSelectionStart={() => {
-            const snapshot = selectionPointer.current ?? {
-              nodeIds: [...workspace.selectedNodeIds],
-              connectionIds: [...workspace.selectedConnectionIds],
-              shiftKey: false,
-            };
-            selectionPointer.current = snapshot;
-            selectionGesture.current = interaction.beginGesture("selecting", () => {
-              suppressClick.current = true;
-              resetSelectionOverlay();
-              if (snapshot.connectionIds.length)
-                commands.setSelectedConnectionIds(snapshot.connectionIds, groupId);
-              else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
-            });
-          }}
+          onSelectionStart={onSelectionStart}
           onPointerUp={() => {
             // React Flow enables its group overlay after onSelectionEnd, before pointerup bubbles here.
             resetSelectionOverlay();
@@ -606,10 +593,7 @@ function GraphFlowRuntime({
               else commands.setSelectedNodeIds(snapshot.nodeIds, groupId);
             }
           }}
-          onPaneClick={(event) => {
-            if (!event.shiftKey && !suppressClick.current && interaction.isInteractive())
-              commands.setSelectedNodeIds([], groupId);
-          }}
+          onPaneClick={onPaneClick}
           onContextMenuCapture={(event) => {
             const target = event.target instanceof Element ? event.target : null;
             if (!target?.classList.contains("react-flow__pane")) return;
@@ -626,68 +610,10 @@ function GraphFlowRuntime({
               return;
             onContextMenu(event);
           }}
-          onMove={(event) => {
-            const press = contextMenuPress.current;
-            if (press && event && "clientX" in event && (event.buttons & 2) !== 0) {
-              press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
-            }
-          }}
-          onEdgeClick={(event, edge) => {
-            if (!interaction.isInteractive() || event.detail > 1) return;
-            const before = {
-              nodeIds: new Set(workspace.selectedNodeIds),
-              connectionIds: new Set(workspace.selectedConnectionIds),
-            };
-            const toggle = event.ctrlKey || event.metaKey || event.shiftKey;
-            const ids = toggle ? before.connectionIds : new Set<string>();
-            if (toggle && ids.has(edge.id)) ids.delete(edge.id);
-            else ids.add(edge.id);
-            const temporary = { nodeIds: new Set<string>(), connectionIds: new Set(ids) };
-            beforeEdgeClick.current = {
-              id: edge.id,
-              before: {
-                nodeIds: new Set(workspace.selectedNodeIds),
-                connectionIds: new Set(workspace.selectedConnectionIds),
-              },
-              temporary,
-            };
-            commands.setSelectedConnectionIds([...ids], groupId);
-            setEdgeMenu(null);
-          }}
-          onEdgeDoubleClick={(event, edge) => {
-            if (!interaction.isInteractive()) return;
-            const element = flowStore.getState().domNode;
-            if (!element) return;
-            const rect = element.getBoundingClientRect();
-            const position = {
-              x: (event.clientX - rect.left - viewport.x) / viewport.scale,
-              y: (event.clientY - rect.top - viewport.y) / viewport.scale,
-            };
-            const selected = {
-              nodeIds: new Set(workspace.selectedNodeIds),
-              connectionIds: new Set(workspace.selectedConnectionIds),
-            };
-            const pending = beforeEdgeClick.current;
-            const snapshot =
-              pending?.id === edge.id ? pending : { before: selected, temporary: selected };
-            beforeEdgeClick.current = null;
-            void interaction.insertRerouteAtConnection(
-              edge.id,
-              position,
-              graphPath,
-              groupId,
-              snapshot,
-            );
-          }}
-          onEdgeContextMenu={(event, edge) => {
-            event.preventDefault();
-            if (!interaction.isInteractive()) return;
-            const ids = workspace.selectedConnectionIds.includes(edge.id)
-              ? workspace.selectedConnectionIds
-              : [edge.id];
-            commands.setSelectedConnectionIds(ids, groupId);
-            setEdgeMenu({ x: event.clientX, y: event.clientY, ids });
-          }}
+          onMove={onMove}
+          onEdgeClick={onEdgeClick}
+          onEdgeDoubleClick={onEdgeDoubleClick}
+          onEdgeContextMenu={onEdgeContextMenu}
           onPointerDownCapture={(event) => {
             contextMenuPress.current =
               event.button === 2 ? { x: event.clientX, y: event.clientY, moved: false } : null;
@@ -697,17 +623,11 @@ function GraphFlowRuntime({
               selectionGesture.current.finish();
               selectionGesture.current = null;
             }
-            if (drag.current && !drag.current.lease.isCurrent()) {
-              drag.current.lease.finish();
-              drag.current = null;
-            }
+            recoverCancelledDrag();
             if (pan.current && !pan.current.isCurrent()) {
               pan.current.finish();
               pan.current = null;
-              const current = viewportRef.current;
-              flowStore
-                .getState()
-                .panZoom?.syncViewport({ x: current.x, y: current.y, zoom: current.scale });
+              synchronizeViewport(viewport.getViewport());
             }
             const target = event.target instanceof Element ? event.target : null;
             // Snapshot before React Flow clears its selection on the first rectangle movement.

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import {
   act,
-  type ReactNode,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -10,6 +9,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactFlowProps, OnConnectEnd } from "@xyflow/react";
 import type { EditorCanvasSession } from "@/features/application/editor";
 import type { GraphProjectionSnapshot } from "@/features/core/graph/read";
+import type { EditorViewport } from "@/features/core/viewport";
 import { FLOW_GRAPH_PATH, makeGraphFlowFixture } from "@/tests/helpers/graphFlowFixture";
 import { GraphFlowCanvas } from "./GraphFlowCanvas";
 import type { GraphFlowNode, GraphFlowEdge } from "./graphFlowModel";
@@ -17,12 +17,17 @@ import type { GraphFlowNode, GraphFlowEdge } from "./graphFlowModel";
 type FlowProps = ReactFlowProps<GraphFlowNode, GraphFlowEdge>;
 const mocks = vi.hoisted(() => ({
   flows: new Map<string, FlowProps>(),
+  nodeStores: new Map<
+    string,
+    ReturnType<typeof import("@xyflow/react").useStoreApi<GraphFlowNode, GraphFlowEdge>>
+  >(),
   snapshot: { graphEntities: {}, graphMeta: {} } as GraphProjectionSnapshot,
   cancelConnection: vi.fn(),
   syncViewport: vi.fn(),
   viewportChange: vi.fn(),
   viewportCommit: vi.fn(),
   flowState: {
+    transform: [20, 40, 2],
     nodesSelectionActive: false,
     userSelectionActive: false,
     userSelectionRect: null as unknown,
@@ -31,27 +36,36 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/features/core/graph/read", () => ({
   useGraphRead: (select: (value: GraphProjectionSnapshot) => unknown) => select(mocks.snapshot),
 }));
-vi.mock("@xyflow/react", async (original) => ({
-  ...(await original<typeof import("@xyflow/react")>()),
-  ReactFlowProvider: ({ children }: { children: ReactNode }) => children,
-  useConnection: (select: (connection: { toHandle: null }) => unknown) =>
-    select({ toHandle: null }),
-  ReactFlow: (props: FlowProps) => {
-    mocks.flows.set(props.id!, props);
-    return props.children;
-  },
-  useStoreApi: () => ({
-    getState: () => ({
-      ...mocks.flowState,
-      cancelConnection: mocks.cancelConnection,
-      domNode: document.body,
-      panZoom: { syncViewport: mocks.syncViewport },
-    }),
-    setState: (patch: object) => {
-      Object.assign(mocks.flowState, patch);
+vi.mock("@xyflow/react", async (original) => {
+  const actual = await original<typeof import("@xyflow/react")>();
+  return {
+    ...actual,
+    useConnection: (select: (connection: { toHandle: null }) => unknown) =>
+      select({ toHandle: null }),
+    ReactFlow: (props: FlowProps) => {
+      mocks.flows.set(props.id!, props);
+      mocks.nodeStores.set(props.id!, actual.useStoreApi<GraphFlowNode, GraphFlowEdge>());
+      return props.children;
     },
-  }),
-}));
+    useStore: (select: (state: { panZoom: object }) => unknown) =>
+      select({ panZoom: { syncViewport: mocks.syncViewport } }),
+    useStoreApi: () => {
+      const store = actual.useStoreApi<GraphFlowNode, GraphFlowEdge>();
+      return {
+        getState: () => ({
+          ...store.getState(),
+          ...mocks.flowState,
+          cancelConnection: mocks.cancelConnection,
+          domNode: document.body,
+          panZoom: { syncViewport: mocks.syncViewport },
+        }),
+        setState: (patch: object) => {
+          Object.assign(mocks.flowState, patch);
+        },
+      };
+    },
+  };
+});
 vi.mock("./GraphFlowNode", () => ({ GraphFlowNode: () => null }));
 vi.mock("./GraphFlowEdge", () => ({ GraphFlowEdge: () => null }));
 vi.mock("./GraphFlowConnection", () => ({
@@ -66,9 +80,11 @@ let host: HTMLDivElement;
 let canvas: EditorCanvasSession;
 let active: boolean;
 let cancelGesture: () => void;
+let liveViewport: EditorViewport;
 const mutationResult = { status: "applied" as const };
 const emptyEnd = { toNode: null, toHandle: null, isValid: false } as Parameters<OnConnectEnd>[1];
 const flow = (id = "first") => mocks.flows.get(id)!;
+const nodes = (id = "first") => mocks.nodeStores.get(id)!.getState().nodes;
 
 function session(): EditorCanvasSession {
   return {
@@ -120,9 +136,18 @@ function render(twoPanels = false) {
     interactive: active,
     contextMenuActions: null,
     canvas,
-    viewport: { x: 20, y: 40, scale: 2 },
-    onViewportChange: mocks.viewportChange,
-    onViewportCommit: mocks.viewportCommit,
+    viewport: {
+      getViewport: () => liveViewport,
+      subscribe: (listener: (viewport: EditorViewport) => void) => {
+        listener(liveViewport);
+        return () => {};
+      },
+      setViewport: (next: EditorViewport) => {
+        liveViewport = next;
+        mocks.viewportChange(next);
+      },
+      commit: mocks.viewportCommit,
+    },
     onContextMenu: vi.fn(),
   };
   act(() =>
@@ -137,11 +162,7 @@ function render(twoPanels = false) {
   );
 }
 function beginDrag(id = "first") {
-  act(() =>
-    flow(id).onNodeDragStart!(new MouseEvent("mousedown"), flow(id).nodes![0], [
-      flow(id).nodes![0],
-    ]),
-  );
+  act(() => flow(id).onNodeDragStart!(new MouseEvent("mousedown"), nodes(id)[0], [nodes(id)[0]]));
 }
 function move(x: number, id = "first") {
   act(() =>
@@ -152,20 +173,23 @@ function move(x: number, id = "first") {
 }
 async function endDrag(id = "first") {
   await act(async () =>
-    flow(id).onNodeDragStop!(new MouseEvent("mouseup"), flow(id).nodes![0], [flow(id).nodes![0]]),
+    flow(id).onNodeDragStop!(new MouseEvent("mouseup"), nodes(id)[0], [nodes(id)[0]]),
   );
 }
 beforeEach(() => {
   vi.clearAllMocks();
   Object.assign(mocks.flowState, {
+    transform: [20, 40, 2],
     nodesSelectionActive: false,
     userSelectionActive: false,
     userSelectionRect: null,
   });
   mocks.flows.clear();
+  mocks.nodeStores.clear();
   mocks.snapshot = { graphEntities: { [FLOW_GRAPH_PATH]: makeGraphFlowFixture() }, graphMeta: {} };
   active = true;
   canvas = session();
+  liveViewport = { x: 20, y: 40, scale: 2 };
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -194,19 +218,19 @@ describe("React Flow canvas command bridge", () => {
     flow().onMoveStart!({ sync: true } as unknown as MouseEvent, { x: 20, y: 40, zoom: 2 });
     expect(canvas.interaction.beginGesture).not.toHaveBeenCalled();
     flow().onMoveStart!(new MouseEvent("mousedown", { button: 2 }), { x: 20, y: 40, zoom: 2 });
-    flow().onViewportChange!({ x: 70, y: 90, zoom: 2 });
+    flow().onMove!(new MouseEvent("mousemove"), { x: 70, y: 90, zoom: 2 });
     expect(mocks.viewportChange).toHaveBeenLastCalledWith({ x: 70, y: 90, scale: 2 });
     act(() => cancelGesture());
     expect(mocks.viewportChange).toHaveBeenLastCalledWith({ x: 20, y: 40, scale: 2 });
     mocks.viewportChange.mockClear();
     flow().onMoveEnd!({ sync: true } as unknown as MouseEvent, { x: 20, y: 40, zoom: 2 });
-    flow().onViewportChange!({ x: 150, y: 180, zoom: 2 });
+    flow().onMove!(new MouseEvent("mousemove"), { x: 150, y: 180, zoom: 2 });
     expect(mocks.viewportChange).not.toHaveBeenCalled();
     flow().onMoveEnd!(new MouseEvent("mouseup", { button: 2 }), { x: 150, y: 180, zoom: 2 });
     expect(mocks.viewportCommit).not.toHaveBeenCalled();
     expect(mocks.syncViewport).toHaveBeenLastCalledWith({ x: 20, y: 40, zoom: 2 });
     flow().onMoveStart!(new MouseEvent("mousedown", { button: 2 }), { x: 20, y: 40, zoom: 2 });
-    flow().onViewportChange!({ x: 25, y: 45, zoom: 2 });
+    flow().onMove!(new MouseEvent("mousemove"), { x: 25, y: 45, zoom: 2 });
     flow().onMoveEnd!(new MouseEvent("mouseup", { button: 2 }), { x: 25, y: 45, zoom: 2 });
     expect(mocks.viewportChange).toHaveBeenLastCalledWith({ x: 25, y: 45, scale: 2 });
     expect(mocks.viewportCommit).toHaveBeenCalledOnce();
@@ -261,18 +285,18 @@ describe("React Flow canvas command bridge", () => {
         { type: "dimensions", id: "target", dimensions: { width: 180, height: 125 } },
       ]),
     );
-    const stationary = flow().nodes![1];
+    const stationary = nodes()[1];
     beginDrag();
     move(40);
     move(80);
-    expect(flow().nodes![0]).toMatchObject({
+    expect(nodes()[0]).toMatchObject({
       measured: { width: 160, height: 93 },
       dragging: true,
     });
-    expect(flow().nodes![1]).toBe(stationary);
+    expect(nodes()[1]).toBe(stationary);
     act(() => cancelGesture());
-    expect(flow().nodes![0].measured).toEqual({ width: 160, height: 93 });
-    expect(flow().nodes![1]).toBe(stationary);
+    expect(nodes()[0].measured).toEqual({ width: 160, height: 93 });
+    expect(nodes()[1]).toBe(stationary);
     active = false;
     render();
     act(() =>
@@ -280,13 +304,13 @@ describe("React Flow canvas command bridge", () => {
         { type: "dimensions", id: "target", dimensions: { width: 200, height: 140 } },
       ]),
     );
-    expect(flow().nodes![1].measured).toEqual({ width: 200, height: 140 });
+    expect(nodes()[1].measured).toEqual({ width: 200, height: 140 });
     act(() =>
       flow().onNodesChange!([
         { type: "dimensions", id: "target", dimensions: { width: 0, height: 0 } },
       ]),
     );
-    expect(flow().nodes![1].measured).toEqual({ width: 200, height: 140 });
+    expect(nodes()[1].measured).toEqual({ width: 200, height: 140 });
   });
 
   it("keeps pointer frames local and submits one batch at drag end", async () => {
@@ -294,8 +318,11 @@ describe("React Flow canvas command bridge", () => {
     beginDrag();
     move(40);
     move(80);
-    expect(flow().nodes![0].position).toEqual({ x: 80, y: 60 });
-    expect(flow("second").nodes![0].position).toEqual({ x: 0, y: 0 });
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    expect(nodes()[0].position).toEqual({ x: 80, y: 60 });
+    expect(nodes("second")[0].position).toEqual({ x: 0, y: 0 });
     expect(mocks.snapshot.graphEntities[FLOW_GRAPH_PATH].nodes.source.position).toEqual({
       x: 0,
       y: 0,
@@ -323,10 +350,10 @@ describe("React Flow canvas command bridge", () => {
     beginDrag();
     move(120);
     await act(async () => finishFirst(mutationResult));
-    expect(flow().nodes![0].position.x).toBe(120);
+    expect(nodes()[0].position.x).toBe(120);
     act(() => cancelGesture());
     await endDrag();
-    expect(flow().nodes![0].position.x).toBe(0);
+    expect(nodes()[0].position.x).toBe(0);
     expect(canvas.interaction.mutations.submitNodePositions).toHaveBeenCalledTimes(1);
   });
 

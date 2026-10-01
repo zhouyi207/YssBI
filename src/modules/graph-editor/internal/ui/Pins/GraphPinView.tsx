@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { PinRenderStyle, PinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { resolvePinRenderStyle } from "@/shared/types/domain/pinVisual";
 import { useGraphFlowInteraction } from "../Canvas/core/GraphFlowContext";
+import { getFlowPinAppearance } from "../Canvas/core/graphFlowModel";
 
 export interface GraphPinViewProps {
   id: string;
@@ -163,16 +164,17 @@ export function GraphPinView({
   onContextMenu,
   onClick,
 }: GraphPinViewProps) {
-  const interaction = useGraphFlowInteraction((state) => state.pins[id] ?? null);
-  const isConnected = projectedConnected || interaction?.active === true;
+  const appearance = useGraphFlowInteraction((state) => getFlowPinAppearance(state, id));
+  const active = appearance === "active";
+  const isConnected = projectedConnected || active;
   const renderStyle =
     isConnected === projectedConnected
       ? projectedRenderStyle
       : resolvePinRenderStyle(true, baseColor, projectedRenderStyle.stroke);
   const interactionStyle: CSSProperties | undefined =
-    interaction?.dragState === "dimmed"
+    appearance === "dimmed"
       ? { opacity: 0.25, transition: "opacity 150ms, filter 150ms" }
-      : interaction?.dragState === "highlighted"
+      : active || appearance === "highlighted"
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
   return (
@@ -240,7 +242,7 @@ export function GraphPinView({
             {name}
           </span>
 
-          {!interaction?.active && inputSlot}
+          {!active && inputSlot}
           {contextMenuSlot}
         </div>
       </TooltipTrigger>

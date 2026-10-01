@@ -20,7 +20,7 @@ export { useProjectOperations } from "./useProjectOperations";
 export { useEditorCanvas } from "./useEditorCanvas";
 export { clearDetailFocusForClosedPanel } from "./clearDetailFocusForClosedPanel";
 export type { GraphContextMenuActions } from "./graphContextMenuActions";
-export { useCanvasViewport } from "./useCanvasViewport";
+export { useCanvasViewport, type EditorCanvasViewportSession } from "./useCanvasViewport";
 export { useCanvasDrop } from "./useCanvasDrop";
 export { useCanvasOverlayHandlers } from "./useCanvasOverlayHandlers";
 export { revealDetails, setDetailContext, setInspectionContext } from "./rightSidebarActions";

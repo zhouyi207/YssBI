@@ -24,6 +24,9 @@ Graph、Resource、Execution、Settings、Database 和界面读取能力复用 `
 数值参数编辑遵循当前 `Scalar/Numeric` 语义，允许小数；客户端保留必填、有限值和安全整数检查，不保留旧物理整数类型对应的“必须为整数”错误分支。
 
 连接提示由 `application/graphEditing/useConnectionCandidates` 查询 Rust 的连接决策投影，普通连接和迁移共用实际 mutation planner。前端按后端的 append、replace、invalid 结果显示高亮、替换范围和候选列表，不推导类型兼容性或迁移容量。查询只保留当前起点及操作的一份结果，按项目、图编辑版本、语义身份和资源目录发布版本失效；迟到响应不能覆盖新手势，鼠标移动不触发 IPC。Pin 创建目录同样在这些身份变化时重新查询 Rust 的兼容目录；单纯结果状态更新不会重新查询。
+候选查询仅在启用且存在起始端口时消费这些失效信号。空闲画布的相关 selector 返回稳定空值，
+项目、图版本和资源目录更新不会通过候选查询唤醒它；开始手势时立即读取当前 owner 的值，
+继续按完整身份查询并拒绝迟到结果。
 
 `core/dataStore/graphProjectionStore` 是图会话、实体和结果有效性摘要的统一只读发布入口。打开、编辑、撤销、保存以及项目快照都先验证完整回执，再一次安装 `sessions / graphEntities / resultStates`；原图编辑 Store 已移除。完整快照和增量响应都按实体 ID 复用未变化的内容，发布时冻结对象。编辑版本和结果摘要版本独立接纳，迟到的较旧结果不能覆盖新运行状态。结果查询和持有租约仍由 Results Application 管理。
 单图安装和多图快照共用 `prepareGraphSessions`：先准备每张图的会话、实体桶与结果条目，再一次冻结完整批次。三个项目级表各自最多复制一次，删除过滤已经生成的新表直接参与候选构建；拒绝旧版本或内容未变化时保留原引用，完全无变化的批次返回原状态。中途校验失败或路径重复不会发布部分结果，项目快照仍在原提交边界一次安装。
@@ -37,5 +40,14 @@ Graph、Resource、Execution、Settings、Database 和界面读取能力复用 `
 `pnpm bench:graph` 对完整快照和增量分别报告同步解析、实体安装及两者合计的耗时；安装样本在计时外准备已验证的输入，快照样本每次清空基线和该图 Store，增量样本先建立基线。样本之间清理 mock 调用历史，避免历史响应干扰对象回收。可用 `--testNamePattern='5000 nodes: snapshot'` 或 `--testNamePattern='5000 nodes: delta'` 独立测量，减少上一阶段回收对下一阶段的干扰。该基准使用模拟 IPC，不测量 Rust 处理、真实传输或浏览器布局与绘制，桌面交互仍需人工验收。
 `pnpm bench:graph:publication` 单独测量多图快照准备和执行状态的结果展示更新。批量样本消费已冻结的会话，每次从空项目表准备；展示样本安装稳定结果后，通过真实 Execution Store 与 Results 读取投影交替设置、清除错误。两者均不包含 IPC、React 组件渲染或浏览器绘制。
 节点视图按输入、输出分组并共享原始 Pin 引用；连接数量直接读取 Rust 的 `connections.current`，不再派生第二套 Pin 连接状态。连线记录保留必需的结构化端点和顺序字段，查看结果与诊断直接消费这些字段。
+Pin 的查看入口仅在菜单挂载期间订阅可用性，Core 查询直接使用现有 `pinConnections` 与
+`connections` 索引返回布尔值，不物化连线和结果引用数组。Application 在点击时读取当前
+图快照，再按邻接顺序解析上游输出；检查目标端点以排除反向的受损连接，并保留重复端点。
+`useNodeView` 用一个 Zustand selector 读取节点正文，缓存归当前图路径和节点 ID 的订阅所有。
+节点与端口表引用未变时直接复用视图；端口表变化时只遍历该节点的端口 ID，一次核对引用及分组顺序，
+不创建中间端口数组。输入、输出分别复用原数组，只在该组首次出现差异时复制匹配前缀并填充后续端口；
+末尾删除只截取受影响的数组，另一组继续共享。标题、参数、诊断、能力与输入输出均未变化时保留整个正文引用，
+坐标提交不会重建正文；仅正文元数据变化时继续共享输入输出数组，不重新遍历端口。节点删除时清空缓存，
+切换图或节点时替换 selector，卸载后释放；缓存不参与图状态写入或序列化。
 
 Application 可以依赖 Core、Domain 和 Services；依赖不能从 Core 或 Domain 反向指向 Application 或界面。完整边界由[当前架构](../../docs/architecture/ARCHITECTURE.md#layer-and-dependency-direction)和[架构门禁](../../docs/development/ARCHITECTURE_GATES.md)维护。

@@ -1,15 +1,19 @@
-import { memo } from "react";
+import { memo, useMemo, type RefCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { type EdgeProps } from "@xyflow/react";
+import { Position, type EdgeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
 import { useGraphRead } from "@/features/core/graph/read";
 import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
-import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
+import { computeEdgePath } from "@/features/core/canvas";
 import { useGraphFlowContext, useGraphFlowInteraction } from "./GraphFlowContext";
-import type { GraphFlowEdge as FlowEdge } from "./graphFlowModel";
+import {
+  createGraphFlowEdgeAppearanceSelector,
+  type GraphFlowEdge as FlowEdge,
+} from "./graphFlowModel";
 import { Edge } from "./Edge";
+import { useEdgePath } from "./useEdgePath";
 
 export const GraphFlowEdge = memo(function GraphFlowEdge({
   id,
@@ -19,64 +23,79 @@ export const GraphFlowEdge = memo(function GraphFlowEdge({
   sourceY,
   targetX,
   targetY,
+  sourcePosition,
   selected,
   data,
 }: EdgeProps<FlowEdge>) {
+  const pathRef = useEdgePath(
+    computeEdgePath(sourceX, sourceY, targetX, targetY, sourcePosition === Position.Left),
+  );
+  return useMemo(
+    () => (
+      <GraphFlowEdgeAppearance
+        id={id}
+        source={source}
+        target={target}
+        selected={selected}
+        data={data}
+        pathRef={pathRef}
+      />
+    ),
+    [id, source, target, selected, data, pathRef],
+  );
+});
+
+// Coordinate updates only write path geometry above. Business subscriptions and
+// the visible, highlighted and hit shapes stay mounted without rerendering on each move.
+const GraphFlowEdgeAppearance = memo(function GraphFlowEdgeAppearance({
+  id,
+  source,
+  target,
+  selected,
+  data,
+  pathRef,
+}: Pick<EdgeProps<FlowEdge>, "id" | "source" | "target" | "selected" | "data"> & {
+  pathRef: RefCallback<SVGPathElement>;
+}) {
   const { interactive, graphPath } = useGraphFlowContext();
-  const drawingConnection = useGraphFlowInteraction((state) => state.sourceId !== null);
   const { t } = useTranslation();
   const replaced = useGraphFlowInteraction((state) => state.replacedConnectionIds.has(id));
   const { tokens } = useTheme();
-  const pin = useGraphRead((snapshot) =>
-    data ? snapshot.graphEntities[graphPath]?.pins[data.fromPinId] : undefined,
+  const fromPinId = data?.fromPinId;
+  const toPinId = data?.toPinId;
+  const selectAppearance = useMemo(
+    () => createGraphFlowEdgeAppearanceSelector(graphPath, id, fromPinId, toPinId),
+    [graphPath, id, fromPinId, toPinId],
   );
-  const input = useGraphRead((snapshot) =>
-    data ? snapshot.graphEntities[graphPath]?.pins[data.toPinId] : undefined,
-  );
-  const blocked = useGraphRead(
-    (snapshot) =>
-      snapshot.graphEntities[graphPath]?.diagnostics.some(
-        (diagnostic) =>
-          diagnostic.blocking &&
-          diagnostic.location.kind === "connection" &&
-          diagnostic.location.connectionId === id,
-      ) ?? false,
-  );
+  const { colorKey, hasEndpoints, blocked } = useGraphRead(selectAppearance);
   const [cache, state] = useGraphResultPresentation(
     graphPath,
     useShallow((presentation) => {
-      const cache = pin && input ? (presentation.connections[pin.id]?.[input.id] ?? "new") : "new";
+      const cache =
+        hasEndpoints && data
+          ? (presentation.connections[data.fromPinId]?.[data.toPinId] ?? "new")
+          : "new";
       return [
         cache,
         graphElementState(
           presentation,
           target,
           cache,
-          blocked ||
-            pin?.orphan ||
-            input?.orphan ||
-            presentation.failure?.source?.nodeId === source,
+          blocked || presentation.failure?.source?.nodeId === source,
         ),
       ] as const;
     }),
   );
-  const color = pin
-    ? getPinTypeColor(resolvePinVisualSpec(pin).colorKey, tokens)
-    : tokens.mutedForeground;
+  const color = colorKey === undefined ? tokens.mutedForeground : getPinTypeColor(colorKey, tokens);
   return (
     <g data-replacement-preview={replaced || undefined}>
       <Edge
         edgeId={id}
-        x1={sourceX}
-        y1={sourceY}
-        x2={targetX}
-        y2={targetY}
+        pathRef={pathRef}
         color={color}
         state={state}
         cacheState={cache}
         title={t(`canvas.graphState.${state}`)}
-        startIsInput={pin?.direction === "input"}
-        dimmed={drawingConnection}
         replacementPreview={replaced}
         selected={selected}
         interactive={interactive}

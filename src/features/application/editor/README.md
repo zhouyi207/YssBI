@@ -74,9 +74,14 @@ normally. Shift-clicking the pane preserves selection. Port anchors always isola
 gestures, even when their connection handle is disabled. Selection, node, and connection drags
 do not implicitly auto-pan.
 
-`useCanvasViewport` connects the controlled React Flow viewport to the existing viewport
-session. Navigation commands, sidebar drops, and view-state persistence use that same
-coordinate system. React Flow does not own draft history, save/execute, or FlexLayout layout.
+`useCanvasViewport` exposes stable read/subscribe/update/commit access to the existing viewport
+session without subscribing its React caller to pointer-frequency coordinates. React Flow
+applies its native transform first; the renderer publishes valid gesture coordinates from
+`onMove`. Session subscriptions synchronize navigation and cancellation directly into the
+renderer, skipping unchanged transforms. No controlled viewport render/effect round trip or
+separate writable viewport store is introduced. Navigation commands, sidebar drops, and
+view-state persistence use that same coordinate system. React Flow does not own draft
+history, save/execute, or FlexLayout layout.
 React Flow handles wheel zoom and the canvas content transform. Core viewport helpers own
 the shared session and grid alignment; they do not attach a second wheel listener or transform.
 

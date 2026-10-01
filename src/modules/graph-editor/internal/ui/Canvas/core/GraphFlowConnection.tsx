@@ -1,23 +1,45 @@
+import { memo, useMemo, type RefCallback } from "react";
 import {
+  Position,
   ViewportPortal,
   useInternalNode,
   useReactFlow,
   type ConnectionLineComponentProps,
 } from "@xyflow/react";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { computeEdgePath } from "@/features/core/canvas/edgePath";
+import { computeEdgePath } from "@/features/core/canvas";
+import { Edge } from "./Edge";
 import { useGraphFlowInteraction } from "./GraphFlowContext";
+import { getFlowPinFeedback } from "./graphFlowModel";
+import { useEdgePath } from "./useEdgePath";
 
 export function GraphFlowConnection({
   fromX,
   fromY,
   toX,
   toY,
+  fromPosition,
   toHandle,
 }: ConnectionLineComponentProps) {
-  const sourceDirection = useGraphFlowInteraction((state) => state.sourceDirection);
+  const pathRef = useEdgePath(
+    computeEdgePath(fromX, fromY, toX, toY, fromPosition === Position.Left),
+  );
+  const targetId = toHandle?.id ?? null;
+  return useMemo(
+    () => <ConnectionAppearance pathRef={pathRef} targetId={targetId} />,
+    [pathRef, targetId],
+  );
+}
+
+const ConnectionAppearance = memo(function ConnectionAppearance({
+  pathRef,
+  targetId,
+}: {
+  pathRef: RefCallback<SVGPathElement>;
+  targetId: string | null;
+}) {
   const feedback = useGraphFlowInteraction((state) =>
-    toHandle?.id ? (state.pins[toHandle.id]?.feedback ?? null) : null,
+    targetId ? getFlowPinFeedback(state, targetId) : null,
   );
   const color =
     feedback?.kind === "invalid"
@@ -28,17 +50,15 @@ export function GraphFlowConnection({
           ? "var(--status-success)"
           : "var(--accent-color)";
   return (
-    <path
-      d={computeEdgePath(fromX, fromY, toX, toY, sourceDirection === "input")}
-      fill="none"
-      stroke={color}
-      strokeWidth={2}
+    <g
       pointerEvents="none"
       data-connection-feedback={feedback?.kind}
       data-connection-invalid-reason={feedback?.kind === "invalid" ? feedback.reason : undefined}
-    />
+    >
+      <Edge pathRef={pathRef} color={color} />
+    </g>
   );
-}
+});
 
 export function PendingFlowConnection({
   pin,
@@ -62,11 +82,13 @@ export function PendingFlowConnection({
         className="absolute pointer-events-none overflow-visible"
         style={{ left: 0, top: 0, width: 1, height: 1 }}
       >
-        <path
-          d={computeEdgePath(start.x, start.y, end.x, end.y, pin.direction === "input")}
-          fill="none"
-          stroke="var(--accent-color)"
-          strokeWidth={2}
+        <Edge
+          x1={start.x}
+          y1={start.y}
+          x2={end.x}
+          y2={end.y}
+          startIsInput={pin.direction === "input"}
+          color="var(--accent-color)"
         />
       </svg>
     </ViewportPortal>

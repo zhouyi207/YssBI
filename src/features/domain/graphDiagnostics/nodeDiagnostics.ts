@@ -1,8 +1,4 @@
-import type {
-  DiagnosticDto,
-  DiagnosticLocationDto,
-  PortAddressDto,
-} from "@/shared/types/domain/editorProjection";
+import type { DiagnosticDto, DiagnosticLocationDto } from "@/shared/types/domain/editorProjection";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import diagnosticTemplates from "./diagnosticTemplates.generated.json";
 import type {
@@ -13,7 +9,6 @@ import type {
 import {
   formatNodePinDisplayLabel,
   nodeDisplayTitle,
-  portAddressKey,
   resolveNodePinDisplayLabel,
 } from "@/features/domain/editorProjection";
 
@@ -63,19 +58,6 @@ export function formatGraphDiagnostic(
     }
     return text;
   });
-}
-
-export function findPrimaryPortDiagnostic(
-  diagnostics: readonly DeepReadonly<DiagnosticDto>[],
-  address: PortAddressDto,
-): DeepReadonly<DiagnosticDto> | undefined {
-  const addressKey = portAddressKey(address);
-  const matchingDiagnostics = diagnostics.filter(
-    (diagnostic) =>
-      diagnostic.location.kind === "port" &&
-      portAddressKey(diagnostic.location.address) === addressKey,
-  );
-  return matchingDiagnostics.find((diagnostic) => diagnostic.blocking) ?? matchingDiagnostics[0];
 }
 
 export function isUnboundInputDiagnostic(

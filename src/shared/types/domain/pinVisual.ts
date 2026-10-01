@@ -6,8 +6,8 @@ import type { DeepReadonly } from "@/shared/types/deepReadonly";
 
 import {
   dataTypeContainerOverlay,
-  dataTypeToThemePinType,
   exactPinDataType,
+  pinTypeColorKey,
   pinTypeLabel,
   type PinSemanticsFields,
 } from "./pinSemantics";
@@ -43,13 +43,12 @@ function resolveShape(pin: DeepReadonly<PinVisualInput>): PinShape {
 
 export function resolvePinVisualSpec(pin: DeepReadonly<PinVisualInput>): PinVisualSpec {
   const dataType = exactPinDataType(pin);
-  const colorKey = dataType ? dataTypeToThemePinType(dataType) : "object";
   const container = dataTypeContainerOverlay(dataType);
 
   return {
     label: pinTypeLabel(pin),
     shape: resolveShape(pin),
-    colorKey,
+    colorKey: pinTypeColorKey(pin),
     container,
     dashedStroke: dataType?.kind === "OneOf",
   };

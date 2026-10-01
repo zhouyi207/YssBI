@@ -1,8 +1,9 @@
 import {
-  useCallback,
+  memo,
   useContext,
   useMemo,
   useState,
+  type ComponentProps,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -12,16 +13,12 @@ import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
 import { useTranslation } from "react-i18next";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
-import {
-  inspectableRefsFromPinView,
-  type ResolvePinViewTargetParams,
-} from "@/features/core/execution/pinViewTarget";
+import { hasPinViewTarget } from "@/features/core/execution/pinViewTarget";
 import { useGraphRead } from "@/features/core/graph/read";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useTheme } from "@/features/core/theme/useTheme";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import {
-  findPrimaryPortDiagnostic,
   formatGraphDiagnostic,
   isUnboundInputDiagnostic,
 } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
@@ -35,12 +32,37 @@ export interface GraphPinControllerProps {
   pin: PinData;
   graphPath?: string;
   contextMenuActions?: GraphContextMenuActions | null;
-  handleSlot?: ReactNode;
+  renderPinHandle?: (pin: PinData) => ReactNode;
 }
 
-export function GraphPinController(props: GraphPinControllerProps) {
-  const { pin, graphPath, contextMenuActions, handleSlot } = props;
-  const { id, nodeId, name, direction, address, orphan, input, typeState } = pin;
+// Only a mounted menu subscribes to result-target availability.
+function GraphPinContextMenu({
+  graphPath,
+  pin,
+  ...props
+}: Pick<GraphPinControllerProps, "graphPath" | "pin"> &
+  Omit<ComponentProps<typeof PinContextMenu>, "showView" | "onView">) {
+  const target = graphPath ? { graphPath, address: pin.address, direction: pin.direction } : null;
+  const showView = useGraphRead(
+    (snapshot) =>
+      target !== null && hasPinViewTarget(target, snapshot.graphEntities[target.graphPath]),
+  );
+  return (
+    <PinContextMenu
+      {...props}
+      showView={showView}
+      onView={() => {
+        if (target) void openPinInspectableView(target);
+      }}
+    />
+  );
+}
+
+export const GraphPinController = memo(function GraphPinController(props: GraphPinControllerProps) {
+  const { pin, graphPath, contextMenuActions, renderPinHandle } = props;
+  // A stable factory lets unchanged sibling Pins skip rendering; local updates reuse their handle.
+  const handleSlot = useMemo(() => renderPinHandle?.(pin), [pin, renderPinHandle]);
+  const { id, nodeId, name, direction, orphan, input, typeState } = pin;
   const dataType = typeState.status === "exact" ? (typeState.dataType ?? undefined) : undefined;
   const defaultValue = input?.protocolDefault;
   const userValue = input?.literalOverride;
@@ -58,21 +80,14 @@ export function GraphPinController(props: GraphPinControllerProps) {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
-  const graphConnections = useGraphRead(
-    useShallow((snapshot) => {
-      const bucket = graphPath ? snapshot.graphEntities[graphPath] : undefined;
-      if (!bucket || direction === "output") return [];
-      return (bucket.pinConnections[id] ?? []).map(
-        (connectionId) => bucket.connections[connectionId],
-      );
-    }),
+  const pinDiagnostic = useGraphRead((snapshot) =>
+    graphPath ? snapshot.graphEntities[graphPath]?.primaryPortDiagnostics[id] : undefined,
   );
-  const pinDiagnostic = useGraphRead((snapshot) => {
-    const diagnostics = graphPath
-      ? snapshot.graphEntities[graphPath]?.nodes[nodeId]?.diagnostics
-      : undefined;
-    return diagnostics ? findPrimaryPortDiagnostic(diagnostics, address) : undefined;
-  });
+  const diagnosticMessage = useMemo(
+    () =>
+      pinDiagnostic ? formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage) : undefined,
+    [pinDiagnostic, i18n?.resolvedLanguage],
+  );
   const [cacheState, executionState] = useGraphResultPresentation(
     graphPath,
     useShallow((presentation) => {
@@ -90,33 +105,15 @@ export function GraphPinController(props: GraphPinControllerProps) {
       ] as const;
     }),
   );
-  const viewParams = useMemo<ResolvePinViewTargetParams | null>(
-    () =>
-      graphPath
-        ? {
-            graphPath,
-            address,
-            direction,
-            connections: graphConnections,
-          }
-        : null,
-    [address, graphConnections, direction, graphPath],
-  );
-  const showViewMenu = viewParams !== null && inspectableRefsFromPinView(viewParams).length > 0;
-  const handleView = useCallback(() => {
-    if (viewParams) void openPinInspectableView(viewParams);
-  }, [viewParams]);
-
   const editableInput = direction === "input" && scalarPinInputKey(dataType) !== null;
   const canReset = editableInput && userValue != null;
   const shouldPulse =
     !isConnected && direction === "input" && isUnboundInputDiagnostic(pinDiagnostic);
-  const showInput = Boolean(editableInput && !isConnected && graphPath && nodeId);
   const dragStyle: CSSProperties | undefined = orphan
     ? { opacity: 0.25, transition: "opacity 150ms, filter 150ms" }
     : undefined;
-  const pinTooltip = pinDiagnostic
-    ? `${name} (${visualSpec.label}) — ${formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage)}`
+  const pinTooltip = diagnosticMessage
+    ? `${name} (${visualSpec.label}) — ${diagnosticMessage}`
     : `${name} (${visualSpec.label})`;
   const tooltip = [
     pinTooltip,
@@ -126,17 +123,25 @@ export function GraphPinController(props: GraphPinControllerProps) {
     .filter(Boolean)
     .join(" · ");
 
-  const inputSlot = showInput ? (
-    <PinInput
-      pinId={id}
-      nodeId={nodeId}
-      graphPath={graphPath!}
-      dataType={dataType}
-      value={userValue ?? defaultValue}
-    />
-  ) : null;
+  const inputValue = userValue ?? defaultValue;
+  // Runtime decoration does not change the editor's value, identity or local editing state.
+  const inputSlot = useMemo(
+    () =>
+      editableInput && !isConnected && graphPath && nodeId ? (
+        <PinInput
+          pinId={id}
+          nodeId={nodeId}
+          graphPath={graphPath}
+          dataType={dataType}
+          value={inputValue}
+        />
+      ) : null,
+    [editableInput, isConnected, graphPath, nodeId, id, dataType, inputValue],
+  );
   const contextMenuSlot = contextMenu ? (
-    <PinContextMenu
+    <GraphPinContextMenu
+      graphPath={graphPath}
+      pin={pin}
       position={contextMenu}
       hasLinks={isConnected}
       canReset={canReset}
@@ -146,8 +151,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
       onResetValue={
         contextMenuActions ? () => void contextMenuActions.resetPinValue(nodeId, id) : undefined
       }
-      showView={showViewMenu}
-      onView={handleView}
       onClose={() => setContextMenu(null)}
     />
   ) : null;
@@ -159,9 +162,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
       direction={direction}
       isConnected={isConnected}
       contextMenuOpen={contextMenu != null}
-      diagnosticMessage={
-        pinDiagnostic ? formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage) : undefined
-      }
+      diagnosticMessage={diagnosticMessage}
       dragStyle={dragStyle}
       handleSlot={handleSlot}
       visualSpec={visualSpec}
@@ -183,4 +184,4 @@ export function GraphPinController(props: GraphPinControllerProps) {
       }}
     />
   );
-}
+});

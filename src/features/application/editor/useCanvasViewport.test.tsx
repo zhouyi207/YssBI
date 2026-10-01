@@ -30,15 +30,19 @@ it("shares one viewport with navigation commands, preserves zoom, and isolates p
     resetLiveViewports();
     act(() => root.render(<Harness />));
     const scope = editorViewportScope("first", "graph");
-    const untouched = second!.viewport;
+    const untouched = second!.getViewport();
+    const changed = vi.fn();
+    const unsubscribe = first!.subscribe(changed);
     act(() => setViewportLive(scope, { x: 40, y: 60, scale: 2 }));
-    expect(first!.viewport).toEqual({ x: 40, y: 60, scale: 2 });
-    expect(second!.viewport).toEqual(untouched);
+    expect(first!.getViewport()).toEqual({ x: 40, y: 60, scale: 2 });
+    expect(changed).toHaveBeenLastCalledWith({ x: 40, y: 60, scale: 2 });
+    expect(second!.getViewport()).toEqual(untouched);
     act(() => first!.setViewport({ x: 80, y: 90, scale: 0.5 }));
     expect(getViewport(scope)).toEqual({ x: 80, y: 90, scale: 0.5 });
     expect(persist).not.toHaveBeenCalled();
     act(() => first!.commit());
     expect(persist).toHaveBeenCalledWith(scope);
+    unsubscribe();
   } finally {
     act(() => root.unmount());
     useViewportStore.getState().clear();
