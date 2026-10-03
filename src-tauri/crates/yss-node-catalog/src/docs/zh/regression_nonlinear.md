@@ -1,10 +1,10 @@
 # 非线性回归
 
-连接对齐的有限观测，缺失值会被拒绝。除下述说明外，响应为数值，`predictors` 按端口顺序接收 至少一个数值列，对应 x1、x2……。分类自变量须显式编码；未惩罚模型须设计满秩且残差自由度为正。
+连接对齐的有限观测，缺失值会被拒绝。除下述说明外，响应为数值，`X₁, X₂, …` 按端口顺序接收 至少一个数值列，对应 x1、x2……。分类自变量须显式编码；未惩罚模型须设计满秩且残差自由度为正。
 
 ## 方法与参数
 
-单个 `predictor`。模型为指数 b1·exp(b2·x)（默认）、Logistic 生长 b1/[1+exp(−b2·(x−b3))]、Michaelis–Menten b1·x/(b2+x) 或 Gompertz b1·exp[−exp(−b2·(x−b3))]。`initial_values` 按 b1、b2……排列，留空自动初始化。采用局部阻尼最小二乘，最大迭代 500 次、容差 1e-7。J 为拟合 Jacobian，p 为参数数目，须 J 满秩且 n>p。推断采用 n−p 自由度的局部 Student t 近似，不保证全局最优。
+单个 `X`。模型为指数 b1·exp(b2·x)（默认）、Logistic 生长 b1/[1+exp(−b2·(x−b3))]、Michaelis–Menten b1·x/(b2+x) 或 Gompertz b1·exp[−exp(−b2·(x−b3))]。`initial_values` 按 b1、b2……排列，留空自动初始化。采用局部阻尼最小二乘，最大迭代 500 次、容差 1e-7。J 为拟合 Jacobian，p 为参数数目，须 J 满秩且 n>p。推断采用 n−p 自由度的局部 Student t 近似，不保证全局最优。
 
 $$
 \hat\theta=\arg\min_\theta\sum_i[y_i-f(x_i,\theta)]^2,\quad\widehat{\operatorname{Cov}}(\hat\theta)=\frac{RSS}{n-p}(J^TJ)^{-1}.

@@ -98,7 +98,7 @@ fn estimate_ports(method: &str, regression: bool) -> Result<Vec<PortSpec>, Built
         concrete("core.binary")?,
     ]));
     let mut ports = vec![
-        data_input("response", "Response", response)?,
+        data_input("y", "Y", response)?,
         data_input("weights", "Sampling weights", series_type()?)?,
     ];
     for (key, title, required) in [
@@ -116,13 +116,7 @@ fn estimate_ports(method: &str, regression: bool) -> Result<Vec<PortSpec>, Built
         });
     }
     if regression {
-        ports.push(bounded_user_data_input(
-            "predictors",
-            "Predictor",
-            series_type()?,
-            0,
-            None,
-        )?);
+        ports.push(bounded_user_data_input("x", "X", series_type()?, 0, None)?);
     }
     ports.push(data_output(
         "result",

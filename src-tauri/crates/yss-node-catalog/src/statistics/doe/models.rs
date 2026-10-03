@@ -14,7 +14,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             false,
         ),
     ] {
-        let mut ports = vec![data_input("response", "Response", series_type()?)?];
+        let mut ports = vec![data_input("y", "Y", series_type()?)?];
         ports.push(if surface {
             bounded_user_data_input("factors", "Continuous factor", series_type()?, 1, None)?
         } else {

@@ -1,6 +1,6 @@
 # 复杂抽样均值／比例
 
-连接 response 响应和 weights 抽样权重，可连接一列 strata 层标签及一列 clusters 初级抽样单元（PSU）标签。
+连接 Y 响应和 weights 抽样权重，可连接一列 strata 层标签及一列 clusters 初级抽样单元（PSU）标签。
 
 未提供 strata 时视为一层；未提供 clusters 时每行是一个独立 PSU。不同层内相同的 PSU 标签分别识别。列须对齐且无缺失，数值有限，抽样权重严格为正。不自动删除记录。
 

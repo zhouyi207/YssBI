@@ -32,7 +32,7 @@ fn longitudinal_category_executes_all_ten_nodes_with_aligned_relations_and_catal
             .iter()
             .map(|g| format!("subject-{}", g.as_u64().unwrap()))
             .collect::<Vec<_>>();
-        let mut table = serde_json::json!({"response":case["y"],"x":fixture["x"][0],"g":labels});
+        let mut table = serde_json::json!({"y":case["y"],"x":fixture["x"][0],"g":labels});
         if matches!(name, "nested" | "crossed") {
             table["h"] = case["second_groups"].clone();
         }
@@ -46,14 +46,14 @@ fn longitudinal_category_executes_all_ten_nodes_with_aligned_relations_and_catal
             yss_graph_document::normalize_constant_value(constant).unwrap();
         }
         let model = node(&mut document, &kind, serde_json::json!({}));
-        for (key, column, index) in std::iter::once(("response", "response", 0))
-            .chain(std::iter::once(("predictors", "x", 0)))
+        for (key, column, index) in std::iter::once(("y", "y", 0))
+            .chain(std::iter::once(("x", "x", 0)))
             .chain(std::iter::once(("groups", "g", 0)))
             .chain(matches!(name, "nested" | "crossed").then_some(("groups", "h", 1)))
             .chain((name == "random_slope").then_some(("random_predictors", "x", 0)))
         {
             let from = selector(&mut document, source, column);
-            let address = if key == "response" {
+            let address = if key == "y" {
                 PortAddress::declared(model, key.parse().unwrap())
             } else {
                 let a = PortAddress::instance(model, key.parse().unwrap(), PortInstanceId::new());
@@ -124,7 +124,7 @@ fn longitudinal_fits_positional_groups_and_rejects_different_lengths() {
     let mut inv = KernelInvocation {
         relations: &relations,
         inputs: &[],
-        input_keys: &["response", "groups"],
+        input_keys: &["y", "groups"],
         parameters: [
             ("constant", RuntimeValue::from(TabularScalar::Bool(true))),
             (

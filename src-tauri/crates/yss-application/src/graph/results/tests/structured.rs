@@ -77,7 +77,7 @@ fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
         .unwrap()
         .parameters
         .insert("constant".parse().unwrap(), id.to_string().into());
-    let input = PortAddress::instance(model, "predictors".parse().unwrap(), PortInstanceId::new());
+    let input = PortAddress::instance(model, "x".parse().unwrap(), PortInstanceId::new());
     document.port_bindings.insert(
         input.clone(),
         DynamicPortBinding::UserCreated {
@@ -98,7 +98,7 @@ fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
         (
             response,
             "series",
-            PortAddress::declared(model, "response".parse().unwrap()),
+            PortAddress::declared(model, "y".parse().unwrap()),
         ),
         (predictor, "series", input),
     ] {

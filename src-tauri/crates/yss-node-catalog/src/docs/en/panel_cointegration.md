@@ -1,6 +1,6 @@
 # Panel cointegration (Fisher–Engle–Granger)
 
-Connect aligned finite numeric **response**, 1–5 **predictors**, numeric **entity** IDs and integer period indices **time**, without missing values. At least two entities are required. Each entity must have consecutive, unique periods; sample lengths and start/end periods may differ. Input variables should be integrated of order one, I(1); the node does not establish integration order automatically.
+Connect aligned finite numeric **Y**, 1–5 **X₁, X₂, …**, numeric **entity** IDs and integer period indices **time**, without missing values. At least two entities are required. Each entity must have consecutive, unique periods; sample lengths and start/end periods may differ. Input variables should be integrated of order one, I(1); the node does not establish integration order automatically.
 
 **Parameters:** lags defaults to 1, a nonnegative integer, fixing the lagged differences in residual ADF regressions. regression defaults to constant; trend adds a linear trend to the cointegrating equation.
 

@@ -4,7 +4,7 @@ Maximum-likelihood estimation of a cross-sectional production or cost frontier.
 
 ## Inputs and parameters
 
-Connect complete, aligned numeric `response` and optional `predictors`. Supply already transformed data if a log-production or log-cost model is intended; the node does not take logarithms automatically.
+Connect complete, aligned numeric `Y` and optional `X₁, X₂, …`. Supply already transformed data if a log-production or log-cost model is intended; the node does not take logarithms automatically.
 
 `constant=true`, `frontier_type=production`, `max_iterations=500` and `tolerance=0.0000001` are defaults. Choose `cost` to reverse the inefficiency sign. Iterations must be positive and tolerance in [1e-12,0.01].
 The design must be full rank and the sample count must exceed the regression coefficient count plus two scale parameters. Unidentified/near-zero variance components, nonpositive information matrices and nonconvergence fail explicitly.

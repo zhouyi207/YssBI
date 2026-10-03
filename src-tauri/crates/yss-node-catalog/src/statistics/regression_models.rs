@@ -411,20 +411,14 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         | "regression.glm" => union_series(&["core.numeric", "core.binary"])?,
         _ => series_type()?,
     };
-    let mut ports = vec![data_input("response", "Response", response)?];
+    let mut ports = vec![data_input("y", "Y", response)?];
     if matches!(
         method,
         "regression.curve" | "regression.nonlinear" | "regression.deming" | "transform.rcs"
     ) {
-        ports.push(data_input("predictor", "Predictor", series_type()?)?);
+        ports.push(data_input("x", "X", series_type()?)?);
     } else {
-        ports.push(bounded_user_data_input(
-            "predictors",
-            "Predictor",
-            series_type()?,
-            1,
-            None,
-        )?);
+        ports.push(bounded_user_data_input("x", "X", series_type()?, 1, None)?);
     }
     if matches!(
         method,

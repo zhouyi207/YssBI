@@ -86,19 +86,12 @@ fn panel_category_nodes_execute_defaults_and_connect_to_existing_summary() {
         }
         let model = node(&mut document, &id, serde_json::json!({}));
         for (column, key) in [
-            (
-                "y",
-                if method == "unit_root" {
-                    "series"
-                } else {
-                    "response"
-                },
-            ),
-            ("x", "predictors"),
+            ("y", if method == "unit_root" { "series" } else { "y" }),
+            ("x", "x"),
             ("entity", "entity"),
             ("time", "time"),
         ] {
-            if key == "predictors" && method == "unit_root" {
+            if key == "x" && method == "unit_root" {
                 continue;
             }
             let select = node(
@@ -112,7 +105,7 @@ fn panel_category_nodes_execute_defaults_and_connect_to_existing_summary() {
                 "value",
                 PortAddress::declared(select, "dataframe".parse().unwrap()),
             );
-            let address = if key == "predictors" {
+            let address = if key == "x" {
                 let address =
                     PortAddress::instance(model, key.parse().unwrap(), PortInstanceId::new());
                 document.port_bindings.insert(

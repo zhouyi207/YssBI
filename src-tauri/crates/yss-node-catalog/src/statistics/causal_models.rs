@@ -117,12 +117,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 concrete("statistics.result.treatment_effect")?,
             )?]
         } else if method == "econometrics.sur" {
-            vec![
-                repeated("responses", "Response", 2)?,
-                repeated("predictors", "Predictor", 0)?,
-            ]
+            vec![repeated("y", "Y", 2)?, repeated("x", "X", 0)?]
         } else {
-            vec![data_input("response", "Response", series_type()?)?]
+            vec![data_input("y", "Y", series_type()?)?]
         };
         if effect || method == "test.heterogeneity" {
             ports.push(data_input("treatment", "Treatment", binary()?)?);
@@ -154,8 +151,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )
         {
             ports.push(repeated(
-                "predictors",
-                "Predictor",
+                "x",
+                "X",
                 if method == "econometrics.gmm" { 1 } else { 0 },
             )?);
         }

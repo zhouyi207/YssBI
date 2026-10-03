@@ -92,7 +92,7 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             &mut document,
             EditorGraphMutation::AddPortInstance {
                 node_id: target,
-                template_key: "predictors".parse().unwrap(),
+                template_key: "x".parse().unwrap(),
                 placement: PortPlacement::Append,
             },
         );
@@ -103,7 +103,7 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             .unwrap()
             .clone();
         // Graph constants supply both the declared series type and its values.
-        for (source, input) in [(response, port(target, "response")), (predictor, input)] {
+        for (source, input) in [(response, port(target, "y")), (predictor, input)] {
             let source = if target == summary {
                 let mut node = document.nodes[&source].clone();
                 node.id = NodeId::new();

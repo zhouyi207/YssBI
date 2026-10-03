@@ -7,8 +7,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         ("yssbi.statistics.workflow.moderation_advanced", true),
     ] {
         let mut inputs = vec![
-            Input::fixed("response"),
-            Input::fixed("predictor"),
+            Input::fixed("y"),
+            Input::fixed("x"),
             Input::fixed("moderator"),
         ];
         if advanced {

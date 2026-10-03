@@ -83,7 +83,7 @@ fn run_model(
         &mut document,
         y,
         "series",
-        PortAddress::declared(model, "response".parse().unwrap()),
+        PortAddress::declared(model, "y".parse().unwrap()),
     );
     let single = matches!(
         method,
@@ -95,10 +95,9 @@ fn run_model(
     for i in 0..if single { 1 } else { x.len() } {
         let id = selector(&mut document, source, &format!("x{}", i + 1));
         let address = if single {
-            PortAddress::declared(model, "predictor".parse().unwrap())
+            PortAddress::declared(model, "x".parse().unwrap())
         } else {
-            let a =
-                PortAddress::instance(model, "predictors".parse().unwrap(), PortInstanceId::new());
+            let a = PortAddress::instance(model, "x".parse().unwrap(), PortInstanceId::new());
             document.port_bindings.insert(
                 a.clone(),
                 DynamicPortBinding::UserCreated {
@@ -323,7 +322,7 @@ fn regression_models_accept_positional_relation_and_memory_columns() {
         let inv = KernelInvocation {
             relations: &relations,
             inputs,
-            input_keys: &["response", "predictors"],
+            input_keys: &["y", "x"],
             parameters: params
                 .iter()
                 .map(|(k, v)| {

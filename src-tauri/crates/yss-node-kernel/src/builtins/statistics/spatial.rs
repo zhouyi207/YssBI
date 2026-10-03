@@ -19,9 +19,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             if method == "panel" {
                 inputs.push(Input::fixed("periods"));
             }
-            inputs.push(Input::fixed("response"));
+            inputs.push(Input::fixed("y"));
             if method != "moran" {
-                inputs.push(Input::repeated("predictors", 1..=usize::MAX));
+                inputs.push(Input::repeated("x", 1..=usize::MAX));
             }
         }
         let parameters = match method {
@@ -123,7 +123,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         .input_keys
         .iter()
         .enumerate()
-        .filter_map(|(i, k)| (*k == "predictors").then_some(i))
+        .filter_map(|(i, k)| (*k == "x").then_some(i))
         .collect::<Vec<_>>();
     budget(inv, w.units.len(), n, predictor_indices.len(), retained)?;
     weights::validate(&w.matrix, &control).map_err(computation_error)?;
@@ -173,7 +173,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let response_index = inv
         .input_keys
         .iter()
-        .position(|k| *k == "response")
+        .position(|k| *k == "y")
         .ok_or(KernelError::InputLayoutMismatch)?;
     let y = numeric_column(response_index)?;
     if method == "moran" {

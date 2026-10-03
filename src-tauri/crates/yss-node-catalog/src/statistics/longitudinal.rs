@@ -88,8 +88,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             value: e.to_string().into(),
         })?;
         let mut ports = vec![
-            data_input("response", "Response", response)?,
-            bounded_user_data_input("predictors", "Fixed predictor", series_type()?, 0, None)?,
+            data_input("y", "Y", response)?,
+            bounded_user_data_input("x", "X", series_type()?, 0, None)?,
             bounded_user_data_input(
                 "groups",
                 "Grouping factor",

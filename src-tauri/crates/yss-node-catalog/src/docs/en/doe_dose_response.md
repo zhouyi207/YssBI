@@ -1,6 +1,6 @@
 # Dose response (four-parameter log-logistic)
 
-Connect aligned nonnegative numeric **dose** and continuous numeric **response**. Each row is an independent observation; zero dose is evaluated at the continuous limit.
+Connect aligned nonnegative numeric **dose** and continuous numeric **Y**. Each row is an independent observation; zero dose is evaluated at the continuous limit.
 Fits equal-weight nonlinear least squares: `c + (d−c)/(1+(dose/ED50)^Hill)`.
 
 - c is the infinite-dose asymptote (`asymptote_infinite`); d is the zero-dose asymptote (`asymptote_zero`).

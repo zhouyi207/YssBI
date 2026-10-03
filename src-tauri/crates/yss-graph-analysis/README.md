@@ -111,6 +111,10 @@ Schema 输入读取和输出指纹同样借用本次解析的连接与节点 bin
 - User-created：instance ID/order 持久化；后端 placement 负责 append、before、after、move，member group 共用 ID/order。
 - Derived：未使用成员只投影；首次连接或设置 literal 时与 mutation 原子 claim。被引用成员消失时显示 orphan；未引用的消失成员不再投影。显式编辑清理无引用的旧 derived bindings，解析与运行准备不改写 document。
 
+变量输入直接使用 Protocol 的 `x` / `y` key 与 `X` / `Y` 标题。
+`node_projection/interface` 在具体端口排序后，为用户创建的变量输入生成下标并写入既有 `instance_label`。
+新增、删除和移动端口只更新显示编号，不重建实例身份或重绑连接；固定输入直接展示标题。
+
 Decompose 的列含义读取与端口投影共用 binding origin。成员恢复后，旧 `Orphan` binding 的下游
 Schema 也按当前输入字段与 lineage 恢复，并跟随字段类型变化；不以旧标签或 last-known 类型替代当前事实。
 

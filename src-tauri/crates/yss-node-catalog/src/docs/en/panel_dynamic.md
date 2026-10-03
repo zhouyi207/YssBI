@@ -1,6 +1,6 @@
 # Dynamic panel (one-step difference GMM)
 
-Connect aligned numeric **response**, optional strictly exogenous **predictors**, numeric **entity** IDs and integer period indices **time**. Values must be finite and complete. Rows are sorted by keys. A balanced panel is required: the same start/end periods for every entity, exactly one row per consecutive period, at least 4 periods and 3 entities, and more entities than instruments.
+Connect aligned numeric **Y**, optional strictly exogenous **X₁, X₂, …**, numeric **entity** IDs and integer period indices **time**. Values must be finite and complete. Rows are sorted by keys. A balanced panel is required: the same start/end periods for every entity, exactly one row per consecutive period, at least 4 periods and 3 entities, and more entities than instruments.
 
 The model is $y_{it}=\rho y_{i,t-1}+x_{it}'\beta+\alpha_i+\varepsilon_{it}$. Differencing removes $\alpha_i$. One-step Arellano–Bond GMM estimates
 

@@ -32,15 +32,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.anova.{method}");
         let mut ports = if method == "manova" {
-            vec![bounded_user_data_input(
-                "responses",
-                "Response",
-                series_type()?,
-                2,
-                None,
-            )?]
+            vec![bounded_user_data_input("y", "Y", series_type()?, 2, None)?]
         } else {
-            vec![data_input("response", "Response", series_type()?)?]
+            vec![data_input("y", "Y", series_type()?)?]
         };
         if method == "repeated_measures" {
             ports.push(data_input("subjects", "Subject", label_series()?)?);

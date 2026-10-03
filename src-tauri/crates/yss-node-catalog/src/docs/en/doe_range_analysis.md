@@ -1,6 +1,6 @@
 # Range analysis (factor-level effects)
 
-Connect a numeric **response** and aligned categorical **factors**, one factor
+Connect a numeric **Y** and aligned categorical **factors**, one factor
 per input. Each row is an experimental run. Missing categories and nonfinite or
 missing responses are rejected. Numeric factor codes are categories, not slopes.
 

@@ -4,7 +4,7 @@ Tests equality of treatment effects across observed groups, with optional additi
 
 ## Inputs
 
-Connect aligned numeric `response`, binary or numeric 0/1 `treatment`, one categorical `groups` series, and optional numeric `predictors`.
+Connect aligned numeric `Y`, binary or numeric 0/1 `treatment`, one categorical `groups` series, and optional numeric `X₁, X₂, …`.
 Boolean false/true correspond to control/treated. Groups accept numeric codes, binary, categorical, ordinal, text or identifier values. Their original labels are preserved in first-appearance order. At least two groups and both treatment levels within every group are required. Missing values, rank deficiency and leverage-one designs are rejected. There are no method parameters.
 
 ## Model and test

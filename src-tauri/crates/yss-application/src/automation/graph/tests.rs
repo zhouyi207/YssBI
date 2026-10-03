@@ -620,20 +620,20 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         node("yssbi.statistics.linear.fit", "fit"),
         GraphEditOperation::AddPortInstance {
             node_id: "$fit".into(),
-            template_key: "predictors".into(),
+            template_key: "x".into(),
             client_id: Some("first".into()),
         },
         GraphEditOperation::AddPortInstance {
             node_id: "$fit".into(),
-            template_key: "predictors".into(),
+            template_key: "x".into(),
             client_id: Some("second".into()),
         },
-        connect(x.clone(), port("$fit", "response")),
+        connect(x.clone(), port("$fit", "y")),
         connect(
             x,
             GraphEditPortRef::Instance {
                 node_id: "$fit".into(),
-                template_key: "predictors".into(),
+                template_key: "x".into(),
                 instance_id: "$first".into(),
             },
         ),

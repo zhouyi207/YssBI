@@ -68,14 +68,7 @@ fn survey_weights_and_mean_nodes_preserve_source_alignment_and_nested_psu_identi
             &kind,
             json!({"statistic":"mean","lonely_psu":"fail"}),
         );
-        connect(
-            &mut document,
-            source["y"],
-            "series",
-            target,
-            "response",
-            None,
-        );
+        connect(&mut document, source["y"], "series", target, "y", None);
         connect(&mut document, weights, "weights", target, "weights", None);
         connect(
             &mut document,
@@ -130,27 +123,13 @@ fn survey_regressions_report_only_predictor_names_and_keep_every_fitted_row() {
             &kind,
             json!({"lonely_psu":"fail","constant":true,"max_iterations":500,"tolerance":0.0000001}),
         );
-        connect(
-            &mut document,
-            source[response],
-            "series",
-            target,
-            "response",
-            None,
-        );
+        connect(&mut document, source[response], "series", target, "y", None);
         connect(&mut document, weights, "weights", target, "weights", None);
         for (name, port) in [("strata", "strata"), ("psu", "clusters")] {
             connect(&mut document, source[name], "series", target, port, Some(0));
         }
         for (j, name) in ["x", "z"].into_iter().enumerate() {
-            connect(
-                &mut document,
-                source[name],
-                "series",
-                target,
-                "predictors",
-                Some(j),
-            );
+            connect(&mut document, source[name], "series", target, "x", Some(j));
         }
         let report = execute(&document, &kind).unwrap();
         let RuntimeValue::List(names) = field(&report, "factor_names") else {

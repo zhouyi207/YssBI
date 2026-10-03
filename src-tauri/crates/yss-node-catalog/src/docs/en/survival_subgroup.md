@@ -2,7 +2,7 @@
 
 Connect aligned `time` and `event` series. Time must be finite and strictly positive, in one consistent unit; `event=1` (or true) means an observed event and `0` (or false) means right censoring. Rows with missing values are rejected, not dropped. Censoring is assumed independent of the event process, conditional on the model/group used. Inputs must have equal lengths and pair by current row position, including mixed database and in-memory series.
 
-Also connect binary `treatment`, a required `groups` label series and optional numeric adjustment `predictors`. At least two groups are required, with both treatment levels in each group. Original group labels are preserved. `survival_ties=efron` (default) or `breslow`; `max_iterations=500` (positive integer), `tolerance=0.0000001` (from 1e-12 to 0.01). Nonconvergence or a singular information matrix produces an error. Predictor columns must be finite and identifiable; categorical predictors require prior dummy coding.
+Also connect binary `treatment`, a required `groups` label series and optional numeric adjustment `X₁, X₂, …`. At least two groups are required, with both treatment levels in each group. Original group labels are preserved. `survival_ties=efron` (default) or `breslow`; `max_iterations=500` (positive integer), `tolerance=0.0000001` (from 1e-12 to 0.01). Nonconvergence or a singular information matrix produces an error. Predictor columns must be finite and identifiable; categorical predictors require prior dummy coding.
 
 ## Model and heterogeneity test
 

@@ -108,8 +108,8 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
                     })
                     .collect::<Vec<_>>();
                 inputs.extend([
-                    ("response", serde_json::json!(response), false),
-                    ("predictors", serde_json::json!(x), true),
+                    ("y", serde_json::json!(response), false),
+                    ("x", serde_json::json!(x), true),
                     ("endogenous", serde_json::json!(endogenous), true),
                     ("instruments", serde_json::json!(z1), true),
                     ("instruments", serde_json::json!(z2), true),
@@ -125,41 +125,41 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
                     .map(|i| entity[i] * 0.4 + time[i] * 0.3 + 1.75 * treatment[i])
                     .collect::<Vec<_>>();
                 inputs.extend([
-                    ("response", serde_json::json!(response), false),
+                    ("y", serde_json::json!(response), false),
                     ("entity", serde_json::json!(entity), false),
                     ("time", serde_json::json!(time), false),
                     ("treatment", serde_json::json!(treatment), false),
                 ]);
             }
             "econometrics.sur" => {
-                repeated(&mut inputs, "responses", &f["sur"]["responses"]);
-                repeated(&mut inputs, "predictors", &f["sur"]["predictors"]);
+                repeated(&mut inputs, "y", &f["sur"]["responses"]);
+                repeated(&mut inputs, "x", &f["sur"]["predictors"]);
             }
             "econometrics.gmm" => {
                 let d = &f["gmm"];
-                inputs.push(("response", d["response"].clone(), false));
-                repeated(&mut inputs, "predictors", &d["predictors"]);
+                inputs.push(("y", d["response"].clone(), false));
+                repeated(&mut inputs, "x", &d["predictors"]);
                 repeated(&mut inputs, "instruments", &d["instruments"]);
             }
             "causal.rdd" => {
                 let d = &f["rdd"];
                 inputs.extend([
-                    ("response", d["response"].clone(), false),
+                    ("y", d["response"].clone(), false),
                     ("running", d["running"].clone(), false),
                 ]);
             }
             "econometrics.sfa" => {
                 let d = &f["frontier"];
-                inputs.push(("response", d["response"].clone(), false));
-                repeated(&mut inputs, "predictors", &d["predictors"]);
+                inputs.push(("y", d["response"].clone(), false));
+                repeated(&mut inputs, "x", &d["predictors"]);
             }
             "econometrics.heckman_two_step" => {
                 let d = &f["heckman"];
                 inputs.extend([
-                    ("response", d["response"].clone(), false),
+                    ("y", d["response"].clone(), false),
                     ("selected", d["selected"].clone(), false),
                 ]);
-                repeated(&mut inputs, "predictors", &d["predictors"]);
+                repeated(&mut inputs, "x", &d["predictors"]);
                 repeated(
                     &mut inputs,
                     "selection_predictors",
@@ -168,13 +168,13 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
             }
             "causal.synthetic_control" => {
                 let d = &f["synthetic"];
-                inputs.push(("response", d["response"].clone(), false));
+                inputs.push(("y", d["response"].clone(), false));
                 repeated(&mut inputs, "donors", &d["donors"]);
             }
             _ => {
                 let d = &f["treatment"];
                 inputs.extend([
-                    ("response", d["response"].clone(), false),
+                    ("y", d["response"].clone(), false),
                     ("treatment", d["treatment"].clone(), false),
                 ]);
                 if method == "test.heterogeneity" {
@@ -191,7 +191,7 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
                         false,
                     ));
                 }
-                repeated(&mut inputs, "predictors", &d["predictors"]);
+                repeated(&mut inputs, "x", &d["predictors"]);
             }
         }
         let mut document = GraphDocument::default();

@@ -13,22 +13,8 @@ fn fitted_plus_residuals_compares_with_the_original_database_series() {
         ],
     );
     let fit = node(&mut document, "yssbi.statistics.linear.fit", json!({}));
-    connect(
-        &mut document,
-        source["price"],
-        "series",
-        fit,
-        "response",
-        None,
-    );
-    connect(
-        &mut document,
-        source["x"],
-        "series",
-        fit,
-        "predictors",
-        Some(0),
-    );
+    connect(&mut document, source["price"], "series", fit, "y", None);
+    connect(&mut document, source["x"], "series", fit, "x", Some(0));
     let sum = node(&mut document, "yssbi.numeric.add", json!({}));
     connect(&mut document, fit, "fitted", sum, "operands", Some(0));
     connect(&mut document, fit, "residuals", sum, "operands", Some(1));

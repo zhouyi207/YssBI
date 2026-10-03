@@ -1,6 +1,6 @@
 # Time-dependent Cox regression
 
-Supply `start`, `stop`, `event`, exact `subjects` identifiers and one or more numeric `predictors`. Each row is one interval with constant covariates. Require $0\le start<stop$, finite times, and event 0/1 (or false/true) at the interval's stop. Input row order is arbitrary. Subject identifiers can be numeric, text, categorical, ordinal or binary.
+Supply `start`, `stop`, `event`, exact `subjects` identifiers and one or more numeric `X₁, X₂, …`. Each row is one interval with constant covariates. Require $0\le start<stop$, finite times, and event 0/1 (or false/true) at the interval's stop. Input row order is arbitrary. Subject identifiers can be numeric, text, categorical, ordinal or binary.
 
 Intervals of one subject cannot overlap. Adjacent intervals are allowed; gaps represent time outside observation. Each subject may have at most one terminal event, on its last interval; no post-event intervals are accepted.
 

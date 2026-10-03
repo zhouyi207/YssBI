@@ -119,7 +119,7 @@ fn anova_nodes_execute_graph_defaults_with_mixed_factor_labels_and_interactions(
         let mut fixed = if method == "manova" {
             vec![]
         } else {
-            vec![("response", "y")]
+            vec![("y", "y")]
         };
         if method == "repeated_measures" {
             fixed.push(("subjects", "subjects"));
@@ -143,7 +143,7 @@ fn anova_nodes_execute_graph_defaults_with_mixed_factor_labels_and_interactions(
         };
         let mut groups = vec![("factors", ["a", "b", "c"][..factor_count].to_vec())];
         if method == "manova" {
-            groups.push(("responses", vec!["y", "z"]));
+            groups.push(("y", vec!["y", "z"]));
         }
         if method == "ancova" {
             groups.push(("covariates", vec!["x"]));

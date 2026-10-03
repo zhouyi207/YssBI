@@ -38,7 +38,7 @@ fn moderation_nodes_keep_role_alignment_conditional_effects_and_every_prediction
             ],
         );
         let target = node(&mut document, kind, json!({"probe_sd":1}));
-        for (column, input) in [("y", "response"), ("x", "predictor"), ("w", "moderator")] {
+        for (column, input) in [("y", "y"), ("x", "x"), ("w", "moderator")] {
             connect(&mut document, source[column], "series", target, input, None);
         }
         if advanced {
@@ -125,7 +125,7 @@ fn mediation_and_recursive_path_nodes_preserve_role_order_and_complete_equation_
                 );
             }
         } else {
-            for (name, port) in [("y", "response"), ("x", "predictor"), ("m", "mediator")] {
+            for (name, port) in [("y", "y"), ("x", "x"), ("m", "mediator")] {
                 connect(&mut document, source[name], "series", target, port, None);
             }
             if stage != "none" {

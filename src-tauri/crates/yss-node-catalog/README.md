@@ -45,6 +45,10 @@ Analysis 和 Editor 共用协议校验。View 观察已有输出结果，不创�
 用户创建端口使用所属成员分组或自身的上下限，派生端口保持开放范围。Editor 的初始候选筛选与
 Application 的内核输入/输出数量校验共用此读取；它不保存实例、计算当前成员数或代替完整分组的创建与删除。
 
+`PortSpec` 直接以 `y` / `x` 声明主因变量 / 主自变量输入，标题为 `Y` / `X`。
+Catalog、Kernel 和图调用共用这些端口 key；固定与重复输入通过既有 cardinality 区分。
+重复输入由 Analysis 按当前顺序显示为 `X₁、X₂…` 或 `Y₁、Y₂…`，权重、分组、时间等辅助输入保留原名。
+
 Registry 的 `StructuralNodeRole` 拥有函数角色的引用字段约定：Call 使用 `target`，Entry/Return
 使用 `function`，节点类型 ID 不参与角色判定。`RegisteredNode::function_reference_parameter`
 提供声明字段，`function_reference` 通过 Protocol 的 `Parameters::effective_text` 借用当前适用的

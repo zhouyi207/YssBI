@@ -8,9 +8,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.inference.cluster_robust",
         vec![
-            Input::fixed("response"),
+            Input::fixed("y"),
             Input::fixed("clusters"),
-            Input::repeated("predictors", 1..=usize::MAX),
+            Input::repeated("x", 1..=usize::MAX),
         ],
         &["constant"],
         1,
@@ -35,7 +35,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.posthoc.multiple_comparisons",
-        vec![Input::fixed("response"), Input::fixed("groups")],
+        vec![Input::fixed("y"), Input::fixed("groups")],
         &["confidence_level", "equal_variances", "adjustment"],
         2,
         comparisons,

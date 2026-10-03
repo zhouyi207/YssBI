@@ -14,11 +14,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         let mut inputs = vec![Input::fixed(if method == "unit_root" {
             "series"
         } else {
-            "response"
+            "y"
         })];
         if method != "unit_root" {
             inputs.push(Input::repeated(
-                "predictors",
+                "x",
                 (if method == "dynamic" { 0 } else { 1 })..=if method == "cointegration" {
                     MAX_COINTEGRATION_PREDICTORS
                 } else {
@@ -123,7 +123,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 .map_err(computation_error)?;
             result.parameter_names[0] =
                 format!("lag({},1)", input_label(&inv.inputs[0], "response".into()));
-            for (j, input) in group(inv, "predictors").iter().enumerate() {
+            for (j, input) in group(inv, "x").iter().enumerate() {
                 result.parameter_names[j + 1] = input_label(input, format!("x{}", j + 1));
             }
             value(result, inv)?

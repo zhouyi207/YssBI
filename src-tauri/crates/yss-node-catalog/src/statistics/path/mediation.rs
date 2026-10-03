@@ -15,8 +15,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         ),
     ] {
         let mut ports = vec![
-            data_input("response", "Response Y", series_type()?)?,
-            data_input("predictor", "Predictor X", series_type()?)?,
+            data_input("y", "Y", series_type()?)?,
+            data_input("x", "X", series_type()?)?,
             data_input("mediator", "Mediator M", series_type()?)?,
         ];
         let mut params = vec![

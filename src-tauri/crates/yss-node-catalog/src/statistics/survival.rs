@@ -168,8 +168,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         }
         if cox || parametric {
             ports.push(bounded_user_data_input(
-                "predictors",
-                "Predictor",
+                "x",
+                "X",
                 series_type()?,
                 if cox && method != "workflow.subgroup" {
                     1

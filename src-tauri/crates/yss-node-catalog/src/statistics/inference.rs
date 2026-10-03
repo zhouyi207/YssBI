@@ -34,9 +34,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let prediction = suffix == "postestimation.adjusted_predictions";
         let mut ports = if cluster {
             vec![
-                data_input("response", "Response", series_type()?)?,
+                data_input("y", "Y", series_type()?)?,
                 data_input("clusters", "Clusters", label_series()?)?,
-                bounded_user_data_input("predictors", "Predictor", series_type()?, 1, None)?,
+                bounded_user_data_input("x", "X", series_type()?, 1, None)?,
             ]
         } else if prediction {
             vec![data_input(
@@ -51,7 +51,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ]
         } else {
             vec![
-                data_input("response", "Response", series_type()?)?,
+                data_input("y", "Y", series_type()?)?,
                 data_input("groups", "Groups", label_series()?)?,
             ]
         };

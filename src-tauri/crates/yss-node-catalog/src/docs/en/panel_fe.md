@@ -1,6 +1,6 @@
 # Fixed effects (FE)
 
-Connect aligned finite numeric series: **response**, one or more **predictors**, **entity** IDs and **time**. Missing values are rejected and entity-time pairs must be unique. Rows are sorted by panel keys. Encode textual entity IDs before connecting them.
+Connect aligned finite numeric series: **Y**, one or more **X₁, X₂, …**, **entity** IDs and **time**. Missing values are rejected and entity-time pairs must be unique. Rows are sorted by panel keys. Encode textual entity IDs before connecting them.
 
 **Parameters:** constant defaults to true; effects defaults to entity, with time and two_way alternatives; covariance defaults to cluster, with nonrobust and HC0–HC3 alternatives.
 

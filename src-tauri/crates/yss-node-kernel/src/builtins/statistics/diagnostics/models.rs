@@ -33,7 +33,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             vec![
                 Input::fixed("time"),
                 Input::fixed("event"),
-                Input::repeated("predictors", 1..=usize::MAX),
+                Input::repeated("x", 1..=usize::MAX),
             ],
             &[
                 "survival_ties",

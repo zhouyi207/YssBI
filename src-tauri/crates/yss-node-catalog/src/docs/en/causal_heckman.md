@@ -4,8 +4,8 @@ Fits a Probit selection equation followed by an outcome OLS equation augmented w
 
 ## Inputs and parameters
 
-Connect aligned `response`, binary or numeric 0/1 `selected`, optional numeric `predictors`, and at least one numeric `selection_predictors` column.
-True/1 means the outcome is observed. `response` may be null on unselected rows; those values are ignored. Selected outcomes and every selection/covariate value must be finite and complete.
+Connect aligned `Y`, binary or numeric 0/1 `selected`, optional numeric `X₁, X₂, …`, and at least one numeric `selection_predictors` column.
+True/1 means the outcome is observed. `Y` may be null on unselected rows; those values are ignored. Selected outcomes and every selection/covariate value must be finite and complete.
 Both selection states must occur.
 
 Both equations include intercepts. Supply the complete selection equation, including outcome predictors when appropriate. At least one selection column must add linear information beyond the outcome design (an exclusion restriction). This numerical rank condition does not establish substantive instrument validity.

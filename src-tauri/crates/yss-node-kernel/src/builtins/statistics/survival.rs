@@ -61,7 +61,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         }
         if cox || parametric {
             inputs.push(Input::repeated(
-                "predictors",
+                "x",
                 if cox && method != "workflow.subgroup" {
                     1
                 } else {
@@ -246,7 +246,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             .collect::<std::collections::BTreeSet<_>>()
             .len()
     });
-    let predictors = group(inv, "predictors");
+    let predictors = group(inv, "x");
     let width = predictors
         .len()
         .checked_add(group_labels.len())
@@ -277,7 +277,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         .collect::<Vec<_>>();
     let mut x = vec![];
     for (i, key) in inv.input_keys.iter().enumerate() {
-        if *key == "predictors" {
+        if *key == "x" {
             x.push(numeric(&materialized[i], false, inv)?);
         }
     }

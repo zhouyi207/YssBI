@@ -108,15 +108,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             if method == "panel" {
                 ports.push(data_input("periods", "Period identifier", labels()?)?);
             }
-            ports.push(data_input("response", "Response", series_type()?)?);
+            ports.push(data_input("y", "Y", series_type()?)?);
             if method != "moran" {
-                ports.push(bounded_user_data_input(
-                    "predictors",
-                    "Predictor",
-                    series_type()?,
-                    1,
-                    None,
-                )?);
+                ports.push(bounded_user_data_input("x", "X", series_type()?, 1, None)?);
             }
         }
         ports.push(data_output(

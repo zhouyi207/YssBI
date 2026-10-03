@@ -8,10 +8,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.panel.predict",
-        vec![
-            Input::fixed("model"),
-            Input::repeated("predictors", 1..=usize::MAX),
-        ],
+        vec![Input::fixed("model"), Input::repeated("x", 1..=usize::MAX)],
         &[],
         1,
         predict,
@@ -20,8 +17,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.panel.compare",
         vec![
-            Input::fixed("response"),
-            Input::repeated("predictors", 1..=usize::MAX),
+            Input::fixed("y"),
+            Input::repeated("x", 1..=usize::MAX),
             Input::fixed("entity"),
             Input::fixed("time"),
         ],
@@ -33,8 +30,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.panel.fit",
         vec![
-            Input::fixed("response"),
-            Input::repeated("predictors", 1..=usize::MAX),
+            Input::fixed("y"),
+            Input::repeated("x", 1..=usize::MAX),
             Input::fixed("entity"),
             Input::fixed("time"),
         ],
@@ -114,7 +111,7 @@ fn fit(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
 
 pub(super) fn name_fit(fit: &mut yss_sci_contract::panel::PanelFit, inv: &KernelInvocation<'_>) {
     fit.response_name = input_label(&inv.inputs[0], "response".into());
-    let names = group(inv, "predictors")
+    let names = group(inv, "x")
         .iter()
         .enumerate()
         .map(|(j, v)| (format!("x{}", j + 1), input_label(v, format!("x{}", j + 1))))
@@ -133,7 +130,7 @@ pub(super) fn name_fit(fit: &mut yss_sci_contract::panel::PanelFit, inv: &Kernel
 
 fn predict(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let fit: yss_sci_contract::panel::PanelFit = decode_model(inv)?;
-    let predictors = columns(&group(inv, "predictors"), inv, 0)?;
+    let predictors = columns(&group(inv, "x"), inv, 0)?;
     let n = predictors.first().map_or(0, Vec::len);
     check_fit_workspace(n, predictors.len(), fit.estimation.constant, "OLS", inv)?;
     let values = yss_sci_runtime::panel::predict(&fit, &predictors).map_err(sci)?;

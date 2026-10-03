@@ -216,7 +216,7 @@ fn every_visualization_kernel_executes_its_declared_input_layout_and_plot_carrie
     }
     let fit = run(
         "yssbi.statistics.linear.fit",
-        &[("response", y), ("predictors", x)],
+        &[("y", y), ("x", x)],
         &[
             ("method", text("OLS")),
             ("constant", flag(true)),

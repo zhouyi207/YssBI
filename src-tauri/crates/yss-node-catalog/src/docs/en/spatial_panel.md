@@ -6,7 +6,7 @@ Remove entity fixed effects using orthonormal time contrasts, then fit a Gaussia
 
 - `weights`: a one-row-per-unit spatial weights design; do not construct weights from repeated panel rows.
 - `units`, `periods`: each unit-period combination must occur exactly once and every period must cover all weighted units. Input sorting is unnecessary; period labels follow first appearance.
-- `response` and one or more `predictors`: aligned finite numeric columns. Missing, duplicate or unbalanced observations are rejected. Time-invariant or collinear predictors are unidentified after removing entity effects and must be removed.
+- `Y` and one or more `X₁, X₂, …`: aligned finite numeric columns. Missing, duplicate or unbalanced observations are rejected. Time-invariant or collinear predictors are unidentified after removing entity effects and must be removed.
 - `spatial_panel_model`: `slm` (default) or `sem`.
 - `max_iterations`: 500 by default, at least 1; `tolerance`: $10^{-7}$ by default, in $[10^{-12},0.01]$. At least two units and two periods are required; no additional overall intercept is fitted.
 

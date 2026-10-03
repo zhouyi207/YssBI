@@ -11,8 +11,8 @@ fn panel_category_adapters_validate_parameters_alignment_and_resource_control() 
         |key: &str| series(&serde_json::from_value::<Vec<f64>>(data[key].clone()).unwrap());
     let x = series(&serde_json::from_value::<Vec<f64>>(data["predictors"][0].clone()).unwrap());
     let inputs = [
-        ("response", column("response")),
-        ("predictors", x),
+        ("y", column("response")),
+        ("x", x),
         ("entity", column("entity")),
         ("time", column("time")),
     ];

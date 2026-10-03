@@ -68,7 +68,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "ph" => vec![
                 data_input("time", "Time", series_type()?)?,
                 data_input("event", "Event", binary_series()?)?,
-                bounded_user_data_input("predictors", "Predictor", series_type()?, 1, None)?,
+                bounded_user_data_input("x", "X", series_type()?, 1, None)?,
             ],
             "lr" | "score_lm" | "nested_comparison" => vec![
                 data_input("restricted", "Restricted model", fitted_regression_type()?)?,

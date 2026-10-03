@@ -135,7 +135,7 @@ fn spatial_category_all_ten_nodes_execute_with_typed_weights_and_aligned_tables(
             };
             let mut columns = serde_json::json!({
                 "district":(0..rows).rev().map(|i|format!("地区-{}",i%n)).collect::<Vec<_>>(),
-                "response":reverse(&data["response"]),
+                "y":reverse(&data["response"]),
                 "income":reverse(&data["predictors"][0]),"density":reverse(&data["predictors"][1])});
             if method == "panel" {
                 columns["period"] = serde_json::json!(
@@ -153,29 +153,15 @@ fn spatial_category_all_ten_nodes_execute_with_typed_weights_and_aligned_tables(
                 "result",
                 PortAddress::declared(target, "weights".parse().unwrap()),
             );
-            for (column, key) in [("district", "units"), ("response", "response")] {
+            for (column, key) in [("district", "units"), ("y", "y")] {
                 select(&mut document, source, column, target, key, None);
             }
             if method == "panel" {
                 select(&mut document, source, "period", target, "periods", None);
             }
             if method != "moran" {
-                select(
-                    &mut document,
-                    source,
-                    "income",
-                    target,
-                    "predictors",
-                    Some(0),
-                );
-                select(
-                    &mut document,
-                    source,
-                    "density",
-                    target,
-                    "predictors",
-                    Some(1),
-                );
+                select(&mut document, source, "income", target, "x", Some(0));
+                select(&mut document, source, "density", target, "x", Some(1));
             }
         }
         let result = execute(&document, &id).unwrap_or_else(|e| panic!("{method}: {e:?}"));

@@ -90,7 +90,7 @@ fn paired_statistics_accept_positional_inputs_and_reject_different_lengths() {
     let mut inv = KernelInvocation {
         relations: &relations,
         inputs: &[],
-        input_keys: &["response", "factors"],
+        input_keys: &["y", "factors"],
         parameters: Default::default(),
         outputs: &outputs,
         control: &control,
@@ -2910,7 +2910,7 @@ fn relational_document(resource: &str) -> (GraphDocument, [NodeId; 6]) {
     }
     let predictor_port = PortAddress::instance(
         fit,
-        "predictors".parse().unwrap(),
+        "x".parse().unwrap(),
         PortInstanceId::from_bytes([7; 16]),
     );
     document.port_bindings.insert(
@@ -2925,7 +2925,7 @@ fn relational_document(resource: &str) -> (GraphDocument, [NodeId; 6]) {
         (address(project, "result"), address(filter, "source")),
         (address(filter, "result"), address(response, "dataframe")),
         (address(filter, "result"), address(predictor, "dataframe")),
-        (address(response, "series"), address(fit, "response")),
+        (address(response, "series"), address(fit, "y")),
         (address(predictor, "series"), predictor_port),
     ] {
         let id = ConnectionId::new();
@@ -3875,7 +3875,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         ),
         (
             y_output.clone(),
-            PortAddress::declared(fit, "response".parse().unwrap()),
+            PortAddress::declared(fit, "y".parse().unwrap()),
         ),
     ] {
         let version = project

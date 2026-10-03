@@ -1,6 +1,6 @@
 # Survey mean/proportion
 
-Connect response and sampling weights, optionally adding one strata column and one clusters (primary sampling unit, PSU) column.
+Connect Y and sampling weights, optionally adding one strata column and one clusters (primary sampling unit, PSU) column.
 
 Omitted strata means one stratum; omitted clusters treats every row as its own PSU. Identical PSU labels in different strata identify separate units. Columns must be aligned and complete, numbers finite, and sampling weights strictly positive. No rows are dropped.
 

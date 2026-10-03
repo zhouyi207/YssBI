@@ -341,6 +341,7 @@ OneOf 分支恢复旧引用，其余变体比较固定标量字段；类型状�
 `pnpm bench:graph` 对完整快照和增量分别报告同步解析、实体安装及两者合计的耗时；安装样本在计时外准备已验证的输入，首次快照样本每次清空基线和该图 Store，增量样本先建立基线。已有图另测同值、单节点移动及节点/端口重排的完整快照；每个样本恢复相同已安装基线，再接收全新输入，使用每节点两个端口来实际覆盖端口重排。setup 检查完整行为，每个样本在计时外核对冻结和预期引用。样本之间清理 mock 调用历史，避免历史响应干扰对象回收。可用 `--testNamePattern='5000 nodes: snapshot'`、`--testNamePattern='5000 nodes: delta'` 或 `--testNamePattern='^5000 nodes: existing graph'` 独立测量。该基准使用模拟 IPC，不测量 Rust 处理、真实传输或浏览器布局与绘制，桌面交互仍需人工验收。
 `pnpm bench:graph:publication` 单独测量多图快照准备和执行状态的结果展示更新。批量样本消费已冻结的会话，每次从空项目表准备；展示样本安装稳定结果及同等数量的已结束输出运行记录，包含事件结果版本与摘要 revision 的比较。通过真实 Execution Store 一次发布带匹配语义身份的 error/idle 状态与对应失败摘要，交替测量 Results 读取投影的更新。该样本测量状态发布及派生读取，不包含运行事件接纳、IPC、React 组件渲染或浏览器绘制。
 节点视图按输入、输出分组并共享原始 Pin 引用；连接数量直接读取 Rust 的 `connections.current`，不再派生第二套 Pin 连接状态。连线记录保留必需的结构化端点和顺序字段，查看结果与诊断直接消费这些字段。
+Pin 名称统一读取 `display.instanceLabel ?? display.label`；诊断、搜索及连接选项不再回退到派生的 `name` 字段。
 Pin 的查看入口仅在菜单挂载期间订阅可用性，Core 查询直接使用现有 `pinConnections` 与
 `connections` 索引返回布尔值，不物化连线和结果引用数组。Application 在点击时读取当前
 图快照，再按邻接顺序解析上游输出；检查目标端点以排除反向的受损连接，并保留重复端点。

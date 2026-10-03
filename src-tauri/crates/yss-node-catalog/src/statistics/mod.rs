@@ -239,7 +239,7 @@ fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
 fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
         data_input("model", "Model", prediction_model_type(family)?)?,
-        user_data_input("predictors", "Predictors", series_type()?, 1)?,
+        user_data_input("x", "X", series_type()?, 1)?,
         data_output("prediction", "Prediction", float_series_type()?)?,
     ])
 }
@@ -267,10 +267,10 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 
 fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let mut ports = vec![
-        data_input("response", "Response", series_type()?)?,
+        data_input("y", "Y", series_type()?)?,
         user_data_input(
-            "predictors",
-            "Predictors",
+            "x",
+            "X",
             series_type()?,
             if matches!(family, Family::Iv2sls | Family::IvLiml | Family::PanelDid) {
                 0

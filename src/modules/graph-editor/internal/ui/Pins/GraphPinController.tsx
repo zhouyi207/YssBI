@@ -18,6 +18,7 @@ import { useGraphRead } from "@/features/core/graph/read";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useTheme } from "@/features/core/theme/useTheme";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { resolveNodePinDisplayLabel } from "@/features/domain/editorProjection/displayLabels";
 import {
   formatGraphDiagnostic,
   isUnboundInputDiagnostic,
@@ -70,6 +71,20 @@ export const GraphPinController = memo(function GraphPinController(props: GraphP
   const inCanvas = useContext(GraphFlowContext) !== null;
   const { tokens } = useTheme();
   const isConnected = pin.connections.current > 0;
+  const connectedSource = useGraphRead((snapshot) => {
+    if (!graphPath || direction !== "input") return null;
+    const bucket = snapshot.graphEntities[graphPath];
+    if (!bucket) return null;
+    return (
+      (bucket.pinConnections[id] ?? [])
+        .flatMap((connectionId) => {
+          const connection = bucket.connections[connectionId];
+          const label = connection && resolveNodePinDisplayLabel(bucket, connection.output);
+          return label ? [label] : [];
+        })
+        .join(" · ") || null
+    );
+  });
   const pinSemantics = useMemo(() => ({ typeState }), [typeState]);
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
   const baseColor = getPinTypeColor(visualSpec.colorKey, tokens);
@@ -117,6 +132,7 @@ export const GraphPinController = memo(function GraphPinController(props: GraphP
     : `${name} (${visualSpec.label})`;
   const tooltip = [
     pinTooltip,
+    connectedSource,
     executionState && t(`canvas.graphState.${executionState}`),
     executionState === "error" && cacheState !== "new" && t(`canvas.graphState.${cacheState}`),
   ]

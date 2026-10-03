@@ -618,16 +618,15 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
         }
         Series(_) => vec![Input::fixed("series")],
         Statistical(Stats::Fit) => vec![
-            Input::fixed("response"),
-            Input::repeated("predictors", 1..=usize::MAX),
+            Input::fixed("y"),
+            Input::repeated("x", 1..=usize::MAX),
             Input::repeated("weights", 0..=1),
             Input::repeated("sigma", 0..=usize::MAX),
             Input::repeated("clusters", 0..=1),
         ],
-        Statistical(Stats::Predict) => vec![
-            Input::fixed("model"),
-            Input::repeated("predictors", 1..=usize::MAX),
-        ],
+        Statistical(Stats::Predict) => {
+            vec![Input::fixed("model"), Input::repeated("x", 1..=usize::MAX)]
+        }
         Statistical(Stats::Summary) => vec![Input::fixed("model")],
         Relational(Table::Source) | Constant | FixedNumber(_) => vec![],
         Relational(Table::Assemble) => vec![Input::repeated("series", 1..=usize::MAX)],

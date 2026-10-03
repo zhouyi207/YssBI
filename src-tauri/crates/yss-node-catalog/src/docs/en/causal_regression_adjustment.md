@@ -2,7 +2,7 @@
 
 ## Inputs and identification
 
-Connect aligned numeric `response`, binary or numeric 0/1 `treatment`, and optional numeric repeated `predictors`.
+Connect aligned numeric `Y`, binary or numeric 0/1 `treatment`, and optional numeric repeated `X₁, X₂, …`.
 False/true mean control/treated. Both treatment states must occur. Covariates must be measured before treatment. An empty covariate group fits intercept-only models. Missing, nonfinite, separated or singular inputs fail; no rows are silently removed.
 
 ATE targets the observed covariate population; ATT targets the treated covariate population. Causal interpretation requires consistency, no interference, conditional exchangeability and overlap. These assumptions are not verified by a successful fit.

@@ -1,10 +1,10 @@
 # Regression Zero Inflated Negative Binomial
 
-Connect aligned finite observations; missing values are rejected. Unless specified below, response is numeric and `predictors` accepts one or more numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
+Connect aligned finite observations; missing values are rejected. Unless specified below, Y is numeric and inputs `X₁, X₂, …` accept one or more numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.
 
 ## Method and options
 
-Nonnegative integer counts with positive mean; f is NB2. Count terms use `predictors`; optional `inflation_predictors` configure the zero-generation logit, which always has an intercept and defaults to intercept only. `constant=true` controls the count intercept. More observations than combined parameters are required; 500 iterations, tolerance 1e-7. Order: count terms, `inflation.*`, then `alpha`. Fitted values are mixture means (1−π)μ. Inference uses the complete observed Hessian including cross-component covariance and normal Wald reference. The local optimizer does not guarantee a global mixture maximum. No offset/exposure/hurdle variant.
+Nonnegative integer counts with positive mean; f is NB2. Count terms use `X₁, X₂, …`; optional `inflation_predictors` configure the zero-generation logit, which always has an intercept and defaults to intercept only. `constant=true` controls the count intercept. More observations than combined parameters are required; 500 iterations, tolerance 1e-7. Order: count terms, `inflation.*`, then `alpha`. Fitted values are mixture means (1−π)μ. Inference uses the complete observed Hessian including cross-component covariance and normal Wald reference. The local optimizer does not guarantee a global mixture maximum. No offset/exposure/hurdle variant.
 
 $$
 P(Y=0)=\pi+(1-\pi)f(0;\mu),\quad P(Y=y>0)=(1-\pi)f(y;\mu),\quad\log\mu=x^T\beta,\quad\operatorname{logit}\pi=z^T\gamma.

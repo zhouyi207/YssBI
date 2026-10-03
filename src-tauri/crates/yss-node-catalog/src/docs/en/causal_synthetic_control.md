@@ -4,7 +4,7 @@ Builds a convex combination of untreated donor outcome series to match one treat
 
 ## Inputs and parameters
 
-Connect aligned numeric `response` (treated unit) and one or more repeated `donors` series. Rows must already be in chronological order on a common, equally interpreted time grid; the node neither sorts nor aggregates them. Inputs must be complete and finite.
+Connect aligned numeric `Y` (treated unit) and one or more repeated `donors` series. Rows must already be in chronological order on a common, equally interpreted time grid; the node neither sorts nor aggregates them. Inputs must be complete and finite.
 
 `pre_periods=10` uses exactly the first ten rows to fit weights. It must be a positive integer below the total row count; all remaining rows are post-treatment. `max_iterations=5000` is positive and `tolerance=0.0000001` lies in [1e-12,0.01]. The optimizer checks a simplex optimality gap on scaled pre-period data and fails explicitly if it does not converge.
 

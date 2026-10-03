@@ -27,10 +27,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         install(
             builder,
             &format!("yssbi.statistics.{name}.fit"),
-            vec![
-                Input::fixed("response"),
-                Input::repeated("predictors", 1..=usize::MAX),
-            ],
+            vec![Input::fixed("y"), Input::repeated("x", 1..=usize::MAX)],
             &parameters,
             3,
             move |inv| fit(method, inv),
@@ -72,10 +69,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             install(
                 builder,
                 &format!("yssbi.statistics.{name}.predict"),
-                vec![
-                    Input::fixed("model"),
-                    Input::repeated("predictors", 1..=usize::MAX),
-                ],
+                vec![Input::fixed("model"), Input::repeated("x", 1..=usize::MAX)],
                 &[],
                 1,
                 move |inv| predict(link, inv),
@@ -274,11 +268,7 @@ fn predict(
         return Err(KernelError::InvalidNumericInput);
     }
     let coefficients = columns(&[field(model, "coefficients")?], inv, 0)?.remove(0);
-    let predictors = columns(
-        &group(inv, "predictors"),
-        inv,
-        coefficients.len().saturating_mul(8),
-    )?;
+    let predictors = columns(&group(inv, "x"), inv, coefficients.len().saturating_mul(8))?;
     check_fit_workspace(predictors[0].len(), predictors.len(), constant, "OLS", inv)?;
     let prediction = yss_sci_runtime::regression::discrete::predict_binary(
         link,

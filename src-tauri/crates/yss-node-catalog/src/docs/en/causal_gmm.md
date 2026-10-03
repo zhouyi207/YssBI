@@ -4,7 +4,7 @@ Fits a linear equation using one-step or two-step generalized method of moments.
 
 ## Inputs and parameters
 
-Connect aligned numeric `response`, repeated `predictors` (at least one), and repeated `instruments` (at least one).
+Connect aligned numeric `Y`, repeated `X₁, X₂, …` (at least one), and repeated `instruments` (at least one).
 Supply the complete instrument set, including any exogenous predictors that instrument themselves. The intercept is added to both designs when `constant=true` (default); do not supply duplicate constant columns.
 
 `gmm_steps=two_step` (default) uses a heteroskedastic moment weight; `one_step` uses the 2SLS weight.

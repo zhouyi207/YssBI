@@ -6,7 +6,7 @@ Jointly estimates response feedback and spatial error dependence using the same 
 
 - `weights`: the design object from Spatial weights.
 - `units`: unique observation identifiers, exactly matching the weights' unit set. Computation aligns by identifier and observation arrays return in input row order. Text and numeric identifiers remain distinct; wide integers remain exact.
-- `response`: finite numeric response; `predictors`: one or more finite numeric columns with equal lengths, paired by current position. Missing values are rejected rather than dropped.
+- `Y`: finite numeric response; `X₁, X₂, …`: one or more finite numeric columns with equal lengths, paired by current position. Missing values are rejected rather than dropped.
 - `constant`: true by default. Do not supply another constant column.
 - `max_iterations`: 500 by default, at least 1; `tolerance`: $10^{-7}$ by default, in $[10^{-12},0.01]$. Nonconvergence or an estimate approaching the stability boundary is a failure.
 

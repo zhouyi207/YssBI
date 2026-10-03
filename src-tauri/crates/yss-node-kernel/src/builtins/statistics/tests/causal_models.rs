@@ -15,10 +15,10 @@ fn causal_effect_projections_preserve_estimator_and_inference() {
     let f = fixture();
     let d = &f["treatment"];
     let inputs = [
-        ("response", column(&d["response"])),
+        ("y", column(&d["response"])),
         ("treatment", column(&d["treatment"])),
-        ("predictors", column(&d["predictors"][0])),
-        ("predictors", column(&d["predictors"][1])),
+        ("x", column(&d["predictors"][0])),
+        ("x", column(&d["predictors"][1])),
     ];
     let parameters = [
         ("ps_overlap", number(1e-6)),
@@ -84,9 +84,9 @@ fn causal_adapters_handle_selection_nulls_equation_maps_and_exact_group_labels()
             .collect(),
     );
     let mut inputs = vec![
-        ("response", response),
+        ("y", response),
         ("selected", selected),
-        ("predictors", column(&d["predictors"][0])),
+        ("x", column(&d["predictors"][0])),
         (
             "selection_predictors",
             column(&d["selection_predictors"][0]),
@@ -136,11 +136,11 @@ fn causal_adapters_handle_selection_nulls_equation_maps_and_exact_group_labels()
     ));
     let d = &f["sur"];
     let inputs = [
-        ("responses", column(&d["responses"][0])),
-        ("responses", column(&d["responses"][1])),
-        ("predictors", column(&d["predictors"][0])),
-        ("predictors", column(&d["predictors"][1])),
-        ("predictors", column(&d["predictors"][2])),
+        ("y", column(&d["responses"][0])),
+        ("y", column(&d["responses"][1])),
+        ("x", column(&d["predictors"][0])),
+        ("x", column(&d["predictors"][1])),
+        ("x", column(&d["predictors"][2])),
     ];
     let r = run(
         "yssbi.statistics.econometrics.sur",
@@ -182,11 +182,11 @@ fn causal_adapters_handle_selection_nulls_equation_maps_and_exact_group_labels()
             .collect(),
     );
     let inputs = [
-        ("response", column(&d["response"])),
+        ("y", column(&d["response"])),
         ("treatment", column(&d["treatment"])),
         ("groups", labels),
-        ("predictors", column(&d["predictors"][0])),
-        ("predictors", column(&d["predictors"][1])),
+        ("x", column(&d["predictors"][0])),
+        ("x", column(&d["predictors"][1])),
     ];
     let r = run("yssbi.statistics.test.heterogeneity", &inputs, &[], 1)
         .unwrap()
@@ -204,7 +204,7 @@ fn causal_adapter_validates_alignment_budget_deadline_and_cancellation() {
     let d = &f["synthetic"];
     let id = "yssbi.statistics.causal.synthetic_control";
     let inputs = [
-        ("response", column(&d["response"])),
+        ("y", column(&d["response"])),
         ("donors", column(&d["donors"][0])),
         ("donors", column(&d["donors"][1])),
         ("donors", column(&d["donors"][2])),

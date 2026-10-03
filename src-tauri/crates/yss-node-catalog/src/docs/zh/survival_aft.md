@@ -2,7 +2,7 @@
 
 连接逐行对齐的 `time` 与 `event` 数列。时间必须有限且严格大于 0，单位保持一致；`event=1`（或 true）表示事件发生，`0`（或 false）表示右删失。缺失值会导致计算失败，不自动删行。假设在给定模型或分组条件下删失独立于事件过程；输入须等长并按当前位置逐项对应，可混合数据库与内存数列。
 
-`predictors` 可以连接零个或多个数值自变量，始终拟合截距。`aft_distribution=weibull` 为默认，也可选 `exponential`、`lognormal`、`loglogistic`。令 $z=(\log t-\eta)/\sigma$，Weibull、对数正态、对数逻辑斯蒂生存函数分别为 $\exp(-e^z)$、$1-\Phi(z)$、$(1+e^z)^{-1}$；指数为固定 $\sigma=1$ 的 Weibull。
+`X₁, X₂, …` 可以连接零个或多个数值自变量，始终拟合截距。`aft_distribution=weibull` 为默认，也可选 `exponential`、`lognormal`、`loglogistic`。令 $z=(\log t-\eta)/\sigma$，Weibull、对数正态、对数逻辑斯蒂生存函数分别为 $\exp(-e^z)$、$1-\Phi(z)$、$(1+e^z)^{-1}$；指数为固定 $\sigma=1$ 的 Weibull。
 `survival_horizon=1` 是严格为正的预测时点。`max_iterations=500`，要求正整数；`tolerance=0.0000001`，范围为 1e-12 至 0.01。未收敛或信息矩阵奇异时返回错误。自变量必须有限且模型可识别；分类自变量须预先编码为哑变量。
 
 ## 模型与推断

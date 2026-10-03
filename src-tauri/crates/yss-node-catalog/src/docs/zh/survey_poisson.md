@@ -1,6 +1,6 @@
 # 复杂抽样 Poisson 回归
 
-连接 response 响应和 weights 抽样权重，可连接一列 strata 层标签及一列 clusters 初级抽样单元（PSU）标签。
+连接 Y 响应和 weights 抽样权重，可连接一列 strata 层标签及一列 clusters 初级抽样单元（PSU）标签。
 
 未提供 strata 时视为一层；未提供 clusters 时每行是一个独立 PSU。不同层内相同的 PSU 标签分别识别。列须对齐且无缺失，数值有限，抽样权重严格为正。不自动删除记录。
 
@@ -12,9 +12,9 @@
 
 非负整数响应，Poisson log 链接，响应总和须为正。
 
-追加数值 predictors；`constant=true` 默认包含截距。每个设计须满秩，观测数须大于回归参数数目。`max_iterations` 默认 500（正整数），`tolerance` 默认 1e-7，范围 1e-12 至 0.01，未收敛报错。
+追加数值 X₁, X₂, …；`constant=true` 默认包含截距。每个设计须满秩，观测数须大于回归参数数目。`max_iterations` 默认 500（正整数），`tolerance` 默认 1e-7，范围 1e-12 至 0.01，未收敛报错。
 
-**result** 返回系数、抽样设计 sandwich 协方差、迭代情况和 `details.design`；`factor_names` 只对应 predictors 顺序。k 为回归参数数目，系数推断自由度为设计自由度 + 1 − k，须为正。零系数的双侧统计量为估计除以设计标准误，使用 t 分布及 95% 区间。不使用普通 GLM 模型方差或似然 AIC/BIC。
+**result** 返回系数、抽样设计 sandwich 协方差、迭代情况和 `details.design`；`factor_names` 只对应 X₁, X₂, … 顺序。k 为回归参数数目，系数推断自由度为设计自由度 + 1 − k，须为正。零系数的双侧统计量为估计除以设计标准误，使用 t 分布及 95% 区间。不使用普通 GLM 模型方差或似然 AIC/BIC。
 
 **observations** 分页表保留全部 `observation, response, fitted, residual`，残差为响应减响应尺度的拟合均值，行号从 1 开始。
 

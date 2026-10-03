@@ -4,7 +4,7 @@
 
 ## 输入和参数
 
-连接对齐的数值 `response` 与 `running` 数列。默认参数为 `rdd_cutoff=0`、`rdd_bandwidth=1`、`rdd_kernel=triangular`。
+连接对齐的数值 `Y` 与 `running` 数列。默认参数为 `rdd_cutoff=0`、`rdd_bandwidth=1`、`rdd_kernel=triangular`。
 带宽必须为有限正数，单位与运行变量一致；核函数也可选择 `uniform`。
 运行变量等于断点时归入处理侧，不自动选择带宽。
 

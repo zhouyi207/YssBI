@@ -13,11 +13,7 @@ pub(super) fn check(
     groups: usize,
 ) -> Result<(), KernelError> {
     let rows = data.first().map_or(0, |column| column.values.len());
-    let predictors = inv
-        .input_keys
-        .iter()
-        .filter(|key| matches!(**key, "predictor" | "predictors"))
-        .count();
+    let predictors = inv.input_keys.iter().filter(|key| **key == "x").count();
     let inflation = inv
         .input_keys
         .iter()

@@ -6,7 +6,7 @@ Adds first-order spatial lags of every predictor to OLS; the intercept is not sp
 
 - `weights`: the design object from Spatial weights.
 - `units`: unique observation identifiers, exactly matching the weights' unit set. Computation aligns by identifier and observation arrays return in input row order. Text and numeric identifiers remain distinct; wide integers remain exact.
-- `response`: finite numeric response; `predictors`: one or more finite numeric columns with equal lengths, paired by current position. Missing values are rejected rather than dropped.
+- `Y`: finite numeric response; `X₁, X₂, …`: one or more finite numeric columns with equal lengths, paired by current position. Missing values are rejected rather than dropped.
 - `constant`: true by default. Do not supply another constant column.
 
 ## Model and inference

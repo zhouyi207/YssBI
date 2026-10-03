@@ -25,31 +25,31 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         let repeated = |key, min| Input::repeated(key, min..=usize::MAX);
         let inputs = match method {
             "causal.ate" | "causal.att" => vec![Input::fixed("effects")],
-            "econometrics.sur" => vec![repeated("responses", 2), repeated("predictors", 0)],
-            "causal.rdd" => vec![Input::fixed("response"), Input::fixed("running")],
-            "causal.synthetic_control" => vec![Input::fixed("response"), repeated("donors", 1)],
+            "econometrics.sur" => vec![repeated("y", 2), repeated("x", 0)],
+            "causal.rdd" => vec![Input::fixed("y"), Input::fixed("running")],
+            "causal.synthetic_control" => vec![Input::fixed("y"), repeated("donors", 1)],
             "econometrics.gmm" => vec![
-                Input::fixed("response"),
-                repeated("predictors", 1),
+                Input::fixed("y"),
+                repeated("x", 1),
                 repeated("instruments", 1),
             ],
-            "econometrics.sfa" => vec![Input::fixed("response"), repeated("predictors", 0)],
+            "econometrics.sfa" => vec![Input::fixed("y"), repeated("x", 0)],
             "econometrics.heckman_two_step" => vec![
-                Input::fixed("response"),
+                Input::fixed("y"),
                 Input::fixed("selected"),
-                repeated("predictors", 0),
+                repeated("x", 0),
                 repeated("selection_predictors", 1),
             ],
             "test.heterogeneity" => vec![
-                Input::fixed("response"),
+                Input::fixed("y"),
                 Input::fixed("treatment"),
                 Input::fixed("groups"),
-                repeated("predictors", 0),
+                repeated("x", 0),
             ],
             _ => vec![
-                Input::fixed("response"),
+                Input::fixed("y"),
                 Input::fixed("treatment"),
-                repeated("predictors", 0),
+                repeated("x", 0),
             ],
         };
         let parameters: &[&str] = match method {
@@ -185,7 +185,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     }
     let (materialized, retained) = materialize(inv)?;
     let n = materialized.first().map_or(0, |v| v.values.len());
-    let predictors = group(inv, "predictors");
+    let predictors = group(inv, "x");
     let labels = predictors
         .iter()
         .enumerate()
@@ -196,7 +196,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     } else {
         None
     };
-    let equation_count = group(inv, "responses").len();
+    let equation_count = group(inv, "y").len();
     let selections = if method == "econometrics.sur" {
         // Bound the index matrix before even expanding the all-predictors default.
         inv.control.check_bytes(

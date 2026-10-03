@@ -23,8 +23,8 @@ const METHODS: &[&str] = &[
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     for &method in METHODS {
         let mut inputs = vec![
-            Input::fixed("response"),
-            Input::repeated("predictors", 0..=usize::MAX),
+            Input::fixed("y"),
+            Input::repeated("x", 0..=usize::MAX),
             Input::repeated(
                 "groups",
                 if method == "mixed.crossed_effects" {
@@ -81,8 +81,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let mut group_labels = Vec::new();
     for (key, column) in inv.input_keys.iter().zip(&columns) {
         match *key {
-            "response" => y = super::common::numeric(column, true, inv)?,
-            "predictors" => predictors.push(super::common::numeric(column, false, inv)?),
+            "y" => y = super::common::numeric(column, true, inv)?,
+            "x" => predictors.push(super::common::numeric(column, false, inv)?),
             "random_predictors" => {
                 random_predictors.push(super::common::numeric(column, false, inv)?)
             }

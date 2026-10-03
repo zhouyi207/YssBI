@@ -57,10 +57,10 @@ fn spatial_adapter_weights_roundtrip_preserves_exact_identifiers_and_reorders_ob
     let mut inputs = vec![
         ("weights", w.clone()),
         ("units", wi[0].1.clone()),
-        ("response", series(&vector(&d["response"]))),
+        ("y", series(&vector(&d["response"]))),
     ];
     for x in d["predictors"].as_array().unwrap() {
-        inputs.push(("predictors", series(&vector(x))));
+        inputs.push(("x", series(&vector(x))));
     }
     let parameters = [("constant", flag(true))];
     let first = run("yssbi.statistics.spatial.ols", &inputs, &parameters, 1)
@@ -144,10 +144,10 @@ fn spatial_adapter_panel_balance_and_execution_budgets_are_enforced() {
                     .collect(),
             ),
         ),
-        ("response", series(&vector(&panel["response"]))),
+        ("y", series(&vector(&panel["response"]))),
     ];
     for x in panel["predictors"].as_array().unwrap() {
-        inputs.push(("predictors", series(&vector(x))));
+        inputs.push(("x", series(&vector(x))));
     }
     let parameters = [
         ("spatial_panel_model", string("sem")),

@@ -1,6 +1,6 @@
 # Error-correction model (ECM)
 
-Estimate a two-step single-equation ECM for a numeric `series` and one or more aligned `predictors`. Rows must be equally spaced and ordered, with finite values and no missing observations. No fixed row or predictor ceiling is imposed.
+Estimate a two-step single-equation ECM for a numeric `series` and one or more aligned `X₁, X₂, …`. Rows must be equally spaced and ordered, with finite values and no missing observations. No fixed row or predictor ceiling is imposed.
 
 `ts_lags=0` is the nonnegative number of lagged differences. `constant=true` adds an intercept to both regressions. The design must have full column rank and positive residual degrees of freedom after lagging.
 

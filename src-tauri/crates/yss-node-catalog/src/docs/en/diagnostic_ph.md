@@ -1,6 +1,6 @@
 # Proportional-hazards score test
 
-Connect aligned **time** (positive follow-up), **event** (1/true for an event, 0/false for right censoring) and one or more numeric **predictors**. Missing rows are rejected. The node fits a static, unstratified Cox model, then tests time interactions using an efficient score.
+Connect aligned **time** (positive follow-up), **event** (1/true for an event, 0/false for right censoring) and one or more numeric **X₁, X₂, …**. Missing rows are rejected. The node fits a static, unstratified Cox model, then tests time interactions using an efficient score.
 
 **Tied events** defaults to efron, with breslow also available; fitting and testing use the same partial likelihood. **Time transform** defaults to rank (average ranks of all follow-up times), with log and identity alternatives. **Maximum iterations** defaults to 500; **Convergence tolerance** defaults to $10^{-7}$ with supported range $10^{-12}$ to $0.01$.
 

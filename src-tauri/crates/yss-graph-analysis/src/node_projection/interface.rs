@@ -55,6 +55,7 @@ pub(super) fn project_node_interface(
         projection.project_template(spec, &mut ports, &mut derived_orders, diagnostics);
     }
     sort_concrete_ports(protocol, document, &mut ports, &derived_orders);
+    number_variable_inputs(protocol, &mut ports);
     apply_resolved_schemas(&mut ports, resolved_schemas);
     for (address, _) in node_bindings
         .iter()
@@ -100,6 +101,40 @@ pub(super) fn project_node_interface(
         ports: ports.into_boxed_slice(),
         additions: port_instance_additions.into_boxed_slice(),
         unsupported_resolver,
+    }
+}
+
+fn number_variable_inputs(protocol: &NodeProtocol, ports: &mut [GraphPortSemanticFact]) {
+    let mut counts = BTreeMap::new();
+    let templates = protocol
+        .interface
+        .ports
+        .iter()
+        .filter(|spec| {
+            spec.direction == PortDirection::Input
+                && matches!(spec.key.as_str(), "x" | "y")
+                && matches!(spec.cardinality, PortCardinality::UserCreated { .. })
+        })
+        .map(|spec| &spec.key)
+        .collect::<BTreeSet<_>>();
+    for port in ports {
+        let PortRef::Instance { template, .. } = &port.address.port else {
+            continue;
+        };
+        if port.orphan || !templates.contains(template) {
+            continue;
+        }
+        let count = counts.entry(template).or_insert(0);
+        *count += 1;
+        const DIGITS: [char; 10] = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+        let mut label = port.label.to_string();
+        label.extend(
+            count
+                .to_string()
+                .bytes()
+                .map(|digit| DIGITS[(digit - b'0') as usize]),
+        );
+        port.instance_label = Some(label.into_boxed_str());
     }
 }
 

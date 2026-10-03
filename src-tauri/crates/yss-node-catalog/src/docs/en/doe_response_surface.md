@@ -1,6 +1,6 @@
 # Response surface (full quadratic)
 
-Connect aligned numeric **response** and continuous **factors**, one column per factor.
+Connect aligned numeric **Y** and continuous **factors**, one column per factor.
 Each factor is centered at the midpoint of its observed range and divided by its half-range.
 OLS includes the intercept, all coded z terms, z² terms and pairwise zᵢzⱼ interactions.
 Coefficients use coded coordinates; `centers` and `half_ranges` provide the conversion.

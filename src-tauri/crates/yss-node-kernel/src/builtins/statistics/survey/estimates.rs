@@ -10,7 +10,7 @@ const METHODS: &[(&str, Option<GlmFamily>)] = &[
 ];
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     for &(method, family) in METHODS {
-        let mut inputs = vec![Input::fixed("response"), Input::fixed("weights")];
+        let mut inputs = vec![Input::fixed("y"), Input::fixed("weights")];
         for role in ["strata", "clusters"] {
             let required = (method == "stratified" && role == "strata")
                 || (method == "clustered" && role == "clusters");
@@ -22,7 +22,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         }
         let mut params = vec!["lonely_psu"];
         if family.is_some() {
-            inputs.push(Input::repeated("predictors", 0..=usize::MAX));
+            inputs.push(Input::repeated("x", 0..=usize::MAX));
             params.extend(["constant", "max_iterations", "tolerance"]);
         } else {
             params.push("statistic");
@@ -43,7 +43,7 @@ fn estimate(
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let (data, retained) = materialize(inv)?;
     let n = data[0].values.len();
-    let k = group(inv, "predictors")
+    let k = group(inv, "x")
         .len()
         .checked_add(1)
         .ok_or(KernelError::BudgetExceeded)?;
@@ -82,7 +82,7 @@ fn estimate(
             .input_keys
             .iter()
             .enumerate()
-            .filter(|(_, key)| **key == "predictors")
+            .filter(|(_, key)| **key == "x")
             .map(|(i, _)| numeric(&data[i], false, inv))
             .collect::<Result<Vec<_>, _>>()?;
         let result = yss_sci_runtime::survey::regression(
@@ -100,7 +100,7 @@ fn estimate(
             &control,
         )
         .map_err(computation_error)?;
-        let labels = group(inv, "predictors")
+        let labels = group(inv, "x")
             .iter()
             .enumerate()
             .map(|(j, v)| input_label(v, format!("x{}", j + 1)))

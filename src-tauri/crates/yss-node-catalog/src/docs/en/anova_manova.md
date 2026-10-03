@@ -1,6 +1,6 @@
 # Multivariate ANOVA (MANOVA)
 
-Jointly compare factor effects across multiple responses. Provide at least two numeric **Response** series and one or more **Factor** series. Columns must have equal lengths and pair by current position; database and in-memory inputs may be mixed. Missing values are rejected. Each factor needs at least two observed categories. The intercept-inclusive design needs full rank and positive residual degrees of freedom. Residual SSCP must be positive definite; collinear responses cannot be jointly tested.
+Jointly compare factor effects across multiple responses. Provide at least two numeric **Y₁, Y₂, …** series and one or more **Factor** series. Columns must have equal lengths and pair by current position; database and in-memory inputs may be mixed. Missing values are rejected. Each factor needs at least two observed categories. The intercept-inclusive design needs full rank and positive residual degrees of freedom. Residual SSCP must be positive definite; collinear responses cannot be jointly tested.
 
 **Factor terms** defaults to `full_factorial`, with `main_effects` available. **Sums of squares** defaults to `type_iii`: I is sequential, ordering main effects by input position before increasing-order interactions; II adjusts for other terms except higher-order relatives; III uses sum contrasts and adjusts for all other terms.
 

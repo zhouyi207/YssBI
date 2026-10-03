@@ -4,7 +4,7 @@
 
 ## 输入和参数
 
-连接对齐的数值 `response`、至少一个重复端口 `predictors` 和至少一个 `instruments`。
+连接对齐的数值 `Y`、至少一个重复端口 `X₁, X₂, …` 和至少一个 `instruments`。
 必须提供完整工具集合，包括以自身作为工具的外生自变量。`constant=true`（默认）会在回归与工具矩阵中同时加入截距，请勿重复传入常数列。
 
 `gmm_steps=two_step`（默认）使用异方差矩权重；`one_step` 使用 2SLS 权重。

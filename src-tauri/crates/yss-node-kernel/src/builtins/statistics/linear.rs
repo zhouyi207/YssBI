@@ -34,7 +34,7 @@ pub(crate) fn execute(
             let Some(RuntimeValue::LinearRegression(model)) = invocation.inputs.first() else {
                 return Err(KernelError::InvalidNumericInput);
             };
-            let predictors = columns(&group(invocation, "predictors"), invocation, 0)?;
+            let predictors = columns(&group(invocation, "x"), invocation, 0)?;
             if predictors.is_empty()
                 || predictors.len() + usize::from(model.constant) != model.coefficients.len()
             {
@@ -102,7 +102,7 @@ pub(crate) fn execute(
                 .first()
                 .ok_or(KernelError::InvalidNumericInput)?;
             let mut inputs = vec![response];
-            inputs.extend(group(invocation, "predictors"));
+            inputs.extend(group(invocation, "x"));
             inputs.extend(weights);
             inputs.extend(clusters);
             let mut prepared = columns(&inputs, invocation, 0)?;
@@ -128,7 +128,7 @@ pub(crate) fn execute(
             let n = prepared[0].len();
             check_fit_workspace(
                 n,
-                group(invocation, "predictors").len(),
+                group(invocation, "x").len(),
                 constant,
                 method,
                 invocation,
@@ -404,7 +404,7 @@ mod tests {
                 inputs,
                 input_keys: &groups
                     .iter()
-                    .map(|key| key.unwrap_or(if kind == "fit" { "response" } else { "model" }))
+                    .map(|key| key.unwrap_or(if kind == "fit" { "y" } else { "model" }))
                     .collect::<Vec<_>>(),
                 parameters: if kind == "fit" {
                     config
@@ -554,7 +554,7 @@ mod tests {
                     (0.0, without_intercept)
                 };
                 let mut inputs = vec![series(&[1.0, 2.0, 5.0]), series(&[1.0, 2.0, 3.0])];
-                let mut groups = vec![None, Some("predictors")];
+                let mut groups = vec![None, Some("x")];
                 groups.extend(vec![
                     Some(if method == "WLS" { "weights" } else { "sigma" });
                     auxiliary.len()
@@ -579,7 +579,7 @@ mod tests {
                 let prediction = run(
                     "predict",
                     &[outputs[0].clone(), series(&[4.0, 5.0])],
-                    &[None, Some("predictors")],
+                    &[None, Some("x")],
                     method,
                     1,
                     constant,
@@ -625,7 +625,7 @@ mod tests {
             ),
         ] {
             let mut inputs = vec![series(&[1.0, 2.0, 5.0]), series(&[1.0, 2.0, 3.0])];
-            let mut groups = vec![None, Some("predictors")];
+            let mut groups = vec![None, Some("x")];
             groups.extend(vec![Some(group); auxiliary.len()]);
             inputs.extend(auxiliary);
             assert!(

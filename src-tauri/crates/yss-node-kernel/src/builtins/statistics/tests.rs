@@ -102,8 +102,8 @@ fn longitudinal_adapter_preserves_wide_labels_and_rejects_nulls_shapes_and_exces
             .collect(),
     );
     let mut inputs = vec![
-        ("response", series(&y)),
-        ("predictors", series(&x)),
+        ("y", series(&y)),
+        ("x", series(&x)),
         ("groups", labels.clone()),
     ];
     let parameters = [
@@ -148,7 +148,7 @@ fn longitudinal_adapter_preserves_wide_labels_and_rejects_nulls_shapes_and_exces
     let inv = KernelInvocation {
         relations: &crate::tests::relations(),
         inputs: &inputs,
-        input_keys: &["response", "predictors", "groups"],
+        input_keys: &["y", "x", "groups"],
         parameters: parameters
             .iter()
             .map(|(k, v)| {
@@ -180,7 +180,7 @@ fn anova_adapters_preserve_exact_labels_and_enforce_shapes_and_parameters() {
     let result = run(
         id,
         &[
-            ("response", series(&[1., 2., 3., 2., 4., 6.])),
+            ("y", series(&[1., 2., 3., 2., 4., 6.])),
             ("factors", labels.clone()),
         ],
         &[],
@@ -195,19 +195,14 @@ fn anova_adapters_preserve_exact_labels_and_enforce_shapes_and_parameters() {
         &RuntimeValue::List(wide.into_iter().map(int).collect())
     );
     assert!(matches!(
-        run(
-            id,
-            &[("response", series(&[1., 2.])), ("factors", labels)],
-            &[],
-            1
-        ),
+        run(id, &[("y", series(&[1., 2.])), ("factors", labels)], &[], 1),
         Err(KernelError::ShapeMismatch)
     ));
     let nulls = RuntimeValue::List(vec![int(0), TabularScalar::Null.into(), int(1), int(1)].into());
     assert!(matches!(
         run(
             id,
-            &[("response", series(&[1., 2., 3., 4.])), ("factors", nulls)],
+            &[("y", series(&[1., 2., 3., 4.])), ("factors", nulls)],
             &[],
             1
         ),
@@ -215,7 +210,7 @@ fn anova_adapters_preserve_exact_labels_and_enforce_shapes_and_parameters() {
     ));
     let repeated = "yssbi.statistics.anova.repeated_measures";
     let inputs = [
-        ("response", series(&[1., 3., 2., 5., 4., 5.])),
+        ("y", series(&[1., 3., 2., 5., 4., 5.])),
         (
             "subjects",
             RuntimeValue::List(
@@ -627,14 +622,14 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
         ];
         let fit = run(
             &format!("yssbi.statistics.{method}.fit"),
-            &[("response", y.clone()), ("predictors", x.clone())],
+            &[("y", y.clone()), ("x", x.clone())],
             &parameters,
             3,
         )
         .unwrap();
         let prediction = run(
             &format!("yssbi.statistics.{method}.predict"),
-            &[("model", fit[0].clone()), ("predictors", x.clone())],
+            &[("model", fit[0].clone()), ("x", x.clone())],
             &[],
             1,
         )
@@ -682,7 +677,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
         assert!(
             run(
                 &format!("yssbi.statistics.{method}.fit"),
-                &[("response", y.clone()), ("predictors", x.clone())],
+                &[("y", y.clone()), ("x", x.clone())],
                 &[
                     ("constant", flag(true)),
                     ("max_iterations", int(1)),
@@ -701,7 +696,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
     for transform in ["prais_winsten", "cochrane_orcutt"] {
         let fit = run(
             "yssbi.statistics.prais.fit",
-            &[("response", series(&py)), ("predictors", series(&px))],
+            &[("y", series(&py)), ("x", series(&px))],
             &[
                 ("constant", flag(true)),
                 ("max_iterations", int(20000)),
@@ -805,8 +800,8 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         let fit = run(
             &format!("yssbi.statistics.iv.{method}.fit"),
             &[
-                ("response", series(&y)),
-                ("predictors", series(&x)),
+                ("y", series(&y)),
+                ("x", series(&x)),
                 ("endogenous", series(&endog)),
                 ("instruments", series(&z1)),
                 ("instruments", series(&z2)),
@@ -950,7 +945,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         .collect::<Vec<_>>();
     for method in ["2sls", "liml"] {
         for order in [[0, 1, 2], [2, 0, 1]] {
-            let mut inputs = vec![("response", series(&y)), ("predictors", series(&x))];
+            let mut inputs = vec![("y", series(&y)), ("x", series(&x))];
             inputs.extend(
                 order
                     .iter()
@@ -1020,7 +1015,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
     let fit = run(
         "yssbi.statistics.iv.2sls.fit",
         &[
-            ("response", series(&response)),
+            ("y", series(&response)),
             ("endogenous", series(&constant_column)),
             ("instruments", series(&constant_column)),
         ],
@@ -1078,7 +1073,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         let fit = run(
             "yssbi.statistics.iv.2sls.fit",
             &[
-                ("response", series(&[1.0, 2.0])),
+                ("y", series(&[1.0, 2.0])),
                 ("endogenous", series(&design)),
                 ("instruments", series(&design)),
             ],
@@ -1143,8 +1138,8 @@ fn panel_nodes_select_each_implemented_estimator_and_reject_unsupported_combinat
         .map(|i| 1. + 0.5 * entities[i] + 1.2 * times[i] + 1.5 * x[i] + 0.3 * eps[n + i])
         .collect::<Vec<_>>();
     let inputs = [
-        ("response", series(&y)),
-        ("predictors", series(&x)),
+        ("y", series(&y)),
+        ("x", series(&x)),
         ("entity", series(&entities)),
         ("time", series(&times)),
     ];
@@ -1395,7 +1390,7 @@ fn breusch_pagan_fitted_and_rhs_agree_for_one_predictor() {
         .collect::<Vec<_>>();
     let weights = x.iter().map(|x| 1. / (1. + x).powi(2)).collect::<Vec<_>>();
     for method in ["OLS", "WLS"] {
-        let mut inputs = vec![("response", series(&y)), ("predictors", series(&x))];
+        let mut inputs = vec![("y", series(&y)), ("x", series(&x))];
         if method == "WLS" {
             inputs.push(("weights", series(&weights)));
         }
@@ -1448,8 +1443,8 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
     let fit = run(
         "yssbi.statistics.linear.fit",
         &[
-            ("response", series(&y)),
-            ("predictors", series(&x)),
+            ("y", series(&y)),
+            ("x", series(&x)),
             ("weights", series(&weights)),
         ],
         &[
@@ -1519,8 +1514,8 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
     let clustered = run(
         "yssbi.statistics.linear.fit",
         &[
-            ("response", series(&y)),
-            ("predictors", series(&x)),
+            ("y", series(&y)),
+            ("x", series(&x)),
             (
                 "clusters",
                 series(&(0..n).map(|i| (i / 8) as f64).collect::<Vec<_>>()),
@@ -1563,11 +1558,7 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
     let other = x.iter().map(|v| v.sin()).collect::<Vec<_>>();
     let mut intercept_checks = Vec::new();
     for method in ["OLS", "WLS"] {
-        let mut inputs = vec![
-            ("response", series(&y)),
-            ("predictors", series(&x)),
-            ("predictors", series(&other)),
-        ];
+        let mut inputs = vec![("y", series(&y)), ("x", series(&x)), ("x", series(&other))];
         if method == "WLS" {
             inputs.push(("weights", series(&weights)));
         }
@@ -1658,7 +1649,7 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
         .map(|i| entity[i] * 0.4 + time[i] * 0.3 + treat[i] * post[i] * 1.75 + eps[i] * 0.01)
         .collect::<Vec<_>>();
     let inputs = [
-        ("response", series(&y)),
+        ("y", series(&y)),
         ("entity", series(&entity)),
         ("time", series(&time)),
         ("treat", series(&treat)),
@@ -1710,7 +1701,7 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
     let did = run(
         "yssbi.statistics.panel.did.twfe",
         &[
-            ("response", series(&y)),
+            ("y", series(&y)),
             ("entity", series(&entity)),
             ("time", series(&time)),
             (
@@ -1780,8 +1771,8 @@ fn panel_estimation_predictions_and_comparison_failures_are_explicit() {
         .map(|i| 1.0 + entity[i] + 0.4 * time[i] + 2.0 * x[i] + e[n + i] * 0.2)
         .collect::<Vec<_>>();
     let inputs = [
-        ("response", series(&y)),
-        ("predictors", series(&x)),
+        ("y", series(&y)),
+        ("x", series(&x)),
         ("entity", series(&entity)),
         ("time", series(&time)),
     ];
@@ -1804,7 +1795,7 @@ fn panel_estimation_predictions_and_comparison_failures_are_explicit() {
     };
     let prediction = run(
         "yssbi.statistics.panel.predict",
-        &[("model", fit[0].clone()), ("predictors", design[0].clone())],
+        &[("model", fit[0].clone()), ("x", design[0].clone())],
         &[],
         1,
     )
@@ -1863,8 +1854,8 @@ fn panel_estimation_predictions_and_comparison_failures_are_explicit() {
     .unwrap();
     assert!(undefined.statistics.linear.f_statistic.is_infinite());
     let inputs = [
-        ("response", series(&response)),
-        ("predictors", series(&predictor)),
+        ("y", series(&response)),
+        ("x", series(&predictor)),
         ("entity", series(&entity)),
         ("time", series(&time)),
     ];
@@ -1896,8 +1887,8 @@ fn panel_estimation_predictions_and_comparison_failures_are_explicit() {
     let result = run(
         "yssbi.statistics.panel.fit",
         &[
-            ("response", series(&zero_response)),
-            ("predictors", series(&predictor)),
+            ("y", series(&zero_response)),
+            ("x", series(&predictor)),
             ("entity", series(&entity)),
             ("time", series(&time)),
         ],
@@ -2087,8 +2078,8 @@ fn scale_limits_gee_accepts_large_full_rank_design_and_singleton_clusters() {
                 }
         })
         .collect::<Vec<_>>();
-    let mut inputs = vec![("response", series(&y))];
-    inputs.extend(x.iter().map(|v| ("predictors", series(v))));
+    let mut inputs = vec![("y", series(&y))];
+    inputs.extend(x.iter().map(|v| ("x", series(v))));
     inputs.push((
         "groups",
         RuntimeValue::List((0..n).map(|i| int(i as i64)).collect()),
@@ -2147,8 +2138,8 @@ fn scale_limits_mixed_estimators_preserve_replicated_reference_fits() {
         let result = run(
             &format!("yssbi.statistics.{id}"),
             &[
-                ("response", series(&y.repeat(copies))),
-                ("predictors", series(&x.repeat(copies))),
+                ("y", series(&y.repeat(copies))),
+                ("x", series(&x.repeat(copies))),
                 ("groups", labels),
             ],
             &parameters,

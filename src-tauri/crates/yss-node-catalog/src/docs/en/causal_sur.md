@@ -4,7 +4,7 @@ Fits multiple linear equations on the same observations, allowing their errors t
 
 ## Inputs and parameters
 
-Connect at least two aligned numeric `responses` and optional repeated numeric `predictors`. Every equation uses the same rows; missing/nonfinite values are rejected.
+Connect at least two aligned numeric `Y₁, Y₂, …` and optional repeated numeric `X₁, X₂, …`. Every equation uses the same rows; missing/nonfinite values are rejected.
 
 `constant=true` includes an intercept in every equation. `equation_predictors` is empty by default, meaning all predictors in every equation. To select different designs, enter one semicolon-separated list per response, using comma-separated one-based predictor positions. For example, `1,2;1,3` assigns predictors 1 and 2 to response 1, and 1 and 3 to response 2. `-` selects no predictors for an intercept-only equation.
 Lists must match the response count, contain valid indices without duplicates, and leave each equation identified with positive residual degrees of freedom. Without an intercept, each equation needs at least one predictor. Input and equation counts have no fixed caps; the execution budget admits the complete system.

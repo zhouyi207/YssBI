@@ -42,14 +42,7 @@ fn designed_response_models_retain_all_observed_and_fitted_rows() {
             },
         );
         let inputs = columns(&mut document, &[("y", json!(y)), ("x", json!(x))]);
-        connect(
-            &mut document,
-            inputs["y"],
-            "series",
-            target,
-            "response",
-            None,
-        );
+        connect(&mut document, inputs["y"], "series", target, "y", None);
         connect(
             &mut document,
             inputs["x"],
@@ -204,14 +197,7 @@ fn range_analysis_pages_all_factor_levels_and_retains_exact_labels() {
             ),
         ],
     );
-    connect(
-        &mut document,
-        inputs["y"],
-        "series",
-        target,
-        "response",
-        None,
-    );
+    connect(&mut document, inputs["y"], "series", target, "y", None);
     connect(
         &mut document,
         inputs["batch"],

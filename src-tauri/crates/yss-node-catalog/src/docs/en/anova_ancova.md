@@ -1,6 +1,6 @@
 # Analysis of covariance (ANCOVA)
 
-Compare factor effects after adjusting for continuous covariates. Provide one numeric **Response**, one or more **Factor** series and one or more numeric **Covariate** series. Factors need at least two observed categories; numeric codes remain categories. All columns must have equal lengths and pair by current position, including mixed database and in-memory inputs. Missing values are rejected. The intercept-inclusive design must have full rank, more observations than columns and positive residual variance.
+Compare factor effects after adjusting for continuous covariates. Provide one numeric **Y**, one or more **Factor** series and one or more numeric **Covariate** series. Factors need at least two observed categories; numeric codes remain categories. All columns must have equal lengths and pair by current position, including mixed database and in-memory inputs. Missing values are rejected. The intercept-inclusive design must have full rank, more observations than columns and positive residual variance.
 
 **Factor terms** defaults to `full_factorial`, including all factor interactions; `main_effects` includes only additive factor effects. Covariates are centered at their observed means and always enter as additive linear terms with parallel slopes across groups. Factor-by-covariate interactions are excluded.
 

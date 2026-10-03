@@ -4,7 +4,7 @@ Estimates the outcome jump at a known treatment cutoff using separate local line
 
 ## Inputs and parameters
 
-Connect aligned numeric `response` and `running` series. `rdd_cutoff=0`, `rdd_bandwidth=1` and `rdd_kernel=triangular` are the defaults.
+Connect aligned numeric `Y` and `running` series. `rdd_cutoff=0`, `rdd_bandwidth=1` and `rdd_kernel=triangular` are the defaults.
 Bandwidth must be finite and positive, in running-variable units. The uniform kernel is also available. Treatment starts at the cutoff, including equality. No bandwidth is automatically selected.
 
 Triangular weighting uses observations with $|r_i-c|<h$ and weight $1-|r_i-c|/h$. Uniform weighting uses $|r_i-c|\le h$ with weight one. Each side needs enough distinct running values for a full-rank design and HC3 inference; leverage-one observations are rejected. Inputs must be complete and finite.

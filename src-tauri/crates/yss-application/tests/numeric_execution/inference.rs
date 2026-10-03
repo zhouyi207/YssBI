@@ -26,7 +26,7 @@ fn cluster_and_adjusted_prediction_nodes_use_real_fits_and_canonical_parameters(
             &mut document,
             &[
                 (
-                    "response",
+                    "y",
                     if family == "logit" || family == "probit" {
                         f["binary"].clone()
                     } else {
@@ -38,23 +38,9 @@ fn cluster_and_adjusted_prediction_nodes_use_real_fits_and_canonical_parameters(
                 ("clusters", json!(labels)),
             ],
         );
-        connect(
-            &mut document,
-            sources["response"],
-            "series",
-            fit,
-            "response",
-            None,
-        );
+        connect(&mut document, sources["y"], "series", fit, "y", None);
         for (j, name) in ["x1", "x2"].into_iter().enumerate() {
-            connect(
-                &mut document,
-                sources[name],
-                "series",
-                fit,
-                "predictors",
-                Some(j),
-            );
+            connect(&mut document, sources[name], "series", fit, "x", Some(j));
         }
         if family == "cluster" {
             connect(
@@ -143,7 +129,7 @@ fn inference_tables_execute_with_labels_variants_and_more_than_512_rows() {
                 .iter()
                 .map(|g| ["A", "B", "C"][g.as_u64().unwrap() as usize])
                 .collect::<Vec<_>>();
-            vec![("response", f["y"].clone()), ("groups", json!(labels))]
+            vec![("y", f["y"].clone()), ("groups", json!(labels))]
         };
         for (key, source) in columns(&mut document, &values) {
             connect(&mut document, source, "series", target, &key, None);

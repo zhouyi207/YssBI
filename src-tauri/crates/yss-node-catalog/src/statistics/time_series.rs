@@ -240,13 +240,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         };
         let mut ports = vec![data_input("series", "Series", input)?];
         if method == "timeseries.ecm" {
-            ports.push(bounded_user_data_input(
-                "predictors",
-                "Long-run predictor",
-                series_type()?,
-                1,
-                None,
-            )?);
+            ports.push(bounded_user_data_input("x", "X", series_type()?, 1, None)?);
         }
         if method == "plot.time_series" {
             ports.push(bounded_user_data_input(

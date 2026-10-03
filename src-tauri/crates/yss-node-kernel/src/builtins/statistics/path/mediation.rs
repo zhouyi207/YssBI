@@ -6,8 +6,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         ("yssbi.statistics.workflow.moderated_mediation", true),
     ] {
         let mut inputs = vec![
-            Input::fixed("response"),
-            Input::fixed("predictor"),
+            Input::fixed("y"),
+            Input::fixed("x"),
             Input::fixed("mediator"),
         ];
         let mut params = vec!["replications", "seed"];

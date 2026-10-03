@@ -4,7 +4,7 @@ Measure global spatial association between an attribute and neighboring attribut
 
 ## Inputs and settings
 
-`weights` is a spatial design; `units` must uniquely match its complete unit set; `response` is finite and nonconstant. Columns must align and missing values are rejected. Exact identifiers align the weights; islands retain zero rows. At least two observations are required. `spatial_permutations` defaults to 999, is nonnegative, and 0 disables permutation inference. `seed` is nonnegative, default 42. Identical inputs, order and seed reproduce results.
+`weights` is a spatial design; `units` must uniquely match its complete unit set; `Y` is finite and nonconstant. Columns must align and missing values are rejected. Exact identifiers align the weights; islands retain zero rows. At least two observations are required. `spatial_permutations` defaults to 999, is nonnegative, and 0 disables permutation inference. `seed` is nonnegative, default 42. Identical inputs, order and seed reproduce results.
 
 ## Statistic and hypotheses
 

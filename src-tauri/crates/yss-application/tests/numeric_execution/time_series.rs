@@ -112,7 +112,7 @@ fn time_series_category_defaults_execute_relational_inputs_and_publish_reports_o
         let model = node(&mut document, &kind, serde_json::json!({}));
         let mut inputs = vec![("series", "y")];
         if method == "ecm" {
-            inputs.push(("predictors", "x"));
+            inputs.push(("x", "x"));
         }
         if method == "time_series" {
             inputs.push(("time", "time"));

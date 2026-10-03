@@ -2,7 +2,7 @@
 
 Connect one grouping column and nonnegative integer counts. Uses NB2 with a log link, Gaussian random intercept and estimated alpha > 0: Var(Y|b)=mu+alpha*mu². No exposure/offset input is provided.
 
-Connect aligned response, predictors and groups. Numeric predictors are optional; classify/encode categorical predictors explicitly. Group labels accept numbers, text, identifiers or categorical/binary/ordinal series and retain their original values. The fixed design must have full rank and more rows than coefficients. Missing/nonfinite values are rejected; no rows are silently dropped. Each grouping factor needs at least two observed groups and identifiable covariance components. All inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs.
+Connect aligned Y, X₁, X₂, … and groups. Numeric predictors are optional; classify/encode categorical predictors explicitly. Group labels accept numbers, text, identifiers or categorical/binary/ordinal series and retain their original values. The fixed design must have full rank and more rows than coefficients. Missing/nonfinite values are rejected; no rows are silently dropped. Each grouping factor needs at least two observed groups and identifiable covariance components. All inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs.
 
 Parameters: constant=true (fixed intercept), max_iterations=500 (positive integer), tolerance=1e-7 (1e-12–0.01). Failure to converge fails execution.
 

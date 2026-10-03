@@ -113,22 +113,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     for &(method, id, en, zh, aliases) in SPECS {
         let model = matches!(method, "fe" | "re" | "fd" | "between");
         let mut ports = vec![data_input(
-            if method == "unit_root" {
-                "series"
-            } else {
-                "response"
-            },
-            if method == "unit_root" {
-                "Series"
-            } else {
-                "Response"
-            },
+            if method == "unit_root" { "series" } else { "y" },
+            if method == "unit_root" { "Series" } else { "Y" },
             series_type()?,
         )?];
         if method != "unit_root" {
             ports.push(bounded_user_data_input(
-                "predictors",
-                "Predictor",
+                "x",
+                "X",
                 series_type()?,
                 if method == "dynamic" { 0 } else { 1 },
                 if method == "cointegration" {

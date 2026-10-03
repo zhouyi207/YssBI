@@ -257,7 +257,7 @@ fn multivariate_nodes_execute_publish_summaries_and_page_connectable_scores() {
                 canonical = Some(id);
             }
             "rda" => {
-                group(&mut document, id, "responses", &variables[3..5]);
+                group(&mut document, id, "y", &variables[3..5]);
                 group(&mut document, id, "constraints", &variables[..2]);
             }
             "discriminant" => {

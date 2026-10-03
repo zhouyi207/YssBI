@@ -74,7 +74,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "yssbi.statistics.multivariate.rda",
             Rda,
             vec![
-                Input::repeated("responses", 1..=usize::MAX),
+                Input::repeated("y", 1..=usize::MAX),
                 Input::repeated("constraints", 1..=usize::MAX),
             ],
             &["components", "standardize", "permutations", "seed"][..],
@@ -369,7 +369,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             ])
         }
         Method::Rda => {
-            let count = group(inv, "responses").len();
+            let count = group(inv, "y").len();
             let options = RdaOptions {
                 components: k,
                 standardize: boolean(inv, "standardize")?,

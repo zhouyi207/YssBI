@@ -104,6 +104,211 @@ fn resources() -> ResourceCatalogSnapshot {
 }
 
 #[test]
+fn regression_pin_labels_follow_order_without_rebinding_connections() {
+    use yss_graph_document::{DocumentConnection, DynamicPortBinding, OrderKey, PortInstanceId};
+
+    let runtime = runtime();
+    let mut document = GraphDocument::default();
+    let fit = node(&mut document, "yssbi.statistics.linear.fit", &[]);
+    let source = node(&mut document, "yssbi.dataframe.series.int_range", &[]);
+    let predictors = (1..=12)
+        .map(|index| {
+            let address = PortAddress::instance(fit, "x".parse().unwrap(), PortInstanceId::new());
+            document.port_bindings.insert(
+                address.clone(),
+                DynamicPortBinding::UserCreated {
+                    order: OrderKey::new(format!("{index:05}")),
+                },
+            );
+            address
+        })
+        .collect::<Vec<_>>();
+    let connection = DocumentConnection {
+        id: yss_graph_document::ConnectionId::new(),
+        output: PortAddress::declared(source, "series".parse().unwrap()),
+        input: predictors[0].clone(),
+        order: None,
+    };
+    document
+        .connections
+        .insert(connection.id, connection.clone());
+    let project = |document: &GraphDocument| {
+        let analysis = resolve(&runtime, document, &resources());
+        build_editor_projection(EditorProjectionInput {
+            graph_path: &graph(),
+            document,
+            analysis: &analysis,
+            registry_fingerprint: runtime.registry_fingerprint(),
+        })
+        .unwrap()
+    };
+    let labels = |projection: &yss_graph_editor::projection::EditorProjectionModel| {
+        projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id == fit)
+            .unwrap()
+            .ports
+            .iter()
+            .filter(|port| {
+                matches!(&port.address.port,
+                yss_graph_document::PortRef::Instance { template, .. } if template.as_str() == "x")
+            })
+            .map(|port| {
+                (
+                    port.address.clone(),
+                    port.display.instance_label.clone().unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = [
+        "X₁", "X₂", "X₃", "X₄", "X₅", "X₆", "X₇", "X₈", "X₉", "X₁₀", "X₁₁", "X₁₂",
+    ];
+    let initial = labels(&project(&document));
+    assert_eq!(
+        initial
+            .iter()
+            .map(|(_, label)| label.as_ref())
+            .collect::<Vec<_>>(),
+        expected
+    );
+    assert_eq!(
+        initial
+            .iter()
+            .map(|(address, _)| address)
+            .collect::<Vec<_>>(),
+        predictors.iter().collect::<Vec<_>>()
+    );
+
+    document.port_bindings.remove(&predictors[2]);
+    document.port_bindings.insert(
+        predictors[11].clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey::new("00000"),
+        },
+    );
+    let inserted = PortAddress::instance(fit, "x".parse().unwrap(), PortInstanceId::new());
+    document.port_bindings.insert(
+        inserted.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey::new("00005a"),
+        },
+    );
+    let updated = project(&document);
+    let current = labels(&updated);
+    assert_eq!(
+        current
+            .iter()
+            .map(|(_, label)| label.as_ref())
+            .collect::<Vec<_>>(),
+        expected
+    );
+    assert_eq!(current[0].0, predictors[11]);
+    assert_eq!(current[1].0, predictors[0]);
+    assert_eq!(current[5].0, inserted);
+    assert_eq!(updated.connections[0].input, predictors[0]);
+    assert_eq!(document.connections[&connection.id], connection);
+}
+
+#[test]
+fn variable_pin_titles_match_catalog_without_renaming_other_inputs() {
+    use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
+
+    let runtime = runtime();
+    let mut document = GraphDocument::default();
+    let fit = node(&mut document, "yssbi.statistics.linear.fit", &[]);
+    let curve = node(&mut document, "yssbi.statistics.regression.deming", &[]);
+    for key in ["x", "weights"] {
+        document.port_bindings.insert(
+            PortAddress::instance(fit, key.parse().unwrap(), PortInstanceId::new()),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey::new("00001"),
+            },
+        );
+    }
+    let original = document.clone();
+    for locale in ["zh-CN", "en-US"] {
+        let analysis = runtime.resolve_graph_document(
+            &graph(),
+            &document,
+            &super::tests::basis(&runtime),
+            &resources(),
+            &[],
+            locale,
+        );
+        let projection = build_editor_projection(EditorProjectionInput {
+            graph_path: &graph(),
+            document: &document,
+            analysis: &analysis,
+            registry_fingerprint: runtime.registry_fingerprint(),
+        })
+        .unwrap();
+        let ports = &projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id == fit)
+            .unwrap()
+            .ports;
+        let y = ports
+            .iter()
+            .find(|port| port.address == PortAddress::declared(fit, "y".parse().unwrap()))
+            .unwrap();
+        assert_eq!(y.display.label.as_ref(), "Y");
+        assert_eq!(y.display.instance_label, None);
+        let x = ports
+            .iter()
+            .find(|port| port.display.instance_label.as_deref() == Some("X₁"))
+            .unwrap();
+        assert_eq!(x.display.label.as_ref(), "X₁");
+        assert!(
+            ports
+                .iter()
+                .any(|port| port.display.label.as_ref() == "Weights (WLS)"
+                    && port.display.instance_label.is_none())
+        );
+        let single_x = projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id == curve)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|port| port.address == PortAddress::declared(curve, "x".parse().unwrap()))
+            .unwrap();
+        assert_eq!(single_x.display.label.as_ref(), "X");
+        assert_eq!(single_x.display.instance_label, None);
+        let catalog = runtime.localized_catalog_with_resources(&[], locale);
+        let entry = catalog
+            .items
+            .iter()
+            .find(|item| item.node_type_id.as_ref() == "yssbi.statistics.linear.fit")
+            .unwrap();
+        assert_eq!(
+            entry
+                .ports
+                .iter()
+                .find(|port| port.key.as_ref() == "y")
+                .unwrap()
+                .label
+                .as_ref(),
+            "Y"
+        );
+        assert_eq!(
+            entry
+                .ports
+                .iter()
+                .find(|port| port.key.as_ref() == "x")
+                .unwrap()
+                .label
+                .as_ref(),
+            "X"
+        );
+    }
+    assert_eq!(document, original);
+}
+
+#[test]
 fn resource_titles_use_the_declared_resolved_parameter() {
     use yss_node_catalog::{
         CatalogResourcePath, ResourceBoundCreateArgs, build_builtin_node_system,

@@ -32,9 +32,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         ("repeated_measures", Repeated, 1, usize::MAX),
     ] {
         let mut inputs = if method == Manova {
-            vec![Input::repeated("responses", 2..=usize::MAX)]
+            vec![Input::repeated("y", 2..=usize::MAX)]
         } else {
-            vec![Input::fixed("response")]
+            vec![Input::fixed("y")]
         };
         if method == Repeated {
             inputs.push(Input::fixed("subjects"));
@@ -157,7 +157,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
     let mut subject_ids = None;
     for (key, column) in inv.input_keys.iter().zip(&columns) {
         match *key {
-            "response" | "responses" => responses.push(numerical(column, inv)?),
+            "y" => responses.push(numerical(column, inv)?),
             "factors" => {
                 let (coded, levels) = factor(column, inv)?;
                 factors.push(coded);
@@ -286,7 +286,7 @@ mod tests {
         let mut inv = KernelInvocation {
             relations: &relations,
             inputs: &inputs,
-            input_keys: &["response", "factors"],
+            input_keys: &["y", "factors"],
             parameters: Default::default(),
             outputs: &outputs,
             control: &control,

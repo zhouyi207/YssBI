@@ -27,7 +27,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         let plot = matches!(method, "correlogram" | "time_series");
         let mut inputs = vec![Input::fixed("series")];
         if method == "ecm" {
-            inputs.push(Input::repeated("predictors", 1..=usize::MAX));
+            inputs.push(Input::repeated("x", 1..=usize::MAX));
         }
         if method == "time_series" {
             inputs.push(Input::repeated("time", 0..=1));

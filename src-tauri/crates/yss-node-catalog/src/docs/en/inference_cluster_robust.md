@@ -5,9 +5,9 @@ Observations within a cluster may be dependent; clusters are assumed independent
 
 ## Inputs
 
-- **response**: finite numeric response.
+- **Y**: finite numeric response.
 - **clusters**: one non-null numeric, text or categorical cluster identifier per row.
-- **predictors**: one or more finite numeric columns.
+- **X₁, X₂, …**: one or more finite numeric columns.
 
 All inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs. Missing values are rejected.
 There is no fixed row limit. At least two clusters, a full-rank design and more

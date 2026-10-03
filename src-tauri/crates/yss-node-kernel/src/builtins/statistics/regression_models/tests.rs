@@ -79,10 +79,10 @@ fn ordinal_regression_keeps_declared_order_gaps_and_exact_wide_labels() {
         dummy_base_level: None,
     })
     .unwrap();
-    let mut inputs = vec![("response", response)];
+    let mut inputs = vec![("y", response)];
     for x in data["x"].as_array().unwrap() {
         inputs.push((
-            "predictors",
+            "x",
             RuntimeValue::List(
                 x.as_array()
                     .unwrap()
@@ -132,11 +132,11 @@ fn ordinal_regression_keeps_declared_order_gaps_and_exact_wide_labels() {
 fn regression_admission_checks_shapes_budget_and_cancellation_before_estimation() {
     let inputs = [
         (
-            "response",
+            "y",
             RuntimeValue::List([1., 2., 3., 4.].into_iter().map(float).collect()),
         ),
         (
-            "predictors",
+            "x",
             RuntimeValue::List([0., 1., 2., 3.].into_iter().map(float).collect()),
         ),
     ];
@@ -170,7 +170,7 @@ fn regression_admission_checks_shapes_budget_and_cancellation_before_estimation(
     ));
     let mismatch = [
         inputs[0].clone(),
-        ("predictors", RuntimeValue::List(vec![float(1.0)].into())),
+        ("x", RuntimeValue::List(vec![float(1.0)].into())),
     ];
     assert!(matches!(
         invoke(
@@ -189,7 +189,7 @@ fn hierarchical_admission_counts_actual_retained_models() {
     let column = |f: fn(usize) -> f64| RuntimeValue::List((0..rows).map(|i| float(f(i))).collect());
     let inputs = [
         (
-            "response",
+            "y",
             column(|i| {
                 3.0 + (i % 7) as f64
                     + (i % 11) as f64 * 0.5
@@ -197,9 +197,9 @@ fn hierarchical_admission_counts_actual_retained_models() {
                     + (i % 3) as f64 * 0.1
             }),
         ),
-        ("predictors", column(|i| (i % 7) as f64)),
-        ("predictors", column(|i| (i % 11) as f64)),
-        ("predictors", column(|i| (i % 13) as f64)),
+        ("x", column(|i| (i % 7) as f64)),
+        ("x", column(|i| (i % 11) as f64)),
+        ("x", column(|i| (i % 13) as f64)),
     ];
     let mut bounded = control();
     bounded.max_input_bytes = 2 * 1024 * 1024;

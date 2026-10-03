@@ -116,14 +116,7 @@ fn diagnostics_category_executes_model_unions_and_pages_observation_outputs() {
                     connect(&mut document, vars[key], "series", target, key, None);
                 }
                 for (i, key) in ["x1", "x2"].iter().enumerate() {
-                    connect(
-                        &mut document,
-                        vars[*key],
-                        "series",
-                        target,
-                        "predictors",
-                        Some(i),
-                    );
+                    connect(&mut document, vars[*key], "series", target, "x", Some(i));
                 }
                 let result = execute(&document, &kind).unwrap();
                 assert!(number(field(field(&result, "global"), "p_value")) >= 0.0);
@@ -145,26 +138,12 @@ fn diagnostics_category_executes_model_unions_and_pages_observation_outputs() {
                 let full = node(&mut document, "yssbi.statistics.linear.fit", json!({}));
                 if matches!(method, "lr" | "score_lm" | "nested_comparison") {
                     let model = node(&mut document, "yssbi.statistics.linear.fit", json!({}));
-                    connect(
-                        &mut document,
-                        vars["x1"],
-                        "series",
-                        model,
-                        "predictors",
-                        Some(0),
-                    );
+                    connect(&mut document, vars["x1"], "series", model, "x", Some(0));
                     connect(&mut document, model, "model", target, "restricted", None);
                     restricted = Some(model);
                 }
                 for (i, key) in ["x1", "x2", "x3"].iter().enumerate() {
-                    connect(
-                        &mut document,
-                        vars[*key],
-                        "series",
-                        full,
-                        "predictors",
-                        Some(i),
-                    );
+                    connect(&mut document, vars[*key], "series", full, "x", Some(i));
                 }
                 connect(
                     &mut document,
@@ -205,7 +184,7 @@ fn diagnostics_category_executes_model_unions_and_pages_observation_outputs() {
                             vars[if binary { "binary_y" } else { "y" }],
                             "series",
                             model,
-                            "response",
+                            "y",
                             None,
                         );
                         if *family == "wls" {

@@ -162,7 +162,7 @@ fn survival_category_all_fifteen_nodes_execute_and_models_feed_evaluation_and_no
                 | "survival.competing_risks"
         ) {
             for x in d["predictors"].as_array().unwrap() {
-                inputs.push(("predictors", x.clone(), true));
+                inputs.push(("x", x.clone(), true));
             }
         }
         let mut document = GraphDocument::default();

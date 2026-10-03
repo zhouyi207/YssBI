@@ -6,7 +6,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.doe.response_surface",
         vec![
-            Input::fixed("response"),
+            Input::fixed("y"),
             Input::repeated("factors", 1..=usize::MAX),
         ],
         &[],
@@ -16,7 +16,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
         builder,
         "yssbi.statistics.doe.dose_response",
-        vec![Input::fixed("response"), Input::fixed("dose")],
+        vec![Input::fixed("y"), Input::fixed("dose")],
         &["max_iterations", "tolerance"],
         2,
         |inv| execute(inv, false),

@@ -13,8 +13,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             builder,
             &format!("yssbi.statistics.iv.{name}.fit"),
             vec![
-                Input::fixed("response"),
-                Input::repeated("predictors", 0..=usize::MAX),
+                Input::fixed("y"),
+                Input::repeated("x", 0..=usize::MAX),
                 Input::repeated("endogenous", 1..=usize::MAX),
                 Input::repeated("instruments", 1..=usize::MAX),
             ],
@@ -54,8 +54,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.panel.did.twfe",
         vec![
-            Input::fixed("response"),
-            Input::repeated("predictors", 0..=usize::MAX),
+            Input::fixed("y"),
+            Input::repeated("x", 0..=usize::MAX),
             Input::fixed("entity"),
             Input::fixed("time"),
             Input::fixed("treatment"),
@@ -68,8 +68,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.panel.did.randomization",
         vec![
-            Input::fixed("response"),
-            Input::repeated("predictors", 0..=usize::MAX),
+            Input::fixed("y"),
+            Input::repeated("x", 0..=usize::MAX),
             Input::fixed("entity"),
             Input::fixed("time"),
             Input::fixed("treat"),
@@ -170,7 +170,7 @@ fn randomization(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Kernel
 fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let mut data = columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, 0)?;
     let response = data.remove(0);
-    let exog = group(inv, "predictors").len();
+    let exog = group(inv, "x").len();
     let endog = group(inv, "endogenous").len();
     let constant = boolean(inv, "constant")?;
     // IV first-stage and identification diagnostics form dense observation projections.
@@ -192,7 +192,7 @@ fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Ker
     fit.parameter_names = std::iter::once("_cons".to_string())
         .take(usize::from(constant))
         .chain(
-            group(inv, "predictors")
+            group(inv, "x")
                 .into_iter()
                 .chain(group(inv, "endogenous"))
                 .enumerate()
@@ -224,7 +224,7 @@ fn did(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     check_fit_workspace(response.len(), data.len() + 1, true, "GLS", inv)?;
     let mut fit = yss_sci_runtime::causal::did::fit_did(response, data, entity, time, treatment)
         .map_err(sci)?;
-    let treatment_index = group(inv, "predictors").len() + 1;
+    let treatment_index = group(inv, "x").len() + 1;
     let treatment_label = format!("x{treatment_index}");
     if fit
         .omitted_terms

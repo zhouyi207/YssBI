@@ -52,11 +52,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             "regression.curve" | "regression.nonlinear" | "regression.deming" | "transform.rcs"
         );
         let mut inputs = vec![
-            Input::fixed("response"),
+            Input::fixed("y"),
             if single {
-                Input::fixed("predictor")
+                Input::fixed("x")
             } else {
-                Input::repeated("predictors", 1..=usize::MAX)
+                Input::repeated("x", 1..=usize::MAX)
             },
         ];
         if matches!(
@@ -213,7 +213,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         .input_keys
         .iter()
         .zip(&data)
-        .filter(|(key, _)| matches!(**key, "predictors" | "predictor"))
+        .filter(|(key, _)| **key == "x")
         .map(|(_, c)| numeric(c, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let inflation = inv

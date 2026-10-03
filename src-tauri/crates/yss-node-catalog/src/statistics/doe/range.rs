@@ -45,7 +45,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             interface: assembled_interface(
                 id,
                 vec![
-                    data_input("response", "Response", series_type()?)?,
+                    data_input("y", "Y", series_type()?)?,
                     bounded_user_data_input(
                         "factors",
                         "Experimental factor",

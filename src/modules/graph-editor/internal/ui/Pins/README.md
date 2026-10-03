@@ -4,6 +4,10 @@
 callbacks and context-menu capabilities remain separate props and must never be copied into Canvas
 interaction state.
 
+Variable inputs display the Rust-projected titles (`Y`, `X₁`, `X₂`, …).
+Input tooltips read connected source labels through the existing Pin adjacency index;
+no full-graph scan or frontend numbering is needed. Canvas and Details use the same projected names.
+
 Each Pin controller is a memoized render boundary using the store's shared immutable Pin reference.
 Node layouts pass the stable `renderPinHandle` function instead of creating a handle element for every
 row on each node update. The controller creates and caches its own handle element by Pin and function

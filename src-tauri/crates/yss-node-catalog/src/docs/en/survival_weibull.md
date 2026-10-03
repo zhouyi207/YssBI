@@ -2,7 +2,7 @@
 
 Connect aligned `time` and `event` series. Time must be finite and strictly positive, in one consistent unit; `event=1` (or true) means an observed event and `0` (or false) means right censoring. Rows with missing values are rejected, not dropped. Censoring is assumed independent of the event process, conditional on the model/group used. Inputs must have equal lengths and pair by current row position, including mixed database and in-memory series.
 
-Zero or more numeric `predictors` are allowed; an intercept is always fitted. $S(t\mid x)=\exp\{-\exp[(\log t-\eta)/\sigma]\}$; Weibull shape is $1/\sigma$.
+Zero or more numeric `X₁, X₂, …` are allowed; an intercept is always fitted. $S(t\mid x)=\exp\{-\exp[(\log t-\eta)/\sigma]\}$; Weibull shape is $1/\sigma$.
 `survival_horizon=1` is a strictly positive prediction time. `max_iterations=500` (positive integer), `tolerance=0.0000001` (from 1e-12 to 0.01). Nonconvergence or a singular information matrix produces an error. Predictor columns must be finite and identifiable; categorical predictors require prior dummy coding.
 
 ## Model and inference

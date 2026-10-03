@@ -89,7 +89,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 numeric_group("new_variables", "New variable", 0)?,
             ],
             "rda" => vec![
-                numeric_group("responses", "Response", 1)?,
+                numeric_group("y", "Y", 1)?,
                 numeric_group("constraints", "Constraint", 1)?,
             ],
             "mds" => vec![numeric_group("variables", "Variable / distance column", 1)?],

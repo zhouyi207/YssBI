@@ -3,7 +3,7 @@ import type { NodeData, PinData } from "@/features/domain/editorProjection/graph
 import { portAddressKey } from "@/shared/types/domain/portAddressKey";
 
 type NodeLabelSource = Pick<NodeData, "display">;
-type PinLabelSource = Pick<PinData, "name" | "display">;
+type PinLabelSource = Pick<PinData, "display">;
 
 export interface NodePinDisplayBucket {
   readonly nodes?: Readonly<Record<string, NodeLabelSource>>;
@@ -20,9 +20,7 @@ export function nodeDisplayTitle(node: NodeLabelSource | undefined): string | nu
 }
 
 export function pinDisplayTitle(pin: PinLabelSource | undefined): string | null {
-  return (
-    nonEmpty(pin?.display.instanceLabel) ?? nonEmpty(pin?.display.label) ?? nonEmpty(pin?.name)
-  );
+  return nonEmpty(pin?.display.instanceLabel ?? pin?.display.label);
 }
 
 export function formatNodePinDisplayLabel(

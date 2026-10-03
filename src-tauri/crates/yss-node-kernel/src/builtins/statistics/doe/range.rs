@@ -4,7 +4,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder,
         "yssbi.statistics.doe.range_analysis",
         vec![
-            Input::fixed("response"),
+            Input::fixed("y"),
             Input::repeated("factors", 1..=usize::MAX),
         ],
         &["maximize"],

@@ -140,7 +140,7 @@ pub(crate) fn fixture_with_options(
     }
     let patch = EditorGraphMutation::AddPortInstance {
         node_id: fit,
-        template_key: "predictors".parse().unwrap(),
+        template_key: "x".parse().unwrap(),
         placement: PortPlacement::Append,
     }
     .into_patch(&graph, &document, &builtins.registry)
@@ -153,10 +153,7 @@ pub(crate) fn fixture_with_options(
         .unwrap()
         .clone();
     for (source, input) in [
-        (
-            response,
-            PortAddress::declared(fit, "response".parse().unwrap()),
-        ),
+        (response, PortAddress::declared(fit, "y".parse().unwrap())),
         (predictor, input),
     ] {
         let id = yss_graph_document::ConnectionId::new();
