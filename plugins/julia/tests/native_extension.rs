@@ -227,9 +227,45 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
     assert!(root.join("retained-result.json").exists());
     let duplicate=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":fit_operation,"taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
     assert_eq!(duplicate["taskId"], task_id);
-    draft["sampler"]["samples"] = json!(1_000_000);
+    draft["sampler"]["samples"] = json!(100_000);
     let long=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":operation("cancel-test"),"taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
     let long_id = long["taskId"].as_str().unwrap();
+    let warmup = draft["sampler"]["warmup"].as_u64().unwrap();
+    let sampling_started = Instant::now();
+    loop {
+        let snapshot = manager
+            .call_view(
+                &analysis.session_id,
+                "test",
+                "tasks.get",
+                json!({"taskId":long_id}),
+            )
+            .unwrap();
+        let state = snapshot["state"].as_str().unwrap();
+        let progress = &snapshot["progress"];
+        if state == "running"
+            && progress["stage"] == "sampling"
+            && let (Some(completed), Some(total)) =
+                (progress["completed"].as_u64(), progress["total"].as_u64())
+            && completed > warmup
+            && completed < total
+        {
+            eprintln!(
+                "Sampling cancellation gate: completed={completed}, total={total}, warmup={warmup}"
+            );
+            break;
+        }
+        assert!(
+            !["succeeded", "failed", "cancelled", "outcomeUnknown"].contains(&state),
+            "task ended before sampling cancellation gate: {snapshot}"
+        );
+        assert!(
+            sampling_started.elapsed() < Duration::from_secs(180),
+            "task did not reach sampling cancellation gate: {snapshot}"
+        );
+        std::thread::park_timeout(Duration::from_millis(250));
+    }
+    let cancel_started = Instant::now();
     manager
         .call_view(
             &analysis.session_id,
@@ -245,6 +281,9 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
         Duration::from_secs(30),
     );
     assert_eq!(cancelled["state"], "cancelled", "{cancelled}");
+    let cancel_elapsed = cancel_started.elapsed();
+    eprintln!("Sampling cancellation terminal latency: {cancel_elapsed:?}");
+    assert!(cancel_elapsed < Duration::from_secs(30));
     *host.project.lock().unwrap() = None;
     assert_eq!(
         manager
@@ -366,4 +405,193 @@ fn concurrent_activation_shares_process_and_respects_view_leases() {
     manager.uninstall(&id).unwrap();
     drop(manager);
     fs::remove_dir_all(root).unwrap();
+}
+
+type ProjectReadGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
+
+#[derive(Default)]
+struct GatedViewHost {
+    next_project_read: Mutex<Option<ProjectReadGate>>,
+    next_invoke: Mutex<Option<ProjectReadGate>>,
+    resources: Mutex<std::collections::BTreeSet<String>>,
+}
+impl GatedViewHost {
+    fn pause_next_project_read(&self) -> ProjectReadGate {
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (resume, proceed) = std::sync::mpsc::channel();
+        *self.next_project_read.lock().unwrap() = Some((entered, proceed));
+        (resume, ready)
+    }
+    fn pause_next_invoke(&self) -> ProjectReadGate {
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (resume, proceed) = std::sync::mpsc::channel();
+        *self.next_invoke.lock().unwrap() = Some((entered, proceed));
+        (resume, ready)
+    }
+}
+impl HostServices for GatedViewHost {
+    fn current_project(&self) -> Result<Option<ProjectContext>, PluginFailure> {
+        let gate = self.next_project_read.lock().unwrap().take();
+        if let Some((entered, proceed)) = gate {
+            entered.send(()).unwrap();
+            proceed.recv_timeout(Duration::from_secs(30)).unwrap();
+        }
+        Ok(Some(ProjectContext {
+            project_instance_id: "project".into(),
+            project_session_id: "session".into(),
+        }))
+    }
+    fn invoke(
+        &self,
+        context: &CallContext,
+        method: &str,
+        _: Value,
+        _: &Path,
+    ) -> Result<Value, PluginFailure> {
+        if method != "data.list" {
+            return Err(PluginFailure::new("plugin_method_unknown"));
+        }
+        let gate = self.next_invoke.lock().unwrap().take();
+        if let Some((entered, proceed)) = gate {
+            entered.send(()).unwrap();
+            proceed.recv_timeout(Duration::from_secs(30)).unwrap();
+        }
+        self.resources
+            .lock()
+            .unwrap()
+            .insert(context.context_id.clone());
+        Ok(json!({"datasets":[]}))
+    }
+    fn release_context(&self, context_id: &str) {
+        self.resources.lock().unwrap().remove(context_id);
+    }
+}
+
+fn view_race_fixture() -> (PluginManager, Arc<GatedViewHost>, PathBuf) {
+    let package =
+        PathBuf::from(std::env::var_os("YSSBI_PLUGIN_TEST_PACKAGE").expect("test package"));
+    let root = std::env::temp_dir().join(format!("yssbi-plugin-view-{}", uuid::Uuid::new_v4()));
+    let host = Arc::new(GatedViewHost::default());
+    let manager = PluginManager::new(&root, host.clone()).unwrap();
+    let inspected = manager.inspect(&package).unwrap();
+    manager
+        .install(
+            &package,
+            &inspected.package_digest,
+            &operation("view-race-install"),
+            true,
+            None,
+        )
+        .unwrap();
+    (manager, host, root)
+}
+
+#[test]
+#[ignore = "requires a packaged extension; does not prepare or launch Julia"]
+fn view_attach_rejects_a_process_lost_during_context_preparation() {
+    let (manager, host, root) = view_race_fixture();
+    let lease = manager.acquire("yssbi.julia").unwrap();
+    let (resume, ready) = host.pause_next_project_read();
+    let attaching = {
+        let manager = manager.clone();
+        std::thread::spawn(move || manager.attach_view("yssbi.julia", "analysis", "test"))
+    };
+    ready.recv_timeout(Duration::from_secs(30)).unwrap();
+    lease.process.stop();
+    resume.send(()).unwrap();
+    assert_eq!(
+        attaching.join().unwrap().err().map(|error| error.code),
+        Some("plugin_process_exited".into())
+    );
+    drop(lease);
+
+    let replacement = manager
+        .attach_view("yssbi.julia", "analysis", "test")
+        .unwrap();
+    manager
+        .detach_view(&replacement.session_id, "test")
+        .unwrap();
+    manager.uninstall("yssbi.julia").unwrap();
+    drop(manager);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[ignore = "requires a packaged extension; does not prepare or launch Julia"]
+fn view_export_rejects_a_context_detached_after_initial_validation() {
+    let (manager, host, root) = view_race_fixture();
+    let view = manager
+        .attach_view("yssbi.julia", "analysis", "test")
+        .unwrap();
+    let (resume, ready) = host.pause_next_project_read();
+    let granting = {
+        let manager = manager.clone();
+        let session = view.session_id.clone();
+        let path = root.join("export.csv");
+        std::thread::spawn(move || manager.grant_export(&session, "test", path))
+    };
+    ready.recv_timeout(Duration::from_secs(30)).unwrap();
+    manager.detach_view(&view.session_id, "test").unwrap();
+    resume.send(()).unwrap();
+    assert_eq!(
+        granting.join().unwrap().err().map(|error| error.code),
+        Some("plugin_stale_context".into())
+    );
+
+    let replacement = manager
+        .attach_view("yssbi.julia", "analysis", "test")
+        .unwrap();
+    assert!(
+        !manager
+            .grant_export(&replacement.session_id, "test", root.join("export.csv"))
+            .unwrap()
+            .is_empty()
+    );
+    manager
+        .detach_view(&replacement.session_id, "test")
+        .unwrap();
+    manager.uninstall("yssbi.julia").unwrap();
+    drop(manager);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[ignore = "requires a packaged extension; does not prepare or launch Julia"]
+fn view_host_reply_rejects_revocation_and_releases_late_context_resources() {
+    let (manager, host, root) = view_race_fixture();
+    let view = manager
+        .attach_view("yssbi.julia", "analysis", "test")
+        .unwrap();
+    let (resume, ready) = host.pause_next_invoke();
+    let reading = {
+        let manager = manager.clone();
+        let session = view.session_id.clone();
+        std::thread::spawn(move || manager.call_view(&session, "test", "data.list", json!({})))
+    };
+    ready.recv_timeout(Duration::from_secs(30)).unwrap();
+    manager.detach_view(&view.session_id, "test").unwrap();
+    let replacement = manager
+        .attach_view("yssbi.julia", "analysis", "test")
+        .unwrap();
+    let current = manager
+        .call_view(&replacement.session_id, "test", "data.list", json!({}))
+        .unwrap();
+    resume.send(()).unwrap();
+    let outcome = reading.join().unwrap();
+    let resources = host.resources.lock().unwrap().clone();
+
+    // Finish this fixture's process and directory cleanup even when the regression fails.
+    manager
+        .detach_view(&replacement.session_id, "test")
+        .unwrap();
+    manager.uninstall("yssbi.julia").unwrap();
+    drop(manager);
+    fs::remove_dir_all(root).unwrap();
+
+    assert_eq!(
+        outcome.err().map(|error| error.code),
+        Some("plugin_stale_context".into())
+    );
+    assert_eq!(current, json!({"datasets":[]}));
+    assert_eq!(resources, [replacement.session_id].into_iter().collect());
 }

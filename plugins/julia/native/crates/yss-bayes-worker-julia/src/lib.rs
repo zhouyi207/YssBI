@@ -218,6 +218,26 @@ impl JuliaBayesWorkerAdapter {
 }
 
 impl BayesWorkerPort for JuliaBayesWorkerAdapter {
+    fn release(&self, handle: &BayesTaskHandle) {
+        let task = {
+            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            if state.current.get(handle.task_id()) == Some(handle) {
+                state.current.remove(handle.task_id());
+            }
+            state.tasks.remove(handle)
+        };
+        if let Some(AdapterTaskState::Active {
+            worker_task_id,
+            cancellation,
+            ..
+        }) = &task
+        {
+            cancellation.store(true, Ordering::Release);
+            let _ = self.runtime.cancel(worker_task_id);
+        }
+        drop(task);
+    }
+
     fn progress(&self, handle: &BayesTaskHandle) -> Option<yss_bayes_result::TaskProgress> {
         let state = self.state.lock().ok()?;
         Self::validate_current(&state, handle).ok()?;
@@ -389,7 +409,9 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                 }
                 Ok(Err(error)) => {
                     let mapped = fit::map_worker_error(handle, error);
-                    if let Ok(mut state) = self.state.lock() {
+                    if let Ok(mut state) = self.state.lock()
+                        && state.current.get(handle.task_id()) == Some(handle)
+                    {
                         state.tasks.insert(
                             handle.clone(),
                             if matches!(mapped, BayesWorkerError::Cancelled { .. }) {
@@ -787,10 +809,11 @@ mod tests {
                 gate: None,
             },
         ]));
-        let adapter = BayesWorkerClient::new(Arc::new(JuliaBayesWorkerAdapter::with_runtime(
+        let backend = Arc::new(JuliaBayesWorkerAdapter::with_runtime(
             root.path(),
-            runtime,
-        )));
+            runtime.clone(),
+        ));
+        let adapter = BayesWorkerClient::new(backend.clone());
         let (run_control, _, _) = controls();
         let first = adapter
             .start(validated_task("shared-task"), &run_control)
@@ -823,10 +846,26 @@ mod tests {
             adapter.read_artifact(&result.artifacts()[0], &run_control),
             Err(BayesWorkerError::StaleTaskHandle { task }) if task == first
         ));
+        let task_root = root.path().join("julia-worker").join("tasks");
+        assert!(task_root.join("bayes-1").exists());
+        adapter.release(&first);
+        assert!(!task_root.join("bayes-1").exists());
+        assert_eq!(runtime.cancel_attempts(), 0);
+        {
+            let state = backend.state.lock().unwrap();
+            assert!(!state.tasks.contains_key(&first));
+            assert_eq!(state.current.get(second.task_id()), Some(&second));
+        }
         let second_result = adapter
             .await_result(&second, &run_control)
             .expect("second generation must finish before its temporary root is released");
         assert!(second_result.artifacts().is_empty());
+        adapter.release(&first);
+        assert!(task_root.join("bayes-2").exists());
+        adapter.release(&second);
+        assert!(!task_root.join("bayes-2").exists());
+        assert!(backend.state.lock().unwrap().tasks.is_empty());
+        assert!(backend.state.lock().unwrap().current.is_empty());
     }
 
     #[test]

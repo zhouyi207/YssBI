@@ -62,7 +62,7 @@ describe("bayes inference task state machine", () => {
     ).toBe(active);
   });
 
-  it("does not regress a completed status when an older poll resolves late", () => {
+  it("preserves cancellation intent and terminal results against late polls and cancel failures", () => {
     const submitting = bayesInferenceReducer(initialBayesInferenceState, {
       type: "submit_started",
       requestGeneration: 1,
@@ -72,7 +72,49 @@ describe("bayes inference task state machine", () => {
       requestGeneration: 1,
       task: task("task-1", "running"),
     });
-    const reading = bayesInferenceReducer(active, {
+    const cancelling = bayesInferenceReducer(active, {
+      type: "cancel_started",
+      requestGeneration: 1,
+      taskId: "task-1",
+    });
+    for (const status of ["running", "queued"] as const) {
+      expect
+        .soft(
+          bayesInferenceReducer(cancelling, {
+            type: "task_received",
+            requestGeneration: 1,
+            task: task("task-1", status),
+          }).task?.status,
+        )
+        .toBe("cancelling");
+    }
+    expect(
+      bayesInferenceReducer(cancelling, {
+        type: "task_received",
+        requestGeneration: 1,
+        task: task("task-1", "cancelled"),
+      }).phase,
+    ).toBe("cancelled");
+    const cancelFailure = {
+      type: "cancel_failed" as const,
+      requestGeneration: 1,
+      taskId: "task-1",
+      error: { code: "plugin_request_timeout", details: null, incidentId: null },
+    };
+    const uncertain = bayesInferenceReducer(cancelling, cancelFailure);
+    expect(uncertain.phase).toBe("submission_unknown");
+    const retrying = bayesInferenceReducer(uncertain, {
+      type: "submit_started",
+      requestGeneration: 2,
+    });
+    expect(
+      bayesInferenceReducer(retrying, {
+        type: "task_received",
+        requestGeneration: 2,
+        task: task("task-1", "running"),
+      }).task?.status,
+    ).toBe("running");
+    const reading = bayesInferenceReducer(cancelling, {
       type: "task_received",
       requestGeneration: 1,
       task: task("task-1", "completed"),
@@ -84,6 +126,25 @@ describe("bayes inference task state machine", () => {
         task: task("task-1", "running"),
       }),
     ).toBe(reading);
+    expect.soft(bayesInferenceReducer(reading, cancelFailure)).toBe(reading);
+    const completed = bayesInferenceReducer(reading, {
+      type: "result_received",
+      requestGeneration: 1,
+      taskId: "task-1",
+      result: result("task-1"),
+    });
+    expect.soft(bayesInferenceReducer(completed, cancelFailure)).toBe(completed);
+    const resultFailure = bayesInferenceReducer(reading, {
+      type: "request_failed",
+      requestGeneration: 1,
+      taskId: "task-1",
+      error: { code: "plugin_result_missing", details: null, incidentId: null },
+      uncertain: true,
+    });
+    expect(resultFailure).toMatchObject({
+      phase: "submission_unknown",
+      error: { code: "plugin_result_missing" },
+    });
   });
 
   it("normalizes backend task failures into the same failed state as invoke errors", () => {

@@ -43,9 +43,15 @@ pnpm plugin:julia:package
 - `web/`：独立 React、图表、模型编辑器和桥接适配；不依赖宿主 React 实例。
 - 宿主：通用安装 registry、进程监督、任务账本、项目上下文、数据快照授权和结果提交。
 
-项目数据通过有界 Arrow 文件快照传入插件，不穿过网页。任务使用 operation ID 去重，关闭页面不终止计算；取消意图不会被迟到状态覆盖。进程异常后的未知结果不会自动重试。结果以 JSON、CSV 摘要及原始 artifacts 提交到项目 `extension-results/`，包含来源和内容哈希，禁用/卸载不删除已有结果。
+项目数据通过有界 Arrow 文件快照传入插件，不穿过网页。任务使用 operation ID 去重，关闭页面不终止计算；网页保留同一任务的取消意图，迟到的排队/运行快照只能刷新进度，任务终态仍正常接纳。取消请求失败仅在任务仍活跃时进入未知提交状态与显式重试流程，不能覆盖已接纳的终态或结果读取；真正的结果读取失败仍按原流程结算。进程异常后的未知结果不会自动重试。结果以 JSON、CSV 摘要及原始 artifacts 提交到项目 `extension-results/`，包含来源和内容哈希，禁用/卸载不删除已有结果。
 
 任务历史清理由宿主账本提供。原生 Bayes 服务在失败或取消后的产物清理中，只删除自身记录为当前任务所有的路径；结果清单中的外部路径不授予删除权限。
+
+Bayes 队列在已接纳任务的结果复制、失败或取消处理结束后，统一释放该 worker 句柄。
+Julia 适配器只回收该句柄拥有的临时目录和资源，保留已经复制的结果与后继任务；迟到完成不能恢复已释放句柄。
+取消通知与队列释放竞争时，仅在原任务已结算且原句柄已移除后接纳该句柄的失效回执，其他取消错误仍保留。
+结果物化期间已接纳的取消，在产物读取失败后仍结算为取消；未取消的读取失败保留原错误，部分结果与 worker 临时资源按原归属清理。
+数据快照读取由 Extension 负责，Bayes Runtime 只接收已验证的 `StatisticalInput`，不另设数据源加载接口。
 
 插件与宿主统一使用 Arrow 数据边界，workspace 不再依赖 Polars。输入保留跨批次的行对齐、类别标签和缺失值；
 Julia worker 分批写出 Float64/Utf8 交换文件，交换表模式与 Julia 模型不变。
@@ -80,6 +86,7 @@ src-tauri/crates/
 网页通信实现保留在 `web/src/sdk.ts`，由本插件的页面直接复用，不单独发布 npm 包。
 Bayes 服务直接调用 `tasks.start/get/cancel/result` 管理推理任务；`commands.execute`
 只承接清单中声明的模型和产物命令。网页语言资源只维护本插件的运行时与 Bayes 页面内容。
+公式编辑从已解析的 raw predictor AST 格式化分布参数，复用领域格式化入口，保持嵌套函数参数；不反向拆解显示用的公式文本。
 插件图表仅维护 Bayes 使用的绘图实现；坐标点、尺寸和边距类型由 `web/src/shared/charts/core/types.ts` 统一定义。
 协议和 Rust SDK 保留原 crate 名称与路径。插件复用 `yss-math-expr` 提供纯数学解析；
 统计输入、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。平台文件替换直接使用 `atomicwrites`。
@@ -99,8 +106,12 @@ pnpm test:rs:package -p yss-plugin-runtime --test installation
 pnpm test:plugin:native
 ```
 
-`test:plugin:package` 验证通用清单内容身份和发布版本规则。原生测试需要已构建的包和兼容 Julia，覆盖环境准备、推断、取消、上下文失效和卸载；普通单元测试不会隐式启动它。
+`test:plugin:package` 验证通用清单内容身份和发布版本规则。完整原生验收需要已构建的包和兼容 Julia，覆盖环境准备、推断、取消、上下文失效和卸载；普通单元测试不会隐式启动它。
+完整原生用例先完成短采样与结果读取，再等待长任务的真实 `sampling` 进度越过 warmup 后取消；输出宿主取消请求至终态的观察耗时，其中包含当前实现终止 worker 的路径，不代表纯 Julia 协作取消延迟。
 默认验证本地最新包；可通过 `YSSBI_PLUGIN_TEST_PACKAGE` 指定待验证的 `.yssplugin`。冷环境准备和 Julia 编译可能需要数分钟。
+只验证宿主视图生命周期时，设置上述包路径后，为 `yss-plugin-runtime` 的 `native_extension` 目标选择
+`view_` 过滤器并显式启用 ignored 用例。该范围覆盖并发启动、视图配额、附加期间进程退出，以及关闭视图
+与导出授权竞争；使用真实插件进程，但不准备或启动 Julia，不能替代完整计算链验收。
 直接运行 Julia 源码测试的初始化方式见 [worker 开发验证](runtime/julia/README.md#开发验证)。宿主投影 schema 的生成与检查由 [Plugin protocol](../../src-tauri/crates/yss-plugin-protocol/README.md) 维护。
 历史、预算、缓存、签名身份和诊断的当前宿主行为见 [Plugin runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)。
 

@@ -250,9 +250,9 @@ impl JuliaWorkerManager {
             }
             let worker = self.worker(app_data_dir)?;
             let request_id = Uuid::new_v4().to_string();
-            self.set_active_task(Some(task_id.clone()))?;
-            let response = worker
-                .send(json!({
+            let response = send_worker_message(
+                &worker.stdin,
+                json!({
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "method": "run",
@@ -264,15 +264,17 @@ impl JuliaWorkerManager {
                         "metadataPath": metadata_path,
                         "parameters": task.parameters
                     }
-                }))
-                .and_then(|()| {
-                    worker.await_response_cancellable(
-                        &request_id,
-                        &task_id,
-                        progress.as_ref(),
-                        task.cancellation.as_deref(),
-                    )
-                });
+                }),
+                || self.set_active_task(Some(task_id.clone())),
+            )
+            .and_then(|()| {
+                worker.await_response_cancellable(
+                    &request_id,
+                    &task_id,
+                    progress.as_ref(),
+                    task.cancellation.as_deref(),
+                )
+            });
             self.clear_active_task(&task_id);
             response
         })();
@@ -415,6 +417,37 @@ struct WorkerProcess {
     stderr: Arc<Mutex<VecDeque<String>>>,
 }
 
+fn send_worker_message<W: Write>(
+    stdin: &Mutex<W>,
+    message: Value,
+    admit: impl FnOnce() -> Result<(), JuliaWorkerError>,
+) -> Result<(), JuliaWorkerError> {
+    let encoded = serde_json::to_string(&message).map_err(|error| {
+        JuliaWorkerError::new(JuliaWorkerErrorCode::RequestFailed, error.to_string())
+    })?;
+    let mut stdin = stdin.lock().map_err(|_| {
+        JuliaWorkerError::new(
+            JuliaWorkerErrorCode::StateUnavailable,
+            "Julia worker stdin is unavailable.",
+        )
+    })?;
+    // Publish the active task only once its run message owns the writer; a
+    // cancellation that observes it must be written after that run message.
+    admit()?;
+    writeln!(stdin, "{encoded}").map_err(|error| {
+        JuliaWorkerError::new(
+            JuliaWorkerErrorCode::RequestFailed,
+            format!("Failed to write Julia request: {error}"),
+        )
+    })?;
+    stdin.flush().map_err(|error| {
+        JuliaWorkerError::new(
+            JuliaWorkerErrorCode::RequestFailed,
+            format!("Failed to flush Julia request: {error}"),
+        )
+    })
+}
+
 impl WorkerProcess {
     fn spawn(worker_dir: &Path) -> Result<Self, JuliaWorkerError> {
         let executable = system_julia_executable().map_err(|error| {
@@ -506,27 +539,7 @@ impl WorkerProcess {
     }
 
     fn send(&self, message: Value) -> Result<(), JuliaWorkerError> {
-        let encoded = serde_json::to_string(&message).map_err(|error| {
-            JuliaWorkerError::new(JuliaWorkerErrorCode::RequestFailed, error.to_string())
-        })?;
-        let mut stdin = self.stdin.lock().map_err(|_| {
-            JuliaWorkerError::new(
-                JuliaWorkerErrorCode::StateUnavailable,
-                "Julia worker stdin is unavailable.",
-            )
-        })?;
-        writeln!(stdin, "{encoded}").map_err(|error| {
-            JuliaWorkerError::new(
-                JuliaWorkerErrorCode::RequestFailed,
-                format!("Failed to write Julia request: {error}"),
-            )
-        })?;
-        stdin.flush().map_err(|error| {
-            JuliaWorkerError::new(
-                JuliaWorkerErrorCode::RequestFailed,
-                format!("Failed to flush Julia request: {error}"),
-            )
-        })
+        send_worker_message(&self.stdin, message, || Ok(()))
     }
 
     fn await_response_cancellable(
@@ -639,11 +652,12 @@ mod tests {
     use std::cell::Cell;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::{Arc, Barrier};
+    use std::sync::{Arc, Barrier, Mutex};
 
     use super::{
         JuliaRuntimeState, JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager,
-        JuliaWorkerStartupState, JuliaWorkerTask, TASK_DIR, WORKER_DIR, worker_error, write_asset,
+        JuliaWorkerStartupState, JuliaWorkerTask, TASK_DIR, WORKER_DIR, send_worker_message,
+        worker_error, write_asset,
     };
     use serde_json::json;
     use uuid::Uuid;
@@ -878,5 +892,59 @@ mod tests {
         assert!(manager.inner.active_task_id.try_lock().is_ok());
         cancel_release.wait();
         assert!(!cancel.join().expect("cancel thread must finish").unwrap());
+
+        let manager = JuliaWorkerManager::new();
+        let stdin = Arc::new(Mutex::new(Vec::new()));
+        let admitted = Arc::new(Barrier::new(2));
+        let resume_run = Arc::new(Barrier::new(2));
+        let cancel_entered = Arc::new(Barrier::new(2));
+        let run = {
+            let manager = manager.clone();
+            let stdin = stdin.clone();
+            let admitted = admitted.clone();
+            let resume_run = resume_run.clone();
+            std::thread::spawn(move || {
+                send_worker_message(&stdin, json!({ "method": "run" }), || {
+                    manager.set_active_task(Some("ordered-task".to_owned()))?;
+                    admitted.wait();
+                    resume_run.wait();
+                    Ok(())
+                })
+            })
+        };
+        admitted.wait();
+        let cancel = {
+            let manager = manager.clone();
+            let stdin = stdin.clone();
+            let cancel_entered = cancel_entered.clone();
+            std::thread::spawn(move || {
+                let mut active_lock_available = false;
+                let result = manager.cancel_with_io_hook("ordered-task", || {
+                    active_lock_available = manager.inner.active_task_id.try_lock().is_ok();
+                    let waiting_for_run = stdin.try_lock().is_err();
+                    if waiting_for_run {
+                        cancel_entered.wait();
+                    }
+                    send_worker_message(&stdin, json!({ "method": "cancel" }), || Ok(()))
+                        .expect("write cancellation");
+                    if !waiting_for_run {
+                        cancel_entered.wait();
+                    }
+                });
+                (result, active_lock_available)
+            })
+        };
+        cancel_entered.wait();
+        resume_run.wait();
+        run.join().expect("run sender must finish").unwrap();
+        let (cancelled, active_lock_available) = cancel.join().expect("cancel sender must finish");
+        assert!(!cancelled.unwrap());
+        assert!(active_lock_available);
+        let messages = String::from_utf8(stdin.lock().unwrap().clone()).unwrap();
+        let methods: Vec<_> = messages
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["method"].clone())
+            .collect();
+        assert_eq!(methods, [json!("run"), json!("cancel")]);
     }
 }

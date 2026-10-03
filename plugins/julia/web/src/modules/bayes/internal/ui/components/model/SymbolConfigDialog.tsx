@@ -514,7 +514,7 @@ function priorArgLabels(distribution: PriorSpecDTO["distribution"], t: Translati
     case "gamma":
       return [t("bayes.prior.args.shape"), t("bayes.prior.args.scale")];
     case "exponential":
-      return [t("bayes.prior.args.scale")];
+      return [t("bayes.prior.args.rate")];
     case "student_t":
       return [
         t("bayes.prior.args.degreesOfFreedom"),

@@ -1,26 +1,4 @@
-import {
-  BINARY_OPERATOR_LABELS,
-  type ExpressionDTO,
-  type RawExpressionDTO,
-} from "@/shared/types/bayes";
-
-export function formatExpression(expression: ExpressionDTO | null): string {
-  if (!expression) return "";
-  switch (expression.type) {
-    case "number":
-      return String(expression.value);
-    case "column":
-    case "data_variable":
-    case "parameter":
-      return expression.name;
-    case "unary":
-      return `-${formatExpressionWithParens(expression.arg)}`;
-    case "binary":
-      return `${formatExpressionWithParens(expression.left)} ${BINARY_OPERATOR_LABELS[expression.op]} ${formatExpressionWithParens(expression.right)}`;
-    case "call":
-      return `${expression.function}(${expression.args.map(formatExpression).join(", ")})`;
-  }
-}
+import type { RawExpressionDTO } from "@/shared/types/bayes";
 
 export function formatRawExpressionLatex(expression: RawExpressionDTO | null): string {
   if (!expression) return "";
@@ -64,11 +42,4 @@ function formatRawExpressionLatexGrouped(expression: RawExpressionDTO): string {
   return expression.type === "binary"
     ? `\\left(${formatRawExpressionLatex(expression)}\\right)`
     : formatRawExpressionLatex(expression);
-}
-
-function formatExpressionWithParens(expression: ExpressionDTO): string {
-  if (expression.type === "binary") {
-    return `(${formatExpression(expression)})`;
-  }
-  return formatExpression(expression);
 }

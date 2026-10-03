@@ -19,11 +19,3 @@ export type ExpressionDTO =
   | { type: "unary"; op: UnaryOpDTO; arg: ExpressionDTO }
   | { type: "binary"; op: BinaryOpDTO; left: ExpressionDTO; right: ExpressionDTO }
   | { type: "call"; function: MathFunctionDTO; args: ExpressionDTO[] };
-
-export const BINARY_OPERATOR_LABELS: Record<BinaryOpDTO, string> = {
-  add: "+",
-  sub: "-",
-  mul: "*",
-  div: "/",
-  pow: "^",
-};

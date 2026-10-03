@@ -16,6 +16,12 @@ end
 if !isdefined(Main, :require_string)
     require_string(value, name::String) = value isa AbstractString ? String(value) : throw(ArgumentError("`$name` must be a string"))
 end
+if !isdefined(Main, :send_progress)
+    function send_progress(task_id::String, stage::String; kwargs...)
+        task_id == "prior-preview" && stage == "initializing_nuts" && throw(TaskCancelled(task_id))
+        return nothing
+    end
+end
 
 @testset "Transformed response uses safe ln evaluator" begin
     response = JSON3.read("""
@@ -84,6 +90,40 @@ end
 @testset "Bayesian capability boundary" begin
     unsupported = UnsupportedBayesCapability("test model")
     @test sprint(showerror, unsupported) == "unsupported capability: test model"
+end
+
+@testset "Prior preview respects the fitted distribution support" begin
+    model = JSON3.read("""
+        {
+          "response": {
+            "expression": {"type": "data_variable", "name": "y"},
+            "dataVariables": {"y": "response"}
+          },
+          "likelihood": {"type": "normal", "sigma": {"parameter": "sigma"}},
+          "sampler": {"samples": 4, "warmup": 2, "chains": 1},
+          "parameters": [
+            {"name": "beta", "prior": {"distribution": "log_normal", "args": [0.0, 1.0]}},
+            {"name": "sigma", "prior": {"distribution": "half_normal", "args": [1.0]}}
+          ]
+        }
+    """)
+    table = (response = [0.1, 1.1, 1.9, 3.1], x = [0.0, 1.0, 2.0, 3.0])
+    mktempdir() do directory
+        predictor_path = joinpath(directory, "predictor.jl")
+        likelihood_path = joinpath(directory, "likelihood.jl")
+        write(predictor_path, "(theta, columns, row) -> log(theta[1]) + columns[row, 1]")
+        write(likelihood_path, "(theta, columns, y) -> sum(logpdf(Normal(log(theta[1]) + columns[row, 1], theta[2]), y[row]) for row in eachindex(y))")
+        exchange = Dict(
+            "predictorKernelPath" => predictor_path,
+            "likelihoodKernelPath" => likelihood_path,
+            "predictorColumns" => ["x"],
+        )
+        # Reaching the sampling boundary proves admission without running MCMC.
+        @test_throws TaskCancelled bayes_try_generic_normal_turing(
+            model, exchange, table, 4, "prior-preview",
+            joinpath(directory, "output.arrow"), joinpath(directory, "metadata.json"),
+        )
+    end
 end
 
 @testset "Artifact manifest is the only result path source" begin

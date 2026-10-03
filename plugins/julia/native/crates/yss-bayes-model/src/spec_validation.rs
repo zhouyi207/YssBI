@@ -102,7 +102,7 @@ fn expression_is_valid(expression: &Expression) -> bool {
     }
 }
 
-fn collect_expression_symbols(
+pub(super) fn collect_expression_symbols(
     expression: &Expression,
     data: &mut BTreeSet<String>,
     parameters: &mut BTreeSet<String>,

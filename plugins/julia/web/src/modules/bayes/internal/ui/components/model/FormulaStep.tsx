@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatExpression, formatRawExpressionLatex } from "@/features/domain/bayes";
+import { formatRawExpressionLatex } from "@/features/domain/bayes";
 import { bayesErrorMessage } from "../../bayesIssuePresentation";
 import { PanelTitle, replaceAt } from "./BayesFields";
 import { LatexFormulaPreview, RecognizedSymbols, latexSymbol } from "./LatexPresentation";
@@ -216,10 +216,7 @@ function likelihoodDistribution(likelihood: LikelihoodSpecDTO): LikelihoodDistri
 }
 
 function initialDistributionArgs(draft: BayesModelDraftDTO): string[] {
-  const predictor =
-    extractPredictorLatex(draft.formulaText) ||
-    formatExpression(draft.boundPredictor) ||
-    "a \\cdot x + b";
+  const predictor = formatRawExpressionLatex(draft.rawPredictor) || "a \\cdot x + b";
   switch (draft.likelihood.type) {
     case "normal":
       return [predictor, latexSymbol(draft.likelihood.sigma.parameter)];
@@ -316,17 +313,6 @@ function distributionLatexName(distribution: LikelihoodDistribution): string {
     case "poisson_log":
       return "PoissonLog";
   }
-}
-
-function extractPredictorLatex(formulaText: string): string | null {
-  const trimmed = formulaText.trim();
-  const equalsIndex = trimmed.indexOf("=");
-  if (equalsIndex >= 0) return trimmed.slice(equalsIndex + 1).trim() || null;
-  const normalMatch = trimmed.match(
-    /\\operatorname\{(?:Normal|BernoulliLogit|PoissonLog)\}\\left\((.*)\\right\)$/,
-  );
-  if (normalMatch?.[1]) return normalMatch[1].split(",")[0]?.trim() || null;
-  return null;
 }
 
 function latexToPlainSymbol(value: string | undefined): string | null {

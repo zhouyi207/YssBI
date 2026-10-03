@@ -8,5 +8,10 @@ The crate depends on `yss-julia-runtime` for executable discovery and platform
 command policy. It deliberately contains no Tauri, SCI, Polars, or Bayes domain
 contracts; scientific adapters translate their own types at the boundary.
 
-`cancel` targets the currently active task. `restart` terminates the worker process for
+`cancel` targets the currently active task. Run admission publishes that task while
+holding the existing stdin writer lock, so a cancellation observing it is written
+after the run request, including when the optional cancellation token is absent.
+The active-task lock is released before worker IO. Before admission, `cancel`
+returns false; cancellation during input preparation uses the optional token.
+`restart` terminates the worker process for
 environment preparation or extension shutdown; plugin-wide fault recovery belongs to the host.

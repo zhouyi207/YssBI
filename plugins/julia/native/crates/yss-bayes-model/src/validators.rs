@@ -7,7 +7,7 @@ use super::model::{
     Expression, InferenceConfig, LikelihoodSpec, MathFunction, ParameterConstraint, ParameterSpec,
     PriorSpec,
 };
-use super::spec_validation::{constraint_is_valid, prior_is_valid};
+use super::spec_validation::{collect_expression_symbols, constraint_is_valid, prior_is_valid};
 use super::validation::{ValidationIssue, ValidationReport, error, warning};
 
 pub fn validate_draft(draft: &BayesModelDraft) -> ValidationReport {
@@ -421,30 +421,4 @@ fn column_map(columns: &[ColumnMeta]) -> BTreeMap<&str, &ColumnMeta> {
         .iter()
         .map(|column| (column.name.as_str(), column))
         .collect()
-}
-
-fn collect_expression_symbols(
-    expression: &Expression,
-    data: &mut BTreeSet<String>,
-    parameters: &mut BTreeSet<String>,
-) {
-    match expression {
-        Expression::Number { .. } => {}
-        Expression::DataVariable { name } | Expression::Column { name } => {
-            data.insert(name.clone());
-        }
-        Expression::Parameter { name } => {
-            parameters.insert(name.clone());
-        }
-        Expression::Unary { arg, .. } => collect_expression_symbols(arg, data, parameters),
-        Expression::Binary { left, right, .. } => {
-            collect_expression_symbols(left, data, parameters);
-            collect_expression_symbols(right, data, parameters);
-        }
-        Expression::Call { args, .. } => {
-            for arg in args {
-                collect_expression_symbols(arg, data, parameters);
-            }
-        }
-    }
 }

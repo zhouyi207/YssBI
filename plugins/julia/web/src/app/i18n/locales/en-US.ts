@@ -56,9 +56,6 @@ export const enUS = {
       bayes_posterior_predictive_invalid: "The posterior predictive data is invalid.",
       bayes_service_lock_poisoned:
         "An internal Bayesian service error occurred. Use the incident ID when reporting it.",
-      bayes_dataset_source_unsupported:
-        "The selected data source is not supported for Bayesian inference.",
-      bayes_dataset_load_failed: "The selected data could not be loaded.",
       bayes_input_empty: "The selected data source contains no rows.",
       bayes_input_response_non_finite: "The response contains a missing or non-finite value.",
       bayes_input_predictor_non_finite: "A predictor contains a missing or non-finite value.",
@@ -196,6 +193,7 @@ export const enUS = {
         beta: "Beta",
         shape: "Shape",
         scale: "Scale",
+        rate: "Rate",
         degreesOfFreedom: "Degrees of freedom",
         location: "Location",
       },

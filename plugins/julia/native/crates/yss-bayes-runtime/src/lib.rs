@@ -22,16 +22,9 @@ use yss_bayes_worker::{
     BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, ValidatedBayesTask,
 };
 
-#[derive(Debug, thiserror::Error)]
-pub enum BayesDatasetLoadError {
-    #[error("invalid dataset snapshot")]
-    InvalidSnapshot,
-}
-
 #[derive(Debug)]
 pub enum BayesApplicationError {
     ValidationFailed,
-    DatasetSourceUnsupported,
     TaskNotFound,
     TaskActive,
     ResultNotFound,
@@ -48,9 +41,6 @@ pub enum BayesApplicationError {
         source: Box<BayesTaskFailure>,
     },
     ServiceLockPoisoned,
-    DatasetLoadFailed {
-        source: BayesDatasetLoadError,
-    },
     ArtifactReadFailed {
         context: &'static str,
         source: BayesArtifactReadError,
@@ -170,9 +160,6 @@ impl fmt::Display for BayesApplicationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ValidationFailed => formatter.write_str("Bayesian model validation failed"),
-            Self::DatasetSourceUnsupported => {
-                formatter.write_str("Bayesian dataset source is unsupported")
-            }
             Self::TaskNotFound => formatter.write_str("Bayesian inference task was not found"),
             Self::TaskActive => formatter.write_str("Bayesian inference task is still active"),
             Self::ResultNotFound => formatter.write_str("Bayesian inference result is unavailable"),
@@ -198,9 +185,6 @@ impl fmt::Display for BayesApplicationError {
             }
             Self::ServiceLockPoisoned => {
                 formatter.write_str("Bayesian inference service state lock was poisoned")
-            }
-            Self::DatasetLoadFailed { source } => {
-                write!(formatter, "failed to load Bayesian dataset: {source}")
             }
             Self::ArtifactReadFailed { context, source } => {
                 write!(formatter, "failed to read Bayesian {context}: {source}")
@@ -238,7 +222,6 @@ impl std::error::Error for BayesApplicationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::CancelFailed { source, .. } => Some(source),
-            Self::DatasetLoadFailed { source } => Some(source),
             Self::ArtifactReadFailed { source, .. }
             | Self::ArtifactWriteFailed { source, .. }
             | Self::SamplesInvalid { source }
@@ -439,15 +422,32 @@ impl BayesInferenceService {
                 let deadline = Instant::now()
                     .checked_add(std::time::Duration::from_secs(30))
                     .ok_or(BayesApplicationError::TaskNotFound)?;
-                self.worker
-                    .cancel(
-                        &handle,
-                        &CancelDeliveryControl::new(AbsoluteDeadline::at(deadline)),
-                    )
-                    .map_err(|source| BayesApplicationError::CancelFailed {
-                        task_id: task_id.to_string(),
-                        source: Box::new(bayes_worker_backend_error(source)),
-                    })?;
+                if let Err(source) = self.worker.cancel(
+                    &handle,
+                    &CancelDeliveryControl::new(AbsoluteDeadline::at(deadline)),
+                ) {
+                    // The queue may finish and release this handle after the token is set.
+                    let settled = matches!(
+                        &source,
+                        BayesWorkerError::StaleTaskHandle { task } if task == &handle
+                    ) && self.inner.lock().is_ok_and(|state| {
+                        !state.worker_handles.contains_key(task_id)
+                            && state.tasks.get(task_id).is_some_and(|task| {
+                                matches!(
+                                    task.status,
+                                    TaskStatus::Completed
+                                        | TaskStatus::Cancelled
+                                        | TaskStatus::Failed
+                                )
+                            })
+                    });
+                    if !settled {
+                        return Err(BayesApplicationError::CancelFailed {
+                            task_id: task_id.to_string(),
+                            source: Box::new(bayes_worker_backend_error(source)),
+                        });
+                    }
+                }
             }
         }
         Ok(())
@@ -590,16 +590,20 @@ fn run_worker_queue(
         let control =
             ExecutionControl::new(job.cancellation.token(), AbsoluteDeadline::at(job.deadline));
         let started = worker.start(job.task, &control);
-        let result = match started {
+        let (handle, result) = match started {
             Ok(handle) => {
                 if let Ok(mut state) = inner.lock() {
                     state.worker_handles.insert(task_id.clone(), handle.clone());
                 }
-                worker.await_result(&handle, &control)
+                let result = worker.await_result(&handle, &control);
+                (Some(handle), result)
             }
-            Err(error) => Err(error),
+            Err(error) => (None, Err(error)),
         };
         finish_worker_task(&inner, &worker, &app_data_dir, task_id, result, &control);
+        if let Some(handle) = handle {
+            worker.release(&handle);
+        }
     }
 }
 
@@ -668,9 +672,14 @@ fn finish_worker_task(
     match materialized {
         Err(error) => {
             if let Ok(mut state) = inner.lock() {
-                state
-                    .tasks
-                    .insert(task_id.clone(), failed_task(task_id.clone(), error));
+                let task = if state.tasks.get(&task_id).is_some_and(|task| {
+                    matches!(task.status, TaskStatus::Cancelling | TaskStatus::Cancelled)
+                }) {
+                    cancelled_task(task_id.clone())
+                } else {
+                    failed_task(task_id.clone(), error)
+                };
+                state.tasks.insert(task_id.clone(), task);
                 state.worker_handles.remove(&task_id);
                 state.worker_sources.remove(&task_id);
             }
@@ -951,7 +960,7 @@ mod tests {
     use std::fs;
     use std::num::NonZeroU64;
     use std::path::{Path, PathBuf};
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Condvar, Mutex};
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -970,9 +979,9 @@ mod tests {
         BayesInferenceTask, InferenceDiagnostics, InferenceResult, TaskErrorDetails, TaskStatus,
     };
     use yss_bayes_worker::{
-        BayesArtifact, BayesArtifactHandle, BayesCancelTerminal, BayesTaskHandle, BayesTaskResult,
-        BayesWorkerAuthority, BayesWorkerError, BayesWorkerPort, BayesWorkerTerminalCode,
-        ValidatedBayesTask,
+        ArtifactId, BayesArtifact, BayesArtifactHandle, BayesArtifactMediaType,
+        BayesCancelTerminal, BayesTaskHandle, BayesTaskResult, BayesWorkerAuthority,
+        BayesWorkerError, BayesWorkerPort, BayesWorkerTerminalCode, ValidatedBayesTask,
     };
     use yss_bayes_worker::{
         CancelDeliveryControl, ExecutionControl, StatisticalInput, StatisticalScalar,
@@ -1042,18 +1051,31 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone)]
     enum TestWorkerOutcome {
         Success,
         Failure,
+        AwaitCancellation,
+        ArtifactFailure { gate: Arc<(Mutex<bool>, Condvar)> },
     }
 
     struct TestWorker {
         calls: Arc<Mutex<usize>>,
         outcome: TestWorkerOutcome,
+        artifact_root: PathBuf,
+        owned_directories: Mutex<BTreeMap<BayesTaskHandle, PathBuf>>,
+        released: Condvar,
     }
 
     impl BayesWorkerPort for TestWorker {
+        fn release(&self, handle: &BayesTaskHandle) {
+            let directory = self.owned_directories.lock().unwrap().remove(handle);
+            if let Some(directory) = directory {
+                fs::remove_dir_all(directory).expect("release owned worker directory");
+            }
+            self.released.notify_all();
+        }
+
         fn start(
             &self,
             authority: &BayesWorkerAuthority,
@@ -1073,19 +1095,40 @@ mod tests {
                 ["response", "time"]
             );
             *self.calls.lock().expect("calls lock") += 1;
-            Ok(BayesWorkerAuthority::issue_task_handle(
+            let handle = BayesWorkerAuthority::issue_task_handle(
                 authority,
                 task.task_id().clone(),
                 NonZeroU64::new(1).expect("test generation must be non-zero"),
-            ))
+            );
+            let directory = self.artifact_root.join(task.task_id().as_str());
+            fs::create_dir_all(&directory).expect("create worker artifact directory");
+            fs::write(directory.join("summary.json"), b"{}").expect("write worker artifact");
+            self.owned_directories
+                .lock()
+                .unwrap()
+                .insert(handle.clone(), directory);
+            Ok(handle)
         }
 
         fn await_result(
             &self,
             authority: &BayesWorkerAuthority,
             handle: &BayesTaskHandle,
-            _control: &ExecutionControl,
+            control: &ExecutionControl,
         ) -> Result<BayesTaskResult, BayesWorkerError> {
+            if matches!(self.outcome, TestWorkerOutcome::AwaitCancellation) {
+                let deadline = Instant::now() + Duration::from_secs(2);
+                while !control.is_cancelled() {
+                    assert!(
+                        Instant::now() < deadline,
+                        "worker cancellation was not delivered"
+                    );
+                    thread::sleep(Duration::from_millis(1));
+                }
+                return Err(BayesWorkerError::Cancelled {
+                    task: handle.clone(),
+                });
+            }
             if matches!(self.outcome, TestWorkerOutcome::Failure) {
                 return Err(BayesWorkerError::WorkerTerminal {
                     task: handle.clone(),
@@ -1113,26 +1156,75 @@ mod tests {
                 Arc::from([]),
                 diagnostics,
             );
-            BayesWorkerAuthority::task_result(authority, handle, inference, Arc::from([]))
+            let artifact = BayesWorkerAuthority::mint_artifact_handle(
+                authority,
+                handle.clone(),
+                ArtifactId::try_from("summary.json").unwrap(),
+            );
+            let mut artifacts = vec![artifact];
+            if matches!(self.outcome, TestWorkerOutcome::ArtifactFailure { .. }) {
+                artifacts.push(BayesWorkerAuthority::mint_artifact_handle(
+                    authority,
+                    handle.clone(),
+                    ArtifactId::try_from("unreadable.json").unwrap(),
+                ));
+            }
+            BayesWorkerAuthority::task_result(authority, handle, inference, artifacts.into())
         }
 
         fn cancel(
             &self,
-            _handle: &BayesTaskHandle,
+            handle: &BayesTaskHandle,
             _control: &CancelDeliveryControl,
         ) -> Result<BayesCancelTerminal, BayesWorkerError> {
+            if matches!(self.outcome, TestWorkerOutcome::AwaitCancellation) {
+                let (directories, timeout) = self
+                    .released
+                    .wait_timeout_while(
+                        self.owned_directories.lock().unwrap(),
+                        Duration::from_secs(2),
+                        |directories| directories.contains_key(handle),
+                    )
+                    .unwrap();
+                assert!(!timeout.timed_out(), "worker handle was not released");
+                assert!(!directories.contains_key(handle));
+                return Err(BayesWorkerError::StaleTaskHandle {
+                    task: handle.clone(),
+                });
+            }
             Ok(BayesCancelTerminal::Cancelled)
         }
 
         fn read_artifact(
             &self,
-            _authority: &BayesWorkerAuthority,
+            authority: &BayesWorkerAuthority,
             artifact: &BayesArtifactHandle,
             _control: &ExecutionControl,
         ) -> Result<BayesArtifact, BayesWorkerError> {
-            Err(BayesWorkerError::ArtifactNotOwned {
-                artifact: artifact.clone(),
-            })
+            if let TestWorkerOutcome::ArtifactFailure { gate } = &self.outcome
+                && artifact.artifact_id().as_str() == "unreadable.json"
+            {
+                let (waiting, changed) = gate.as_ref();
+                let mut waiting = waiting.lock().unwrap();
+                *waiting = true;
+                changed.notify_all();
+                let (_waiting, timeout) = changed
+                    .wait_timeout_while(waiting, Duration::from_secs(2), |waiting| *waiting)
+                    .unwrap();
+                assert!(!timeout.timed_out(), "artifact read was not released");
+                return Err(BayesWorkerError::ArtifactNotOwned {
+                    artifact: artifact.clone(),
+                });
+            }
+            let directory = self.owned_directories.lock().unwrap()[artifact.task()].clone();
+            let bytes = fs::read(directory.join(artifact.artifact_id().as_str())).unwrap();
+            Ok(BayesWorkerAuthority::artifact(
+                authority,
+                artifact.clone(),
+                BayesArtifactMediaType::Json,
+                yss_bayes_result::ResultArtifactKind::Summary,
+                Arc::from(bytes),
+            ))
         }
     }
 
@@ -1143,7 +1235,13 @@ mod tests {
     ) -> BayesInferenceService {
         BayesInferenceService::with_worker(
             app_data_dir,
-            Arc::new(TestWorker { calls, outcome }),
+            Arc::new(TestWorker {
+                calls,
+                outcome,
+                artifact_root: app_data_dir.join("worker-artifacts"),
+                owned_directories: Mutex::new(BTreeMap::new()),
+                released: Condvar::new(),
+            }),
             Arc::new(UnavailableBayesArtifactReader),
         )
     }
@@ -1292,7 +1390,8 @@ mod tests {
             if matches!(
                 task.status,
                 TaskStatus::Completed | TaskStatus::Cancelled | TaskStatus::Failed
-            ) {
+            ) && !service.has_active_tasks()
+            {
                 return task;
             }
             assert!(
@@ -1422,6 +1521,23 @@ mod tests {
         let result = service.result(&task.task_id).expect("stored result");
         assert_eq!(*calls.lock().expect("calls lock"), 1);
         assert_eq!(result.diagnostics().warnings()[0].code(), "test_worker");
+        assert_eq!(
+            fs::read(
+                root.path()
+                    .join("bayes-results")
+                    .join(&task.task_id)
+                    .join("summary.json")
+            )
+            .unwrap(),
+            b"{}"
+        );
+        assert!(
+            !root
+                .path()
+                .join("worker-artifacts")
+                .join(&task.task_id)
+                .exists()
+        );
     }
 
     #[test]
@@ -1444,6 +1560,110 @@ mod tests {
         let wire = serde_json::to_string(&failed).expect("serialize asynchronous failure");
         assert!(!wire.contains("worker terminal"));
         assert!(service.result(&task.task_id).is_err());
+        assert!(
+            !root
+                .path()
+                .join("worker-artifacts")
+                .join(&task.task_id)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn cancelled_worker_releases_resources_after_the_queue_finishes() {
+        let root = TemporaryAppRoot::new("bayes-worker-cancel-release");
+        let service = test_service(
+            root.path(),
+            Arc::new(Mutex::new(0)),
+            TestWorkerOutcome::AwaitCancellation,
+        );
+        let task = submit_test_task(&service, valid_draft()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !service
+            .inner
+            .lock()
+            .unwrap()
+            .worker_handles
+            .contains_key(&task.task_id)
+        {
+            assert!(Instant::now() < deadline, "worker handle was not installed");
+            thread::sleep(Duration::from_millis(1));
+        }
+        service.cancel(&task.task_id).unwrap();
+        assert_eq!(
+            wait_for_terminal_task(&service, &task.task_id).status,
+            TaskStatus::Cancelled
+        );
+        assert!(
+            !root
+                .path()
+                .join("worker-artifacts")
+                .join(&task.task_id)
+                .exists()
+        );
+        assert!(
+            !root
+                .path()
+                .join("bayes-results")
+                .join(&task.task_id)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn artifact_read_failure_preserves_an_accepted_cancellation() {
+        for cancel in [false, true] {
+            let root = TemporaryAppRoot::new("bayes-artifact-read-failure");
+            let gate = Arc::new((Mutex::new(false), Condvar::new()));
+            let service = test_service(
+                root.path(),
+                Arc::new(Mutex::new(0)),
+                TestWorkerOutcome::ArtifactFailure { gate: gate.clone() },
+            );
+            let task = submit_test_task(&service, valid_draft()).unwrap();
+            let (waiting, changed) = gate.as_ref();
+            let (mut waiting, timeout) = changed
+                .wait_timeout_while(waiting.lock().unwrap(), Duration::from_secs(2), |waiting| {
+                    !*waiting
+                })
+                .unwrap();
+            assert!(!timeout.timed_out(), "artifact read was not entered");
+            let result_directory = root.path().join("bayes-results").join(&task.task_id);
+            assert_eq!(
+                fs::read(result_directory.join("summary.json")).unwrap(),
+                b"{}"
+            );
+            if cancel {
+                service.cancel(&task.task_id).unwrap();
+                assert_eq!(
+                    service.status(&task.task_id).unwrap().status,
+                    TaskStatus::Cancelling
+                );
+            }
+            *waiting = false;
+            changed.notify_all();
+            drop(waiting);
+            let terminal = wait_for_terminal_task(&service, &task.task_id);
+            if cancel {
+                assert_eq!(terminal.status, TaskStatus::Cancelled);
+                assert!(terminal.error.is_none());
+            } else {
+                assert_eq!(terminal.status, TaskStatus::Failed);
+                assert_eq!(
+                    terminal.error.unwrap().code,
+                    "bayes_worker_artifact_not_owned"
+                );
+            }
+            assert!(service.result(&task.task_id).is_err());
+            assert!(!result_directory.exists());
+            assert!(
+                !root
+                    .path()
+                    .join("worker-artifacts")
+                    .join(&task.task_id)
+                    .exists()
+            );
+        }
     }
 
     #[test]

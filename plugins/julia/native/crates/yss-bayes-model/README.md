@@ -9,5 +9,6 @@ worker capabilities, result artifacts, datasets, Julia processes, or Tauri
 transport.
 
 Draft conversion and worker admission reuse the same canonical immutable-spec
-validator. Validation reports store only issues; their JSON `ok` field is
+validator. Draft and immutable-spec validation share its expression-symbol traversal.
+Validation reports store only issues; their JSON `ok` field is
 derived during serialization and cannot drift from the error set.

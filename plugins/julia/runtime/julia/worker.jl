@@ -3,10 +3,14 @@
 include(joinpath(@__DIR__, "worker_protocol.jl"))
 include(joinpath(@__DIR__, "scientific_runtime.jl"))
 
-const CANCELLED_TASK_IDS = Set{String}()
-const CANCEL_LOCK = ReentrantLock()
+mutable struct WorkerTaskRegistration
+    task_id::String
+    task::Task
+    cancelled::Bool
+end
+
 const STDOUT_LOCK = ReentrantLock()
-const ACTIVE_TASKS = Task[]
+const ACTIVE_TASKS = WorkerTaskRegistration[]
 const ACTIVE_TASKS_LOCK = ReentrantLock()
 
 
@@ -46,8 +50,8 @@ function send_error(request_id, code::String, message::String; data = nothing)
 end
 
 function is_cancelled(task_id::String)
-    lock(CANCEL_LOCK) do
-        return task_id in CANCELLED_TASK_IDS
+    lock(ACTIVE_TASKS_LOCK) do
+        return any(entry -> entry.task_id == task_id && entry.cancelled, ACTIVE_TASKS)
     end
 end
 
@@ -77,9 +81,7 @@ function run_operation(operation::String, params, task_id::String)
     return handler(params, task_id)
 end
 
-function process_run(request, request_id, params)
-    task_id_value = field(params, "taskId")
-    task_id = require_string(task_id_value, "taskId")
+function process_run(request, request_id, params, task_id::String)
     operation = field(params, "operation", field(request, "operation"))
 
     try
@@ -97,10 +99,6 @@ function process_run(request, request_id, params)
             task_error.diagnostic;
             data = task_error.data,
         )
-    finally
-        lock(CANCEL_LOCK) do
-            delete!(CANCELLED_TASK_IDS, task_id)
-        end
     end
 end
 
@@ -122,8 +120,10 @@ function handle_message(request)
 
     if method == "cancel"
         task_id = require_string(field(params, "taskId"), "taskId")
-        lock(CANCEL_LOCK) do
-            push!(CANCELLED_TASK_IDS, task_id)
+        lock(ACTIVE_TASKS_LOCK) do
+            for entry in ACTIVE_TASKS
+                entry.task_id == task_id && (entry.cancelled = true)
+            end
         end
         return
     end
@@ -131,10 +131,20 @@ function handle_message(request)
     request_id = field(request, "id", nothing)
     method == "run" || throw(ArgumentError("unsupported method `$method`"))
     params === nothing && throw(ArgumentError("`params` is required"))
-    worker = @async process_run(request, request_id, params)
-    lock(ACTIVE_TASKS_LOCK) do
-        push!(ACTIVE_TASKS, worker)
+    task_id = require_string(field(params, "taskId"), "taskId")
+    worker = Task() do
+        try
+            process_run(request, request_id, params, task_id)
+        finally
+            lock(ACTIVE_TASKS_LOCK) do
+                filter!(entry -> entry.task !== current_task(), ACTIVE_TASKS)
+            end
+        end
     end
+    lock(ACTIVE_TASKS_LOCK) do
+        push!(ACTIVE_TASKS, WorkerTaskRegistration(task_id, worker, false))
+    end
+    schedule(worker)
 end
 
 function control_reader()
@@ -158,8 +168,9 @@ end
 
 reader = @async control_reader()
 wait(reader)
-lock(ACTIVE_TASKS_LOCK) do
-    for worker in ACTIVE_TASKS
-        istaskdone(worker) || wait(worker)
-    end
+workers = lock(ACTIVE_TASKS_LOCK) do
+    [entry.task for entry in ACTIVE_TASKS]
+end
+for worker in workers
+    istaskdone(worker) || wait(worker)
 end

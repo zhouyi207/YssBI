@@ -285,6 +285,17 @@ impl FakeWorker {
 }
 
 impl BayesWorkerPort for FakeWorker {
+    fn release(&self, handle: &BayesTaskHandle) {
+        let mut state = self.state.lock().unwrap();
+        if state.current_tasks.get(handle.task_id()) == Some(handle) {
+            state.current_tasks.remove(handle.task_id());
+        }
+        state.tasks.remove(handle);
+        state
+            .artifacts
+            .retain(|artifact, _| artifact.task() != handle);
+    }
+
     fn start(
         &self,
         authority: &BayesWorkerAuthority,
@@ -441,6 +452,8 @@ impl BayesWorkerPort for FakeWorker {
 struct CrossTaskWorker;
 
 impl BayesWorkerPort for CrossTaskWorker {
+    fn release(&self, _handle: &BayesTaskHandle) {}
+
     fn start(
         &self,
         authority: &BayesWorkerAuthority,

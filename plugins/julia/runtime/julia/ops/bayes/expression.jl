@@ -1,32 +1,3 @@
-function bayes_prior_default(prior)
-    distribution = String(field(prior, "distribution", "normal"))
-    args = field(prior, "args", Any[])
-
-    if distribution in ("normal", "log_normal", "student_t", "cauchy")
-        return Float64(args[1])
-    elseif distribution == "uniform"
-        return (Float64(args[1]) + Float64(args[2])) / 2.0
-    elseif distribution == "beta"
-        alpha = Float64(args[1])
-        beta = Float64(args[2])
-        return alpha / (alpha + beta)
-    elseif distribution == "gamma"
-        shape = Float64(args[1])
-        rate = Float64(args[2])
-        return shape / rate
-    elseif distribution == "exponential"
-        rate = Float64(args[1])
-        return 1.0 / rate
-    elseif distribution == "half_normal"
-        sigma = Float64(args[1])
-        return sigma * sqrt(2.0 / pi)
-    end
-
-    throw(ArgumentError("unsupported prior distribution `$distribution`"))
-end
-
-
-
 function bayes_column_value(table, column_name::String, row_index::Int)
     column_symbol = Symbol(column_name)
     hasproperty(table, column_symbol) || throw(invalid_parameters_error(

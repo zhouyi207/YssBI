@@ -13,6 +13,12 @@ depending on any host SCI crate.
 Backend adapters use that temporary capability to create handles and results; application and
 transport code can only consume the validated projections.
 
+`BayesWorkerClient::release` relinquishes one accepted task handle and its artifacts
+after the caller has finished consuming them, including failed or cancelled tasks.
+Release is idempotent, cancels unfinished work and cannot release another generation.
+Adapters detach owned resources under their state lock and perform cancellation and
+resource destruction outside it. Late completion cannot restore a released handle.
+
 This crate does not own Julia process management, filesystem artifacts, Polars dataframes, Tauri
 commands, or application task storage.
 

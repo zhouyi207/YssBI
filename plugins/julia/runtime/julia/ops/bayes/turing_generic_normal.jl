@@ -43,21 +43,6 @@ function bayes_try_generic_normal_turing(model, exchange, table, input_rows::Int
     send_progress(task_id, "loading_kernels")
     compiled_predictor = bayes_load_predictor(exchange, table, input_rows, task_id)
     send_progress(task_id, "preparing_kernels")
-    preview_parameters = [
-        bayes_prior_default(field(parameter, "prior"))
-        for parameter in field(model, "parameters", Any[])
-    ]
-    for row_index in 1:min(input_rows, 5)
-        value = compiled_predictor.predictor(preview_parameters, compiled_predictor.columns, row_index)
-        isfinite(value) || throw(invalid_parameters_error(
-            "predictor returned a non-finite value at row $row_index";
-            row = row_index,
-            path = "model.predictor",
-        ))
-    end
-
-
-    send_progress(task_id, "building_model")
     sigma_parameter = likelihood_type == "normal" ? bayes_normal_sigma_parameter(model) : nothing
     likelihood_type == "normal" && sigma_parameter === nothing && return nothing
 
@@ -84,6 +69,18 @@ function bayes_try_generic_normal_turing(model, exchange, table, input_rows::Int
         parameter = sigma_parameter,
         path = "model.likelihood.sigma.parameter",
     ))
+
+    preview_parameters = median.(priors)
+    for row_index in 1:min(input_rows, 5)
+        value = compiled_predictor.predictor(preview_parameters, compiled_predictor.columns, row_index)
+        isfinite(value) || throw(invalid_parameters_error(
+            "predictor returned a non-finite value at row $row_index";
+            row = row_index,
+            path = "model.predictor",
+        ))
+    end
+
+    send_progress(task_id, "building_model")
 
     sampler = field(model, "sampler", nothing)
     draws = Int(field(sampler, "samples", 1_000))

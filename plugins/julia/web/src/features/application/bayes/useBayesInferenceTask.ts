@@ -54,7 +54,13 @@ type BayesInferenceAction =
       error: BayesInferenceError;
       uncertain?: boolean;
     }
-  | { type: "cancel_started"; requestGeneration: number; taskId: string };
+  | { type: "cancel_started"; requestGeneration: number; taskId: string }
+  | {
+      type: "cancel_failed";
+      requestGeneration: number;
+      taskId: string;
+      error: BayesInferenceError;
+    };
 
 export const initialBayesInferenceState: BayesInferenceState = {
   requestGeneration: 0,
@@ -98,7 +104,12 @@ export function bayesInferenceReducer(
       if (task.status === "cancelled") return { ...state, phase: "cancelled", task, error: null };
       if (task.status === "completed")
         return { ...state, phase: "reading_result", task, error: null };
-      return { ...state, phase: "active", task, error: null };
+      return {
+        ...state,
+        phase: "active",
+        task: state.task?.status === "cancelling" ? { ...task, status: "cancelling" } : task,
+        error: null,
+      };
     }
     case "result_received":
       if (action.result.artifactManifest.taskId !== action.taskId) return state;
@@ -112,6 +123,10 @@ export function bayesInferenceReducer(
     case "cancel_started":
       return state.task && ACTIVE_TASK_STATUSES.has(state.task.status)
         ? { ...state, task: { ...state.task, status: "cancelling" } }
+        : state;
+    case "cancel_failed":
+      return state.phase === "active"
+        ? { ...state, phase: "submission_unknown", error: action.error }
         : state;
   }
 }
@@ -215,11 +230,10 @@ export function useBayesInferenceTask() {
     dispatch({ type: "cancel_started", requestGeneration, taskId });
     void cancelBayesInference(taskId).catch((caught: unknown) =>
       dispatch({
-        type: "request_failed",
+        type: "cancel_failed",
         requestGeneration,
         taskId,
         error: formatBayesError(caught),
-        uncertain: true,
       }),
     );
   };

@@ -5,7 +5,6 @@ use yss_plugin_protocol::PluginFailure;
 pub fn bayes_error(error: BayesApplicationError) -> PluginFailure {
     let code = match error {
         BayesApplicationError::ValidationFailed => "bayes_validation_failed",
-        BayesApplicationError::DatasetSourceUnsupported => "bayes_dataset_source_unsupported",
         BayesApplicationError::TaskNotFound => "bayes_task_not_found",
         BayesApplicationError::TaskActive => "bayes_task_active",
         BayesApplicationError::ResultNotFound => "bayes_result_not_found",

@@ -23,6 +23,10 @@ Bayes helpers live under `ops/bayes/`:
 
 The current Turing adapter supports the model families accepted by `bayes_fit` implementation (Normal, BernoulliLogit and PoissonLog regression with supported scalar priors). Rust validates the application model and compiles predictor/likelihood kernels before dispatch.
 
+Predictor admission uses medians from the same constructed prior distributions passed to Turing. The preview does not reinterpret prior arguments or set sampler initial values.
+
+The Exponential prior wire uses `args: [rate]`. Its UI parameter is labeled Rate; the Julia adapter converts it to the distribution constructor's scale as `1 / rate`.
+
 ## Control plane
 
 The worker uses newline-delimited JSON-RPC 2.0 over stdin/stdout. Stdout is protocol-only; diagnostics go to stderr.
@@ -35,6 +39,8 @@ Methods:
 - `progress`: worker-to-host notification carrying `taskId`, stage and optional completed/total values.
 
 Rust serializes compute requests through one reusable worker process. Cancellation may restart the process if cooperative cancellation cannot complete safely.
+
+The Julia task list owns each task's ID and cancellation flag, registers it before scheduling, and removes that exact task on every exit. Cancellation only marks matching current registrations; unknown or completed IDs leave no retained state. Rust admits a task while holding its stdin writer lock, so cancellation that observes the active ID follows its run message even without a cancellation token. There is no active task before admission; raw cancel-before-run notifications are not queued for future work. Completion removes by Task identity, so it cannot remove another registration with the same ID. At stdin EOF, the reader has stopped admitting work; shutdown snapshots the remaining tasks under the list lock and waits outside it so completion cleanup can acquire the same lock.
 
 ## Typed errors
 
@@ -115,6 +121,7 @@ Julia 版本约束以 [Project.toml](Project.toml) 的 compat 为准。直接运
 ```sh
 julia --project=plugins/julia/runtime/julia -e 'using Pkg; Pkg.instantiate()'
 julia --project=plugins/julia/runtime/julia plugins/julia/runtime/julia/tests/bayes_fit_tests.jl
+julia --project=plugins/julia/runtime/julia plugins/julia/runtime/julia/tests/worker_protocol_tests.jl
 ```
 
 初始化可能下载依赖与 artifacts。以上是源码测试环境；安装后的插件仍通过显式依赖准备操作管理自己的私有环境。真实插件进程测试和指定安装包的方式见 [Julia 插件 README](../../README.md#验证与能力边界)。

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RawExpressionDTO, SymbolDraftDTO } from "@/shared/types/bayes";
+import { formatRawExpressionLatex } from "./expressionAst";
 import {
   bindResponseExpression,
   collectRawSymbols,
@@ -45,10 +46,28 @@ describe("response expressions", () => {
     });
   });
 
-  it("does not retain symbols absent from the rebuilt expression set", () => {
+  it("rebuilds current symbols and preserves nested predictor arguments when formatting", () => {
+    const rawPredictor: RawExpressionDTO = {
+      type: "call",
+      function: "min",
+      args: [
+        {
+          type: "call",
+          function: "max",
+          args: [
+            { type: "symbol", name: "x" },
+            { type: "number", value: 1 },
+          ],
+        },
+        { type: "number", value: 2 },
+      ],
+    };
+    expect(formatRawExpressionLatex(rawPredictor)).toBe(
+      "\\operatorname{min}\\left(\\operatorname{max}\\left(x, 1\\right), 2\\right)",
+    );
     expect(
       createSymbolDrafts(
-        [...collectRawSymbols(rawResponse), "x", "sigma"],
+        [...collectRawSymbols(rawResponse), ...collectRawSymbols(rawPredictor), "sigma"],
         [
           ...existing,
           { name: "y", role: "parameter", inferredRole: "parameter", userEdited: true },
