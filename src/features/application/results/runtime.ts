@@ -41,7 +41,11 @@ import {
   isCurrentPinResult,
   type ResultProjectionState,
 } from "./resultProjection";
-export { resultQueryRead, usePinResultSearchEntries } from "./resultProjection";
+export {
+  resultQueryRead,
+  useCurrentPinResult,
+  usePinResultSearchEntries,
+} from "./resultProjection";
 export { useGraphResultPresentation } from "./graphPresentationRead";
 
 const resultQueryPublication = {

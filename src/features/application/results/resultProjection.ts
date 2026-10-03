@@ -190,6 +190,11 @@ export function usePinResultSearchEntries(graphPath: string) {
   );
 }
 
+export function useCurrentPinResult(request: ResultPinRequest) {
+  const key = pinResultKey(request);
+  return useReadProjection(readProjection, (state) => state.pinResults[key] ?? null);
+}
+
 export const resultQueryRead: ResultQueryReadCapability = {
   subscribe: readProjection.subscribe,
   getDescriptor: (reference) =>

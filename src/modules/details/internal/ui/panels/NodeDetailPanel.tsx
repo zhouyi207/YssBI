@@ -14,6 +14,7 @@ import { NodeParameterEditor } from "../node/parameterEditors/NodeParameterEdito
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";
 import { NodePinInterfacePanel } from "../node/NodePinInterfacePanel";
+import { DescriptionResultSection } from "../node/DescriptionResultSection";
 import type { NodePinViewModel } from "../node/NodePinViewModel";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 import { DetailBadge, DetailText } from "../shared/DetailText";
@@ -176,6 +177,9 @@ export const NodeDetailPanel = memo(function NodeDetailPanel({
             })}
           </div>
         </DetailCollapsibleSection>
+      )}
+      {node.nodeType === "yssbi.statistics.describe" && (
+        <DescriptionResultSection graphPath={graphPath} nodeId={nodeId} />
       )}
       <NodePinInterfacePanel
         graphPath={graphPath}
