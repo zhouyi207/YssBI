@@ -188,7 +188,7 @@ Graph 的 20 类 `plot.data` 输出按 descriptor 的 chart kind 校验和绘制
 chart kind 使用实际图形名称，散点图为 `scatter`；`plot` 仅表示 presentation kind。
 完整样本计算和展示抽样在 SCI 完成，前端保留观测数、AUC、分组或区间信息。
 
-描述节点的 Details 通过 `useCurrentPinResult` 只订阅对应输出的有效 descriptor，复用
+数据描述节点的 Details 通过 `useCurrentPinResult` 只订阅对应输出的有效 descriptor，复用
 `useResultValue` 读取按原始列名组织的 `columns` 对象，各列摘要直接包含在结果 JSON 中。
 `useDescriptionResult` 在载荷变化时按 `semantic` 验证各类型的专属字段及连续的 `position`，拒绝混入不适用字段；分类列的 `categories` 编号对象投影为有序明细，保留类别原值、标签、频数、占比以及 Null、空字符串与宽整数文本。
 组件只格式化 Rust 已计算的统计量。当前图持有有效结果，Details 不固定历史快照或另建结果存储；

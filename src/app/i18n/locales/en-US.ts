@@ -2331,7 +2331,7 @@ export const enUS = {
     description: {
       result: "Result",
       unavailable: "No current result. Run the node to calculate it.",
-      invalid: "The description result has an invalid format.",
+      invalid: "The Data Description result has an invalid format.",
       categories: "Category frequencies",
       noCategories: "No non-null categories.",
       fields: {

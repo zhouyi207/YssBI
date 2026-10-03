@@ -2153,7 +2153,7 @@ export const zhCN = {
     description: {
       result: "结果",
       unavailable: "暂无有效结果，请执行节点。",
-      invalid: "描述结果格式无效。",
+      invalid: "数据描述结果格式无效。",
       categories: "类别频数",
       noCategories: "没有非空类别。",
       fields: {
