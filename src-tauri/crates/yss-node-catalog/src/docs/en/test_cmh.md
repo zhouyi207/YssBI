@@ -4,7 +4,7 @@ Tests a common association between binary exposure and outcome while controlling
 
 ## Inputs and parameters
 
-`exposed` and `outcome` use `0/1` codes or Boolean binary values. `strata` identifies each subject's stratum with Numeric, Categorical, Ordinal, or Binary semantics. All three inputs must be nonempty, aligned, equal in length, and nonmissing. Relational series must share a row domain. There are no parameters.
+`exposed` and `outcome` use `0/1` codes or Boolean binary values. `strata` identifies each subject's stratum with Numeric, Categorical, Ordinal, or Binary semantics. All three inputs must be nonempty, aligned, equal in length, and nonmissing. Database and in-memory series may be mixed and pair by current position, with equal lengths. There are no parameters.
 
 ## Hypotheses and statistic
 

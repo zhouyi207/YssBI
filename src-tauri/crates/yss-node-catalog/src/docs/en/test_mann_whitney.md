@@ -4,7 +4,7 @@ Compares distributions or locations of two independent populations.
 
 ## Inputs and parameters
 
-`group1` and `group2` must be nonempty finite numeric series without missing values. The current node requires equal lengths; relational series must share a row domain. The statistical design still treats them as independent samples, not paired differences. `alternative` defaults to `two_sided`, with `greater` and `less` referring to group 1 relative to group 2.
+`group1` and `group2` must be nonempty finite numeric series without missing values. Each group is read independently; lengths may differ, and database and in-memory inputs may be mixed. The statistical design still treats them as independent samples, not paired differences. `alternative` defaults to `two_sided`, with `greater` and `less` referring to group 1 relative to group 2.
 
 ## Hypotheses and statistic
 

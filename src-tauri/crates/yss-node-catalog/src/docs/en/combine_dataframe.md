@@ -4,6 +4,6 @@ Assemble one or more series as columns, in input-port order. Columns may have di
 
 ## Usage
 
-Lazy series sharing a proven row domain form a lazy projection, evaluated when consumed. Column selection and renaming preserve alignment; independently filtered or limited row domains cannot be aligned by matching lengths.
+Columns must have equal lengths and pair by current row position. Database series from independent sources and mixed database/in-memory inputs are supported. Rows are not automatically matched by key; shorter columns are not padded.
 
-Materialized series must have equal lengths and remain materialized. Shorter columns are not padded, and materialized lists cannot mix with lazy series. Names derive from source columns or output ports, with suffixes for duplicates. Use Rename DataFrame to adjust names afterward.
+Compatible database inputs retain a lazy projection; other inputs are read into one table. Names derive from source columns or output ports, with suffixes for duplicates. Use Rename DataFrame to adjust names afterward.

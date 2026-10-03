@@ -4,7 +4,7 @@ Compares relative locations across three or more conditions measured on the same
 
 ## Inputs and parameters
 
-Add at least three numeric series under `conditions`. They must be equal in length and aligned in the same subject order, with at least 2 subjects. Relational series must share a row domain. Values must be finite and nonmissing; handle incomplete subjects jointly upstream. There are no parameters.
+Add at least three numeric series under `conditions`. They must be equal in length and aligned in the same subject order, with at least 2 subjects. Database and in-memory series may be mixed and pair by current position, with equal lengths. Values must be finite and nonmissing; handle incomplete subjects jointly upstream. There are no parameters.
 
 ## Hypotheses and statistic
 

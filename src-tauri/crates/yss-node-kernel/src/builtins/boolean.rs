@@ -21,12 +21,13 @@ pub(super) fn execute(
         return Err(KernelError::Failed);
     }
     invocation.check_control()?;
-    let normalized = invocation
-        .inputs
+    let prepared =
+        super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+    let normalized = prepared
         .iter()
         .map(|value| {
             let Some(metadata) = value.metadata() else {
-                return Ok(Cow::Borrowed(value));
+                return Ok(Cow::Borrowed(value.as_ref()));
             };
             if metadata.semantic.kind != SemanticType::Binary {
                 return Err(KernelError::Failed);

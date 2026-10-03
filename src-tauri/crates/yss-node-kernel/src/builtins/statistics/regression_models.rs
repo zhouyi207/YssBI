@@ -153,7 +153,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(
-                    if matches!(
+                    1 + if matches!(
                         method,
                         "regression.hierarchical"
                             | "regression.stepwise"
@@ -178,39 +178,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
 fn typed_columns(
     inv: &KernelInvocation<'_>,
 ) -> Result<Vec<super::super::series::Column>, KernelError> {
-    use super::super::series;
-    if inv
-        .inputs
-        .iter()
-        .all(|v| matches!(v.unannotated(), RuntimeValue::Series(_)))
-    {
-        let handles = inv
-            .inputs
-            .iter()
-            .map(|v| match v.unannotated() {
-                RuntimeValue::Series(h) => h.clone(),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        return series::load(&handles, inv);
-    }
-    let Some(RuntimeValue::List(first)) = inv.inputs.first().map(RuntimeValue::unannotated) else {
-        return Err(KernelError::UnalignedSeries);
-    };
-    for input in inv.inputs {
-        match input.unannotated() {
-            RuntimeValue::List(v) if v.len() == first.len() => {}
-            RuntimeValue::List(_) => return Err(KernelError::ShapeMismatch),
-            _ => return Err(KernelError::UnalignedSeries),
-        }
-    }
-    inv.control.check_bytes(
-        first
-            .len()
-            .checked_mul(inv.inputs.len())
-            .and_then(|v| v.checked_mul(8 * size_of::<RuntimeValue>())),
-    )?;
-    inv.inputs.iter().map(|v| series::column(v, inv)).collect()
+    super::super::series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, true)
 }
 
 fn list(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<f64>, KernelError> {

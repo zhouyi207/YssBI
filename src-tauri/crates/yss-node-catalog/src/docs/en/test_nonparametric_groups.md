@@ -4,7 +4,7 @@ Selects one independent-group nonparametric test through `method`. Each executio
 
 ## Inputs and parameters
 
-Add at least two nonempty finite numeric series under `groups`, with no missing values. The current node requires equal lengths; relational series must share a row domain. `method` defaults to `mann_whitney`:
+Add at least two nonempty finite numeric series under `groups`, with no missing values. Each group is read independently; lengths may differ, and database and in-memory inputs may be mixed. `method` defaults to `mann_whitney`:
 
 | `method`         | Groups and purpose                                                         |
 | ---------------- | -------------------------------------------------------------------------- |

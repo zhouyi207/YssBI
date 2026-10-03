@@ -4,7 +4,7 @@ Compares variances of independent populations using group means as centers.
 
 ## Inputs and parameters
 
-Add at least two numeric series under `groups`, each with at least 2 finite observations and no missing values. The current node requires equal lengths; relational series must share a row domain. There are no parameters.
+Add at least two numeric series under `groups`, each with at least 2 finite observations and no missing values. Each group is read independently; lengths may differ, and database and in-memory inputs may be mixed. There are no parameters.
 
 ## Hypotheses and statistic
 

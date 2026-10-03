@@ -2,7 +2,7 @@
 
 One grouping column identifies independent subjects/clusters. Select Gaussian identity (default), Bernoulli logit, or Poisson log. Binary responses must be 0/1; count responses must be nonnegative integers. Working correlation defaults to exchangeable; independence is also available.
 
-Connect aligned response, predictors and groups. Numeric predictors are optional; classify/encode categorical predictors explicitly. Group labels accept numbers, text, identifiers or categorical/binary/ordinal series and retain their original values. The fixed design must have full rank and more rows than coefficients. Missing/nonfinite values are rejected; no rows are silently dropped. At least two observed groups are required. Singleton groups are allowed with independence correlation; exchangeable correlation needs within-group pairs. All inputs must share a proven row domain or be equally long materialized columns.
+Connect aligned response, predictors and groups. Numeric predictors are optional; classify/encode categorical predictors explicitly. Group labels accept numbers, text, identifiers or categorical/binary/ordinal series and retain their original values. The fixed design must have full rank and more rows than coefficients. Missing/nonfinite values are rejected; no rows are silently dropped. At least two observed groups are required. Singleton groups are allowed with independence correlation; exchangeable correlation needs within-group pairs. All inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs.
 
 Parameters: constant=true (fixed intercept), max_iterations=500 (positive integer), tolerance=1e-7 (1e-12–0.01). Failure to converge fails execution.
 

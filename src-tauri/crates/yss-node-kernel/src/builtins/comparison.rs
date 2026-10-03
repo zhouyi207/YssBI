@@ -58,9 +58,26 @@ fn execute_with_tolerance(
             scalar(operation, left, right)
         }
     };
-    let [left, right] = invocation.inputs else {
+    let prepared =
+        super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+    let values = prepared.iter().map(|v| v.as_ref()).collect::<Vec<_>>();
+    let [left, right] = values.as_slice() else {
         return Err(KernelError::Failed);
     };
+    let inputs = [left.unannotated(), right.unannotated()];
+    let series = inputs
+        .iter()
+        .any(|v| matches!(v, RuntimeValue::List(_) | RuntimeValue::Series(_)));
+    let scalar_type = ValueType::Scalar(SemanticType::Binary);
+    let expected = if series {
+        ValueType::DataSeries(Box::new(scalar_type))
+    } else {
+        scalar_type
+    };
+    if invocation.outputs.len() != 1 || invocation.outputs[0].data_type != expected {
+        return Err(KernelError::Failed);
+    }
+    invocation.check_control()?;
     if !matches!(
         operation,
         ComparisonOperation::Equal | ComparisonOperation::NotEqual
@@ -84,19 +101,6 @@ fn execute_with_tolerance(
         return Err(KernelError::Failed);
     }
     let inputs = [left.unannotated(), right.unannotated()];
-    let series = inputs
-        .iter()
-        .any(|v| matches!(v, RuntimeValue::List(_) | RuntimeValue::Series(_)));
-    let scalar_type = ValueType::Scalar(SemanticType::Binary);
-    let expected = if series {
-        ValueType::DataSeries(Box::new(scalar_type))
-    } else {
-        scalar_type
-    };
-    if invocation.outputs.len() != 1 || invocation.outputs[0].data_type != expected {
-        return Err(KernelError::Failed);
-    }
-    invocation.check_control()?;
     if let Some(RuntimeValue::Series(first)) = inputs
         .iter()
         .copied()

@@ -1,4 +1,4 @@
-//! Data-preparation adapters construct native plans and consume only scalar aggregates.
+//! Data-preparation adapters reuse native plans, binding independent operands by position.
 use super::{numeric_input, relational::kernel_error, series::SeriesKernel};
 use crate::{
     KernelContract, KernelError, KernelId, KernelInputSpec as Input, KernelInvocation,
@@ -255,7 +255,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(id.into()).expect("kernel id"),
-                std::num::NonZeroU32::new(1).unwrap(),
+                std::num::NonZeroU32::new(2).unwrap(),
                 KernelContract::new(
                     inputs,
                     parameters
@@ -407,34 +407,50 @@ pub(super) fn operands(
     inputs: &[&RuntimeValue],
     inv: &KernelInvocation<'_>,
 ) -> Result<(RelationHandle, Vec<SeriesOperand>), KernelError> {
+    let columns = inputs
+        .iter()
+        .copied()
+        .filter(|v| {
+            matches!(
+                v.unannotated(),
+                RuntimeValue::Series(_) | RuntimeValue::List(_)
+            )
+        })
+        .collect::<Vec<_>>();
+    let first = columns.first().ok_or(KernelError::InvalidParameter)?;
+    let shared = match first.unannotated() {
+        RuntimeValue::Series(first) => columns.iter().all(|v| matches!(v.unannotated(), RuntimeValue::Series(h) if first.relation().shares_row_domain(h.relation()))),
+        _ => false,
+    };
+    let relation = if shared {
+        let RuntimeValue::Series(first) = first.unannotated() else {
+            unreachable!()
+        };
+        first.relation().clone()
+    } else {
+        super::series::relation(&columns, inv)?
+    };
+    let mut index = 0;
     let values = inputs
         .iter()
-        .map(|value| match value.unannotated() {
+        .map(|v| match v.unannotated() {
+            RuntimeValue::Series(handle) if shared => Ok(SeriesOperand::Series(handle.clone())),
             RuntimeValue::Series(_) | RuntimeValue::List(_) => {
-                series_input(value, inv).map(SeriesOperand::Series)
+                let series = relation
+                    .select_series(&format!("value_{index}"))
+                    .map_err(kernel_error)?;
+                index += 1;
+                Ok(SeriesOperand::Series(series))
             }
-            _ => value
+            _ => v
                 .tabular_scalar()
                 .map(SeriesOperand::Scalar)
                 .map_err(|_| KernelError::InvalidParameter),
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let relation = values
-        .iter()
-        .find_map(|value| match value {
-            SeriesOperand::Series(series) => Some(series.relation().clone()),
-            _ => None,
-        })
-        .ok_or(KernelError::InvalidParameter)?;
-    for value in &values {
-        if let SeriesOperand::Series(series) = value {
-            relation
-                .check_row_domain(series.relation())
-                .map_err(kernel_error)?;
-        }
-    }
     Ok((relation, values))
 }
+
 pub(super) fn series_input(
     value: &RuntimeValue,
     inv: &KernelInvocation<'_>,
@@ -527,6 +543,33 @@ fn scalar_results(
     result.ok_or(KernelError::OutputContractMismatch)
 }
 
+fn contextual_series(
+    series: &SeriesHandle,
+    operation: &mut SeriesTransform,
+    inv: &KernelInvocation<'_>,
+) -> Result<SeriesHandle, KernelError> {
+    let window = match operation {
+        SeriesTransform::Difference { window, .. }
+        | SeriesTransform::PercentChange { window, .. }
+        | SeriesTransform::Shift { window, .. }
+        | SeriesTransform::Rolling { window, .. }
+        | SeriesTransform::Cumulative { window, .. }
+        | SeriesTransform::Rank { window, .. }
+        | SeriesTransform::FillDirection { window, .. } => window,
+        _ => return Ok(series.clone()),
+    };
+    let Some(context) = &window.context else {
+        return Ok(series.clone());
+    };
+    if context.shares_row_domain(series.relation()) {
+        return Ok(series.clone());
+    }
+    let (frame, series) =
+        super::series::attach(context, &RuntimeValue::Series(series.clone()), inv)?;
+    window.context = Some(frame);
+    Ok(series)
+}
+
 pub(super) fn execute_series(
     kind: SeriesKernel,
     inv: &KernelInvocation<'_>,
@@ -575,7 +618,7 @@ pub(super) fn execute_series(
         )?;
         return Ok(result.into_iter().map(RuntimeValue::Scalar).collect());
     }
-    let operation = match kind {
+    let mut operation = match kind {
         Standardize => {
             let stats = scalar_results(
                 &series
@@ -655,6 +698,7 @@ pub(super) fn execute_series(
         }
         _ => return Err(KernelError::InvalidParameter),
     };
+    let series = contextual_series(&series, &mut operation, inv)?;
     Ok(vec![RuntimeValue::Series(
         series
             .relation()
@@ -705,18 +749,48 @@ fn execute(
                 },
             ),
             SetColumn => {
-                let series = series_input(
-                    inv.inputs.get(1).ok_or(KernelError::InputLayoutMismatch)?,
-                    inv,
-                )?;
-                source.set_column(text(inv, "name")?, &series)
+                let operand = inv.inputs.get(1).ok_or(KernelError::InputLayoutMismatch)?;
+                if let RuntimeValue::Series(series) = operand.unannotated()
+                    && source.shares_row_domain(series.relation())
+                {
+                    source.set_column(text(inv, "name")?, series)
+                } else {
+                    let (frame, series) = super::series::attach(source, &inv.inputs[1], inv)?;
+                    let mut names = frame
+                        .schema()
+                        .fields()
+                        .iter()
+                        .take(frame.schema().fields().len() - 1)
+                        .map(|field| field.name().clone().into_boxed_str())
+                        .collect::<Vec<_>>();
+                    let name = text(inv, "name")?;
+                    if !names.iter().any(|n| n.as_ref() == name) {
+                        names.push(name.into());
+                    }
+                    frame
+                        .set_column(name, &series)
+                        .and_then(|frame| frame.project(&names))
+                }
             }
             Mask => {
-                let mask = series_input(
-                    inv.inputs.get(1).ok_or(KernelError::InputLayoutMismatch)?,
-                    inv,
-                )?;
-                source.filter_mask(&mask, boolean(inv, "drop_matches")?)
+                let operand = inv.inputs.get(1).ok_or(KernelError::InputLayoutMismatch)?;
+                if let RuntimeValue::Series(mask) = operand.unannotated()
+                    && source.shares_row_domain(mask.relation())
+                {
+                    source.filter_mask(mask, boolean(inv, "drop_matches")?)
+                } else {
+                    let (frame, mask) = super::series::attach(source, &inv.inputs[1], inv)?;
+                    let names = frame
+                        .schema()
+                        .fields()
+                        .iter()
+                        .take(frame.schema().fields().len() - 1)
+                        .map(|field| field.name().clone().into_boxed_str())
+                        .collect::<Vec<_>>();
+                    frame
+                        .filter_mask(&mask, boolean(inv, "drop_matches")?)
+                        .and_then(|frame| frame.project(&names))
+                }
             }
             Unpivot => source.unpivot(&UnpivotSpec {
                 keys: strings(inv, "keys")?,
@@ -762,7 +836,7 @@ fn execute(
     let Some(SeriesOperand::Series(series)) = operands.first() else {
         return Err(KernelError::InvalidParameter);
     };
-    let operation = match operation {
+    let mut operation = match operation {
         Choose => {
             let [SeriesOperand::Series(condition), yes, no] = operands.as_slice() else {
                 return Err(KernelError::InputLayoutMismatch);
@@ -906,9 +980,11 @@ fn execute(
         },
         _ => unreachable!(),
     };
+    let series = contextual_series(series, &mut operation, inv)?;
     Ok(vec![RuntimeValue::Series(
-        relation
-            .transform_series(series, &operation)
+        series
+            .relation()
+            .transform_series(&series, &operation)
             .map_err(kernel_error)?,
     )])
 }

@@ -102,7 +102,7 @@ fn longitudinal_category_executes_all_ten_nodes_with_aligned_relations_and_catal
 }
 
 #[test]
-fn longitudinal_rejects_independent_and_mixed_row_domains_before_fitting() {
+fn longitudinal_fits_positional_groups_and_rejects_different_lengths() {
     use arrow::{
         array::Float64Array,
         datatypes::{DataType, Field, Schema},
@@ -150,7 +150,9 @@ fn longitudinal_rejects_independent_and_mixed_row_domains_before_fitting() {
     };
     let batch = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new("v", DataType::Float64, false)])),
-        vec![Arc::new(Float64Array::from(vec![1., 2., 3., 4.]))],
+        vec![Arc::new(Float64Array::from(vec![
+            1.1, 1.9, 3.2, 3.8, 5.1, 5.9, 7.2, 7.8,
+        ]))],
     )
     .unwrap();
     let relation1 = relations
@@ -159,11 +161,24 @@ fn longitudinal_rejects_independent_and_mixed_row_domains_before_fitting() {
         .unwrap();
     let relation2 = relations
         .clone()
-        .materialize(batch, &inv.relation_control())
+        .materialize(
+            RecordBatch::try_new(
+                batch.schema(),
+                vec![Arc::new(Float64Array::from(vec![
+                    1., 1., 2., 2., 3., 3., 4., 4.,
+                ]))],
+            )
+            .unwrap(),
+            &inv.relation_control(),
+        )
         .unwrap();
     let first = RuntimeValue::Series(relation1.select_series("v").unwrap());
     let second = RuntimeValue::Series(relation2.select_series("v").unwrap());
-    let materialized = RuntimeValue::List(vec![RuntimeValue::float64(1.).unwrap(); 4].into());
+    let materialized = RuntimeValue::List(
+        [1., 1., 2., 2., 3., 3., 4., 4.]
+            .map(|v| RuntimeValue::float64(v).unwrap())
+            .into(),
+    );
     let independent = [first.clone(), second];
     let mixed = [first, materialized];
     for columns in [&independent[..], &mixed[..]] {
@@ -172,9 +187,21 @@ fn longitudinal_rejects_independent_and_mixed_row_domains_before_fitting() {
             &KernelId::new("yssbi.statistics.mixed.random_intercept".into()).unwrap(),
             &inv,
         );
-        assert!(
-            matches!(result, Err(KernelError::UnalignedSeries)),
-            "{result:?}"
-        );
+        assert!(result.is_ok(), "{result:?}");
+        let short = [
+            columns[0].clone(),
+            RuntimeValue::List(vec![RuntimeValue::float64(1.).unwrap(); 7].into()),
+        ];
+        assert!(matches!(
+            KernelRegistry::default().execute(
+                &KernelId::new("yssbi.statistics.mixed.random_intercept".into()).unwrap(),
+                &KernelInvocation {
+                    inputs: &short,
+                    parameters: inv.parameters.clone(),
+                    ..inv
+                }
+            ),
+            Err(KernelError::ShapeMismatch)
+        ));
     }
 }

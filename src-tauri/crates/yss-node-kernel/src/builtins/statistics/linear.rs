@@ -1,4 +1,5 @@
 use super::super::numeric_input;
+use super::super::series::numeric_columns as columns;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::sync::Arc;
 use yss_data_contract::TabularScalar;
@@ -204,63 +205,6 @@ pub(super) fn group<'a>(invocation: &'a KernelInvocation<'_>, name: &str) -> Vec
         .zip(invocation.inputs)
         .filter_map(|(group, value)| (*group == name).then_some(value))
         .collect()
-}
-
-pub(super) fn columns(
-    values: &[&RuntimeValue],
-    invocation: &KernelInvocation<'_>,
-    retained_bytes: usize,
-) -> Result<Vec<Vec<f64>>, KernelError> {
-    invocation.control.check_bytes(Some(retained_bytes))?;
-    if values.is_empty() {
-        return Err(KernelError::InvalidNumericInput);
-    }
-    if matches!(values[0], RuntimeValue::Series(_)) {
-        let series = values
-            .iter()
-            .map(|value| match value {
-                RuntimeValue::Series(series) => Ok(series.clone()),
-                _ => Err(KernelError::UnalignedSeries),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut control = invocation.relation_control();
-        control.max_input_bytes -= retained_bytes;
-        return series[0]
-            .relation()
-            .numeric_columns(&series, &control)
-            .map_err(super::super::relational::kernel_error);
-    }
-    let mut rows = None;
-    for value in values {
-        let RuntimeValue::List(column) = value else {
-            return Err(KernelError::InvalidNumericInput);
-        };
-        if rows.is_some_and(|rows| rows != column.len()) {
-            return Err(KernelError::ShapeMismatch);
-        }
-        rows = Some(column.len());
-    }
-    let rows = rows.unwrap_or(0);
-    invocation.control.check_bytes(
-        rows.checked_mul(values.len())
-            .and_then(|v| v.checked_mul(size_of::<f64>()))
-            .and_then(|v| v.checked_add(retained_bytes)),
-    )?;
-    let mut columns = Vec::with_capacity(values.len());
-    for value in values {
-        let RuntimeValue::List(values) = value else {
-            unreachable!()
-        };
-        let mut column = invocation.control.reserve(rows)?;
-        for (index, value) in values.iter().enumerate() {
-            if index % 1024 == 0 {
-                invocation.check_control()?;
-            }
-            column.push(numeric_input(Some(value))?);
-        }
-        columns.push(column);
-    }
-    Ok(columns)
 }
 
 /// Conservative admission estimate for the dense fit, retained model and both materialized

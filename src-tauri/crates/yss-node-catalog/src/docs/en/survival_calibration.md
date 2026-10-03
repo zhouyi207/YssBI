@@ -1,6 +1,6 @@
 # Survival calibration curve
 
-Connect aligned `time` and `event` series. Time must be finite and strictly positive, in one consistent unit; `event=1` (or true) means an observed event and `0` (or false) means right censoring. Rows with missing values are rejected, not dropped. Censoring is assumed independent of the event process, conditional on the model/group used. Equal-length columns from unrelated tables are not treated as aligned.
+Connect aligned `time` and `event` series. Time must be finite and strictly positive, in one consistent unit; `event=1` (or true) means an observed event and `0` (or false) means right censoring. Rows with missing values are rejected, not dropped. Censoring is assumed independent of the event process, conditional on the model/group used. Inputs must have equal lengths and pair by current row position, including mixed database and in-memory series.
 
 Connect numeric `predicted_risk` in [0,1], representing the probability of an event by `survival_horizon=1` (strictly positive). The risk and observed follow-up must refer to the same outcome and horizon. `calibration_bins=10`, an integer at least 2, requests approximately equal-size bins sorted by prediction. Equal predictions are never split; the realized count may be smaller, including one.
 

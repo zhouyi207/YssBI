@@ -4,7 +4,7 @@ Builds a contingency table from paired categorical observations and tests indepe
 
 ## Inputs and parameters
 
-`row` and `column` describe the same observations, with Numeric, Categorical, Ordinal, or Binary semantics. They must be nonempty, aligned, and equal in length, with at least 2 observed levels in each variable. Relational series must share a row domain. Missing values are rejected; categories are not merged or dropped automatically. There are no parameters.
+`row` and `column` describe the same observations, with Numeric, Categorical, Ordinal, or Binary semantics. They must be nonempty, aligned, and equal in length, with at least 2 observed levels in each variable. Database and in-memory series may be mixed and pair by current position, with equal lengths. Missing values are rejected; categories are not merged or dropped automatically. There are no parameters.
 
 ## Hypotheses and statistic
 

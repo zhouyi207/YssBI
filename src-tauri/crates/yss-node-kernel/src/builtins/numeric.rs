@@ -11,7 +11,9 @@ pub(crate) fn execute(
     operation: NumericOperation,
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
-    let inputs = invocation.inputs;
+    let prepared =
+        super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+    let inputs = prepared.iter().map(|v| v.unannotated()).collect::<Vec<_>>();
     if !operation.accepts_arity(inputs.len()) {
         return Err(KernelError::InvalidNumericInput);
     }
@@ -20,7 +22,7 @@ pub(crate) fn execute(
         .first()
         .map(|output| &output.data_type)
         .ok_or(KernelError::Failed)?;
-    let representation = if operation.requires_float() || inputs.iter().any(needs_float) {
+    let representation = if operation.requires_float() || inputs.iter().any(|v| needs_float(v)) {
         NumericType::Float64
     } else {
         NumericType::Int64
@@ -29,7 +31,7 @@ pub(crate) fn execute(
         if *output_type != ValueType::Scalar(yss_data_contract::SemanticType::Numeric) {
             return Err(KernelError::InvalidNumericInput);
         }
-        return scalar(operation, inputs.iter(), representation);
+        return scalar(operation, inputs.iter().copied(), representation);
     };
     if **element != ValueType::Scalar(yss_data_contract::SemanticType::Numeric) {
         return Err(KernelError::InvalidNumericInput);
@@ -37,7 +39,7 @@ pub(crate) fn execute(
     let numeric_type = representation;
     if operation == NumericOperation::Divide
         && !matches!(inputs[1], RuntimeValue::Series(_) | RuntimeValue::List(_))
-        && numeric_input(inputs.get(1))? == 0.0
+        && numeric_input(inputs.get(1).copied())? == 0.0
     {
         return Err(KernelError::DivisionByZero);
     }
@@ -67,7 +69,6 @@ pub(crate) fn execute(
                             .map_err(|_| KernelError::InvalidNumericInput)?,
                     )))
                 }
-                // A materialized list carries no proof of alignment with a live row domain.
                 _ => Err(KernelError::InvalidNumericInput),
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -85,7 +86,7 @@ pub(crate) fn execute(
             _ => None,
         })
         .ok_or(KernelError::InvalidNumericInput)?;
-    for input in inputs {
+    for input in &inputs {
         match input {
             RuntimeValue::List(values) if values.len() == rows => {}
             RuntimeValue::List(_) => return Err(KernelError::ShapeMismatch),

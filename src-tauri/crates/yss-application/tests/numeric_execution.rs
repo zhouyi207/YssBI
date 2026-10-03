@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 #[path = "numeric_execution/causal_models.rs"]
 mod causal_models;
+#[path = "numeric_execution/comparison.rs"]
+mod comparison;
 #[path = "numeric_execution/decision.rs"]
 mod decision;
 #[path = "numeric_execution/diagnostics.rs"]
@@ -23,6 +25,8 @@ mod meta;
 mod panel_models;
 #[path = "numeric_execution/path.rs"]
 mod path;
+#[path = "numeric_execution/positional.rs"]
+mod positional;
 #[path = "numeric_execution/power.rs"]
 mod power;
 #[path = "numeric_execution/psychometrics.rs"]
@@ -63,7 +67,7 @@ use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_kernel::RuntimeValue;
 
 #[test]
-fn paired_statistics_reject_independent_relation_domains_and_mixed_materialized_columns() {
+fn paired_statistics_accept_positional_inputs_and_reject_different_lengths() {
     use arrow::{
         array::Float64Array,
         datatypes::{DataType, Field, Schema},
@@ -102,7 +106,14 @@ fn paired_statistics_reject_independent_relation_domains_and_mixed_materialized_
         .unwrap();
     let right = relations
         .clone()
-        .materialize(batch, &inv.relation_control())
+        .materialize(
+            RecordBatch::try_new(
+                batch.schema(),
+                vec![Arc::new(Float64Array::from(vec![0., 0., 0., 1., 1., 1.]))],
+            )
+            .unwrap(),
+            &inv.relation_control(),
+        )
         .unwrap();
     let unrelated = [
         RuntimeValue::Series(left.select_series("y").unwrap()),
@@ -121,10 +132,7 @@ fn paired_statistics_reject_independent_relation_domains_and_mixed_materialized_
     let id = KernelId::new("yssbi.statistics.anova.one_way".into()).unwrap();
     for inputs in [&unrelated[..], &mixed[..]] {
         inv.inputs = inputs;
-        assert!(matches!(
-            kernels.execute(&id, &inv),
-            Err(KernelError::UnalignedSeries)
-        ));
+        assert!(kernels.execute(&id, &inv).is_ok());
     }
 
     let before = [0., 0., 1., 0., 1., 1.];
@@ -166,7 +174,6 @@ fn paired_statistics_reject_independent_relation_domains_and_mixed_materialized_
     });
     let mixed = [paired[0].clone(), materialized[1].clone()];
     inv.input_keys = &["before", "after"];
-    let mut accepted_unpaired = Vec::new();
     for suffix in ["t.paired", "mcnemar"] {
         let id = KernelId::new(format!("yssbi.statistics.test.{suffix}").into()).unwrap();
         inv.parameters = if suffix == "t.paired" {
@@ -182,15 +189,28 @@ fn paired_statistics_reject_independent_relation_domains_and_mixed_materialized_
             inv.inputs = inputs;
             assert!(kernels.execute(&id, &inv).is_ok(), "{suffix}");
         }
-        for (kind, inputs) in [("unrelated", &unrelated[..]), ("mixed", &mixed[..])] {
+        inv.inputs = &materialized;
+        let expected = kernels.execute(&id, &inv).unwrap();
+        for inputs in [&unrelated[..], &mixed[..]] {
             inv.inputs = inputs;
-            match kernels.execute(&id, &inv) {
-                Ok(_) => accepted_unpaired.push(format!("{suffix}/{kind}")),
-                Err(error) => assert!(matches!(error, KernelError::UnalignedSeries)),
-            }
+            assert_eq!(kernels.execute(&id, &inv).unwrap(), expected, "{suffix}");
         }
+        let short = [
+            paired[0].clone(),
+            RuntimeValue::List(vec![RuntimeValue::float64(1.).unwrap(); 5].into()),
+        ];
+        assert!(matches!(
+            kernels.execute(
+                &id,
+                &KernelInvocation {
+                    inputs: &short,
+                    parameters: inv.parameters.clone(),
+                    ..inv
+                }
+            ),
+            Err(KernelError::ShapeMismatch)
+        ));
     }
-    assert!(accepted_unpaired.is_empty(), "{accepted_unpaired:?}");
 }
 
 #[test]
@@ -388,11 +408,8 @@ fn association_nodes_execute_aligned_data_and_switch_conditional_parameters() {
         }
     }
     assert_eq!(
-        execute(&unaligned, "yssbi.statistics.association.pearson")
-            .unwrap_err()
-            .failure()
-            .code,
-        RunFailureCode::UnalignedSeries
+        execute(&unaligned, "yssbi.statistics.association.pearson").unwrap(),
+        execute(&document, "yssbi.statistics.association.pearson").unwrap()
     );
 }
 
@@ -489,7 +506,7 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
         RuntimeValue::Scalar(TabularScalar::String("East".into()))
     );
 
-    // Equal row counts from a separate relation are not proof of observation alignment.
+    // The group labels from an independent relation pair with observations by position.
     let mut unaligned = document.clone();
     let foreign = NodeId::new();
     unaligned.nodes.insert(
@@ -514,8 +531,8 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
         }
     }
     assert_eq!(
-        execute(&unaligned, DAGUM).unwrap_err().failure().code,
-        RunFailureCode::UnalignedSeries
+        execute(&unaligned, DAGUM).unwrap(),
+        execute(&document, DAGUM).unwrap()
     );
     set_constant(
         &mut document,
@@ -1516,17 +1533,19 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             serde_json::json!([true, true, true, null, true])
         );
     }
-    // Equal row counts do not authorize comparison across a different row domain.
+    // An independent row domain is read in its current order for positional comparison.
     let other = RuntimeValue::Series(frame.limit(0, 5).unwrap().select_series("x").unwrap());
-    assert!(
-        run(
-            "logic.equal",
-            &[restored[0].clone(), other],
-            vec![],
-            vec![binary_series()],
-            &control
-        )
-        .is_err()
+    let compared = run(
+        "logic.equal",
+        &[restored[0].clone(), other],
+        vec![],
+        vec![binary_series()],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        as_json(&compared[0]),
+        serde_json::json!([true, true, true, null, true])
     );
     let empty = RuntimeValue::List(Arc::from([]));
     assert_eq!(
@@ -2761,31 +2780,6 @@ fn fixed_semantic_conversions_keep_metadata_in_scalar_and_series_chains() {
             execute(&document, "yssbi.logic.equal").unwrap(),
             RuntimeValue::Scalar(TabularScalar::Bool(true))
         );
-    }
-    evaluate(
-        "001",
-        vec![
-            (
-                "yssbi.value.to_ordinal",
-                serde_json::json!({"semantic_domain":domain}),
-            ),
-            ("yssbi.value.to_categorical", serde_json::json!({})),
-            ("yssbi.value.to_identifier", serde_json::json!({})),
-            ("yssbi.value.to_text", serde_json::json!({})),
-        ],
-        S::Text,
-        "001",
-    );
-    evaluate(
-        "17/09/2026 08:30:00 +0800",
-        vec![(
-            "yssbi.value.to_datetime",
-            serde_json::json!({"datetime_format":"%d/%m/%Y %H:%M:%S %z"}),
-        )],
-        S::Datetime,
-        "2026-09-17T08:30:00",
-    );
-    evaluate(
         for constant in document.constants.values_mut() {
             let DataValue::String(value) = &constant.data_value else {
                 panic!("string fixture");
@@ -2826,6 +2820,31 @@ fn fixed_semantic_conversions_keep_metadata_in_scalar_and_series_chains() {
         ),
     ] {
         evaluate("001", vec![(kind, parameters)], semantic, "001");
+    }
+    evaluate(
+        "001",
+        vec![
+            (
+                "yssbi.value.to_ordinal",
+                serde_json::json!({"semantic_domain":domain}),
+            ),
+            ("yssbi.value.to_categorical", serde_json::json!({})),
+            ("yssbi.value.to_identifier", serde_json::json!({})),
+            ("yssbi.value.to_text", serde_json::json!({})),
+        ],
+        S::Text,
+        "001",
+    );
+    evaluate(
+        "17/09/2026 08:30:00 +0800",
+        vec![(
+            "yssbi.value.to_datetime",
+            serde_json::json!({"datetime_format":"%d/%m/%Y %H:%M:%S %z"}),
+        )],
+        S::Datetime,
+        "2026-09-17T08:30:00",
+    );
+    evaluate(
         "17/09/2026 08:30:00 +0800",
         vec![
             (
@@ -3499,51 +3518,18 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
     let converted = runtime
         .kernels()
         .execute(
-            &yss_node_kernel::KernelId::new("yssbi.value.convert".into()).unwrap(),
+            &yss_node_kernel::KernelId::new("yssbi.value.to_numeric".into()).unwrap(),
             &yss_node_kernel::KernelInvocation {
                 relations: &(yss_database_runtime::dataset_query_engine().unwrap()
                     as std::sync::Arc<dyn yss_relational_contract::RelationFactory>),
                 inputs: &[input],
                 input_keys: &["input"],
-                parameters: BTreeMap::from([
-                    (
-                        yss_node_kernel::KernelParameterKey::new("target_type".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
-                            "auto".into(),
-                        ))),
-                    ),
-                    (
-                        yss_node_kernel::KernelParameterKey::new("numeric_mode".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
-                            "real".into(),
-                        ))),
-                    ),
-                    (
-                        yss_node_kernel::KernelParameterKey::new("semantic_domain".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Record(std::sync::Arc::new(
-                            BTreeMap::new(),
-                        ))),
-                    ),
-                    (
-                        yss_node_kernel::KernelParameterKey::new("datetime_kind".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
-                            "auto".into(),
-                        ))),
-                    ),
-                    (
-                        yss_node_kernel::KernelParameterKey::new("datetime_precision".into())
-                            .unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
-                            "microseconds".into(),
-                        ))),
-                    ),
-                    (
-                        yss_node_kernel::KernelParameterKey::new("datetime_format".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
-                            "".into(),
-                        ))),
-                    ),
-                ]),
+                parameters: BTreeMap::from([(
+                    yss_node_kernel::KernelParameterKey::new("numeric_mode".into()).unwrap(),
+                    std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                        "real".into(),
+                    ))),
+                )]),
                 outputs: &[yss_node_kernel::KernelOutputSpec {
                     data_type: yss_data_contract::ValueType::DataSeries(Box::new(
                         yss_data_contract::ValueType::Scalar(

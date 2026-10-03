@@ -40,44 +40,7 @@ pub(in crate::builtins::statistics) fn materialize(
     inv: &KernelInvocation<'_>,
 ) -> Result<(Vec<series::Column>, usize), KernelError> {
     inv.check_control()?;
-    let columns = if inv
-        .inputs
-        .iter()
-        .all(|v| matches!(v.unannotated(), RuntimeValue::Series(_)))
-    {
-        let handles = inv
-            .inputs
-            .iter()
-            .map(|v| match v.unannotated() {
-                RuntimeValue::Series(handle) => handle.clone(),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        series::load(&handles, inv)?
-    } else {
-        let Some(RuntimeValue::List(first)) = inv.inputs.first().map(RuntimeValue::unannotated)
-        else {
-            return Err(KernelError::UnalignedSeries);
-        };
-        for input in inv.inputs {
-            let RuntimeValue::List(column) = input.unannotated() else {
-                return Err(KernelError::UnalignedSeries);
-            };
-            if column.len() != first.len() {
-                return Err(KernelError::ShapeMismatch);
-            }
-        }
-        inv.control.check_bytes(
-            first
-                .len()
-                .checked_mul(inv.inputs.len())
-                .and_then(|n| n.checked_mul(size_of::<RuntimeValue>() * 8)),
-        )?;
-        inv.inputs
-            .iter()
-            .map(|v| series::column(v, inv))
-            .collect::<Result<Vec<_>, _>>()?
-    };
+    let columns = series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, true)?;
     let n = columns.first().map_or(0, |column| column.values.len());
     let mut retained = inv.control.check_bytes(
         n.checked_mul(columns.len())

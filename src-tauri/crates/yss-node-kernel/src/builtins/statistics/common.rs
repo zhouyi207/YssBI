@@ -1,4 +1,7 @@
-pub(super) use super::linear::{check_fit_workspace, columns, group, numeric_list};
+pub(super) use super::super::series::{
+    independent_numeric_columns as independent_columns, numeric_columns as columns,
+};
+pub(super) use super::linear::{check_fit_workspace, group, numeric_list};
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
 

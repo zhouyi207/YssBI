@@ -206,13 +206,11 @@ pub(crate) fn execute(
         {
             return Err(KernelError::Failed);
         }
-        if invocation
-            .inputs
-            .iter()
-            .all(|v| matches!(v, RuntimeValue::Series(_)))
-        {
-            let series = invocation
-                .inputs
+        let prepared =
+            super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+        let inputs = prepared.iter().map(|v| v.as_ref()).collect::<Vec<_>>();
+        if inputs.iter().all(|v| matches!(v, RuntimeValue::Series(_))) {
+            let series = inputs
                 .iter()
                 .map(|v| match v {
                     RuntimeValue::Series(s) => Ok(s.clone()),
@@ -231,11 +229,7 @@ pub(crate) fn execute(
                 .map(RuntimeValue::Relation)
                 .map_err(kernel_error);
         }
-        return materialize(
-            fields,
-            &invocation.inputs.iter().collect::<Vec<_>>(),
-            invocation,
-        );
+        return materialize(fields, &inputs, invocation);
     }
     if matches!(kind, RelationalKernel::Source) {
         let value = parameter("dataframe")?;

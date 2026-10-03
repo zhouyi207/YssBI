@@ -58,23 +58,7 @@ fn gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
 
 fn dagum_gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     use super::super::series;
-    let mut inputs = match (inv.inputs[0].unannotated(), inv.inputs[1].unannotated()) {
-        (RuntimeValue::Series(values), RuntimeValue::Series(groups)) => {
-            series::load(&[values.clone(), groups.clone()], inv)?
-        }
-        (RuntimeValue::List(values), RuntimeValue::List(groups)) => {
-            if values.len() != groups.len() {
-                return Err(KernelError::ShapeMismatch);
-            }
-            inv.control
-                .check_bytes(values.len().checked_mul(size_of::<RuntimeValue>() * 8))?;
-            vec![
-                series::column(&inv.inputs[0], inv)?,
-                series::column(&inv.inputs[1], inv)?,
-            ]
-        }
-        _ => return Err(KernelError::UnalignedSeries),
-    };
+    let mut inputs = series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, true)?;
     let groups = inputs.pop().ok_or(KernelError::ShapeMismatch)?.values;
     let values = inputs.pop().ok_or(KernelError::ShapeMismatch)?.values;
     if values.len() != groups.len() {

@@ -2,7 +2,7 @@
 
 Connect one grouping column and a nonnegative integer count response. Uses a log link with a Gaussian random intercept; conditional variance equals the mean. No exposure or offset input is provided.
 
-Connect aligned response, predictors and groups. Numeric predictors are optional; classify/encode categorical predictors explicitly. Group labels accept numbers, text, identifiers or categorical/binary/ordinal series and retain their original values. The fixed design must have full rank and more rows than coefficients. Missing/nonfinite values are rejected; no rows are silently dropped. Each grouping factor needs at least two observed groups and identifiable covariance components. All inputs must share a proven row domain or be equally long materialized columns.
+Connect aligned response, predictors and groups. Numeric predictors are optional; classify/encode categorical predictors explicitly. Group labels accept numbers, text, identifiers or categorical/binary/ordinal series and retain their original values. The fixed design must have full rank and more rows than coefficients. Missing/nonfinite values are rejected; no rows are silently dropped. Each grouping factor needs at least two observed groups and identifiable covariance components. All inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs.
 
 Parameters: constant=true (fixed intercept), max_iterations=500 (positive integer), tolerance=1e-7 (1e-12–0.01). Failure to converge fails execution.
 

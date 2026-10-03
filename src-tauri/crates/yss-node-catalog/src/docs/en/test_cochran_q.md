@@ -4,7 +4,7 @@ Compares binary success probabilities across three or more conditions measured o
 
 ## Inputs and parameters
 
-Add at least three numeric `0/1` series under `conditions`, with at least 2 subjects. Columns must be equal in length, aligned by subject, and use a consistent meaning for `1`. Relational series must share a row domain. Missing values and other codes are rejected. There are no parameters.
+Add at least three numeric `0/1` series under `conditions`, with at least 2 subjects. Columns must be equal in length, aligned by subject, and use a consistent meaning for `1`. Database and in-memory series may be mixed and pair by current position, with equal lengths. Missing values and other codes are rejected. There are no parameters.
 
 ## Hypotheses and statistic
 

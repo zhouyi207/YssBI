@@ -9,7 +9,7 @@ For values $x_i$, let $p_i=w_i/\sum_j w_j$ (or $p_i=1/n$ for individuals), $\mu=
 
 $$T=\sum_{i:q_i>0} q_i\ln(q_i/p_i).$$
 
-Values and weights must be finite and nonnegative. Zero values contribute zero; zero-weight groups are ignored. The total weight and weighted mean must be positive. Empty inputs, missing values, negative values, or mismatched lengths fail explicitly. Relational series must share a proven row domain; in-memory series align by position. Filter the common sample upstream instead of dropping values from each series independently.
+Values and weights must be finite and nonnegative. Zero values contribute zero; zero-weight groups are ignored. The total weight and weighted mean must be positive. Empty inputs, missing values, negative values, or mismatched lengths fail explicitly. Database and in-memory series may be mixed and pair by current position. Filter the common sample upstream instead of dropping values from each series independently.
 
 The single **Result** output contains structured data with `theil_t`, `form`, and `observations` (the number of supplied individuals or groups, including zero-weight groups). Equal positive values produce zero up to floating-point roundoff; larger values indicate more inequality. The index is not restricted to 0–1.
 

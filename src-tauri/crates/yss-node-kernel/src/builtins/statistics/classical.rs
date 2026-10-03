@@ -208,9 +208,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            ensure_aligned(inv, &["row", "column"])?;
             let row = category_values(inv, "row", 0)?;
             let column = category_values(inv, "column", category_bytes(&row, inv)?)?;
+            if row.len() != column.len() {
+                return Err(KernelError::ShapeMismatch);
+            }
             execute_categorical(CategoricalHypothesisTest::Independence { row, column }, inv)
         },
     );
@@ -257,9 +259,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            ensure_aligned(inv, &["row", "column"])?;
             let row = category_values(inv, "row", 0)?;
             let column = category_values(inv, "column", category_bytes(&row, inv)?)?;
+            if row.len() != column.len() {
+                return Err(KernelError::ShapeMismatch);
+            }
             execute_categorical(CategoricalHypothesisTest::FisherExact { row, column }, inv)
         },
     );
@@ -287,7 +291,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            ensure_aligned(inv, &["exposed", "outcome", "strata"])?;
             let exposed = category_binary_values(inv, "exposed", 0)?;
             let retained = inv
                 .control
@@ -300,6 +303,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                     .and_then(|n| n.checked_mul(size_of::<f64>())),
             )?;
             let strata = category_values(inv, "strata", retained)?;
+            if exposed.len() != outcome.len() || outcome.len() != strata.len() {
+                return Err(KernelError::ShapeMismatch);
+            }
             execute_categorical(
                 CategoricalHypothesisTest::Cmh {
                     exposed,
@@ -404,7 +410,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &["alternative"],
         1,
         |inv| {
-            let mut values = columns(&[group(inv, "group1")[0], group(inv, "group2")[0]], inv, 0)?;
+            let mut values =
+                independent_columns(&[group(inv, "group1")[0], group(inv, "group2")[0]], inv, 0)?;
             let second = values.pop().expect("second column");
             let first = values.pop().expect("first column");
             execute_rank(
@@ -424,7 +431,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            let values = columns(&group(inv, "groups"), inv, 0)?;
+            let values = independent_columns(&group(inv, "groups"), inv, 0)?;
             execute_rank(RankHypothesisTest::KruskalWallis { groups: values }, inv)
         },
     );
@@ -435,7 +442,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            let values = columns(&group(inv, "groups"), inv, 0)?;
+            let values = independent_columns(&group(inv, "groups"), inv, 0)?;
             execute_rank(RankHypothesisTest::MoodMedian { groups: values }, inv)
         },
     );
@@ -499,7 +506,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &["method"],
         1,
         |inv| {
-            let values = columns(&group(inv, "groups"), inv, 0)?;
+            let values = independent_columns(&group(inv, "groups"), inv, 0)?;
             match text(inv, "method")? {
                 "mann_whitney" if values.len() == 2 => {
                     let mut values = values;
@@ -533,7 +540,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         |inv| {
             execute_variance(
                 VarianceHomogeneityTest::Levene {
-                    groups: columns(&group(inv, "groups"), inv, 0)?,
+                    groups: independent_columns(&group(inv, "groups"), inv, 0)?,
                 },
                 inv,
             )
@@ -548,7 +555,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         |inv| {
             execute_variance(
                 VarianceHomogeneityTest::BrownForsythe {
-                    groups: columns(&group(inv, "groups"), inv, 0)?,
+                    groups: independent_columns(&group(inv, "groups"), inv, 0)?,
                 },
                 inv,
             )
@@ -563,7 +570,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         |inv| {
             execute_variance(
                 VarianceHomogeneityTest::Bartlett {
-                    groups: columns(&group(inv, "groups"), inv, 0)?,
+                    groups: independent_columns(&group(inv, "groups"), inv, 0)?,
                 },
                 inv,
             )
@@ -972,43 +979,6 @@ pub(super) fn append_category_batch(
         }
     } else {
         append(array, bytes)?;
-    }
-    Ok(())
-}
-
-fn ensure_aligned(inv: &KernelInvocation<'_>, keys: &[&str]) -> Result<(), KernelError> {
-    let values = keys
-        .iter()
-        .map(|key| {
-            group(inv, key)
-                .into_iter()
-                .next()
-                .ok_or(KernelError::InvalidNumericInput)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    if let Some(RuntimeValue::Series(first)) = values.first() {
-        let mut series = Vec::with_capacity(values.len());
-        for value in &values {
-            let RuntimeValue::Series(value) = value else {
-                return Err(KernelError::UnalignedSeries);
-            };
-            series.push(value.clone());
-        }
-        first
-            .relation()
-            .project_series(&series)
-            .map_err(|_| KernelError::UnalignedSeries)?;
-        return Ok(());
-    }
-    let mut length = None;
-    for value in values {
-        let RuntimeValue::List(values) = value else {
-            return Err(KernelError::UnalignedSeries);
-        };
-        if length.is_some_and(|expected| expected != values.len()) {
-            return Err(KernelError::ShapeMismatch);
-        }
-        length = Some(values.len());
     }
     Ok(())
 }

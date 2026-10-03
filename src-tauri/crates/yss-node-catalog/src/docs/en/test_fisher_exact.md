@@ -4,7 +4,7 @@ Performs a two-sided conditional exact test of independence for two binary class
 
 ## Inputs and parameters
 
-`row` and `column` must be nonempty, aligned categorical series of equal length, each with exactly 2 observed levels. Numeric, Categorical, Ordinal, and Binary semantics are supported. Relational series must share a row domain. Missing values are rejected. There are no parameters; only a two-sided test is available.
+`row` and `column` must be nonempty, aligned categorical series of equal length, each with exactly 2 observed levels. Numeric, Categorical, Ordinal, and Binary semantics are supported. Database and in-memory series may be mixed and pair by current position, with equal lengths. Missing values are rejected. There are no parameters; only a two-sided test is available.
 
 ## Hypotheses and reference distribution
 

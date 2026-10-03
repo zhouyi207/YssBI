@@ -262,7 +262,7 @@ fn poisson_regression_fits_53940_rows_with_the_default_memory_budget() {
 }
 
 #[test]
-fn regression_models_reject_unaligned_relation_domains_and_mixed_columns() {
+fn regression_models_accept_positional_relation_and_memory_columns() {
     use arrow::{
         array::Float64Array,
         datatypes::{DataType, Field, Schema},
@@ -339,12 +339,22 @@ fn regression_models_reject_unaligned_relation_domains_and_mixed_columns() {
             }],
             control: &control,
         };
+        let id = KernelId::new("yssbi.statistics.regression.ridge".into()).unwrap();
+        let result = kernels.execute(&id, &inv).unwrap();
+        assert!(matches!(&result[0], RuntimeValue::Record(_)));
+        let short = [
+            inputs[0].clone(),
+            RuntimeValue::List(vec![RuntimeValue::float64(1.).unwrap(); 3].into()),
+        ];
         assert!(matches!(
             kernels.execute(
-                &KernelId::new("yssbi.statistics.regression.ridge".into()).unwrap(),
-                &inv
+                &id,
+                &KernelInvocation {
+                    inputs: &short,
+                    ..inv
+                }
             ),
-            Err(KernelError::UnalignedSeries)
+            Err(KernelError::ShapeMismatch)
         ));
     }
 }

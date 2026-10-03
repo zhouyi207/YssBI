@@ -1,5 +1,5 @@
 # Concatenate Text
 
-Add at least two Text inputs in the requested order. Inputs may be scalars or series; at least one must be a series, and all series must share a row domain. Separator defaults to empty text.
+Add at least two Text inputs in the requested order. Inputs may be scalars or series; at least one must be a series, and all series must have equal lengths and pair by current position. Separator defaults to empty text.
 
-Scalars broadcast. A Null input makes that row's result Null; empty strings participate normally. Output is Text in the shared row domain.
+Scalars broadcast. A Null input makes that row's result Null; empty strings participate normally. Output is Text in the input position order; database and in-memory series may be mixed.

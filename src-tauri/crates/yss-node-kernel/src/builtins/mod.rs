@@ -566,19 +566,21 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             .register(
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
-                    Comparison(_) => 8,
+                    Comparison(_) => 10,
                     Distribution(_) => 3,
-                    Series(_) => 4,
-                    Statistical(Fit) => 9,
-                    Boolean(_) => 4,
+                    Series(_) => 5,
+                    Statistical(Fit) => 10,
+                    Boolean(_) => 5,
                     Statistical(Summary) => 11,
-                    Statistical(Predict) => 4,
+                    Statistical(Predict) => 5,
                     Convert(_) => 1,
                     Constant => 5,
                     Relational(
                         relational::RelationalKernel::Limit | relational::RelationalKernel::Join,
                     ) => 4,
-                    Numeric(_) | Relational(relational::RelationalKernel::Filter) => 3,
+                    Numeric(_) => 4,
+                    Relational(relational::RelationalKernel::Assemble) => 3,
+                    Relational(relational::RelationalKernel::Filter) => 3,
                     _ => 2,
                 })
                 .expect("built-in implementation revision"),

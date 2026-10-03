@@ -124,7 +124,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(format!("yssbi.statistics.{id}").into()).expect("association ID"),
-                std::num::NonZeroU32::new(1).unwrap(),
+                std::num::NonZeroU32::new(2).unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )
@@ -180,49 +180,8 @@ fn typed_columns(
     inv: &KernelInvocation<'_>,
     aligned: bool,
 ) -> Result<Vec<super::super::series::Column>, KernelError> {
-    use super::super::series;
-    if aligned {
-        if inv
-            .inputs
-            .iter()
-            .all(|value| matches!(value.unannotated(), RuntimeValue::Series(_)))
-        {
-            let handles = inv
-                .inputs
-                .iter()
-                .map(|value| match value.unannotated() {
-                    RuntimeValue::Series(handle) => handle.clone(),
-                    _ => unreachable!(),
-                })
-                .collect::<Vec<_>>();
-            let output = series::load(&handles, inv)?;
-            check_typed_budget(inv, &output)?;
-            return Ok(output);
-        }
-        let Some(RuntimeValue::List(first)) = inv.inputs.first().map(RuntimeValue::unannotated)
-        else {
-            return Err(KernelError::UnalignedSeries);
-        };
-        for input in inv.inputs {
-            let RuntimeValue::List(values) = input.unannotated() else {
-                return Err(KernelError::UnalignedSeries);
-            };
-            if values.len() != first.len() {
-                return Err(KernelError::ShapeMismatch);
-            }
-        }
-        inv.control.check_bytes(
-            first
-                .len()
-                .checked_mul(inv.inputs.len())
-                .and_then(|n| n.checked_mul(size_of::<RuntimeValue>() * 8)),
-        )?;
-    }
-    let output = inv
-        .inputs
-        .iter()
-        .map(|input| series::column(input, inv))
-        .collect::<Result<Vec<_>, _>>()?;
+    let output =
+        super::super::series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, aligned)?;
     check_typed_budget(inv, &output)?;
     Ok(output)
 }

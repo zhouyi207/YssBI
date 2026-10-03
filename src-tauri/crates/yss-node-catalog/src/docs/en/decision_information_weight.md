@@ -4,7 +4,7 @@ Weights are proportional to the coefficient of variation $CV_j=s_j/\bar x_j$ of 
 
 ## Inputs and parameters
 
-Connect **criteria** as aligned Numeric columns, one criterion per port and one alternative per row. At least one row is needed; objective weights require two or more observations. Nulls, non-finite values and mismatched row domains are rejected; there is no fixed row limit.
+Connect **criteria** as aligned Numeric columns, one criterion per port and one alternative per row. At least one row is needed; objective weights require two or more observations. Nulls, non-finite values and different observation counts are rejected; there is no fixed row limit.
 
 **cost_criteria** lists one-based positions where lower is better; empty means all criteria are benefits. Score normalization, when exposed, is **minmax**, **vector**, or **none**. Min–max maps constant columns to zero. For additive scores, cost criteria use one minus min–max values (constant stays zero), or negate raw/vector values. Rank and distance methods handle direction directly.
 

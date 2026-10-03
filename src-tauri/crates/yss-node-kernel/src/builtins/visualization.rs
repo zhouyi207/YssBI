@@ -177,66 +177,7 @@ fn prepared(
     independent: bool,
 ) -> Result<Vec<series::Column>, KernelError> {
     inv.check_control()?;
-    let all_handles = inv
-        .inputs
-        .iter()
-        .all(|value| matches!(value.unannotated(), RuntimeValue::Series(_)));
-    let any_handles = inv
-        .inputs
-        .iter()
-        .any(|value| matches!(value.unannotated(), RuntimeValue::Series(_)));
-    if !independent && any_handles && !all_handles {
-        return Err(KernelError::UnalignedSeries);
-    }
-    let data = if all_handles && !independent {
-        let handles = inv
-            .inputs
-            .iter()
-            .map(|value| match value.unannotated() {
-                RuntimeValue::Series(series) => series.clone(),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        series::load(&handles, inv)?
-    } else {
-        let mut columns = Vec::with_capacity(inv.inputs.len());
-        let mut retained = 0usize;
-        for input in inv.inputs {
-            let column = series::column(input, inv)?;
-            retained = retained
-                .checked_add(
-                    column
-                        .values
-                        .len()
-                        .checked_mul(size_of::<TabularScalar>() * 4)
-                        .ok_or(KernelError::BudgetExceeded)?,
-                )
-                .ok_or(KernelError::BudgetExceeded)?;
-            for value in &column.values {
-                if let TabularScalar::String(value) = value {
-                    retained = retained
-                        .checked_add(
-                            value
-                                .len()
-                                .checked_mul(4)
-                                .ok_or(KernelError::BudgetExceeded)?,
-                        )
-                        .ok_or(KernelError::BudgetExceeded)?;
-                }
-            }
-            inv.control.check_bytes(Some(retained))?;
-            columns.push(column);
-        }
-        columns
-    };
-    if !independent
-        && let Some(first) = data.first()
-        && data
-            .iter()
-            .any(|column| column.values.len() != first.values.len())
-    {
-        return Err(KernelError::ShapeMismatch);
-    }
+    let data = series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, !independent)?;
     inv.check_control()?;
     Ok(data)
 }

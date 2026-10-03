@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 arrow-array.workspace = true
+arrow-select.workspace = true
 arrow-schema.workspace = true
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-data-contract = { path = "../yss-data-contract" }

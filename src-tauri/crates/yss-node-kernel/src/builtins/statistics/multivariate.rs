@@ -106,7 +106,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(id.into()).unwrap(),
-                std::num::NonZeroU32::new(1).unwrap(),
+                std::num::NonZeroU32::new(2).unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )
@@ -177,41 +177,7 @@ fn classification(
     control: &ScientificExecutionControl,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let input = selected(inv, &["groups", "variables"]);
-    let typed = if input
-        .iter()
-        .all(|v| matches!(v.unannotated(), RuntimeValue::Series(_)))
-    {
-        let handles = input
-            .iter()
-            .map(|v| match v.unannotated() {
-                RuntimeValue::Series(handle) => handle.clone(),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        series::load(&handles, inv)?
-    } else {
-        let Some(RuntimeValue::List(first)) = input.first().map(|v| v.unannotated()) else {
-            return Err(KernelError::UnalignedSeries);
-        };
-        for value in &input {
-            let RuntimeValue::List(column) = value.unannotated() else {
-                return Err(KernelError::UnalignedSeries);
-            };
-            if column.len() != first.len() {
-                return Err(KernelError::ShapeMismatch);
-            }
-        }
-        inv.control.check_bytes(
-            first
-                .len()
-                .checked_mul(input.len())
-                .and_then(|n| n.checked_mul(size_of::<RuntimeValue>() * 8)),
-        )?;
-        input
-            .iter()
-            .map(|v| series::column(v, inv))
-            .collect::<Result<Vec<_>, _>>()?
-    };
+    let typed = series::columns(&input, inv, true)?;
     let mut retained = inv.control.check_bytes(
         typed[0]
             .values

@@ -4,7 +4,7 @@ Build a reusable weights design from unit identifiers and planar coordinates, th
 
 ## Inputs and parameters
 
-`units` contains unique, nonmissing identifiers; `x` and `y` are finite numeric coordinates sharing the same row domain. At least two units are required. Missing values are rejected; text and numeric identifiers are distinct and integers retain exact precision. For a panel, supply a separate one-row-per-unit coordinate table to this node.
+`units` contains unique, nonmissing identifiers; `x` and `y` are finite numeric coordinates with equal lengths, paired by current position. At least two units are required. Missing values are rejected; text and numeric identifiers are distinct and integers retain exact precision. For a panel, supply a separate one-row-per-unit coordinate table to this node.
 
 - `spatial_weight_rule`: `knn` (default), `distance_band` or `inverse_distance`.
 - `spatial_neighbors`: 4 by default; KNN requires $1\le k<n$. Equal distances are resolved by input unit order. Neighbor links can be directed.

@@ -8,7 +8,7 @@ $$
 \text{Result} = (A \neq B)
 $$
 
-Uses the same element-wise comparison and broadcasting rules as Equal. Two scalars return a Binary scalar; any series input returns a Binary series. Non-null results are inverted; null remains null. Numeric representations compare exactly and text is never implicitly parsed as a number. Materialized series require equal lengths; lazy series require the same relation row domain.
+Uses the same element-wise comparison and broadcasting rules as Equal. Two scalars return a Binary scalar; any series input returns a Binary series. Non-null results are inverted; null remains null. Numeric representations compare exactly and text is never implicitly parsed as a number. All series must have equal lengths and pair by current row position, regardless of storage or source. Independent database series and mixed database/in-memory operands are read into memory before comparison; rows are not automatically matched by key.
 
 ## Usage
 

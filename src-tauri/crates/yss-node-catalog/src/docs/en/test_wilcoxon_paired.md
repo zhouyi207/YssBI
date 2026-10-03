@@ -4,7 +4,7 @@ Tests whether paired differences are symmetrically distributed around zero.
 
 ## Inputs and parameters
 
-Connect numeric `before` and `after` series in matching subject order. Lengths must agree; relational series must share a row domain. Differences are $d_i=before_i-after_i$. Missing and non-finite values are rejected. Zero differences are excluded from ranking, leaving at least 2 nonzero differences.
+Connect numeric `before` and `after` series in matching subject order. Lengths must agree; database and in-memory series may be mixed and pair by current position. Differences are $d_i=before_i-after_i$. Missing and non-finite values are rejected. Zero differences are excluded from ranking, leaving at least 2 nonzero differences.
 
 `alternative` defaults to `two_sided`, with `greater` and `less` available. Direction follows `before−after`.
 

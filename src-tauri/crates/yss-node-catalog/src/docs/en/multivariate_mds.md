@@ -2,7 +2,7 @@
 
 This node uses classical metric MDS. **MDS input** defaults to `observations`: provide one or more numeric **Variable / distance column** series with observations in rows, using Euclidean distances. **Standardize variables** defaults to disabled and appears only in this mode; enabling it uses sample standard deviations and rejects constant variables.
 
-With `dissimilarity_matrix`, each input is one column of a nonnegative symmetric square distance matrix with zero diagonal. Symmetry and zero diagonal allow floating error of $10^{-12}$ relative to maximum distance. No additive distance correction is applied. Missing values and distances without positive variation are rejected. Columns must align and relational inputs must share a row domain.
+With `dissimilarity_matrix`, each input is one column of a nonnegative symmetric square distance matrix with zero diagonal. Symmetry and zero diagonal allow floating error of $10^{-12}$ relative to maximum distance. No additive distance correction is applied. Missing values and distances without positive variation are rejected. Columns must have equal lengths and pair by current position, including mixed database and in-memory inputs.
 
 Let $n$ be the observation count. **Retained dimensions** defaults to 2 with $1\le k\len-1$. For distances $D$ and centering $J=I-\mathbf1\mathbf1^T/n$:
 

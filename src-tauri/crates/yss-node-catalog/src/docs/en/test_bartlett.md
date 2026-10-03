@@ -4,7 +4,7 @@ Tests equality of variances across independent groups under approximate populati
 
 ## Inputs and parameters
 
-Add at least two numeric series under `groups`, each with at least 2 finite observations and strictly positive sample variance. The current node requires equal lengths; relational series must share a row domain. Missing values are rejected. There are no parameters.
+Add at least two numeric series under `groups`, each with at least 2 finite observations and strictly positive sample variance. Each group is read independently; lengths may differ, and database and in-memory inputs may be mixed. Missing values are rejected. There are no parameters.
 
 ## Hypotheses and statistic
 
