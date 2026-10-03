@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { ColumnInfo } from "@/shared/types/domain/database";
 import { useDatabaseRead } from "@/features/core/database/read";
@@ -11,6 +11,7 @@ import {
   getGridSelectionPrimaryCellText,
   useDatabaseExport,
 } from "@/features/application/databaseEditor";
+import { useEditorPaneStateStore } from "@/modules/workbench/public";
 import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
 import { DataTable } from "./Table";
 import { Toolbar } from "./Layout";
@@ -18,20 +19,15 @@ import { Toolbar } from "./Layout";
 const EMPTY_COLUMNS: readonly ColumnInfo[] = [];
 
 interface DatabaseEditorContentProps {
-  databaseId: string | null;
-  renderHeader?: (selectedCellText: string) => ReactNode;
-  refreshProjectOnRefresh?: boolean;
+  databaseId: string;
+  panelInstanceId: string;
 }
 
-export function DatabaseEditorContent({
-  databaseId,
-  renderHeader,
-  refreshProjectOnRefresh = false,
-}: DatabaseEditorContentProps) {
+export function DatabaseEditorContent({ databaseId, panelInstanceId }: DatabaseEditorContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { columns, rowCount, columnCount } = useDatabaseRead(
     useShallow((snapshot) => {
-      const database = databaseId ? snapshot.databases[databaseId] : undefined;
+      const database = snapshot.databases[databaseId];
       return {
         columns: database?.columns ?? EMPTY_COLUMNS,
         rowCount: database?.rowCount ?? 0,
@@ -39,10 +35,8 @@ export function DatabaseEditorContent({
       };
     }),
   );
-  const revision = useResourceRead((snapshot) =>
-    databaseId
-      ? snapshot.resources[resourceKey({ kind: "database", id: databaseId })]?.revision
-      : undefined,
+  const revision = useResourceRead(
+    (snapshot) => snapshot.resources[resourceKey({ kind: "database", id: databaseId })]?.revision,
   );
   const dataLoader = useDataLoader(databaseId);
   const exportDatabase = useDatabaseExport(databaseId);
@@ -50,21 +44,17 @@ export function DatabaseEditorContent({
     columnCount: columns.length,
     rowCount: dataLoader.loadedRows.length,
   });
-  const { loadInitialRows, clearData } = dataLoader;
+  const { loadInitialRows } = dataLoader;
   const { clearSelection } = selection;
 
   useDatabaseEditorKeyboard({ containerRef, selectAll: selection.selectAll, clearSelection });
 
   useEffect(() => {
-    if (databaseId) {
-      void loadInitialRows(databaseId).catch((error) =>
-        reportViewIssue("app", error, "DatabaseEditor"),
-      );
-    } else {
-      clearData();
-    }
+    void loadInitialRows(databaseId).catch((error) =>
+      reportViewIssue("app", error, "DatabaseEditor"),
+    );
     clearSelection();
-  }, [databaseId, revision, loadInitialRows, clearData, clearSelection]);
+  }, [databaseId, revision, loadInitialRows, clearSelection]);
 
   useEffect(() => {
     clearSelection();
@@ -81,13 +71,24 @@ export function DatabaseEditorContent({
     [selection.selection, columns.length, dataLoader.loadedRows],
   );
 
+  useEffect(() => {
+    useEditorPaneStateStore.getState().setDatabaseView(panelInstanceId, {
+      databaseId,
+      selectedCellText,
+    });
+  }, [panelInstanceId, databaseId, selectedCellText]);
+
+  useEffect(
+    () => () => useEditorPaneStateStore.getState().setDatabaseView(panelInstanceId, undefined),
+    [panelInstanceId],
+  );
+
   return (
     <div
       ref={containerRef}
-      data-database-editor={databaseId ?? undefined}
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground font-sans"
+      data-database-editor={databaseId}
+      className="@container flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground font-sans"
     >
-      {renderHeader?.(selectedCellText)}
       <div className="flex min-h-0 flex-1 overflow-hidden bg-muted/30">
         <DataTable
           columns={columns}
@@ -107,10 +108,9 @@ export function DatabaseEditorContent({
         pageSize={dataLoader.pageSize}
         totalPages={dataLoader.totalPages}
         lastFetchMs={dataLoader.lastFetchMs}
-        exportEnabled={Boolean(databaseId)}
         onPreviousPage={dataLoader.goToPreviousPage}
         onNextPage={dataLoader.goToNextPage}
-        onRefresh={refreshProjectOnRefresh ? dataLoader.refreshData : dataLoader.reloadAllData}
+        onRefresh={dataLoader.reloadAllData}
         onExport={exportDatabase}
       />
     </div>

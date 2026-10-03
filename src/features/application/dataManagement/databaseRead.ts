@@ -10,6 +10,7 @@ import {
 import { DatabaseService } from "@/services/database/databaseService";
 import { logger } from "@/utils/frontendLogger";
 import { formatApplicationIpcError } from "@/features/application/errorReference";
+import type { ColumnInfo, ColumnSemantic, SemanticType } from "@/shared/types/domain/database";
 
 export interface DatabaseRead {
   readonly id: string;
@@ -50,6 +51,40 @@ export async function readDatabaseMetadata(read: DatabaseRead): Promise<void> {
     useResourceStore.getState().updateDatabaseMetadata(read.id, read.revision, metadata);
 }
 
+export async function readColumnSemanticDraft(
+  read: DatabaseRead,
+  column: ColumnInfo,
+  kind: SemanticType,
+): Promise<ColumnSemantic | null> {
+  if (read.revision === undefined || !read.isCurrent()) return null;
+  const draft: ColumnSemantic = {
+    kind,
+    values: [],
+    positiveValue: kind === "Binary" ? (column.semantic?.positiveValue ?? null) : null,
+    numeric:
+      kind === "Numeric"
+        ? (column.semantic?.numeric ?? { integer: false, minimum: null, maximum: null })
+        : null,
+  };
+  if (kind === "Categorical" || kind === "Ordinal" || kind === "Binary") {
+    const observed = await DatabaseService.getColumnValues(
+      read.projectInstanceId,
+      read.id,
+      read.revision,
+      column.name,
+    );
+    if (!read.isCurrent()) return null;
+    // Preserve declared levels (including absent levels), labels and order across domain changes.
+    const existing = column.semantic?.values ?? [];
+    const known = new Set(existing.map((entry) => entry.value));
+    draft.values = [
+      ...existing,
+      ...observed.filter((value) => !known.has(value)).map((value) => ({ value, label: value })),
+    ];
+  }
+  return draft;
+}
+
 export async function readDatabasePage(read: DatabaseRead, pageIndex: number, pageSize: number) {
   if (read.revision === undefined || !read.isCurrent()) return null;
   const rowCount = useResourceStore.getState().databases[read.id]?.rowCount;
@@ -82,7 +117,7 @@ export async function hydrateDatabaseEditorMetadata(
     if (read.isCurrent()) {
       logger.data.warn(
         "getDatabaseMeta failed: " + formatApplicationIpcError(error),
-        "DatabaseEditorWindow",
+        "DatabaseEditor",
       );
     }
   }

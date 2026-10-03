@@ -9,7 +9,7 @@ import {
   toggleWorkbenchView,
   WORKBENCH_ACTIVITY_GROUP_ID,
 } from "@/modules/workbench/public";
-import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
+import { openLogsWindow } from "@/features/application/window";
 
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 import type { WorkbenchViewId } from "@/modules/workbench/public";
@@ -66,10 +66,6 @@ export function useMenubar() {
     if (target) void splitEditorPanel(target.groupId, "bottom");
   }, []);
 
-  const handleDatabaseEditor = useCallback(() => {
-    void openDatabaseEditorWindow();
-  }, []);
-
   const handleOpenLogs = useCallback(() => {
     void openLogsWindow();
   }, []);
@@ -93,7 +89,6 @@ export function useMenubar() {
     handleImportData,
     handleSplitRight,
     handleSplitDown,
-    handleDatabaseEditor,
     handleOpenLogs,
     viewActions: {
       toggleActivityGroup,

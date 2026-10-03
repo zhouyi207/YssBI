@@ -604,7 +604,6 @@ export const enUS = {
     copy: "Copy",
     paste: "Paste",
     importData: "Import Data",
-    databaseEditor: "Database Editor",
     schemaViewer: "Schema Viewer",
     splitEditorRight: "Split Editor Right",
     splitEditorDown: "Split Editor Down",
@@ -1962,8 +1961,10 @@ export const enUS = {
     },
   },
   databaseEditor: {
-    title: "Database Editor",
-    noDataFrame: "No DataFrame",
+    selectedContent: "Selected content",
+    previousPage: "Previous page",
+    nextPage: "Next page",
+    fetchTime: "Fetch time",
     loadingProjectData: "Loading project data...",
     noDataFrameSelected: "No DataFrame Selected",
     cellPreviewPlaceholder: "Selected cell value appears here",
@@ -2174,8 +2175,20 @@ export const enUS = {
   },
   detail: {
     data: {
-      applyPhysical: "Apply Physical conversion",
-      applySemantic: "Apply Semantic",
+      confirmPhysicalTitle: "Change Physical type",
+      confirmPhysicalMessage:
+        "Change the Physical type of column “{{column}}” from {{from}} to {{to}}?",
+      confirmSemanticTitle: "Change Semantic settings",
+      confirmSemanticMessage:
+        "Confirm changes to the Semantic settings of column “{{column}}” ({{kind}})?",
+      editMapping: "Edit value mapping…",
+      editConstraints: "Edit numeric constraints…",
+      initialMappingHint:
+        "Initialized from all non-null values in this column, preserving existing labels and order. Adjust the mapping, then confirm.",
+      binaryCount: "Binary requires exactly two values; the current mapping has {{count}}.",
+      tooManyValues: "A mapping supports up to 65,536 values.",
+      mappingLoadFailed: "Could not read the complete column values. Please retry.",
+      settingsStale: "The data has changed. Close this dialog and edit again.",
       categoryHint:
         "Map original values to internal semantic labels. The data view keeps original values; codes do not imply an order.",
       ordinalHint:

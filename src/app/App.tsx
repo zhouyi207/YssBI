@@ -12,11 +12,6 @@ import { UIHost } from "./ui/UIHost";
 const PlotWindow = React.lazy(() =>
   import("@/modules/results/public").then((m) => ({ default: m.PlotWindow })),
 );
-const DatabaseEditorWindow = React.lazy(() =>
-  import("@/modules/database-editor/public").then((m) => ({
-    default: m.DatabaseEditorWindow,
-  })),
-);
 const SourceInspectorWindow = React.lazy(() =>
   import("@/modules/results/public").then((m) => ({
     default: m.SourceInspectorWindow,
@@ -50,7 +45,6 @@ function AppRouter() {
         <Route path="/projects" element={<ProjectPickerScreen />} />
         <Route path="/editor" element={<WorkbenchComposition />} />
         <Route path="/plot" element={<PlotWindow />} />
-        <Route path="/database" element={<DatabaseEditorWindow />} />
         <Route path="/inspect" element={<SourceInspectorWindow />} />
         <Route path="/logs" element={<LogWindow />} />
         <Route path="*" element={<ProjectPickerScreen />} />

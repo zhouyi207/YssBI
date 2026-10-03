@@ -20,8 +20,8 @@ function FunctionGraphEditor(props: EditorPanelScope<"function_graph">) {
   });
 }
 
-function DatabaseEditorRenderer({ resourceRef }: EditorPanelScope<"database">) {
-  return createElement(DatabaseEditorContent, { databaseId: resourceRef });
+function DatabaseEditorRenderer({ resourceRef, panelInstanceId }: EditorPanelScope<"database">) {
+  return createElement(DatabaseEditorContent, { databaseId: resourceRef, panelInstanceId });
 }
 
 export const editorRendererRegistry = {

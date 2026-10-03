@@ -43,7 +43,7 @@ export function DetailsPane() {
         />
       );
     case "data":
-      return <DataDetailPanel dataframe={model.dataframe} />;
+      return <DataDetailPanel key={model.dataframe.id} dataframe={model.dataframe} />;
     case "mind":
       return (
         <MindDetailPanel

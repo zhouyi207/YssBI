@@ -3,7 +3,6 @@ import { readWindowDecorationsFromSettings } from "@/features/application/window
 
 // Creation defaults are logical pixels. The Rust plugin restores saved physical geometry.
 const DEFAULT_SIZES = {
-  dataview: { width: 1000, height: 600 },
   logs: { width: 1000, height: 600 },
   inspect: { width: 1000, height: 600 },
   plot: { width: 960, height: 800 },

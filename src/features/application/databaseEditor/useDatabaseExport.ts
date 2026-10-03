@@ -7,9 +7,8 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { logger } from "@/utils/frontendLogger";
 
-export function useDatabaseExport(selectedDatabaseId: string | null): () => Promise<void> {
+export function useDatabaseExport(selectedDatabaseId: string): () => Promise<void> {
   return useCallback(async () => {
-    if (!selectedDatabaseId) return;
     const identity = captureProjectIdentity();
     const selected = await selectDatabaseExportPath();
     if (!selected.ok || selected.value === null || !isCurrentProjectIdentity(identity)) return;
@@ -23,7 +22,7 @@ export function useDatabaseExport(selectedDatabaseId: string | null): () => Prom
       );
     } catch {
       if (isCurrentProjectIdentity(identity)) {
-        logger.data.error("database export failed", "DatabaseEditorWindow");
+        logger.data.error("database export failed", "DatabaseEditor");
       }
     }
   }, [selectedDatabaseId]);

@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { VscChevronLeft, VscChevronRight, VscRefresh } from "react-icons/vsc";
+import { VscChevronLeft, VscChevronRight, VscExport, VscRefresh } from "react-icons/vsc";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 
 interface ToolbarProps {
@@ -11,8 +11,6 @@ interface ToolbarProps {
   pageSize: number;
   totalPages: number;
   lastFetchMs: number | null;
-  /** 当前是否有打开的 DataFrame（用于导出等，与单元格是否选中无关） */
-  exportEnabled: boolean;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onRefresh: () => void;
@@ -27,7 +25,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   pageSize,
   totalPages,
   lastFetchMs,
-  exportEnabled,
   onPreviousPage,
   onNextPage,
   onRefresh,
@@ -44,14 +41,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         : `${lastFetchMs}ms`;
 
   return (
-    <div className="flex min-h-12 shrink-0 items-center gap-2 border-t border-border bg-card/90 px-3 py-2">
-      <div className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background p-0.5 shadow-sm">
+    <div className="grid min-h-12 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-t border-border bg-card/90 px-3 py-2 @[28rem]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <div className="flex items-center justify-self-start overflow-hidden rounded-md border border-border bg-background shadow-sm">
         <ToolbarIconButton
           type="button"
           variant="ghost"
           size="icon-sm"
+          className="rounded-none border-r border-border"
           onClick={onRefresh}
+          disabled={loading}
+          aria-label={t("common.refresh")}
           tooltip={t("common.refresh")}
+          side="top"
         >
           <VscRefresh className={loading ? "animate-spin" : ""} size={15} />
         </ToolbarIconButton>
@@ -59,26 +60,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           type="button"
           variant="ghost"
           size="icon-sm"
+          className="rounded-none"
           onClick={onExport}
-          disabled={!exportEnabled}
+          aria-label={t("common.export")}
           tooltip={t("common.export")}
+          side="top"
         >
-          <svg
-            className="h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden
-          >
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
+          <VscExport size={15} />
         </ToolbarIconButton>
       </div>
 
-      <div className="flex min-w-0 flex-1 items-center justify-center">
+      <div className="flex min-w-0 items-center justify-center">
         <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-border bg-background text-card-foreground shadow-sm">
           <ToolbarIconButton
             type="button"
@@ -87,12 +79,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             className="rounded-none border-r border-border"
             onClick={onPreviousPage}
             disabled={loading || pageIndex <= 0}
-            tooltip="上一页"
+            tooltip={t("databaseEditor.previousPage")}
           >
             <VscChevronLeft size={15} />
           </ToolbarIconButton>
 
-          <div className="flex h-6 min-w-[184px] items-center justify-center gap-1 px-2 text-[11px]">
+          <div className="flex h-6 min-w-0 items-center justify-center gap-1 px-2 text-[11px] @[28rem]:min-w-[184px]">
             <span className="font-medium text-foreground">
               {pageStart}-{pageEnd}
             </span>
@@ -110,14 +102,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             className="rounded-none border-l border-border"
             onClick={onNextPage}
             disabled={loading || pageIndex >= totalPages - 1}
-            tooltip="下一页"
+            tooltip={t("databaseEditor.nextPage")}
           >
             <VscChevronRight size={15} />
           </ToolbarIconButton>
         </div>
       </div>
 
-      <div className="hidden shrink-0 items-center gap-2 text-[10px] font-medium text-muted-foreground xl:flex">
+      <div className="hidden min-w-0 items-center justify-self-end gap-2 whitespace-nowrap text-[10px] font-medium text-muted-foreground @[48rem]:flex">
         <div className="rounded-md border border-border bg-background px-2 py-1">
           {t("databaseEditor.columns").toUpperCase()}:{" "}
           <span className="text-foreground">{columnCount}</span>
@@ -127,7 +119,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <span className="text-foreground">{totalRowCount}</span>
         </div>
         <div className="rounded-md border border-border bg-background px-2 py-1">
-          获取数据: <span className="text-foreground">{fetchTimeLabel}</span>
+          {t("databaseEditor.fetchTime")}: <span className="text-foreground">{fetchTimeLabel}</span>
         </div>
       </div>
     </div>

@@ -7,11 +7,12 @@ import {
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { DatabaseService, type DatabaseRowsResult } from "@/services/database/databaseService";
-import type { LoadDatabaseResult } from "@/shared/types/domain/database";
+import type { ColumnInfo, LoadDatabaseResult } from "@/shared/types/domain/database";
 import {
   captureDatabaseRead,
   hydrateDatabaseEditorMetadata,
   readDatabasePage,
+  readColumnSemanticDraft,
 } from "./databaseRead";
 
 const database = { id: "sales", kind: "database" as const };
@@ -103,4 +104,55 @@ it("rejects a delayed page and prevents an obsolete read from starting another r
   await expect(readDatabasePage(current, 0, 200)).rejects.toThrow(
     "Database page width does not match its metadata",
   );
+});
+
+it("initializes complete semantic mappings without replacing existing labels or accepting stale reads", async () => {
+  const column: ColumnInfo = {
+    name: "value",
+    type: "Utf8",
+    semantic: {
+      kind: "Ordinal",
+      numeric: null,
+      positiveValue: null,
+      values: [
+        { value: "z", label: "Last" },
+        { value: "absent", label: "Reserved" },
+      ],
+    },
+  };
+  const query = vi
+    .spyOn(DatabaseService, "getColumnValues")
+    .mockResolvedValue(["", "9007199254740993", "z"]);
+  const read = captureDatabaseRead(captureProjectIdentity(), database.id);
+  const before = useResourceStore.getState();
+  const draft = await readColumnSemanticDraft(read, column, "Categorical");
+  expect(draft).toEqual({
+    kind: "Categorical",
+    numeric: null,
+    positiveValue: null,
+    values: [
+      ...column.semantic!.values,
+      { value: "", label: "" },
+      { value: "9007199254740993", label: "9007199254740993" },
+    ],
+  });
+  expect(useResourceStore.getState()).toBe(before);
+  expect(query).toHaveBeenCalledWith(read.projectInstanceId, database.id, 1, "value");
+  const binary = await readColumnSemanticDraft(read, { ...column, semantic: draft }, "Binary");
+  expect(binary?.values).toEqual(draft?.values);
+  expect(await readColumnSemanticDraft(read, column, "Numeric")).toEqual({
+    kind: "Numeric",
+    values: [],
+    positiveValue: null,
+    numeric: { integer: false, minimum: null, maximum: null },
+  });
+  expect(query).toHaveBeenCalledTimes(2);
+  const pending = deferred<string[]>();
+  query.mockReturnValue(pending.promise);
+  const completion = readColumnSemanticDraft(read, column, "Ordinal");
+  useResourceStore.getState().patchResource(database, { revision: 2 });
+  pending.resolve(["old"]);
+  expect(await completion).toBeNull();
+  expect(await readColumnSemanticDraft(read, column, "Categorical")).toBeNull();
+  expect(query).toHaveBeenCalledTimes(3);
 });

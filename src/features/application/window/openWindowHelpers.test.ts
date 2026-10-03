@@ -15,7 +15,6 @@ import {
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { IPC_TRANSPORT_FAILURE_CODE, normalizeIpcError } from "@/services/ipc";
-import { openDatabaseEditorWindow } from "./openDatabaseEditor";
 import { openLogsWindow } from "./openLogsWindow";
 import { openPresentationWindow } from "./openPresentationWindow";
 
@@ -30,11 +29,6 @@ vi.mock("@/utils/frontendLogger", () => ({
 }));
 vi.mock("@/app/i18n", () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
 
-const helpers = [
-  ["database editor", () => openDatabaseEditorWindow("database-1")],
-  ["logs", () => openLogsWindow()],
-] as const;
-
 describe("window opening helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,11 +36,11 @@ describe("window opening helpers", () => {
   });
   afterEach(() => clearProjectLifecycle());
 
-  it.each(helpers)("records and rethrows a %s window failure", async (_label, openWindow) => {
+  it("records and rethrows a logs window failure", async () => {
     const failure = new Error("sensitive native window failure");
     createPersistedWindow.mockRejectedValueOnce(failure);
 
-    await expect(openWindow()).rejects.toBe(failure);
+    await expect(openLogsWindow()).rejects.toBe(failure);
 
     expect(appError).toHaveBeenCalledOnce();
     expect(String(appError.mock.calls[0]?.[0])).toContain(IPC_TRANSPORT_FAILURE_CODE);

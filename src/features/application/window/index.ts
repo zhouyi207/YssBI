@@ -14,7 +14,6 @@ export {
   presentationWindowPayloadFromDescriptor,
 } from "./openPresentationWindow";
 export type { PresentationWindowPayload } from "./openPresentationWindow";
-export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openLogsWindow } from "./openLogsWindow";
 export { openExternalUrlWithDialog } from "./openExternalUrlWithDialog";
 export { createEphemeralWindowLabel } from "./windowLabels";

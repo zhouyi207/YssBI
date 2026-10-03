@@ -191,7 +191,6 @@ export function WorkbenchMenuContribution({
     handleImportData,
     handleSplitRight,
     handleSplitDown,
-    handleDatabaseEditor,
     handleOpenLogs,
   } = useMenubar();
   const currentPath = useActiveProjectPath();
@@ -232,7 +231,6 @@ export function WorkbenchMenuContribution({
 
   const dataItems: MenuItem[] = [
     { label: t("menubar.importData"), onClick: handleImportData },
-    { label: t("menubar.databaseEditor"), onClick: handleDatabaseEditor },
     { label: "-", type: "separator" },
     { label: t("menubar.schemaViewer") },
   ];

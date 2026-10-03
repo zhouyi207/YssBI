@@ -53,4 +53,46 @@ describe("editor pane selection snapshots", () => {
       unsubscribe();
     }
   });
+
+  it("isolates database previews without changing other selections", () => {
+    const store = useEditorPaneStateStore;
+    const actions = store.getState();
+    const view = { databaseId: "sales", selectedCellText: "1" };
+    actions.setDatabaseView("data-a", view);
+    actions.setDatabaseView("data-b", { ...view, selectedCellText: "2" });
+    actions.setSelectedNodeIds("graph-a", ["node-a"]);
+    const initial = store.getState();
+    actions.setDatabaseView("data-a", { ...view });
+    expect(store.getState()).toBe(initial);
+
+    actions.setDatabaseView("data-a", { ...view, selectedCellText: "3" });
+    const updated = store.getState();
+    expect(updated.databaseViews["data-a"].selectedCellText).toBe("3");
+    expect(updated.databaseViews["data-b"]).toBe(initial.databaseViews["data-b"]);
+    expect(updated.selections).toBe(initial.selections);
+  });
+
+  it("releases database previews on unmount, panel close and project reset", () => {
+    const store = useEditorPaneStateStore;
+    const actions = store.getState();
+    const view = {
+      databaseId: "sales",
+      selectedCellText: "1",
+    };
+    actions.setDatabaseView("data-a", view);
+    actions.setDatabaseView("data-b", view);
+    actions.setDatabaseView("data-a", undefined);
+    expect(store.getState().databaseViews["data-a"]).toBeUndefined();
+    expect(store.getState().databaseViews["data-b"]).toBe(view);
+    actions.setDatabaseView("data-a", view);
+    actions.release("data-a");
+    expect(store.getState().databaseViews["data-a"]).toBeUndefined();
+    expect(store.getState().databaseViews["data-b"]).toBe(view);
+    actions.reset();
+    expect(store.getState().databaseViews).toEqual({});
+    const empty = store.getState();
+    actions.setDatabaseView("data-a", undefined);
+    actions.reset();
+    expect(store.getState()).toBe(empty);
+  });
 });
