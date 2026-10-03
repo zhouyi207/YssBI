@@ -68,12 +68,14 @@ Registry 的 `StructuralNodeRole` 拥有函数角色的引用字段约定：Call
 区间与比较表的字段由声明唯一持有，Graph 统一解析；中英文帮助明确推断自由度、
 多重校正方式及均值置信区间的含义。
 
-单次插补由 `dataframe/transforms` 声明，导航仍属于“缺失数据与插补”。输入与输出均为
+单次插补由 `dataframe/transforms` 声明，导航属于“统计 → 缺失值处理”。输入与输出均为
 Numeric 数列，帮助说明全部样本估计填补值、空列规则和单次插补的推断局限。
 
 “数据 → 常量”提供固定的 π 和 e 节点，无输入、无参数，输出 Numeric 标量；运行值由 Kernel 使用 Rust 标准库的 Float64 常量提供。它们不引用图内自定义常量，后者仍通过“读取常量”节点访问。
 
-“数据处理 → 数据序列”包含待实现的“数据标签”入口；单次插补、多重插补和 MICE 插补归入“统计 → 插值处理”（`statistics.imputation`）。这四个入口仍由 `src/dataframe/inventory.rs` 维护，节点 ID 不变。数据编码入口已实现为数据序列目录中的“虚拟变量生成”，沿用 `yssbi.dataframe.encode`，不代替基础类型转换。MICE 是 MI 的具体算法，二者保留独立入口。
+单次插补、多重插补和 MICE 插补归入“统计 → 缺失值处理”（`statistics.imputation`，英文 `Missing Value Handling`）。多重插补和 MICE 入口由 `src/dataframe/inventory.rs` 维护；MICE 是 MI 的具体算法，二者保留独立入口。
+
+“数据处理 → 数据序列”中的“数据标签”由 `src/dataframe/labels.rs` 声明。数据编码入口已实现为数据序列目录中的“虚拟变量生成”，沿用 `yssbi.dataframe.encode`，不代替基础类型转换。
 
 “可视化 / Visualization”使用 `plot` 分类 ID，19 个节点均在 `src/plot/mod.rs` 声明并由 Kernel 执行：散点、折线、ECDF、KDE、直方、相关性、自相关、箱线、词云、误差线、P-P/Q-Q、ROC、象限、帕累托、组合、气泡、小提琴、热力和系数图。
 输出统一为 `plot.data` 结构化绘图数据，通过既有 Result 查询和 Plot 窗口由 D3 展示。
@@ -118,7 +120,7 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 | -------------------- | ----------------------------- | ------------------------------------------------ |
 | 描述统计             | `statistics.descriptive`      | Gini、Dagum Gini 分解、Theil T                   |
 | 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验         |
-| 插值处理             | `statistics.imputation`       | 单次插补、多重插补与 MICE 插补                   |
+| 缺失值处理           | `statistics.imputation`       | 单次插补、多重插补与 MICE 插补                   |
 | 相关与一致性         | `statistics.association`      | Pearson/偏相关/秩相关、Kappa、ICC、W、Ridit、rwg |
 | 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性         |
 | 方差分析             | `statistics.anova`            | 单因素、多因素、协方差分析、重复测量等入口       |

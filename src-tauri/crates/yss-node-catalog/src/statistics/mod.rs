@@ -948,8 +948,8 @@ const CATEGORIES: &[(&str, &str, &str)] = &[
     ("statistics.tests", "Hypothesis Tests", "假设检验"),
     (
         "statistics.imputation",
-        "Interpolation and Imputation",
-        "插值处理",
+        "Missing Value Handling",
+        "缺失值处理",
     ),
     (
         "statistics.association",
