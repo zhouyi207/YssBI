@@ -28,7 +28,8 @@ vi.mock("@tauri-apps/api/window", async (importOriginal) => {
 vi.mock("@/features/application/initialization", () => ({
   useAppInitialization: () => ({ status: "loading" }),
 }));
-vi.mock("@/features/application/editor/editorPanelDirty", () => ({
+vi.mock("@/features/application/editor/editorPanelDirty", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/application/editor/editorPanelDirty")>()),
   collectDirtyEditorPanels: () => [{ title: "Unsaved graph" }],
 }));
 vi.mock("@/features/core/ui/UIStore", () => ({ uiStore: { confirm3: mocks.confirm } }));

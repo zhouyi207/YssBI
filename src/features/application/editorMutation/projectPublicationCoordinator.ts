@@ -15,29 +15,27 @@ import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ChartDocument, ProjectIndexRow } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import {
-  type PreparedGraphSessions,
-  isGraphModified,
-  isGraphSaving,
-  useGraphProjectionStore,
-} from "@/features/core/dataStore/graphProjectionStore";
+import { type PreparedGraphSessions } from "@/features/core/dataStore/graphProjection";
+import { isGraphModified, isGraphSaving } from "@/features/core/graph/read";
 import {
   acceptProjectLifecycleActivation,
   captureProjectIdentity,
   captureProjectLifecycleState,
   clearProjectLifecycle,
   isCurrentProjectIdentity,
+  isProjectLifecycleStateCurrent,
   startProjectLifecycle,
   type ProjectIdentitySnapshot,
+  type ProjectLifecycleStateSnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
+import type { GraphMeta } from "@/features/core/dataStore/graphMeta";
 import type { FocusedGraphSession } from "@/features/core/graphSession/graphSessionStore";
 import type { EditorViewport } from "@/features/core/viewport/editorViewport";
 import {
-  useDocumentStateStore,
   useResourceStore,
   resourceKey,
   type DocumentState,
+  type FileSnapshots,
   type ProjectResourceMeta,
   type ResourceKey,
 } from "@/features/core/resource";
@@ -49,7 +47,6 @@ import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphSessionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
 
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
 import {
   collectResourceMutationGraphPaths,
@@ -107,8 +104,8 @@ export interface PreparedProjectSnapshotStoreState {
   readonly documents: Readonly<Record<ResourceKey, DocumentState>>;
   readonly graphMeta: Readonly<Record<string, GraphMeta>>;
   readonly databases: Readonly<Record<string, DatabaseRecord>>;
-  readonly databaseRevisions: Readonly<Record<string, number>>;
   readonly chartDocuments: Readonly<Record<string, ChartDocument>>;
+  readonly fileSnapshots: FileSnapshots;
   readonly focusedSession: FocusedGraphSession | null;
   readonly viewports: Readonly<Record<string, EditorViewport>>;
 }
@@ -186,33 +183,44 @@ export class ProjectPublicationCoordinator {
     if (!projectInstanceId || !Number.isSafeInteger(revision) || revision < 0)
       throw protocolError("project publication baseline is malformed");
   }
-  startProject(projectInstanceId: string, revision: number, index?: ProjectIndexRow): void {
+  startProject(
+    projectInstanceId: string,
+    revision: number,
+    index?: ProjectIndexRow,
+  ): ProjectIdentitySnapshot {
     this.validateProjectStart(projectInstanceId, revision);
     clearChartPreviewCache();
     clearChartLifecycleProjects();
     startProjectLifecycle(projectInstanceId);
+    const owner = captureProjectIdentity();
     this.reset(revision, index);
-    useNodeCatalogStore.getState().observeResourcePublication(projectInstanceId, revision);
+    if (isCurrentProjectIdentity(owner))
+      useNodeCatalogStore.getState().observeResourcePublication(projectInstanceId, revision);
+    return owner;
   }
   acceptProjectActivation(projectInstanceId: string, revision: number): boolean {
     if (!projectInstanceId || !Number.isSafeInteger(revision) || revision <= 0)
       throw protocolError("project activation identity is malformed");
     const result = acceptProjectLifecycleActivation(projectInstanceId, revision);
     if (result === "stale") return false;
+    const owner = captureProjectIdentity();
     if (result === "activated") {
       clearChartPreviewCache();
       clearChartLifecycleProjects();
       this.reset(0);
     }
-    return true;
+    return isCurrentProjectIdentity(owner);
   }
-  cancelProject(): void {
+  cancelProject(): ProjectLifecycleStateSnapshot {
     clearChartPreviewCache();
     clearChartLifecycleProjects();
     clearProjectLifecycle();
+    const owner = captureProjectLifecycleState();
     this.reset(0);
+    return owner;
   }
   private reset(revision: number, index?: ProjectIndexRow): void {
+    const owner = captureProjectLifecycleState();
     const error = staleLifecycleError();
     for (const pending of this.pending.values())
       for (const waiter of pending.waiters) waiter.reject(error);
@@ -225,7 +233,7 @@ export class ProjectPublicationCoordinator {
     this.phase = "idle";
     this.driverInFlight = null;
     useNodeCatalogStore.getState().clear();
-    useSidebarStore.getState().clearProjectPanels();
+    if (isProjectLifecycleStateCurrent(owner)) useSidebarStore.getState().clearProjectPanels();
   }
   capturePublicationRevision(): number {
     return this.appliedRevision;
@@ -320,31 +328,34 @@ export class ProjectPublicationCoordinator {
     while (isCurrentProjectIdentity(identity) && (this.pending.size || this.indexWaiters.length)) {
       const first = this.pending.get(this.appliedRevision + 1);
       const receipt = first?.input.result;
-      if (
-        first &&
-        receipt &&
-        receipt.deltas.length === 0 &&
-        receipt.moves.length === 0 &&
-        receipt.projectionStatus.status === "complete" &&
-        receipt.projectionReplacements.length === 0
-      ) {
-        this.appliedRevision = receipt.publicationRevision;
-        this.appliedFingerprint = first.fingerprint;
-        this.pending.delete(this.appliedRevision);
-        useNodeCatalogStore
-          .getState()
-          .observeResourcePublication(identity.projectInstanceId, this.appliedRevision);
-        for (const waiter of first.waiters)
-          waiter.resolve({ status: "applied", affectedGraphPaths: first.affectedGraphPaths });
-        continue;
-      }
       const waiting = [...this.indexWaiters];
       const owned = new Set(this.pending.values());
       const recovered =
         (!first && owned.size > 0) ||
         [...owned].some((p) => p.input.result.projectionStatus.status === "incomplete");
-      this.phase = recovered ? "recovering" : "applying";
       try {
+        if (
+          first &&
+          receipt &&
+          receipt.deltas.length === 0 &&
+          receipt.moves.length === 0 &&
+          receipt.projectionStatus.status === "complete" &&
+          receipt.projectionReplacements.length === 0
+        ) {
+          this.appliedRevision = receipt.publicationRevision;
+          this.appliedFingerprint = first.fingerprint;
+          useResourceStore.getState().advancePublicationRevision(this.appliedRevision);
+          this.assertCurrent(identity);
+          useNodeCatalogStore
+            .getState()
+            .observeResourcePublication(identity.projectInstanceId, this.appliedRevision);
+          this.assertCurrent(identity);
+          this.pending.delete(this.appliedRevision);
+          for (const waiter of first.waiters)
+            waiter.resolve({ status: "applied", affectedGraphPaths: first.affectedGraphPaths });
+          continue;
+        }
+        this.phase = recovered ? "recovering" : "applying";
         await this.publishIndex(identity, recovered);
         this.assertCurrent(identity);
         for (const waiter of waiting) waiter.resolve();
@@ -374,9 +385,12 @@ export class ProjectPublicationCoordinator {
   private async publishIndex(identity: ProjectIdentitySnapshot, recovered: boolean): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
       const locale = currentProjectionLocale();
-      const bindings = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) =>
-        useSidebarStore.getState().bindPanel({ panelId, ...identity, locale }),
-      );
+      const bindings = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) => {
+        this.assertCurrent(identity);
+        const binding = useSidebarStore.getState().bindPanel({ panelId, ...identity, locale });
+        this.assertCurrent(identity);
+        return binding;
+      });
       try {
         const previous = Object.fromEntries(
           bindings.flatMap((binding) => {
@@ -384,7 +398,10 @@ export class ProjectPublicationCoordinator {
             return snapshot ? [[binding.panelId, snapshot]] : [];
           }),
         );
-        for (const binding of bindings) useSidebarStore.getState().startPanelRequest(binding);
+        for (const binding of bindings) {
+          useSidebarStore.getState().startPanelRequest(binding);
+          this.assertCurrent(identity);
+        }
         const response = await this.dependencies.loadProjectIndex(
           identity.projectInstanceId,
           locale,
@@ -416,6 +433,7 @@ export class ProjectPublicationCoordinator {
           const changed = signature !== this.publishedIndexSignature;
           const deletedResources = collectDeletedResourceKeys(index, receipts);
           if (
+            recovered ||
             changed ||
             deletedResources.size > 0 ||
             receipts.some((r) => r.projectionReplacements.length > 0 || r.moves.length > 0)
@@ -469,13 +487,13 @@ export class ProjectPublicationCoordinator {
               const previousPath =
                 [...filePathRemaps].find(([, to]) => to === chart.chartPath)?.[0] ??
                 chart.chartPath;
-              const cached = useChartDocumentStore.getState().documents[previousPath];
+              const cached = useResourceStore.getState().chartDocuments[previousPath];
               const previous =
                 useResourceStore.getState().resources[
                   resourceKey({ id: previousPath, kind: "chart" })
                 ];
               const dirty =
-                useDocumentStateStore.getState().documents[
+                useResourceStore.getState().documents[
                   resourceKey({ id: previousPath, kind: "chart" })
                 ]?.dirty;
               const created = receipts.some((r) =>
@@ -529,13 +547,18 @@ export class ProjectPublicationCoordinator {
             this.assertCurrent(identity);
             this.publishedIndexSignature = signature;
           } else {
+            useResourceStore.getState().advancePublicationRevision(index.publicationRevision);
+            this.assertCurrent(identity);
             useSidebarStore.getState().publishPanels(activityPanels);
+            this.assertCurrent(identity);
           }
           const indexOnlyChange = changed && index.publicationRevision === this.appliedRevision;
-          this.appliedRevision = index.publicationRevision;
-          this.appliedFingerprint = covered.find(
+          const fingerprint = covered.find(
             (p) => p.input.result.publicationRevision === index.publicationRevision,
           )?.fingerprint;
+          if (index.publicationRevision !== this.appliedRevision || fingerprint !== undefined)
+            this.appliedFingerprint = fingerprint;
+          this.appliedRevision = index.publicationRevision;
           useNodeCatalogStore
             .getState()
             .observeResourcePublication(
@@ -543,6 +566,7 @@ export class ProjectPublicationCoordinator {
               index.publicationRevision,
               indexOnlyChange,
             );
+          this.assertCurrent(identity);
           for (const pending of covered) {
             const revision = pending.input.result.publicationRevision;
             this.pending.delete(revision);
@@ -560,10 +584,12 @@ export class ProjectPublicationCoordinator {
           attempt === 1 ||
           (error as { code?: string })?.code === "activity_panel_contract_invalid"
         ) {
-          for (const binding of bindings)
+          for (const binding of bindings) {
             useSidebarStore
               .getState()
               .failPanelRequest(binding, toErrorReference(error, "activity_panel_sync_failed"));
+            this.assertCurrent(identity);
+          }
           throw error;
         }
       }
@@ -574,26 +600,8 @@ export const projectPublicationCoordinator = new ProjectPublicationCoordinator({
   loadProjectIndex: (id, locale, previous) => ProjectService.getProjectIndex(id, locale, previous),
   loadChartDocument: (id, path, revision) => ChartService.loadChart(id, path, revision),
   prepareGraphSession: prepareGraphSessionForPublication,
-  captureLoadedGraphPaths: () =>
-    new Set(Object.keys(useGraphProjectionStore.getState().graphEntities)),
+  captureLoadedGraphPaths: () => new Set(Object.keys(useResourceStore.getState().graphEntities)),
   prepareSnapshot: prepareProjectSnapshotCommit,
   commitSnapshot: commitPreparedProjectSnapshot,
-  markProjectProjectionStale: () => {
-    useDocumentStateStore.setState((state) => ({
-      documents: Object.fromEntries(
-        Object.entries(state.documents).map(([key, document]) => [
-          key,
-          { ...document, stale: true },
-        ]),
-      ),
-    }));
-    useResourceStore.setState((state) => ({
-      resources: Object.fromEntries(
-        Object.entries(state.resources).map(([key, resource]) => [
-          key,
-          { ...resource, hasStaleDocument: true },
-        ]),
-      ),
-    }));
-  },
+  markProjectProjectionStale: () => useResourceStore.getState().markAllStale(),
 });

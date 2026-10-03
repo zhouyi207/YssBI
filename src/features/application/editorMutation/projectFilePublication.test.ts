@@ -5,13 +5,11 @@ import {
   collectDeletedResourceKeys,
 } from "./projectPublicationSnapshot";
 import type { ProjectSnapshotPreparation } from "./projectPublicationCoordinator";
-import { useDocProjectionStore, docProjection } from "@/features/core/resource/docProjectionStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import {
   buildFileResourceMeta,
   markResourceLoaded,
   resourceKey,
-  useDocumentStateStore,
   useResourceStore,
 } from "@/features/core/resource";
 import {
@@ -46,15 +44,12 @@ const saved: DocSnapshot = {
 beforeEach(() => {
   resetDocumentInputs();
   startProjectLifecycle("project-a");
-  useGraphProjectionStore.getState().clear();
-  useDocProjectionStore.getState().clear();
-  useDocumentStateStore.getState().clear();
   useResourceStore.getState().clear();
   useResourceStore
     .getState()
     .setSnapshot({ resources: [buildFileResourceMeta("doc", saved.path, "Report")] });
   markResourceLoaded({ id: saved.path, kind: "doc" });
-  useDocProjectionStore.getState().install(saved);
+  useResourceStore.getState().installFileSnapshot(saved);
 });
 afterEach(resetDocumentInputs);
 function setup() {
@@ -64,7 +59,7 @@ function setup() {
       saved,
       saved.content,
       (markdown): DocEdit => ({ op: "set_markdown", markdown }),
-      { edit, getSnapshot: (path) => useDocProjectionStore.getState().documents[path] },
+      { edit, getSnapshot: (path) => useResourceStore.getState().fileSnapshots.doc[path] },
     ),
   );
   input.change("unsaved text");
@@ -96,21 +91,21 @@ function setup() {
 it("preserves externally missing text until explicit discard, without restoring index membership", async () => {
   const { input, plan } = setup();
   await commitPreparedProjectSnapshot(prepareProjectSnapshotCommit(plan));
-  expect(useDocProjectionStore.getState().documents[saved.path]).toEqual(saved);
+  expect(useResourceStore.getState().fileSnapshots.doc[saved.path]).toEqual(saved);
   expect(hasPendingDocumentInput(saved.path)).toBe(true);
   input.change("still recoverable");
   expect(
     useResourceStore.getState().resources[resourceKey({ id: saved.path, kind: "doc" })],
   ).toMatchObject({ exists: false, hasDirtyDocument: true });
   const command = vi.fn();
-  const actions = createFileActions<DocSnapshot, DocEdit>(docProjection, {
+  const actions = createFileActions<"doc", DocEdit>("doc", {
     read: vi.fn(),
     command,
   });
   await actions.discard(saved.path, saved.version);
   expect(command).not.toHaveBeenCalled();
   expect(hasPendingDocumentInput(saved.path)).toBe(false);
-  expect(useDocProjectionStore.getState().documents[saved.path]).toBeUndefined();
+  expect(useResourceStore.getState().fileSnapshots.doc[saved.path]).toBeUndefined();
 });
 
 it("releases dirty buffers only when a deletion receipt authorizes removal", async () => {
@@ -141,8 +136,24 @@ it("releases dirty buffers only when a deletion receipt authorizes removal", asy
       ],
     },
   ]);
-  await commitPreparedProjectSnapshot(prepareProjectSnapshotCommit({ ...plan, deletedResources }));
-  expect(useDocProjectionStore.getState().documents[saved.path]).toBeUndefined();
+  const observed: unknown[] = [];
+  const key = resourceKey({ id: saved.path, kind: "doc" });
+  const stop = useResourceStore.subscribe((state) =>
+    observed.push({
+      content: state.fileSnapshots.doc[saved.path],
+      document: state.documents[key],
+      resource: state.resources[key],
+    }),
+  );
+  try {
+    await commitPreparedProjectSnapshot(
+      prepareProjectSnapshotCommit({ ...plan, deletedResources }),
+    );
+    expect(observed).toEqual([{ content: undefined, document: undefined, resource: undefined }]);
+  } finally {
+    stop();
+  }
+  expect(useResourceStore.getState().fileSnapshots.doc[saved.path]).toBeUndefined();
   expect(hasPendingDocumentInput(saved.path)).toBe(false);
   expect(
     useResourceStore.getState().resources[resourceKey({ id: saved.path, kind: "doc" })],

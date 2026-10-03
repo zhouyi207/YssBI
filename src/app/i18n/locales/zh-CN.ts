@@ -1115,8 +1115,6 @@ export const zhCN = {
       bayes_posterior_predictive_not_found: "当前结果不包含后验预测数据。",
       bayes_posterior_predictive_invalid: "后验预测数据无效。",
       bayes_service_lock_poisoned: "贝叶斯服务发生内部错误，报告问题时请提供事件编号。",
-      bayes_dataset_source_unsupported: "所选数据源不支持贝叶斯推断。",
-      bayes_dataset_load_failed: "无法读取所选数据。",
       bayes_input_empty: "所选数据源没有数据行。",
       bayes_input_response_non_finite: "响应变量包含缺失值或非有限值。",
       bayes_input_predictor_non_finite: "预测变量包含缺失值或非有限值。",
@@ -2134,6 +2132,7 @@ export const zhCN = {
       },
       errors: {
         invalidJson: "JSON 格式无效",
+        invalidValue: "值不符合所选类型",
         notArray: "请输入 JSON 数组",
         notObject: "请输入 JSON 对象",
         notDataFrameContent: "DataFrame 需为列名 → 值数组的对象，且各列长度一致",

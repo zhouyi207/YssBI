@@ -1,10 +1,22 @@
 import type { EditorViewport } from "./editorViewport";
-import { logger } from "@/features/core/observability/logger";
+import { logger } from "@/utils/frontendLogger";
 import { normalizeEditorViewport } from "./editorViewport";
+import { z } from "zod";
 
 const STORAGE_PREFIX = "yssbi-editor-view-state";
 
 export type EditorViewStateMemento = Record<string, EditorViewport>;
+
+const editorViewStateSchema = z.record(
+  z.string(),
+  z
+    .object({
+      x: z.number().finite(),
+      y: z.number().finite(),
+      scale: z.number().finite().positive(),
+    })
+    .strict(),
+);
 
 export function editorViewStateStorageKey(projectPath: string): string {
   return `${STORAGE_PREFIX}:${encodeURIComponent(projectPath)}`;
@@ -16,9 +28,8 @@ export function loadEditorViewStateMemento(projectPath: string): EditorViewState
   try {
     const raw = localStorage.getItem(editorViewStateStorageKey(projectPath));
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as EditorViewStateMemento;
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed;
+    const parsed = editorViewStateSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : {};
   } catch (error) {
     logger.app.warn(
       `Failed to load editor view state: ${error instanceof Error ? error.message : String(error)}`,

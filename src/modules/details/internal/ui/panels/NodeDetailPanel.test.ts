@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { NodeDetailPanel } from "./NodeDetailPanel";
@@ -82,7 +82,7 @@ describe("NodeDetailPanel projection selection", () => {
   afterAll(() => katexWarningSpy.mockRestore());
 
   it("renders an overlapping node id only from the requested graph path", () => {
-    useGraphProjectionStore.setState({
+    useResourceStore.setState({
       graphEntities: {
         first: bucket("first", "First"),
         second: bucket("second", "Second"),
@@ -128,7 +128,7 @@ describe("NodeDetailPanel projection selection", () => {
         ],
       },
     ];
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: graphBucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -164,7 +164,7 @@ describe("NodeDetailPanel projection selection", () => {
     });
     graphBucket.nodes.shared.pinIds = [pinId];
     graphBucket.pinConnections[pinId] = [];
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: graphBucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 

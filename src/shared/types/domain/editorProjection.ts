@@ -160,7 +160,14 @@ export interface SchemaFieldDto {
 
 export type RelationalScalarTypeDto = import("./database").SemanticType | null;
 
-export type SchemaSummaryKindDto = "input" | "project" | "append" | "rename" | "filter" | "derived";
+export type SchemaSummaryKindDto =
+  | "input"
+  | "fixed"
+  | "project"
+  | "append"
+  | "rename"
+  | "filter"
+  | "derived";
 
 export type ResolvedPortStatusDto = "resolved" | "orphan";
 export type ParameterPresentationDto = "detailPanel" | "inlineAndDetail";

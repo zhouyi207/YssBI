@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
-import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { executeDatabaseMutation } from "./databaseMutation";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
+import { executeDatabaseCreate, executeDatabaseMutation } from "./databaseMutation";
 
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 const replacementProjectInstanceId = "00000000-0000-0000-0000-000000000602";
@@ -26,7 +27,23 @@ describe("executeDatabaseMutation", () => {
     vi.restoreAllMocks();
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
-    useDatabaseStore.setState({ databases: {}, revisions: { sales: 4 } });
+    useResourceStore.getState().clear();
+    useResourceStore.getState().setSnapshot({
+      resources: [
+        {
+          id: "sales",
+          kind: "database",
+          name: "Sales",
+          revision: 4,
+          uri: resourceKey({ kind: "database", id: "sales" }),
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
+      ],
+    });
   });
 
   it("passes one revisioned lifecycle snapshot to the command and settles its receipt", async () => {
@@ -40,13 +57,87 @@ describe("executeDatabaseMutation", () => {
     });
   });
 
+  it("installs import metadata only while the receipt's created revision is still current", async () => {
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
+    for (const installedRevision of [1, 2]) {
+      const id = `import-${installedRevision}`;
+      const resourcePath = `opaque imported resource ${id}`;
+      const declaration = {
+        id,
+        name: id,
+        engine: { dataset: {} },
+        schemaVersion: 1,
+        required: false,
+      };
+      const data = {
+        id,
+        name: id,
+        columns: [{ name: "old", type: "Int64" }],
+        rowCount: 1,
+        columnCount: 1,
+      };
+      let published = useResourceStore.getState();
+      submit.mockImplementationOnce(async () => {
+        const current = useResourceStore.getState();
+        const resource = current.resources[resourceKey({ kind: "database", id: "sales" })]!;
+        current.setSnapshot({
+          resources: [
+            ...Object.values(current.resources),
+            {
+              ...resource,
+              id,
+              name: id,
+              uri: resourceKey({ kind: "database", id }),
+              revision: installedRevision,
+            },
+          ],
+          databases: {
+            ...current.databases,
+            [id]:
+              installedRevision === 1
+                ? { ...declaration, resourcePath }
+                : {
+                    ...declaration,
+                    resourcePath,
+                    rowCount: 99,
+                    columnCount: 1,
+                    columns: [{ name: "new", type: "Utf8" }],
+                  },
+          },
+          publicationRevision: installedRevision,
+        });
+        published = useResourceStore.getState();
+        return { status: "recovered", affectedGraphPaths: new Set() };
+      });
+      await executeDatabaseCreate(async ({ operationId }) => ({
+        data,
+        mutation: {
+          ...aggregate(operationId).mutation,
+          deltas: [
+            {
+              resource: { kind: "database", key: resourcePath },
+              fromRevision: 0,
+              toRevision: 1,
+              causedBy: operationId,
+              payload: { kind: "database", patch: { before: null, after: declaration } },
+            },
+          ],
+        },
+      }));
+      const current = useResourceStore.getState();
+      expect(current.databases[id]?.rowCount).toBe(installedRevision === 1 ? 1 : 99);
+      if (installedRevision === 2) expect(current).toBe(published);
+    }
+    expect(submit).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects lifecycle replacement inside the authority reader before command or publication effects", async () => {
-    const authority = useDatabaseStore.getState();
+    const authority = useResourceStore.getState();
     const before = {
       databases: structuredClone(authority.databases),
-      revisions: structuredClone(authority.revisions),
+      resources: structuredClone(authority.resources),
     };
-    vi.spyOn(useDatabaseStore, "getState").mockImplementationOnce(() => {
+    vi.spyOn(useResourceStore, "getState").mockImplementationOnce(() => {
       projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
       return authority;
     });
@@ -59,11 +150,11 @@ describe("executeDatabaseMutation", () => {
 
     expect(command).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
-    expect(useDatabaseStore.getState()).toMatchObject(before);
+    expect(useResourceStore.getState()).toMatchObject(before);
   });
 
   it("rejects missing revision authority before command or publication effects", async () => {
-    useDatabaseStore.setState({ databases: {}, revisions: {} });
+    useResourceStore.getState().clear();
     const command = vi.fn();
     const submit = vi.spyOn(projectPublicationCoordinator, "submit");
 

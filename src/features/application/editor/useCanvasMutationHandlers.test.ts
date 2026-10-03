@@ -9,7 +9,7 @@ vi.mock("@/features/application/graphEditing", () => ({
   executeGraphEdit,
 }));
 vi.mock("./edgeOperations", () => ({ insertRerouteAtConnection }));
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: {
     graph: { warn: graphWarn },
   },

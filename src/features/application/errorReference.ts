@@ -44,6 +44,12 @@ export function normalizeApplicationIpcError(error: unknown): ApplicationIpcErro
   };
 }
 
+/** Technical observations retain the boundary identity, never raw failure prose or details. */
+export function formatApplicationIpcError(error: unknown): string {
+  const { code, incidentId } = normalizeApplicationIpcError(error);
+  return incidentId ? `${code} (${incidentId})` : code;
+}
+
 export function isApplicationIpcErrorCode<Code extends string>(
   value: unknown,
   code: Code,

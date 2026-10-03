@@ -31,7 +31,6 @@ function makeWindow(initialMaximized: boolean): FakeWindow {
     isMaximized: vi.fn(() => success(maximized)),
     close: vi.fn(() => success(undefined)),
     setDecorations: vi.fn((_enabled: boolean) => success(undefined)),
-    scaleFactor: vi.fn(() => success(1)),
     onCloseRequested: vi.fn((_listener) => success(vi.fn())),
     onResized: vi.fn((listener: () => void) => {
       resizeListener = listener;

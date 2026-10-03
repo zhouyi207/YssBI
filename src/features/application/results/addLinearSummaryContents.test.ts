@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import reportFixture from "@/tests/fixtures/node-system-contracts/ols-summary-report.json";
 import type { ApplyGraphMutationInput } from "@/features/application/graphEditing/graphEditCoordinator";
-import type { GraphDocumentDto } from "@/shared/types/domain/editorMutation";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { addLinearSummaryContents } from "./addLinearSummaryContents";
 
@@ -25,8 +24,8 @@ vi.mock("@/features/application/graphEditing/graphEditCoordinator", () => ({
 vi.mock("@/features/application/project/projectIOStore", () => ({
   useProjectIOStore: { getState: () => ({ loadGraph: mocks.loadGraph }) },
 }));
-vi.mock("@/features/core/dataStore/graphProjectionStore", () => ({
-  useGraphProjectionStore: { getState: mocks.getState },
+vi.mock("@/features/core/resource/resourceStore", () => ({
+  useResourceStore: { getState: mocks.getState },
 }));
 vi.mock("@/features/core/projectLifecycle/projectLifecycleAuthority", () => ({
   captureProjectIdentity: () => ({ projectInstanceId: "project", epoch: 1 }),
@@ -71,20 +70,7 @@ const original: ResultDescriptor = {
   },
 };
 const next = { ...original, resultId: "18", provenance: { ...original.provenance, runId: "3" } };
-const document: GraphDocumentDto = {
-  nodes: {
-    [nodeId]: {
-      id: nodeId,
-      node_type: "yssbi.statistics.linear.summary",
-      position: { x: 0, y: 0 },
-      user_label: null,
-      parameters: { serial_tests: true },
-    },
-  },
-  connections: {},
-  input_states: [],
-  port_bindings: [],
-};
+const node = { id: nodeId, nodeType: "yssbi.statistics.linear.summary" };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -93,9 +79,11 @@ beforeEach(() => {
   mocks.mutate.mockResolvedValue({ status: "applied", result: { editing: { version } } });
   mocks.getState.mockReturnValue({
     sessions: { [graphPath]: { version, semanticInputHash: "hash", saving: false } },
+    graphEntities: { [graphPath]: { nodes: { [nodeId]: node } } },
   });
   mocks.execute.mockImplementation(async ({ onEvent }) => {
     onEvent({
+      resultRevision: "1",
       run: { executionSessionId: next.executionSessionId, graphPath, runId: "3" },
       kind: { type: "runCompleted" },
     });
@@ -117,7 +105,7 @@ it("adds to the source node, executes its output, and releases a superseded repo
   const additions = { acf_pacf: true as const, acf_max_lag: 3 };
   const updated = await addLinearSummaryContents(original, additions, () => true);
   const input = mocks.mutate.mock.calls[0][0] as ApplyGraphMutationInput;
-  expect(typeof input.mutation === "function" && input.mutation(document)).toEqual({
+  expect(typeof input.mutation === "function" && input.mutation(undefined)).toEqual({
     type: "setParameters",
     payload: { nodeId, parameters: additions },
   });
@@ -142,5 +130,21 @@ it("adds to the source node, executes its output, and releases a superseded repo
   await expect(addLinearSummaryContents(original, additions, () => active)).rejects.toMatchObject({
     code: "report_summary_changed",
   });
+  expect(mocks.finish).toHaveBeenCalledExactlyOnceWith("new-lease", false);
+});
+
+it("releases an acquired lease without reading a report whose consumer has ended", async () => {
+  let active = true;
+  mocks.acquire.mockImplementationOnce(async () => {
+    active = false;
+    return { leaseId: "new-lease", descriptor: next };
+  });
+
+  await expect(
+    addLinearSummaryContents(original, { acf_pacf: true }, () => active),
+  ).rejects.toMatchObject({ code: "report_summary_changed" });
+
+  expect(mocks.retainPayload).not.toHaveBeenCalled();
+  expect(mocks.loadValue).not.toHaveBeenCalled();
   expect(mocks.finish).toHaveBeenCalledExactlyOnceWith("new-lease", false);
 });

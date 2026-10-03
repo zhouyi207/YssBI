@@ -1,7 +1,9 @@
+import type { LogStreamFailure } from "@/shared/types/dto/log";
+
 export interface SequencedBatch {
   streamId: string;
   entries: readonly { sequence: number }[];
-  failure?: "storage_unavailable";
+  failure?: LogStreamFailure;
 }
 
 export interface StreamWatermark {
@@ -14,6 +16,7 @@ export type RecordStreamDiscontinuity =
   | "preactivation-overflow"
   | "sequence-gap"
   | "storage-unavailable"
+  | "subscriber-lagged"
   | "invalid-batch";
 
 export class RecordStreamDiscontinuityError extends Error {
@@ -72,6 +75,7 @@ export function createRecordBatchReceiver<Batch extends SequencedBatch>(
   }
 
   let active = false;
+  let draining = false;
   let disposed = false;
   let prepared = false;
   let pending: Batch[] = [];
@@ -84,6 +88,18 @@ export function createRecordBatchReceiver<Batch extends SequencedBatch>(
       onRecords(batch);
     } catch (error) {
       onError(error);
+    }
+  };
+
+  const drainPending = () => {
+    if (draining) return;
+    draining = true;
+    try {
+      while (!disposed && !discontinuity && pending.length > 0) {
+        deliver(pending.shift()!);
+      }
+    } finally {
+      draining = false;
     }
   };
 
@@ -107,18 +123,16 @@ export function createRecordBatchReceiver<Batch extends SequencedBatch>(
       try {
         const batch = parseBatch(value);
         if (batch.failure) {
-          discontinuity = "storage-unavailable";
+          discontinuity =
+            batch.failure === "subscriber_lagged" ? "subscriber-lagged" : "storage-unavailable";
           pending = [];
           onError(new RecordStreamDiscontinuityError(discontinuity));
           return;
         }
-        if (active) {
-          if (!acceptPreparedBatch(batch)) deliver(batch);
-          return;
-        }
         if (pending.length >= maxPendingBatches) {
-          discontinuity = "preactivation-overflow";
+          discontinuity = active ? "subscriber-lagged" : "preactivation-overflow";
           pending = [];
+          if (active) onError(new RecordStreamDiscontinuityError(discontinuity));
           return;
         }
         if (prepared && acceptPreparedBatch(batch)) {
@@ -127,6 +141,7 @@ export function createRecordBatchReceiver<Batch extends SequencedBatch>(
           return;
         }
         pending.push(batch);
+        if (active) drainPending();
       } catch (error) {
         discontinuity = "invalid-batch";
         pending = [];
@@ -161,9 +176,7 @@ export function createRecordBatchReceiver<Batch extends SequencedBatch>(
         throw new Error("Record receiver must be prepared before activation");
       }
       active = true;
-      const queued = pending;
-      pending = [];
-      for (const batch of queued) deliver(batch);
+      drainPending();
     },
     dispose: () => {
       disposed = true;

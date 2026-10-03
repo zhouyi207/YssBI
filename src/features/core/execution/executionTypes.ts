@@ -1,9 +1,14 @@
-import type { RunPhase, ResultInspectionSource } from "@/shared/types/domain/runEvent";
+import type {
+  GraphRunIdentityDto,
+  RunPhase,
+  ResultInspectionSource,
+} from "@/shared/types/domain/runEvent";
+import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
 
 export type ExecutionStatus = "idle" | "submitting" | "running" | "completed" | "error" | "unknown";
 
 export interface RunFailureProjection {
-  runId: string | null;
+  run: GraphRunIdentityDto;
   code: string;
   phase: RunPhase | null;
   source: ResultInspectionSource | null;
@@ -13,10 +18,18 @@ export interface RunFailureProjection {
 /** 单张图的执行状态 */
 export interface GraphExecutionState {
   status: ExecutionStatus;
-  runId: string | null;
+  run: GraphRunIdentityDto | null;
   /** Identity of the current local run request; edits revoke late callbacks. */
   request: object | null;
   runFailure: RunFailureProjection | null;
+  outputRuns: Record<string, OutputRun>;
+}
+
+export interface OutputRun {
+  run: GraphRunIdentityDto;
+  output: GraphOutputRefDto;
+  active: boolean;
+  resultRevision: string;
 }
 
 /** 全局执行状态 */

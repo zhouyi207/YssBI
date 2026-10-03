@@ -1,47 +1,33 @@
+import { produce } from "immer";
+import { prepareSnapshotResources } from "./projectSnapshotResources";
 import { nodeFileEntries } from "@/shared/types/domain/project";
 import {
   detailResource,
   detailResourceRef,
 } from "@/features/core/editor/detail/editorDetailPolicy";
-import {
-  hasPendingDocumentInput,
-  remapDocumentInputs,
-} from "@/features/application/resource/documentInputs";
+import { remapDocumentInputs } from "@/features/application/resource/documentInputs";
 import { shouldRetainResourceEditor } from "@/features/core/resource";
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
-import type { ProjectDatabaseIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
+import type { ProjectIndexRow } from "@/shared/types/domain/project";
 import { parseProjectIndexRow } from "@/services/project/projectService";
-import type { DatabaseRecord } from "@/shared/types/domain/database";
+import { prepareDatabaseIndexSnapshot } from "@/features/application/dataManagement/databaseRecords";
 import type {
   PreparedProjectSnapshot,
   ProjectSnapshotPreparation,
 } from "./projectPublicationCoordinator";
-import { useDatabaseStore, useGraphMetaStore } from "@/features/core/dataStore";
+import { prepareGraphMetaSnapshot } from "@/features/core/dataStore/graphMeta";
 import {
   prepareGraphSessions,
-  useGraphProjectionStore,
   canAcceptGraphSession,
-  isGraphModified,
-  isGraphSaving,
-} from "@/features/core/dataStore/graphProjectionStore";
+} from "@/features/core/dataStore/graphProjection";
+import { isGraphModified, isGraphSaving } from "@/features/core/graph/read";
 
 import {
   assertCurrentProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
-import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
-import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
-import {
-  prepareResourceProjectionSnapshot,
-  resourceKey,
-  useDocumentStateStore,
-  useResourceStore,
-  type DocumentState,
-  type ProjectResourceMeta,
-  type ResourceKey,
-} from "@/features/core/resource";
+import { resourceKey, useResourceStore, type ResourceKey } from "@/features/core/resource";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useViewportStore } from "@/features/core/viewport";
@@ -52,7 +38,6 @@ import {
 } from "@/features/application/editor/cascadeGraphPathReferences";
 import { invalidateChartPreviewCacheForMove } from "@/services/chart/chartPreviewCache";
 import { commitEditorLayoutPublication } from "./editorLayoutPublicationCommit";
-import { buildProjectResourceState } from "@/features/application/project/authoritativeProjectLoadPlan";
 import { reconcileGraphResultQueries } from "@/features/application/results/runtime";
 import { releaseDocumentInputs } from "@/features/application/resource/documentInputs";
 
@@ -168,269 +153,86 @@ export function buildProjectSnapshotFilePathRemaps(
   );
 }
 
-function remapDocuments(
-  current: Readonly<Record<ResourceKey, DocumentState>>,
-  plan: ProjectSnapshotPreparation,
-): Record<ResourceKey, DocumentState> {
-  const documents = structuredClone(current) as Record<ResourceKey, DocumentState>;
-  const graphKind = new Map(nodeFileEntries(plan.index).map((graph) => [graph.path, graph.type]));
-  for (const [from, to] of plan.pathRemaps) {
-    const kind = graphKind.get(to);
-    if (!kind) continue;
-    const fromKey = resourceKey({ id: from, kind });
-    const toKey = resourceKey({ id: to, kind });
-    const source = documents[fromKey];
-    if (!source) continue;
-    documents[toKey] = { ...source, resourceKey: toKey };
-    delete documents[fromKey];
-  }
-  for (const [from, to] of plan.filePathRemaps) {
-    const kind =
-      [...plan.index.minds, ...plan.index.docs].find((document) => document.path === to)?.kind ??
-      "chart";
-    const fromKey = resourceKey({ id: from, kind });
-    const toKey = resourceKey({ id: to, kind });
-    const source = documents[fromKey];
-    if (!source) continue;
-    documents[toKey] = { ...source, resourceKey: toKey };
-    delete documents[fromKey];
-  }
-  return documents;
-}
-
-function remapResources(
-  current: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
-  plan: ProjectSnapshotPreparation,
-): Record<ResourceKey, ProjectResourceMeta> {
-  const resources = structuredClone(current) as Record<ResourceKey, ProjectResourceMeta>;
-  const graphByPath = new Map(nodeFileEntries(plan.index).map((graph) => [graph.path, graph]));
-  for (const [from, to] of plan.pathRemaps) {
-    const graph = graphByPath.get(to);
-    if (!graph) continue;
-    const fromKey = resourceKey({ id: from, kind: graph.type });
-    const toKey = resourceKey({ id: to, kind: graph.type });
-    const source = resources[fromKey];
-    if (!source) continue;
-    resources[toKey] = { ...source, id: to, uri: toKey, name: graph.name, kind: graph.type };
-    delete resources[fromKey];
-  }
-  const fileByPath = new Map<
-    string,
-    { name: string; revision: number; kind: "chart" | "mind" | "doc" }
-  >([
-    ...plan.index.charts.map(
-      (chart) =>
-        [
-          chart.chartPath,
-          { name: chart.name, revision: chart.revision, kind: "chart" as const },
-        ] as const,
-    ),
-    ...[...plan.index.minds, ...plan.index.docs].map(
-      (document) => [document.path, document] as const,
-    ),
-  ]);
-  for (const [from, to] of plan.filePathRemaps) {
-    const file = fileByPath.get(to);
-    if (!file) continue;
-    const kind = file.kind;
-    const fromKey = resourceKey({ id: from, kind });
-    const toKey = resourceKey({ id: to, kind });
-    const source = resources[fromKey];
-    if (!source) continue;
-    resources[toKey] = {
-      ...source,
-      id: to,
-      uri: toKey,
-      name: file.name,
-      revision: file.revision,
-      kind,
-    };
-    delete resources[fromKey];
-  }
-  return resources;
-}
-
-function applyDocumentPatches(
-  documents: Record<ResourceKey, DocumentState>,
-  patches: ReturnType<typeof prepareResourceProjectionSnapshot>["documentPatches"],
-): void {
-  for (const { key, patch } of patches) {
-    const previous = documents[key];
-    documents[key] = previous
-      ? { ...previous, ...patch }
-      : {
-          resourceKey: key,
-          loaded: true,
-          dirty: patch.conflict ?? false,
-          stale: patch.stale ?? false,
-          missing: patch.missing ?? false,
-          conflict: patch.conflict ?? false,
-        };
-  }
-}
-
 function prepareViewports(
   current: ReturnType<typeof useViewportStore.getState>["viewports"],
   pathRemaps: ReadonlyMap<string, string>,
   authoritativeGraphPaths: ReadonlySet<string>,
 ) {
-  const viewports = structuredClone(current);
-  for (const [from, to] of pathRemaps) {
+  return produce(current, (viewports) => {
+    for (const [from, to] of pathRemaps) {
+      for (const key of Object.keys(viewports)) {
+        const scope = parseViewportScopeKey(key);
+        if (!scope || scope.graphPath !== from) continue;
+        const destinationKey = viewportScopeKey({ ...scope, graphPath: to });
+        if (viewports[destinationKey]) {
+          throw new Error(`recovery viewport destination '${destinationKey}' already exists`);
+        }
+        viewports[destinationKey] = viewports[key];
+        delete viewports[key];
+      }
+    }
     for (const key of Object.keys(viewports)) {
       const scope = parseViewportScopeKey(key);
-      if (!scope || scope.graphPath !== from) continue;
-      const destinationKey = viewportScopeKey({ ...scope, graphPath: to });
-      if (viewports[destinationKey]) {
-        throw new Error(`recovery viewport destination '${destinationKey}' already exists`);
-      }
-      viewports[destinationKey] = viewports[key];
-      delete viewports[key];
+      if (scope && !authoritativeGraphPaths.has(scope.graphPath)) delete viewports[key];
     }
-  }
-  for (const key of Object.keys(viewports)) {
-    const scope = parseViewportScopeKey(key);
-    if (scope && !authoritativeGraphPaths.has(scope.graphPath)) delete viewports[key];
-  }
-  return viewports;
-}
-
-function databaseFromIndex(
-  row: ProjectDatabaseIndexRow,
-  current: DatabaseRecord | undefined,
-): DatabaseRecord {
-  const runtime: Partial<DatabaseRecord> = {};
-  if (current?.columns !== undefined) runtime.columns = structuredClone(current.columns);
-  if (current?.rowCount !== undefined) runtime.rowCount = current.rowCount;
-  if (current?.columnCount !== undefined) runtime.columnCount = current.columnCount;
-  runtime.loadFailed = current?.loadFailed === true;
-  return {
-    ...runtime,
-    id: row.id,
-    resourcePath: row.resourcePath,
-    name: row.name ?? row.id,
-    engine: structuredClone(row.engine),
-    schemaVersion: row.schemaVersion,
-    required: row.required,
-  };
+  });
 }
 
 export function prepareProjectSnapshotCommit(
   plan: ProjectSnapshotPreparation,
 ): PreparedProjectSnapshot {
-  const currentDatabases = useDatabaseStore.getState().databases;
-  const databaseRows = plan.index.databases;
-  const databases = Object.fromEntries(
-    databaseRows.map((row) => [row.id, databaseFromIndex(row, currentDatabases[row.id])]),
+  const current = useResourceStore.getState();
+  const databases = prepareDatabaseIndexSnapshot(
+    plan.index.databases,
+    current.databases,
+    current.resources,
   );
-  const databaseRevisions = Object.fromEntries(databaseRows.map((row) => [row.id, row.revision]));
-  const remappedDocuments = remapDocuments(useDocumentStateStore.getState().documents, plan);
-  for (const key of plan.deletedResources) delete remappedDocuments[key];
-  const chartState = useChartDocumentStore.getState();
-  const authoritativeChartPaths = new Set(plan.index.charts.map((chart) => chart.chartPath));
-  const remappedChartDocuments = structuredClone(chartState.documents);
-  for (const [from, to] of plan.filePathRemaps) {
-    const source = remappedChartDocuments[from];
-    if (!source) continue;
-    remappedChartDocuments[to] = source;
-    delete remappedChartDocuments[from];
-  }
-  const chartDocuments = Object.fromEntries(
-    Object.entries(remappedChartDocuments).filter(
-      ([chartPath]) =>
-        authoritativeChartPaths.has(chartPath) ||
-        remappedDocuments[resourceKey({ id: chartPath, kind: "chart" })]?.dirty,
-    ),
-  );
-  for (const [path, document] of plan.chartDocuments) {
-    if (!remappedDocuments[resourceKey({ id: path, kind: "chart" })]?.dirty)
-      chartDocuments[path] = document;
-  }
-
-  const graphMeta = Object.fromEntries(
-    nodeFileEntries(plan.index).map((graph) => {
-      const functionState =
-        graph.type === "function_graph"
-          ? {
-              functionRevision: graph.functionEditorProjection.functionRevision,
-              functionSignature: structuredClone(graph.functionSignature),
-              functionInputs: structuredClone(graph.functionEditorProjection.inputs),
-              functionOutputs: structuredClone(graph.functionEditorProjection.outputs),
-            }
-          : {};
-      return [
-        graph.path,
-        {
-          type: graph.type,
-          ...functionState,
-        },
-      ];
-    }),
-  );
-
-  const remappedResources = remapResources(useResourceStore.getState().resources, plan);
-  for (const key of plan.deletedResources) delete remappedResources[key];
-  const incoming = Object.values(
-    buildProjectResourceState({
-      eventGraphs: plan.index.eventGraphs,
-      functionGraphs: plan.index.functionGraphs,
-      charts: plan.index.charts,
-      minds: plan.index.minds,
-      docs: plan.index.docs,
-      databases,
-      loadedChartPaths: new Set(Object.keys(chartDocuments)),
-    }).resources,
-  );
-  const { resources: projectedResources, documentPatches } = prepareResourceProjectionSnapshot(
-    incoming,
-    remappedResources,
-    remappedDocuments,
-  );
-  const resources = Object.fromEntries(
-    projectedResources.map((resource) => [resourceKey(resource), resource]),
-  ) as Record<ResourceKey, ProjectResourceMeta>;
-  applyDocumentPatches(remappedDocuments, documentPatches);
-  const documents = remappedDocuments;
-  const authoritativeGraphPaths = new Set(nodeFileEntries(plan.index).map((graph) => graph.path));
+  const graphs = nodeFileEntries(plan.index);
+  const graphMeta = prepareGraphMetaSnapshot(graphs, useResourceStore.getState().graphMeta);
+  const graphsByPath = new Map(graphs.map((graph) => [graph.path, graph]));
+  const authoritativeGraphPaths = new Set(graphsByPath.keys());
   const replacements = [...plan.graphSessions]
     .filter(([path, session]) => {
       const previousPath = [...plan.pathRemaps].find(([, to]) => to === path)?.[0] ?? path;
       return (
         !isGraphModified(previousPath) &&
         !isGraphSaving(previousPath) &&
-        canAcceptGraphSession(useGraphProjectionStore.getState().sessions[previousPath], session) &&
-        canAcceptGraphSession(useGraphProjectionStore.getState().sessions[path], session)
+        canAcceptGraphSession(useResourceStore.getState().sessions[previousPath], session) &&
+        canAcceptGraphSession(useResourceStore.getState().sessions[path], session)
       );
     })
     .map(([graphPath, session]) => ({ graphPath, session }));
   const retainedGraphPaths = new Set([
     ...authoritativeGraphPaths,
-    ...Object.keys(useGraphProjectionStore.getState().sessions).filter(
+    ...Object.keys(useResourceStore.getState().sessions).filter(
       (path) =>
         !plan.deletedResources.has(resourceKey({ id: path, kind: "event_graph" })) &&
         !plan.deletedResources.has(resourceKey({ id: path, kind: "function_graph" })) &&
         (isGraphModified(path) || isGraphSaving(path)),
     ),
   ]);
-  const preparedGraphs = prepareGraphSessions(replacements, retainedGraphPaths);
+  const preparedGraphs = prepareGraphSessions(
+    replacements,
+    retainedGraphPaths,
+    useResourceStore.getState(),
+  );
   const refreshedKeys = [
     ...replacements.map(({ graphPath }) => {
-      const kind = nodeFileEntries(plan.index).find((graph) => graph.path === graphPath)!.type;
+      const kind = graphsByPath.get(graphPath)!.type;
       return resourceKey({ id: graphPath, kind });
     }),
     ...[...plan.chartDocuments.keys()].map((id) => resourceKey({ id, kind: "chart" })),
   ];
-  for (const key of refreshedKeys) {
-    if (documents[key]?.dirty) continue;
-    if (documents[key])
-      documents[key] = { ...documents[key], stale: false, missing: false, conflict: false };
-    if (resources[key])
-      resources[key] = {
-        ...resources[key],
-        loaded: true,
-        hasStaleDocument: false,
-        hasConflictDocument: false,
-      };
-  }
+  const { resources, documents, chartDocuments, fileSnapshots } = prepareSnapshotResources(
+    plan,
+    {
+      resources: useResourceStore.getState().resources,
+      documents: useResourceStore.getState().documents,
+      chartDocuments: useResourceStore.getState().chartDocuments,
+      fileSnapshots: useResourceStore.getState().fileSnapshots,
+    },
+    refreshedKeys,
+  );
   const focused = useGraphSessionStore.getState().focusedSession;
   const remappedFocusedPath = focused
     ? (plan.pathRemaps.get(focused.graphPath) ?? focused.graphPath)
@@ -450,12 +252,12 @@ export function prepareProjectSnapshotCommit(
     graphProjectionPlan: preparedGraphs,
     storeState: {
       resources,
-      graphOrder: nodeFileEntries(plan.index).map((graph) => graph.path),
+      graphOrder: graphs.map((graph) => graph.path),
       documents,
       graphMeta,
       databases,
-      databaseRevisions,
       chartDocuments,
+      fileSnapshots,
       focusedSession,
       viewports,
     },
@@ -477,51 +279,44 @@ export function commitPreparedProjectSnapshot(
       assertCurrentProjectIdentity(prepared);
       const plan = prepareProjectSnapshotCommit(prepared);
       const fileProjections = [
-        { kind: "mind", store: useMindProjectionStore, index: plan.index.minds },
-        { kind: "doc", store: useDocProjectionStore, index: plan.index.docs },
+        { kind: "mind", index: plan.index.minds },
+        { kind: "doc", index: plan.index.docs },
       ] as const;
-      for (const { store, index } of fileProjections) {
+      for (const { kind, index } of fileProjections) {
+        const snapshots = useResourceStore.getState().fileSnapshots[kind];
         for (const [from, to] of plan.filePathRemaps) {
           const entry = index.find((file) => file.path === to);
-          const previous = store.getState().documents[from];
-          if (entry && previous)
+          const previous = snapshots[from];
+          if (entry && previous) {
             remapDocumentInputs(from, to, previous.version, {
               sessionId: previous.version.sessionId,
               revision: entry.revision,
             });
+            assertCurrentProjectIdentity(prepared);
+          }
         }
-      }
-      useDatabaseStore.setState({
-        databases: plan.storeState.databases,
-        revisions: plan.storeState.databaseRevisions,
-      });
-      useChartDocumentStore.setState({
-        documents: plan.storeState.chartDocuments,
-      });
-      useDocumentStateStore.setState({ documents: plan.storeState.documents });
-      useResourceStore.getState().setSnapshot({
-        resources: Object.values(plan.storeState.resources),
-        graphOrder: plan.storeState.graphOrder,
-        publicationRevision: plan.publicationRevision,
-      });
-      useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
-      useSidebarStore.getState().publishPanels(plan.activityPanels);
-      for (const { kind, store, index } of fileProjections) {
-        const paths = new Set(index.map((file) => file.path));
-        for (const path of Object.keys(store.getState().documents)) {
-          const ref = { id: path, kind };
-          if (
-            !paths.has(path) &&
-            (plan.deletedResources.has(resourceKey(ref)) ||
-              (!shouldRetainResourceEditor(ref) && !hasPendingDocumentInput(path)))
-          ) {
+        for (const path of Object.keys(snapshots)) {
+          if (!plan.storeState.fileSnapshots[kind][path]) {
             releaseDocumentInputs(path);
-            store.getState().remove(path);
+            assertCurrentProjectIdentity(prepared);
           }
         }
       }
-      const previousGraphs = useGraphProjectionStore.getState().sessions;
-      useGraphProjectionStore.setState(plan.graphProjectionPlan.state);
+      const previousGraphs = useResourceStore.getState().sessions;
+      useResourceStore.getState().setSnapshot({
+        databases: plan.storeState.databases,
+        resources: Object.values(plan.storeState.resources),
+        documents: plan.storeState.documents,
+        chartDocuments: plan.storeState.chartDocuments,
+        fileSnapshots: plan.storeState.fileSnapshots,
+        graphProjection: plan.graphProjectionPlan.state,
+        graphMeta: plan.storeState.graphMeta,
+        graphOrder: plan.storeState.graphOrder,
+        publicationRevision: plan.publicationRevision,
+      });
+      assertCurrentProjectIdentity(prepared);
+      useSidebarStore.getState().publishPanels(plan.activityPanels);
+      assertCurrentProjectIdentity(prepared);
       for (const path of new Set([
         ...plan.graphProjectionPlan.graphPaths,
         ...Object.keys(previousGraphs).filter(
@@ -529,12 +324,19 @@ export function commitPreparedProjectSnapshot(
         ),
       ])) {
         reconcileGraphResultQueries(path, previousGraphs[path]);
+        assertCurrentProjectIdentity(prepared);
       }
       useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
+      assertCurrentProjectIdentity(prepared);
       useViewportStore.setState({ viewports: plan.storeState.viewports });
-      for (const [from, to] of plan.pathRemaps) remapGraphNonViewportUiState(from, to);
+      assertCurrentProjectIdentity(prepared);
+      for (const [from, to] of plan.pathRemaps) {
+        remapGraphNonViewportUiState(from, to, prepared);
+        assertCurrentProjectIdentity(prepared);
+      }
       for (const [from, to] of plan.filePathRemaps) {
         remapFileNonViewportUiState(from, to);
+        assertCurrentProjectIdentity(prepared);
         if (!plan.index.charts.some((chart) => chart.chartPath === to)) continue;
         invalidateChartPreviewCacheForMove(plan.projectInstanceId, from, to);
       }
@@ -545,6 +347,7 @@ export function commitPreparedProjectSnapshot(
         (!focusedResource || !shouldRetainResourceEditor(focusedResource))
       ) {
         useEditorStore.getState().clearDetailFocus();
+        assertCurrentProjectIdentity(prepared);
       }
     },
     () => isCurrentProjectIdentity(prepared),

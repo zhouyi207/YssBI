@@ -9,26 +9,23 @@ import {
 } from "@/components/ui/empty";
 import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogPanelVirtualList } from "./LogPanelVirtualList";
-import type { LogPanelPresentation } from "./useLogPanelVirtualList";
 
 export interface LogPanelListProps {
   readonly filteredLogs: readonly LogRecordDto[];
-  readonly totalLogCount: number;
+  readonly hasLogs: boolean;
   readonly isInitialLoad: boolean;
   readonly autoScroll: boolean;
   readonly refreshScrollToken: number;
-  readonly presentation: LogPanelPresentation;
   readonly selectedIndex: number | null;
   readonly onSelectLog: (log: LogRecordDto) => void;
 }
 
 export function LogPanelList({
   filteredLogs,
-  totalLogCount,
+  hasLogs,
   isInitialLoad,
   autoScroll,
   refreshScrollToken,
-  presentation,
   selectedIndex,
   onSelectLog,
 }: LogPanelListProps) {
@@ -50,9 +47,9 @@ export function LogPanelList({
           <EmptyMedia variant="icon" className="text-muted-foreground">
             <VscFile />
           </EmptyMedia>
-          <EmptyTitle>{totalLogCount === 0 ? t("log.noLogs") : t("log.noMatches")}</EmptyTitle>
+          <EmptyTitle>{hasLogs ? t("log.noMatches") : t("log.noLogs")}</EmptyTitle>
           <EmptyDescription>
-            {totalLogCount === 0 ? t("log.runGraphHint") : t("log.adjustFilterHint")}
+            {hasLogs ? t("log.adjustFilterHint") : t("log.runGraphHint")}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -64,7 +61,6 @@ export function LogPanelList({
       filteredLogs={filteredLogs}
       autoScroll={autoScroll}
       refreshScrollToken={refreshScrollToken}
-      presentation={presentation}
       selectedIndex={selectedIndex}
       onSelectLog={onSelectLog}
     />

@@ -1,5 +1,5 @@
 import type { GraphConstantDragState } from "@/features/core/dnd";
-import { getGraphDocumentProjection } from "@/features/core/dataStore/graphProjectionStore";
+import { getGraphConstants } from "@/features/core/graph/read";
 import { createGraphConstantNode } from "@/features/application/graphEditing/graphConstantActions";
 import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "../editorCommandFocus";
 import { clientToWorldInCanvas, isPointInsideCanvas } from "./canvasGeometry";
@@ -21,7 +21,7 @@ export async function dropGraphConstantIntoCanvas(
     target.resourceRef !== graphPath ||
     (target.resourceKind !== "event_graph" && target.resourceKind !== "function_graph") ||
     !isEditorCommandTargetCurrent(target) ||
-    !getGraphDocumentProjection(graphPath)?.constants?.[dragState.constantId]
+    !getGraphConstants(graphPath)?.[dragState.constantId]
   )
     return false;
 

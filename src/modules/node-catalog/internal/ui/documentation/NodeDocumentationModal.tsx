@@ -22,6 +22,7 @@ import { nodeCatalogErrorText } from "@/features/application/nodeCatalog/nodeCat
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { catalogItemKey } from "@/features/domain/nodeCatalog/catalogItem";
 import type { LocalizedCatalogItem } from "@/features/domain/nodeCatalog/catalogItem";
+import { normalizeCatalogSearchText } from "@/features/domain/nodeCatalog/searchDocument";
 import { MarkdownRenderer } from "@/shared/ui/MarkdownRenderer";
 import { markdownProseClass } from "@/shared/ui/markdownProseClass";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,23 +32,14 @@ interface NodeDocumentationModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function normalizeDocumentationQuery(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/\p{Mark}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
-    .trim();
-}
-
 function searchDocumentationItems(
   items: readonly LocalizedCatalogItem[],
   query: string,
 ): LocalizedCatalogItem[] {
-  const terms = normalizeDocumentationQuery(query).split(" ").filter(Boolean);
+  const terms = normalizeCatalogSearchText(query).split(" ").filter(Boolean);
   if (terms.length === 0) return [...items];
   return items.filter((item) => {
-    const text = normalizeDocumentationQuery([item.title, ...item.aliases].join(" "));
+    const text = normalizeCatalogSearchText([item.title, ...item.aliases].join(" "));
     return terms.every((term) => text.includes(term));
   });
 }

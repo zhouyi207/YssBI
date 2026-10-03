@@ -1,5 +1,8 @@
 import { invokeCommand } from "@/services/ipc";
+import { z } from "zod";
 import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
+
+const graphUnloadAcknowledgement = z.boolean();
 
 /** Shared node-graph editor residency; file operations belong to their file-type services. */
 export class GraphService {
@@ -9,11 +12,13 @@ export class GraphService {
     projectInstanceId: string,
     discardVersion?: GraphEditVersionDto,
   ): Promise<boolean> {
-    return invokeCommand<boolean>("unload_project_graph", {
-      graphPath,
-      lifecycleToken,
-      projectInstanceId,
-      discardVersion,
-    });
+    return graphUnloadAcknowledgement.parse(
+      await invokeCommand<unknown>("unload_project_graph", {
+        graphPath,
+        lifecycleToken,
+        projectInstanceId,
+        discardVersion,
+      }),
+    );
   }
 }

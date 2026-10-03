@@ -87,10 +87,18 @@ the shared session and grid alignment; they do not attach a second wheel listene
 
 `CanvasOverlays` receives a discriminated `graph` / `palette` / `execution` model from
 the controller and must not assemble application commands.
+The workspace's `activeGraph` identity depends only on its graph path and kind.
+Selection updates preserve that identity, so the memoized overlay boundary can retain
+its palette and execution actions while their own subscriptions continue to update.
 
 ### Other consumers
 
 `editorGroupContext` owns the shared native active Graph read. Problems, Output, Project sidebar and Assistant consume it; graph-session focus bookkeeping is not a UI selection authority. Session path remapping is committed by `projectPublicationSnapshot` with the authoritative resource snapshot.
+
+`revealGraphProblem` resolves the owning pane before publishing selection and delegates Details
+context to `revealDetails`. After revealing the pane, it captures the existing editor command
+target and revalidates it after Details, activation and the layout frame. Project replacement,
+panel removal, hiding, regrouping or resource rebinding stops the pending navigation.
 
 `features/core/editor/detail/editorDetailPolicy.ts` owns the two resource-tab Details
 policies. Event Graph, Function Graph and Mind follow selection: one node shows node
@@ -179,6 +187,8 @@ that graph's resource identity to display Event/Function Details instead of a mi
 Mind activation publishes its file path, owning panel ID and resolved topic ID to that
 same Details context. Its topic selection and collapsed branches use the existing pane
 state; the Details form consumes the policy's target and uses the shared detail controls.
+The pane store owns selection deduplication and unchanged-value suppression. Canvas commands
+still synchronize Details when the selection is unchanged, without republishing pane state.
 Both canvases use the same basic shortcut resolver and viewport fitting rules.
 Mind handles its shortcuts within the owning canvas, using the existing DOM target
 and input/modal guards; Graph retains the workbench command dispatcher.
@@ -188,6 +198,17 @@ retention and commands are owned by [File operations](../resource/README.md).
 Activating a cached graph reuses its ready loading status and loaded document state instead of publishing duplicate updates. Graph panels subscribe to their own loading status; UI intent delivery subscribes only to project identity, without a broader project-state aggregate.
 
 Focus synchronization is synchronous and never loads, retries or unloads graphs. Canvas gestures call the same focus coordinator directly. Visible panels and explicit data-dependent use cases call the same `ProjectIOStore.loadGraph` entry, which deduplicates in-flight loads and reuses cached graphs. Project restoration first ensures visible graphs, then synchronizes the active editor's focus. Cache cleanup follows successful loads and panel closure instead of every focus switch; the old activation/suspension queue and bootstrap retries are removed.
+
+Projection refresh rechecks its captured project and graph lifecycle after publishing stale state,
+before starting either a clean reload or a dirty-graph resolve. A synchronous subscriber cannot
+redirect the old request to a successor project. The existing session installation clears stale
+state atomically with the frame; refresh completion does not publish that flag a second time.
+
+Graph loading captures its project before publishing loading state and rechecks ownership after
+status notifications, before cache cleanup and when reporting completion. Reentrant project
+replacement cannot redirect the old load or start cleanup against the successor. Each cache
+eviction batch also retains its original project identity across awaited unloads; a new project
+starts its own cleanup, while an older batch stops without evicting its graphs.
 
 Menus capture the native active editor across the main layout and floating tabsets. Workbench keeps one native active tabset across those layouts; no separate active-editor store is introduced. Explicit canvas actions capture their own visible panel. Both revalidate identity before committing; the menu target also revalidates the active selection. Keyboard node commands resolve the owning panel from the DOM event path or focused element, while inputs, menus, modals and import progress retain their shortcuts. Execution controls use the canvas graph path and stay mounted while focus changes.
 
@@ -208,6 +229,23 @@ graph constant. Saving gates the mutation, and Escape cancels the drag and its o
 
 Project Explorer obtains its active resource through
 `features/application/sidebar/useActiveProjectResource.ts`.
+
+Graph unloading retains the loaded frontend frame until Rust confirms removal. ResourceStore then
+removes the session, entities, result summary and document flags in one update. The existing graph
+lifecycle record identifies a pending unload, so reopening starts a new load instead of reusing the
+frame being unloaded. A refused, failed or superseded unload leaves the current frame intact;
+project identity, retention and captured discard-version checks remain in Application.
+
+## Execution observations
+
+`observeGraphRunEvent` shares acceptance and deduplication across the public subscription,
+invocation channel and recovery snapshot. Loaded graphs accept run-state updates only when
+the event's captured semantic hash and execution session match the current graph frame.
+Result inspection intents retain their reference-based, once-only delivery after graph edits.
+The Execution owner publishes run identity, per-output activity and terminal failure in one
+update. Results retains query and lease coordination; its output invalidation scope comes from
+the Execution owner. After query listeners run, the installer rechecks project, semantic and
+observation identity before publishing. Older terminal events update only outputs they still own.
 
 ## Interface rules
 

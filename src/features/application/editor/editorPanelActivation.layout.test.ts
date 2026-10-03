@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   WorkbenchEditorPanelInfo,
@@ -6,6 +6,11 @@ import type {
 } from "@/modules/workbench/internal/layout/workbenchRead";
 import { resolveEditorDetailFocus } from "@/features/core/editor/detail/editorDetailPolicy";
 import { RESOURCE_KINDS, type ResourceKind } from "@/shared/types/domain/resource";
+import {
+  startProjectLifecycle,
+  clearProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { focusGraphPanelSession } from "./graphPanelSession";
 
 const mocks = vi.hoisted(() => ({
   groups: [] as WorkbenchGroupInfo[],
@@ -94,6 +99,49 @@ describe("editor panel FlexLayout synchronization", () => {
     mocks.panels = [editorPanel("panel-a", "events/A", true)];
     mocks.groups = [group()];
     mocks.rootActivePanelInstanceId = "panel-a";
+  });
+  afterEach(() => clearProjectLifecycle());
+
+  it("stops activation after synchronous owner changes and rejects a late Details result", async () => {
+    for (const phase of [
+      "detail-project",
+      "detail-panel",
+      "detail-chart",
+      "focus-project",
+      "reveal-project",
+    ]) {
+      vi.clearAllMocks();
+      startProjectLifecycle("original");
+      const panel = editorPanel(
+        "panel-a",
+        "resource-a",
+        true,
+        phase === "detail-chart" ? "chart" : "event_graph",
+      );
+      mocks.panels = [panel, editorPanel("panel-b", "events/B")];
+      mocks.rootActivePanelInstanceId = panel.panelInstanceId;
+      if (phase.startsWith("detail")) {
+        mocks.setDetailContext.mockImplementationOnce(() => {
+          if (phase === "detail-panel") mocks.rootActivePanelInstanceId = "panel-b";
+          else startProjectLifecycle("successor");
+        });
+      } else if (phase === "focus-project") {
+        vi.mocked(focusGraphPanelSession).mockImplementationOnce(() => {
+          startProjectLifecycle("successor");
+        });
+      } else {
+        mocks.reveal.mockImplementationOnce(async () => {
+          startProjectLifecycle("successor");
+          return null;
+        });
+      }
+      expect.soft(await revealActiveEditorDetails(panel), phase).toBe(false);
+      if (phase.startsWith("detail")) {
+        expect.soft(focusGraphPanelSession, phase).not.toHaveBeenCalled();
+        expect.soft(mocks.clearFocusedSession, phase).not.toHaveBeenCalled();
+      }
+      if (phase !== "reveal-project") expect.soft(mocks.reveal, phase).not.toHaveBeenCalled();
+    }
   });
 
   it("synchronizes a FlexLayout activation with passive detail context only", () => {

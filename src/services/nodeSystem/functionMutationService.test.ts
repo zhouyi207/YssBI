@@ -29,7 +29,20 @@ describe("FunctionMutationService", () => {
       projectionReplacements: [],
       projectionStatus: { status: "complete", expectedGraphPaths: [] },
     };
-    vi.mocked(invoke).mockResolvedValue(result);
+    for (const invalid of [
+      { ...result, publicationRevision: -1 },
+      { ...result, deltas: [{}] },
+    ]) {
+      vi.mocked(invoke).mockResolvedValueOnce(invalid);
+      await expect(
+        FunctionMutationService.updateSignature(
+          result.projectInstanceId,
+          request.resource.key,
+          request,
+        ),
+      ).rejects.toThrow();
+    }
+    vi.mocked(invoke).mockResolvedValueOnce(result);
 
     await expect(
       FunctionMutationService.updateSignature(
@@ -37,7 +50,7 @@ describe("FunctionMutationService", () => {
         "functions/Compute.yssbi-function",
         request,
       ),
-    ).resolves.toBe(result);
+    ).resolves.toEqual(result);
 
     expect(invoke).toHaveBeenCalledWith("update_function_signature", {
       projectInstanceId: "00000000-0000-0000-0000-000000000601",

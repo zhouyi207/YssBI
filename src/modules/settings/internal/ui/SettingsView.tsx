@@ -10,7 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { settingsUi } from "@/features/core/settings/ui";
-import { ui } from "@/features/core/ui/ui";
+import { useSettingsReset } from "@/features/application/settings/useSettingsReset";
 import { Select } from "@/shared/ui";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,11 +18,16 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { i18n, type AppLanguage } from "@/app/i18n";
-import { formatInlineUserError } from "@/features/application/userErrorSummary";
+import type { AppLanguage } from "@/shared/types/settings";
 import "./settings.css";
 
-export function SettingsDialog({ onClose }: { readonly onClose: () => void }) {
+export function SettingsDialog({
+  modalId,
+  onClose,
+}: {
+  readonly modalId: string;
+  readonly onClose: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -50,31 +55,24 @@ export function SettingsDialog({ onClose }: { readonly onClose: () => void }) {
           </Button>
         </div>
         <div className="min-h-0 flex-1">
-          <SettingsView />
+          <SettingsView modalId={modalId} />
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-export const SettingsView: React.FC = () => {
+export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }) => {
   const { t } = useTranslation();
   const ai = useSettingsRead((s) => s.ai);
   const appearance = useSettingsRead((s) => s.appearance);
   const isLoading = useSettingsRead((s) => s.isLoading);
   const updateAi = settingsUi.updateAi;
   const updateAppearance = settingsUi.updateAppearance;
-  const resetAllToDefaults = settingsUi.resetAllToDefaults;
-  const resetAiToDefaults = settingsUi.resetAiToDefaults;
-  const resetAppearanceToDefaults = settingsUi.resetAppearanceToDefaults;
+  const { resetSettings, isResetPending, isResetting, resetAllError, sectionResetError } =
+    useSettingsReset(modalId);
 
   const [activeSection, setActiveSection] = useState("ai");
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetAllError, setResetAllError] = useState<string | null>(null);
-  const [sectionResetError, setSectionResetError] = useState<{
-    section: string;
-    message: string;
-  } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const sections = [
@@ -113,70 +111,6 @@ export const SettingsView: React.FC = () => {
     { label: t("settings.options.titleBarNative"), value: "native" },
   ];
 
-  const handleResetAll = async () => {
-    const confirmed = await ui.confirm({
-      title: t("settings.confirmResetAllTitle"),
-      message: t("settings.confirmResetAllMessage"),
-      type: "danger",
-      confirmText: t("common.restoreDefaults"),
-    });
-    if (!confirmed) return;
-
-    setIsResetting(true);
-    setResetAllError(null);
-    setSectionResetError(null);
-    try {
-      await resetAllToDefaults();
-    } catch (error) {
-      setResetAllError(
-        t("settings.restoreAllFailed", {
-          error: formatInlineUserError(error, t),
-        }),
-      );
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
-  const handleResetSection = async (section: string) => {
-    const sectionNames: Record<string, string> = {
-      ai: t("settings.sections.ai"),
-      appearance: t("settings.sections.appearance"),
-    };
-
-    const sectionName = sectionNames[section] || section;
-    const confirmed = await ui.confirm({
-      title: t("settings.confirmResetTitle"),
-      message: t("settings.confirmResetMessage", { section: sectionName }),
-      type: "danger",
-      confirmText: t("common.restoreDefaults"),
-    });
-    if (!confirmed) return;
-
-    setIsResetting(true);
-    setSectionResetError((current) => (current?.section === section ? null : current));
-    try {
-      switch (section) {
-        case "ai":
-          await resetAiToDefaults();
-          break;
-        case "appearance":
-          await resetAppearanceToDefaults();
-          break;
-      }
-    } catch (error) {
-      setSectionResetError({
-        section,
-        message: t("settings.restoreSectionFailed", {
-          section: sectionName,
-          error: formatInlineUserError(error, t),
-        }),
-      });
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="settings-view">
@@ -209,8 +143,8 @@ export const SettingsView: React.FC = () => {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleResetSection("ai")}
-                  disabled={isResetting}
+                  onClick={() => resetSettings("ai")}
+                  disabled={isResetPending}
                 >
                   {t("common.restoreDefaults")}
                 </Button>
@@ -257,8 +191,8 @@ export const SettingsView: React.FC = () => {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleResetSection("appearance")}
-                  disabled={isResetting}
+                  onClick={() => resetSettings("appearance")}
+                  disabled={isResetPending}
                 >
                   {t("common.restoreDefaults")}
                 </Button>
@@ -279,9 +213,7 @@ export const SettingsView: React.FC = () => {
                   options={languageOptions}
                   value={appearance.language}
                   onChange={(val) => {
-                    const language = val as AppLanguage;
-                    updateAppearance({ language });
-                    void i18n.changeLanguage(language);
+                    updateAppearance({ language: val as AppLanguage });
                   }}
                 />
 
@@ -354,7 +286,12 @@ export const SettingsView: React.FC = () => {
             </nav>
           </ScrollArea>
           <div className="settings-footer">
-            <Button type="button" variant="ghost" onClick={handleResetAll} disabled={isResetting}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => resetSettings("all")}
+              disabled={isResetPending}
+            >
               {isResetting ? t("common.restoring") : t("common.restoreAllDefaults")}
             </Button>
           </div>

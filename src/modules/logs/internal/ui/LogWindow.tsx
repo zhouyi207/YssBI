@@ -8,11 +8,12 @@ import { WindowChrome } from "@/shared/ui/WindowChrome";
 export const LogWindow = () => {
   const { t } = useTranslation();
   const windowActions = useCurrentWindowActions();
+  const { show } = windowActions;
   const customChrome = useCustomTitleBar();
 
   useEffect(() => {
-    void windowActions.show();
-  }, [windowActions]);
+    void show();
+  }, [show]);
 
   return (
     <div

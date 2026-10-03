@@ -17,7 +17,7 @@ import {
   canSplitWorkbenchPanel,
   hasWorkbenchPanelCloseButton,
 } from "./workbenchActivityGroup";
-import { WORKBENCH_HOME_LOCATION, WORKBENCH_EDGE_SIZES } from "./workbenchLayoutDefaults";
+import { WORKBENCH_HOME_LOCATION } from "./workbenchLayoutDefaults";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
@@ -180,10 +180,13 @@ export class WorkbenchModelOperations {
       enableFloat: canFloatWorkbenchPanel(metadata),
       enableDrag: !isWorkbenchPersistentViewMetadata(metadata),
     };
+    const group = this.group(groupId);
     this.model.doAction(
-      Actions.addTab(json, this.group(groupId).getId(), DockLocation.CENTER, index, false),
+      Actions.group([
+        Actions.addTab(json, group.getId(), DockLocation.CENTER, index, false),
+        ...this.activationActions(id, group),
+      ]),
     );
-    this.activate(id);
     const panel = this.getPanel(id);
     if (!panel) throw new WorkbenchLayoutError("panel_open_failed");
     return panel;
@@ -231,12 +234,10 @@ export class WorkbenchModelOperations {
         : undefined;
     if (existing) {
       const tab = this.tab(existing.panelInstanceId)!;
-      this.model.doAction(
-        Actions.updateNodeAttributes(tab.getId(), {
-          name: request.title,
-        }),
-      );
-      this.reveal(existing.panelInstanceId);
+      const actions = this.activationActions(tab.getId(), this.group(existing.groupId));
+      if (tab.getName() !== request.title)
+        actions.unshift(Actions.updateNodeAttributes(tab.getId(), { name: request.title }));
+      if (actions.length) this.model.doAction(Actions.group(actions));
       return this.getPanel(existing.panelInstanceId)!;
     }
     const group = request.targetGroupId
@@ -315,25 +316,24 @@ export class WorkbenchModelOperations {
     );
     return this.getPanel(previous.panelInstanceId)!;
   };
-  activate = (id: string): boolean => {
-    const tab = this.tab(id);
-    if (!tab) return false;
-    const parent = tab.getParent();
+  private activationActions = (id: string, parent: TabSetNode | BorderNode): Action[] => {
     const actions: Action[] = [];
-    const maximized = this.model.getMaximizedTabset(tab.getLayoutId());
+    const layoutId = parent.getLayoutId();
+    const maximized = this.model.getMaximizedTabset(layoutId);
     if (parent instanceof TabSetNode && maximized && maximized !== parent)
-      actions.push(Actions.maximizeToggle(maximized.getId()));
-    if (
-      (parent instanceof TabSetNode || parent instanceof BorderNode) &&
-      parent.getSelectedNode() !== tab
-    )
-      actions.push(Actions.selectTab(id));
+      actions.push(Actions.maximizeToggle(maximized.getId(), layoutId));
+    if (parent.getSelectedNode()?.getId() !== id) actions.push(Actions.selectTab(id));
     if (parent instanceof BorderNode && !parent.isShowing())
       actions.push(Actions.updateNodeAttributes(parent.getId(), { show: true }));
     if (parent instanceof TabSetNode && this.model.getActiveTabset(parent.getLayoutId()) !== parent)
       actions.push(Actions.setActiveTabset(parent.getId(), parent.getLayoutId()));
-    if (tab.getLayoutId() !== Model.MAIN_LAYOUT_ID)
-      actions.push(Actions.movePopoutToFront(tab.getLayoutId()));
+    if (layoutId !== Model.MAIN_LAYOUT_ID) actions.push(Actions.movePopoutToFront(layoutId));
+    return actions;
+  };
+  activate = (id: string): boolean => {
+    const parent = this.tab(id)?.getParent();
+    if (!(parent instanceof TabSetNode || parent instanceof BorderNode)) return false;
+    const actions = this.activationActions(id, parent);
     if (actions.length) this.model.doAction(Actions.group(actions));
     return true;
   };
@@ -355,11 +355,13 @@ export class WorkbenchModelOperations {
       return false;
     const index =
       request.index ?? (tab.getParent() === target ? target.getTabNodes().indexOf(tab) : -1);
+    const actions: Action[] = [];
     if (tab.getParent() !== target || index !== target.getTabNodes().indexOf(tab))
-      this.model.doAction(
+      actions.push(
         Actions.moveNode(tab.getId(), target.getId(), DockLocation.CENTER, index, false),
       );
-    if (request.activate !== false) this.activate(tab.getId());
+    if (request.activate !== false) actions.push(...this.activationActions(tab.getId(), target));
+    if (actions.length) this.model.doAction(Actions.group(actions));
     return true;
   };
   split = (request: SplitWorkbenchPanelRequest): boolean => {
@@ -373,7 +375,12 @@ export class WorkbenchModelOperations {
       !canSplitWorkbenchPanel(metadata, target.getId())
     )
       return false;
-    this.model.doAction(
+    const actions: Action[] = [];
+    const layoutId = target.getLayoutId();
+    const maximized = this.model.getMaximizedTabset(layoutId);
+    if (request.activate !== false && maximized)
+      actions.push(Actions.maximizeToggle(maximized.getId(), layoutId));
+    actions.push(
       Actions.moveNode(
         tab.getId(),
         target.getId(),
@@ -387,7 +394,9 @@ export class WorkbenchModelOperations {
         request.activate !== false,
       ),
     );
-    if (request.activate !== false) this.activate(tab.getId());
+    if (request.activate !== false && layoutId !== Model.MAIN_LAYOUT_ID)
+      actions.push(Actions.movePopoutToFront(layoutId));
+    this.model.doAction(Actions.group(actions));
     return true;
   };
   floatPanel = (id: string): boolean => {
@@ -404,7 +413,6 @@ export class WorkbenchModelOperations {
     )
       return false;
     this.model.doAction(Actions.popoutTab(id, "float"));
-    this.activate(id);
     return true;
   };
   floatGroup = (id: string): boolean => {
@@ -419,8 +427,6 @@ export class WorkbenchModelOperations {
     )
       return false;
     this.model.doAction(Actions.popoutTabset(id, "float"));
-    const selected = group.getSelectedNode();
-    if (selected) this.activate(selected.getId());
     return true;
   };
   dockFloat = (layoutId: string): boolean => {
@@ -440,9 +446,9 @@ export class WorkbenchModelOperations {
           DockLocation.RIGHT,
           -1,
         ),
+        ...(selected ? [Actions.selectTab(selected.getId())] : []),
       ]),
     );
-    if (selected) this.activate(selected.getId());
     return true;
   };
   configureEdge = (request: ConfigureWorkbenchEdgeRequest): ConfiguredWorkbenchEdgeState => {
@@ -482,18 +488,18 @@ export class WorkbenchModelOperations {
     return true;
   };
   remapResource = (from: string, to: string): number => {
-    let count = 0;
+    const actions: Action[] = [];
     for (const tab of modelTabs(this.model)) {
       const metadata = readMetadata(tab);
       if (metadata?.role !== "editor" || metadata.resourceRef !== from) continue;
-      this.model.doAction(
+      actions.push(
         Actions.updateNodeAttributes(tab.getId(), {
           config: { ...tab.getConfig(), metadata: { ...metadata, resourceRef: to } },
         }),
       );
-      count++;
     }
-    return count;
+    if (actions.length) this.model.doAction(Actions.group(actions));
+    return actions.length;
   };
   removePanels = (ids: readonly string[]): void => {
     const tabs = [...new Set(ids)].flatMap((id) => {
@@ -507,18 +513,5 @@ export class WorkbenchModelOperations {
     }
     if (tabs.length)
       this.model.doAction(Actions.group(tabs.map((tab) => Actions.deleteTab(tab.getId()))));
-  };
-}
-
-export function readSerializedEdge(
-  layout: ReturnType<Model["toJson"]>,
-  position: WorkbenchEdgePosition,
-) {
-  const border = layout.borders?.find((node) => node.location === position);
-  if (!border) return undefined;
-  return {
-    size: border.size ?? WORKBENCH_EDGE_SIZES[position as keyof typeof WORKBENCH_EDGE_SIZES] ?? 200,
-    collapsed: (border.selected ?? -1) < 0,
-    activePanelId: border.children?.[border.selected ?? -1]?.id,
   };
 }

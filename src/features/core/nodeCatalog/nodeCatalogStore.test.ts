@@ -32,21 +32,27 @@ describe("useNodeCatalogStore", () => {
     ["locale", { locale: "en-US" }],
     ["Registry fingerprint", { registryFingerprint: "registry-2" }],
     ["resource publication revision", { resourcePublicationRevision: 8 }],
-  ] as const)("retains distinct cached responses by %s", (_dimension, overrides) => {
+  ] as const)("retains current response ownership across %s", (_dimension, overrides) => {
     const baseline = catalog();
     const changed = catalog(overrides);
     const store = useNodeCatalogStore.getState();
     const baselineOwner = store.beginRequest(baseline.projectInstanceId, baseline.locale);
     expect(baselineOwner).toBeDefined();
     expect(store.storeResponse(baselineOwner!, baseline)).toBe(true);
+    const retained = useNodeCatalogStore.getState().responses;
     const changedOwner = store.beginRequest(changed.projectInstanceId, changed.locale);
     expect(changedOwner).toBeDefined();
     expect(store.storeResponse(changedOwner!, changed)).toBe(true);
 
     const { responses } = useNodeCatalogStore.getState();
-    expect(responses[catalogResponseKey(baseline)]).toBe(baseline);
+    const sameOwner =
+      baseline.projectInstanceId === changed.projectInstanceId &&
+      baseline.locale === changed.locale;
+    expect(responses[catalogResponseKey(baseline)]).toBe(sameOwner ? undefined : baseline);
     expect(responses[catalogResponseKey(changed)]).toBe(changed);
-    expect(Object.keys(responses)).toHaveLength(2);
+    expect(Object.keys(responses)).toHaveLength(sameOwner ? 1 : 2);
+    expect(retained[catalogResponseKey(baseline)]).toBe(baseline);
+    expect(Object.keys(retained)).toHaveLength(1);
   });
 
   it("replaces equal-metadata cached response provenance with the latest DTO object", () => {
@@ -196,6 +202,12 @@ describe("useNodeCatalogStore", () => {
       minimumResourcePublicationRevision: 0,
     });
     expect(store.observeResourcePublication("project-1", 8)).toBe(false);
+
+    expect(store.observeResourcePublication("project-without-requests", 9)).toBe(true);
+    const advanced = useNodeCatalogStore.getState();
+    expect(advanced.projectWatermarks["project-without-requests"]).toBe(9);
+    expect(advanced.requests).toBe(state.requests);
+    expect(advanced.responses).toBe(state.responses);
   });
 
   it("preserves the last ready response when a refresh fails", () => {

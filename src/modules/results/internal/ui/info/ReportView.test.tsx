@@ -7,10 +7,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { ReportView } from "./ReportView";
+import { validateReportPayload } from "@/shared/types/report/reportValidation";
 
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: { data: { error: logError } },
 }));
 
@@ -63,13 +64,16 @@ describe("ReportView", () => {
     container.remove();
   });
 
-  it("logs an actionable diagnostic for a malformed canonical OLS report", () => {
+  it("logs safe report identity while displaying a malformed canonical OLS diagnostic", () => {
     act(() => {
       root.render(
         <ReportView
           descriptor={descriptor}
-          report="linearRegressionSummary"
-          data={malformedLinearRegressionReport}
+          validation={validateReportPayload(
+            descriptor,
+            "linearRegressionSummary",
+            malformedLinearRegressionReport,
+          )}
         />,
       );
     });
@@ -78,34 +82,28 @@ describe("ReportView", () => {
       "Unable to render linear regression report: coefficients.rowCount missing required field.",
     );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    expect(logError).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(logError.mock.calls[0][0])).toEqual({
-      resultId: "42",
-      runId: "7",
-      nodeId: "ols-node",
-      outputPinId: "result",
-      presentation: { kind: "report", report: "linearRegressionSummary" },
-      valueKind: "scalar",
-      fieldPath: "coefficients.rowCount",
-      reason: "missing required field",
-    });
-    expect(logError).toHaveBeenCalledWith(expect.any(String), "ReportValidation");
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      "report_validation_failed resultId=42 runId=7 nodeId=ols-node report=linearRegressionSummary valueKind=scalar",
+      "ReportValidation",
+    );
+    expect(logError.mock.calls[0][0]).not.toMatch(
+      /outputPinId|fieldPath|reason|coefficients\.rowCount|missing required field/,
+    );
   });
 
-  it("reports the exact missing OLS presentation field path", () => {
+  it("shows the exact missing OLS presentation field path without including it in logs", () => {
     act(() => {
       root.render(
         <ReportView
           descriptor={descriptor}
-          report="linearRegressionSummary"
-          data={{
+          validation={validateReportPayload(descriptor, "linearRegressionSummary", {
             ...malformedLinearRegressionReport,
             presentation: {
               ...reportFixture.presentation,
               summary: { ...reportFixture.presentation.summary, items: undefined },
             },
             coefficients: { ...malformedLinearRegressionReport.coefficients, rowCount: 1 },
-          }}
+          })}
         />,
       );
     });
@@ -113,13 +111,12 @@ describe("ReportView", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
       "Unable to render linear regression report: presentation.summary.items missing required field.",
     );
-    expect(logError).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(logError.mock.calls[0][0])).toMatchObject({
-      resultId: "42",
-      runId: "7",
-      nodeId: "ols-node",
-      fieldPath: "presentation.summary.items",
-      reason: "missing required field",
-    });
+    expect(logError).toHaveBeenCalledExactlyOnceWith(
+      "report_validation_failed resultId=42 runId=7 nodeId=ols-node report=linearRegressionSummary valueKind=scalar",
+      "ReportValidation",
+    );
+    expect(logError.mock.calls[0][0]).not.toMatch(
+      /outputPinId|fieldPath|reason|presentation\.summary\.items|missing required field/,
+    );
   });
 });

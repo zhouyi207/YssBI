@@ -8,13 +8,22 @@ import type {
   SampleDatasetSummary,
 } from "@/shared/types/dto/database";
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
+import {
+  databaseDistributionsSchema,
+  databaseEditStateSchema,
+  databaseEmptyResultSchema,
+  databaseMetadataSchema,
+  databaseRowsSchema,
+  databaseSourceEntriesSchema,
+  parseDatabaseMutationResult,
+} from "./databaseWireParser";
 
 export type { DatabaseImportSourceDTO } from "@/shared/types/dto/database";
 
 /** 分页行数据（含稳定 rowIds） */
 export interface DatabaseRowsResult {
   rows: DatabaseRow[];
-  rowIds: number[];
+  rowIds: string[];
 }
 
 export interface DatabaseMutationCommandResult<T> {
@@ -70,12 +79,15 @@ export class DatabaseService {
     sampleId: string,
     version: number,
   ): Promise<DatabaseMutationCommandResult<LoadDatabaseResult>> {
-    return await invokeCommand("import_sample_dataset", {
-      projectInstanceId,
-      operationId,
-      sampleId,
-      version,
-    });
+    return parseDatabaseMutationResult(
+      await invokeCommand<unknown>("import_sample_dataset", {
+        projectInstanceId,
+        operationId,
+        sampleId,
+        version,
+      }),
+      databaseMetadataSchema,
+    );
   }
 
   /**
@@ -86,21 +98,39 @@ export class DatabaseService {
     operationId: string,
     engine: DatabaseImportSourceDTO,
   ): Promise<DatabaseMutationCommandResult<LoadDatabaseResult>> {
-    return await invokeCommand("load_database", { projectInstanceId, operationId, engine });
+    return parseDatabaseMutationResult(
+      await invokeCommand<unknown>("load_database", { projectInstanceId, operationId, engine }),
+      databaseMetadataSchema,
+    );
   }
 
   /**
    * 获取数据库元数据（name, columns, rowCount, columnCount）
    */
-  static async getDatabaseMeta(projectInstanceId: string, id: string): Promise<LoadDatabaseResult> {
-    return await invokeCommand("get_database_meta", { projectInstanceId, id });
+  static async getDatabaseMeta(
+    projectInstanceId: string,
+    id: string,
+    expectedRevision: number,
+  ): Promise<LoadDatabaseResult> {
+    const metadata = databaseMetadataSchema.parse(
+      await invokeCommand<unknown>("get_database_meta", {
+        projectInstanceId,
+        id,
+        expectedRevision,
+      }),
+    );
+    if (metadata.id !== id)
+      throw new TypeError("Database metadata identity does not match request");
+    return metadata;
   }
 
   /**
    * 列出 SQLite 数据库中的表
    */
   static async listSqliteTables(dbPath: string): Promise<string[]> {
-    return await invokeCommand("list_sqlite_tables", { dbPath });
+    return databaseSourceEntriesSchema.parse(
+      await invokeCommand<unknown>("list_sqlite_tables", { dbPath }),
+    );
   }
 
   /**
@@ -109,14 +139,18 @@ export class DatabaseService {
    * @param connectionString 连接字符串，如 postgres://user:pass@host:5432/db 或 mysql://...
    */
   static async listSqlTables(engine: string, connectionString: string): Promise<string[]> {
-    return await invokeCommand("list_sql_tables", { engine, connectionString });
+    return databaseSourceEntriesSchema.parse(
+      await invokeCommand<unknown>("list_sql_tables", { engine, connectionString }),
+    );
   }
 
   /**
    * 列出 Excel 文件中的 Sheet
    */
   static async listExcelSheets(filePath: string): Promise<string[]> {
-    return await invokeCommand("list_excel_sheets", { filePath });
+    return databaseSourceEntriesSchema.parse(
+      await invokeCommand<unknown>("list_excel_sheets", { filePath }),
+    );
   }
 
   /**
@@ -128,12 +162,15 @@ export class DatabaseService {
     expectedRevision: number,
     id: string,
   ): Promise<DatabaseMutationCommandResult<null>> {
-    return await invokeCommand("delete_database", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-    });
+    return parseDatabaseMutationResult(
+      await invokeCommand<unknown>("delete_database", {
+        projectInstanceId,
+        operationId,
+        expectedRevision,
+        id,
+      }),
+      databaseEmptyResultSchema,
+    );
   }
 
   /**
@@ -146,13 +183,16 @@ export class DatabaseService {
     id: string,
     name: string,
   ): Promise<DatabaseMutationCommandResult<null>> {
-    return await invokeCommand("rename_database", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      name,
-    });
+    return parseDatabaseMutationResult(
+      await invokeCommand<unknown>("rename_database", {
+        projectInstanceId,
+        operationId,
+        expectedRevision,
+        id,
+        name,
+      }),
+      databaseEmptyResultSchema,
+    );
   }
 
   /**
@@ -161,25 +201,20 @@ export class DatabaseService {
   static async getDatabaseRows(
     projectInstanceId: string,
     id: string,
+    expectedRevision: number,
     offset: number,
     limit: number,
   ): Promise<DatabaseRowsResult> {
-    const payload = await invokeCommand<DatabaseRowsResult>("get_database_rows", {
-      projectInstanceId,
-      id,
-      offset,
-      limit,
-    });
-    if (
-      !payload ||
-      !Array.isArray(payload.rows) ||
-      !Array.isArray(payload.rowIds) ||
-      payload.rows.length !== payload.rowIds.length ||
-      !payload.rows.every(Array.isArray) ||
-      !payload.rowIds.every(Number.isInteger)
-    ) {
-      throw new TypeError("Invalid database rows response");
-    }
+    const payload = databaseRowsSchema.parse(
+      await invokeCommand<unknown>("get_database_rows", {
+        projectInstanceId,
+        id,
+        expectedRevision,
+        offset,
+        limit,
+      }),
+    );
+    if (payload.rows.length > limit) throw new TypeError("Database page exceeds requested limit");
     return payload;
   }
 
@@ -189,8 +224,15 @@ export class DatabaseService {
   static async getColumnDistribution(
     projectInstanceId: string,
     id: string,
+    expectedRevision: number,
   ): Promise<ColumnDistribution[]> {
-    return await invokeCommand("get_column_distribution", { projectInstanceId, id });
+    return databaseDistributionsSchema.parse(
+      await invokeCommand<unknown>("get_column_distribution", {
+        projectInstanceId,
+        id,
+        expectedRevision,
+      }),
+    );
   }
 
   static async castColumn(
@@ -202,15 +244,18 @@ export class DatabaseService {
     newDtype: string,
     force = false,
   ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("cast_column", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      colName,
-      newDtype,
-      force,
-    });
+    return parseDatabaseMutationResult(
+      await invokeCommand<unknown>("cast_column", {
+        projectInstanceId,
+        operationId,
+        expectedRevision,
+        id,
+        colName,
+        newDtype,
+        force,
+      }),
+      databaseEditStateSchema,
+    );
   }
 
   static async setColumnSemantic(
@@ -221,14 +266,17 @@ export class DatabaseService {
     colName: string,
     semantic: ColumnSemantic,
   ): Promise<DatabaseMutationCommandResult<EditState>> {
-    return await invokeCommand("set_column_semantic", {
-      projectInstanceId,
-      operationId,
-      expectedRevision,
-      id,
-      colName,
-      semantic,
-    });
+    return parseDatabaseMutationResult(
+      await invokeCommand<unknown>("set_column_semantic", {
+        projectInstanceId,
+        operationId,
+        expectedRevision,
+        id,
+        colName,
+        semantic,
+      }),
+      databaseEditStateSchema,
+    );
   }
 
   static async exportDatabase(

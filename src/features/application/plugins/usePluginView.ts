@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { pluginService } from "@/services/plugins/pluginService";
-import type { InstalledPlugin, PluginView, ViewSession } from "@/shared/types/plugins/generated";
-import { useApplicationSettings } from "@/features/application/settings/applicationSettings";
+import type { PluginView, ViewSession } from "@/shared/types/plugins/generated";
+import type { PluginSnapshot } from "./pluginRegistry";
+import { useApplicationTheme } from "@/features/application/settings/applicationSettings";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { fulfillPluginUiRequest } from "@/features/application/plugins/pluginActions";
 import { PluginViewSession, pluginViewFailure, type PluginViewFailure } from "./pluginViewSession";
@@ -28,18 +29,18 @@ export function usePluginView({
   onOpen,
   visible = true,
 }: {
-  plugin: InstalledPlugin | undefined;
+  plugin: PluginSnapshot | undefined;
   viewId: string;
   onOpen(pluginId: string, view: PluginView): void;
   visible?: boolean;
 }) {
   const { i18n } = useTranslation();
-  const { theme } = useApplicationSettings();
-  const currentProjectId = useProjectIOStore((state) => state.projectInstanceId);
-  const projectId =
-    plugin?.manifest.contributes.views.find((view) => view.id === viewId)?.scope === "project"
-      ? currentProjectId
-      : undefined;
+  const theme = useApplicationTheme();
+  const projectScoped =
+    plugin?.manifest.contributes.views.find((view) => view.id === viewId)?.scope === "project";
+  const projectId = useProjectIOStore((state) =>
+    projectScoped ? state.projectInstanceId : undefined,
+  );
   const [session, setSession] = useState<ViewSession | null>(null);
   const [error, setError] = useState<PluginViewFailure | null>(null);
   const [retry, setRetry] = useState(0);
@@ -166,10 +167,10 @@ export function usePluginView({
           message.input ?? null,
         );
         if (!isCurrent()) return;
-        const result = await fulfillPluginUiRequest(active.session.sessionId, response);
+        const result = await fulfillPluginUiRequest(active.session.sessionId, response, isCurrent);
         if (!isCurrent()) return;
-        if (result && typeof result === "object" && "openView" in result) {
-          const open = (result as { openView: { pluginId: string; view: PluginView } }).openView;
+        if (response.kind === "openView") {
+          const open = response.value.openView;
           if (open.pluginId === pluginId) onOpen(open.pluginId, open.view);
         }
         channel.port1.postMessage({ id: message.id, result });

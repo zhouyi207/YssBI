@@ -3,9 +3,9 @@ import {
   captureProjectReadContext,
   useProjectIOStore,
 } from "@/features/application/project/projectIOStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import { useResourceStore } from "@/features/core/resource";
-import { portAddressKey } from "@/features/domain/editorProjection/portAddressKey";
+import { portAddressKey } from "@/features/domain/editorProjection";
 import { getConnectionCandidates } from "@/services/nodeSystem/connectionCandidatesService";
 import type {
   ConnectionDecision,
@@ -31,10 +31,10 @@ export function useConnectionCandidates({
   // Idle canvases do not consume candidate invalidation signals. Enabling a gesture
   // reads the current owners before constructing its request identity.
   const projectInstanceId = useProjectIOStore((state) => (active ? state.projectInstanceId : null));
-  const version = useGraphProjectionStore((state) =>
+  const version = useResourceStore((state) =>
     active ? state.sessions[graphPath]?.version : undefined,
   );
-  const semanticInputHash = useGraphProjectionStore((state) =>
+  const semanticInputHash = useResourceStore((state) =>
     active ? state.sessions[graphPath]?.semanticInputHash : undefined,
   );
   const publicationRevision = useResourceStore((state) => (active ? state.indexRevision : null));
@@ -73,7 +73,7 @@ export function useConnectionCandidates({
     const context = captureProjectReadContext(projectInstanceId);
     if (!context) return;
     const isCurrent = () => {
-      const session = useGraphProjectionStore.getState().sessions[graphPath];
+      const session = useResourceStore.getState().sessions[graphPath];
       return (
         context.isCurrent() &&
         session?.version.sessionId === version.sessionId &&

@@ -4,7 +4,7 @@ import type { Root } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import "katex/dist/katex.min.css";
 import { MarkdownLink } from "./MarkdownLink";
 

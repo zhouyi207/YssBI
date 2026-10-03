@@ -60,7 +60,7 @@ vi.mock("@/app/i18n", () => ({
     t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
   },
 }));
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: { app: { error: mocks.logError, warn: mocks.logWarn } },
 }));
 

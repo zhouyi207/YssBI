@@ -1,5 +1,10 @@
 import { invokeCommand } from "@/services/ipc";
-import schema from "@/shared/types/plugins/schema.json";
+import {
+  parsePluginWire as parse,
+  parsePluginViewReply,
+  pluginExportGrantSchema,
+  pluginGarbageCountSchema,
+} from "./pluginWireParser";
 import type {
   InstalledPlugin,
   PackageInspection,
@@ -10,75 +15,11 @@ import type {
   PluginDiagnostic,
 } from "@/shared/types/plugins/generated";
 
-type Schema = {
-  $ref?: string;
-  type?: string | string[];
-  anyOf?: Schema[];
-  oneOf?: Schema[];
-  enum?: unknown[];
-  required?: string[];
-  properties?: Record<string, Schema | boolean>;
-  additionalProperties?: boolean;
-  items?: Schema;
-  minimum?: number;
-  maximum?: number;
-};
-function valid(value: unknown, shape: Schema | boolean, depth = 0): boolean {
-  if (depth > 64 || shape === false) return false;
-  if (shape === true) return true;
-  if (shape.$ref)
-    return valid(
-      value,
-      (schema.$defs as Record<string, Schema>)[shape.$ref.split("/").pop()!],
-      depth + 1,
-    );
-  if (shape.anyOf || shape.oneOf)
-    return (shape.anyOf ?? shape.oneOf)!.some((item) => valid(value, item, depth + 1));
-  if (Array.isArray(shape.type))
-    return shape.type.some((type) => valid(value, { ...shape, type }, depth + 1));
-  if (shape.enum && !shape.enum.includes(value)) return false;
-  switch (shape.type) {
-    case "null":
-      return value === null;
-    case "string":
-      return typeof value === "string";
-    case "boolean":
-      return typeof value === "boolean";
-    case "integer":
-    case "number":
-      return (
-        typeof value === "number" &&
-        Number.isFinite(value) &&
-        (shape.type !== "integer" || Number.isSafeInteger(value)) &&
-        (shape.minimum === undefined || value >= shape.minimum) &&
-        (shape.maximum === undefined || value <= shape.maximum)
-      );
-    case "array":
-      return (
-        Array.isArray(value) &&
-        value.length <= 4096 &&
-        value.every((item) => valid(item, shape.items ?? true, depth + 1))
-      );
-    case "object": {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-      const object = value as Record<string, unknown>;
-      return (
-        (shape.required ?? []).every((key) => Object.prototype.hasOwnProperty.call(object, key)) &&
-        Object.entries(object).every(([key, item]) =>
-          shape.properties?.[key] !== undefined
-            ? valid(item, shape.properties[key], depth + 1)
-            : shape.additionalProperties !== false,
-        )
-      );
-    }
-    default:
-      return true;
-  }
+function requirePluginIdentity<T extends { pluginId: string }>(value: T, pluginId: string): T {
+  if (value.pluginId !== pluginId) throw new Error("plugin_wire_invalid");
+  return value;
 }
-function parse<T>(name: keyof typeof schema.$defs, value: unknown): T {
-  if (!valid(value, schema.$defs[name] as Schema)) throw new Error("plugin_wire_invalid");
-  return value as T;
-}
+
 export const pluginService = {
   async list(): Promise<InstalledPlugin[]> {
     const value = await invokeCommand<unknown>("list_plugins");
@@ -117,11 +58,16 @@ export const pluginService = {
   detach(sessionId: string) {
     return invokeCommand<void>("detach_plugin_view", { sessionId });
   },
-  grantExport(sessionId: string, path: string) {
-    return invokeCommand<string>("grant_plugin_export", { sessionId, path });
+  async grantExport(sessionId: string, path: string) {
+    return pluginExportGrantSchema.parse(
+      await invokeCommand<unknown>("grant_plugin_export", { sessionId, path }),
+    );
   },
-  call(sessionId: string, method: string, input: unknown) {
-    return invokeCommand<unknown>("call_plugin_view", { sessionId, method, input });
+  async call(sessionId: string, method: string, input: unknown) {
+    return parsePluginViewReply(
+      method,
+      await invokeCommand<unknown>("call_plugin_view", { sessionId, method, input }),
+    );
   },
   async tasks(): Promise<TaskSnapshot[]> {
     const result = await invokeCommand<unknown>("list_plugin_tasks");
@@ -129,30 +75,43 @@ export const pluginService = {
     return result.map((task) => parse("TaskSnapshot", task));
   },
   async history(pluginId: string, cursor: string | null = null): Promise<TaskHistoryPage> {
-    return parse(
+    const page = parse<TaskHistoryPage>(
       "TaskHistoryPage",
       await invokeCommand("get_plugin_task_history", { pluginId, cursor, limit: 25 }),
     );
+    page.tasks.forEach((task) => requirePluginIdentity(task, pluginId));
+    return page;
   },
   clearHistory(pluginId: string) {
     return invokeCommand<void>("clear_plugin_task_history", { pluginId });
   },
   async storage(pluginId: string): Promise<PluginStorageUsage> {
-    return parse(
-      "PluginStorageUsage",
-      await invokeCommand("get_plugin_storage_usage", { pluginId }),
+    return requirePluginIdentity(
+      parse<PluginStorageUsage>(
+        "PluginStorageUsage",
+        await invokeCommand("get_plugin_storage_usage", { pluginId }),
+      ),
+      pluginId,
     );
   },
   async clearCache(pluginId: string): Promise<PluginStorageUsage> {
-    return parse("PluginStorageUsage", await invokeCommand("clear_plugin_cache", { pluginId }));
+    return requirePluginIdentity(
+      parse<PluginStorageUsage>(
+        "PluginStorageUsage",
+        await invokeCommand("clear_plugin_cache", { pluginId }),
+      ),
+      pluginId,
+    );
   },
-  collectGarbage() {
-    return invokeCommand<number>("collect_plugin_garbage");
+  async collectGarbage() {
+    return pluginGarbageCountSchema.parse(await invokeCommand<unknown>("collect_plugin_garbage"));
   },
   async diagnostics(pluginId: string): Promise<PluginDiagnostic[]> {
     const result = await invokeCommand<unknown>("get_plugin_diagnostics", { pluginId });
     if (!Array.isArray(result)) throw new Error("plugin_wire_invalid");
-    return result.map((item) => parse("PluginDiagnostic", item));
+    return result.map((item) =>
+      requirePluginIdentity(parse<PluginDiagnostic>("PluginDiagnostic", item), pluginId),
+    );
   },
 };
 

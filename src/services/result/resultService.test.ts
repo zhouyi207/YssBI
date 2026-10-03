@@ -1,4 +1,8 @@
-import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
+import {
+  resultSessionFixture,
+  resultReferenceFixture,
+  resultLeaseIdFixture,
+} from "@/tests/helpers/resultFixture";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -9,6 +13,8 @@ import {
   parseGraphResultState,
 } from "@/shared/types/dto/resultParser";
 import { ResultService } from "./resultService";
+import { isResultReference } from "@/shared/types/domain/result";
+import { resultReferenceField } from "@/shared/types/report/parseLinearRegression";
 import executionFixture from "@/tests/fixtures/node-system-contracts/execution-wire.json";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -40,6 +46,43 @@ const readyDescriptor = {
 };
 
 describe("result DTO parsers", () => {
+  it("shares the Rust result identity range across references and result responses", () => {
+    const page = {
+      resultId: "17",
+      offset: 0,
+      requestedLimit: 1,
+      actualCount: 0,
+      totalCount: 0,
+      hasMore: false,
+      nextOffset: null,
+      valueKind: "scalar",
+      metadata: null,
+      values: [],
+    };
+    const graphState = (resultId: string) => ({
+      ...executionFixture.graphResultState,
+      outputs: executionFixture.graphResultState.outputs.map((entry, index) =>
+        index === 0 ? { ...entry, resultId } : entry,
+      ),
+    });
+    for (const resultId of ["1", "9007199254740993", "18446744073709551615"]) {
+      const reference = resultReferenceFixture(resultId);
+      expect(isResultReference(reference)).toBe(true);
+      expect(resultReferenceField.read(reference, "$").ok).toBe(true);
+      expect(parseResultDescriptor({ ...readyDescriptor, resultId }).resultId).toBe(resultId);
+      expect(parseResultPage({ ...page, resultId }).resultId).toBe(resultId);
+      expect(parseGraphResultState(graphState(resultId)).outputs[0].resultId).toBe(resultId);
+    }
+    for (const resultId of ["0", "01", "-1", "", "18446744073709551616", "1".repeat(100)]) {
+      const reference = resultReferenceFixture(resultId);
+      expect.soft(isResultReference(reference)).toBe(false);
+      expect.soft(resultReferenceField.read(reference, "$").ok).toBe(false);
+      expect.soft(() => parseResultDescriptor({ ...readyDescriptor, resultId })).toThrow();
+      expect.soft(() => parseResultPage({ ...page, resultId })).toThrow();
+      expect.soft(() => parseGraphResultState(graphState(resultId))).toThrow();
+    }
+  });
+
   it("parses available result descriptors and rejects unrecognized fields", () => {
     expect(parseResultDescriptor(readyDescriptor)).toEqual(readyDescriptor);
     const structured = {
@@ -48,6 +91,21 @@ describe("result DTO parsers", () => {
     };
     expect(parseResultDescriptor(structured)).toEqual(structured);
     expect(() => parseResultDescriptor({ ...readyDescriptor, extra: true })).toThrow();
+    expect(() =>
+      parseResultDescriptor({
+        ...readyDescriptor,
+        provenance: { ...provenance, graphPath: "events/other.yssbi-event" },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseResultDescriptor({
+        ...readyDescriptor,
+        provenance: { ...provenance, nodeId: resultSessionFixture },
+      }),
+    ).toThrow();
+    expect(
+      parseResultDescriptor({ ...readyDescriptor, provenance: { ...provenance, output: null } }),
+    ).toMatchObject({ provenance: { output: null } });
   });
 
   it("strictly parses value, page, and metadata variants", () => {
@@ -154,7 +212,10 @@ describe("ResultService", () => {
     };
     await ResultService.getPage(resultReferenceFixture("17"), 200, 200, "observations");
     await ResultService.getPage(resultReferenceFixture("17"), 53930, 100, "structured:/fitted");
-    const response = { kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } };
+    const response = {
+      kind: "acfPacf",
+      value: { acf: [1, 0.5], pacf: [0.5], n: 53940, ciHalfWidth: 0.00844 },
+    };
     vi.mocked(invoke).mockResolvedValueOnce(response);
     await expect(ResultService.analyze(reference, { kind: "acfPacf" })).resolves.toEqual(response);
     expect(vi.mocked(invoke).mock.calls).toEqual([
@@ -212,5 +273,79 @@ describe("ResultService", () => {
     await expect(
       ResultService.getPinResult("events/contract.yssbi-event", output),
     ).resolves.toEqual(readyDescriptor);
+  });
+
+  it("rejects descriptors, output lookups and claimed leases belonging to another request", async () => {
+    const reference = resultReferenceFixture("17");
+    vi.mocked(invoke).mockResolvedValueOnce({ ...readyDescriptor, resultId: "18" });
+    await expect(ResultService.getDescriptor(reference)).rejects.toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ...readyDescriptor,
+      executionSessionId: resultLeaseIdFixture(2),
+    });
+    await expect(ResultService.getDescriptor(reference)).rejects.toThrow();
+
+    vi.mocked(invoke).mockResolvedValueOnce(readyDescriptor);
+    await expect(ResultService.getPinResult("events/other.yssbi-event", output)).rejects.toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce(readyDescriptor);
+    await expect(
+      ResultService.getPinResult(provenance.graphPath, { ...output, portKey: "other" }),
+    ).rejects.toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ...readyDescriptor,
+      provenance: { ...provenance, output: null },
+    });
+    await expect(ResultService.getPinResult(provenance.graphPath, output)).rejects.toThrow();
+
+    const leaseId = resultLeaseIdFixture(3);
+    vi.mocked(invoke).mockResolvedValueOnce({
+      leaseId: resultLeaseIdFixture(4),
+      descriptor: readyDescriptor,
+    });
+    await expect(ResultService.claim(leaseId)).rejects.toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce({ leaseId, descriptor: readyDescriptor });
+    await expect(ResultService.claim(leaseId)).resolves.toEqual({
+      leaseId,
+      descriptor: readyDescriptor,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("claim_result_lease", { lease: leaseId });
+  });
+
+  it("binds pages to the requested result and range while preserving end-of-data offsets", async () => {
+    const reference = resultReferenceFixture("17");
+    const page = {
+      resultId: "17",
+      offset: 2,
+      requestedLimit: 2,
+      actualCount: 2,
+      totalCount: 6,
+      hasMore: true,
+      nextOffset: 4,
+      valueKind: "sequence",
+      metadata: { columns: [{ name: "x", type: "Numeric" }] },
+      values: [[2], [3]],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce({ ...page, resultId: "18" });
+    await expect(ResultService.getPage(reference, 2, 2)).rejects.toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce({ ...page, offset: 1, nextOffset: 3 });
+    await expect(ResultService.getPage(reference, 2, 2)).rejects.toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce({ ...page, requestedLimit: 3 });
+    await expect(ResultService.getPage(reference, 2, 2, "observations")).rejects.toThrow();
+
+    vi.mocked(invoke).mockResolvedValueOnce(page);
+    await expect(ResultService.getPage(reference, 2, 2)).resolves.toEqual(page);
+    const end = {
+      ...page,
+      offset: 6,
+      actualCount: 0,
+      hasMore: false,
+      nextOffset: null,
+      values: [],
+    };
+    vi.mocked(invoke).mockResolvedValueOnce(end);
+    await expect(ResultService.getPage(reference, 12, 2, "observations")).resolves.toEqual(end);
+    const unknownEnd = { ...end, offset: 12, totalCount: null };
+    vi.mocked(invoke).mockResolvedValueOnce(unknownEnd);
+    await expect(ResultService.getPage(reference, 12, 2)).resolves.toEqual(unknownEnd);
   });
 });

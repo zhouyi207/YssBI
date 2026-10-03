@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LocalizedCatalogItem } from "./catalogItem";
 import { isLocalizedCatalogItemDto } from "@/shared/types/domain/localizedCatalog";
-import { buildCatalogSearchDocument, matchesCatalogSearchDocument } from "./searchDocument";
+import {
+  buildCatalogSearchDocument,
+  catalogSearchTerms,
+  matchesCatalogSearchDocument,
+} from "./searchDocument";
 
 function item(overrides: Partial<LocalizedCatalogItem> = {}): LocalizedCatalogItem {
   return Object.assign(
@@ -59,7 +63,12 @@ describe("catalog search documents", () => {
       "zs addparser",
     ],
   ])("matches %s", (_field, catalogItem, query) => {
-    expect(matchesCatalogSearchDocument(buildCatalogSearchDocument(catalogItem), query)).toBe(true);
+    expect(
+      matchesCatalogSearchDocument(
+        buildCatalogSearchDocument(catalogItem),
+        catalogSearchTerms(query),
+      ),
+    ).toBe(true);
   });
 
   it.each([
@@ -69,9 +78,12 @@ describe("catalog search documents", () => {
       "documentation-only-secret",
     ],
   ])("does not match %s outside the search document", (_field, catalogItem, query) => {
-    expect(matchesCatalogSearchDocument(buildCatalogSearchDocument(catalogItem), query)).toBe(
-      false,
-    );
+    expect(
+      matchesCatalogSearchDocument(
+        buildCatalogSearchDocument(catalogItem),
+        catalogSearchTerms(query),
+      ),
+    ).toBe(false);
   });
 
   it("builds deterministic polyphonic pinyin and preserves unknown characters", () => {
@@ -86,22 +98,26 @@ describe("catalog search documents", () => {
       }),
     );
 
-    expect(document).toEqual({
-      nodeTypeId: "yssbi.polyphonic.fixture",
-      localizedTitle: "重庆银行",
-      aliases: ["整数add"],
-      technicalTerms: ["技术术语"],
-      backendSearchText: ["未知𠮷a"],
-      resourceNames: ["数据源db"],
-      pinyinFull: [
+    expect(document).toBe(
+      [
+        "yssbi polyphonic fixture",
+        "重庆银行",
+        "整数add",
+        "技术术语",
+        "未知𠮷a",
+        "数据源db",
         "chong qing yin hang",
         "zheng shu add",
         "ji shu shu yu",
         "wei zhi 𠮷a",
         "shu ju yuan db",
-      ],
-      pinyinInitials: ["cqyh", "zsadd", "jssy", "wz𠮷a", "sjydb"],
-    });
+        "cqyh",
+        "zsadd",
+        "jssy",
+        "wz𠮷a",
+        "sjydb",
+      ].join(" "),
+    );
   });
 
   it("normalizes raw wire metadata once across Unicode boundary cases", () => {
@@ -113,13 +129,16 @@ describe("catalog search documents", () => {
       resourceNames: ["资源_Name"],
     });
 
-    expect(buildCatalogSearchDocument(catalogItem)).toMatchObject({
-      localizedTitle: "straße value",
-      aliases: ["cafe alias"],
-      technicalTerms: ["angstrom term"],
-      backendSearchText: ["maße backend"],
-      resourceNames: ["资源 name"],
-    });
+    const document = buildCatalogSearchDocument(catalogItem);
+    for (const text of [
+      "straße value",
+      "cafe alias",
+      "angstrom term",
+      "maße backend",
+      "资源 name",
+    ]) {
+      expect(document).toContain(text);
+    }
     for (const query of [
       "straße value",
       "cafe alias",
@@ -127,9 +146,7 @@ describe("catalog search documents", () => {
       "maße backend",
       "zi yuan name",
     ]) {
-      expect(matchesCatalogSearchDocument(buildCatalogSearchDocument(catalogItem), query)).toBe(
-        true,
-      );
+      expect(matchesCatalogSearchDocument(document, catalogSearchTerms(query))).toBe(true);
     }
   });
 
@@ -145,11 +162,17 @@ describe("catalog search documents", () => {
 
     try {
       expect(
-        matchesCatalogSearchDocument(buildCatalogSearchDocument(titleItem), "integration"),
+        matchesCatalogSearchDocument(
+          buildCatalogSearchDocument(titleItem),
+          catalogSearchTerms("integration"),
+        ),
       ).toBe(true);
-      expect(matchesCatalogSearchDocument(buildCatalogSearchDocument(aliasItem), "int64")).toBe(
-        true,
-      );
+      expect(
+        matchesCatalogSearchDocument(
+          buildCatalogSearchDocument(aliasItem),
+          catalogSearchTerms("int64"),
+        ),
+      ).toBe(true);
     } finally {
       localeLowerCase.mockRestore();
     }

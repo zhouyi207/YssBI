@@ -24,6 +24,7 @@ let listening = false;
 let switching = 0;
 let capturePending = false;
 let captureRequested = false;
+let disposed = false;
 const unlisten: (() => void)[] = [];
 
 function read(page: Page): Geometry | undefined {
@@ -43,12 +44,14 @@ function read(page: Page): Geometry | undefined {
 }
 
 async function capture(): Promise<void> {
-  if (!activePage) return;
+  if (disposed || !activePage) return;
   const native = getCurrentWindow();
-  if (await native.isMinimized()) return;
+  if ((await native.isMinimized()) || disposed) return;
   const maximized = await native.isMaximized();
+  if (disposed) return;
   if (!maximized) {
     const [position, size] = await Promise.all([native.outerPosition(), native.innerSize()]);
+    if (disposed) return;
     geometry = { x: position.x, y: position.y, width: size.width, height: size.height, maximized };
   } else if (geometry) {
     geometry = { ...geometry, maximized };
@@ -71,14 +74,15 @@ function enqueue(action: () => Promise<void>): Promise<void> {
 
 /** One native main window, with independent preferences for its two page roles. */
 export function restoreMainWindowPage(page: Page): Promise<void> {
-  if (!isTauri() || getCurrentWindow().label !== "main") return Promise.resolve();
+  if (disposed || !isTauri() || getCurrentWindow().label !== "main") return Promise.resolve();
   switching += 1;
   return enqueue(async () => {
     try {
+      if (disposed) return;
       const native = getCurrentWindow();
       if (!listening) {
         const changed = () => {
-          if (switching !== 0) return;
+          if (disposed || switching !== 0) return;
           captureRequested = true;
           if (capturePending) return;
           capturePending = true;
@@ -93,19 +97,42 @@ export function restoreMainWindowPage(page: Page): Promise<void> {
             }
           });
         };
-        unlisten.push(await native.onMoved(changed));
-        unlisten.push(await native.onResized(changed));
+        const stopMoved = await native.onMoved(changed);
+        if (disposed) {
+          stopMoved();
+          return;
+        }
+        unlisten.push(stopMoved);
+        try {
+          const stopResized = await native.onResized(changed);
+          if (disposed) {
+            stopResized();
+            return;
+          }
+          unlisten.push(stopResized);
+        } catch (error) {
+          for (const stop of unlisten.splice(0)) stop();
+          throw error;
+        }
         listening = true;
       }
       if (activePage === page) return;
-      await capture();
-      activePage = page;
-      geometry = read(page);
+      try {
+        await capture();
+      } finally {
+        // A partial restore must not capture native geometry for either page.
+        activePage = undefined;
+        geometry = undefined;
+      }
+      if (disposed) return;
+      const saved = read(page);
       await native.unmaximize();
-      if (geometry) {
-        await native.setSize(new PhysicalSize(geometry.width, geometry.height));
-        const saved = geometry;
+      if (disposed) return;
+      if (saved) {
+        await native.setSize(new PhysicalSize(saved.width, saved.height));
+        if (disposed) return;
         const monitors = await availableMonitors();
+        if (disposed) return;
         const visible = monitors.some(
           ({ position, size }) =>
             saved.x + saved.width > position.x &&
@@ -115,12 +142,17 @@ export function restoreMainWindowPage(page: Page): Promise<void> {
         );
         if (visible) await native.setPosition(new PhysicalPosition(saved.x, saved.y));
         else await native.center();
+        if (disposed) return;
         if (saved.maximized) await native.maximize();
       } else {
         const { width, height } = DEFAULT_SIZES[page];
         await native.setSize(new LogicalSize(width, height));
+        if (disposed) return;
         await native.center();
       }
+      if (disposed) return;
+      geometry = saved;
+      activePage = page;
       await capture();
     } finally {
       switching -= 1;
@@ -128,6 +160,13 @@ export function restoreMainWindowPage(page: Page): Promise<void> {
   });
 }
 
+export function disposeMainWindowGeometryForHmr(): void {
+  disposed = true;
+  activePage = undefined;
+  geometry = undefined;
+  for (const stop of unlisten.splice(0)) stop();
+}
+
 if (import.meta.hot) {
-  import.meta.hot.dispose(() => unlisten.forEach((stop) => stop()));
+  import.meta.hot.dispose(disposeMainWindowGeometryForHmr);
 }

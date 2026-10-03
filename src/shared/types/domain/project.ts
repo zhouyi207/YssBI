@@ -4,6 +4,12 @@ import type { FunctionEditorProjectionDto } from "./editorProjection";
 import type { FunctionSignatureDto } from "./editorMutation";
 import type { ChartType } from "./chart";
 
+export interface ProjectActivationResult {
+  readonly path: string;
+  readonly projectInstanceId: string;
+  readonly activationRevision: number;
+}
+
 export interface ProjectRecordRow {
   id: string;
   name: string;
@@ -12,6 +18,7 @@ export interface ProjectRecordRow {
   lastOpenedAt: string | null;
   isFavorite: boolean;
   rootIdentity: string;
+  rootIdentityState: "valid" | "invalid";
 }
 
 export type LifecycleMutationKind =

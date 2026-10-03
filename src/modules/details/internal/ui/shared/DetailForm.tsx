@@ -32,7 +32,10 @@ export function DetailForm({ children, className }: DetailFormProps) {
   );
 }
 
-interface DetailCommitInputProps {
+interface DetailCommitInputProps extends Pick<
+  ComponentProps<"input">,
+  "aria-invalid" | "aria-describedby"
+> {
   value: string;
   onCommit: (value: string) => void | Promise<void>;
   className?: string;
@@ -56,6 +59,7 @@ export function DetailCommitInput({
   onCommit,
   className,
   type = "text",
+  ...accessibility
 }: DetailCommitInputProps) {
   const [draft, setDraft] = useState(value);
   const skipNextBlurCommitRef = useRef(false);
@@ -87,6 +91,7 @@ export function DetailCommitInput({
 
   return (
     <Input
+      {...accessibility}
       className={className}
       type={type}
       value={draft}

@@ -1,6 +1,6 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
 import { type CustomCellRendererProps, type CustomHeaderProps } from "ag-grid-react";
-import { type DatabaseGridRow, type DatabaseGridSelectionModifiers } from "./databaseGridModel";
+import { selectionModifiers, type DatabaseGridRow } from "./databaseGridModel";
+import type { DatabaseGridSelectionModifiers } from "@/features/domain/databaseEditor/gridSelection";
 
 interface DatabaseColumnHeaderParams {
   columnIndex: number;
@@ -10,12 +10,6 @@ interface DatabaseColumnHeaderParams {
 }
 type DatabaseColumnHeaderProps = CustomHeaderProps<DatabaseGridRow> & DatabaseColumnHeaderParams;
 
-function selectionModifiers(event: ReactMouseEvent): DatabaseGridSelectionModifiers {
-  return {
-    additive: event.ctrlKey || event.metaKey,
-    extend: event.shiftKey,
-  };
-}
 export function DatabaseColumnHeader({
   columnIndex,
   columnType,

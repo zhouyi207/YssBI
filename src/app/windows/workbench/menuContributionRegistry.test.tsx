@@ -29,11 +29,10 @@ function fileActions() {
 }
 
 describe("Menubar editor command authorization", () => {
-  it("does not authorize mutations from a stale activeResourceRef", () => {
+  it("does not authorize mutations from history availability alone", () => {
     const items = buildEditMenuItems(
       translate,
       {
-        activeResourceRef: "events/Stale.yssbi-event",
         canUndo: true,
         canRedo: true,
         editorCommandAuthorized: false,

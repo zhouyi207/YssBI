@@ -1,10 +1,12 @@
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { useMemo, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { VscAdd, VscRemove } from "react-icons/vsc";
 
 import { Button } from "@/components/ui/button";
-import type { PinData, ConnectionData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import { useGraphRead } from "@/features/core/graph/read";
 import { Select } from "@/shared/ui/Select";
 import { useConnectionCandidates } from "@/features/application/graphEditing/useConnectionCandidates";
 import {
@@ -15,20 +17,13 @@ import {
 
 import type { NodePinViewModel } from "./NodePinViewModel";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
-import {
-  connectedPeerId,
-  projectPinConnectionOptions,
-  listPinConnections,
-} from "./nodePinConnectionOptions";
+import { connectedPeerId, projectPinConnectionOptions } from "./nodePinConnectionOptions";
 import { graphMutationMessageKey, graphMutationSucceeded } from "./nodeMutationFeedback";
 
 interface NodePinConnectionFieldProps {
   graphPath: string;
   pin: NodePinViewModel;
   pinData: DeepReadonly<PinData> | undefined;
-  pins: DeepReadonly<PinData[]>;
-  nodeTitles: Readonly<Record<string, string>>;
-  connections: DeepReadonly<ConnectionData[]>;
   disabled?: boolean;
 }
 
@@ -73,9 +68,6 @@ export function NodePinConnectionField({
   graphPath,
   pin,
   pinData,
-  pins,
-  nodeTitles,
-  connections,
   disabled = false,
 }: NodePinConnectionFieldProps) {
   const { t } = useTranslation();
@@ -91,9 +83,17 @@ export function NodePinConnectionField({
     intent: "connect",
     enabled: pickerOpen && !disabled && !busy,
   });
-  const connectionRecords = useMemo(
-    () => (anchor ? listPinConnections(anchor.id, anchor.direction, connections) : []),
-    [anchor, connections],
+  const connectionRecords = useGraphRead(
+    useShallow((snapshot) => {
+      const bucket = snapshot.graphEntities[graphPath];
+      if (!bucket || !anchor) return [];
+      return (bucket.pinConnections[anchor.id] ?? []).flatMap((id) => {
+        const connection = bucket.connections[id];
+        return connection && connectedPeerId(anchor.id, anchor.direction, connection) !== null
+          ? [connection]
+          : [];
+      });
+    }),
   );
   const connectionTargets = useMemo(
     () =>
@@ -105,6 +105,40 @@ export function NodePinConnectionField({
           .filter((id): id is string => Boolean(id)),
       ),
     [anchor, connectionRecords],
+  );
+
+  const optionIds = useMemo(() => {
+    // Candidate order comes from the backend's node/port projection. Keep connected
+    // peers visible while that query is idle or refreshing.
+    const ids = new Set(
+      Object.entries(candidates.decisions)
+        .filter(
+          ([id, decision]) =>
+            connectionTargets.has(id) ||
+            decision?.kind === "append" ||
+            decision?.kind === "replace",
+        )
+        .map(([id]) => id),
+    );
+    for (const id of connectionTargets) ids.add(id);
+    return [...ids];
+  }, [candidates.decisions, connectionTargets]);
+  const pins = useGraphRead(
+    useShallow((snapshot) => {
+      const bucket = snapshot.graphEntities[graphPath];
+      return optionIds.flatMap((id) => (bucket?.pins[id] ? [bucket.pins[id]] : []));
+    }),
+  );
+  const nodeTitles = useGraphRead(
+    useShallow((snapshot) => {
+      const bucket = snapshot.graphEntities[graphPath];
+      const titles: Record<string, string> = {};
+      for (const candidate of pins) {
+        const node = bucket?.nodes[candidate.nodeId];
+        if (node) titles[candidate.nodeId] = node.display.title;
+      }
+      return titles;
+    }),
   );
 
   const displayOptions = useMemo(() => {

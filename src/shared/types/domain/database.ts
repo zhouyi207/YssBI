@@ -90,6 +90,23 @@ export type ParquetEngineConfig = { path: string; columns?: string[] };
 export type ExcelEngineConfig = { path: string; sheet: string };
 export type DatabaseEngineDTO = { dataset: Record<string, never> };
 
+export function isDatabaseEngine(value: unknown): value is DatabaseEngineDTO {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (
+    Object.keys(value).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(value, "dataset") ||
+    !("dataset" in value)
+  )
+    return false;
+  const dataset = value.dataset;
+  return (
+    dataset !== null &&
+    typeof dataset === "object" &&
+    !Array.isArray(dataset) &&
+    Object.keys(dataset).length === 0
+  );
+}
+
 export type DatabaseImportSourceDTO =
   | { sql: { engine: DatabaseImportSqlEngineDTO; connectionString: string; table: string } }
   | { csv: CsvEngineConfig }

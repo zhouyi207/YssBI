@@ -97,9 +97,29 @@ describe("execution wire parsers", () => {
     const valid = executionWire.runEvents[0];
 
     expect(executionWire.runEvents.map(parseRunEvent)).toEqual(executionWire.runEvents);
+    for (const resultRevision of ["0", "9007199254740994", "18446744073709551615"])
+      expect(parseRunEvent({ ...valid, resultRevision }).resultRevision).toBe(resultRevision);
+    const missingRevision = record(clone(valid));
+    delete missingRevision.resultRevision;
+    expect(() => parseRunEvent(missingRevision)).toThrow("Invalid run event");
+    for (const resultRevision of [null, 1, "-1", "01", "18446744073709551616"])
+      expect(() => parseRunEvent({ ...valid, resultRevision })).toThrow("Invalid run event");
     expect([...new Set(executionWire.runEvents.map((event) => event.kind.type))]).toEqual(
       Object.keys(RUN_EVENT_KIND_TYPES),
     );
+
+    const inspection = executionWire.runEvents.find(
+      (event) => event.kind.type === "resultInspectionRequested",
+    );
+    if (!inspection) throw new Error("missing result inspection fixture");
+    for (const resultId of ["1", "9007199254740994", "18446744073709551615"]) {
+      const event = { ...inspection, kind: { ...inspection.kind, resultId } };
+      expect(parseRunEvent(event)).toEqual(event);
+    }
+    for (const resultId of ["0", "01", "18446744073709551616", "9".repeat(100)])
+      expect
+        .soft(() => parseRunEvent({ ...inspection, kind: { ...inspection.kind, resultId } }))
+        .toThrow("resultInspectionRequested");
 
     expect(() =>
       parseRunEvent({
@@ -114,6 +134,14 @@ describe("execution wire parsers", () => {
         ...valid,
         run: { ...valid.run, runId: null },
       }),
+    ).toThrow("Invalid graph run identity");
+    const missingBasis = record(clone(valid.run));
+    delete missingBasis.semanticInputHash;
+    expect(() => parseRunEvent({ ...valid, run: missingBasis })).toThrow(
+      "Invalid graph run identity",
+    );
+    expect(() =>
+      parseRunEvent({ ...valid, run: { ...valid.run, semanticInputHash: "invalid" } }),
     ).toThrow("Invalid graph run identity");
   });
 

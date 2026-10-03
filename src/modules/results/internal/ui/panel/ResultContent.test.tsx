@@ -11,7 +11,6 @@ import { ResultContent } from "./ResultContent";
 
 const mocks = vi.hoisted(() => ({
   loadPresentationWindow: vi.fn(),
-  parsePlotPayload: vi.fn(),
   plotResultView: vi.fn(),
   launchInspectablePresentation: vi.fn(),
   reportView: vi.fn(),
@@ -44,7 +43,7 @@ vi.mock("@/features/application/results", async () => {
 });
 
 vi.mock("./ResultInspector", () => ({
-  ResultInspector: (props: { descriptor: ResultDescriptor; report: string; data: unknown }) => {
+  ResultInspector: (props: unknown) => {
     mocks.reportView(props);
     return <div data-testid="report-preview">report preview</div>;
   },
@@ -52,7 +51,6 @@ vi.mock("./ResultInspector", () => ({
 
 vi.mock("@/features/application/presentation", () => ({
   loadPresentationWindow: mocks.loadPresentationWindow,
-  parsePlotPayload: mocks.parsePlotPayload,
   presentationWindowErrorMessage: () => null,
 }));
 
@@ -71,7 +69,6 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-const plotData = { points: [[1, 2]] };
 const parsedPlotPayload = {
   kind: "scatter" as const,
   data: { data: [{ x: 1, y: 2 }] },
@@ -144,9 +141,8 @@ describe("ResultContent", () => {
     mocks.loadPresentationWindow.mockResolvedValue({
       status: "ready",
       descriptor,
-      payload: { mode: "plot", chart: "scatter", data: plotData },
+      payload: { mode: "plot", plot: parsedPlotPayload },
     });
-    mocks.parsePlotPayload.mockReturnValue(parsedPlotPayload);
     mocks.launchInspectablePresentation.mockResolvedValue(undefined);
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -171,7 +167,7 @@ describe("ResultContent", () => {
     expect(mocks.reportView).toHaveBeenCalledOnce();
     const renderedReportProps = mocks.reportView.mock.calls[0][0];
     expect(renderedReportProps.descriptor).toBe(reportDescriptor);
-    expect(renderedReportProps.data).toBe(preloadedReportData);
+    expect(renderedReportProps.payload.data).toBe(preloadedReportData);
   });
 
   it("keeps the full title hierarchy when the result shell is standalone", () => {
@@ -197,9 +193,6 @@ describe("ResultContent", () => {
     await flush();
 
     expect(container.querySelector('[data-testid="plot-preview"]')).not.toBeNull();
-    expect(mocks.parsePlotPayload).toHaveBeenCalledOnce();
-    expect(mocks.parsePlotPayload.mock.calls[0][0]).toBe("scatter");
-    expect(mocks.parsePlotPayload.mock.calls[0][1]).toBe(plotData);
     expect(mocks.plotResultView).toHaveBeenCalled();
     const renderedPlotProps =
       mocks.plotResultView.mock.calls[mocks.plotResultView.mock.calls.length - 1][0];
@@ -229,12 +222,12 @@ describe("ResultContent", () => {
       .mockResolvedValueOnce({
         status: "ready",
         descriptor,
-        payload: { mode: "plot", chart: "scatter", data: { points: [[1, 2]] } },
+        payload: { mode: "plot", plot: parsedPlotPayload },
       })
       .mockResolvedValueOnce({
         status: "ready",
         descriptor: nextDescriptor,
-        payload: { mode: "plot", chart: "scatter", data: { points: [[3, 4]] } },
+        payload: { mode: "plot", plot: { kind: "scatter", data: { data: [{ x: 3, y: 4 }] } } },
       });
     mocks.launchInspectablePresentation.mockReturnValueOnce(expansion.promise);
 

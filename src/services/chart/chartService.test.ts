@@ -135,6 +135,50 @@ describe("ChartService authoritative mutation contract", () => {
 });
 
 describe("ChartService database read lifecycle contract", () => {
+  it("rejects malformed chart documents at the read boundary", async () => {
+    const document = { schemaVersion: 4, databaseId: "sales", chartType: "line", encodings: {} };
+    for (const invalid of [
+      { ...document, schemaVersion: 3 },
+      { ...document, encodings: { x: 42 } },
+      { ...document, chartType: "unknown" },
+      { ...document, chartPath },
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(invalid);
+      await expect(ChartService.loadChart(projectInstanceId, chartPath, 7)).rejects.toThrow();
+    }
+  });
+
+  it("validates plot points and formats while preserving nullable axis labels", async () => {
+    const pair = {
+      data: [{ x: 1, y: 2 }],
+      xLabel: null,
+      yLabel: "cost",
+      xFormat: "date",
+      yFormat: "number",
+    };
+    vi.mocked(invoke).mockResolvedValue(pair);
+    await expect(
+      ChartService.getPlotColumnPair(projectInstanceId, "sales", 4, "amount", "cost", 1),
+    ).resolves.toEqual(pair);
+    for (const invalid of [
+      { ...pair, data: [{ x: Infinity, y: 2 }] },
+      { ...pair, data: [{ x: 1, y: "2" }] },
+      { ...pair, xFormat: "unknown" },
+      {
+        ...pair,
+        data: [
+          { x: 1, y: 2 },
+          { x: 3, y: 4 },
+        ],
+      },
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(invalid);
+      await expect(
+        ChartService.getPlotColumnPair(projectInstanceId, "sales", 4, "amount", "cost", 1),
+      ).rejects.toThrow();
+    }
+  });
+
   it("binds document loading to the requested project publication", async () => {
     const document = { schemaVersion: 4, databaseId: "sales", chartType: "line", encodings: {} };
     vi.mocked(invoke).mockResolvedValue(document);
@@ -158,11 +202,12 @@ describe("ChartService database read lifecycle contract", () => {
       yFormat: "number",
     });
 
-    await ChartService.getPlotColumnPair(projectInstanceId, "sales", "amount", "cost", 500);
+    await ChartService.getPlotColumnPair(projectInstanceId, "sales", 4, "amount", "cost", 500);
 
     expect(invoke).toHaveBeenCalledWith("get_plot_column_pair", {
       projectInstanceId,
       databaseId: "sales",
+      expectedRevision: 4,
       xCol: "amount",
       yCol: "cost",
       maxPoints: 500,

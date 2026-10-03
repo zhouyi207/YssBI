@@ -1,4 +1,4 @@
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 import { ProjectService } from "@/services/project/projectService";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";

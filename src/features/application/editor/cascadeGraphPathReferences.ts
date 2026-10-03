@@ -2,6 +2,10 @@ import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { remapEditorViewStateGraphPath } from "@/features/core/viewport/editorViewStateMemento";
 import { remapDetailResource } from "@/features/core/editor/detail/editorDetailPolicy";
+import {
+  assertCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 function remapEditorDetailResource(from: string, to: string): void {
   if (from === to) return;
@@ -18,9 +22,15 @@ export function remapFileNonViewportUiState(from: string, to: string): void {
 }
 
 /** Migrate non-viewport editor UI state after the prepared viewport snapshot commits. */
-export function remapGraphNonViewportUiState(from: string, to: string): void {
+export function remapGraphNonViewportUiState(
+  from: string,
+  to: string,
+  project: ProjectIdentitySnapshot,
+): void {
   if (from === to) return;
+  assertCurrentProjectIdentity(project);
   remapEditorDetailResource(from, to);
+  assertCurrentProjectIdentity(project);
   const projectPath = useProjectIOStore.getState().currentPath;
   if (projectPath) remapEditorViewStateGraphPath(projectPath, from, to);
 }

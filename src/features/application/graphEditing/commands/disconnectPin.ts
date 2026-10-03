@@ -1,4 +1,4 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
 import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
@@ -8,7 +8,7 @@ export interface DisconnectPortArgs {
 
 export const disconnectPortCommand: CommandHandler<DisconnectPortArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
+    const pin = useResourceStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin) return { status: "unavailable" };
     return applyGraphMutation({
       graphPath,

@@ -10,7 +10,8 @@ import type { ChartModel } from "@/shared/charts/ChartModel";
 import { ChartPreview } from "./ChartPreview";
 
 vi.mock("@/services/chart/chartPreviewDataService", () => ({ fetchChartPreview: vi.fn() }));
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({
     t: (key: string, options?: { column?: unknown }) =>
       options?.column === undefined

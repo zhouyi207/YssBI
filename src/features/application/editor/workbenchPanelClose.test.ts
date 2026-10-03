@@ -1,3 +1,4 @@
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 vi.mock("@/features/application/resource/mindActions", () => ({
   mindActions: {
     save: vi.fn(),
@@ -18,7 +19,6 @@ vi.mock("@/features/application/resource/docActions", () => ({
 }));
 import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 import type {
   EditorResourceKind,
@@ -231,6 +231,16 @@ vi.mock("@/features/core/resource", () => ({
   isResourceDocumentDirty: (ref: { id: string; kind: string }) =>
     mocks.dirty.has(mocks.dirtyKey(ref)),
   clearResourceDocumentState: mocks.clearResourceDocumentState,
+  useResourceStore: {
+    getState: () => ({
+      ...useResourceStore.getState(),
+      chartDocuments: mocks.chartState.documents,
+      removeChartDocument: (chartPath: string) => {
+        delete mocks.chartState.documents[chartPath];
+        mocks.clearResourceDocumentState({ id: chartPath, kind: "chart" });
+      },
+    }),
+  },
 }));
 
 vi.mock("@/features/application/resource/resourceActions", () => ({
@@ -270,18 +280,6 @@ vi.mock("@/features/application/resource/resourceActions", () => ({
       return docActions.save(path);
     }
     return mocks.saveGraph(path, kind);
-  },
-}));
-
-vi.mock("@/features/core/chart/chartDocumentStore", () => ({
-  useChartDocumentStore: {
-    getState: () => ({
-      ...mocks.chartState,
-      removeDocument: (chartPath: string) => {
-        delete mocks.chartState.documents[chartPath];
-        mocks.clearResourceDocumentState({ id: chartPath, kind: "chart" });
-      },
-    }),
   },
 }));
 
@@ -408,7 +406,7 @@ function seedPanels(panels: readonly WorkbenchPanelInfo[]): void {
       metadata.role === "editor" &&
       (metadata.resourceKind === "event_graph" || metadata.resourceKind === "function_graph")
     ) {
-      useGraphProjectionStore.setState((state) => ({
+      useResourceStore.setState((state) => ({
         sessions: {
           ...state.sessions,
           [metadata.resourceRef]: {
@@ -426,10 +424,58 @@ function markDirty(resourceRef: string, resourceKind: EditorResourceKind): void 
 
 beforeEach(() => {
   mocks.reset();
-  useGraphProjectionStore.getState().clear();
+  useResourceStore.getState().clear();
 });
 
 describe("workbench panel close coordinator", () => {
+  it("preserves successor panels and documents created by finalization notifications", async () => {
+    const graphPath = "events/Reopened.yssbi-event";
+    const chartPath = "charts/Reopened.yssbi-chart";
+    for (const phase of ["project", "pane", "viewport", "detail"] as const) {
+      mocks.reset();
+      useResourceStore.getState().clear();
+      const graph = editorPanel("old-graph", graphPath);
+      const chart = editorPanel("old-chart", chartPath, "chart");
+      const document = { revision: 1, chartType: "scatter" };
+      mocks.chartState.documents = { [chartPath]: document };
+      seedPanels([graph, chart]);
+      if (phase === "project") {
+        mocks.releasePane.mockImplementationOnce(() => {
+          mocks.project.epoch++;
+          mocks.panels.push(
+            editorPanel("new-graph", graphPath),
+            editorPanel("new-chart", chartPath, "chart"),
+          );
+        });
+      } else if (phase === "pane") {
+        mocks.releasePane.mockImplementationOnce(() => {
+          mocks.panels.push(editorPanel("new-graph", graphPath));
+        });
+      } else if (phase === "viewport") {
+        mocks.releaseEditorViewport.mockImplementationOnce(() => {
+          mocks.panels.push(editorPanel("new-graph", graphPath));
+        });
+      } else {
+        mocks.clearDetailFocusForClosedPanel.mockImplementation((path: string) => {
+          if (path === chartPath) mocks.panels.push(editorPanel("new-chart", chartPath, "chart"));
+        });
+      }
+      await requestCloseWorkbenchPanels([graph.panelInstanceId, chart.panelInstanceId]);
+      if (phase === "project") {
+        expect.soft(mocks.releasePane, phase).toHaveBeenCalledTimes(1);
+        expect.soft(mocks.clearDetailFocusForClosedPanel, phase).not.toHaveBeenCalled();
+      }
+      if (phase !== "detail") {
+        expect.soft(mocks.deactivateGraphPanelSession, phase).not.toHaveBeenCalled();
+        expect.soft(mocks.unloadGraphDocument, phase).not.toHaveBeenCalled();
+        if (phase !== "viewport")
+          expect.soft(mocks.releaseEditorViewport, phase).not.toHaveBeenCalled();
+      }
+      if (phase === "project" || phase === "detail")
+        expect.soft(mocks.chartState.documents[chartPath], phase).toBe(document);
+    }
+  });
+
   it("closes the requested group members without affecting another group", async () => {
     seedPanels([
       viewPanel("logs-a", "logs", "group-a"),

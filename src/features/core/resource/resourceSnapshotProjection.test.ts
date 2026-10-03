@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  useDocumentStateStore,
   useResourceStore,
   buildFileResourceMeta,
   type ProjectResourceMeta,
 } from "@/features/core/resource";
 import { prepareResourceProjectionSnapshot } from "./resourceSnapshotProjection";
-import { selectGraphResourcesByKind } from "./resourceSelectors";
 import { resourceKey } from "./resourceTypes";
 
 function graphResource(
@@ -20,13 +18,12 @@ function graphResource(
 describe("resource projection snapshot preparation", () => {
   beforeEach(() => {
     useResourceStore.getState().clear();
-    useDocumentStateStore.getState().clear();
   });
 
   it("marks loaded clean resources stale when snapshot metadata changes", () => {
     const previous = graphResource("g1", "event_graph", "Old Name");
     previous.loaded = true;
-    useDocumentStateStore.getState().upsertDocument({
+    useResourceStore.getState().upsertDocument({
       resourceKey: resourceKey(previous),
       loaded: true,
       dirty: false,
@@ -53,7 +50,7 @@ describe("resource projection snapshot preparation", () => {
   it("retains missing loaded resources absent from the snapshot", () => {
     const previous = graphResource("g1", "event_graph", "Removed");
     previous.loaded = true;
-    useDocumentStateStore.getState().upsertDocument({
+    useResourceStore.getState().upsertDocument({
       resourceKey: resourceKey(previous),
       loaded: true,
       dirty: false,
@@ -75,22 +72,5 @@ describe("resource projection snapshot preparation", () => {
     expect(documentPatches).toEqual([
       { key: resourceKey(previous), patch: { missing: true, stale: false, conflict: false } },
     ]);
-  });
-});
-
-describe("resource selectors", () => {
-  it("derives event/function lists and first graph from ResourceStore", () => {
-    useResourceStore.getState().setSnapshot({
-      resources: [
-        graphResource("e1", "event_graph", "Event A"),
-        graphResource("f1", "function_graph", "Function A"),
-      ],
-      graphOrder: ["e1", "f1"],
-    });
-
-    const resources = useResourceStore.getState().resources;
-    expect(selectGraphResourcesByKind(resources, "event_graph")).toEqual({
-      e1: { id: "e1", name: "Event A" },
-    });
   });
 });

@@ -3,22 +3,21 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ResultJsonView } from "@/features/application/results/components/renderers/ResultRenderers";
 import { ResultViewShell } from "@/features/application/results/components/ResultViewShell";
-import type { ResultDescriptor, ResultReportKind } from "@/shared/types/domain/result";
+import type { ResultDescriptor } from "@/shared/types/domain/result";
+import type { PresentationPayload } from "@/features/application/presentation";
 import { ReportView } from "../info/ReportView";
 
 export function ResultInspector({
   descriptor,
-  report,
-  data,
+  payload,
 }: {
   descriptor: ResultDescriptor;
-  report: ResultReportKind;
-  data: unknown;
+  payload: Extract<PresentationPayload, { mode: "report" }>;
 }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<"value" | "report">("value");
   const [openedReport, setOpenedReport] = useState(false);
-  const [numericValue, setNumericValue] = useState(data);
+  const [numericValue, setNumericValue] = useState(payload.data);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
@@ -55,8 +54,7 @@ export function ResultInspector({
         <div className={mode === "report" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
           <ReportView
             descriptor={descriptor}
-            report={report}
-            data={data}
+            validation={payload.validation}
             onValueChange={setNumericValue}
           />
         </div>

@@ -1,46 +1,8 @@
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
+import type { ProjectEvent, ProjectLoadedPayload } from "@/services/project/projectEventParser";
 
 type Awaitable<T> = T | PromiseLike<T>;
-
-export interface ProjectLoadedPayload {
-  readonly result: {
-    readonly path: string;
-    readonly projectInstanceId: string;
-    readonly activationRevision: number;
-  };
-}
-
-export interface ProjectLifecycleCommittedPayload {
-  readonly result: LifecycleMutationResultDto;
-}
-
-export interface ProjectIndexInvalidatedPayload {
-  readonly projectInstanceId: string;
-  readonly source: "watcher";
-  readonly version: number;
-}
-
-export interface ResourceMutationCommittedPayload {
-  readonly result: ResourceMutationResultDto;
-}
-
-/** Low-rate Rust facts; resource receipts share the command publication owner. */
-export type ProjectEvent =
-  | { readonly type: "ProjectLoaded"; readonly payload: ProjectLoadedPayload }
-  | { readonly type: "ProjectCleared"; readonly payload: { readonly projectInstanceId: string } }
-  | {
-      readonly type: "ProjectLifecycleCommitted";
-      readonly payload: ProjectLifecycleCommittedPayload;
-    }
-  | {
-      readonly type: "ProjectIndexInvalidated";
-      readonly payload: ProjectIndexInvalidatedPayload;
-    }
-  | {
-      readonly type: "ResourceMutationCommitted";
-      readonly payload: ResourceMutationCommittedPayload;
-    };
 
 export type ProjectEventConsumptionOutcome =
   | { readonly status: "applied" }

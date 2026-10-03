@@ -23,7 +23,6 @@ import {
 import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
-import { resetResultQueryProject } from "@/features/application/results";
 
 interface ProjectSyncRuntime {
   readonly stream: ProjectEventStream;
@@ -47,7 +46,6 @@ function createConsumer(): ProjectEventConsumer {
         "event_graph",
         createProjectLifecycleReceiptDependencies(),
       );
-      if (result.invalidation.project) resetResultQueryProject();
     },
     publishResourceMutationCommitted: async (result) => {
       await projectPublicationCoordinator.submit({ result });

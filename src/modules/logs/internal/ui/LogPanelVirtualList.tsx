@@ -2,13 +2,12 @@ import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from "@/shared/config-default";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogItemRow } from "./LogItemRow";
-import { useLogPanelVirtualList, type LogPanelPresentation } from "./useLogPanelVirtualList";
+import { useLogPanelVirtualList } from "./useLogPanelVirtualList";
 
 export interface LogPanelVirtualListProps {
   readonly filteredLogs: readonly LogRecordDto[];
   readonly autoScroll: boolean;
   readonly refreshScrollToken: number;
-  readonly presentation: LogPanelPresentation;
   readonly selectedIndex: number | null;
   readonly onSelectLog: (log: LogRecordDto) => void;
 }
@@ -17,14 +16,12 @@ export function LogPanelVirtualList({
   filteredLogs,
   autoScroll,
   refreshScrollToken,
-  presentation,
   selectedIndex,
   onSelectLog,
 }: LogPanelVirtualListProps) {
   const { viewportRef, virtualizer, handleScroll } = useLogPanelVirtualList({
     filteredLogs,
     autoScroll,
-    presentation,
     refreshScrollToken,
   });
 

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { launchInspectablePresentation } from "@/features/application/execution/openInspectableResult";
 import {
   loadPresentationWindow,
-  parsePlotPayload,
   presentationWindowErrorMessage,
   type PresentationWindowState,
 } from "@/features/application/presentation";
@@ -93,16 +92,11 @@ export function ResultContent({ reference }: { reference: ResultReference }) {
   if (state.payload.mode === "report") {
     return (
       <ResultViewPresentationProvider presentation="embedded">
-        <ResultInspector
-          descriptor={state.descriptor}
-          report={state.payload.report}
-          data={state.payload.data}
-        />
+        <ResultInspector descriptor={state.descriptor} payload={state.payload} />
       </ResultViewPresentationProvider>
     );
   }
   if (state.payload.mode === "plot") {
-    const plotPayload = parsePlotPayload(state.payload.chart, state.payload.data);
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         <div className="flex h-(--panel-toolbar-height) shrink-0 items-center justify-end border-b border-border/20 bg-background px-2">
@@ -122,7 +116,10 @@ export function ResultContent({ reference }: { reference: ResultReference }) {
           </Alert>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col p-3">
-          <PlotResultView payload={plotPayload} invalidContent={t("detail.result.invalidPlot")} />
+          <PlotResultView
+            payload={state.payload.plot}
+            invalidContent={t("detail.result.invalidPlot")}
+          />
         </div>
       </div>
     );

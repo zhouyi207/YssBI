@@ -145,7 +145,13 @@ export function createPersistedWorkbenchLayout(
 export function parsePersistedWorkbenchLayout(
   candidate: unknown,
 ): ParsedPersistedWorkbenchLayout | null {
-  if (!isRecord(candidate) || !isRecord(candidate.nested)) return null;
+  if (
+    !isRecord(candidate) ||
+    Object.keys(candidate).some((key) => key !== "root" && key !== "nested") ||
+    !isRecord(candidate.nested) ||
+    Object.keys(candidate.nested).some((key) => key !== "logs")
+  )
+    return null;
   return {
     root: isValidRootLayout(candidate.root)
       ? { status: "valid", value: normalize(candidate.root) }
@@ -166,4 +172,44 @@ export function scrubProjectScopedRootLayout(layout: IJsonModel): IJsonModel {
     layout,
     (metadata) => metadata.role === "editor" || metadata.role === "result",
   );
+}
+
+export type WorkbenchLayoutStorage = Pick<Storage, "getItem" | "setItem">;
+
+export const workbenchLayoutStorage: WorkbenchLayoutStorage = {
+  getItem(key) {
+    return typeof localStorage === "undefined" ? null : localStorage.getItem(key);
+  },
+  setItem(key, value) {
+    if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
+  },
+};
+
+export function parseStoredWorkbenchLayout(raw: string | null) {
+  if (raw === null) return null;
+  try {
+    return parsePersistedWorkbenchLayout(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function scrubStoredProjectRoot(storage: WorkbenchLayoutStorage, key: string): void {
+  try {
+    const raw = storage.getItem(key);
+    if (raw === null) return;
+    const candidate: unknown = JSON.parse(raw);
+    const parsed = parsePersistedWorkbenchLayout(candidate);
+    if (!parsed || parsed.root.status !== "valid") return;
+
+    storage.setItem(
+      key,
+      JSON.stringify({
+        ...(candidate as Record<string, unknown>),
+        root: scrubProjectScopedRootLayout(parsed.root.value),
+      }),
+    );
+  } catch {
+    // Startup hydration owns fallback for unreadable or unwritable snapshots.
+  }
 }

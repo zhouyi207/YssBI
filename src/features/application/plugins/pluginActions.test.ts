@@ -27,12 +27,12 @@ beforeEach(() => {
 
 it("requires separate signer-change consent and binds approval to the inspected fingerprint", async () => {
   mocks.confirm.mockResolvedValueOnce(false);
-  await installLocalPlugin(t);
+  await installLocalPlugin(t, () => true);
   expect(mocks.install).not.toHaveBeenCalled();
   expect(mocks.confirm).toHaveBeenCalledTimes(1);
 
   mocks.confirm.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
-  await installLocalPlugin(t);
+  await installLocalPlugin(t, () => true);
   expect(mocks.confirm.mock.calls.slice(1).map(([options]) => options.title)).toEqual([
     "plugins.signerChangeTitle",
     "plugins.trustTitle",
@@ -43,4 +43,17 @@ it("requires separate signer-change consent and binds approval to the inspected 
     expect.stringMatching(/^op-\d+-/),
     "old-key",
   );
+});
+
+it("stops an installation when its owner expires during trust confirmation", async () => {
+  let current = true;
+  mocks.confirm
+    .mockImplementationOnce(async () => {
+      current = false;
+      return true;
+    })
+    .mockResolvedValueOnce(true);
+  await installLocalPlugin(t, () => current);
+  expect(mocks.confirm).toHaveBeenCalledOnce();
+  expect(mocks.install).not.toHaveBeenCalled();
 });

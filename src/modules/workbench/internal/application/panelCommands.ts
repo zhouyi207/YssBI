@@ -91,5 +91,8 @@ async function commitEditorPanelPublicationWithFlexLayout(
     return removed;
   });
 
-  for (const panelInstanceId of removedPanelIds) releaseEditorPaneState(panelInstanceId);
+  for (const panelInstanceId of removedPanelIds) {
+    if (!isCurrent()) return;
+    if (!workbenchLayoutRead.getPanel(panelInstanceId)) releaseEditorPaneState(panelInstanceId);
+  }
 }

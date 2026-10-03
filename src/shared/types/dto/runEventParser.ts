@@ -3,7 +3,12 @@ import {
   type ExecutionDemandDto,
   type GraphOutputRefDto,
 } from "./executionDemand";
-import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectionGuards";
+import {
+  isFingerprint,
+  isGraphResourcePath,
+  isPortAddressDto,
+  isUuid,
+} from "./editorProjectionGuards";
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
@@ -16,6 +21,8 @@ import {
   type RunPhase,
   type ResultInspectionSource,
 } from "./runEvent";
+import { isResultRevision } from "./resultParser";
+import { isResultId } from "../domain/result";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -112,10 +119,11 @@ function parseErrorOutcome(value: UnknownRecord): RunErrorOutcome {
 function parseGraphRunIdentityDto(value: unknown): GraphRunIdentityDto {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["executionSessionId", "graphPath", "runId"]) ||
+    !hasExactKeys(value, ["executionSessionId", "graphPath", "runId", "semanticInputHash"]) ||
     typeof value.executionSessionId !== "string" ||
     value.executionSessionId.length === 0 ||
     !isGraphResourcePath(value.graphPath) ||
+    !isFingerprint(value.semanticInputHash) ||
     !isPositiveDecimalId(value.runId)
   )
     return fail("graph run identity");
@@ -124,6 +132,7 @@ function parseGraphRunIdentityDto(value: unknown): GraphRunIdentityDto {
     executionSessionId: value.executionSessionId,
     graphPath: value.graphPath,
     runId: value.runId,
+    semanticInputHash: value.semanticInputHash,
   };
 }
 
@@ -162,10 +171,7 @@ function parseRunEventKind(value: unknown): RunEventKind {
       if (!hasExactKeys(value, ["type"])) return fail("runCancelled");
       return { type: "runCancelled" };
     case "resultInspectionRequested":
-      if (
-        !hasExactKeys(value, ["type", "resultId", "source"]) ||
-        !isPositiveDecimalId(value.resultId)
-      ) {
+      if (!hasExactKeys(value, ["type", "resultId", "source"]) || !isResultId(value.resultId)) {
         return fail("resultInspectionRequested");
       }
       return {
@@ -179,11 +185,16 @@ function parseRunEventKind(value: unknown): RunEventKind {
 }
 
 export function parseRunEvent(value: unknown): RunEvent {
-  if (!isRecord(value) || !hasExactKeys(value, ["run", "kind"])) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["run", "resultRevision", "kind"]) ||
+    !isResultRevision(value.resultRevision)
+  ) {
     return fail("run event");
   }
   return {
     run: parseGraphRunIdentityDto(value.run),
+    resultRevision: value.resultRevision,
     kind: parseRunEventKind(value.kind),
   };
 }

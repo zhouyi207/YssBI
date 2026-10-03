@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { LOG_LEVELS, type LogLevel } from "@/shared/types/domain/log";
+import { useLogStore } from "@/features/application/log";
 import { getLogLevelBackground, getLogLevelColor } from "./logPresentation";
 import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
@@ -15,16 +16,13 @@ const LOG_FILTER_LEVELS: readonly LogLevel[] = LOG_LEVELS;
 export function LogPanelToolbar() {
   const { t } = useTranslation();
   const [filterOpen, setFilterOpen] = useState(false);
-  const {
-    loading,
-    filter,
-    autoScroll,
-    setAutoScroll,
-    toggleLevel,
-    setSearchText,
-    refreshLogs,
-    clearLogs,
-  } = useLogWorkspaceContext();
+  const { subscriptionStatus, refreshLogs, clearLogs } = useLogWorkspaceContext();
+  const filter = useLogStore((state) => state.filter);
+  const autoScroll = useLogStore((state) => state.autoScroll);
+  const setAutoScroll = useLogStore((state) => state.setAutoScroll);
+  const toggleLevel = useLogStore((state) => state.toggleLevel);
+  const setSearchText = useLogStore((state) => state.setSearchText);
+  const loading = subscriptionStatus === "connecting";
 
   return (
     <div

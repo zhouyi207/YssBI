@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { installGraphRunEvent } from "@/features/application/editor/observeGraphRunEvent";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -10,7 +11,6 @@ import {
   clearProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
-  observeResultRunEvent,
   resetResultQueryProject,
   resultQueryCoordinator,
   resultQueryRead,
@@ -60,8 +60,10 @@ it("keeps the opened snapshot when its pin is invalidated and rerun", async () =
     await act(async () => root.render(<ResultPanel reference={reference} />));
     const content = host.querySelector("[data-result]");
     act(() =>
-      observeResultRunEvent({
+      installGraphRunEvent({
+        resultRevision: "1",
         run: {
+          semanticInputHash: "0".repeat(64),
           executionSessionId: reference.executionSessionId,
           graphPath: output.graphPath,
           runId: "2",
@@ -78,8 +80,10 @@ it("keeps the opened snapshot when its pin is invalidated and rerun", async () =
       provenance: { ...descriptor.provenance, runId: "2" },
     });
     await act(async () =>
-      observeResultRunEvent({
+      installGraphRunEvent({
+        resultRevision: "1",
         run: {
+          semanticInputHash: "0".repeat(64),
           executionSessionId: reference.executionSessionId,
           graphPath: output.graphPath,
           runId: "2",

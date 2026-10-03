@@ -82,7 +82,7 @@ export function RunFailurePanel() {
             ) : null}
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
               {failure.phase ? <span>{t(`runFailure.phases.${failure.phase}`)}</span> : null}
-              {failure.runId ? <span>{t("runFailure.run", { id: failure.runId })}</span> : null}
+              <span>{t("runFailure.run", { id: failure.run.runId })}</span>
               <span>{t("runFailure.code", { code: failure.code })}</span>
               {failure.incidentId ? (
                 <span>{t("runFailure.incident", { id: failure.incidentId })}</span>

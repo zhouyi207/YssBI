@@ -1,10 +1,5 @@
 import * as projectHydration from "@/features/application/project/projectHydration";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  useDatabaseStore,
-  useGraphProjectionStore,
-  useGraphMetaStore,
-} from "@/features/core/dataStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { resourceKey, useResourceStore } from "@/features/core/resource";
@@ -165,9 +160,21 @@ describe("renameResource project ownership", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     useResourceStore.getState().clear();
-    useGraphProjectionStore.getState().clear();
     useResourceStore.getState().setSnapshot({
       resources: [
+        {
+          id: "sales",
+          kind: "database",
+          name: "Sales",
+          revision: 4,
+          uri: resourceKey({ kind: "database", id: "sales" }),
+          resourcePath: "opaque database resource path",
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
         {
           id: "events/Old.yssbi-event",
           kind: "event_graph",
@@ -195,12 +202,10 @@ describe("renameResource project ownership", () => {
       ],
       graphOrder: ["events/Old.yssbi-event"],
     });
-    useGraphMetaStore.getState().clear();
-    useDatabaseStore.setState({
+    useResourceStore.setState({
       databases: {
         sales: { id: "sales", name: "Sales", resourcePath: "opaque database resource path" },
       },
-      revisions: { sales: 4 },
     });
     vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockResolvedValue(true);
     useProjectIOStore.setState({

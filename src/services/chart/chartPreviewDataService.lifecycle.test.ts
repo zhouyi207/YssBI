@@ -41,6 +41,7 @@ function identity() {
   const snapshot = captureProjectIdentity();
   return {
     projectInstanceId: snapshot.projectInstanceId,
+    databaseRevision: 4,
     isCurrent: () => isCurrentProjectIdentity(snapshot),
     assertCurrent: () => assertCurrentProjectIdentity(snapshot),
   };
@@ -81,11 +82,13 @@ describe("fetchChartPreview project lifecycle ownership", () => {
         expect(DatabaseService.getColumnDistribution).toHaveBeenCalledWith(
           projectInstanceId,
           "sales",
+          4,
         );
       } else {
         expect(ChartService.getPlotColumnPair).toHaveBeenCalledWith(
           projectInstanceId,
           "sales",
+          4,
           "amount",
           "cost",
         );

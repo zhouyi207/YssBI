@@ -1,10 +1,5 @@
-import {
-  isResultReference,
-  type ResultDescriptor,
-  type ResultReportKind,
-} from "@/shared/types/domain/result";
-import { isRecord } from "./guards";
-import { parseReportPayloadResult } from "./parseReportPayload";
+import type { ResultDescriptor, ResultReportKind } from "@/shared/types/domain/result";
+import { parseReportPayloadResult, type ParsedReportPayload } from "./parseReportPayload";
 
 export interface ReportValidationDiagnostic {
   resultId: string;
@@ -18,7 +13,7 @@ export interface ReportValidationDiagnostic {
 }
 
 export type ReportValidationResult =
-  | { ok: true; value: unknown }
+  | { ok: true; value: ParsedReportPayload }
   | { ok: false; diagnostic: ReportValidationDiagnostic };
 
 function outputPinId(descriptor: ResultDescriptor): string | null {
@@ -36,10 +31,9 @@ export function validateReportPayload(
   const identityMatches =
     report !== "linearRegressionSummary" ||
     (parsed.ok &&
-      isRecord(parsed.value) &&
-      isResultReference(parsed.value.resultRef) &&
-      parsed.value.resultRef.executionSessionId === descriptor.executionSessionId &&
-      parsed.value.resultRef.resultId === descriptor.resultId);
+      parsed.value.kind === "linearRegressionSummary" &&
+      parsed.value.data.resultRef.executionSessionId === descriptor.executionSessionId &&
+      parsed.value.data.resultRef.resultId === descriptor.resultId);
   if (parsed.ok && identityMatches) return { ok: true, value: parsed.value };
 
   return {

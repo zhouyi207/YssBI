@@ -4,7 +4,7 @@ import projectionWire from "@/tests/fixtures/node-system-contracts/editor-projec
 import { parseEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionParser";
 import { makeGraphEditorSession } from "@/tests/helpers/editorProjectionFixtures";
 import { clearGraphSyncBaselines, invokeGraphSync } from "./graphEditorSync";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { ParameterEditorDto } from "@/shared/types/domain/editorProjection";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -27,7 +27,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   clearGraphSyncBaselines();
 });
-afterEach(() => useGraphProjectionStore.getState().clear());
+afterEach(() => useResourceStore.getState().clear());
 
 it("retains parameter identities through transport splices and the existing Zustand store", async () => {
   const parameter = (key: string): ParameterEditorDto => ({
@@ -59,14 +59,14 @@ it("retains parameter identities through transport splices and the existing Zust
     response({ kind: "snapshot", cursor: "first", data: initial }),
   );
   const first = await invokeGraphSync("load_project_graph", {}, binding);
-  useGraphProjectionStore.getState().install(binding.graphPath, first.data);
+  useResourceStore.getState().installGraphSession(binding.graphPath, first.data, { mode: "load" });
   const parameters = () =>
-    useGraphProjectionStore.getState().graphEntities[binding.graphPath].nodes[nodeId]
-      .parameterGroups[0].parameters;
+    useResourceStore.getState().graphEntities[binding.graphPath].nodes[nodeId].parameterGroups[0]
+      .parameters;
   const before = parameters();
   let notifications = 0;
   let sumChanges = 0;
-  const unsubscribe = useGraphProjectionStore.subscribe(() => {
+  const unsubscribe = useResourceStore.subscribe(() => {
     notifications++;
     if (parameters().find((p) => p.key === "sum") !== before[1]) sumChanges++;
   });
@@ -91,7 +91,7 @@ it("retains parameter identities through transport splices and the existing Zust
       }),
     );
     const next = await invokeGraphSync("hydrate_editor_graph", {}, binding);
-    useGraphProjectionStore.getState().hydrate(binding.graphPath, next.data);
+    useResourceStore.getState().installGraphSession(binding.graphPath, next.data);
     expect(parameters().find((p) => p.key === "sum")).toBe(before[1]);
     expect(parameters().find((p) => p.key === "mean")).toBe(before[2]);
   }

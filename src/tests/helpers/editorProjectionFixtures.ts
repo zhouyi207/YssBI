@@ -2,21 +2,67 @@ import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dt
 import type {
   GraphEditorSessionDto,
   GraphEditingStateDto,
+  GraphConstantDto,
 } from "@/shared/types/dto/editorMutation";
 import type { ValueType } from "@/shared/types/domain/valueType";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "@/features/domain/editorProjection";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+
+export function makeGraphConstantFixture(id: string) {
+  return {
+    id,
+    name: `Constant ${id}`,
+    dataType: { kind: "Object" },
+    dataValue: {
+      Object: {
+        left: { List: Array.from({ length: 16 }, (_, index) => ({ Integer: String(index) })) },
+        right: {
+          List: Array.from({ length: 16 }, (_, index) => ({ Integer: String(index + 16) })),
+        },
+        metadata: { Object: { label: { String: "samples" }, enabled: { Bool: true } } },
+      },
+    },
+    description: "Nested constant fixture",
+    tags: ["fixture", "nested"],
+  } satisfies GraphConstantDto;
+}
+
+/** Ordinary JSON used by parameter values and input bindings, not serialized DataValue variants. */
+export function makeGraphProjectionJsonFixture(key: string) {
+  return {
+    left: Array.from({ length: 16 }, (_, index) => ({ index, value: `${key}-${index}` })),
+    right: Array.from({ length: 16 }, (_, index) => ({ index, value: `kept-${index}` })),
+    nested: { key },
+    metadata: {
+      label: "samples",
+      enabled: true,
+      ["__proto__"]: { items: ["first", "second"] },
+      constructor: { keep: { key: "kept" }, change: { key: "old" } },
+    },
+  };
+}
+
+export function changeGraphProjectionJsonFixture(
+  value: ReturnType<typeof makeGraphProjectionJsonFixture>,
+) {
+  value.left[0].value = "changed";
+  value.nested.key = "changed";
+  value.metadata.__proto__.items.reverse();
+  value.metadata.constructor.change.key = "changed";
+  delete (value.metadata as Partial<typeof value.metadata>).enabled;
+  Object.assign(value.metadata, { added: { key: "added" } });
+}
 
 export function installGraphProjectionFixture(
   graphPath: string,
   projection: EditorGraphProjectionDto,
 ): void {
-  const store = useGraphProjectionStore.getState();
+  const store = useResourceStore.getState();
   const previous = store.sessions[graphPath];
   const session = makeGraphEditorSession(projection);
   if (previous) {
-    session.document = previous.document;
+    session.document.constants = previous.constants;
     session.editing = {
       version: previous.version,
       dirty: previous.saveDirty,
@@ -24,7 +70,7 @@ export function installGraphProjectionFixture(
       canRedo: previous.canRedo,
     };
   }
-  store.hydrate(graphPath, session);
+  store.installGraphSession(graphPath, session);
 }
 
 export interface EditorProjectionFixtureOptions {

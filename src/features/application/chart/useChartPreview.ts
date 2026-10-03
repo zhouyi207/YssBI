@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { toErrorReference } from "@/features/application/errorReference";
-import { getDatabaseSnapshot, useDatabaseRead } from "@/features/core/database/read";
+import { getResourceSnapshot, useResourceRead } from "@/features/core/resource/read";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -27,8 +28,11 @@ export function useChartPreview(
   const [preview, setPreview] = useState<ChartPreviewPayload>({ kind: "empty" });
   const [loading, setLoading] = useState(false);
 
-  const databaseRevision = useDatabaseRead((snapshot) =>
-    document?.databaseId ? (snapshot.revisions[document.databaseId] ?? null) : null,
+  const databaseKey = document?.databaseId
+    ? resourceKey({ kind: "database", id: document.databaseId })
+    : null;
+  const databaseRevision = useResourceRead((snapshot) =>
+    databaseKey ? (snapshot.resources[databaseKey]?.revision ?? null) : null,
   );
 
   useEffect(() => {
@@ -42,9 +46,8 @@ export function useChartPreview(
     let active = true;
     const sourceIsCurrent = () =>
       isCurrentProjectIdentity(identity) &&
-      (document.databaseId
-        ? (getDatabaseSnapshot().revisions[document.databaseId] ?? null)
-        : null) === databaseRevision;
+      (databaseKey ? (getResourceSnapshot().resources[databaseKey]?.revision ?? null) : null) ===
+        databaseRevision;
     const isCurrent = () => active && sourceIsCurrent();
     const cached = getCachedChartPreview(
       identity.projectInstanceId,
@@ -61,6 +64,7 @@ export function useChartPreview(
 
     const previewIdentity: ChartPreviewProjectIdentity = {
       projectInstanceId: identity.projectInstanceId,
+      databaseRevision,
       isCurrent: sourceIsCurrent,
       assertCurrent: () => {
         assertCurrentProjectIdentity(identity);
@@ -98,7 +102,7 @@ export function useChartPreview(
       active = false;
       window.clearTimeout(timer);
     };
-  }, [document, chartPath, databaseRevision]);
+  }, [document, chartPath, databaseKey, databaseRevision]);
 
   return { preview, loading };
 }

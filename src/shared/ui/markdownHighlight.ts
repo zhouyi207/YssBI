@@ -17,7 +17,7 @@ import typescript from "shiki/langs/typescript.mjs";
 import yaml from "shiki/langs/yaml.mjs";
 import githubDark from "shiki/themes/github-dark.mjs";
 import githubLight from "shiki/themes/github-light.mjs";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 // This module is loaded once on demand and shared by all Markdown views.
 const highlighter = createHighlighterCoreSync({

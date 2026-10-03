@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
-import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { SidebarDataRow } from "@/modules/project-explorer/internal/ui/activity/SidebarDataRow";
 import { SidebarProjectTab } from "@/modules/project-explorer/internal/ui/activity/SidebarProjectTab";
 import type { ActivityPanelDocument } from "@/shared/types/domain/activityPanel";
@@ -116,7 +116,7 @@ describe("resource sidebar rows", () => {
     mocks.draggableInputs.length = 0;
     mocks.catalogState = catalogState();
     mocks.openDatabase.mockResolvedValue(undefined);
-    useDatabaseStore.getState().clear();
+    useResourceStore.getState().clear();
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -128,11 +128,15 @@ describe("resource sidebar rows", () => {
   });
 
   function renderDatabase(loadFailed = false) {
-    useDatabaseStore.getState().addDatabase("database-id", {
-      id: "database-id",
-      name: "Sales",
-      resourcePath: databasePath,
-      loadFailed,
+    useResourceStore.setState({
+      databases: {
+        "database-id": {
+          id: "database-id",
+          name: "Sales",
+          resourcePath: databasePath,
+          loadFailed,
+        },
+      },
     });
     act(() =>
       root.render(
@@ -157,10 +161,14 @@ describe("resource sidebar rows", () => {
         item: { kind: "database", id: "database-id", name: "Sales", resourcePath: databasePath },
       },
     ]);
-    useDatabaseStore.getState().addDatabase("database-id", {
-      id: "database-id",
-      name: "Sales",
-      resourcePath: databasePath,
+    useResourceStore.setState({
+      databases: {
+        "database-id": {
+          id: "database-id",
+          name: "Sales",
+          resourcePath: databasePath,
+        },
+      },
     });
     act(() =>
       root.render(
@@ -194,7 +202,14 @@ describe("resource sidebar rows", () => {
       useSidebarStore.getState().expandedCategories.project?.[PROJECT_TREE_CATEGORY_IDS.data],
     ).toBe(true);
 
-    act(() => useDatabaseStore.getState().updateDatabase("database-id", { name: "Sales updated" }));
+    act(() =>
+      useResourceStore.setState((state) => ({
+        databases: {
+          ...state.databases,
+          "database-id": { ...state.databases["database-id"], name: "Sales updated" },
+        },
+      })),
+    );
     expect(host.textContent).not.toContain("Sales updated");
     expect(host.textContent).toContain("Sales");
   });

@@ -76,6 +76,8 @@ describe("getLocalizedSearchIndex", () => {
     item.technicalTerms = ["technical-only-secret", "技术术语"];
     item.backendSearchText = ["backend-search-only-secret"];
     item.resourceNames = ["季度销售"];
+    const other = { ...catalog().items[0], title: "Another item" };
+    response.items.push(other);
 
     const index = getLocalizedSearchIndex(response);
 
@@ -90,8 +92,16 @@ describe("getLocalizedSearchIndex", () => {
       "季度销售",
       "dang qian biao ti",
       "dqbt",
+      "当前 technical-only-secret",
     ]) {
       expect(index.search(query)).toEqual([item]);
+    }
+    expect(index.search("当前 absent")).toEqual([]);
+    for (const query of ["", "   ", "!?_"]) {
+      const matches = index.search(query);
+      expect(matches).toEqual([item, other]);
+      expect(matches[0]).toBe(item);
+      expect(matches[1]).toBe(other);
     }
     expect(index.response.items[0]).toBe(item);
   });

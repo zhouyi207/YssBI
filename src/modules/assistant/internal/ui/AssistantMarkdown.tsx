@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState } from "react";
 import {
   MarkdownTextPrimitive,
   normalizeMathDelimiters,
@@ -9,6 +9,7 @@ import { VscCheck, VscCopy } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { openExternalUrlWithDialog } from "@/features/application/window/openExternalUrlWithDialog";
 import { markdownProseClass } from "@/shared/ui/markdownProseClass";
+import { MarkdownLinkContext } from "@/shared/ui/MarkdownLink";
 import {
   markdownComponents,
   markdownRemarkPlugins,
@@ -51,40 +52,27 @@ function CodeHeader({ language, code }: CodeHeaderProps) {
   );
 }
 
-function MarkdownLink({ children, href }: { children?: ReactNode; href?: string }) {
-  const { t } = useTranslation();
-  if (!href || !/^https?:\/\//i.test(href)) return <span>{children}</span>;
-  return (
-    <a
-      href={href}
-      onClick={(event) => {
-        event.preventDefault();
-        void openExternalUrlWithDialog(href, t);
-      }}
-    >
-      {children}
-    </a>
-  );
-}
-
 const components = {
   ...markdownComponents,
   CodeHeader,
-  a: MarkdownLink,
 };
 
 export function AssistantMarkdown() {
+  const { t } = useTranslation();
+  const openLink = useCallback((url: string) => openExternalUrlWithDialog(url, t), [t]);
   const rehypePlugins = useMarkdownRehypePlugins();
 
   return (
-    <MarkdownTextPrimitive
-      className={`${markdownProseClass} assistant-markdown w-full max-w-full prose-sm`}
-      components={components}
-      remarkPlugins={markdownRemarkPlugins}
-      rehypePlugins={rehypePlugins}
-      preprocess={normalizeMathDelimiters}
-      smooth
-      defer
-    />
+    <MarkdownLinkContext value={openLink}>
+      <MarkdownTextPrimitive
+        className={`${markdownProseClass} assistant-markdown w-full max-w-full prose-sm`}
+        components={components}
+        remarkPlugins={markdownRemarkPlugins}
+        rehypePlugins={rehypePlugins}
+        preprocess={normalizeMathDelimiters}
+        smooth
+        defer
+      />
+    </MarkdownLinkContext>
   );
 }

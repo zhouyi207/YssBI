@@ -3,6 +3,10 @@ import type { EditorResourceTarget } from "@/modules/workbench/public";
 import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { type WorkbenchEditorPanelInfo, type WorkbenchPanelInfo } from "@/modules/workbench/public";
 import { WorkbenchLayoutError } from "@/modules/workbench/public";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 import { resolveEditorOpenTargetGroupId } from "./editorOpenTarget";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
@@ -36,8 +40,14 @@ export async function openEditorPanel(
   target: EditorResourceTarget,
   options?: OpenEditorPanelOptions,
 ): Promise<WorkbenchEditorPanelInfo> {
+  const identity = captureProjectLifecycleState();
+  const assertCurrent = () => {
+    if (!isProjectLifecycleStateCurrent(identity))
+      throw new WorkbenchLayoutError("layout_not_ready", { reason: "stale_project" });
+  };
   try {
     const targetGroupId = await resolveEditorOpenTargetGroupId(options?.targetGroupId);
+    assertCurrent();
     const opened = await workbenchLayoutControl.openEditor({
       resourceRef: target.resourceRef,
       resourceKind: target.resourceKind,
@@ -49,11 +59,20 @@ export async function openEditorPanel(
       index: options?.insertIndex,
       mode: "reuse-resource",
     });
+    assertCurrent();
     if (!isEditorPanelInfo(opened)) {
       throw new WorkbenchLayoutError("invalid_panel_metadata");
     }
     return opened;
   } catch (error) {
+    if (!isProjectLifecycleStateCurrent(identity)) {
+      const rejection =
+        error instanceof Error
+          ? error
+          : new WorkbenchLayoutError("layout_not_ready", { reason: "stale_project" });
+      handledOpenRejections.add(rejection);
+      throw rejection;
+    }
     throw presentOpenRejection(error);
   }
 }

@@ -75,6 +75,9 @@ export function LinePlotControls({ model }: LinePlotControlsProps) {
           xAxis={model.xAxis}
           yAxis={model.yAxis}
           showPoints={pointsVisible}
+          referenceLines={model.referenceLines}
+          xDomain={model.xDomain}
+          yDomain={model.yDomain}
         />
       </div>
     </div>

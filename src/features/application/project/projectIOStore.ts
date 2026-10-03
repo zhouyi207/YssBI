@@ -6,9 +6,11 @@ import {
 import { createBoundApplicationStore } from "@/features/core/state/applicationStore";
 import { LoadStatus } from "@/shared/types/ui/common";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import {
   beginGraphLoadLifecycle,
+  isGraphLifecycleCurrent,
+  isGraphUnloading,
   loadGraphProjection,
 } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
@@ -48,7 +50,8 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
   projectInstanceId: null,
   setCurrentPath: (path) => set({ currentPath: path || null }),
   loadGraph: async (graphPath) => {
-    if (isGraphCachedInMemory(graphPath)) {
+    const project = captureProjectLifecycleState();
+    if (!isGraphUnloading(graphPath) && isGraphCachedInMemory(graphPath)) {
       set((state) =>
         state.graphLoadStatus[graphPath] === "ready"
           ? state
@@ -56,7 +59,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
               graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: "ready" },
             },
       );
-      return true;
+      return isProjectLifecycleStateCurrent(project);
     }
 
     const existing = loadGraphInFlight.get(graphPath);
@@ -65,11 +68,16 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
     set((state) => ({
       graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: "loading" },
     }));
+    if (!isProjectLifecycleStateCurrent(project)) return false;
     const lifecycleToken = beginGraphLoadLifecycle(graphPath);
+    const isCurrent = () =>
+      isProjectLifecycleStateCurrent(project) && isGraphLifecycleCurrent(graphPath, lifecycleToken);
     const pending = loadGraphProjection(graphPath, lifecycleToken)
       .catch((err) => {
+        if (!isCurrent()) return false;
         const error = toErrorReference(err, GRAPH_PROJECTION_CONTRACT_ERROR_CODE);
         set({ error });
+        if (!isCurrent()) return false;
         try {
           logger.sys.error(`Failed to load graph projection [${error.code}]`, "ProjectIOStore");
         } catch {
@@ -78,6 +86,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
         return false;
       })
       .then(async (loaded) => {
+        if (!isCurrent()) return false;
         const current = loadGraphInFlight.get(graphPath);
         if (current?.lifecycleToken === lifecycleToken && current.promise === pending) {
           set((state) => ({
@@ -86,15 +95,17 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
               [graphPath]: loaded ? "ready" : "error",
             },
           }));
+          if (!isCurrent()) return false;
           if (loaded) {
             try {
               await enforceGraphDocumentCacheLimit();
             } catch {
+              if (!isCurrent()) return false;
               logger.graph.warn("Graph cache cleanup failed", "ProjectIOStore");
             }
           }
         }
-        return loaded;
+        return loaded && isCurrent();
       })
       .finally(() => {
         const current = loadGraphInFlight.get(graphPath);

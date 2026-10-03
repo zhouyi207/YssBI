@@ -84,6 +84,7 @@ export interface AcfPacfResult {
   acf: number[];
   pacf: number[];
   n: number;
+  ciHalfWidth: number;
 }
 
 export interface HypothesisTestResult {

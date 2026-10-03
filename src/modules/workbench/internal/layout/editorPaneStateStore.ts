@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { shallow } from "zustand/shallow";
+import { produce } from "immer";
 
 type EditorPanePanelId = string;
 
@@ -26,44 +28,53 @@ interface EditorPaneState {
 const unique = (ids: readonly string[]): string[] => [...new Set(ids)];
 
 /** Pane-local UI state only; FlexLayout remains authoritative for panel placement. */
-export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
-  selections: {},
-  collapsedNodeIds: {},
-  setSelectedNodeIds: (panelInstanceId, ids) =>
-    set((state) => ({
-      selections: {
-        ...state.selections,
-        [panelInstanceId]: { selectedNodeIds: unique(ids), selectedConnectionIds: [] },
-      },
-    })),
-  setSelectedConnectionIds: (panelInstanceId, ids) =>
-    set((state) => ({
-      selections: {
-        ...state.selections,
-        [panelInstanceId]: { selectedNodeIds: [], selectedConnectionIds: unique(ids) },
-      },
-    })),
-  setNodeCollapsed: (panelInstanceId, nodeId, collapsed) =>
-    set((state) => {
-      const ids = new Set(state.collapsedNodeIds[panelInstanceId]);
-      if (collapsed) ids.add(nodeId);
-      else ids.delete(nodeId);
-      return { collapsedNodeIds: { ...state.collapsedNodeIds, [panelInstanceId]: [...ids] } };
-    }),
-  clearSelection: (panelInstanceId) =>
-    set((state) => ({
-      selections: { ...state.selections, [panelInstanceId]: { ...EMPTY_EDITOR_PANE_SELECTION } },
-    })),
-  release: (panelInstanceId) =>
-    set((state) => {
-      const selections = { ...state.selections };
-      const collapsedNodeIds = { ...state.collapsedNodeIds };
-      delete selections[panelInstanceId];
-      delete collapsedNodeIds[panelInstanceId];
-      return { selections, collapsedNodeIds };
-    }),
-  reset: () => set({ selections: {}, collapsedNodeIds: {} }),
-}));
+export const useEditorPaneStateStore = create<EditorPaneState>((set) => {
+  const setSelection = (panelInstanceId: EditorPanePanelId, selection: EditorPaneSelection) =>
+    set(
+      produce((state: EditorPaneState) => {
+        const current = state.selections[panelInstanceId] ?? EMPTY_EDITOR_PANE_SELECTION;
+        if (
+          shallow(current.selectedNodeIds, selection.selectedNodeIds) &&
+          shallow(current.selectedConnectionIds, selection.selectedConnectionIds)
+        )
+          return;
+        state.selections[panelInstanceId] = selection;
+      }),
+    );
+  return {
+    selections: {},
+    collapsedNodeIds: {},
+    setSelectedNodeIds: (panelInstanceId, ids) =>
+      setSelection(panelInstanceId, { selectedNodeIds: unique(ids), selectedConnectionIds: [] }),
+    setSelectedConnectionIds: (panelInstanceId, ids) =>
+      setSelection(panelInstanceId, { selectedNodeIds: [], selectedConnectionIds: unique(ids) }),
+    setNodeCollapsed: (panelInstanceId, nodeId, collapsed) =>
+      set(
+        produce((state: EditorPaneState) => {
+          const ids = state.collapsedNodeIds[panelInstanceId] ?? [];
+          if (ids.includes(nodeId) === collapsed) return;
+          state.collapsedNodeIds[panelInstanceId] = collapsed
+            ? [...ids, nodeId]
+            : ids.filter((id) => id !== nodeId);
+        }),
+      ),
+    clearSelection: (panelInstanceId) => setSelection(panelInstanceId, EMPTY_EDITOR_PANE_SELECTION),
+    release: (panelInstanceId) =>
+      set(
+        produce((state: EditorPaneState) => {
+          delete state.selections[panelInstanceId];
+          delete state.collapsedNodeIds[panelInstanceId];
+        }),
+      ),
+    reset: () =>
+      set(
+        produce((state: EditorPaneState) => {
+          if (Object.keys(state.selections).length) state.selections = {};
+          if (Object.keys(state.collapsedNodeIds).length) state.collapsedNodeIds = {};
+        }),
+      ),
+  };
+});
 
 export function getPaneSelection(
   panelInstanceId: EditorPanePanelId | undefined,

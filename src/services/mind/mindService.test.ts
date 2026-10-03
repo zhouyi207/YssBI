@@ -69,4 +69,26 @@ describe("authored document transport", () => {
     });
     expect(result.mutation.deltas[0].resource.kind).toBe("mind");
   });
+
+  it("admits only one connected tree before publishing a Mind snapshot", () => {
+    const root = { id: "root", parentId: null, content: "Plan" };
+    const invalidTrees = [
+      [{ ...root, parentId: "root" }],
+      [root, { id: "other", parentId: null, content: "Other root" }],
+      [root, { id: "a", parentId: "b", content: "A" }, { id: "b", parentId: "a", content: "B" }],
+    ];
+    for (const nodes of invalidTrees) {
+      expect
+        .soft(() => parseMindSnapshot({ ...snapshot, content: { rootId: "root", nodes } }))
+        .toThrow("Invalid mind hierarchy");
+    }
+
+    const nodes = Array.from({ length: 5_000 }, (_, index) => ({
+      id: String(index),
+      parentId: index === 0 ? null : String(index - 1),
+      content: "Topic",
+    })).reverse();
+    const content = { rootId: "0", nodes };
+    expect(parseMindSnapshot({ ...snapshot, content }).content).toBe(content);
+  });
 });

@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useEditorStore } from "@/features/core/editor";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
@@ -67,7 +67,7 @@ describe("GraphProblemsPanel", () => {
   beforeEach(() => {
     clearProjectLifecycle();
     startProjectLifecycle("project-problems");
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
     useEditorStore.getState().clearDetailFocus();
     vi.spyOn(workbenchLayoutRead, "getActiveEditorPanel").mockReturnValue({
       panelInstanceId: "graph-panel",
@@ -91,7 +91,7 @@ describe("GraphProblemsPanel", () => {
   });
 
   it("lists canonical problems for the native active graph and locates node-owned rows", () => {
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: bucket } });
 
     act(() => {
       root.render(
@@ -118,7 +118,7 @@ describe("GraphProblemsPanel", () => {
   });
 
   it("shows an empty state when the canonical projection has no problems", () => {
-    useGraphProjectionStore.setState({
+    useResourceStore.setState({
       graphEntities: { [graphPath]: { ...bucket, diagnostics: [] } },
     });
 

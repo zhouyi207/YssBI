@@ -17,19 +17,20 @@ export function usePresentationWindow() {
 
   const sessionActive = useResultSession(reference);
   const windowActions = useCurrentWindowActions();
+  const { setTitle, show, close } = windowActions;
 
   useEffect(() => {
     let cancelled = false;
     let releasePayload: (() => void) | undefined;
 
     const revealWindow = async (title?: string) => {
-      if (title) await windowActions.setTitle(title);
-      await windowActions.show();
+      if (title) await setTitle(title);
+      if (!cancelled) await show();
     };
 
     if (!sessionActive) {
       setState({ status: "not_found" });
-      void windowActions.close();
+      void close();
       return;
     }
 
@@ -45,6 +46,7 @@ export function usePresentationWindow() {
         if (cancelled) return;
         releasePayload = resultQueryCoordinator.retainPayload(reference);
         const held = await ResultService.claim(query.leaseId!);
+        if (cancelled) return;
         if (resultReferenceKey(held.descriptor) !== resultReferenceKey(reference))
           throw new Error("Mismatched result lease");
         next = await loadPresentationWindow(reference);
@@ -64,7 +66,7 @@ export function usePresentationWindow() {
       cancelled = true;
       releasePayload?.();
     };
-  }, [reference, query.leaseId, windowActions, sessionActive]);
+  }, [reference, query.leaseId, setTitle, show, close, sessionActive]);
 
   return {
     reference,

@@ -9,8 +9,8 @@ import {
   useGraphInteractionStore,
 } from "@/features/core/graphInteraction/graphInteractionStore";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
-import { logger } from "@/features/application/observability/appLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
+import { logger } from "@/utils/frontendLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";
 
 function interactionStillMatches(
@@ -101,9 +101,8 @@ export function useCanvasOverlayHandlers({
         setContextMenu(null);
         setPendingConnection(null);
       } catch (error) {
-        const message = formatErrorMessage(error, "Unknown mutation error");
         logger.graph.error(
-          `Failed to create node '${descriptor.nodeTypeId}' in '${activeResourceRef}': ${message}`,
+          `Failed to create node '${descriptor.nodeTypeId}' in '${activeResourceRef}': ${formatApplicationIpcError(error)}`,
           "NodePalette",
         );
       }

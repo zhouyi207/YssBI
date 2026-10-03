@@ -1,6 +1,5 @@
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { parsePlotPayload, usePresentationWindow } from "@/features/application/presentation";
+import { usePresentationWindow } from "@/features/application/presentation";
 import { PlotResultView } from "@/features/application/presentation/PlotResultView";
 import { PresentationWindowShell } from "@/features/application/window/PresentationWindowShell";
 
@@ -24,10 +23,8 @@ export const PlotWindow: React.FC = () => {
   const { t } = useTranslation();
   const { state, windowActions } = usePresentationWindow();
 
-  const plotPayload = useMemo(() => {
-    if (state.status !== "ready" || state.payload.mode !== "plot") return null;
-    return parsePlotPayload(state.payload.chart, state.payload.data);
-  }, [state]);
+  const plotPayload =
+    state.status === "ready" && state.payload.mode === "plot" ? state.payload.plot : null;
 
   const title = state.status === "ready" ? state.descriptor.title : t("plot.title");
 

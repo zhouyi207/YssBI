@@ -1,9 +1,7 @@
-import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { useShallow } from "zustand/react/shallow";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { useGraphEditingLocked } from "@/features/application/graphEditing/useGraphEditingLocked";
 import { useGraphRead } from "@/features/core/graph/read";
-import type { ConnectionData, PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { PortInstanceAdditionDto } from "@/shared/types/domain/editorProjection";
 import type { NodePinViewModel } from "./NodePinViewModel";
 import { detailEmptyHintClass } from "../shared/detailStyles";
@@ -22,14 +20,36 @@ interface NodePinInterfacePanelProps {
   portInstanceAdditions: readonly PortInstanceAdditionDto[];
 }
 
+const PinRow = memo(function PinRow({
+  graphPath,
+  pin,
+  disabled,
+}: {
+  graphPath: string;
+  pin: NodePinViewModel;
+  disabled: boolean;
+}) {
+  const pinData = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.pins[pin.id]);
+  return (
+    <div className="flex flex-col gap-1">
+      <NodePinConnectionField
+        graphPath={graphPath}
+        pin={pin}
+        pinData={pinData}
+        disabled={disabled}
+      />
+      {pinData ? (
+        <RemoveNodePortInstanceButton graphPath={graphPath} pin={pinData} disabled={disabled} />
+      ) : null}
+    </div>
+  );
+});
+
 function PinList({
   graphPath,
   nodeId,
   emptyLabel,
   pins,
-  graphPins,
-  nodeTitles,
-  connections,
   additions,
   disabled,
 }: {
@@ -37,37 +57,19 @@ function PinList({
   nodeId: string;
   emptyLabel: string;
   pins: NodePinViewModel[];
-  graphPins: DeepReadonly<PinData[]>;
-  nodeTitles: Readonly<Record<string, string>>;
-  connections: DeepReadonly<ConnectionData[]>;
   additions: readonly PortInstanceAdditionDto[];
   disabled: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1">
-      {pins.map((pin) => {
-        const pinData = graphPins.find((candidate) => candidate.id === pin.id);
-        return (
-          <div key={`${graphPath}-${pin.id}`} className="flex flex-col gap-1">
-            <NodePinConnectionField
-              graphPath={graphPath}
-              pin={pin}
-              pinData={pinData}
-              pins={graphPins}
-              nodeTitles={nodeTitles}
-              connections={connections}
-              disabled={disabled}
-            />
-            {pinData ? (
-              <RemoveNodePortInstanceButton
-                graphPath={graphPath}
-                pin={pinData}
-                disabled={disabled}
-              />
-            ) : null}
-          </div>
-        );
-      })}
+      {pins.map((pin) => (
+        <PinRow
+          key={`${graphPath}-${pin.id}`}
+          graphPath={graphPath}
+          pin={pin}
+          disabled={disabled}
+        />
+      ))}
       {pins.length === 0 && additions.length === 0 ? (
         <div className={detailEmptyHintClass}>{emptyLabel}</div>
       ) : null}
@@ -97,22 +99,6 @@ export function NodePinInterfacePanel({
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
   const editingLocked = useGraphEditingLocked(graphPath);
-  const graphPins = useGraphRead(
-    useShallow((snapshot) => Object.values(snapshot.graphEntities[graphPath]?.pins ?? {})),
-  );
-  const graphConnections = useGraphRead(
-    useShallow((snapshot) => Object.values(snapshot.graphEntities[graphPath]?.connections ?? {})),
-  );
-  const nodeTitles = useGraphRead(
-    useShallow((snapshot) =>
-      Object.fromEntries(
-        Object.entries(snapshot.graphEntities[graphPath]?.nodes ?? {}).map(([id, node]) => [
-          id,
-          node.display.title,
-        ]),
-      ),
-    ),
-  );
 
   return (
     <>
@@ -122,9 +108,6 @@ export function NodePinInterfacePanel({
           nodeId={nodeId}
           emptyLabel={t("detail.nodeDoc.noInputs")}
           pins={inputs}
-          graphPins={graphPins}
-          nodeTitles={nodeTitles}
-          connections={graphConnections}
           additions={portInstanceAdditions.filter((addition) => addition.direction === "input")}
           disabled={editingLocked}
         />
@@ -135,9 +118,6 @@ export function NodePinInterfacePanel({
           nodeId={nodeId}
           emptyLabel={t("detail.nodeDoc.noOutputs")}
           pins={outputs}
-          graphPins={graphPins}
-          nodeTitles={nodeTitles}
-          connections={graphConnections}
           additions={portInstanceAdditions.filter((addition) => addition.direction === "output")}
           disabled={editingLocked}
         />

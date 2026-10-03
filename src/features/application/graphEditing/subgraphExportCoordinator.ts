@@ -4,10 +4,8 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { GraphSubgraphService } from "@/services/nodeSystem/graphSubgraphService";
 import type { ClipboardSubgraphDto } from "@/shared/types/domain/clipboardSubgraph";
-import {
-  useGraphProjectionStore,
-  isGraphSaving,
-} from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { isGraphSaving } from "@/features/core/graph/read";
 
 export async function exportEditorSubgraph(input: {
   graphPath: string;
@@ -17,7 +15,7 @@ export async function exportEditorSubgraph(input: {
     throw new Error(`Graph draft '${input.graphPath}' is being saved`);
   }
   const identity = captureProjectIdentity();
-  const version = useGraphProjectionStore.getState().sessions[input.graphPath]?.version;
+  const version = useResourceStore.getState().sessions[input.graphPath]?.version;
   if (!version) throw new Error(`Graph draft '${input.graphPath}' is not loaded`);
   const snapshot = await GraphSubgraphService.exportSubgraph(
     identity.projectInstanceId,

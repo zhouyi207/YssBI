@@ -1,6 +1,7 @@
 import { nodeFileEntries } from "@/shared/types/domain/project";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
+import { prepareDatabaseIndexSnapshot } from "@/features/application/dataManagement/databaseRecords";
+import type { ProjectDatabaseMetadata } from "@/services/database/databaseWireParser";
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
 
 import {
@@ -9,21 +10,20 @@ import {
   type ProjectResourceMeta,
   type ResourceKey,
 } from "@/features/core/resource";
-import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
+import { prepareGraphMetaSnapshot, type GraphMeta } from "@/features/core/dataStore/graphMeta";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { detailResource } from "@/features/core/editor/detail/editorDetailPolicy";
 import { LoadStatus } from "@/shared/types/ui/common";
 
 export interface AuthoritativeProjectLoadSource {
   readonly path: string | null;
-  readonly databases: Record<string, unknown>;
+  readonly databases: Readonly<Record<string, ProjectDatabaseMetadata>>;
   readonly index: ProjectIndexRow;
 }
 
 export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLoadSource {
   readonly storeState: {
     readonly databases: Record<string, DatabaseRecord>;
-    readonly databaseRevisions: Record<string, number>;
     readonly graphMeta: Record<string, GraphMeta>;
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
     readonly graphOrder: string[];
@@ -39,14 +39,12 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
 
 export interface AuthoritativeProjectLoadPlanContext {
   readonly databases: Record<string, DatabaseRecord>;
+  readonly resources: Record<ResourceKey, ProjectResourceMeta>;
   readonly detailFocus: DetailFocus | null;
 }
 
 export interface AuthoritativeProjectLoadPlanDependencies {
-  normalizeDatabases(
-    raw: Record<string, unknown>,
-    current: Record<string, DatabaseRecord>,
-  ): Record<string, DatabaseRecord>;
+  prepareDatabases: typeof prepareDatabaseIndexSnapshot;
   prepareFunctionState(
     functionGraphs: ProjectIndexRow["functionGraphs"],
   ): Record<string, GraphMeta>;
@@ -56,31 +54,10 @@ export interface AuthoritativeProjectLoadPlanDependencies {
     charts: ProjectIndexRow["charts"];
     minds: ProjectIndexRow["minds"];
     docs: ProjectIndexRow["docs"];
-    databases: Record<string, DatabaseRecord>;
+    databases: ProjectIndexRow["databases"];
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
 
   validateCoordinatorStart(projectInstanceId: string, publicationRevision: number): void;
-}
-
-function prepareFunctionState(
-  functionGraphs: ProjectIndexRow["functionGraphs"],
-): Record<string, GraphMeta> {
-  return Object.fromEntries(
-    functionGraphs.flatMap((graph) => {
-      return [
-        [
-          graph.path,
-          {
-            type: "function_graph" as const,
-            functionRevision: graph.functionEditorProjection.functionRevision,
-            functionSignature: structuredClone(graph.functionSignature),
-            functionInputs: structuredClone(graph.functionEditorProjection.inputs),
-            functionOutputs: structuredClone(graph.functionEditorProjection.outputs),
-          },
-        ],
-      ];
-    }),
-  );
 }
 
 export function buildProjectResourceState(input: {
@@ -89,7 +66,7 @@ export function buildProjectResourceState(input: {
   charts: ProjectIndexRow["charts"];
   minds: ProjectIndexRow["minds"];
   docs: ProjectIndexRow["docs"];
-  databases: Record<string, DatabaseRecord>;
+  databases: ProjectIndexRow["databases"];
   loadedChartPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
   const resources: ProjectResourceMeta[] = nodeFileEntries(input).map((graph) =>
@@ -123,13 +100,15 @@ export function buildProjectResourceState(input: {
       hasConflictDocument: false,
     });
   }
-  for (const [id, database] of Object.entries(input.databases)) {
+  for (const database of input.databases) {
+    const id = database.id;
     resources.push({
       id,
       kind: "database",
       name: typeof database.name === "string" ? database.name : id,
       uri: resourceKey({ id, kind: "database" }),
       resourcePath: database.resourcePath,
+      revision: database.revision,
       exists: true,
       loaded: true,
       hasDirtyDocument: false,
@@ -149,8 +128,8 @@ export const defaultAuthoritativeProjectLoadPlanDependencies: Omit<
   AuthoritativeProjectLoadPlanDependencies,
   "validateCoordinatorStart"
 > = {
-  normalizeDatabases,
-  prepareFunctionState,
+  prepareDatabases: prepareDatabaseIndexSnapshot,
+  prepareFunctionState: prepareGraphMetaSnapshot,
   prepareResourceState: buildProjectResourceState,
 };
 
@@ -159,17 +138,11 @@ export function buildAuthoritativeProjectLoadPlan(
   context: AuthoritativeProjectLoadPlanContext,
   dependencies: AuthoritativeProjectLoadPlanDependencies,
 ): PreparedAuthoritativeProjectLoad {
-  const normalizedDatabases = dependencies.normalizeDatabases(source.databases, context.databases);
-  const databaseRows = source.index.databases;
-  const databaseResourcePaths = Object.fromEntries(
-    databaseRows.map((row) => [row.id, row.resourcePath]),
-  );
-  const databaseRevisions = Object.fromEntries(databaseRows.map((row) => [row.id, row.revision]));
-  const databases = Object.fromEntries(
-    Object.entries(normalizedDatabases).map(([id, database]) => [
-      id,
-      { ...database, resourcePath: databaseResourcePaths[id] },
-    ]),
+  const databases = dependencies.prepareDatabases(
+    source.index.databases,
+    context.databases,
+    context.resources,
+    source.databases,
   );
   const graphMeta = dependencies.prepareFunctionState(source.index.functionGraphs);
   const resourceState = dependencies.prepareResourceState({
@@ -178,7 +151,7 @@ export function buildAuthoritativeProjectLoadPlan(
     charts: source.index.charts,
     minds: source.index.minds,
     docs: source.index.docs,
-    databases,
+    databases: source.index.databases,
   });
   const focus = context.detailFocus;
   const focusedResource = detailResource(focus, resourceState.resources);
@@ -194,7 +167,6 @@ export function buildAuthoritativeProjectLoadPlan(
     ...source,
     storeState: {
       databases,
-      databaseRevisions,
       graphMeta,
       resources: resourceState.resources,
       graphOrder: resourceState.graphOrder,

@@ -4,8 +4,9 @@ import type { GraphExecutionState } from "./executionTypes";
 
 function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
   return {
+    outputRuns: {},
     status: "idle",
-    runId: null,
+    run: null,
     request: null,
     runFailure: null,
     ...partial,

@@ -5,10 +5,8 @@ import {
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
 import { enqueueGraphTask, installGraphSession } from "./graphEditCoordinator";
-import {
-  isGraphSaving,
-  useGraphProjectionStore,
-} from "@/features/core/dataStore/graphProjectionStore";
+import { isGraphSaving } from "@/features/core/graph/read";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 
 export type HistoryDirection = "undo" | "redo";
 
@@ -27,11 +25,11 @@ async function installHistoryProjection(
   direction: HistoryDirection,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  const session = useGraphProjectionStore.getState().sessions[graphPath];
+  const session = useResourceStore.getState().sessions[graphPath];
   if (!session) return false;
   if (!(direction === "undo" ? session.canUndo : session.canRedo)) return false;
   const isCurrent = () => {
-    const current = useGraphProjectionStore.getState().sessions[graphPath];
+    const current = useResourceStore.getState().sessions[graphPath];
     return (
       isCurrentProjectIdentity(identity) &&
       current?.sessionId === session.sessionId &&

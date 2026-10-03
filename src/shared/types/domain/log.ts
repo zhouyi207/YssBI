@@ -40,10 +40,12 @@ export interface LogSubscriptionDto {
   truncated: boolean;
 }
 
+export type LogStreamFailure = "storage_unavailable" | "subscriber_lagged";
+
 export interface LogBatchDto {
   streamId: string;
   entries: LogRecordDto[];
-  failure?: "storage_unavailable";
+  failure?: LogStreamFailure;
 }
 
 /** Payload accepted by `plugin:tracing|submit_frontend_logs`; Rust assigns stream metadata. */

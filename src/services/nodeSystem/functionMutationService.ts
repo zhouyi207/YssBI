@@ -1,4 +1,5 @@
 import { invokeCommand } from "@/services/ipc";
+import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 import type {
   FunctionDocumentPatchDto,
   MutationRequestDto,
@@ -6,15 +7,17 @@ import type {
 } from "@/shared/types/dto/editorMutation";
 
 export class FunctionMutationService {
-  static updateSignature(
+  static async updateSignature(
     projectInstanceId: string,
     functionPath: string,
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invokeCommand<ResourceMutationResultDto>("update_function_signature", {
-      projectInstanceId,
-      functionPath,
-      request,
-    });
+    return parseResourceMutationResultDto(
+      await invokeCommand<unknown>("update_function_signature", {
+        projectInstanceId,
+        functionPath,
+        request,
+      }),
+    );
   }
 }

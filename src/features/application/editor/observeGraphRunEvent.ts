@@ -1,7 +1,11 @@
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { observeResultRunEvent } from "@/features/application/results";
+import {
+  observeResultRunEvent,
+  prepareResultExecutionSession,
+} from "@/features/application/results/runtime";
 import { useExecutionStore } from "@/features/core/execution";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
+import { isCurrentGraphRun } from "@/features/core/graph/read";
 
 const observedRuns = new Map<
   string,
@@ -12,6 +16,8 @@ let observedEpoch = -1;
 /** Shared acceptance for the public subscription, invocation stream and recovery snapshot. */
 export function installGraphRunEvent(event: RunEvent): boolean {
   const epoch = captureProjectLifecycleState().epoch;
+  const current = () =>
+    epoch === captureProjectLifecycleState().epoch && isCurrentGraphRun(event.run);
   if (epoch !== observedEpoch) {
     observedRuns.clear();
     observedEpoch = epoch;
@@ -24,57 +30,44 @@ export function installGraphRunEvent(event: RunEvent): boolean {
     previous?.session === event.run.executionSessionId &&
     BigInt(previous.run) > BigInt(event.run.runId)
   ) {
-    observeResultRunEvent(event);
+    if (current()) {
+      if (!prepareResultExecutionSession(event.run.executionSessionId)) return false;
+      observeResultRunEvent(event);
+      if (current()) useExecutionStore.getState().applyRunEvent(event, false);
+    }
     return false;
   }
   const store = useExecutionStore.getState();
   if (same && event.kind.type === "resultInspectionRequested") {
+    // A retained result is addressed by its reference, independently of the current graph basis.
     if (previous.inspected.has(event.kind.resultId)) return false;
     previous.inspected.add(event.kind.resultId);
     return true;
   }
   if (event.kind.type === "runStarted") {
     if (same) {
-      if (!previous.terminal && store.getGraph(path).status === "unknown")
-        store.setActiveRunId(path, event.run.runId);
+      if (current() && !previous.terminal && store.getGraph(path).status === "unknown")
+        store.applyRunEvent(event);
       return false;
     }
-    if (
-      !["running", "submitting", "unknown"].includes(store.getGraph(path).status) ||
-      store.getGraph(path).runId !== null
-    )
-      store.startExecution(path);
     observedRuns.set(path, {
       session: event.run.executionSessionId,
       run: event.run.runId,
       terminal: false,
       inspected: new Set(),
     });
+    if (!current()) return false;
   } else if (!same || previous.terminal) {
     return false;
+  } else if (!current()) {
+    previous.terminal = true;
+    return false;
   }
+  const accepted = observedRuns.get(path)!;
+  if (!prepareResultExecutionSession(event.run.executionSessionId)) return false;
   observeResultRunEvent(event);
-  if (event.kind.type === "runStarted") store.setActiveRunId(path, event.run.runId);
-  switch (event.kind.type) {
-    case "runCompleted":
-      store.completeExecution(path);
-      break;
-    case "runErrored":
-      store.recordRunFailure(path, {
-        runId: event.run.runId,
-        code: event.kind.code,
-        phase: event.kind.phase,
-        source: event.kind.source,
-        incidentId: null,
-      });
-      store.failExecution(path);
-      break;
-    case "runCancelled":
-      store.interruptExecution(path);
-      break;
-    default:
-      return true;
-  }
-  observedRuns.get(path)!.terminal = true;
+  if (!current() || observedRuns.get(path) !== accepted) return false;
+  if (event.kind.type !== "runStarted") accepted.terminal = true;
+  store.applyRunEvent(event);
   return true;
 }

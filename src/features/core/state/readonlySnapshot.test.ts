@@ -5,19 +5,14 @@ import {
 import { afterEach, expect, it } from "vitest";
 import { getGraphSnapshot } from "@/features/core/graph/read";
 import { getResourceSnapshot } from "@/features/core/resource/read";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
+
 import { useResourceStore } from "@/features/core/resource/resourceStore";
-import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
 import { buildFileResourceMeta, resourceKey } from "@/features/core/resource/resourceTypes";
 import { freezePublishedValue, isPublishedValue } from "@/shared/types/deepReadonly";
 
 afterEach(() => {
-  useGraphProjectionStore.getState().clear();
-  useGraphMetaStore.getState().clear();
   useResourceStore.getState().clear();
-  useDocumentStateStore.getState().clear();
 });
 
 it("deep-freezes owned records and collections without treating a shallow freeze as publication", () => {
@@ -64,11 +59,11 @@ it("keeps unrelated graph and resource snapshots stable and freezes published st
   installGraphProjectionFixture("events/B", second.projection);
   expect(getGraphSnapshot().graphEntities["events/A"]).toBe(graphBefore.graphEntities["events/A"]);
   expect(graphBefore.graphEntities["events/A"]).toBe(
-    useGraphProjectionStore.getState().graphEntities["events/A"],
+    useResourceStore.getState().graphEntities["events/A"],
   );
   expect(Object.isFrozen(graphBefore.graphEntities["events/A"].nodes)).toBe(true);
   const graphs = getGraphSnapshot().graphEntities;
-  useGraphMetaStore.setState({ graphs: { "events/B": { type: "event_graph" } } });
+  useResourceStore.setState({ graphMeta: { "events/B": { type: "event_graph" } } });
   expect(getGraphSnapshot().graphEntities).toBe(graphs);
 
   useResourceStore.getState().setSnapshot({
@@ -88,9 +83,9 @@ it("keeps unrelated graph and resource snapshots stable and freezes published st
     resourceBefore.resources[resourceKey(refA)],
   );
   expect(getResourceSnapshot().documents[resourceKey(refA)]).toBe(
-    useDocumentStateStore.getState().documents[resourceKey(refA)],
+    useResourceStore.getState().documents[resourceKey(refA)],
   );
   const resourceAfter = getResourceSnapshot();
-  useDocumentStateStore.setState({});
+  useResourceStore.setState({});
   expect(getResourceSnapshot()).toBe(resourceAfter);
 });

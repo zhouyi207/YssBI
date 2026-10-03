@@ -1,5 +1,10 @@
 import type { IJsonModel, IJsonRowNode, IJsonTabSetNode } from "flexlayout-react";
 import { WORKBENCH_ACTIVITY_VIEW_IDS } from "./workbenchPanelModel";
+import type {
+  WorkbenchLayoutTransaction,
+  WorkbenchPanelInfo,
+  WorkbenchEdgePosition,
+} from "./workbenchTypes";
 export const WORKBENCH_ACTIVITY_GROUP_ID = "border_left";
 export const WORKBENCH_EDGE_GROUP_IDS = {
   left: "border_left",
@@ -97,4 +102,137 @@ export function orderWorkbenchPanelIdsForReset(
   }
   const live = new Set(livePanelIds);
   return [...new Set([...ids, ...livePanelIds])].filter((id) => live.has(id));
+}
+
+export function readSerializedEdge(layout: IJsonModel, position: WorkbenchEdgePosition) {
+  const border = layout.borders?.find((node) => node.location === position);
+  if (!border) return undefined;
+  return {
+    size: border.size ?? WORKBENCH_EDGE_SIZES[position as keyof typeof WORKBENCH_EDGE_SIZES] ?? 200,
+    collapsed: (border.selected ?? -1) < 0,
+    activePanelId: border.children?.[border.selected ?? -1]?.id,
+  };
+}
+
+const DETAILS_VIEW_REQUEST = {
+  viewId: "details",
+  title: "Details",
+} as const;
+
+const ASSISTANT_VIEW_REQUEST = {
+  viewId: "assistant",
+  title: "Assistant",
+} as const;
+
+function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): number {
+  const right = readSerializedEdge(transaction.serialize(), "right");
+  return typeof right?.size === "number" ? right.size : WORKBENCH_EDGE_SIZES.right;
+}
+
+function configurePermanentDetailsSidebar(
+  transaction: WorkbenchLayoutTransaction,
+  details: WorkbenchPanelInfo,
+): string {
+  const right = transaction.configureEdge({
+    position: "right",
+    size: persistedRightSidebarSize(transaction),
+    collapsed: false,
+  });
+  transaction.move({
+    panelInstanceId: details.panelInstanceId,
+    groupId: right.groupId,
+    index: 0,
+    activate: false,
+  });
+  return right.groupId;
+}
+
+function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction): void {
+  const activePanelInstanceId = transaction.getActivePanel()?.panelInstanceId;
+  const right = readSerializedEdge(transaction.serialize(), "right");
+  const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
+  configurePermanentDetailsSidebar(transaction, details);
+  if (right) {
+    if (right.activePanelId && transaction.getPanel(right.activePanelId)) {
+      transaction.activate(right.activePanelId);
+    }
+    transaction.configureEdge({ position: "right", size: right.size, collapsed: right.collapsed });
+  }
+  if (activePanelInstanceId && transaction.getPanel(activePanelInstanceId)) {
+    transaction.activate(activePanelInstanceId);
+  }
+}
+
+export function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void {
+  transaction.ensureCentralGroup();
+  const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
+    transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) }),
+  );
+  const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
+  const assistant = transaction.ensureView(ASSISTANT_VIEW_REQUEST);
+  const logs = transaction.ensureView({ viewId: "logs", title: "Logs" });
+  const output = transaction.ensureView({ viewId: "output", title: "Output" });
+  const problems = transaction.ensureView({ viewId: "problems", title: "Problems" });
+  const left = transaction.configureEdge({
+    position: "left",
+    size: WORKBENCH_EDGE_SIZES.left,
+    collapsed: false,
+  });
+  const rightGroupId = configurePermanentDetailsSidebar(transaction, details);
+  const bottom = transaction.configureEdge({
+    position: "bottom",
+    size: WORKBENCH_EDGE_SIZES.bottom,
+    collapsed: false,
+  });
+  activityPanels.forEach((panel, index) => {
+    transaction.move({
+      panelInstanceId: panel.panelInstanceId,
+      groupId: left.groupId,
+      index,
+    });
+  });
+  transaction.move({
+    panelInstanceId: assistant.panelInstanceId,
+    groupId: rightGroupId,
+    index: 1,
+    activate: false,
+  });
+  for (const [index, viewId] of WORKBENCH_BOTTOM_DEFAULT_ORDER.entries()) {
+    transaction.move({
+      panelInstanceId: { logs, output, problems }[viewId].panelInstanceId,
+      groupId: bottom.groupId,
+      index,
+    });
+  }
+  const project = activityPanels.find(
+    (panel) => panel.metadata.role === "view" && panel.metadata.viewId === "project",
+  );
+  if (project) transaction.activate(project.panelInstanceId);
+  transaction.configureEdge({
+    position: "bottom",
+    size: WORKBENCH_EDGE_SIZES.bottom,
+    collapsed: true,
+  });
+}
+
+export function ensureRestoredRootPanels(transaction: WorkbenchLayoutTransaction): void {
+  ensurePermanentDetailsSidebar(transaction);
+  if (
+    !transaction
+      .listPanels()
+      .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "plugins")
+  ) {
+    const active = transaction.getActivePanel();
+    const left = readSerializedEdge(transaction.serialize(), "left");
+    const leftGroup = left ? { activeView: left.activePanelId } : undefined;
+    transaction.ensureView({ viewId: "plugins", title: "Plugins" });
+    if (leftGroup?.activeView) transaction.activate(leftGroup.activeView);
+    if (active) transaction.activate(active.panelInstanceId);
+    if (left)
+      transaction.configureEdge({
+        position: "left",
+        size: left.size,
+        collapsed: left.collapsed ?? false,
+      });
+  }
 }

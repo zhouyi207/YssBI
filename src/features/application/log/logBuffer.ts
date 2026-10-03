@@ -1,11 +1,23 @@
+import { createStore } from "zustand/vanilla";
+import { shallow } from "zustand/shallow";
 import { LOG_BUFFER_MAX } from "@/shared/config-default";
-import type { LogBatchDto, LogRecordDto, LogSubscriptionDto } from "@/shared/types/domain/log";
+import {
+  LOG_DOMAINS,
+  type LogDomain,
+  type LogBatchDto,
+  type LogRecordDto,
+  type LogSubscriptionDto,
+} from "@/shared/types/domain/log";
+import type { LogDomainId } from "@/features/domain/log/logDomains";
+
+type LogDomainEntries = Readonly<Record<LogDomainId, readonly LogRecordDto[]>>;
 
 export interface LogSnapshot {
-  streamId: string | null;
-  entries: LogRecordDto[];
-  latestSequence: number | null;
-  truncated: boolean;
+  readonly streamId: string | null;
+  readonly entries: readonly LogRecordDto[];
+  readonly entriesByDomain: LogDomainEntries;
+  readonly latestSequence: number | null;
+  readonly truncated: boolean;
 }
 
 export interface LogLogBuffer {
@@ -21,6 +33,51 @@ interface RecentEntries {
   entries: LogRecordDto[];
   allSequences: number[];
   truncated: boolean;
+}
+
+function indexEntries(
+  entries: readonly LogRecordDto[],
+  previous?: LogDomainEntries,
+): LogDomainEntries {
+  const domains = Object.fromEntries<LogRecordDto[]>(
+    LOG_DOMAINS.map((domain) => [domain, []]),
+  ) as Record<LogDomain, LogRecordDto[]>;
+  for (const entry of entries) domains[entry.domain].push(entry);
+  const index: Record<LogDomainId, readonly LogRecordDto[]> = { all: entries, ...domains };
+  for (const domain of LOG_DOMAINS) {
+    if (previous && shallow(previous[domain], index[domain])) index[domain] = previous[domain];
+  }
+  return index;
+}
+
+function appendDomainEntries(
+  previous: LogSnapshot,
+  entries: readonly LogRecordDto[],
+  incoming: readonly LogRecordDto[],
+): LogDomainEntries {
+  const removed = new Map<LogDomain, number>();
+  const removedCount = previous.entries.length + incoming.length - entries.length;
+  for (let index = 0; index < removedCount; index += 1) {
+    const domain = previous.entries[index].domain;
+    removed.set(domain, (removed.get(domain) ?? 0) + 1);
+  }
+  const added = new Map<LogDomain, LogRecordDto[]>();
+  for (const entry of incoming) {
+    let domainEntries = added.get(entry.domain);
+    if (!domainEntries) added.set(entry.domain, (domainEntries = []));
+    domainEntries.push(entry);
+  }
+  const index = { ...previous.entriesByDomain, all: entries };
+  for (const domain of LOG_DOMAINS) {
+    const removeCount = removed.get(domain) ?? 0;
+    const incomingDomain = added.get(domain);
+    if (!removeCount && !incomingDomain) continue;
+    const retained = removeCount
+      ? previous.entriesByDomain[domain].slice(removeCount)
+      : previous.entriesByDomain[domain];
+    index[domain] = incomingDomain ? [...retained, ...incomingDomain] : retained;
+  }
+  return index;
 }
 
 function recentDistinctEntries(
@@ -60,31 +117,24 @@ export function createLogLogBuffer(maxEntries = LOG_BUFFER_MAX): LogLogBuffer {
     throw new Error("Log log buffer capacity must be a positive integer");
   }
 
-  let streamId: string | null = null;
-  let entries: LogRecordDto[] = [];
-  let latestSequence: number | null = null;
-  let truncated = false;
-  let replacedStream = false;
-  let snapshot: LogSnapshot = { streamId, entries, latestSequence, truncated };
-  const listeners = new Set<() => void>();
-
-  const publish = () => {
-    snapshot = {
-      streamId,
-      entries: [...entries],
-      latestSequence,
-      truncated,
+  const store = createStore<LogSnapshot>(() => {
+    const entries: LogRecordDto[] = [];
+    return {
+      streamId: null,
+      entries,
+      entriesByDomain: indexEntries(entries),
+      latestSequence: null,
+      truncated: false,
     };
-    for (const listener of listeners) listener();
-  };
+  });
+  let replacedStream = false;
 
   return {
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    getSnapshot: () => snapshot,
+    subscribe: store.subscribe,
+    getSnapshot: store.getState,
     setSubscription: (subscription) => {
+      const snapshot = store.getState();
+      const { streamId } = snapshot;
       replacedStream ||= streamId !== null && streamId !== subscription.streamId;
       const recent = recentDistinctEntries(subscription.entries, subscription.streamId, maxEntries);
       const snapshotGap = hasSequenceGap(
@@ -92,13 +142,31 @@ export function createLogLogBuffer(maxEntries = LOG_BUFFER_MAX): LogLogBuffer {
         subscription.truncated ? (recent.allSequences[0] ?? subscription.latestSequence + 1) : 1,
         subscription.latestSequence,
       );
-      streamId = subscription.streamId;
-      entries = recent.entries;
-      latestSequence = subscription.latestSequence;
-      truncated = replacedStream || subscription.truncated || recent.truncated || snapshotGap;
-      publish();
+      // Persisted records are append-only. A reconnect can reuse records still held
+      // by this buffer, but sequence numbers from another stream have no relation.
+      const previousEntries =
+        streamId === subscription.streamId
+          ? new Map(snapshot.entries.map((entry) => [entry.sequence, entry]))
+          : undefined;
+      const shared = previousEntries
+        ? recent.entries.map((entry) => previousEntries.get(entry.sequence) ?? entry)
+        : recent.entries;
+      const entries = shallow(snapshot.entries, shared) ? snapshot.entries : shared;
+      const next = {
+        streamId: subscription.streamId,
+        entries,
+        entriesByDomain:
+          entries === snapshot.entries
+            ? snapshot.entriesByDomain
+            : indexEntries(entries, snapshot.entriesByDomain),
+        latestSequence: subscription.latestSequence,
+        truncated: replacedStream || subscription.truncated || recent.truncated || snapshotGap,
+      };
+      if (!shallow(snapshot, next)) store.setState(next);
     },
     appendBatch: (batch) => {
+      const snapshot = store.getState();
+      const { streamId, latestSequence } = snapshot;
       const sameStream = streamId === batch.streamId;
       const watermark = sameStream ? (latestSequence ?? 0) : 0;
       const recentIncoming = recentDistinctEntries(
@@ -110,27 +178,39 @@ export function createLogLogBuffer(maxEntries = LOG_BUFFER_MAX): LogLogBuffer {
       if (incoming.length === 0) return;
 
       const sequenceGap = hasSequenceGap(recentIncoming.allSequences, watermark + 1);
-      streamId = batch.streamId;
-      entries = sameStream ? [...entries, ...incoming] : incoming;
-      latestSequence =
-        incoming[incoming.length - 1]?.sequence ?? (sameStream ? latestSequence : null);
-      truncated = truncated || !sameStream || sequenceGap || recentIncoming.truncated;
+      let entries = sameStream ? [...snapshot.entries, ...incoming] : incoming;
+      let truncated = snapshot.truncated || !sameStream || sequenceGap || recentIncoming.truncated;
       if (entries.length > maxEntries) {
         entries = entries.slice(entries.length - maxEntries);
         truncated = true;
       }
-      publish();
+      store.setState({
+        streamId: batch.streamId,
+        entries,
+        entriesByDomain: sameStream
+          ? appendDomainEntries(snapshot, entries, incoming)
+          : indexEntries(entries, snapshot.entriesByDomain),
+        latestSequence:
+          incoming[incoming.length - 1]?.sequence ?? (sameStream ? latestSequence : null),
+        truncated,
+      });
     },
     markTruncated: () => {
-      truncated = true;
-      publish();
+      if (!store.getState().truncated) store.setState({ truncated: true });
     },
     clear: () => {
-      if (entries.length === 0 && !truncated) return;
-      entries = [];
+      const snapshot = store.getState();
+      if (snapshot.entries.length === 0 && !snapshot.truncated) return;
       replacedStream = false;
-      truncated = false;
-      publish();
+      const entries = snapshot.entries.length ? [] : snapshot.entries;
+      store.setState({
+        entries,
+        entriesByDomain:
+          entries === snapshot.entries
+            ? snapshot.entriesByDomain
+            : indexEntries(entries, snapshot.entriesByDomain),
+        truncated: false,
+      });
     },
   };
 }

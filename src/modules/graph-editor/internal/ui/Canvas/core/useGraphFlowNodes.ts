@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useStoreApi, type NodeChange, type NodeDimensionChange } from "@xyflow/react";
 import type { EditorCanvasSession } from "@/features/application/editor";
-import {
-  createGraphFlowNodeViewProjector,
-  type GraphFlowModel,
-  type GraphFlowNode,
-  type GraphFlowEdge,
-} from "./graphFlowModel";
+import { createFlowNodeViewProjector } from "@/shared/ui/flowNodeViewProjector";
+import { type GraphFlowModel, type GraphFlowNode, type GraphFlowEdge } from "./graphFlowModel";
 
 type Interaction = EditorCanvasSession["interaction"];
 type GestureLease = NonNullable<ReturnType<Interaction["beginGesture"]>>;
@@ -35,7 +31,7 @@ export function useGraphFlowNodes({
   onCancel,
 }: GraphFlowNodesOptions) {
   const flowStore = useStoreApi<GraphFlowNode, GraphFlowEdge>();
-  const nodeViews = useMemo(createGraphFlowNodeViewProjector, []);
+  const nodeViews = useMemo(() => createFlowNodeViewProjector<GraphFlowNode>(), []);
   const selected = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
   const inputs = useRef({
     model,

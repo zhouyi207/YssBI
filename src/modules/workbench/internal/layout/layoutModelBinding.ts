@@ -6,7 +6,7 @@ import {
   type ModelChangeListener,
 } from "flexlayout-react";
 
-/** Gesture producers mark intermediate actions; their final unmarked action commits notification. */
+/** Intermediate native actions advance mutation identity; the final action commits notification. */
 export function isIntermediateLayoutAction(action: Action): boolean {
   return (
     action.isAdjusting() ||
@@ -25,8 +25,8 @@ export class LayoutModelBinding {
   private readonly modelListeners = new Set<() => void>();
   private readonly modelListener: ModelChangeListener = {
     onAfterAction: (action) => {
-      // Native geometry gestures update their own rendering. Notify application subscribers
-      // on release; keep the revision current so speculative transactions still go stale.
+      // Geometry gestures and host corrections keep native rendering current. Only the final
+      // action notifies application subscribers; every action still invalidates old candidates.
       this.publish(!isIntermediateLayoutAction(action));
     },
   };

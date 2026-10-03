@@ -60,4 +60,21 @@ describe("diagnostic log domain filtering", () => {
     expect(reopenedState.autoScroll).toBe(false);
     expect(reopenedState.filter.searchText).toBe("ready");
   });
+
+  it("shares filtered records between consumers and invalidates them for changed inputs", () => {
+    const logs = [record("graph", 1, "info", "ready"), record("execution", 2, "warn", "ready")];
+    const filter: LogLogFilter = { levels: allLevels, searchText: "ready" };
+    const graph = applyLogFilter(logs, filter, "graph");
+    expect(applyLogFilter(logs, filter, "graph")).toBe(graph);
+    expect(applyLogFilter(logs, filter, "all")).toEqual(logs);
+    expect(applyLogFilter(logs, filter, "graph")).toBe(graph);
+
+    const warnings = { ...filter, levels: new Set(["warn"] as const) };
+    expect(applyLogFilter(logs, warnings, "graph")).toEqual([]);
+    expect(applyLogFilter(logs, warnings, "all")).toEqual([logs[1]]);
+    expect(applyLogFilter(logs, { ...filter, searchText: "waiting" }, "all")).toEqual([]);
+    const appended = [...logs, record("graph", 3, "info", "ready")];
+    expect(applyLogFilter(appended, filter, "graph")).toEqual([logs[0], appended[2]]);
+    expect(applyLogFilter(logs, filter, "graph")).toBe(graph);
+  });
 });

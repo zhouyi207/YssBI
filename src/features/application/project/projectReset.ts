@@ -1,18 +1,14 @@
-import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
 import { resetDocumentInputs } from "@/features/application/resource/documentInputs";
-import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import type { ProjectLifecycleStateSnapshot } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { isProjectLifecycleStateCurrent } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
-import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
-import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
+import { useResourceStore } from "@/features/core/resource";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import { resetGraphEditCoordinator } from "@/features/application/graphEditing/graphEditCoordinator";
 
 export interface ProjectPresentationResetActions {
@@ -49,20 +45,9 @@ export async function resetClientProjectState(
   if (!runOwnedReset(owner, () => useViewportStore.getState().clear())) return;
   if (!runOwnedReset(owner, resetFunctionSignatureCoordinator)) return;
   if (!runOwnedReset(owner, resetGraphEditCoordinator)) return;
-  if (!runOwnedReset(owner, () => useGraphProjectionStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useGraphInteractionStore.setState({ interactions: {} }))) return;
-  if (!runOwnedReset(owner, () => useChartDocumentStore.getState().clear())) return;
   if (!runOwnedReset(owner, resetDocumentInputs)) return;
-  if (
-    !runOwnedReset(owner, () => {
-      useMindProjectionStore.getState().clear();
-      useDocProjectionStore.getState().clear();
-    })
-  )
-    return;
   if (!runOwnedReset(owner, () => useResourceStore.getState().clear())) return;
-  if (!runOwnedReset(owner, () => useDocumentStateStore.getState().clear())) return;
-  if (!runOwnedReset(owner, () => useGraphMetaStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useGraphSessionStore.getState().reset())) return;
   runOwnedReset(owner, resetProjectScopedRightSidebarState);
 }

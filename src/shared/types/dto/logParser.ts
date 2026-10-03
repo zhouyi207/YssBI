@@ -167,15 +167,17 @@ export function parseLogBatchDto(value: unknown): LogBatchDto {
     return fail("log batch");
   }
   const entries = parseEntries(value.entries, value.streamId, "log batch entries");
-  if (
-    Object.prototype.hasOwnProperty.call(value, "failure") &&
-    (value.failure !== "storage_unavailable" || entries.length > 0)
-  ) {
-    return fail("log storage failure");
+  if (Object.prototype.hasOwnProperty.call(value, "failure")) {
+    if (
+      (value.failure !== "storage_unavailable" && value.failure !== "subscriber_lagged") ||
+      entries.length > 0
+    ) {
+      return fail("log stream failure");
+    }
+    return { streamId: value.streamId, entries, failure: value.failure };
   }
   return {
     streamId: value.streamId,
     entries,
-    ...(value.failure === "storage_unavailable" ? ({ failure: value.failure } as const) : {}),
   };
 }

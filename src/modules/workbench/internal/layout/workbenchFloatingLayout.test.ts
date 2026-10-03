@@ -21,6 +21,36 @@ function floatEditor(model: Model, id: string): string {
 }
 
 describe("workbench floating panels", () => {
+  it("reveals a hidden editor within its own maximized floating layout", () => {
+    const model = Model.fromJson(createEmptyWorkbenchLayout());
+    configureWorkbenchModel(model);
+    const ops = new WorkbenchModelOperations(model);
+    const first = ops.openEditor({
+      resourceKind: "event_graph",
+      resourceRef: "events/A",
+      title: "A",
+      mode: "reuse-resource",
+    });
+    const second = ops.openEditor({
+      resourceKind: "event_graph",
+      resourceRef: "events/B",
+      title: "B",
+      mode: "reuse-resource",
+    });
+    ops.floatGroup(first.groupId);
+    const layoutId = model.getNodeById(first.panelInstanceId)!.getLayoutId();
+    ops.split({
+      panelInstanceId: second.panelInstanceId,
+      referenceGroupId: first.groupId,
+      direction: "right",
+    });
+    model.doAction(Actions.maximizeToggle(ops.getPanel(second.panelInstanceId)!.groupId, layoutId));
+    expect(ops.getPanel(first.panelInstanceId)?.visible).toBe(false);
+    ops.reveal(first.panelInstanceId);
+    expect(model.getMaximizedTabset(layoutId)?.getId()).toBeUndefined();
+    expect(ops.getPanel(first.panelInstanceId)).toMatchObject({ active: true, visible: true });
+  });
+
   it("floats an entire group and resets its tabs to the main workspace with their identities and selection intact", async () => {
     const binding = new LayoutModelBinding(createEmptyWorkbenchLayout(), configureWorkbenchModel);
     try {

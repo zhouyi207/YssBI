@@ -32,6 +32,7 @@ import {
 import { formatProjectStamp, type ProjectSortMode } from "./projectPickerViewUtils";
 
 interface ProjectLibraryProps {
+  isBusy: boolean;
   filterQuery: string;
   sortMode: ProjectSortMode;
   onSetFilterQuery: (value: string) => void;
@@ -47,6 +48,7 @@ interface ProjectLibraryProps {
 }
 
 export function ProjectLibrary({
+  isBusy,
   filterQuery,
   sortMode,
   onSetFilterQuery,
@@ -162,7 +164,9 @@ export function ProjectLibrary({
                         tabIndex={0}
                         data-project-picker-item
                         onClick={() => onSelectProject(project.id)}
-                        onDoubleClick={() => onOpenProject(project.path)}
+                        onDoubleClick={() => {
+                          if (!isBusy) onOpenProject(project.path);
+                        }}
                         onContextMenu={(event) => {
                           onSelectProject(project.id);
                           onProjectContextMenu(event, project);
@@ -183,6 +187,7 @@ export function ProjectLibrary({
                           type="button"
                           variant="ghost"
                           size="icon-sm"
+                          disabled={isBusy}
                           onClick={(event) => {
                             event.stopPropagation();
                             onToggleFavorite(project.id);

@@ -1,4 +1,5 @@
 import type { AiSettings, AppearanceSettings, PartialAppSettings } from "./index";
+import { SUPPORTED_LANGUAGES } from "./LanguageSettings";
 
 type Validators<T> = { [K in keyof T]-?: (value: unknown) => boolean };
 const isString = (value: unknown) => typeof value === "string";
@@ -12,7 +13,7 @@ const fields = {
     colorTheme: isString,
     lastLightColorTheme: isString,
     lastDarkColorTheme: isString,
-    language: (value: unknown) => value === "zh-CN" || value === "en-US",
+    language: (value: unknown) => SUPPORTED_LANGUAGES.some((language) => language === value),
     smoothScroll: (value: unknown) => typeof value === "boolean",
     titleBarStyle: (value: unknown) => value === "custom" || value === "native",
   } satisfies Validators<AppearanceSettings>,

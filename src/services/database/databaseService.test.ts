@@ -8,6 +8,13 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 const operationId = "00000000-0000-0000-0000-000000000401";
 const expectedRevision = 4;
+const metadata = {
+  id: "sales",
+  name: "Sales",
+  rowCount: 1,
+  columnCount: 1,
+  columns: [{ name: "value", type: "Int64", physical: "Int64", semantic: null }],
+};
 const mutation = {
   operationId,
   projectInstanceId,
@@ -23,6 +30,30 @@ beforeEach(() => {
 });
 
 describe("DatabaseService project lifecycle contract", () => {
+  it("rejects invalid metadata before read or import consumers can accept it", async () => {
+    vi.mocked(invoke).mockResolvedValue({ ...metadata, id: "another-database" });
+    await expect(
+      DatabaseService.getDatabaseMeta(projectInstanceId, metadata.id, expectedRevision),
+    ).rejects.toThrow();
+
+    for (const invalid of [
+      { ...metadata, columnCount: 2 },
+      { ...metadata, columns: [{ ...metadata.columns[0], semantic: { kind: "Scalar" } }] },
+      { ...metadata, rowCount: -1 },
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(invalid);
+      await expect(
+        DatabaseService.getDatabaseMeta(projectInstanceId, metadata.id, expectedRevision),
+      ).rejects.toThrow();
+      vi.mocked(invoke).mockResolvedValue({ data: invalid, mutation });
+      await expect(
+        DatabaseService.loadDatabase(projectInstanceId, operationId, {
+          csv: { path: "C:/sales.csv" },
+        }),
+      ).rejects.toThrow();
+    }
+  });
+
   it("validates the bounded sample projection before publishing the list", async () => {
     const sample = {
       id: "iris",
@@ -48,23 +79,80 @@ describe("DatabaseService project lifecycle contract", () => {
     }
   });
   it("keeps the backend row identities aligned with their page rows", async () => {
-    const page = { rows: [[7], [9]], rowIds: [101, 3] };
+    const page = {
+      rows: [
+        ["9007199254740993", true, null],
+        [9.5, false, "text"],
+      ],
+      rowIds: ["9007199254740993", "9223372036854775807"],
+    };
     vi.mocked(invoke).mockResolvedValue(page);
 
     await expect(
-      DatabaseService.getDatabaseRows(projectInstanceId, "sales", 50, 2),
+      DatabaseService.getDatabaseRows(projectInstanceId, "sales", expectedRevision, 50, 2),
     ).resolves.toEqual(page);
+    for (const malformed of [
+      { ...page, rowIds: [Number("9007199254740993"), 3] },
+      { ...page, rowIds: ["01", "3"] },
+      { ...page, rowIds: ["9223372036854775808", "3"] },
+      { ...page, rowIds: ["3", "3"] },
+      { ...page, rowIds: ["3"] },
+      { ...page, rows: [[{}], [9]] },
+      { ...page, rows: [[7], [9, 10]] },
+      { ...page, rows: [[Infinity], [9]] },
+      { rows: [[7], [9], [10]], rowIds: ["0", "1", "2"] },
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(malformed);
+      await expect(
+        DatabaseService.getDatabaseRows(projectInstanceId, "sales", expectedRevision, 50, 2),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("validates both distribution variants before chart consumers receive them", async () => {
+    const numeric = { columnName: "value", kind: "numeric", bins: [{ label: "[0, 1)", count: 2 }] };
+    const categorical = {
+      columnName: "category",
+      kind: "string",
+      categories: [{ label: "A", value: 1 }],
+      otherCount: 1,
+    };
+    vi.mocked(invoke).mockResolvedValue([numeric, categorical]);
+    await expect(
+      DatabaseService.getColumnDistribution(projectInstanceId, "sales", expectedRevision),
+    ).resolves.toEqual([numeric, categorical]);
+    for (const invalid of [
+      [{ ...numeric, bins: [{ label: "[0, 1)", count: -1 }] }],
+      [{ ...categorical, categories: [{ label: "A", value: "1" }] }],
+      [numeric, numeric],
+      [{ ...categorical, kind: "unknown" }],
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(invalid);
+      await expect(
+        DatabaseService.getColumnDistribution(projectInstanceId, "sales", expectedRevision),
+      ).rejects.toThrow();
+    }
   });
 
   it.each([
-    ["getDatabaseMeta", "get_database_meta", [projectInstanceId, "sales"], {}],
+    [
+      "getDatabaseMeta",
+      "get_database_meta",
+      [projectInstanceId, "sales", expectedRevision],
+      { expectedRevision },
+    ],
     [
       "getDatabaseRows",
       "get_database_rows",
-      [projectInstanceId, "sales", 0, 50],
-      { offset: 0, limit: 50 },
+      [projectInstanceId, "sales", expectedRevision, 0, 50],
+      { expectedRevision, offset: 0, limit: 50 },
     ],
-    ["getColumnDistribution", "get_column_distribution", [projectInstanceId, "sales"], {}],
+    [
+      "getColumnDistribution",
+      "get_column_distribution",
+      [projectInstanceId, "sales", expectedRevision],
+      { expectedRevision },
+    ],
     [
       "exportDatabase",
       "export_database",
@@ -73,7 +161,13 @@ describe("DatabaseService project lifecycle contract", () => {
     ],
   ] as const)("passes exact project identity through %s", async (method, command, args, extra) => {
     vi.mocked(invoke).mockResolvedValue(
-      method === "getDatabaseRows" ? { rows: [], rowIds: [] } : undefined,
+      method === "getDatabaseRows"
+        ? { rows: [], rowIds: [] }
+        : method === "getDatabaseMeta"
+          ? metadata
+          : method === "getColumnDistribution"
+            ? []
+            : undefined,
     );
 
     await (DatabaseService[method] as (...values: any[]) => Promise<unknown>)(...args);
@@ -98,19 +192,28 @@ describe("DatabaseService project lifecycle contract", () => {
       connectionString: "postgres://localhost/source",
     });
     expect(invoke).toHaveBeenNthCalledWith(3, "list_excel_sheets", { filePath: "C:/source.xlsx" });
+    const entries = ["  preserved name  ", "表格", "A.B"];
+    vi.mocked(invoke).mockResolvedValue(entries);
+    await expect(DatabaseService.listExcelSheets("C:/source.xlsx")).resolves.toEqual(entries);
+    vi.mocked(invoke).mockResolvedValue(["valid", { name: "invalid" }]);
+    await expect(DatabaseService.listSqliteTables("C:/source.sqlite")).rejects.toThrow();
+    await expect(
+      DatabaseService.listSqlTables("postgres", "postgres://localhost/source"),
+    ).rejects.toThrow();
+    await expect(DatabaseService.listExcelSheets("C:/source.xlsx")).rejects.toThrow();
   });
 });
 
 describe("DatabaseService revisioned mutation contract", () => {
   it("binds a sample import to the caller project, operation and exact sample version", async () => {
     const aggregate = {
-      data: { id: "new-dataset", name: "Iris", rowCount: 150, columnCount: 5, columns: [] },
+      data: { ...metadata, id: "new-dataset", name: "Iris" },
       mutation,
     };
     vi.mocked(invoke).mockResolvedValue(aggregate);
     await expect(
       DatabaseService.importSampleDataset(projectInstanceId, operationId, "iris", 1),
-    ).resolves.toBe(aggregate);
+    ).resolves.toEqual(aggregate);
     expect(invoke).toHaveBeenCalledWith("import_sample_dataset", {
       projectInstanceId,
       operationId,
@@ -121,19 +224,26 @@ describe("DatabaseService revisioned mutation contract", () => {
   it("passes caller project and operation identity for expected-absent imports and returns the aggregate", async () => {
     const engine = { csv: { path: "C:/sales.csv", delimiter: ",", hasHeader: true } } as const;
     const aggregate = {
-      data: { id: "sales", name: "Sales", rowCount: 1, columnCount: 1, columns: [] },
+      data: metadata,
       mutation,
     };
     vi.mocked(invoke).mockResolvedValue(aggregate);
 
     await expect(
       DatabaseService.loadDatabase(projectInstanceId, operationId, engine),
-    ).resolves.toBe(aggregate);
+    ).resolves.toEqual(aggregate);
     expect(invoke).toHaveBeenCalledWith("load_database", {
       projectInstanceId,
       operationId,
       engine,
     });
+    vi.mocked(invoke).mockResolvedValue({
+      ...aggregate,
+      mutation: { ...mutation, deltas: [{ payload: { kind: "database", patch: null } }] },
+    });
+    await expect(
+      DatabaseService.loadDatabase(projectInstanceId, operationId, engine),
+    ).rejects.toThrow();
   });
 
   it.each([
@@ -168,12 +278,18 @@ describe("DatabaseService revisioned mutation contract", () => {
   ] as const)(
     "passes exact revision authority through %s",
     async (method, command, args, extra) => {
-      const aggregate = { data: null, mutation };
+      const aggregate = {
+        data:
+          method === "setColumnSemantic"
+            ? { canUndo: true, canRedo: false, isModified: true, undoCount: 1, redoCount: 0 }
+            : null,
+        mutation,
+      };
       vi.mocked(invoke).mockResolvedValue(aggregate);
 
       await expect(
         (DatabaseService[method] as (...values: any[]) => Promise<unknown>)(...args),
-      ).resolves.toBe(aggregate);
+      ).resolves.toEqual(aggregate);
       expect(invoke).toHaveBeenCalledWith(command, {
         projectInstanceId,
         operationId,

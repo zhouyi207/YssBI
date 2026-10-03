@@ -39,5 +39,14 @@ export async function pruneEditorPanelsForMissingResources(): Promise<void> {
   );
   if (outcome !== "committed") return;
 
-  for (const panel of stalePanels) releaseEditorPaneState(panel.panelInstanceId);
+  for (const panel of stalePanels) {
+    if (!isProjectLifecycleStateCurrent(identity)) return;
+    if (
+      workbenchLayoutRead
+        .listPanels()
+        .some((current) => current.panelInstanceId === panel.panelInstanceId)
+    )
+      continue;
+    releaseEditorPaneState(panel.panelInstanceId);
+  }
 }

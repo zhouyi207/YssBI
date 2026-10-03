@@ -2,10 +2,12 @@
 
 > Status: Current
 > Scope: 前端职责入口、类型检查、测试和格式化命令
-> Canonical owners: package.json 拥有脚本定义，各模块 README 拥有对应功能契约
+> Canonical owners: package.json 拥有脚本定义和前端版本，各模块 README 拥有对应功能契约
 > Update when: 前端入口、工具链或验证命令改变时
 
 `app/` 组合窗口与路由，`modules/` 提供界面，`features/application/` 编排用例，`features/core/` 保存投影与交互状态，`features/domain/` 保存纯领域规则，`services/` 适配 IPC。
+
+Help/About 的共享元数据位于 `shared/appLinks.ts`，显示的前端版本直接读取根 `package.json`，不在呈现源码另存版本字符串。
 
 Rust 拥有已提交项目状态及当前 Graph 文档、历史与保存身份。查询返回数据；修改返回提交结果，事件可交付同一提交的回声，前端由发布协调器统一去重和更新投影。React 保留图的只读投影与临时交互，其他资源的配置草稿遵循各自模块契约。
 

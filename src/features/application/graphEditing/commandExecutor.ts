@@ -1,7 +1,7 @@
 import { commandRegistry } from "./commands";
 import type { CommandHandlerMap } from "./commands/registryTypes";
 import type { CommandHandler, GraphEditOutcome } from "./types";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 export type GraphEditInvocation = {
   [K in keyof CommandHandlerMap]: [type: K, args: Parameters<CommandHandlerMap[K]["execute"]>[1]];

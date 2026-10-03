@@ -8,6 +8,7 @@ import {
   type SourceMessagePartComponent,
 } from "@assistant-ui/react";
 import { useTranslation } from "react-i18next";
+import { useShallow } from "zustand/react/shallow";
 import {
   VscArrowDown,
   VscCheck,
@@ -197,7 +198,19 @@ function AssistantMessage() {
 
 export function AssistantThread() {
   const { t } = useTranslation();
-  const snapshot = useAssistantHarnessSnapshot();
+  const snapshot = useAssistantHarnessSnapshot(
+    useShallow((state) => ({
+      status: state.status,
+      error: state.error,
+      sessionId: state.sessionId,
+      conversations: state.conversations,
+      isRunning: state.isRunning,
+      isEmpty: state.messages.length === 0,
+      memoryCount: state.memoryCount,
+      memoryRecords: state.memoryRecords,
+      activity: state.activity,
+    })),
+  );
   const { deleteMemory, newConversation, selectConversation, reloadConversations } =
     useAssistantHarnessActions();
   const statusError = snapshot.error;
@@ -241,7 +254,7 @@ export function AssistantThread() {
           disabled={
             snapshot.status === "initializing" ||
             snapshot.isRunning ||
-            (snapshot.sessionId !== null && snapshot.messages.length === 0)
+            (snapshot.sessionId !== null && snapshot.isEmpty)
           }
           onClick={() => void newConversation()}
         >

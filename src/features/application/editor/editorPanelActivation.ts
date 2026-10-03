@@ -6,6 +6,10 @@ import {
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { focusGraphPanelSession } from "./graphPanelSession";
 import { detailFocusForEditorResource, setDetailContext } from "./rightSidebarActions";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 type ActiveEditorPanelTarget = Pick<
   WorkbenchEditorPanelInfo,
@@ -26,6 +30,9 @@ function currentActiveEditorPanel(panel: ActiveEditorPanelTarget): WorkbenchEdit
 
 /** Model selection drives focus and Details; it never loads or unloads a graph. */
 export function synchronizeActiveEditorPanel(panel: ActiveEditorPanelTarget): boolean {
+  const identity = captureProjectLifecycleState();
+  const isCurrent = () =>
+    isProjectLifecycleStateCurrent(identity) && currentActiveEditorPanel(panel) !== null;
   const current = currentActiveEditorPanel(panel);
   if (!current) return false;
   const { metadata, groupId } = current;
@@ -36,6 +43,7 @@ export function synchronizeActiveEditorPanel(panel: ActiveEditorPanelTarget): bo
       panel.panelInstanceId,
     ),
   );
+  if (!isCurrent()) return false;
   if (metadata.resourceKind === "event_graph" || metadata.resourceKind === "function_graph")
     focusGraphPanelSession(metadata.resourceRef, groupId);
   else {
@@ -43,14 +51,15 @@ export function synchronizeActiveEditorPanel(panel: ActiveEditorPanelTarget): bo
     const focusedGroup = sessions.getFocusedGroupId();
     if (focusedGroup) sessions.clearFocusedSession(focusedGroup);
   }
-  return true;
+  return isCurrent();
 }
 
 /** Native open/reuse already selected the panel; never reactivate a late open result. */
 export async function revealActiveEditorDetails(panel: WorkbenchEditorPanelInfo): Promise<boolean> {
+  const identity = captureProjectLifecycleState();
   if (!synchronizeActiveEditorPanel(panel)) return false;
   if (workbenchLayoutRead.isReady) await revealWorkbenchView("details");
-  return currentActiveEditorPanel(panel) !== null;
+  return isProjectLifecycleStateCurrent(identity) && currentActiveEditorPanel(panel) !== null;
 }
 
 export function synchronizeCurrentEditorPanel(groupId: string): boolean {

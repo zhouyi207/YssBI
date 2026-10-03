@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { executeGraphEdit } from "@/features/application/graphEditing";
-import { logger } from "@/features/core/observability/logger";
+import { logger } from "@/utils/frontendLogger";
 import type { ValueType } from "@/shared/types/domain/valueType";
 import { scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 

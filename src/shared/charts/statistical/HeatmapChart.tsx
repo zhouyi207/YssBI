@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   axisBottom,
   axisLeft,
+  extent,
   format,
   interpolateRdBu,
   scaleBand,
@@ -53,8 +54,11 @@ export function HeatmapChart({
       .range([0, box.plotHeight])
       .padding(0.015);
     const cells = model.matrix.flatMap((row, r) => row.map((value, c) => ({ r, c, value })));
-    const minimum = Math.min(...cells.map((value) => value.value));
-    const maximum = Math.max(...cells.map((value) => value.value));
+    const [minimum, maximum] = extent(cells, (cell) => cell.value);
+    if (minimum === undefined || maximum === undefined) {
+      layers.root.attr("display", "none");
+      return;
+    }
     const midpoint = minimum * 0.5 + maximum * 0.5;
     const color = scaleDiverging(interpolateRdBu).domain([maximum, midpoint, minimum]);
     const xStep = Math.max(1, Math.ceil(model.xLabels.length / Math.max(1, box.plotWidth / 60)));

@@ -99,8 +99,7 @@ export function applyThemeTokens(root: HTMLElement, tokens: ResolvedThemeTokens)
 }
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { theme, appearance, load } = useApplicationSettings();
-  const { language, smoothScroll } = appearance;
+  const { theme, language, smoothScroll, load } = useApplicationSettings();
 
   useWindowDecorationEffect();
 

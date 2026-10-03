@@ -1,9 +1,8 @@
-import { useGraphProjectionStore } from "./graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 
 /** Missing projections never authorize graph content operations. */
 export function isUnmanagedNode(graphPath: string, nodeId: string): boolean {
   return (
-    useGraphProjectionStore.getState().getGraphNode(graphPath, nodeId)?.capabilities?.managed ===
-    false
+    useResourceStore.getState().getGraphNode(graphPath, nodeId)?.capabilities?.managed === false
   );
 }

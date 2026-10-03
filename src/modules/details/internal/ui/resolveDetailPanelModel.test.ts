@@ -15,13 +15,11 @@ const logEntry = {
   fields: {},
 } satisfies LogRecordDto;
 
-const catalog = {
+const targetData = {
   chartName: null,
-  eventGraphs: { "evt-1": { id: "evt-1", name: "Main" } },
-  functionGraphs: { "fn-1": { id: "fn-1", name: "Add", functionInputs: [], functionOutputs: [] } },
-  dataframes: {
-    "df-1": { id: "df-1", name: "Sales", rowCount: 10 },
-  },
+  eventName: null,
+  functionGraph: { id: "fn-1", name: "Add", functionInputs: [], functionOutputs: [] },
+  dataframe: { id: "df-1", name: "Sales", rowCount: 10 },
 };
 
 describe("resolveDetailPanelModel", () => {
@@ -31,18 +29,18 @@ describe("resolveDetailPanelModel", () => {
         target: null,
         selectedLog: null,
         chartDocument: null,
-        ...catalog,
+        ...targetData,
       }),
     ).toEqual({ kind: "empty" });
   });
 
-  it("resolves resource-backed panels from catalog snapshots", () => {
+  it("resolves resource-backed panels from the selected resource", () => {
     expect(
       resolveDetailPanelModel({
         target: { kind: "data", id: "df-1" },
         selectedLog: null,
         chartDocument: null,
-        ...catalog,
+        ...targetData,
       }),
     ).toMatchObject({ kind: "data", id: "df-1", dataframe: { name: "Sales" } });
   });
@@ -53,7 +51,7 @@ describe("resolveDetailPanelModel", () => {
         target: { kind: "node", id: "shared-node", graphPath: "functions/second" },
         selectedLog: null,
         chartDocument: null,
-        ...catalog,
+        ...targetData,
       }),
     ).toEqual({
       kind: "node",
@@ -67,18 +65,14 @@ describe("resolveDetailPanelModel", () => {
       target: { kind: "function_graph", path: "fn-1" },
       selectedLog: null,
       chartDocument: null,
-      ...catalog,
-      functionGraphs: {
-        "fn-1": {
-          id: "fn-1",
-          name: "Add",
-          functionInputs: [
-            createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" }),
-          ],
-          functionOutputs: [
-            createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" }),
-          ],
-        },
+      ...targetData,
+      functionGraph: {
+        id: "fn-1",
+        name: "Add",
+        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
+        functionOutputs: [
+          createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" }),
+        ],
       },
     });
 
@@ -99,7 +93,7 @@ describe("resolveDetailPanelModel", () => {
         target: { kind: "event_graph", path: "missing" },
         selectedLog: null,
         chartDocument: null,
-        ...catalog,
+        ...targetData,
       }),
     ).toEqual({ kind: "unavailable", resourceKind: "event_graph", resourceRef: "missing" });
 
@@ -108,7 +102,7 @@ describe("resolveDetailPanelModel", () => {
         target: { kind: "log" },
         selectedLog: null,
         chartDocument: null,
-        ...catalog,
+        ...targetData,
       }),
     ).toEqual({ kind: "empty" });
 
@@ -117,7 +111,7 @@ describe("resolveDetailPanelModel", () => {
         target: { kind: "log" },
         selectedLog: logEntry,
         chartDocument: null,
-        ...catalog,
+        ...targetData,
       }),
     ).toEqual({ kind: "log", log: logEntry });
   });

@@ -58,16 +58,14 @@ function LinearObservations({ data }: { data: LinearRegressionReportData }) {
     undefined,
     data.observations.part,
   );
-  const columns = useMemo(() => [...page.columns], [page.columns]);
-  const rows = useMemo(() => page.rows.map((row) => [...row]), [page.rows]);
   return (
     <div className="space-y-3">
       {page.error ? (
         <ResultReadError error={page.error} onRetry={() => void page.reload()} />
       ) : null}
       <ReadOnlyDataGrid
-        columns={columns}
-        rows={rows}
+        columns={page.columns}
+        rows={page.rows}
         loading={page.loading}
         pageStartIndex={page.offset}
         height={320}

@@ -1,4 +1,4 @@
-export { graphOutputKey, portAddressKey } from "./portAddressKey";
+export { graphOutputKey, portAddressKey } from "@/shared/types/domain/portAddressKey";
 export {
   formatNodePinDisplayLabel,
   nodeDisplayTitle,

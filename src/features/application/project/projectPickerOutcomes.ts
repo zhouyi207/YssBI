@@ -25,18 +25,13 @@ type ProjectPickerFailureIssueBase = {
   error: ProjectPickerErrorPresentation;
 };
 
+export type ProjectPickerPageOperation =
+  | { operation: "refresh" | "scan" | "cleanup" | "import" }
+  | { operation: "open" | "reveal"; projectPath: string }
+  | { operation: "remove" | "favorite"; projectId: string };
+
 export type ProjectPickerPageIssue =
-  | (ProjectPickerFailureIssueBase & {
-      operation: "refresh" | "scan" | "cleanup" | "import";
-    })
-  | (ProjectPickerFailureIssueBase & {
-      operation: "open" | "reveal";
-      projectPath: string;
-    })
-  | (ProjectPickerFailureIssueBase & {
-      operation: "remove" | "favorite";
-      projectId: string;
-    })
+  | (ProjectPickerFailureIssueBase & ProjectPickerPageOperation)
   | {
       kind: "empty";
       operation: "scan";
@@ -61,7 +56,7 @@ export type ProjectPickerLifecycleActionOutcome =
   | { status: "failed"; error: ProjectPickerErrorPresentation }
   | { status: "stale" };
 
-type ProjectPickerLocalErrorCode = "project_activation_failed";
+type ProjectPickerLocalErrorCode = "project_activation_failed" | "project_picker_busy";
 
 export class ProjectPickerOperationError extends Error {
   constructor(readonly code: ProjectPickerLocalErrorCode) {
@@ -81,6 +76,10 @@ const DEFAULT_ERROR_PRESENTATION: ErrorMessagePresentation = {
 };
 
 const ERROR_PRESENTATIONS: Readonly<Record<string, ErrorMessagePresentation>> = {
+  project_picker_busy: {
+    messageKey: "projectPicker.issues.errors.busy",
+    fallbackMessageKey: "common.error",
+  },
   invalid_path: {
     messageKey: "projectPicker.issues.errors.invalidPath",
     fallbackMessageKey: "projectPicker.newProjectModal.invalidPath",

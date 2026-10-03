@@ -9,8 +9,9 @@ import {
 } from "react-icons/vsc";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { openFileInEditor } from "@/features/application/editor/openFileInEditor";
+import { useGraphRead } from "@/features/core/graph/read";
 import { buildSidebarDragData } from "@/features/application/sidebar";
-import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
+import { TYPE_ICON_COLORS } from "./resourceIconColors";
 import {
   SidebarListItem,
   SidebarRowActionButton,
@@ -25,7 +26,6 @@ export const SidebarFileRow = memo(function SidebarFileRow({
   kind,
   indentDepth = 0,
   isSelected = false,
-  diagnosticCount = 0,
   onContextMenu,
   onOpen,
 }: {
@@ -34,11 +34,15 @@ export const SidebarFileRow = memo(function SidebarFileRow({
   kind: FileResourceKind;
   indentDepth?: number;
   isSelected?: boolean;
-  diagnosticCount?: number;
   onContextMenu: (e: React.MouseEvent) => void;
   onOpen?: (ref: FileResourceRef) => void;
 }) {
   const { t } = useTranslation();
+  const diagnosticCount = useGraphRead((snapshot) =>
+    kind === "event_graph" || kind === "function_graph"
+      ? (snapshot.graphEntities[id]?.diagnostics.length ?? 0)
+      : 0,
+  );
   const Icon = {
     event_graph: VscSymbolEvent,
     function_graph: VscSymbolMethod,
@@ -53,12 +57,7 @@ export const SidebarFileRow = memo(function SidebarFileRow({
     function_graph: () => buildSidebarDragData(id, name, "function_graph"),
   };
   const open = () => (onOpen ? onOpen({ id, kind }) : void openFileInEditor(id, kind));
-  const icon = (
-    <Icon
-      size={SIDEBAR_ROW_ICON_SIZE}
-      style={{ color: (TYPE_ICON_COLORS as Record<string, string>)[kind] }}
-    />
-  );
+  const icon = <Icon size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS[kind] }} />;
 
   return (
     <SidebarListItem

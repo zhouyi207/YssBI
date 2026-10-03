@@ -40,7 +40,15 @@ Project sidebar 按 Events → Functions → Charts → Minds → Docs → Data 
 侧栏获得输入焦点不改变顶部选择，切换资源或关闭标签时高亮随原生选择更新。
 画布内单选、多选、框选和清空节点选择只改变节点选择及 Details，不改变所属 Graph 条目的背景。
 
+侧栏重命名输入归 `useSidebarContextMenu` 的局部状态。每次打开创建独立提交回调身份；
+异步成功关闭或失败写入错误前，核对当前表单仍属于该次打开。取消后重新打开的表单不接纳旧提交结果。
+资源命令及项目身份校验由 [File operations](../../features/application/resource/README.md) 对应的 Application 动作负责。
+
 Event、Function、Chart、Mind、Doc、Data 的物理激活统一由原生布局的打开和复用操作完成，随后由 `revealActiveEditorDetails` 同步 Details 上下文。同步前校验资源及活动面板，不再排队二次激活；Project 分类展开不改变活动面板。
+详情及图焦点的同步通知返回后，重新核对原项目生命周期和活动面板；Details 展开回执也沿用原项目身份。
+编辑器打开在解析目标组、取得原生面板和调用方继续更新视口或详情时分别重验原项目。项目替换仍由
+Workbench 原有 generation 撤销已排队操作；旧请求不能在目标组等待结束后借用新项目重新排队，
+目标组和面板打开的失效回执不再显示旧错误。
 
 从侧栏条目、行尾按钮或资源“打开”动作进入上述六类资源时，统一打开流程在同步详情内容后
 切换并展开既有 Details 面板，不再由事件图和函数图的侧栏行单独触发。布局恢复、面板移动等
@@ -53,6 +61,8 @@ Doc、Chart 和 Data 始终显示资源信息。激活标签读取该面板自�
 
 Mind 的主题编辑操作由现有 Details 面板承载。Details 上下文包含文件路径和所属面板 ID，
 节点选择与折叠状态复用 `EditorPaneState`，关闭面板或重置项目时一并清理；分屏间各自保留。
+该 store 统一去重选择 ID、维护节点/连线选择互斥，并在写入边界比较变化；同值选择、折叠和重复清理不发布新状态。
+复合清理使用一次 Immer 更新，保留其他面板及未变化字段的引用；画布不再各自维护同值判断。
 Mind 画布不再内嵌属性侧栏，详情表单复用 Details 的公共样式与控件，见 [Document editors](../document-editor/README.md)。
 
 数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 在工作台与独立数据库窗口间复用数据表格、分页、选择及导出；嵌入模式不执行窗口初始化或窗口控制，键盘选择仅处理表格容器内的事件。独立窗口仍由菜单入口打开。数据标签没有本地文档草稿，不参与图/图表编辑与保存命令；关闭标签只释放面板状态，不卸载图文档或清除共享数据库投影。
@@ -220,7 +230,14 @@ Logs 内部使用一个受限的 FlexLayout Model，承载七个 domain tabs。�
 
 工作台内的 Logs 复用外层面板边框，移除内层日志 tab 内容的主题边框与圆角，避免内容比 Output、Problems 多缩进一层。分类 tab、工具栏和日志行自身的内距仍由对应组件负责；独立 Logs 窗口保留原生主题边框。
 
-main Logs 的布局由 logsRuntime 在挂载时交给真实 Model，卸载时保存只读快照，作为 nested.logs 随工作台持久化。独立 Logs 窗口使用自己的临时 Model。日志内容、过滤、选择和运行观测继续属于 Logs owner。
+main Logs 的布局由 logsRuntime 在挂载时交给真实 Model，卸载时保存只读快照，作为 nested.logs 随工作台持久化。
+该快照的缓存与发布使用内部 Zustand store，恢复候选和原生 Model 仍沿用当前 epoch 与绑定校验。
+比较相同快照时不重复通知，也不复制；只有变化的原生 Model JSON 才在接收边界隔离。
+恢复候选先隔离一次，并直接交给 `LayoutModelBinding.replace` 的现有复制入口；内部只读快照可以共享，
+持久化读取仍返回隔离副本。每次 capture 继续调用原生 `toJson`，保留节点 save 事件，不按布局 revision 跳过。
+绑定、捕获、恢复及清理按本次绑定对象核对归属；同步观察者重绑后，旧操作不会覆盖新绑定、
+清除其恢复候选或断开同一 API 的后继订阅。
+独立 Logs 窗口使用自己的临时 Model。日志内容、过滤、选择和运行观测继续属于 Logs owner。
 
 ## 4. Canonical metadata 与 identity
 
@@ -247,11 +264,11 @@ reference → { role, url, title }
 
 Singleton 与 multi-instance contract：
 
-- Project、Nodes、Commands、Plugins、Details、Assistant、Settings、Logs、Output、Problems 由 `viewId` 保证 singleton；
+- Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 由 `viewId` 保证 singleton；
 - Project、Nodes、Commands、Plugins 随默认 Activity group 安装且保持存在；
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
-- Settings 按需打开，是普通 layout-persisted singleton；
+- Settings 按需打开为应用 singleton Dialog，打开状态不进入布局 JSON；
 - Result 按完整结果引用复用并 reveal，不同运行产生的新引用创建独立面板；
 - 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
@@ -270,14 +287,28 @@ Application 的结果租约控制器订阅完成 hydration 后的真实面板集
 布局实现位于 src/modules/workbench/internal/layout/：
 
 - workbenchLayoutOperations.ts 在原生 Model 上执行 openEditor、openReference、ensureView、upsertResult、activate、reveal、move、split、边栏调整和资源重映射。
+- workbenchLayoutDefaults.ts 拥有空布局、默认面板安装、恢复时的固定面板补全、边栏默认值读取及重置排序；安装函数只操作传入的既有事务。
+- workbenchLayoutPersistence.ts 拥有存储键、浏览器存储适配、JSON 读取校验、快照生成和已存项目面板清理。
 - workbenchRead.ts 与 workbenchControl.ts 提供业务侧查询和语义命令；调用方不持有可写 Model。
-- workbenchRootBinding.ts 只为 RootLayoutHost 创建渲染绑定，并接收原生布局动作与面板激活请求。
+- workbenchRootBinding.ts 只为 RootLayoutHost 创建渲染绑定，并接收原生布局动作与面板激活请求；该入口留在宿主内部，不从模块公共入口导出。
 - workbenchLayoutInternal.ts 拥有 FIFO、hydration gate、操作代际、关闭提交和复合事务。
+- workbenchLayoutProjection.ts 从已提交的原生 Model 生成冻结只读记录，使用内部 Zustand store 发布并管理窄订阅。
 - workbenchLayoutController.ts 协调窗口绑定、恢复、项目资源就绪、持久化防抖和关闭时 flush。
+
+恢复协调器通过上述模块准备内容，再使用现有 hydration 或布局事务入口安装；
+绑定、恢复、项目及就绪回调代际仍归协调器所有。默认安装和存储清理不持有另一份运行期布局或生命周期状态。
+解除绑定时的 Logs 捕获和原生节点 save 回调可能同步安装后继绑定；旧清理与外层 bind 只处理原绑定，
+不会覆盖后继的恢复周期。持久化暂停计数归各自恢复周期，旧关闭 flush 的等待和结束不阻止或取消后继写入。
 
 普通操作使用原生 Actions。复合操作通过 PendingWorkbenchTransaction 创建独立候选 Model，在候选上使用同一套语义操作；验证结构、metadata 和基线 revision 后，以 Model.fromJson(candidate, previousModel) 发布并移交既有标签的视图状态。候选准备期间不移交活动视图。没有另一份自制 panel/group/edge 模型，也不回放 Dockview 风格命令。
 
+打开/复用面板、移动、分屏、浮窗停靠及资源重映射把同次命令的原生动作放入 `Actions.group`，
+完成标题、成员及激活变更后才发布。激活动作在现有 Model adapter 中统一生成；新浮窗沿用原生创建时的选择和层级。
+目标位于浮窗时，恢复被最大化分组遮住的内容使用该浮窗自己的 layout ID。
+
 publication transaction 可以在准备期间等待业务查询。提交前重验 binding、operation generation 和布局 revision；项目切换或用户布局操作会使过期候选失败。Actions.group 只提供原生动作的分组通知，不替代候选验证和业务提交边界。
+资源发布提交后的 pane 清理继续使用该发布的有效性检查，并在每次释放前读取当前 panel ID；
+提交回执或前一次清理通知期间失效的发布不继续清理，已重新出现的面板保留自己的状态。
 
 ### 5.1 拖动与订阅
 
@@ -287,7 +318,14 @@ publication transaction 可以在准备期间等待业务查询。提交前重�
 
 Layout 通过 `subscribeModel` 只订阅 Model 实例替换；Model 内部动作由 FlexLayout 自己处理。所有带 `isAdjusting()` 标记的中间动作统一延迟应用通知，全由中间动作组成的嵌套 GroupAction 同样处理，不再维护手势动作名称清单。原生几何路径继续实时更新，结束动作再提交通知；无论是否通知，每次动作都推进绑定 revision，避免拖动期间的旧候选覆盖新布局。活动分组补全也跳过中间动作，避免空中央区时逐帧扫描布局。
 
-提交后从原生 Model 生成轻量面板、分组和边栏只读投影，复用未变化的记录与嵌套字段引用，按实际状态变化通知消费者。没有 JSON 签名、全量字符串序列化或面板排序，也不根据动作名称猜测影响：
+原生移动动作按 `fromNode` 查找实际移入的 tab/group。跨主区与浮窗的活动分组补全属于触发动作的内部步骤，
+其原生修正动作标记为中间状态，由外层动作发布最终投影，避免补全与外层重复通知；mutation revision 仍逐动作推进。
+
+提交后从原生 Model 生成轻量面板、分组和边栏只读投影，复用未变化的记录与嵌套字段引用，按实际状态变化通知消费者。没有 JSON 签名、全量字符串序列化或面板排序，也不根据动作名称猜测影响。
+
+投影按面板 ID 和 group ID 匹配已有记录，用一次 Immer 更新交付变化与删除。
+metadata、位置、组成员 ID 和边栏字段使用浅比较；Result 的结果引用与展示类型分别保留未变对象，
+不递归合并整份投影。原生 Model 整体替换为相同内容时仍保留读取引用，结果引用或租约变化则通知成员订阅者。
 
 - `subscribePersistence` 接收提交及生命周期通知，用于布局保存调度；纯几何变化不会广播到业务订阅者。
 - `subscribe` / `getSnapshot` 反映面板、分组和边栏语义变化，菜单使用此入口，不因尺寸或浮窗坐标变化重算。
@@ -296,6 +334,12 @@ Layout 通过 `subscribeModel` 只订阅 Model 实例替换；Model 内部动作
 - `subscribePanel(id, listener)` 只反映该面板及所在边栏的状态变化，供面板内容和标签菜单的呈现使用。
 
 绑定、解除绑定及 hydration 状态变化会通知相关订阅者。公共查询读取同一份冻结的提交投影，保证记录引用稳定；中间手势只改变原生 Model 与 mutation revision，结束后发布读投影。投影没有写入口，不是第二份可写面板布局。
+投影的记录、语义通知快照、活动面板和成员通知快照在一次 Zustand 发布中安装；
+`subscribeWithSelector` 按各自依据通知，面板订阅只浅比较自身记录、所在边栏及就绪状态。
+持久化订阅仍接收每次提交。订阅者异常由适配器隔离，不能中断其他观察者或已提交的布局变更。
+内部 store 从空面板投影创建，其初始状态不持有已挂载 Model 或第一份业务面板数据；
+解除绑定发布空投影。FIFO、hydration gate 与 idle 等待由布局运行期拥有；恢复完成或失败由
+controller 的 `cycle.promise` 统一跟踪，公共只读入口不再维护另一组 hydration 等待者。
 
 异步命令的过期检查使用 `getMutationRevision()`，它包含绑定/操作代际、hydration 及原生动作 revision，中间动作也会改变此 token。`getSnapshot().revision` 与 `getActiveSnapshot().revision` 仅表示对应通知投影的变化，不用于并发提交校验；图问题定位和内部布局事务分别使用 mutation token 和 binding revision。
 
@@ -325,6 +369,12 @@ Coordinator 按顺序执行：
 6. 仅对已经物理移除的 panel 释放 pane、viewport、graph session 或 chart document state。
 
 并发 close workflow 串行化；取消、stale token 或 project replacement 都不会提前释放 domain state。
+缺失资源的自动裁剪在提交后及每次 pane 释放前重验原项目，并跳过已重新出现的 panel ID，
+不清理同步通知或提交回执期间建立的后继面板状态。
+物理关闭后的清理也受原项目身份约束：pane、viewport 和详情清理的同步通知返回后重新检查身份，
+并从原生布局重新读取同面板、同图分组和同文档的存在情况，保留通知期间重新打开的面板及文档。
+图卸载同时持有原项目身份与图 lifecycle token；会话、结果、画布交互和执行状态的清理逐步重验，
+结果及画布 owner 的内部清理也接收该有效性检查，旧卸载不会继续清除项目替换或同图重新加载后的状态。
 
 ### 6.2 物理命令
 
@@ -383,7 +433,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 - 所有 editor；
 - 所有 Result。
 
-随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `ResourceStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
 
 ## 8. Persistence contract
 
@@ -404,7 +454,9 @@ value 为：
 }
 ```
 
-root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。root 的 float 与主树共用 ID、singleton 和数量校验，浮动矩形必须包含有限坐标及正尺寸；nested.logs 不接受浮动子布局。恢复时重新施加宿主的浮动、关闭和拖放约束，并保留普通浮窗的标签栏。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。设置与导入不注册为 root panel，也不恢复其打开状态、输入或进度。
+封套只接受 root、nested 字段，nested 只接受 logs；未知字段使整个封套无效。
+在合法封套内，root 与 nested.logs 独立验证和恢复，一部分缺失或无效不丢弃另一部分。
+解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。root 的 float 与主树共用 ID、singleton 和数量校验，浮动矩形必须包含有限坐标及正尺寸；nested.logs 不接受浮动子布局。恢复时重新施加宿主的浮动、关闭和拖放约束，并保留普通浮窗的标签栏。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。设置与导入不注册为 root panel，也不恢复其打开状态、输入或进度。
 
 窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
 
@@ -420,6 +472,11 @@ root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前�
 Tauri 主窗口创建尺寸与项目管理页默认尺寸一致；保存位置不在可用显示器上时重新居中。
 两页共用同一个原生窗口和项目会话，所有项目共用编辑页窗口偏好。
 
+几何恢复与采样共用同一串行队列。移动和缩放监听成组保留，注册中途失败会释放已取得的监听器，
+下次调用重新注册。保存离开页面后先撤销当前页面绑定，目标几何全部恢复成功后才登记新页面；
+失败后的移动、缩放不能把半恢复的几何写入任一页面偏好，同页的下一次恢复调用仍可重试。
+模块热替换时立即释放已取得的监听器，迟到取得的监听器也立即释放；旧模块排队或在途的恢复、采样不再继续后续步骤或写入页面偏好。
+
 主窗口排除在 `tauri-plugin-window-state` 之外。次级窗口的位置、尺寸和最大化状态仍由桌面根包装配的插件维护，
 持久化到应用配置目录的 `.window-state.json`。子窗口逻辑像素默认尺寸来自
 [createPersistedWindow](../../features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
@@ -429,7 +486,15 @@ Tauri 主窗口创建尺寸与项目管理页默认尺寸一致；保存位置�
 插件不管理可见性、装饰或全屏：子窗口隐藏创建，由内容准备流程显示；
 装饰继续采用当前应用设置。创建 Promise 等待原生 `tauri://created` 或 `tauri://error`，结果租约据此判断打开是否成功。
 
+[窗口动作](../../features/application/window/useCurrentWindowActions.ts) 的监听、状态查询与命令回执绑定每次挂载的独立身份。
+卸载或 StrictMode 重新建立 effect 后，旧任务不能继续发布，迟到取得的监听器立即释放。
+结果、数据库和 Logs 窗口的初始化/显示 effect 只依赖稳定动作，最大化状态或错误变化不重复启动这些流程。
+
 工作台只有 `useWorkbenchWindowCloseGuard` 决定是否关闭，先处理未保存内容和布局 flush。
+关闭请求归当前挂载实例和项目生命周期所有；卸载或项目替换后，旧确认、保存及 flush 的迟到结果不能继续提交保存、
+显示失败提示或发起原生关闭。已提交的文件保存继续由原资源 owner 结算，后续文件不再启动保存；
+原生关闭请求的再次回调消费一次性许可，并重验原挂载和项目身份；过期则阻止该次关闭，
+后续用户请求重新确认。原生窗口已经真正关闭后无法撤回。
 原生几何监听不参与这个决策。窗口销毁并从 Tauri manager 移除后，根包调用插件落盘，失败记录诊断；
 应用退出也沿用插件保存。几何属于可恢复偏好，采用插件的缓存和直接文件写入语义，不具有业务事务提交保证。
 同种窗口并存时共享插件缓存；保存时仍打开的同组窗口可能刷新缓存，不保证最后关闭实例的状态获胜。

@@ -76,7 +76,14 @@ export const NodeDetailPanel = memo(function NodeDetailPanel({
   nodeId,
 }: NodeDetailPanelProps) {
   const { t, i18n } = useTranslation();
-  const node = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]?.nodes[nodeId]);
+  const node = useGraphRead(
+    useShallow((snapshot) => {
+      const value = snapshot.graphEntities[graphPath]?.nodes[nodeId];
+      if (!value) return undefined;
+      const { nodeType, display, parameterGroups, diagnostics, portInstanceAdditions } = value;
+      return { nodeType, display, parameterGroups, diagnostics, portInstanceAdditions };
+    }),
+  );
   const diagnosticLabels = useGraphRead(
     useShallow((snapshot) => {
       const bucket = snapshot.graphEntities[graphPath];

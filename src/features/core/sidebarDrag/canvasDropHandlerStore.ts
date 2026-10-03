@@ -1,38 +1,32 @@
-/**
- * Store for registering the Canvas drop handler per FlexLayout panel.
- * RootLayoutHost calls this when a sidebar item is dropped on the canvas.
- */
 import { createStore } from "zustand/vanilla";
 import type { SidebarDragState } from "@/features/core/dnd";
 
-export type CanvasDropHandler = (
-  dragState: SidebarDragState,
-  event: { altKey: boolean; ctrlKey: boolean; shiftKey: boolean },
-) => void | Promise<boolean>;
+export type CanvasDropHandler = (dragState: SidebarDragState) => void | Promise<boolean>;
 
 interface CanvasDropHandlerState {
-  handlers: Record<string, CanvasDropHandler | undefined>;
-  setHandler: (panelInstanceId: string, handler: CanvasDropHandler | null) => void;
+  handlers: Record<string, { readonly handler: CanvasDropHandler } | undefined>;
 }
 
-const dropHandlerStore = createStore<CanvasDropHandlerState>((set) => ({
+const dropHandlerStore = createStore<CanvasDropHandlerState>(() => ({
   handlers: {},
-  setHandler: (panelInstanceId, handler) =>
-    set((state) => {
-      const handlers = { ...state.handlers };
-      if (handler) {
-        handlers[panelInstanceId] = handler;
-      } else {
-        delete handlers[panelInstanceId];
-      }
-      return { handlers };
-    }),
 }));
 
 export const canvasDropHandlerStore = {
-  setHandler: (panelInstanceId: string, h: CanvasDropHandler | null) => {
-    dropHandlerStore.getState().setHandler(panelInstanceId, h);
+  registerHandler: (panelInstanceId: string, handler: CanvasDropHandler): (() => void) => {
+    // Callback identity may be reused by successive mounts of the same panel.
+    const registration = { handler };
+    dropHandlerStore.setState((state) => ({
+      handlers: { ...state.handlers, [panelInstanceId]: registration },
+    }));
+    return () => {
+      dropHandlerStore.setState((state) => {
+        if (state.handlers[panelInstanceId] !== registration) return state;
+        const handlers = { ...state.handlers };
+        delete handlers[panelInstanceId];
+        return { handlers };
+      });
+    };
   },
   getHandler: (panelInstanceId: string): CanvasDropHandler | null =>
-    dropHandlerStore.getState().handlers[panelInstanceId] ?? null,
+    dropHandlerStore.getState().handlers[panelInstanceId]?.handler ?? null,
 };

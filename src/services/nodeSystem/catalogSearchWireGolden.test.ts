@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import catalogSearchWire from "@/tests/fixtures/node-system-contracts/catalog-search-wire.json";
 import {
   buildCatalogSearchDocument,
+  catalogSearchTerms,
   matchesCatalogSearchDocument,
 } from "@/features/domain/nodeCatalog/searchDocument";
 import {
@@ -60,17 +61,24 @@ describe("Catalog search wire contract", () => {
     expect(resourceItem!.technicalTerms).toContain("技术_Term");
 
     const document = buildCatalogSearchDocument(resourceItem!);
-    expect(document).toMatchObject({
-      nodeTypeId: "yssbi.project.function.call",
-      localizedTitle: "straße data cafe 数据",
-      backendSearchText: ["call", "invoke", "function"],
-      resourceNames: ["straße data cafe 数据"],
-    });
-    expect(document.technicalTerms).toContain("maße value");
-    expect(document.technicalTerms).toContain("技术 term");
-    expect(document.pinyinFull).toContain("ji shu term");
-    expect(document.pinyinInitials).toContain("js term");
-    expect(matchesCatalogSearchDocument(document, "straße data cafe")).toBe(true);
-    expect(matchesCatalogSearchDocument(document, "strasse data cafe")).toBe(false);
+    for (const text of [
+      "yssbi project function call",
+      "straße data cafe 数据",
+      "call",
+      "invoke",
+      "function",
+      "maße value",
+      "技术 term",
+      "ji shu term",
+      "js term",
+    ]) {
+      expect(document).toContain(text);
+    }
+    expect(matchesCatalogSearchDocument(document, catalogSearchTerms("straße data cafe"))).toBe(
+      true,
+    );
+    expect(matchesCatalogSearchDocument(document, catalogSearchTerms("strasse data cafe"))).toBe(
+      false,
+    );
   });
 });

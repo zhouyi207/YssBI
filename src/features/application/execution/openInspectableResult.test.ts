@@ -8,7 +8,7 @@ import {
   makeEditorProjectionFixture,
   makeGraphEditorSession,
 } from "@/tests/helpers/editorProjectionFixtures";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 
 import {
   clearProjectLifecycle,
@@ -97,7 +97,7 @@ beforeEach(() => {
   startProjectLifecycle("project-1");
 });
 
-afterEach(() => useGraphProjectionStore.getState().clear());
+afterEach(() => useResourceStore.getState().clear());
 
 describe("openInspectableResult", () => {
   it("resolves input targets from the current graph at invocation and tries them in order", async () => {
@@ -119,7 +119,7 @@ describe("openInspectableResult", () => {
       nodes: [first, second, target].flatMap((part) => part.projection.nodes),
       connections: [connection],
     });
-    useGraphProjectionStore.getState().install(graphPath, session);
+    useResourceStore.getState().installGraphSession(graphPath, session, { mode: "load" });
     const params = { graphPath, address: target.inputAddress, direction: "input" as const };
     const updated = {
       ...session,
@@ -135,7 +135,7 @@ describe("openInspectableResult", () => {
         ],
       },
     };
-    useGraphProjectionStore.getState().install(graphPath, updated);
+    useResourceStore.getState().installGraphSession(graphPath, updated, { mode: "load" });
     mocks.getPinResult.mockReturnValueOnce(null).mockReturnValueOnce(descriptor);
 
     await expect(openPinInspectableView(params)).resolves.toBe(true);
@@ -164,6 +164,47 @@ describe("openInspectableResult", () => {
       title: "Node result",
       presentation: { kind: "inspector" },
     });
+  });
+
+  it("stops the upstream target sequence when the project changes during a result read", async () => {
+    const graphPath = "events/Main.yssbi-event";
+    const [first, second, target] = [1, 2, 3].map((id) =>
+      makeEditorProjectionFixture({
+        graphPath,
+        nodeId: `00000000-0000-0000-0000-${String(id).padStart(12, "0")}`,
+      }),
+    );
+    useResourceStore.getState().installGraphSession(
+      graphPath,
+      makeGraphEditorSession({
+        ...first.projection,
+        nodes: [first, second, target].flatMap((part) => part.projection.nodes),
+        connections: [first, second].map((part, index) => ({
+          connectionId: `connection-${index}`,
+          input: target.inputAddress,
+          output: part.outputAddress,
+          order: null,
+        })),
+      }),
+      { mode: "load" },
+    );
+    mocks.loadPinResult.mockImplementationOnce(async () => {
+      clearProjectLifecycle();
+      startProjectLifecycle("project-2");
+      return { status: "stale" };
+    });
+    mocks.getPinResult.mockReturnValue(descriptor);
+
+    await expect(
+      openPinInspectableView({ graphPath, address: target.inputAddress, direction: "input" }),
+    ).resolves.toBe(false);
+
+    expect(mocks.loadPinResult).toHaveBeenCalledExactlyOnceWith({
+      graphPath,
+      output: first.outputAddress,
+    });
+    expect(mocks.acquire).not.toHaveBeenCalled();
+    expect(mocks.upsertResult).not.toHaveBeenCalled();
   });
 
   it("drops current Pin result that settles after the project identity changes", async () => {

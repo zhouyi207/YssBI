@@ -1,11 +1,11 @@
 import { useMemo, type ReactNode } from "react";
-import { useApplicationSettings } from "@/features/application/settings/applicationSettings";
+import { useApplicationTheme } from "@/features/application/settings/applicationSettings";
 import { ChartThemeContextProvider } from "@/shared/charts/core/theme";
 import { getChartSeriesColors, getChartThemeColors } from "@/shared/theme/chartTheme";
 import { resolveThemeTokens } from "@/shared/theme/themeTokens";
 
 export function ChartThemeProvider({ children }: { children: ReactNode }) {
-  const { theme } = useApplicationSettings();
+  const theme = useApplicationTheme();
   const value = useMemo(() => {
     const tokens = resolveThemeTokens(theme);
     return {

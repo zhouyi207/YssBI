@@ -18,7 +18,7 @@ const loggerMocks = vi.hoisted(() => ({
 const loadGraphProjection = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
 const removeProjectScopedWorkbenchPanels = vi.hoisted(() => vi.fn(async () => undefined));
 
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: {
     sys: loggerMocks,
   },
@@ -64,14 +64,6 @@ describe("projectIOStore error references", () => {
     vi.mocked(ProjectService.getDatabases).mockResolvedValue({
       databases: {},
     });
-  });
-
-  afterEach(() => {
-    clearProjectLifecycle();
-  });
-
-  it("does not clean project panels during initial null-to-project hydration", async () => {
-    useProjectIOStore.setState({ projectInstanceId: null });
     vi.mocked(ProjectService.getProjectIndex).mockResolvedValue(
       projectIndexSnapshotFixture({
         projectInstanceId,
@@ -88,6 +80,14 @@ describe("projectIOStore error references", () => {
         exportTime: "",
       }),
     );
+  });
+
+  afterEach(() => {
+    clearProjectLifecycle();
+  });
+
+  it("does not clean project panels during initial null-to-project hydration", async () => {
+    useProjectIOStore.setState({ projectInstanceId: null });
 
     await expect(loadCurrentProject()).resolves.not.toBeNull();
 

@@ -5,7 +5,7 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 export function useDatabaseExport(selectedDatabaseId: string | null): () => Promise<void> {
   return useCallback(async () => {

@@ -11,20 +11,20 @@ import {
 } from "@/shared/config-default";
 
 export interface ReadOnlyColumnMeta {
-  name: string;
-  type?: string;
+  readonly name: string;
+  readonly type?: string;
 }
 
 interface ReadOnlyDataGridProps {
-  columns: ReadOnlyColumnMeta[];
-  rows: unknown[][];
+  columns: readonly ReadOnlyColumnMeta[];
+  rows: readonly (readonly unknown[])[];
   pageStartIndex?: number;
   loading?: boolean;
   height?: number | string;
   fillHeight?: boolean;
 }
 
-type GridRow = unknown[];
+type GridRow = readonly unknown[];
 type ColumnDataKind = "number" | "boolean" | "string";
 
 type ReadOnlyHeaderProps = CustomHeaderProps<GridRow> & {
@@ -145,6 +145,7 @@ export function ReadOnlyDataGrid({
   const appTheme = useSettingsStore((s) => resolveColorThemePreset(s.appearance.colorTheme));
 
   const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);
+  const gridRows = useMemo(() => [...rows], [rows]);
 
   const gridColumns = useMemo<ColDef<GridRow>[]>(() => {
     const realColumns = columns.map<ColDef<GridRow>>((column, columnIndex) => ({
@@ -204,7 +205,7 @@ export function ReadOnlyDataGrid({
         loading={loading}
         loadingOverlayComponent={LoadingOverlay}
         modules={GRID_MODULES}
-        rowData={rows}
+        rowData={gridRows}
         rowHeight={DATABASE_EDITOR_ROW_HEIGHT}
         suppressNoRowsOverlay
         theme={dataGridTheme}

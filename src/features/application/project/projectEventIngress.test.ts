@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { createProjectEventIngress, type ProjectEventStreamItem } from "./projectEventIngress";
-import type {
-  ProjectEvent,
-  ProjectEventConsumptionOutcome,
-  ProjectEventConsumer,
-} from "./projectEventConsumer";
+import type { ProjectEvent } from "@/services/project/projectEventParser";
+import type { ProjectEventStreamItem } from "@/services/project/projectEventStream";
+import { createProjectEventIngress } from "./projectEventIngress";
+import type { ProjectEventConsumptionOutcome, ProjectEventConsumer } from "./projectEventConsumer";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 async function flushQueue(): Promise<void> {
@@ -105,5 +105,60 @@ describe("project event ingress", () => {
     await flushQueue();
     expect(accepted).toEqual(["a", "d"]);
     await ingress.closeAndDrain();
+  });
+
+  it("drains one recovery when an overflowing consumer also requests a snapshot", async () => {
+    const first = deferred<ProjectEventConsumptionOutcome>();
+    const recovery = deferred<void>();
+    const consumer = { acceptEvent: vi.fn(() => first.promise) };
+    const recover = vi.fn(() => recovery.promise);
+    const publishIssue = vi.fn();
+    const ingress = createProjectEventIngress(consumer, {
+      capacity: 1,
+      requestAuthoritativeSnapshot: recover,
+      publishIssue,
+    });
+
+    ingress.enqueue(item("a"));
+    ingress.enqueue(item("b"));
+    expect(ingress.enqueue(item("c"))).toBe("overflowRecovery");
+    expect(recover).not.toHaveBeenCalled();
+    const drained = vi.fn();
+    const draining = ingress.closeAndDrain();
+    void draining.then(drained);
+    expect(ingress.closeAndDrain()).toBe(draining);
+
+    first.resolve({ status: "recoveryRequested" });
+    await vi.waitFor(() => expect(recover).toHaveBeenCalledOnce());
+    expect(recover).toHaveBeenCalledWith("queueOverflow");
+    expect(publishIssue).toHaveBeenCalledOnce();
+    expect(consumer.acceptEvent).toHaveBeenCalledOnce();
+    expect(drained).not.toHaveBeenCalled();
+
+    recovery.resolve();
+    await expect(draining).resolves.toEqual({ status: "drained" });
+    expect(ingress.enqueue(item("d"))).toBe("closed");
+  });
+
+  it("waits for recovery requested by a consumer that rejects after closing", async () => {
+    const first = deferred<ProjectEventConsumptionOutcome>();
+    const recovery = deferred<void>();
+    const recover = vi.fn(() => recovery.promise);
+    const ingress = createProjectEventIngress(
+      { acceptEvent: vi.fn(() => first.promise) },
+      { requestAuthoritativeSnapshot: recover },
+    );
+
+    ingress.enqueue(item("a"));
+    const drained = vi.fn();
+    const draining = ingress.closeAndDrain();
+    void draining.then(drained);
+    first.reject(new Error("publication failed"));
+
+    await vi.waitFor(() => expect(recover).toHaveBeenCalledWith("consumerRejected"));
+    expect(drained).not.toHaveBeenCalled();
+    recovery.resolve();
+    await expect(draining).resolves.toEqual({ status: "drained" });
+    expect(recover).toHaveBeenCalledOnce();
   });
 });

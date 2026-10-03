@@ -26,7 +26,7 @@ export function LogDomainLayoutHost({ layout }: LogDomainLayoutHostProps) {
     return () => logsLayoutRootBinding.unbind(token);
   }, [binding, isMainLayout]);
   return (
-    <LogWorkspaceProvider presentation={isMainLayout ? "embedded" : "standalone"}>
+    <LogWorkspaceProvider>
       <div
         data-yssbi-logs-layout
         className={"workbench-logs-layout " + resolveYssbiLayoutTheme(themeMode)}

@@ -1,9 +1,13 @@
 import { createPersistedWindow } from "./createPersistedWindow";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 import { resultLeases } from "@/features/application/results/resultLeases";
 import type { ResultReference } from "@/shared/types/domain/result";
 import type { ResultPresentation } from "@/shared/types/domain/result";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 const presentationWindowKinds = {
   inspector: "inspect",
@@ -30,6 +34,7 @@ export async function openPresentationWindow(
   reference: ResultReference,
   presentation: PresentationWindowPayload,
 ): Promise<void> {
+  const owner = captureProjectLifecycleState();
   const kind = presentation.kind;
   const route = `/${kind}`;
   const label = `${kind}-${crypto.randomUUID()}`;
@@ -43,6 +48,7 @@ export async function openPresentationWindow(
 
   let created = false;
   try {
+    if (!isProjectLifecycleStateCurrent(owner)) return;
     await createPersistedWindow({
       kind,
       label,

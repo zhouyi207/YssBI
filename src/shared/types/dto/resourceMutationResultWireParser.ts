@@ -1,4 +1,6 @@
 import { areResourceDeltasValid } from "./resourceMutationWireValidator";
+import { isDatabaseEngine } from "@/shared/types/domain/database";
+import { isChartDocumentState } from "@/shared/types/domain/chart";
 import { validateResourceMutationResult } from "@/shared/types/domain/resourceMutationValidation";
 
 import type {
@@ -9,11 +11,7 @@ import type {
   ResourceMoveDto,
   ResourceMutationResultDto,
 } from "@/shared/types/dto/editorMutation";
-import {
-  isTypedLiteralWire,
-  isTypeExprWire,
-  parseGraphProjectionReplacementDto,
-} from "@/shared/types/dto/editorMutationWireParser";
+import { parseGraphProjectionReplacementDto } from "@/shared/types/dto/editorMutationWireParser";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -36,144 +34,9 @@ function isSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value);
 }
 
-function isPositionShape(value: unknown): boolean {
-  return isRecord(value) && hasExactKeys(value, ["x", "y"]);
-}
-
-function isDocumentNodeShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["id", "node_type", "position", "parameters", "user_label"]) &&
-    isPositionShape(value.position) &&
-    isRecord(value.parameters)
-  );
-}
-
-function isDocumentPortAddressShape(value: unknown): boolean {
-  if (!isRecord(value) || !hasExactKeys(value, ["node_id", "port"]) || !isRecord(value.port)) {
-    return false;
-  }
-  if (value.port.kind === "declared") return hasExactKeys(value.port, ["kind", "key"]);
-  return (
-    value.port.kind === "instance" && hasExactKeys(value.port, ["kind", "template", "instance_id"])
-  );
-}
-
-function isDynamicMemberLocatorShape(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  if (value.kind === "function_parameter") {
-    return hasExactKeys(value, ["kind", "function", "parameter"]);
-  }
-  return value.kind === "schema_field" && hasExactKeys(value, ["kind", "source", "field"]);
-}
-
-function isLastKnownPortMetadataShape(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.label !== "string") return false;
-  return (
-    hasExactKeys(value, ["label"]) ||
-    (hasExactKeys(value, ["label", "value_type"]) && isTypeExprWire(value.value_type))
-  );
-}
-
-function isDynamicPortBindingShape(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  if (value.kind === "user_created") return hasExactKeys(value, ["kind", "order"]);
-  if (value.kind === "resolved") {
-    return (
-      hasExactKeys(value, ["kind", "origin", "order", "last_known"]) &&
-      isDynamicMemberLocatorShape(value.origin) &&
-      isLastKnownPortMetadataShape(value.last_known)
-    );
-  }
-  return (
-    value.kind === "orphan" &&
-    hasExactKeys(value, ["kind", "origin", "order", "last_known"]) &&
-    isDynamicMemberLocatorShape(value.origin) &&
-    isLastKnownPortMetadataShape(value.last_known)
-  );
-}
-
-function isDocumentConnectionShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["id", "output", "input", "order"]) &&
-    isDocumentPortAddressShape(value.output) &&
-    isDocumentPortAddressShape(value.input)
-  );
-}
-
-function isInputStateShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["literal_override"]) &&
-    (value.literal_override === null || isTypedLiteralWire(value.literal_override))
-  );
-}
-
-function isGraphOperationShape(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.operation !== "string") return false;
-  switch (value.operation) {
-    case "insert_node":
-    case "remove_node":
-      return hasExactKeys(value, ["operation", "node"]) && isDocumentNodeShape(value.node);
-    case "update_node":
-      return (
-        hasExactKeys(value, ["operation", "before", "after"]) &&
-        isDocumentNodeShape(value.before) &&
-        isDocumentNodeShape(value.after)
-      );
-    case "insert_port_binding":
-    case "remove_port_binding":
-      return (
-        hasExactKeys(value, ["operation", "address", "binding"]) &&
-        isDocumentPortAddressShape(value.address) &&
-        isDynamicPortBindingShape(value.binding)
-      );
-    case "insert_connection":
-    case "remove_connection":
-      return (
-        hasExactKeys(value, ["operation", "connection"]) &&
-        isDocumentConnectionShape(value.connection)
-      );
-    case "set_input_state":
-      return (
-        hasExactKeys(value, ["operation", "address", "before", "after"]) &&
-        isDocumentPortAddressShape(value.address) &&
-        (value.before === null || isInputStateShape(value.before)) &&
-        (value.after === null || isInputStateShape(value.after))
-      );
-    default:
-      return false;
-  }
-}
-
-function isGraphPatchShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["operations"]) &&
-    Array.isArray(value.operations) &&
-    value.operations.every(isGraphOperationShape)
-  );
-}
-
-function isFunctionSignatureShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["parameters", "return_type"]) &&
-    Array.isArray(value.parameters) &&
-    value.parameters.every(
-      (parameter) => isRecord(parameter) && hasExactKeys(parameter, ["id", "name", "type_name"]),
-    )
-  );
-}
-
 function isFunctionPatchShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["before", "after"]) &&
-    isFunctionSignatureShape(value.before) &&
-    isFunctionSignatureShape(value.after)
-  );
+  // areResourceDeltasValid already checked both signatures with their strict shared guard.
+  return isRecord(value) && hasExactKeys(value, ["before", "after"]);
 }
 
 function isPathMoveShape(value: unknown): boolean {
@@ -193,20 +56,11 @@ function isLifecyclePatchShape(value: unknown): boolean {
   );
 }
 
-function isDatabaseEngineShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["dataset"]) &&
-    isRecord(value.dataset) &&
-    Object.keys(value.dataset).length === 0
-  );
-}
-
 function isDatabaseDocumentShape(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["id", "engine", "schemaVersion", "required", "name"]) &&
-    isDatabaseEngineShape(value.engine)
+    isDatabaseEngine(value.engine)
   );
 }
 
@@ -219,29 +73,18 @@ function isDatabasePatchShape(value: unknown): boolean {
   );
 }
 
-function isChartDocumentStateShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["databaseId", "chartType", "encodings"]) &&
-    isRecord(value.encodings) &&
-    Object.keys(value.encodings).every((key) => key === "x" || key === "y")
-  );
-}
-
 function isChartPatchShape(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["before", "after"]) &&
-    isChartDocumentStateShape(value.before) &&
-    isChartDocumentStateShape(value.after)
+    isChartDocumentState(value.before) &&
+    isChartDocumentState(value.after)
   );
 }
 
 function isResourcePayloadShape(value: unknown): boolean {
   if (!isRecord(value) || !hasExactKeys(value, ["kind", "patch"])) return false;
   switch (value.kind) {
-    case "graph":
-      return isGraphPatchShape(value.patch);
     case "function":
       return isFunctionPatchShape(value.patch);
     case "chart":
@@ -288,8 +131,6 @@ function cloneResourceKey(resource: ResourceKeyDto): ResourceKeyDto {
 
 function cloneResourcePayload(payload: ResourceDocumentPatchDto): ResourceDocumentPatchDto {
   switch (payload.kind) {
-    case "graph":
-      return { kind: "graph", patch: structuredClone(payload.patch) };
     case "function":
       return { kind: "function", patch: structuredClone(payload.patch) };
     case "chart":

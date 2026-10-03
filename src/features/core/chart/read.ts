@@ -1,6 +1,7 @@
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { ChartDocument } from "@/shared/types/domain/chart";
-import { useChartDocumentStore } from "./chartDocumentStore";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 export interface ChartReadSnapshot {
   readonly documents: DeepReadonly<Record<string, ChartDocument>>;
@@ -8,6 +9,11 @@ export interface ChartReadSnapshot {
 
 export type ReadonlyChartSnapshot = DeepReadonly<ChartReadSnapshot>;
 
+const projection = createReadProjection(
+  () => ({ documents: useResourceStore.getState().chartDocuments }),
+  [useResourceStore],
+);
+
 export function useChartRead<T>(selector: (state: ReadonlyChartSnapshot) => T): T {
-  return useChartDocumentStore((state) => selector({ documents: state.documents }));
+  return useReadProjection(projection, selector);
 }

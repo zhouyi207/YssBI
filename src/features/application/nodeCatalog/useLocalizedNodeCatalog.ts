@@ -31,7 +31,9 @@ export interface LocalizedNodeCatalogState {
 export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogState {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
-  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
+  const projectInstanceId = useProjectIOStore((state) =>
+    enabled ? state.projectInstanceId : null,
+  );
   const request = useNodeCatalogStore((state) =>
     projectInstanceId ? selectCatalogRequest(state, projectInstanceId, locale) : null,
   );

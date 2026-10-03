@@ -35,6 +35,14 @@ visible tree, and Delete/Backspace removes selected branches while protecting th
 root. A selected ancestor covers its descendants in the deletion batch. Input
 fields and modal dialogs keep their native shortcuts. Hiding a pane cancels its
 unfinished gestures.
+Selection callbacks and pointer release also revalidate the captured editor target;
+events after a project, panel or group change cancel the old gesture instead of extending it.
+React Flow owns the live viewport transform. Mind keeps only the last accepted
+viewport and gesture starting point in panel refs; it does not feed each pointer
+frame through React state or a controlled viewport prop. Navigation and cancellation
+reuse `synchronizeFlowViewport` with Graph to restore both the renderer and D3
+transform. Canvas callbacks and configuration retain their references across
+selection and measurement updates.
 The workbench Details panel
 owns the selected topic's text, parent, add/delete, ordering and collapse
 controls, reusing `DetailPanelShell`, `DetailForm`, `DetailFieldRow`, `DetailTextarea`
@@ -48,10 +56,23 @@ parent links, sibling order and collapsed branches. Depth determines each column
 subtree spans determine vertical spacing and center parents over their branches.
 Structure or collapse changes recompute all positions. Coordinates are rendering
 results and are neither editable nor persisted in Mind documents.
+Each panel's `createMindMapProjector` retains unchanged node, label, position and edge
+references. Selection and measured dimensions use the same `createFlowNodeViewProjector`
+as Graph, independently of the tree layout. The canvas publishes changed views through
+React Flow's existing `setNodes` action once per input batch; unchanged nodes retain
+their references. Measurements live in those view entries, with no separate dimension
+table. Collapsing or deleting a topic removes its cached view and dimensions; expanding
+it obtains fresh measurements. These projections are disposable rendering state.
 Adding topics, editing text, reparenting, ordering siblings and deleting a branch
 use Rust typed edits. Selection and collapsed node IDs use the existing
 panel-scoped `EditorPaneState`. Details captures
 the owning panel ID, so split panes keep independent selections and collapse state.
+The pane store preserves unchanged selection/collapse references; the canvas delegates these
+writes to that owner and continues its existing Details synchronization.
+The Mind property form derives parent choices and sibling order from the published
+node array, selected node and locale. Text-buffer edits and local busy/error state
+reuse that derivation. Its temporary child groups are built once per derivation;
+they do not modify or mirror the committed tree.
 The domain can retain resource references; a reference picker and Mermaid import/export
 are not exposed by this editor.
 
@@ -92,8 +113,9 @@ Shared `MarkdownLink` prevents native click and middle-click navigation and dele
 HTTP(S) links through `MarkdownLinkContext`. Workbench composition supplies
 `openReferenceLink`, which opens/reuses a right-side reference tab without replacing
 the application WebView; the node-help modal closes after the panel opens successfully.
-Outside the workbench, links use the existing system-browser opener. Assistant retains
-its existing external-browser link handler. Unsupported schemes are rendered as text.
+Outside the workbench, links use the existing system-browser opener. Assistant reuses
+the same link component and supplies its external-browser action through that context.
+Unsupported schemes are rendered as text.
 
 `ReferencePanel` owns only document presentation: a URL/title, reload and browser-open
 controls, and an independent frame. Web pages are sandboxed without top-navigation
@@ -125,11 +147,14 @@ file panel, resource removal and project replacement release these buffers.
 The generic close workflow waits for already submitted edits and supports Save,
 Discard and Cancel. Discard remains available when a text buffer cannot be submitted.
 
-`mindProjectionStore` and `docProjectionStore` independently retain typed read snapshots
-using the generic `fileProjectionStore` mechanics. Pending operations live in the
+ResourceStore retains independent typed Mind/Doc snapshot collections alongside
+their resource flags and revisions. FileEditor and Mind Details select their file
+by kind and path; content installation, rename and release each publish once.
+Unchanged snapshot branches retain their references. Pending operations live in the
 application edit queues, which all close/save-all entry points await.
 Reads carry invalidatable ownership, so close, rename, project replacement or newer
-results prevent late reads from restoring stale projections. Resource publication
+results prevent late reads from restoring stale projections. A resource revision or
+existence change also invalidates an in-flight first read. Resource publication
 remaps editor paths and refreshes changed open documents. The editing queue is keyed
 by project and file; split panels observe the same Rust document. Concurrent text
 buffers keep their captured version and report conflicts rather than merging them.
@@ -143,6 +168,10 @@ releases its retained inputs and any Rust resident edits. Rename moves retained 
 and Doc input buffers, including text entered while the command was in flight.
 
 `mindActions` / `MindService` and `docActions` / `DocService` call their own IPC commands.
+MindService validates the tree at the IPC boundary: the declared root has no parent,
+and all other nodes reach it without cycles or missing parents. A temporary ID index
+and connected-node set keep this check iterative and linear in the document size;
+the canvas consumes the validated snapshot without repeating this validation.
 `createFileActions` shares queuing, version checks and publication; it does not combine
 Markdown and tree edits. Current synchronization uses command snapshots and the existing Project resource
 publication notifications. There is no additional document channel, frontend

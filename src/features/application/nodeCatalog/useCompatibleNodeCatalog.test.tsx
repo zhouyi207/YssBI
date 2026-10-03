@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { CatalogService, type LocalizedCatalogDto } from "@/services/nodeSystem/catalogService";
 import { normalizeIpcError } from "@/services/ipc";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -112,9 +112,11 @@ describe("useCompatibleNodeCatalog", () => {
     projectPublicationCoordinator.startProject("project-1", 7);
     useProjectIOStore.setState({ projectInstanceId: "project-1" });
     const projection = makeEditorProjectionFixture({ graphPath, nodeId: sourcePort.nodeId });
-    useGraphProjectionStore
+    useResourceStore
       .getState()
-      .install(graphPath, makeGraphEditorSession(projection.projection));
+      .installGraphSession(graphPath, makeGraphEditorSession(projection.projection), {
+        mode: "load",
+      });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -125,7 +127,7 @@ describe("useCompatibleNodeCatalog", () => {
     host.remove();
     projectPublicationCoordinator.cancelProject();
     useProjectIOStore.setState({ projectInstanceId: null });
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
   });
 
   it("queries the compatible catalog against the current graph editing version", async () => {
@@ -139,7 +141,7 @@ describe("useCompatibleNodeCatalog", () => {
     expect(CatalogService.getCompatibleNodeCatalog).toHaveBeenCalledWith({
       projectInstanceId: "project-1",
       graphPath,
-      version: useGraphProjectionStore.getState().sessions[graphPath].version,
+      version: useResourceStore.getState().sessions[graphPath].version,
       sourcePort,
       locale: "en-US",
     });

@@ -1,4 +1,5 @@
 import type { IJsonModel } from "flexlayout-react";
+import { createStore } from "zustand/vanilla";
 import type { LayoutModelBinding } from "./layoutModelBinding";
 
 import { DEFAULT_LOGS_LAYOUT } from "./logsLayoutModel";
@@ -61,37 +62,29 @@ export function createLogsLayoutRuntime(
   defaultLayout: IJsonModel = DEFAULT_LOGS_LAYOUT,
 ): LogsLayoutRuntime {
   const defaultSnapshot = cloneLayout(defaultLayout);
-  const listeners = new Set<() => void>();
-  let latestSnapshot = cloneLayout(defaultSnapshot);
-  let pendingSnapshot: IJsonModel | undefined = cloneLayout(defaultSnapshot);
+  const published = createStore(() => ({ snapshot: defaultSnapshot }));
+  let pendingSnapshot: IJsonModel | undefined = defaultSnapshot;
   let restoreEpoch = 0;
   let bound: BoundFlexLayout | undefined;
 
-  const publishSnapshot = (layout: IJsonModel): boolean => {
-    const next = cloneLayout(layout);
-    if (snapshotsEqual(latestSnapshot, next)) return false;
+  const publishSnapshot = (layout: IJsonModel, owned = false): void => {
+    if (snapshotsEqual(published.getState().snapshot, layout)) return;
 
-    latestSnapshot = next;
-    for (const listener of [...listeners]) {
-      try {
-        listener();
-      } catch {
-        // Observer failures must not interrupt layout lifecycle transitions.
-      }
-    }
-    return true;
+    // Restore candidates are already isolated. Native toJson may share node config.
+    published.setState({ snapshot: owned ? layout : cloneLayout(layout) });
   };
 
-  const capture = (api: LayoutModelBinding): void => {
-    publishSnapshot(api.getModel().toJson());
+  const capture = (binding: BoundFlexLayout): void => {
+    const layout = binding.api.getModel().toJson();
+    if (bound === binding) publishSnapshot(layout);
   };
 
-  const applyPending = (api: LayoutModelBinding): void => {
+  const applyPending = (binding: BoundFlexLayout): void => {
     const pending = pendingSnapshot;
     if (!pending) return;
 
-    api.replace(cloneLayout(pending));
-    if (bound?.api === api && pendingSnapshot === pending) {
+    binding.api.replace(pending);
+    if (bound === binding && pendingSnapshot === pending) {
       pendingSnapshot = undefined;
     }
   };
@@ -100,17 +93,22 @@ export function createLogsLayoutRuntime(
     bind(api) {
       if (bound?.api === api) return;
       if (bound) runtime.unbind(bound.api);
+      // Final capture can synchronously install a successor through an observer.
+      if (bound) return;
 
-      const dispose = api.subscribe(() => {
-        if (bound?.api === api) capture(api);
-      });
-      bound = { api, dispose };
+      const binding: BoundFlexLayout = {
+        api,
+        dispose: api.subscribe(() => {
+          if (bound === binding) capture(binding);
+        }),
+      };
+      bound = binding;
       try {
-        applyPending(api);
+        applyPending(binding);
       } catch (error) {
-        if (bound?.api === api) {
+        if (bound === binding) {
           bound = undefined;
-          dispose();
+          binding.dispose();
         }
         throw error;
       }
@@ -122,16 +120,14 @@ export function createLogsLayoutRuntime(
 
       let failure: { readonly value: unknown } | undefined;
       try {
-        capture(current.api);
+        capture(current);
       } catch (error) {
         failure = { value: error };
       } finally {
-        try {
-          pendingSnapshot = cloneLayout(latestSnapshot);
-        } catch (error) {
-          failure ??= { value: error };
+        if (bound === current) {
+          pendingSnapshot = published.getState().snapshot;
+          bound = undefined;
         }
-        bound = undefined;
         try {
           current.dispose();
         } catch (error) {
@@ -142,8 +138,13 @@ export function createLogsLayoutRuntime(
     },
 
     subscribe(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+      return published.subscribe(() => {
+        try {
+          listener();
+        } catch {
+          // Observer failures must not interrupt layout lifecycle transitions.
+        }
+      });
     },
 
     beginRestore() {
@@ -155,26 +156,26 @@ export function createLogsLayoutRuntime(
       if (epoch !== restoreEpoch) return "stale";
 
       pendingSnapshot = cloneLayout(layout);
-      publishSnapshot(pendingSnapshot);
+      publishSnapshot(pendingSnapshot, true);
       if (!bound) return "staged";
 
-      applyPending(bound.api);
+      applyPending(bound);
       return "applied";
     },
 
     captureBoundSnapshot() {
-      if (bound) capture(bound.api);
+      if (bound) capture(bound);
     },
 
     getLatestSnapshot() {
-      return cloneLayout(latestSnapshot);
+      return cloneLayout(published.getState().snapshot);
     },
 
     resetToDefault() {
       restoreEpoch += 1;
       pendingSnapshot = cloneLayout(defaultSnapshot);
-      publishSnapshot(pendingSnapshot);
-      if (bound) applyPending(bound.api);
+      publishSnapshot(pendingSnapshot, true);
+      if (bound) applyPending(bound);
     },
   };
 

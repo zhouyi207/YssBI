@@ -3,7 +3,7 @@ import type {
   LinearSummaryOptions,
   ResultAnalysis,
 } from "@/shared/types/domain/resultReport";
-import type { ResultReference } from "@/shared/types/domain/result";
+import { isResultReference, type ResultReference } from "@/shared/types/domain/result";
 import type { Coefficient } from "@/shared/types/report/regression";
 import { keyValueDataField, tableDataField, statCardDataField } from "./parseUiData";
 import {
@@ -18,7 +18,6 @@ import {
   stringField,
   type ReportField,
 } from "@/shared/types/report/fields";
-import { isUuid } from "@/shared/types/domain/editorProjectionGuards";
 
 export const resultReferenceField = refineField(
   objectField<ResultReference>({
@@ -26,7 +25,7 @@ export const resultReferenceField = refineField(
     resultId: stringField,
   }),
   (value) =>
-    isUuid(value.executionSessionId) && /^[1-9]\d*$/.test(value.resultId)
+    isResultReference(value)
       ? null
       : { fieldPath: "resultRef", reason: "invalid result reference" },
 );
@@ -145,11 +144,18 @@ const analysisFields = {
         ? null
         : { fieldPath: "points", reason: "inconsistent plot population" },
   ),
-  acfPacf: objectField({
-    acf: arrayField(numberField),
-    pacf: arrayField(numberField),
-    n: integerField,
-  }),
+  acfPacf: refineField(
+    objectField({
+      acf: arrayField(numberField),
+      pacf: arrayField(numberField),
+      n: integerField,
+      ciHalfWidth: numberField,
+    }),
+    (value) =>
+      value.ciHalfWidth > 0
+        ? null
+        : { fieldPath: "ciHalfWidth", reason: "expected positive confidence band" },
+  ),
   serialTests: objectField({
     bg: optionalField(serialTestField),
     q: optionalField(serialTestField),

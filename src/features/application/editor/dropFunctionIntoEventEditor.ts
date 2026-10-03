@@ -10,6 +10,10 @@ import { canCreateFunctionNodeInGraph } from "@/features/application/editor/canv
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { useSidebarDragStore } from "@/features/core/sidebarDrag";
+import {
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 export function resolveDropPointerFromDragEnd(
   event: Pick<DragEndEvent, "activatorEvent" | "delta">,
@@ -52,17 +56,21 @@ export interface CanvasDropTarget {
 export async function tryDropFunctionIntoCanvas(
   target: CanvasDropTarget,
   dragState: SidebarDragState,
-  modifiers: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean },
+  project: ProjectIdentitySnapshot,
 ): Promise<boolean> {
+  if (!isCurrentProjectIdentity(project)) return false;
   if (dragState.type !== DRAG_TYPES.GRAPH_RESOURCE) return false;
   if (!canCreateFunctionNodeInGraph(target.graphKind, target.graphPath, dragState.sidebarResource))
     return false;
 
+  if (
+    !(await workbenchLayoutControl.activate(target.panelInstanceId)) ||
+    !isCurrentProjectIdentity(project)
+  )
+    return false;
   const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
   if (!handler) return false;
-
-  if (!(await workbenchLayoutControl.activate(target.panelInstanceId))) return false;
-  const handled = await handler(dragState, modifiers);
+  const handled = await handler(dragState);
   return handled === true;
 }
 

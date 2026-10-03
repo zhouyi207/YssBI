@@ -34,7 +34,12 @@ vi.mock("@/features/application/projectLifecycleReceiptDependencies", () => ({
 }));
 vi.mock("@/features/application/results", () => ({ resetResultQueryProject: mocks.resetResults }));
 vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", () => ({
-  projectPublicationCoordinator: { cancelProject: () => clearProjectLifecycle() },
+  projectPublicationCoordinator: {
+    cancelProject: () => {
+      clearProjectLifecycle();
+      return captureProjectLifecycleState();
+    },
+  },
 }));
 
 beforeEach(() => {

@@ -11,17 +11,22 @@ import {
 
 import { MessageDialog, Modal, ProgressOverlay } from "@/shared/ui";
 
-export const UIHost = () => {
-  const { modals, progress } = useApplicationUiRead();
+function ProgressHost() {
+  const progress = useApplicationUiRead((state) => state.progress);
+  return (
+    progress && <ProgressOverlay progress={progress} onCancel={applicationUi.cancelProgress} />
+  );
+}
+
+function ModalHost() {
+  const modals = useApplicationUiRead((state) => state.modals);
 
   return (
     <>
-      {progress && <ProgressOverlay progress={progress} onCancel={applicationUi.cancelProgress} />}
-
       {modals.map((modal, index) => (
         <DialogStackLayer key={modal.id} index={index}>
           {modal.type === "settings" && (
-            <SettingsDialog onClose={() => applicationUi.closeModal(modal.id)} />
+            <SettingsDialog modalId={modal.id} onClose={() => applicationUi.closeModal(modal.id)} />
           )}
           {modal.type === "message" && (
             <MessageDialog
@@ -73,4 +78,11 @@ export const UIHost = () => {
       ))}
     </>
   );
-};
+}
+
+export const UIHost = () => (
+  <>
+    <ProgressHost />
+    <ModalHost />
+  </>
+);

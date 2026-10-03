@@ -168,33 +168,6 @@ export interface GraphDocumentDto {
   input_states: Array<[DocumentPortAddressDto, InputStateDto]>;
 }
 
-export type GraphDocumentOperationDto =
-  | {
-      operation: "set_constant";
-      id: string;
-      before: GraphConstantDto | null;
-      after: GraphConstantDto | null;
-    }
-  | { operation: "insert_node"; node: DocumentNodeDto }
-  | { operation: "remove_node"; node: DocumentNodeDto }
-  | { operation: "update_node"; before: DocumentNodeDto; after: DocumentNodeDto }
-  | {
-      operation: "insert_port_binding" | "remove_port_binding";
-      address: DocumentPortAddressDto;
-      binding: DynamicPortBindingDto;
-    }
-  | { operation: "insert_connection" | "remove_connection"; connection: DocumentConnectionDto }
-  | {
-      operation: "set_input_state";
-      address: DocumentPortAddressDto;
-      before: InputStateDto | null;
-      after: InputStateDto | null;
-    };
-
-export interface GraphDocumentPatchDto {
-  operations: GraphDocumentOperationDto[];
-}
-
 export interface FunctionParameterDto {
   id: string;
   name: string;
@@ -204,6 +177,31 @@ export interface FunctionParameterDto {
 export interface FunctionSignatureDto {
   parameters: FunctionParameterDto[];
   return_type: string | null;
+}
+
+/** Shared boundary guard; Rust owns the meaning of the supplied type names. */
+export function isFunctionSignatureDto(value: unknown): value is FunctionSignatureDto {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const signature = value as Record<string, unknown>;
+  return (
+    Object.keys(signature).length === 2 &&
+    Object.prototype.hasOwnProperty.call(signature, "parameters") &&
+    Object.prototype.hasOwnProperty.call(signature, "return_type") &&
+    Array.isArray(signature.parameters) &&
+    signature.parameters.every((parameter: unknown) => {
+      if (typeof parameter !== "object" || parameter === null || Array.isArray(parameter))
+        return false;
+      const fields = parameter as Record<string, unknown>;
+      return (
+        Object.keys(fields).length === 3 &&
+        ["id", "name", "type_name"].every(
+          (key) =>
+            Object.prototype.hasOwnProperty.call(fields, key) && typeof fields[key] === "string",
+        )
+      );
+    }) &&
+    (signature.return_type === null || typeof signature.return_type === "string")
+  );
 }
 
 export interface FunctionDocumentPatchDto {
@@ -241,7 +239,6 @@ export interface ResourceLifecyclePatchDto {
 }
 
 export type ResourceDocumentPatchDto =
-  | { kind: "graph"; patch: GraphDocumentPatchDto }
   | { kind: "function"; patch: FunctionDocumentPatchDto }
   | { kind: "chart"; patch: ChartDocumentPatchDto }
   | { kind: "resource_lifecycle"; patch: ResourceLifecyclePatchDto }

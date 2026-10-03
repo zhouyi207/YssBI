@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { GraphCanvasController } from "./GraphCanvasController";
 import { CanvasDropZone } from "./CanvasDropZone";
 import { useGraphRead } from "@/features/core/graph/read";
@@ -8,7 +9,7 @@ import { useResourceRead } from "@/features/core/resource/read";
 import type { EditorPanelScope } from "@/modules/workbench/public";
 import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
 import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 
 export type GraphDocumentEditorProps = EditorPanelScope<"event_graph" | "function_graph"> & {
   readonly catalogRowRenderer: NodePaletteCatalogRowRenderer;
@@ -27,23 +28,27 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   catalogRowRenderer,
 }: GraphDocumentEditorProps) {
   useVisibleGraphPanel(isVisible, { groupId, graphPath });
-  const saving = useGraphProjectionStore((state) => state.sessions[graphPath]?.saving === true);
+  const saving = useResourceStore((state) => state.sessions[graphPath]?.saving === true);
   const mode = isVisible && !saving ? "interactive" : "preview";
   const graphLoadStatus = useGraphLoadStatus(graphPath);
   const graphProjectionReady = useGraphRead((snapshot) =>
     Boolean(snapshot.graphEntities[graphPath]),
   );
-  const graphDocument = useResourceRead(
-    (snapshot) => snapshot.documents[resourceKey({ id: graphPath, kind: graphKind })],
+  const [documentReady, documentConflict] = useResourceRead(
+    useShallow((snapshot) => {
+      const document = snapshot.documents[resourceKey({ id: graphPath, kind: graphKind })];
+      return [
+        document?.loaded === true && document.stale === false && document.conflict === false,
+        document?.conflict === true,
+      ] as const;
+    }),
   );
   const graphReady =
     graphProjectionReady &&
-    graphDocument?.loaded === true &&
-    graphDocument.stale === false &&
-    graphDocument.conflict === false &&
+    documentReady &&
     graphLoadStatus !== "loading" &&
     graphLoadStatus !== "error";
-  const graphUnavailable = graphLoadStatus === "error" || graphDocument?.conflict === true;
+  const graphUnavailable = graphLoadStatus === "error" || documentConflict;
 
   return (
     <div

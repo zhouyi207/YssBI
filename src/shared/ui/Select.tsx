@@ -23,8 +23,6 @@ interface SelectProps {
   statusText?: string;
 }
 
-const EMPTY_OPTION_VALUE = "__yssbi_empty_select_value__";
-
 export const Select: React.FC<SelectProps> = ({
   options,
   value,
@@ -39,12 +37,13 @@ export const Select: React.FC<SelectProps> = ({
     typeof opt === "string" ? { label: opt, value: opt } : opt,
   );
   const hasEmptyOption = formattedOptions.some((option) => option.value === "");
-  const selectValue = value === "" && hasEmptyOption ? EMPTY_OPTION_VALUE : value;
+  // Radix reserves the empty string for its placeholder; prefix every option to avoid collisions.
+  const selectValue = value !== "" || hasEmptyOption ? `:${value}` : "";
 
   return (
     <ShadcnSelect
       value={selectValue}
-      onValueChange={(nextValue) => onChange(nextValue === EMPTY_OPTION_VALUE ? "" : nextValue)}
+      onValueChange={(nextValue) => onChange(nextValue.slice(1))}
       disabled={disabled}
       onOpenChange={onOpenChange}
     >
@@ -58,10 +57,7 @@ export const Select: React.FC<SelectProps> = ({
           </div>
         )}
         {formattedOptions.map((option) => (
-          <SelectItem
-            key={`${option.value || EMPTY_OPTION_VALUE}-${option.label}`}
-            value={option.value === "" ? EMPTY_OPTION_VALUE : option.value}
-          >
+          <SelectItem key={option.value} value={`:${option.value}`}>
             {option.label}
           </SelectItem>
         ))}

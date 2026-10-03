@@ -1,4 +1,3 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorStore } from "@/features/core/editor";
 import { useResourceStore } from "@/features/core/resource";
 import {
@@ -24,6 +23,11 @@ import {
 } from "@/modules/workbench/public";
 import { openGraphResource } from "./openGraphResource";
 import { revealDetails } from "./rightSidebarActions";
+import {
+  captureEditorCommandTarget,
+  isEditorCommandTargetCurrent,
+  type EditorCommandTarget,
+} from "./editorCommandFocus";
 
 export async function revealGraphProblem(
   graphPath: string,
@@ -31,7 +35,7 @@ export async function revealGraphProblem(
   groupId: string,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  const graph = useGraphProjectionStore.getState().graphEntities[graphPath];
+  const graph = useResourceStore.getState().graphEntities[graphPath];
   if (!graph) return false;
   if (location.kind === "resource") {
     const resource = Object.values(useResourceStore.getState().resources).find(
@@ -55,23 +59,16 @@ export async function revealGraphProblem(
         ? location.address.nodeId
         : null;
   if (nodeId && !graph.nodes[nodeId]) return false;
-  if (nodeId) {
-    updateEditorGroupSelectedNodeIds([nodeId], groupId);
-    useEditorStore.getState().setDetailFocus({ kind: "node", id: nodeId, graphPath });
-  }
   if (location.kind === "connection" && !graph.connections[location.connectionId]) return false;
   const panels = workbenchLayoutRead.findEditorPanelsByResource(graphPath);
   const panel = panels.find((panel) => panel.groupId === groupId) ?? panels[0];
+  let target: EditorCommandTarget | null = null;
   if (panel) {
     await workbenchLayoutControl.reveal(panel.panelInstanceId);
-    const currentPanel = workbenchLayoutRead.getPanel(panel.panelInstanceId);
-    if (
-      !isCurrentProjectIdentity(identity) ||
-      currentPanel?.metadata.role !== "editor" ||
-      currentPanel.metadata.resourceRef !== graphPath
-    )
-      return false;
-    groupId = currentPanel.groupId;
+    if (!isCurrentProjectIdentity(identity)) return false;
+    target = captureEditorCommandTarget(panel.panelInstanceId);
+    if (!target || target.resourceRef !== graphPath) return false;
+    groupId = target.groupId;
   }
   let nodeIds = nodeId ? [nodeId] : undefined;
   if (location.kind === "connection") {
@@ -84,14 +81,20 @@ export async function revealGraphProblem(
   }
 
   if (nodeId) await revealDetails({ kind: "node", id: nodeId, graphPath });
-  if (!panel) return true;
-  if (location.kind !== "parameter") await workbenchLayoutControl.activate(panel.panelInstanceId);
+  if (!isCurrentProjectIdentity(identity)) return false;
+  if (!target) return true;
+  if (!isEditorCommandTargetCurrent(target)) return false;
+  if (location.kind !== "parameter") await workbenchLayoutControl.activate(target.panelInstanceId);
+  if (!isEditorCommandTargetCurrent(target)) return false;
   const revision = workbenchLayoutRead.getMutationRevision();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  if (!isCurrentProjectIdentity(identity) || workbenchLayoutRead.getMutationRevision() !== revision)
+  if (
+    !isEditorCommandTargetCurrent(target) ||
+    workbenchLayoutRead.getMutationRevision() !== revision
+  )
     return false;
   const canvas = document.querySelector<HTMLElement>(
-    `[data-editor-panel-instance-id="${CSS.escape(panel.panelInstanceId)}"]`,
+    `[data-editor-panel-instance-id="${CSS.escape(target.panelInstanceId)}"]`,
   );
   if (canvas) {
     const scope = editorViewportScope(groupId, graphPath);

@@ -9,22 +9,31 @@ describe("cancelActiveGraphRun", () => {
     });
   });
 
-  it("forwards the projected opaque run ID to the cancellation service", async () => {
+  it("forwards the projected execution session and opaque run ID without output bindings", async () => {
     const cancelGraphRun = vi.fn().mockResolvedValue(true);
     const graphPath = "events/Main.yssbi-event";
-    useExecutionStore.getState().startExecution(graphPath);
-    useExecutionStore.getState().setActiveRunId(graphPath, "9007199254740993");
+    useExecutionStore.getState().submitExecution(graphPath);
+    useExecutionStore.getState().applyRunEvent({
+      resultRevision: "1",
+      run: {
+        graphPath,
+        runId: "9007199254740993",
+        executionSessionId: "session",
+        semanticInputHash: "0".repeat(64),
+      },
+      kind: { type: "runStarted", outputs: [] },
+    });
 
     await expect(cancelActiveGraphRun(graphPath, { cancelGraphRun })).resolves.toBe(true);
 
     expect(cancelGraphRun).toHaveBeenCalledOnce();
-    expect(cancelGraphRun).toHaveBeenCalledWith("9007199254740993");
+    expect(cancelGraphRun).toHaveBeenCalledWith("session", "9007199254740993");
   });
 
   it("does not invoke cancellation before runStarted supplies an ID", async () => {
     const cancelGraphRun = vi.fn().mockResolvedValue(true);
     const graphPath = "events/Main.yssbi-event";
-    useExecutionStore.getState().startExecution(graphPath);
+    useExecutionStore.getState().submitExecution(graphPath);
 
     await expect(cancelActiveGraphRun(graphPath, { cancelGraphRun })).resolves.toBe(false);
 

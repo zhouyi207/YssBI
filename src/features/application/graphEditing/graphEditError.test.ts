@@ -24,7 +24,10 @@ describe("graphEditErrorMessageKey", () => {
   });
 
   it("returns null for an unknown code value", () => {
-    expect(graphEditErrorMessageKey("internal_error")).toBeNull();
+    for (const code of ["internal_error", "constructor", "toString", "__proto__"]) {
+      expect.soft(graphEditErrorMessageKey(code)).toBeNull();
+      expect.soft(graphEditErrorCode(backendError(code))).toBeNull();
+    }
   });
 
   it.each([

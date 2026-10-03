@@ -1,10 +1,9 @@
-import { useDocumentStateStore } from "./documentStateStore";
+import { useResourceStore } from "./resourceStore";
 import type { ResourceRef, ResourceKey, ProjectResourceMeta } from "./resourceTypes";
 import { resourceKey } from "./resourceTypes";
-import { useResourceStore } from "./resourceStore";
 
 export function getDocumentState(ref: ResourceRef) {
-  return useDocumentStateStore.getState().documents[resourceKey(ref)];
+  return useResourceStore.getState().documents[resourceKey(ref)];
 }
 
 export function isResourceDocumentDirty(ref: ResourceRef): boolean {

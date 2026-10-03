@@ -9,10 +9,9 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { captureProjectReadContext, useProjectIOStore } from "./projectIOStore";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
-import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
+
 import { buildFileResourceMeta } from "@/features/core/resource/resourceTypes";
 import { markResourceLoaded } from "@/features/core/resource/documentStateActions";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
 afterEach(() => {
   clearProjectLifecycle();
@@ -40,9 +39,7 @@ describe("project read context", () => {
     } finally {
       unsubscribe();
       useProjectIOStore.setState({ graphLoadStatus: {} });
-      useGraphProjectionStore.getState().clear();
       useResourceStore.getState().clear();
-      useDocumentStateStore.getState().clear();
     }
   });
 

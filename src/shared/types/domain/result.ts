@@ -38,6 +38,14 @@ export function resultReferenceKey(value: ResultReference): string {
   return `${value.executionSessionId}:${value.resultId}`;
 }
 
+export function isResultId(value: unknown): value is ResultId {
+  return (
+    typeof value === "string" &&
+    /^[1-9][0-9]{0,19}$/.test(value) &&
+    (value.length < 20 || value <= "18446744073709551615")
+  );
+}
+
 export function isResultReference(value: unknown): value is ResultReference {
   return (
     typeof value === "object" &&
@@ -45,8 +53,7 @@ export function isResultReference(value: unknown): value is ResultReference {
     "executionSessionId" in value &&
     "resultId" in value &&
     isUuid(value.executionSessionId) &&
-    typeof value.resultId === "string" &&
-    /^[1-9]\d*$/.test(value.resultId)
+    isResultId(value.resultId)
   );
 }
 

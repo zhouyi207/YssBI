@@ -16,11 +16,10 @@ import { installGraphRunEvent } from "./observeGraphRunEvent";
 import { recoverGraphExecution } from "@/features/application/graphProjection/graphActivity";
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
 import { isGraphProjectionExecutable } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { getExecutionEventTarget, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
 
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import {
   ProjectLifecycleProtocolError,
   applyProjectLifecycleReceipt,
@@ -40,7 +39,10 @@ import {
 } from "./editorCommandFocus";
 
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
-import { normalizeApplicationIpcError } from "@/features/application/errorReference";
+import {
+  formatApplicationIpcError,
+  normalizeApplicationIpcError,
+} from "@/features/application/errorReference";
 
 function projectParentDirectory(metadataOrRootPath: string): string {
   const normalized = metadataOrRootPath.replace(/\\/g, "/");
@@ -65,7 +67,7 @@ export function useProjectOperations() {
         cancelPendingProjectLifecycleOperation(pending.operationId);
         return;
       }
-      if (!projectPath) {
+      if (!projectPath || !pending.projectInstanceId) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
         showBlockingMessage(t("notifications.project.notLoaded"));
         return;
@@ -80,7 +82,7 @@ export function useProjectOperations() {
         return;
       }
 
-      const currentPath = await ProjectService.getProjectPath();
+      const currentPath = await ProjectService.getProjectPath(pending.projectInstanceId);
       if (!pending.isCurrent()) return;
       if (!currentPath) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
@@ -133,7 +135,10 @@ export function useProjectOperations() {
         }
         if (!pending.isCurrent()) return;
       }
-      logger.app.error(String(e), "ProjectOperations");
+      logger.app.error(
+        `Save project as failed: ${formatApplicationIpcError(e)}`,
+        "ProjectOperations",
+      );
       showBlockingIpcError(e, (code) => t("notifications.project.saveAsFailed", { error: code }));
     }
   }, [t]);
@@ -164,7 +169,7 @@ export function useProjectOperations() {
         }
       } catch (e) {
         if (!isEditorCommandTargetCurrent(target)) return;
-        logger.app.error(String(e), "ProjectOperations");
+        logger.app.error(`Save file failed: ${formatApplicationIpcError(e)}`, "ProjectOperations");
         showBlockingIpcError(e, (code) => t("notifications.project.saveFailed", { error: code }));
       }
     },
@@ -193,7 +198,7 @@ export function useProjectOperations() {
         return;
       }
     } catch (e) {
-      logger.app.error(String(e), "ProjectOperations");
+      logger.app.error(`Open project failed: ${formatApplicationIpcError(e)}`, "ProjectOperations");
       showBlockingIpcError(e, (code) => `${t("notifications.project.loadFailed")} (${code})`);
     }
   }, [t]);
@@ -219,9 +224,9 @@ export function useProjectOperations() {
           graphPath,
           async () => {
             if (!isCurrentProjectIdentity(project)) return null;
-            const draft = useGraphProjectionStore.getState().sessions[graphPath];
+            const draft = useResourceStore.getState().sessions[graphPath];
             if (!draft || draft.saving) return null;
-            const projection = useGraphProjectionStore.getState().graphEntities[graphPath];
+            const projection = useResourceStore.getState().graphEntities[graphPath];
             if (!isGraphProjectionExecutable(projection)) {
               showBlockingMessage(t("notifications.project.problemsBlockExecution"));
               return null;
@@ -288,7 +293,10 @@ export function useProjectOperations() {
     try {
       await cancelActiveGraphRun(graphPath);
     } catch (e) {
-      logger.exec.error(`中断执行失败: ${formatErrorMessage(e)}`);
+      logger.exec.error(
+        `Execution cancellation failed: ${formatApplicationIpcError(e)}`,
+        "ProjectOperations",
+      );
     }
   }, []);
 

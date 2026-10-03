@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MindEdit, MindSnapshot } from "@/shared/types/domain/mind";
-import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
+import {
+  clearResourceDocumentState,
+  resourceKey,
+  useResourceStore,
+} from "@/features/core/resource";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { createFileTextInput } from "./fileTextInput";
 import {
@@ -49,7 +53,6 @@ function setup() {
 beforeEach(() => {
   resetDocumentInputs();
   startProjectLifecycle(saved.projectInstanceId);
-  useDocumentStateStore.getState().clear();
   useResourceStore.getState().clear();
 });
 afterEach(resetDocumentInputs);
@@ -105,6 +108,37 @@ it("keeps newer text pending until it is separately submitted and ignores an old
   expect(hasPendingDocumentInput(saved.path)).toBe(true);
 });
 
+it("submits newer text once when concurrent flushes await the same preceding edit", async () => {
+  const { acquire, edit } = setup();
+  const input = acquire();
+  const applyEdit = edit.getMockImplementation()!;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  edit.mockImplementationOnce(async (path, edits) => {
+    await gate;
+    return applyEdit(path, edits);
+  });
+
+  input.change("First edit");
+  const first = flushDocumentInputs(saved.path);
+  input.change("Latest edit");
+  const second = flushDocumentInputs(saved.path);
+  const third = flushDocumentInputs(saved.path);
+  release();
+  await Promise.all([first, second, third]);
+
+  expect(edit).toHaveBeenCalledTimes(2);
+  expect(edit).toHaveBeenNthCalledWith(1, saved.path, [makeEdit("First edit")], saved.version);
+  expect(edit).toHaveBeenNthCalledWith(2, saved.path, [makeEdit("Latest edit")], {
+    sessionId: "mind-session",
+    revision: 1,
+  });
+  expect(input.getValue()).toBe("Latest edit");
+  expect(hasPendingDocumentInput(saved.path)).toBe(false);
+});
+
 it("releases retained inputs and ignores late settlements after file close or project reset", async () => {
   const { acquire, edit } = setup();
   const input = acquire();
@@ -118,19 +152,70 @@ it("releases retained inputs and ignores late settlements after file close or pr
   input.change("Pending before close");
   const flushing = flushDocumentInputs(saved.path);
   releaseDocumentInputs(saved.path);
-  useDocumentStateStore.getState().clear();
+  clearResourceDocumentState({ id: saved.path, kind: "mind" });
   complete({ ...saved, dirty: true });
   await flushing;
-  expect(useDocumentStateStore.getState().documents).toEqual({});
+  expect(useResourceStore.getState().documents).toEqual({});
   expect(hasPendingDocumentInput(saved.path)).toBe(false);
   const reopened = acquire();
   expect(reopened).not.toBe(input);
   reopened.change("Pending before project replacement");
   resetDocumentInputs();
   startProjectLifecycle("project-b");
-  useDocumentStateStore.getState().clear();
+  useResourceStore.getState().clear();
   await reopened.flush();
   expect(edit).toHaveBeenCalledTimes(1);
-  expect(useDocumentStateStore.getState().documents).toEqual({});
+  expect(useResourceStore.getState().documents).toEqual({});
   expect(hasPendingDocumentInput(saved.path)).toBe(false);
+});
+
+it("does not change successor dirty flags after text notifications replace the input owner", async () => {
+  for (const phase of ["change-project", "change-release", "flush-project", "flush-release"]) {
+    resetDocumentInputs();
+    startProjectLifecycle(saved.projectInstanceId);
+    useResourceStore.getState().clear();
+    useResourceStore.getState().installFileSnapshot(saved);
+    const { acquire, edit } = setup();
+    const input = acquire();
+    const flushing = phase.startsWith("flush");
+    if (flushing) {
+      input.change("pending text");
+      edit.mockResolvedValueOnce({ ...saved, version: { ...saved.version, revision: 1 } });
+    }
+    const successor = {
+      ...saved,
+      projectInstanceId: phase.endsWith("project") ? "project-b" : saved.projectInstanceId,
+      dirty: flushing,
+      version: { sessionId: "successor", revision: 0 },
+    };
+    let installed = useResourceStore.getState().fileSnapshots.mind[saved.path];
+    const stop = input.subscribe(() => {
+      releaseDocumentInputs(saved.path);
+      if (phase.endsWith("project")) startProjectLifecycle(successor.projectInstanceId);
+      useResourceStore.getState().installFileSnapshot(successor);
+      installed = useResourceStore.getState().fileSnapshots.mind[saved.path];
+      retainDocumentInput(successor.projectInstanceId, saved.path, "successor:root", () =>
+        createFileTextInput(successor, "successor", makeEdit, {
+          edit,
+          getSnapshot: () => successor,
+        }),
+      );
+    });
+    try {
+      if (flushing) await input.flush();
+      else input.change("old text");
+      expect
+        .soft(
+          useResourceStore.getState().documents[resourceKey({ id: saved.path, kind: saved.kind })]
+            ?.dirty,
+          phase,
+        )
+        .toBe(successor.dirty);
+      expect
+        .soft(useResourceStore.getState().fileSnapshots.mind[saved.path], phase)
+        .toBe(installed);
+    } finally {
+      stop();
+    }
+  }
 });

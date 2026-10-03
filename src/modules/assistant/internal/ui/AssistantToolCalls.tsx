@@ -1,5 +1,6 @@
 import { useState, type PropsWithChildren } from "react";
 import { useAuiState, type ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import {
   VscCheck,
@@ -41,22 +42,32 @@ export function AssistantToolGroup({
   children,
 }: PropsWithChildren<{ startIndex: number; endIndex: number }>) {
   const { t } = useTranslation();
-  const content = useAuiState((s) => s.message.content);
-  const tools = content.slice(startIndex, endIndex + 1).filter((part) => part.type === "tool-call");
-  const running = tools.filter(
-    (part) => toolState(part.result, part.isError) === "assistantToolRunning",
-  );
-  const failed = tools.filter(
-    (part) =>
-      !["assistantToolRunning", "assistantToolCompleted"].includes(
-        toolState(part.result, part.isError),
-      ),
+  const { count, running, failed, activeToolName } = useAuiState(
+    useShallow((state) => {
+      let count = 0;
+      let running = 0;
+      let failed = 0;
+      let activeToolName: string | null = null;
+      for (let index = startIndex; index <= endIndex; index += 1) {
+        const part = state.message.content[index];
+        if (part?.type !== "tool-call") continue;
+        count += 1;
+        const status = toolState(part.result, part.isError);
+        if (status === "assistantToolRunning") {
+          running += 1;
+          activeToolName ??= part.toolName;
+        } else if (status !== "assistantToolCompleted") {
+          failed += 1;
+        }
+      }
+      return { count, running, failed, activeToolName };
+    }),
   );
   const [expanded, setExpanded] = useState<boolean | undefined>(undefined);
-  const active = running[0];
+  const active = running > 0;
   return (
     <Collapsible
-      open={expanded ?? running.length > 0}
+      open={expanded ?? active}
       onOpenChange={setExpanded}
       className="my-2 min-w-0 rounded-lg border border-border/60 bg-muted/20 text-xs"
     >
@@ -72,18 +83,18 @@ export function AssistantToolGroup({
         )}
         <span className="shrink-0">
           {t(`panel.${active ? "assistantToolsRunning" : "assistantToolsFinished"}`, {
-            count: tools.length,
-            completed: tools.length - running.length,
+            count,
+            completed: count - running,
           })}
         </span>
-        {failed.length > 0 && (
+        {failed > 0 && (
           <span className="shrink-0 text-destructive">
-            {t("panel.assistantToolsFailed", { count: failed.length })}
+            {t("panel.assistantToolsFailed", { count: failed })}
           </span>
         )}
-        {active && (
+        {activeToolName !== null && (
           <span className="min-w-0 flex-1 truncate">
-            {t(`panel.assistantToolNames.${active.toolName}`, { defaultValue: active.toolName })}
+            {t(`panel.assistantToolNames.${activeToolName}`, { defaultValue: activeToolName })}
           </span>
         )}
       </CollapsibleTrigger>

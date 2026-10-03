@@ -1,6 +1,9 @@
-import type { DatabaseGridSelection } from "@/features/application/databaseEditor";
+import {
+  rangeContainsCell,
+  type DatabaseGridSelection,
+  type DatabaseGridCellRange,
+} from "@/features/domain/databaseEditor/gridSelection";
 import type { DatabaseRow } from "@/shared/types/domain/database";
-import type { DatabaseGridCellRange } from "./databaseGridModel";
 
 function clipboardCell(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -14,16 +17,11 @@ function serializeRows(rows: readonly (readonly unknown[])[]): string {
 
 function primaryCellRange(selection: Extract<DatabaseGridSelection, { type: "cells" }>) {
   const active = selection.activeCell;
+  for (let index = selection.ranges.length - 1; index >= 0; index--) {
+    const range = selection.ranges[index];
+    if (rangeContainsCell(range, active.row, active.column)) return range;
+  }
   return (
-    [...selection.ranges]
-      .reverse()
-      .find(
-        (range) =>
-          active.row >= range.row &&
-          active.row < range.row + range.rowCount &&
-          active.column >= range.column &&
-          active.column < range.column + range.columnCount,
-      ) ??
     selection.ranges[selection.ranges.length - 1] ?? {
       row: active.row,
       column: active.column,

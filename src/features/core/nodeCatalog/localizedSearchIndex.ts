@@ -1,5 +1,6 @@
 import {
   buildCatalogSearchDocument,
+  catalogSearchTerms,
   matchesCatalogSearchDocument,
 } from "@/features/domain/nodeCatalog/searchDocument";
 import type { LocalizedCatalogResponse } from "./nodeCatalogStore";
@@ -21,10 +22,12 @@ export function getLocalizedSearchIndex(response: LocalizedCatalogResponse): Loc
   }));
   const index: LocalizedSearchIndex = {
     response,
-    search: (query) =>
-      documents
-        .filter(({ document }) => matchesCatalogSearchDocument(document, query))
-        .map(({ item }) => item),
+    search: (query) => {
+      const terms = catalogSearchTerms(query);
+      return documents
+        .filter(({ document }) => matchesCatalogSearchDocument(document, terms))
+        .map(({ item }) => item);
+    },
   };
   indexes.set(response, index);
   return index;

@@ -1,6 +1,6 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 
 /** Projects the Graph Draft save lock into editing surfaces. */
 export function useGraphEditingLocked(graphPath: string): boolean {
-  return useGraphProjectionStore((state) => state.sessions[graphPath]?.saving === true);
+  return useResourceStore((state) => state.sessions[graphPath]?.saving === true);
 }

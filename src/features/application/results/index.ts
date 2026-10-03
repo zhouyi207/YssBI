@@ -13,7 +13,6 @@ export {
   resultQueryRead,
   resetResultQuery,
   resetResultQueryProject,
-  observeResultRunEvent,
   useGraphResultPresentation,
 } from "./runtime";
 export {

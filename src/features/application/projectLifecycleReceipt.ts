@@ -3,6 +3,7 @@ import { useProjectIOStore } from "@/features/application/project/projectIOStore
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,
+  type ProjectIdentitySnapshot,
   type ProjectLifecycleStateSnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type {
@@ -10,11 +11,12 @@ import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
 } from "@/shared/types/domain/project";
+import { resetResultQueryProject } from "@/features/application/results";
 
 export interface PreparedProjectLifecycleTransition {
   readonly projectInstanceId: string;
   readonly publicationRevision: number;
-  commit(): Promise<void>;
+  commit(): Promise<ProjectIdentitySnapshot>;
 }
 
 export interface ProjectLifecycleReceiptDependencies {
@@ -161,14 +163,6 @@ function validateReceipt(
   entry.fingerprint = fingerprint;
 }
 
-function captureOwnedTransition(
-  entry: ProjectLifecycleRegistryEntry,
-): ProjectLifecycleStateSnapshot {
-  const lifecycle = captureProjectLifecycleState();
-  entry.transition = lifecycle;
-  return lifecycle;
-}
-
 function assertEntryCurrent(entry: ProjectLifecycleRegistryEntry): void {
   if (!entryIsCurrent(entry)) {
     throw new ProjectLifecycleProtocolError(
@@ -184,8 +178,8 @@ async function rehydrateAndTransition(
 ): Promise<void> {
   assertEntryCurrent(entry);
   if (result.newProjectInstanceId) {
-    projectPublicationCoordinator.startProject(result.newProjectInstanceId, 0);
-    captureOwnedTransition(entry);
+    entry.transition = projectPublicationCoordinator.startProject(result.newProjectInstanceId, 0);
+    assertEntryCurrent(entry);
   }
   const prepared = await dependencies.prepareProjectTransition();
   assertEntryCurrent(entry);
@@ -203,16 +197,14 @@ async function rehydrateAndTransition(
       `operation '${entry.operationId}' prepared an unexpected project identity`,
     );
   }
-  await prepared.commit();
-  if (useProjectIOStore.getState().projectInstanceId !== prepared.projectInstanceId) {
+  entry.transition = await prepared.commit();
+  assertEntryCurrent(entry);
+  if (
+    entry.transition.projectInstanceId !== prepared.projectInstanceId ||
+    useProjectIOStore.getState().projectInstanceId !== prepared.projectInstanceId
+  ) {
     throw new ProjectLifecycleProtocolError(
       `operation '${entry.operationId}' committed an unexpected project store identity`,
-    );
-  }
-  captureOwnedTransition(entry);
-  if (!entryIsCurrent(entry)) {
-    throw new ProjectLifecycleProtocolError(
-      `operation '${entry.operationId}' did not own its committed project transition`,
     );
   }
 }
@@ -226,8 +218,9 @@ async function processReceipt(
 
   if (result.kind === "delete" && result.invalidation.project) {
     assertEntryCurrent(entry);
-    projectPublicationCoordinator.cancelProject();
-    const owner = captureOwnedTransition(entry);
+    const owner = projectPublicationCoordinator.cancelProject();
+    entry.transition = owner;
+    if (!entryIsCurrent(entry)) return { status: "stale", result };
     await dependencies.clearProject(owner);
     if (!isProjectLifecycleStateCurrent(owner)) return { status: "stale", result };
     if (useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId) {
@@ -250,6 +243,11 @@ async function processReceipt(
     assertEntryCurrent(entry);
   }
 
+  if (result.invalidation.project) {
+    assertEntryCurrent(entry);
+    resetResultQueryProject();
+    if (!entryIsCurrent(entry)) return { status: "stale", result };
+  }
   return { status: "applied", result, registryProjects };
 }
 
@@ -329,7 +327,7 @@ export async function applyProjectLifecycleReceipt(
   }
 
   entry.state = "processing";
-  const processing = processReceipt(entry, result, dependencies);
+  const processing = Promise.resolve().then(() => processReceipt(entry, result, dependencies));
   entry.processing = processing;
   try {
     const settlement = await processing;

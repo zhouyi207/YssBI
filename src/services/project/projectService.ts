@@ -9,6 +9,9 @@ import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
 import { parseActivityPanelResponse } from "@/shared/types/dto/activityPanel";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
 import { Channel } from "@tauri-apps/api/core";
+import type { ZodType } from "zod";
+import { clearChannelMessageHandler } from "@/shared/platform/tauriWebview";
+import { logger } from "@/utils/frontendLogger";
 import type { RunEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
 import { parseExecutionDemandDto } from "@/shared/types/dto/runEventParser";
@@ -20,12 +23,13 @@ import type {
   ProjectIndexRow,
   ProjectChartIndexRow,
 } from "@/shared/types/domain/project";
-import type {
-  FunctionSignatureDto,
-  GraphEditVersionDto,
+import {
+  isFunctionSignatureDto,
+  type GraphEditVersionDto,
 } from "@/shared/types/domain/editorMutation";
-import type { DatabaseEngineDTO } from "@/shared/types/domain/database";
-import type { ChartType } from "@/shared/types/domain/chart";
+import { isDatabaseEngine } from "@/shared/types/domain/database";
+import { projectDatabasesSchema } from "@/services/database/databaseWireParser";
+import { isChartType } from "@/shared/types/domain/chart";
 import {
   isFunctionEditorProjectionDto,
   isGraphResourcePath,
@@ -34,6 +38,7 @@ import type {
   CleanupInvalidProjectsResult,
   LifecycleMutationResultDto,
   ProjectRecordRow,
+  ProjectActivationResult,
   ScanProjectsResult,
 } from "@/shared/types/dto/project";
 
@@ -41,15 +46,31 @@ import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
 import { IpcError, invokeCommand, isIpcErrorCode } from "@/services/ipc";
 import { bindExecutionEventChannel } from "./executionChannelDrain";
 import { readExecutionSnapshot } from "@/services/nodeSystem/graphActivityService";
+import {
+  parseProjectActivationResult,
+  parseLifecycleMutationResult,
+  parseProjectRecord,
+  parseProjectRecords,
+  parseScanProjectsResult,
+  projectCleanupResultSchema,
+  projectScanProgressSchema,
+  projectCleanupProgressSchema,
+  projectPathSchema,
+  nullableProjectPathSchema,
+  projectFlagSchema,
+  type ProjectScanProgressEvent,
+  type ProjectCleanupProgressEvent,
+} from "./projectWireParser";
 
-export type ProjectScanProgressEvent =
-  | { kind: "scanning" }
-  | { kind: "discovered"; count: number }
-  | { kind: "registering"; current: number; total: number };
-
-export type ProjectCleanupProgressEvent =
-  | { kind: "checking"; current: number; total: number }
-  | { kind: "removing"; removed: number; total: number };
+function projectProgressChannel<T>(schema: ZodType<T>, onProgress?: (event: T) => void) {
+  const channel = trackChannel(new Channel<unknown>());
+  channel.onmessage = (value) => {
+    const parsed = schema.safeParse(value);
+    if (parsed.success) onProgress?.(parsed.data);
+    else logger.sys.warn("Ignored invalid project picker progress");
+  };
+  return channel;
+}
 
 export interface ExecuteGraphDocumentRequest {
   projectInstanceId: string;
@@ -85,25 +106,6 @@ function isSafeRevision(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-function isFunctionSignature(value: unknown): value is FunctionSignatureDto {
-  return (
-    isRecord(value) &&
-    !Array.isArray(value) &&
-    hasExactKeys(value, ["parameters", "return_type"]) &&
-    Array.isArray(value.parameters) &&
-    value.parameters.every(
-      (parameter) =>
-        isRecord(parameter) &&
-        !Array.isArray(parameter) &&
-        hasExactKeys(parameter, ["id", "name", "type_name"]) &&
-        typeof parameter.id === "string" &&
-        typeof parameter.name === "string" &&
-        typeof parameter.type_name === "string",
-    ) &&
-    (value.return_type === null || typeof value.return_type === "string")
-  );
-}
-
 function isNodeFileIndexBase(value: Record<string, unknown>): boolean {
   return (
     isGraphResourcePath(value.path) &&
@@ -136,16 +138,12 @@ export function parseProjectFunctionGraphIndexRow(value: unknown): ProjectFuncti
       "functionEditorProjection",
     ]) ||
     !isSafeRevision(value.functionRevision) ||
-    !isFunctionSignature(value.functionSignature) ||
+    !isFunctionSignatureDto(value.functionSignature) ||
     !isFunctionEditorProjectionDto(value.functionEditorProjection) ||
     value.functionEditorProjection.functionRevision !== value.functionRevision
   )
     throw new Error("Invalid project function index row");
   return value as unknown as ProjectFunctionGraphIndexRow;
-}
-
-function isChartType(value: unknown): value is ChartType {
-  return value === "histogram" || value === "scatter" || value === "line";
 }
 
 function parseProjectChartIndexRow(value: unknown): ProjectChartIndexRow {
@@ -245,15 +243,6 @@ export function parseProjectIndexRow(value: unknown): ProjectIndexRow {
   }
 }
 
-function isDatabaseEngine(value: unknown): value is DatabaseEngineDTO {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["dataset"]) &&
-    isRecord(value.dataset) &&
-    Object.keys(value.dataset).length === 0
-  );
-}
-
 export function isProjectDatabaseIndexRow(value: unknown): value is ProjectDatabaseIndexRow {
   if (
     !isRecord(value) ||
@@ -283,12 +272,6 @@ export function isProjectDatabaseIndexRow(value: unknown): value is ProjectDatab
   );
 }
 
-export interface ProjectActivationResult {
-  path: string;
-  projectInstanceId: string;
-  activationRevision: number;
-}
-
 // ==================== 项目状态管理 API ====================
 
 export type RevealProjectResourceRequest = {
@@ -301,25 +284,30 @@ export class ProjectService {
 
   /** 获取当前后端项目 activation，供后创建的独立 WebView 建立 lifecycle identity。 */
   static async getProjectActivation(): Promise<ProjectActivationResult> {
-    return await invokeCommand("get_current_project_activation");
+    return parseProjectActivationResult(
+      await invokeCommand<unknown>("get_current_project_activation"),
+    );
   }
 
   /**
-   * 分阶段加载第一步：获取 databases（含 schema）
+   * 按已捕获的项目索引版本读取 databases（含 schema）
    */
-  static async getDatabases(): Promise<{
-    databases: Record<string, unknown>;
-  }> {
-    return await invokeCommand<{
-      databases: Record<string, unknown>;
-    }>("get_project_databases");
+  static async getDatabases(projectInstanceId: string, expectedPublicationRevision: number) {
+    return projectDatabasesSchema.parse(
+      await invokeCommand<unknown>("get_project_databases", {
+        projectInstanceId,
+        expectedPublicationRevision,
+      }),
+    );
   }
 
   /**
    * 获取当前项目路径
    */
-  static async getProjectPath(): Promise<string | null> {
-    return await invokeCommand("get_project_path");
+  static async getProjectPath(projectInstanceId: string): Promise<string | null> {
+    return nullableProjectPathSchema.parse(
+      await invokeCommand<unknown>("get_project_path", { projectInstanceId }),
+    );
   }
 
   static async getProjectIndex(
@@ -390,7 +378,9 @@ export class ProjectService {
   }
 
   static async defaultProjectParentDirectory(): Promise<string> {
-    return await invokeCommand("default_project_parent_directory");
+    return projectPathSchema.parse(
+      await invokeCommand<unknown>("default_project_parent_directory"),
+    );
   }
 
   static async validateNewProjectPath(path: string): Promise<void> {
@@ -402,11 +392,13 @@ export class ProjectService {
     path: string,
     operationId: string,
   ): Promise<LifecycleMutationResultDto> {
-    return await invokeCommand("create_project", { name, path, operationId });
+    return parseLifecycleMutationResult(
+      await invokeCommand<unknown>("create_project", { name, path, operationId }),
+    );
   }
 
   static async listRegisteredProjects(): Promise<ProjectRecordRow[]> {
-    return await invokeCommand("list_registered_projects");
+    return parseProjectRecords(await invokeCommand<unknown>("list_registered_projects"));
   }
 
   static async cancelProjectPickerTask(): Promise<void> {
@@ -416,15 +408,15 @@ export class ProjectService {
   static async cleanupInvalidRegisteredProjects(
     onProgress?: (event: ProjectCleanupProgressEvent) => void,
   ): Promise<CleanupInvalidProjectsResult> {
-    const channel = trackChannel(new Channel<ProjectCleanupProgressEvent>());
-    channel.onmessage = (event) => {
-      onProgress?.(event);
-    };
+    const channel = projectProgressChannel(projectCleanupProgressSchema, onProgress);
     try {
-      return await invokeCommand("cleanup_invalid_registered_projects", {
-        onProgress: channel,
-      });
+      return projectCleanupResultSchema.parse(
+        await invokeCommand<unknown>("cleanup_invalid_registered_projects", {
+          onProgress: channel,
+        }),
+      );
     } finally {
+      clearChannelMessageHandler(channel);
       untrackChannel(channel);
     }
   }
@@ -433,22 +425,22 @@ export class ProjectService {
     directory: string,
     onProgress?: (event: ProjectScanProgressEvent) => void,
   ): Promise<ScanProjectsResult> {
-    const channel = trackChannel(new Channel<ProjectScanProgressEvent>());
-    channel.onmessage = (event) => {
-      onProgress?.(event);
-    };
+    const channel = projectProgressChannel(projectScanProgressSchema, onProgress);
     try {
-      return await invokeCommand("scan_projects_in_directory", {
-        directory,
-        onProgress: channel,
-      });
+      return parseScanProjectsResult(
+        await invokeCommand<unknown>("scan_projects_in_directory", {
+          directory,
+          onProgress: channel,
+        }),
+      );
     } finally {
+      clearChannelMessageHandler(channel);
       untrackChannel(channel);
     }
   }
 
   static async registerProject(name: string, path: string): Promise<ProjectRecordRow> {
-    return await invokeCommand("register_project", { name, path });
+    return parseProjectRecord(await invokeCommand<unknown>("register_project", { name, path }));
   }
 
   static async removeRegisteredProject(id: string): Promise<void> {
@@ -460,15 +452,19 @@ export class ProjectService {
     expectedActiveProjectInstanceId: string | null,
     operationId: string,
   ): Promise<LifecycleMutationResultDto> {
-    return await invokeCommand("delete_registered_project_files", {
-      id,
-      expectedActiveProjectInstanceId,
-      operationId,
-    });
+    return parseLifecycleMutationResult(
+      await invokeCommand<unknown>("delete_registered_project_files", {
+        id,
+        expectedActiveInstanceId: expectedActiveProjectInstanceId,
+        operationId,
+      }),
+    );
   }
 
   static async toggleRegisteredProjectFavorite(id: string): Promise<boolean> {
-    return await invokeCommand("toggle_registered_project_favorite", { id });
+    return projectFlagSchema.parse(
+      await invokeCommand<unknown>("toggle_registered_project_favorite", { id }),
+    );
   }
 
   /**
@@ -476,7 +472,7 @@ export class ProjectService {
    * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
    */
   static async loadProjectToState(path: string): Promise<ProjectActivationResult> {
-    return await invokeCommand("load_project", { path });
+    return parseProjectActivationResult(await invokeCommand<unknown>("load_project", { path }));
   }
 
   /**
@@ -489,11 +485,13 @@ export class ProjectService {
   ): Promise<LifecycleMutationResultDto> {
     await this.validateNewProjectPath(path);
 
-    return await invokeCommand<LifecycleMutationResultDto>("save_project_as", {
-      path,
-      projectInstanceId,
-      operationId,
-    });
+    return parseLifecycleMutationResult(
+      await invokeCommand<unknown>("save_project_as", {
+        path,
+        projectInstanceId,
+        operationId,
+      }),
+    );
   }
   /** Execute one graph document and drain its streamed run eventGraphs. */
   static async executeGraph({
@@ -566,18 +564,22 @@ export class ProjectService {
     }
   }
 
-  static async cancelGraphRun(runId: string): Promise<boolean> {
-    return invokeCommand<boolean>("cancel_graph_run", { runId });
+  static async cancelGraphRun(executionSessionId: string, runId: string): Promise<boolean> {
+    return projectFlagSchema.parse(
+      await invokeCommand<unknown>("cancel_graph_run", { executionSessionId, runId }),
+    );
   }
 
   static async getProjectResourcePath(
     projectInstanceId: string,
     request: RevealProjectResourceRequest,
   ): Promise<string> {
-    return await invokeCommand<string>("get_project_resource_path", {
-      projectInstanceId,
-      kind: request.kind,
-      resourceId: request.resourceId,
-    });
+    return projectPathSchema.parse(
+      await invokeCommand<unknown>("get_project_resource_path", {
+        projectInstanceId,
+        kind: request.kind,
+        resourceId: request.resourceId,
+      }),
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { installGraphRunEvent } from "@/features/application/editor/observeGraphRunEvent";
 import {
   makeGraphEditorSession,
   makeEditorProjectionFixture,
@@ -12,17 +13,19 @@ import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useExecutionStore } from "@/features/core/execution";
 import * as graphPresentation from "./graphPresentation";
+import * as readProjection from "@/features/core/state/readProjection";
 
 import {
-  observeResultRunEvent,
+  prepareResultExecutionSession,
   resetResultQueryProject,
   resultQueryCoordinator,
   resultQueryRead,
   reconcileGraphResultQueries,
   resetGraphResultQueries,
+  usePinResultSearchEntries,
 } from "./runtime";
 
 const graphPath = "events/Main.yssbi-event";
@@ -38,7 +41,7 @@ function resultState(
 
     executionSessionId,
     semanticInputHash:
-      useGraphProjectionStore.getState().sessions[graphPath]?.semanticInputHash ??
+      useResourceStore.getState().sessions[graphPath]?.semanticInputHash ??
       fixture.projection.basis.semanticInputHash,
     outputs: [{ output, state: resultId ? "valid" : "missing", resultId }],
     connections: [],
@@ -73,9 +76,15 @@ const page = (id: string): ResultPage => ({
   metadata: null,
   values: [[1]],
 });
-function event(runId: string, kind: RunEventKind) {
-  observeResultRunEvent({
-    run: { runId, graphPath, executionSessionId: resultSessionFixture },
+function event(runId: string, kind: RunEventKind, resultRevision = runId) {
+  installGraphRunEvent({
+    resultRevision,
+    run: {
+      runId,
+      graphPath,
+      executionSessionId: resultSessionFixture,
+      semanticInputHash: "0".repeat(64),
+    },
     kind,
   });
 }
@@ -84,16 +93,496 @@ beforeEach(() => {
   vi.restoreAllMocks();
   resetResultQueryProject();
   useExecutionStore.setState({ graphs: {} });
-  useGraphProjectionStore.getState().clear();
+  useResourceStore.getState().clear();
   startProjectLifecycle("project-1");
-  useGraphProjectionStore.getState().install(graphPath, {
-    ...makeGraphEditorSession(fixture.projection),
-    resultState: resultState("1"),
-  });
+  useResourceStore.getState().installGraphSession(
+    graphPath,
+    {
+      ...makeGraphEditorSession(fixture.projection),
+      resultState: resultState("1"),
+    },
+    { mode: "load" },
+  );
   vi.spyOn(ResultService, "getGraphState").mockResolvedValue(null);
 });
 
 describe("current result lifecycle", () => {
+  it.each(["nullPin", "runInvalidation"])(
+    "preserves successor graph queries after %s notifications",
+    async (action) => {
+      const pinRead = vi.spyOn(ResultService, "getPinResult");
+      for (const replacement of ["project", "frame", "summary"]) {
+        startProjectLifecycle("project-1");
+        resetResultQueryProject();
+        useExecutionStore.setState({ graphs: {} });
+        prepareResultExecutionSession(resultSessionFixture);
+        useResourceStore.getState().installGraphSession(
+          graphPath,
+          {
+            ...makeGraphEditorSession(fixture.projection),
+            resultState: resultState("1"),
+          },
+          { mode: "load" },
+        );
+        pinRead.mockResolvedValue(descriptor("1"));
+        await resultQueryCoordinator.loadPinResult(request);
+        pinRead.mockResolvedValue(null);
+        const settles: Array<(value: GraphResultState | null) => void> = [];
+        vi.mocked(ResultService.getGraphState)
+          .mockReset()
+          .mockImplementation(
+            () =>
+              new Promise((resolve) => {
+                settles.push(resolve);
+              }),
+          );
+        let successorQuery: ReturnType<typeof resultQueryCoordinator.loadGraphState> | undefined;
+        let replaced = false;
+        const stop = resultQueryRead.subscribe(() => {
+          if (replaced) return;
+          replaced = true;
+          if (replacement === "project") {
+            startProjectLifecycle("project-1");
+            resetResultQueryProject();
+            prepareResultExecutionSession(resultSessionFixture);
+          } else if (replacement === "frame") {
+            useResourceStore.getState().removeGraphSession(graphPath);
+            useResourceStore.getState().installGraphSession(
+              graphPath,
+              {
+                ...makeGraphEditorSession(fixture.projection),
+                resultState: resultState("2"),
+              },
+              { mode: "load" },
+            );
+          } else {
+            useResourceStore.getState().setGraphResultState(graphPath, {
+              ...resultState("2"),
+              revision: "1",
+            });
+          }
+          const session = useResourceStore.getState().sessions[graphPath];
+          successorQuery = resultQueryCoordinator.loadGraphState({
+            graphPath,
+            sessionId: session.sessionId,
+            projectionGeneration: session.projectionGeneration,
+            semanticInputHash: session.semanticInputHash,
+          });
+        });
+        try {
+          if (action === "nullPin") await resultQueryCoordinator.loadPinResult(request);
+          else event("2", { type: "runStarted", outputs: [output] });
+          await Promise.resolve();
+          expect.soft(replaced, replacement).toBe(true);
+          expect.soft(ResultService.getGraphState, replacement).toHaveBeenCalledTimes(1);
+        } finally {
+          stop();
+        }
+        settles.forEach((resolve) => resolve(null));
+        await expect.soft(successorQuery, replacement).resolves.toEqual({ status: "notReady" });
+      }
+    },
+  );
+
+  it("preserves a successor query when graph state publication replaces its frame", async () => {
+    const pinRead = vi.spyOn(ResultService, "getPinResult");
+    vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: 42 });
+    for (const boundary of ["sessionReset", "summaryPublication", "newerSummary"]) {
+      resetResultQueryProject();
+      prepareResultExecutionSession(resultSessionFixture);
+      await resultQueryCoordinator.loadValue(resultReferenceFixture("1"));
+      const incomingSession =
+        boundary === "sessionReset" ? "00000000-0000-0000-0000-000000000002" : resultSessionFixture;
+      vi.mocked(ResultService.getGraphState).mockResolvedValue(resultState("2", incomingSession));
+      const settles: Array<(value: ResultDescriptor) => void> = [];
+      pinRead.mockReset().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            settles.push(resolve);
+          }),
+      );
+      let successorQuery: ReturnType<typeof resultQueryCoordinator.loadPinResult> | undefined;
+      let successorState: ReturnType<typeof useResourceStore.getState>["resultStates"][string];
+      let replaced = false;
+      const replace = () => {
+        if (replaced) return;
+        replaced = true;
+        if (boundary === "newerSummary") {
+          useResourceStore.getState().setGraphResultState(graphPath, {
+            ...resultState("3", incomingSession),
+            revision: "1",
+          });
+        } else {
+          useResourceStore.getState().removeGraphSession(graphPath);
+          useResourceStore.getState().installGraphSession(
+            graphPath,
+            {
+              ...makeGraphEditorSession(fixture.projection),
+              resultState: resultState("3", incomingSession),
+            },
+            { mode: "load" },
+          );
+        }
+        successorState = useResourceStore.getState().resultStates[graphPath];
+        successorQuery = resultQueryCoordinator.loadPinResult(request);
+      };
+      const stop =
+        boundary === "sessionReset"
+          ? resultQueryRead.subscribe(replace)
+          : useResourceStore.subscribe(replace);
+      const session = useResourceStore.getState().sessions[graphPath];
+      try {
+        await resultQueryCoordinator.loadGraphState({
+          graphPath,
+          sessionId: session.sessionId,
+          projectionGeneration: session.projectionGeneration,
+          semanticInputHash: session.semanticInputHash,
+        });
+        expect.soft(replaced, boundary).toBe(true);
+        expect
+          .soft(useResourceStore.getState().resultStates[graphPath], boundary)
+          .toBe(successorState!);
+        expect.soft(pinRead, boundary).toHaveBeenCalledTimes(1);
+      } finally {
+        stop();
+      }
+      settles.forEach((resolve) =>
+        resolve({ ...descriptor("3"), executionSessionId: incomingSession }),
+      );
+      await expect.soft(successorQuery, boundary).resolves.toEqual({ status: "published" });
+      expect.soft(resultQueryRead.getPinResult(request)?.resultId, boundary).toBe("3");
+    }
+  });
+
+  it("does not supersede new pin reads during graph reconciliation notifications", async () => {
+    const pinRead = vi.spyOn(ResultService, "getPinResult");
+    vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: 42 });
+    for (const boundary of ["executionRelease", "pinInvalidation"]) {
+      resetResultQueryProject();
+      prepareResultExecutionSession(resultSessionFixture);
+      useResourceStore.getState().installGraphSession(
+        graphPath,
+        {
+          ...makeGraphEditorSession(fixture.projection),
+          resultState: {
+            ...resultState("1"),
+            semanticInputHash: fixture.projection.basis.semanticInputHash,
+          },
+        },
+        { mode: "load" },
+      );
+      pinRead.mockReset().mockResolvedValue(descriptor("1"));
+      await resultQueryCoordinator.loadPinResult(request);
+      await resultQueryCoordinator.loadValue(resultReferenceFixture("1"));
+      const previous = useResourceStore.getState().sessions[graphPath];
+      const changed = structuredClone(fixture.projection);
+      changed.basis.semanticInputHash = "1".repeat(64);
+      useResourceStore.getState().installGraphSession(graphPath, {
+        ...makeGraphEditorSession(changed),
+        resultState: { ...resultState("2"), semanticInputHash: changed.basis.semanticInputHash },
+      });
+      useExecutionStore.getState().submitExecution(graphPath);
+      const settles: Array<(value: ResultDescriptor) => void> = [];
+      pinRead.mockReset().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            settles.push(resolve);
+          }),
+      );
+      let successorQuery: ReturnType<typeof resultQueryCoordinator.loadPinResult> | undefined;
+      let replaced = false;
+      const replace = () => {
+        if (replaced) return;
+        replaced = true;
+        startProjectLifecycle("project-1");
+        resetResultQueryProject();
+        prepareResultExecutionSession(resultSessionFixture);
+        useResourceStore.getState().installGraphSession(
+          graphPath,
+          {
+            ...makeGraphEditorSession(fixture.projection),
+            resultState: {
+              ...resultState("3"),
+              semanticInputHash: fixture.projection.basis.semanticInputHash,
+            },
+          },
+          { mode: "load" },
+        );
+        successorQuery = resultQueryCoordinator.loadPinResult(request);
+      };
+      const stop =
+        boundary === "executionRelease"
+          ? useExecutionStore.subscribe(replace)
+          : resultQueryRead.subscribe(replace);
+      try {
+        reconcileGraphResultQueries(graphPath, previous);
+        expect.soft(replaced, boundary).toBe(true);
+        expect.soft(pinRead, boundary).toHaveBeenCalledTimes(1);
+      } finally {
+        stop();
+      }
+      settles.forEach((resolve) => resolve(descriptor("3")));
+      await expect.soft(successorQuery, boundary).resolves.toEqual({ status: "published" });
+      expect(resultQueryRead.getPinResult(request)?.resultId).toBe("3");
+    }
+  });
+
+  it("preserves successor output runs published during a graph query reset", async () => {
+    vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
+    for (const replaceProject of [false, true]) {
+      useExecutionStore.setState({ graphs: {} });
+      useResourceStore.getState().setGraphResultState(graphPath, resultState("1"));
+      await resultQueryCoordinator.loadPinResult(request);
+      let replaced = false;
+      let successorRuns: ReturnType<
+        typeof useExecutionStore.getState
+      >["graphs"][string]["outputRuns"];
+      const stop = resultQueryRead.subscribe(() => {
+        if (replaced) return;
+        replaced = true;
+        if (replaceProject) startProjectLifecycle("successor");
+        event("2", { type: "runStarted", outputs: [output] });
+        successorRuns = useExecutionStore.getState().graphs[graphPath].outputRuns;
+      });
+      try {
+        resetGraphResultQueries(graphPath);
+        expect.soft(replaced).toBe(true);
+        expect.soft(Object.values(successorRuns!)).toHaveLength(1);
+        expect.soft(useExecutionStore.getState().graphs[graphPath].outputRuns).toBe(successorRuns!);
+      } finally {
+        stop();
+      }
+    }
+  });
+
+  it("preserves successor runs and execution sessions during a synchronous reset", async () => {
+    const publishInvalidation = vi.spyOn(invalidationChannel, "publishResultSessionEnd");
+    const reference = resultReferenceFixture("1");
+    vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: 42 });
+    for (const replaceProject of [true, false]) {
+      prepareResultExecutionSession(resultSessionFixture);
+      await resultQueryCoordinator.loadValue(reference);
+      const successorSession = replaceProject
+        ? "00000000-0000-0000-0000-000000000002"
+        : "00000000-0000-0000-0000-000000000003";
+      let successorRuns: ReturnType<
+        typeof useExecutionStore.getState
+      >["graphs"][string]["outputRuns"];
+      let replaced = false;
+      const stop = resultQueryRead.subscribe(() => {
+        if (replaced) return;
+        replaced = true;
+        if (replaceProject) startProjectLifecycle("project-2");
+        prepareResultExecutionSession(successorSession);
+        useResourceStore.getState().installGraphSession(graphPath, {
+          ...makeGraphEditorSession(fixture.projection),
+          resultState: resultState(null, successorSession),
+        });
+        installGraphRunEvent({
+          resultRevision: "2",
+          run: {
+            runId: "2",
+            graphPath,
+            executionSessionId: successorSession,
+            semanticInputHash: fixture.projection.basis.semanticInputHash,
+          },
+          kind: { type: "runStarted", outputs: [output] },
+        });
+        successorRuns = useExecutionStore.getState().graphs[graphPath].outputRuns;
+      });
+      try {
+        const prepared = prepareResultExecutionSession("00000000-0000-0000-0000-000000000004");
+        expect(replaced).toBe(true);
+        expect(useExecutionStore.getState().graphs[graphPath].outputRuns).toBe(successorRuns!);
+        expect(Object.values(successorRuns!)).toHaveLength(1);
+        expect(prepared).toBe(false);
+      } finally {
+        stop();
+      }
+      resetResultQueryProject();
+      expect(publishInvalidation).toHaveBeenLastCalledWith(successorSession);
+    }
+  });
+
+  it("confirms run invalidation only from a summary covering the backend result revision", async () => {
+    const compose = vi.spyOn(graphPresentation, "projectGraphPresentation");
+    const latestCache = () => {
+      const result = compose.mock.results[compose.mock.results.length - 1];
+      if (result?.type !== "return") throw new Error("Graph presentation was not composed");
+      return result.value.nodes[output.port.nodeId].cache;
+    };
+    event("2", { type: "runStarted", outputs: [output] }, "9007199254740992");
+    event("2", { type: "runCompleted" }, "9007199254740993");
+    const session = useResourceStore.getState().sessions[graphPath];
+    vi.mocked(ResultService.getGraphState).mockResolvedValue({
+      ...resultState("1"),
+      revision: "9007199254740992",
+    });
+    await resultQueryCoordinator.loadGraphState({
+      graphPath,
+      sessionId: session.sessionId,
+      projectionGeneration: session.projectionGeneration,
+      semanticInputHash: session.semanticInputHash,
+    });
+    expect.soft(latestCache()).toBe("new");
+
+    compose.mockClear();
+    const execution = useExecutionStore.getState().graphs[graphPath];
+    useResourceStore.getState().installGraphSession(graphPath, {
+      ...makeGraphEditorSession(fixture.projection),
+      resultState: { ...resultState("2"), revision: "9007199254740993" },
+    });
+    expect(latestCache()).toBe("valid");
+    expect(compose).toHaveBeenCalledTimes(1);
+    expect(useExecutionStore.getState().graphs[graphPath]).toBe(execution);
+  });
+
+  it("hides invalid current pins as soon as a graph frame changes while retaining held data", async () => {
+    vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
+    vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: 42 });
+    await resultQueryCoordinator.loadPinResult(request);
+    const reference = resultReferenceFixture("1");
+    const release = resultQueryCoordinator.retainPayload(reference);
+    await resultQueryCoordinator.loadValue(reference);
+    const held = resultQueryRead.getValue(reference);
+    const seenByGraph: unknown[] = [];
+    const seenByResults: unknown[] = [];
+    const stopGraph = useResourceStore.subscribe(() =>
+      seenByGraph.push(resultQueryRead.getPinResult(request)),
+    );
+    const stopResults = resultQueryRead.subscribe(() =>
+      seenByResults.push(resultQueryRead.getPinResult(request)),
+    );
+    try {
+      const changed = structuredClone(fixture.projection);
+      changed.basis.semanticInputHash = "2".repeat(64);
+      const previous = useResourceStore.getState().sessions[graphPath];
+      useResourceStore.getState().installGraphSession(graphPath, {
+        ...makeGraphEditorSession(changed),
+        resultState: { ...resultState(null), semanticInputHash: changed.basis.semanticInputHash },
+      });
+      expect.soft(seenByGraph).toEqual([null]);
+      expect.soft(seenByResults).toEqual([null]);
+      expect.soft(resultQueryRead.getPinResult(request)).toBeNull();
+      reconcileGraphResultQueries(graphPath, previous);
+      expect(resultQueryRead.getValue(reference)).toBe(held);
+      expect(resultQueryRead.getDescriptor(reference)?.resultId).toBe("1");
+      expect(seenByResults).toEqual([null]);
+    } finally {
+      stopGraph();
+      stopResults();
+      release();
+    }
+  });
+
+  it("keeps valid pin bindings stable until the authoritative result identity changes", async () => {
+    vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
+    await resultQueryCoordinator.loadPinResult(request);
+    const first = resultQueryRead.getPinResult(request);
+    const observed: (string | null)[] = [];
+    const stop = resultQueryRead.subscribe(() =>
+      observed.push(resultQueryRead.getPinResult(request)?.resultId ?? null),
+    );
+    try {
+      const state = useResourceStore.getState().resultStates[graphPath];
+      useResourceStore.getState().setGraphResultState(graphPath, { ...state, revision: "1" });
+      expect(observed).toEqual([]);
+      expect(resultQueryRead.getPinResult(request)).toBe(first);
+      useResourceStore
+        .getState()
+        .setGraphResultState(graphPath, { ...resultState("2"), revision: "2" });
+      expect.soft(observed).toEqual([null]);
+      expect.soft(resultQueryRead.getPinResult(request)).toBeNull();
+      vi.mocked(ResultService.getPinResult).mockResolvedValue(descriptor("2"));
+      await resultQueryCoordinator.loadPinResult(request);
+      expect(observed).toEqual([null, "2"]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("keeps search reads graph-scoped and removes invalid bindings in the same publication", async () => {
+    // Read the real application projection at its React subscription boundary; no UI is mounted.
+    vi.spyOn(readProjection, "useReadProjection").mockImplementation((projection, select) =>
+      select(projection.getSnapshot()),
+    );
+    vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
+    await resultQueryCoordinator.loadPinResult(request);
+    const first = usePinResultSearchEntries(graphPath);
+    expect(first).toHaveLength(1);
+    expect(first[0].nodeTitle).toBe("Projected node");
+
+    const otherPath = "events/Other.yssbi-event";
+    const otherOutput = { ...output, graphPath: otherPath };
+    const other = descriptor("2");
+    other.provenance = { ...other.provenance, graphPath: otherPath, output: otherOutput };
+    vi.mocked(ResultService.getPinResult).mockResolvedValue(other);
+    await resultQueryCoordinator.loadPinResult({ graphPath: otherPath, output: otherOutput.port });
+    const otherEntries = usePinResultSearchEntries(otherPath);
+    expect(otherEntries).toHaveLength(1);
+    expect(usePinResultSearchEntries(graphPath)).toBe(first);
+
+    const observed: ReturnType<typeof usePinResultSearchEntries>[] = [];
+    const stop = resultQueryRead.subscribe(() =>
+      observed.push(usePinResultSearchEntries(graphPath)),
+    );
+    try {
+      useResourceStore.getState().setGraphResultState(graphPath, {
+        ...resultState(null),
+        revision: "1",
+      });
+      expect(observed).toEqual([[]]);
+      expect(usePinResultSearchEntries(graphPath)).toHaveLength(0);
+      expect(usePinResultSearchEntries(otherPath)).toBe(otherEntries);
+      expect(first).toHaveLength(1);
+    } finally {
+      stop();
+    }
+  });
+
+  it.each(["runStarted", "graphReset"])(
+    "publishes all invalidated pins once during %s while retaining held payloads",
+    async (action) => {
+      useResourceStore.getState().removeGraphSession(graphPath);
+      const secondOutput = {
+        graphPath,
+        port: { kind: "declared" as const, nodeId: output.port.nodeId, portKey: "second" },
+      };
+      const secondRequest = { graphPath, output: secondOutput.port };
+      const second = descriptor("2");
+      second.provenance.output = secondOutput;
+      vi.spyOn(ResultService, "getPinResult").mockImplementation(async (_graph, port) =>
+        port.kind === "declared" && port.portKey === "second" ? second : descriptor("1"),
+      );
+      vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: 42 });
+      await resultQueryCoordinator.loadPinResult(request);
+      await resultQueryCoordinator.loadPinResult(secondRequest);
+      await resultQueryCoordinator.loadValue(resultReferenceFixture("1"));
+      await resultQueryCoordinator.loadValue(resultReferenceFixture("2"));
+      const release = resultQueryCoordinator.retainPayload(resultReferenceFixture("2"));
+      const heldValue = resultQueryRead.getValue(resultReferenceFixture("2"));
+      const observed: (string | null)[][] = [];
+      const unsubscribe = resultQueryRead.subscribe(() => {
+        observed.push(
+          [request, secondRequest].map(
+            (pin) => resultQueryRead.getPinResult(pin)?.resultId ?? null,
+          ),
+        );
+      });
+
+      if (action === "runStarted")
+        event("3", { type: "runStarted", outputs: [output, secondOutput] });
+      else resetGraphResultQueries(graphPath);
+      unsubscribe();
+
+      expect(observed).toEqual([[null, null]]);
+      expect(resultQueryRead.getValue(resultReferenceFixture("1"))).toBeNull();
+      expect(resultQueryRead.getValue(resultReferenceFixture("2"))).toBe(heldValue);
+      expect(resultQueryRead.getDescriptor(resultReferenceFixture("2"))?.resultId).toBe("2");
+      release();
+    },
+  );
+
   it("rebuilds result tables only for changed result branches or pending invalidations", async () => {
     const aggregate = vi.spyOn(graphPresentation, "projectGraphResultCache");
     const compose = vi.spyOn(graphPresentation, "projectGraphPresentation");
@@ -102,36 +591,47 @@ describe("current result lifecycle", () => {
       if (result?.type !== "return") throw new Error("Graph presentation was not composed");
       return result.value;
     };
-    const store = useGraphProjectionStore.getState();
+    const store = useResourceStore.getState();
     const current = store.resultStates[graphPath];
     const stale: GraphResultState = {
       ...current,
       revision: "1",
       outputs: current.outputs.map((entry) => ({ ...entry, state: "stale", resultId: null })),
     };
-    store.setResultState(graphPath, stale);
+    store.setGraphResultState(graphPath, stale);
     expect(aggregate).toHaveBeenCalledTimes(1);
     const initial = latest();
     expect(initial.nodes[output.port.nodeId].cache).toBe("stale");
     aggregate.mockClear();
 
     const execution = useExecutionStore.getState();
-    execution.startExecution(graphPath);
-    execution.setActiveRunId(graphPath, "1");
-    execution.recordRunFailure(graphPath, {
-      runId: "1",
+    event("1", { type: "runStarted", outputs: [] });
+    event("1", {
+      type: "runErrored",
       code: "kernelFailed",
       phase: "execution",
       source: { graphPath, nodeId: output.port.nodeId, portAddress: null },
-      incidentId: null,
     });
     const failed = latest();
     expect(failed.failure?.code).toBe("kernelFailed");
     expect(failed.nodes).toBe(initial.nodes);
     expect(failed.outputs).toBe(initial.outputs);
     expect(failed.connections).toBe(initial.connections);
+    const changed = structuredClone(fixture.projection);
+    changed.basis.semanticInputHash = "2".repeat(64);
+    store.installGraphSession(graphPath, {
+      ...makeGraphEditorSession(changed),
+      resultState: { ...stale, semanticInputHash: changed.basis.semanticInputHash },
+    });
+    expect(latest().failure).toBeNull();
+    expect(useExecutionStore.getState().getGraph(graphPath).runFailure).toBeTruthy();
+    store.installGraphSession(graphPath, {
+      ...makeGraphEditorSession(fixture.projection),
+      resultState: stale,
+    });
+    aggregate.mockClear();
     execution.clearRunFailure(graphPath);
-    store.setResultState(graphPath, { ...stale, revision: "2" });
+    store.setGraphResultState(graphPath, { ...stale, revision: "2" });
     expect(aggregate).not.toHaveBeenCalled();
     expect(latest().failure).toBeNull();
 
@@ -289,12 +789,24 @@ describe("current result lifecycle", () => {
     vi.mocked(ResultService.getGraphState).mockResolvedValue(
       resultState("1", nextExecutionSessionId),
     );
-    observeResultRunEvent({
-      run: { runId: "1", graphPath, executionSessionId: nextExecutionSessionId },
+    installGraphRunEvent({
+      resultRevision: "1",
+      run: {
+        semanticInputHash: "0".repeat(64),
+        runId: "1",
+        graphPath,
+        executionSessionId: nextExecutionSessionId,
+      },
       kind: { type: "runStarted", outputs: [output] },
     });
-    observeResultRunEvent({
-      run: { runId: "1", graphPath, executionSessionId: nextExecutionSessionId },
+    installGraphRunEvent({
+      resultRevision: "1",
+      run: {
+        semanticInputHash: "0".repeat(64),
+        runId: "1",
+        graphPath,
+        executionSessionId: nextExecutionSessionId,
+      },
       kind: { type: "runCompleted" },
     });
     await vi.waitFor(() => expect(resultQueryRead.getPinResult(request)?.resultId).toBe("1"));
@@ -313,8 +825,8 @@ describe("current result lifecycle", () => {
     await resultQueryCoordinator.loadValue(reference);
     const changed = structuredClone(fixture.projection);
     changed.basis.semanticInputHash = "1".repeat(64);
-    const previous = useGraphProjectionStore.getState().sessions[graphPath];
-    useGraphProjectionStore.getState().hydrate(graphPath, {
+    const previous = useResourceStore.getState().sessions[graphPath];
+    useResourceStore.getState().installGraphSession(graphPath, {
       ...makeGraphEditorSession(changed),
       resultState: { ...resultState(null), semanticInputHash: changed.basis.semanticInputHash },
     });
@@ -326,9 +838,9 @@ describe("current result lifecycle", () => {
     expect(resultQueryRead.getPinResult(request)).toBeNull();
     release();
     expect(resultQueryRead.getDescriptor(reference)).toBeNull();
-    useGraphProjectionStore.getState().setResultState(graphPath, resultState("1"));
+    useResourceStore.getState().setGraphResultState(graphPath, resultState("1"));
     await resultQueryCoordinator.loadPinResult(request);
-    useGraphProjectionStore.getState().clearGraph(graphPath);
+    useResourceStore.getState().removeGraphSession(graphPath);
     resetGraphResultQueries(graphPath);
     expect(resultQueryRead.getDescriptor(resultReferenceFixture("1"))).toBeNull();
     expect(resultQueryRead.getPinResult(request)).toBeNull();
@@ -357,6 +869,16 @@ describe("current result lifecycle", () => {
     await resultQueryCoordinator.loadPage(second);
     expect(resultQueryRead.getPage(first)?.offset).toBe(0);
     expect(resultQueryRead.getPage(second)?.offset).toBe(200);
+    const truncated = {
+      ...page("1"),
+      offset: 1,
+      actualCount: 0,
+      values: [],
+    };
+    vi.mocked(ResultService.getPage).mockResolvedValueOnce(truncated);
+    await resultQueryCoordinator.loadPage(second);
+    expect(resultQueryRead.getPage(second)).toEqual(truncated);
+    expect(resultQueryRead.getPage(first)?.offset).toBe(0);
     let settle!: (value: ResultPage) => void;
     vi.mocked(ResultService.getPage).mockImplementationOnce(
       () =>

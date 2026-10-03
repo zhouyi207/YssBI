@@ -5,12 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   refreshCatalog: vi.fn(),
-  setDropHandler: vi.fn(),
+  registerDropHandler: vi.fn(),
+  unregisterDropHandler: vi.fn(),
 }));
 
 vi.mock("@/features/core/sidebarDrag", () => ({
   canvasDropHandlerStore: {
-    setHandler: mocks.setDropHandler,
+    registerHandler: mocks.registerDropHandler,
   },
 }));
 
@@ -46,6 +47,7 @@ describe("useCanvasDrop preview registration", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.registerDropHandler.mockReturnValue(mocks.unregisterDropHandler);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -59,9 +61,9 @@ describe("useCanvasDrop preview registration", () => {
   it("keeps the panel drop handler registered until a preview canvas unmounts", () => {
     act(() => root.render(<PreviewCanvasDropProbe />));
 
-    expect(mocks.setDropHandler).toHaveBeenCalledWith("editor-a", expect.any(Function));
+    expect(mocks.registerDropHandler).toHaveBeenCalledWith("editor-a", expect.any(Function));
 
     act(() => root.render(null));
-    expect(mocks.setDropHandler).toHaveBeenLastCalledWith("editor-a", null);
+    expect(mocks.unregisterDropHandler).toHaveBeenCalledOnce();
   });
 });

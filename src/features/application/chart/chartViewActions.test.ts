@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { ChartService } from "@/services/chart/chartService";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
-import { resourceKey, useDocumentStateStore, useResourceStore } from "@/features/core/resource";
+import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import { loadChartDocumentForView } from "./chartViewActions";
@@ -28,10 +27,9 @@ function deferred() {
 beforeEach(() => {
   vi.resetAllMocks();
   startProjectLifecycle("project-a");
-  useChartDocumentStore.getState().clear();
-  useDocumentStateStore.getState().clear();
   useResourceStore.getState().clear();
   useResourceStore.getState().setSnapshot({
+    publicationRevision: 7,
     resources: [
       {
         ...ref,
@@ -54,11 +52,12 @@ it("shares the editor and Details initial read and reuses an existing draft", as
   const editor = loadChartDocumentForView(path);
   const details = loadChartDocumentForView(path);
   expect(ChartService.loadChart).toHaveBeenCalledOnce();
+  expect(ChartService.loadChart).toHaveBeenCalledWith("project-a", path, 7);
   read.resolve(document);
   await expect(editor).resolves.toBe(document);
   await expect(details).resolves.toBe(document);
 
-  const draft = useChartDocumentStore.getState().updateDocument(path, { chartType: "line" });
+  const draft = useResourceStore.getState().updateChartDocument(path, { chartType: "line" });
   await expect(loadChartDocumentForView(path)).resolves.toBe(draft);
   expect(ChartService.loadChart).toHaveBeenCalledOnce();
 });
@@ -67,12 +66,12 @@ it("keeps a document published and edited while an initial read was pending", as
   const read = deferred();
   vi.mocked(ChartService.loadChart).mockReturnValueOnce(read.promise);
   const loading = loadChartDocumentForView(path);
-  useChartDocumentStore.getState().upsertDocument(path, document);
-  const draft = useChartDocumentStore.getState().updateDocument(path, { chartType: "line" });
+  useResourceStore.getState().upsertChartDocument(path, document);
+  const draft = useResourceStore.getState().updateChartDocument(path, { chartType: "line" });
   read.resolve(document);
 
   await expect(loading).resolves.toBe(draft);
-  expect(useChartDocumentStore.getState().documents[path]).toBe(draft);
+  expect(useResourceStore.getState().chartDocuments[path]).toBe(draft);
 });
 
 it("invalidates a closing chart's read and permits a fresh read on reopening", async () => {
@@ -82,12 +81,12 @@ it("invalidates a closing chart's read and permits a fresh read on reopening", a
     .mockReturnValueOnce(oldRead.promise)
     .mockReturnValueOnce(newRead.promise);
   const closing = loadChartDocumentForView(path);
-  useChartDocumentStore.getState().removeDocument(path);
+  useResourceStore.getState().removeChartDocument(path);
   const reopening = loadChartDocumentForView(path);
   expect(ChartService.loadChart).toHaveBeenCalledTimes(2);
   oldRead.resolve(document);
   await expect(closing).resolves.toBeNull();
-  expect(useChartDocumentStore.getState().documents).toEqual({});
+  expect(useResourceStore.getState().chartDocuments).toEqual({});
   newRead.resolve(document);
   await expect(reopening).resolves.toBe(document);
 });
@@ -97,14 +96,14 @@ it("does not install a previous project's response into the new project", async 
   vi.mocked(ChartService.loadChart).mockReturnValueOnce(read.promise);
   const loading = loadChartDocumentForView(path);
   startProjectLifecycle("project-b");
-  useChartDocumentStore.getState().clear();
+  useResourceStore.getState().clear();
   read.resolve(document);
 
   await expect(loading).resolves.toBeNull();
-  expect(useChartDocumentStore.getState().documents).toEqual({});
+  expect(useResourceStore.getState().chartDocuments).toEqual({});
 });
 
-it("rejects a response from before a resource revision changed", async () => {
+it("rejects stale resources and does not share an older publication's pending read", async () => {
   const read = deferred();
   vi.mocked(ChartService.loadChart).mockReturnValueOnce(read.promise);
   const loading = loadChartDocumentForView(path);
@@ -112,5 +111,21 @@ it("rejects a response from before a resource revision changed", async () => {
   read.resolve(document);
 
   await expect(loading).resolves.toBeNull();
-  expect(useChartDocumentStore.getState().documents).toEqual({});
+  expect(useResourceStore.getState().chartDocuments).toEqual({});
+
+  const oldPublication = deferred();
+  const newPublication = deferred();
+  vi.mocked(ChartService.loadChart)
+    .mockReturnValueOnce(oldPublication.promise)
+    .mockReturnValueOnce(newPublication.promise);
+  const oldLoading = loadChartDocumentForView(path);
+  const current = useResourceStore.getState();
+  current.setSnapshot({ resources: Object.values(current.resources), publicationRevision: 8 });
+  const newLoading = loadChartDocumentForView(path);
+  expect(ChartService.loadChart).toHaveBeenCalledTimes(3);
+  expect(ChartService.loadChart).toHaveBeenLastCalledWith("project-a", path, 8);
+  oldPublication.resolve(document);
+  await expect(oldLoading).resolves.toBeNull();
+  newPublication.resolve(document);
+  await expect(newLoading).resolves.toBe(document);
 });

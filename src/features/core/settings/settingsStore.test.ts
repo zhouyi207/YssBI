@@ -8,11 +8,15 @@ import {
   DEFAULT_LIGHT_THEME,
   getRememberedColorTheme,
 } from "@/shared/theme/colorThemePresets";
-import { setClientSettingsPublisher, useSettingsStore } from "./settingsStore";
+import {
+  applyClientSettingsFromRemote,
+  setClientSettingsPublisher,
+  useSettingsStore,
+} from "./settingsStore";
 import { getSettingsSnapshot, subscribeSettingsRead } from "./read";
 import { settingsUi } from "./ui";
 
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: {
     app: {
       warn: vi.fn(),
@@ -49,6 +53,68 @@ describe("settingsStore appearance persistence", () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it("reloads synchronously in one publication and preserves unchanged settings branches", async () => {
+    await useSettingsStore.getState().load();
+    const before = getSettingsSnapshot();
+    const observations: ReturnType<typeof getSettingsSnapshot>[] = [];
+    const listener = vi.fn(() => observations.push(getSettingsSnapshot()));
+    const unsubscribe = subscribeSettingsRead(listener);
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ai: { openAiModel: "loaded" } }));
+      await useSettingsStore.getState().load();
+      expect(listener).toHaveBeenCalledOnce();
+      expect(observations.map((snapshot) => snapshot.isLoading)).toEqual([false]);
+      expect(getSettingsSnapshot().ai.openAiModel).toBe("loaded");
+      expect(getSettingsSnapshot().appearance).toBe(before.appearance);
+      expect(before.ai.openAiModel).toBe(DEFAULT_AI.openAiModel);
+
+      const loaded = getSettingsSnapshot();
+      await useSettingsStore.getState().load();
+      useSettingsStore.getState().updateAi({ openAiModel: "loaded" });
+      await useSettingsStore.getState().save();
+      expect(listener).toHaveBeenCalledOnce();
+      expect(getSettingsSnapshot()).toBe(loaded);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("keeps local pending fields and untouched branches when receiving remote settings", async () => {
+    await useSettingsStore.getState().load();
+    useSettingsStore.getState().updateAi({ openAiModel: "pending" });
+    const pending = getSettingsSnapshot();
+    const publisher = vi.fn();
+    setClientSettingsPublisher(publisher);
+    const listener = vi.fn();
+    const unsubscribe = subscribeSettingsRead(listener);
+    try {
+      applyClientSettingsFromRemote({
+        ai: { openAiModel: "remote" },
+        appearance: { language: "en-US" },
+      });
+      const remote = getSettingsSnapshot();
+      expect(remote.ai).toBe(pending.ai);
+      expect(remote.appearance.language).toBe("en-US");
+      expect(pending.appearance.language).toBe(DEFAULT_APPEARANCE.language);
+      expect(listener).toHaveBeenCalledOnce();
+      expect(publisher).not.toHaveBeenCalled();
+
+      await useSettingsStore.getState().save();
+      expect(getSettingsSnapshot()).toBe(remote);
+      expect(listener).toHaveBeenCalledOnce();
+      expect(publisher).toHaveBeenCalledOnce();
+      expect(publisher.mock.calls[0][0].ai).toEqual({ openAiModel: "pending" });
+      expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!).appearance.language).toBe(
+        "en-US",
+      );
+      expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!).ai.openAiModel).toBe(
+        "pending",
+      );
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("ignores stored color overrides and persists only the selected theme", async () => {

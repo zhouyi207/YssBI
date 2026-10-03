@@ -1,4 +1,4 @@
-import { useDocumentStateStore, type DocumentState } from "./documentStateStore";
+import { useResourceStore, type DocumentState } from "./resourceStore";
 import type { ProjectResourceMeta, ResourceKey } from "./resourceTypes";
 import { resourceKey } from "./resourceTypes";
 
@@ -13,13 +13,12 @@ export interface PreparedResourceProjectionSnapshot {
 
 /**
  * Prepare a backend index projection with open document state.
- * Loaded persisted resources absent from the snapshot are retained as missing entries.
+ * Loaded file documents absent from the snapshot are retained as missing entries.
  */
 export function prepareResourceProjectionSnapshot(
   incoming: ProjectResourceMeta[],
   previousByKey: Record<ResourceKey, ProjectResourceMeta>,
-  documents: Readonly<Record<ResourceKey, DocumentState>> = useDocumentStateStore.getState()
-    .documents,
+  documents: Readonly<Record<ResourceKey, DocumentState>> = useResourceStore.getState().documents,
 ): PreparedResourceProjectionSnapshot {
   const incomingByKey = new Map(incoming.map((resource) => [resourceKey(resource), resource]));
   const documentPatches: PreparedResourceProjectionSnapshot["documentPatches"] = [];
@@ -69,7 +68,7 @@ export function prepareResourceProjectionSnapshot(
   for (const [key, previous] of Object.entries(previousByKey) as Array<
     [ResourceKey, ProjectResourceMeta]
   >) {
-    if (incomingByKey.has(key)) continue;
+    if (incomingByKey.has(key) || previous.kind === "database") continue;
     const doc = documents[key];
     if (!doc?.loaded && !previous.loaded) continue;
 

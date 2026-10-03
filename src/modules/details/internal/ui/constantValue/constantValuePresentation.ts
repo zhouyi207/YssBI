@@ -1,0 +1,242 @@
+import type { ValueType } from "@/shared/types/domain/valueType";
+
+import { DEFAULT_ARRAY_VALUE, DEFAULT_OBJECT_VALUE } from "@/shared/types/domain/valueType";
+
+import type { DataValue } from "@/shared/types/domain/dataValue";
+
+import { dataValueToRaw } from "@/shared/types/domain/dataValue";
+
+const DEFAULT_ARRAY_JSON = JSON.stringify(DEFAULT_ARRAY_VALUE, null, 2);
+
+const DEFAULT_OBJECT_JSON = JSON.stringify(DEFAULT_OBJECT_VALUE, null, 2);
+
+const DEFAULT_DATAFRAME_JSON = "{}";
+
+const DEFAULT_DATASERIES_JSON = JSON.stringify({ value: [] }, null, 2);
+
+function isJsonLiteralContent(value: string): boolean {
+  const t = value.trim();
+
+  return t.startsWith("[") || t.startsWith("{");
+}
+
+function getConstantLiteralPayload(dataType: ValueType, dataValue: DataValue): string {
+  if (dataType.kind === "DataFrame" && dataValue.kind === "DataFrame") {
+    return dataValue.value;
+  }
+
+  if (dataType.kind === "DataSeries" && dataValue.kind === "DataSeries") {
+    return dataValue.value;
+  }
+
+  return "";
+}
+
+function isConstantValueEmpty(dataType: ValueType, dataValue: DataValue): boolean {
+  if (dataValue.kind === "Null") return true;
+
+  switch (dataType.kind) {
+    case "Array":
+      return dataValue.kind === "Array" && dataValue.value.length === 0;
+
+    case "Object":
+      return dataValue.kind === "Object" && Object.keys(dataValue.value).length === 0;
+
+    case "DataFrame":
+      if (dataValue.kind !== "DataFrame") return true;
+
+      return !dataValue.value.trim();
+
+    case "DataSeries": {
+      if (dataValue.kind !== "DataSeries") return true;
+
+      const payload = getConstantLiteralPayload(dataType, dataValue);
+
+      return !payload.trim();
+    }
+
+    default:
+      return false;
+  }
+}
+
+function tryParseJson(value: string): unknown | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isColumnMapObject(parsed: unknown): parsed is Record<string, unknown> {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+
+  const obj = parsed as Record<string, unknown>;
+
+  const keys = Object.keys(obj);
+
+  if (keys.length === 0) return true;
+
+  return keys.every((key) => key.trim().length > 0 && Array.isArray(obj[key]));
+}
+
+function getColumnMapRowCount(parsed: Record<string, unknown>): number | null {
+  const keys = Object.keys(parsed);
+
+  if (keys.length === 0) return 0;
+
+  const lengths = keys.map((key) => (Array.isArray(parsed[key]) ? parsed[key].length : null));
+
+  if (lengths.some((length) => length === null)) return null;
+
+  const unique = new Set(lengths);
+
+  if (unique.size !== 1) return null;
+
+  return lengths[0] ?? 0;
+}
+
+function summarizeDataFrameJson(json: string): string | null {
+  const parsed = tryParseJson(json);
+
+  if (!isColumnMapObject(parsed)) return null;
+
+  const colCount = Object.keys(parsed).length;
+
+  const rowCount = getColumnMapRowCount(parsed);
+
+  if (rowCount !== null && colCount > 0) {
+    return `DataFrame(${rowCount} rows × ${colCount} cols)`;
+  }
+
+  if (rowCount === 0) return "DataFrame(0 rows)";
+
+  return "DataFrame";
+}
+
+function summarizeDataSeriesJson(json: string): string | null {
+  const parsed = tryParseJson(json);
+
+  if (!isColumnMapObject(parsed)) return null;
+
+  const keys = Object.keys(parsed);
+
+  const colName = keys.length === 1 ? keys[0] : null;
+
+  const rowCount = getColumnMapRowCount(parsed);
+
+  if (colName && rowCount !== null) return `DataSeries(${colName}, ${rowCount})`;
+
+  if (rowCount !== null) return `DataSeries(${rowCount})`;
+
+  return colName ? `DataSeries(${colName})` : "DataSeries";
+}
+
+export function formatConstantValueSummary(
+  dataType: ValueType,
+
+  dataValue: DataValue,
+
+  emptyLabel = "(empty)",
+): string {
+  if (isConstantValueEmpty(dataType, dataValue)) return emptyLabel;
+
+  switch (dataType.kind) {
+    case "Array":
+      if (dataValue.kind === "Array") {
+        return `Array(${dataValue.value.length})`;
+      }
+
+      return emptyLabel;
+
+    case "Object":
+      if (dataValue.kind === "Object") {
+        const count = Object.keys(dataValue.value).length;
+
+        return count > 0 ? `Object{${count}}` : "Object{}";
+      }
+
+      return emptyLabel;
+
+    case "DataFrame": {
+      const payload = getConstantLiteralPayload(dataType, dataValue);
+
+      if (!payload) return emptyLabel;
+
+      if (isJsonLiteralContent(payload)) {
+        return summarizeDataFrameJson(payload) ?? "DataFrame";
+      }
+
+      return payload;
+    }
+
+    case "DataSeries": {
+      const payload = getConstantLiteralPayload(dataType, dataValue);
+
+      if (!payload) return emptyLabel;
+
+      if (isJsonLiteralContent(payload)) {
+        return summarizeDataSeriesJson(payload) ?? "DataSeries";
+      }
+
+      return payload;
+    }
+
+    default:
+      return String(dataValueToRaw(dataValue) ?? emptyLabel);
+  }
+}
+
+function prettyJsonString(json: string, fallback: string): string {
+  const parsed = tryParseJson(json);
+
+  if (parsed === null) return fallback;
+
+  return JSON.stringify(parsed, null, 2);
+}
+
+export function dataValueToEditableJson(dataType: ValueType, dataValue: DataValue): string {
+  if (dataType.kind === "Array") {
+    if (dataValue.kind === "Array" && dataValue.value.length > 0) {
+      const raw = dataValue.value.map((item) => dataValueToRaw(item));
+
+      return JSON.stringify(raw, null, 2);
+    }
+
+    return DEFAULT_ARRAY_JSON;
+  }
+
+  if (dataType.kind === "Object") {
+    if (dataValue.kind === "Object" && Object.keys(dataValue.value).length > 0) {
+      return JSON.stringify(dataValueToRaw(dataValue), null, 2);
+    }
+
+    return DEFAULT_OBJECT_JSON;
+  }
+
+  if (dataType.kind === "DataFrame") {
+    const payload = getConstantLiteralPayload(dataType, dataValue);
+
+    if (payload && isJsonLiteralContent(payload)) {
+      return prettyJsonString(payload, DEFAULT_DATAFRAME_JSON);
+    }
+
+    return DEFAULT_DATAFRAME_JSON;
+  }
+
+  if (dataType.kind === "DataSeries") {
+    const payload = getConstantLiteralPayload(dataType, dataValue);
+
+    if (payload && isJsonLiteralContent(payload)) {
+      return prettyJsonString(payload, DEFAULT_DATASERIES_JSON);
+    }
+
+    return DEFAULT_DATASERIES_JSON;
+  }
+
+  return "";
+}
+
+export function isJsonEditableConstantType(dataType: ValueType): boolean {
+  return ["Array", "Object", "DataFrame", "DataSeries"].includes(dataType.kind);
+}

@@ -37,10 +37,6 @@ export {
 } from "./workbenchLayoutDefaults";
 export { workbenchLayoutRead, type WorkbenchLayoutRead } from "./workbenchRead";
 export { workbenchLayoutControl, type WorkbenchLayoutControl } from "./workbenchControl";
-export {
-  workbenchLayoutRootBinding,
-  type WorkbenchLayoutRootBinding,
-} from "./workbenchRootBinding";
 export { logsLayoutRead, type LogsLayoutRead } from "./logsRead";
 export { logsLayoutControl, type LogsLayoutControl } from "./logsControl";
 export {

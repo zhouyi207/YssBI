@@ -1,11 +1,62 @@
-import { isStructuredTableReference } from "./resultReport";
+import {
+  isStructuredTableReference,
+  type ResultTableReference,
+  type StructuredResultPart,
+} from "./resultReport";
 import { isRecord } from "@/shared/types/report/guards";
 
-export interface ReportDisplaySection {
+export type ReportDisplaySection = {
   readonly title: string;
-  readonly kind: "table" | "equation" | "stability";
   readonly path: string;
   readonly columns: Readonly<Record<string, string>>;
+} & (
+  | { readonly kind: "equation"; readonly value: string }
+  | {
+      readonly kind: "table" | "stability";
+      readonly value: ResultTableReference<StructuredResultPart>;
+    }
+);
+
+export type ReportTableSection = Exclude<ReportDisplaySection, { kind: "equation" }>;
+export type StabilityRoot = Readonly<Record<string, unknown>> & {
+  readonly re: number;
+  readonly im: number;
+};
+export type StructuredReportRows =
+  | { readonly kind: "table"; readonly rows: readonly Readonly<Record<string, unknown>>[] }
+  | { readonly kind: "stability"; readonly rows: readonly StabilityRoot[] };
+
+function isStabilityRoot(row: unknown): row is StabilityRoot {
+  return (
+    isRecord(row) &&
+    typeof row.re === "number" &&
+    Number.isFinite(row.re) &&
+    typeof row.im === "number" &&
+    Number.isFinite(row.im)
+  );
+}
+
+export function parseStructuredReportRows(
+  section: ReportTableSection,
+  rows: readonly (readonly unknown[])[],
+): StructuredReportRows | null {
+  const values = rows.map((row) => row[0]);
+  if (section.kind === "stability") {
+    return values.every(isStabilityRoot) ? { kind: "stability", rows: values } : null;
+  }
+  const fields = Object.keys(section.columns);
+  if (
+    !values.every(isRecord) ||
+    values.some((row) =>
+      fields.some(
+        (field) =>
+          !Object.prototype.hasOwnProperty.call(row, field) ||
+          (row[field] !== null && typeof row[field] === "object"),
+      ),
+    )
+  )
+    return null;
+  return { kind: "table", rows: values };
 }
 
 export function structuredValueAt(root: unknown, path: string): unknown {
@@ -33,16 +84,15 @@ export function parseReportDisplay(root: unknown): Readonly<Record<string, Repor
   )
     throw new Error("invalid_report_display");
   return Object.fromEntries(
-    Object.entries(display.sections).map(([id, item]) => {
+    Object.entries(display.sections).map(([id, item]): [string, ReportDisplaySection] => {
       if (
         !/^[a-zA-Z0-9_-]{1,48}$/.test(id) ||
         !isRecord(item) ||
         Object.keys(item).some((key) => !["title", "kind", "path", "columns"].includes(key)) ||
         typeof item.title !== "string" ||
         new TextEncoder().encode(item.title).length > 200 ||
-        !["table", "equation", "stability"].includes(String(item.kind)) ||
-        typeof item.path !== "string" ||
-        structuredValueAt(root, item.path) === undefined
+        (item.kind !== "table" && item.kind !== "equation" && item.kind !== "stability") ||
+        typeof item.path !== "string"
       )
         throw new Error("invalid_report_display");
       const columns = item.columns ?? {};
@@ -59,22 +109,21 @@ export function parseReportDisplay(root: unknown): Readonly<Record<string, Repor
         throw new Error("invalid_report_display");
       if (item.kind === "table" && Object.keys(columns).length === 0)
         throw new Error("invalid_report_display");
+      const section = {
+        title: item.title,
+        path: item.path,
+        columns: columns as Record<string, string>,
+      };
       const target = structuredValueAt(root, item.path);
       if (item.kind === "equation") {
         if (typeof target !== "string" || new TextEncoder().encode(target).length > 16384)
           throw new Error("invalid_report_display");
-      } else if (!isStructuredTableReference(target) || target.part !== `structured:${item.path}`) {
+        return [id, { ...section, kind: item.kind, value: target }];
+      }
+      if (!isStructuredTableReference(target) || target.part !== `structured:${item.path}`) {
         throw new Error("invalid_report_display");
       }
-      return [
-        id,
-        {
-          title: item.title,
-          kind: item.kind as ReportDisplaySection["kind"],
-          path: item.path,
-          columns: columns as Record<string, string>,
-        },
-      ];
+      return [id, { ...section, kind: item.kind, value: target }];
     }),
   );
 }

@@ -56,7 +56,14 @@ export function usePagedResultRows(
   part?: ResultTablePart,
 ): PagedResultRowsState {
   const safePageSize = Math.max(1, Math.floor(pageSize));
-  const [pageIndex, setPageIndex] = useState(0);
+  const query = useMemo(
+    () => ({ reference, totalCount, pageSize: safePageSize, part }),
+    [reference?.resultId, reference?.executionSessionId, totalCount, safePageSize, part],
+  );
+  const [pagination, setPagination] = useState({ query, index: 0 });
+  // Reset before subscribing or scheduling a read for the new query.
+  if (pagination.query !== query) setPagination({ query, index: 0 });
+  const pageIndex = pagination.query === query ? pagination.index : 0;
   const [loading, setLoading] = useState(false);
   const requestGeneration = useRef(0);
   const requestedOffset = pageIndex * safePageSize;
@@ -83,10 +90,6 @@ export function usePagedResultRows(
   const readError = () =>
     reference === null ? null : dependencies.read.getFailure({ kind: "page", ...request });
   const error = useSyncExternalStore(dependencies.read.subscribe, readError, readError);
-
-  useEffect(() => {
-    setPageIndex(0);
-  }, [reference?.resultId, reference?.executionSessionId, totalCount, safePageSize, part]);
 
   useEffect(() => {
     const releasePayload =
@@ -136,9 +139,9 @@ export function usePagedResultRows(
     (nextPageIndex: number): void => {
       const upper = totalPages === null ? boundedPageIndex + Number(hasMore) : totalPages - 1;
       const clamped = Math.max(0, Math.min(nextPageIndex, upper));
-      setPageIndex(clamped);
+      setPagination({ query, index: clamped });
     },
-    [totalPages, boundedPageIndex, hasMore],
+    [query, totalPages, boundedPageIndex, hasMore],
   );
 
   const reload = useCallback(

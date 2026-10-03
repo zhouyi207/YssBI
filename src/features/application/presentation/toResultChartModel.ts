@@ -15,6 +15,7 @@ export function toResultChartModel(payload: ParsedPlotPayload): ChartModel {
         kind: "scatter",
         points: payload.data.data,
         referenceLines: payload.data.referenceLines,
+        yDomain: payload.data.yDomain,
         ...axes(payload.data),
       };
     case "line":

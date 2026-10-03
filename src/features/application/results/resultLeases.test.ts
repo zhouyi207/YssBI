@@ -45,3 +45,28 @@ it("releases the known request token after a lost retain response or failed wind
   expect(port.release).toHaveBeenLastCalledWith(held.leaseId);
   expect(port.reconcileLeases).toHaveBeenLastCalledWith([]);
 });
+
+it("reclaims a newly retained lease when its panel closes before reconciliation", async () => {
+  const { controller, port } = setup();
+  const held = new Set<string>();
+  let panels: readonly string[] = [];
+  port.retain.mockImplementation(async (_reference, leaseId) => {
+    held.add(leaseId);
+    return { leaseId, descriptor };
+  });
+  port.reconcileLeases.mockImplementation(async (leases) => {
+    for (const lease of held) if (!leases.includes(lease)) held.delete(lease);
+  });
+  controller.bind(() => panels);
+  await controller.whenIdle();
+
+  const lease = await controller.acquire(descriptor);
+  expect(held.has(lease.leaseId)).toBe(true);
+  panels = [lease.leaseId];
+  const installed = controller.finish(lease.leaseId, true);
+  panels = [];
+  controller.reconcile();
+  await installed;
+  await controller.whenIdle();
+  expect(held.size).toBe(0);
+});

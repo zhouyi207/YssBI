@@ -1,88 +1,111 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pluginService } from "@/services/plugins/pluginService";
 import type {
-  InstalledPlugin,
   PluginDiagnostic,
   PluginStorageUsage,
   TaskSnapshot,
 } from "@/shared/types/plugins/generated";
+import type { PluginSnapshot } from "./pluginRegistry";
 
-export function usePluginMaintenance(plugin: InstalledPlugin | null) {
-  const [tasks, setTasks] = useState<TaskSnapshot[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [storage, setStorage] = useState<PluginStorageUsage | null>(null);
-  const [diagnostics, setDiagnostics] = useState<PluginDiagnostic[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const generation = useRef(0);
-  const refresh = useCallback(async () => {
-    const identity = ++generation.current;
-    if (!plugin) return;
-    setBusy(true);
-    setError(false);
-    try {
-      const [history, usage, output] = await Promise.all([
-        pluginService.history(plugin.manifest.id),
-        pluginService.storage(plugin.manifest.id),
-        pluginService.diagnostics(plugin.manifest.id),
-      ]);
-      if (identity !== generation.current) return;
-      setTasks(history.tasks);
-      setCursor(history.nextCursor ?? null);
-      setStorage(usage);
-      setDiagnostics(output);
-    } catch {
-      if (identity === generation.current) setError(true);
-    } finally {
-      if (identity === generation.current) setBusy(false);
-    }
-  }, [plugin]);
+interface MaintenanceSnapshot {
+  tasks: TaskSnapshot[];
+  cursor: string | null;
+  storage: PluginStorageUsage | null;
+  diagnostics: PluginDiagnostic[];
+}
+const emptySnapshot = (): MaintenanceSnapshot => ({
+  tasks: [],
+  cursor: null,
+  storage: null,
+  diagnostics: [],
+});
+
+async function readMaintenance(pluginId: string): Promise<MaintenanceSnapshot> {
+  const [history, storage, diagnostics] = await Promise.all([
+    pluginService.history(pluginId),
+    pluginService.storage(pluginId),
+    pluginService.diagnostics(pluginId),
+  ]);
+  return { tasks: history.tasks, cursor: history.nextCursor ?? null, storage, diagnostics };
+}
+
+export function usePluginMaintenance(plugin: PluginSnapshot) {
+  const pluginId = plugin.manifest.id;
+  const installationGeneration = plugin.installationGeneration;
+  const identity = useMemo(
+    () => ({ pluginId, installationGeneration }),
+    [pluginId, installationGeneration],
+  );
+  const owner = useRef<typeof identity | null>(null);
+  const pending = useRef<object | null>(null);
+  const [snapshot, setSnapshot] = useState(emptySnapshot);
+  const [status, setStatus] = useState({ busy: false, error: false });
+
+  const run = useCallback(
+    async (action: (isCurrent: () => boolean) => Promise<void>) => {
+      if (owner.current !== identity || pending.current) return;
+      const operation = {};
+      pending.current = operation;
+      const isCurrent = () => owner.current === identity && pending.current === operation;
+      setStatus({ busy: true, error: false });
+      let failed = false;
+      try {
+        await action(isCurrent);
+      } catch {
+        failed = true;
+      } finally {
+        if (isCurrent()) {
+          pending.current = null;
+          setStatus({ busy: false, error: failed });
+        }
+      }
+    },
+    [identity],
+  );
+
+  const refresh = useCallback(
+    () =>
+      run(async (isCurrent) => {
+        const next = await readMaintenance(pluginId);
+        if (isCurrent()) setSnapshot(next);
+      }),
+    [pluginId, run],
+  );
+
   useEffect(() => {
-    setTasks([]);
-    setCursor(null);
-    setStorage(null);
-    setDiagnostics([]);
+    owner.current = identity;
+    pending.current = null;
+    setSnapshot(emptySnapshot());
     void refresh();
     return () => {
-      generation.current += 1;
+      owner.current = null;
+      pending.current = null;
     };
-  }, [refresh]);
+  }, [identity, refresh]);
+
   const more = async () => {
-    if (!plugin || !cursor || busy) return;
-    const identity = ++generation.current;
-    setBusy(true);
-    try {
-      const page = await pluginService.history(plugin.manifest.id, cursor);
-      if (identity !== generation.current) return;
-      setTasks((previous) => [...previous, ...page.tasks]);
-      setCursor(page.nextCursor ?? null);
-    } catch {
-      if (identity === generation.current) setError(true);
-    } finally {
-      if (identity === generation.current) setBusy(false);
-    }
+    if (!snapshot.cursor) return;
+    await run(async (isCurrent) => {
+      const page = await pluginService.history(pluginId, snapshot.cursor);
+      if (isCurrent())
+        setSnapshot((previous) => ({
+          ...previous,
+          tasks: [...previous.tasks, ...page.tasks],
+          cursor: page.nextCursor ?? null,
+        }));
+    });
   };
-  const change = async (operation: (id: string) => Promise<unknown>) => {
-    if (!plugin || busy) return;
-    const identity = ++generation.current;
-    setBusy(true);
-    setError(false);
-    try {
-      await operation(plugin.manifest.id);
-      if (identity === generation.current) await refresh();
-    } catch {
-      if (identity === generation.current) setError(true);
-    } finally {
-      if (identity === generation.current) setBusy(false);
-    }
-  };
+  const change = (operation: (id: string) => Promise<unknown>) =>
+    run(async (isCurrent) => {
+      await operation(pluginId);
+      if (!isCurrent()) return;
+      const next = await readMaintenance(pluginId);
+      if (isCurrent()) setSnapshot(next);
+    });
+
   return {
-    tasks,
-    cursor,
-    storage,
-    diagnostics,
-    busy,
-    error,
+    ...snapshot,
+    ...status,
     refresh,
     more,
     clearHistory: () => change(pluginService.clearHistory),

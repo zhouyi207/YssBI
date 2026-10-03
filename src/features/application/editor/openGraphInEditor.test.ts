@@ -34,7 +34,7 @@ vi.mock("./editorPanelActivation", () => ({
   revealActiveEditorDetails: vi.fn(async () => true),
 }));
 
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: { graph: { trace: vi.fn() } },
 }));
 

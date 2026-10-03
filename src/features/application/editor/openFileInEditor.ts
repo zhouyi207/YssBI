@@ -3,6 +3,10 @@ import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { openGraphInEditor } from "./openGraphInEditor";
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
 import { revealActiveEditorDetails } from "./editorPanelActivation";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 type OpenFileOptions = { targetGroupId?: string };
 function fileDisplayName(path: string, kind: FileResourceKind): string {
@@ -13,7 +17,9 @@ async function openPanel(
   kind: FileResourceKind,
   options?: OpenFileOptions,
 ): Promise<void> {
+  const identity = captureProjectLifecycleState();
   const panel = await openEditorPanel({ resourceRef: path, resourceKind: kind }, options);
+  if (!isProjectLifecycleStateCurrent(identity)) return;
   await revealActiveEditorDetails(panel);
 }
 const openers: Record<

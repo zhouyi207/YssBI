@@ -11,7 +11,12 @@ describe("parseReportPayloadResult", () => {
       model: { method: "Fixed Effects", statistic: null },
       coefficients: { kind: "tableRef", part: "structured:/coefficients", rowCount: 3 },
     };
-    expect(parseReportPayloadResult("structured", payload)).toEqual({ ok: true, value: payload });
+    const parsed = parseReportPayloadResult("structured", payload);
+    expect(parsed).toEqual({
+      ok: true,
+      value: { kind: "structured", data: payload, sections: {} },
+    });
+    if (parsed.ok) expect(parsed.value.data).toBe(payload);
     expect(parseReportPayloadResult("structured", [payload])).toMatchObject({
       ok: false,
       issue: { fieldPath: "$", reason: "expected structured result data" },
@@ -28,7 +33,7 @@ describe("parseReportPayloadResult", () => {
 
     expect(parseReportPayloadResult("linearRegressionSummary", payload)).toEqual({
       ok: true,
-      value: payload,
+      value: { kind: "linearRegressionSummary", data: payload },
     });
   });
 
@@ -56,6 +61,19 @@ describe("parseReportPayloadResult", () => {
 });
 
 describe("parseResultAnalysis", () => {
+  it("preserves the computed ACF confidence band and rejects missing or invalid widths", () => {
+    const response = {
+      kind: "acfPacf",
+      value: { acf: [1, 0.5], pacf: [0.5], n: 16, ciHalfWidth: 0.123 },
+    };
+    expect(parseResultAnalysis(response)).toEqual(response);
+    for (const ciHalfWidth of [undefined, Infinity, 0, -0.1]) {
+      expect(() =>
+        parseResultAnalysis({ ...response, value: { ...response.value, ciHalfWidth } }),
+      ).toThrow("Invalid result analysis: ciHalfWidth");
+    }
+  });
+
   it("validates selected serial-test statistics at the result-query boundary", () => {
     const response = {
       kind: "serialTests",

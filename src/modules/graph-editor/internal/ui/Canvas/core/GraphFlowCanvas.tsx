@@ -57,7 +57,10 @@ import {
   type GraphFlowEdge as FlowEdge,
 } from "./graphFlowModel";
 import "@xyflow/react/dist/base.css";
-import { flowCanvasInteractionProps } from "@/shared/ui/flowCanvasInteraction";
+import {
+  flowCanvasInteractionProps,
+  synchronizeFlowViewport,
+} from "@/shared/ui/flowCanvasInteraction";
 import "./graphFlow.css";
 
 const nodeTypes = { graph: GraphFlowNode };
@@ -131,11 +134,7 @@ function GraphFlowRuntime({
   });
   const synchronizeViewport = useCallback(
     (next: EditorViewport) => {
-      const { panZoom, transform } = flowStore.getState();
-      // Also restore D3 after cancellation, even when the rendered transform already matches.
-      panZoom?.syncViewport({ x: next.x, y: next.y, zoom: next.scale });
-      if (transform[0] !== next.x || transform[1] !== next.y || transform[2] !== next.scale)
-        flowStore.setState({ transform: [next.x, next.y, next.scale] });
+      synchronizeFlowViewport(flowStore, { x: next.x, y: next.y, zoom: next.scale });
     },
     [flowStore],
   );

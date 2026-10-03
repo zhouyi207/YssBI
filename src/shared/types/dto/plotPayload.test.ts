@@ -16,6 +16,13 @@ const fixtureByKind = Object.fromEntries(
 );
 
 describe("Rust plot payload contract", () => {
+  it("retains reversed funnel domains and rejects invalid axis endpoints", () => {
+    const data = { data: [{ x: 0.4, y: 0.2 }], yDomain: [0.5, 0] };
+    expect(parseXySeriesPlot(data)?.yDomain).toEqual([0.5, 0]);
+    for (const yDomain of [[0, 0], [0, Infinity], [0], ["0.5", 0]]) {
+      expect(parseXySeriesPlot({ ...data, yDomain })).toBeNull();
+    }
+  });
   it("accepts production survival plots and rejects malformed nomogram scales", () => {
     for (const record of survivalFixture.payloads) {
       expect(parsePlotPayload(record.chart as ResultPlotKind, record.data)?.kind).toBe(
@@ -56,6 +63,11 @@ describe("Rust plot payload contract", () => {
     expect(correlogram?.kind === "correlogram" && correlogram.data.ciHalfWidth).toBeGreaterThan(0);
     expect(correlogram?.kind === "correlogram" && correlogram.data.acf[0]?.qStat).toBe(1.5);
     expect(correlogram?.kind === "correlogram" && correlogram.data.acf[0]?.pValue).toBe(0.2);
+    for (const ciHalfWidth of [0, -0.1]) {
+      expect(
+        parsePlotPayload("correlogram", { ...fixtureByKind.correlogram, ciHalfWidth }),
+      ).toBeNull();
+    }
   });
 });
 

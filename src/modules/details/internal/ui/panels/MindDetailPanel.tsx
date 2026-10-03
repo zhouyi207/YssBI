@@ -1,9 +1,9 @@
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/shared/ui/Select";
 import type { MindNode, MindSnapshot } from "@/shared/types/domain/mind";
-import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
+import { useResourceStore } from "@/features/core/resource";
 import { editorUi } from "@/features/core/editor/ui";
 import { mindActions, applyMindEdits } from "@/features/application/resource/mindActions";
 import { useFileTextInput } from "@/features/application/resource/useFileTextInput";
@@ -40,21 +40,37 @@ function MindNodeDetailForm({
     node.id,
   );
   const mind = snapshot.content;
-  const descendants = new Set([node.id]);
-  const childIds = new Map<string, string[]>();
-  for (const item of mind.nodes)
-    if (item.parentId)
-      childIds.set(item.parentId, [...(childIds.get(item.parentId) ?? []), item.id]);
-  const remaining = [node.id];
-  while (remaining.length)
-    for (const child of childIds.get(remaining.pop()!) ?? []) {
-      if (!descendants.has(child)) {
-        descendants.add(child);
-        remaining.push(child);
+  const { parentOptions, siblings, siblingIndex } = useMemo(() => {
+    const descendants = new Set([node.id]);
+    const childIds = new Map<string, string[]>();
+    const siblings: MindNode[] = [];
+    for (const item of mind.nodes) {
+      if (item.parentId) {
+        const children = childIds.get(item.parentId) ?? [];
+        children.push(item.id);
+        childIds.set(item.parentId, children);
       }
+      if (item.parentId === node.parentId) siblings.push(item);
     }
-  const siblings = mind.nodes.filter((item) => item.parentId === node.parentId);
-  const siblingIndex = siblings.findIndex((item) => item.id === node.id);
+    const remaining = [node.id];
+    while (remaining.length)
+      for (const child of childIds.get(remaining.pop()!) ?? []) {
+        if (!descendants.has(child)) {
+          descendants.add(child);
+          remaining.push(child);
+        }
+      }
+    return {
+      parentOptions: mind.nodes
+        .filter((candidate) => !descendants.has(candidate.id))
+        .map((candidate) => ({
+          value: candidate.id,
+          label: candidate.content || t("documents.newTopic"),
+        })),
+      siblings,
+      siblingIndex: siblings.findIndex((item) => item.id === node.id),
+    };
+  }, [mind.nodes, node.id, node.parentId, t]);
 
   const run = (operation: () => Promise<unknown>) => {
     setError(null);
@@ -124,12 +140,7 @@ function MindNodeDetailForm({
               id={parentId}
               value={node.parentId}
               disabled={disabled}
-              options={mind.nodes
-                .filter((candidate) => !descendants.has(candidate.id))
-                .map((candidate) => ({
-                  value: candidate.id,
-                  label: candidate.content || t("documents.newTopic"),
-                }))}
+              options={parentOptions}
               onChange={(parentId) =>
                 run(() =>
                   applyMindEdits(snapshot, [
@@ -240,7 +251,7 @@ export function MindDetailPanel({
   panelInstanceId: string;
   nodeId: string | null;
 }) {
-  const snapshot = useMindProjectionStore((state) => state.documents[path]);
+  const snapshot = useResourceStore((state) => state.fileSnapshots.mind[path]);
   const node = snapshot?.content.nodes.find((item) => item.id === nodeId);
   if (!nodeId || (snapshot && !node))
     return <FileDetailPanel resourceKind="mind" resourceRef={path} />;

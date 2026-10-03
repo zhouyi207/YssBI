@@ -1,8 +1,7 @@
 import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { useDocumentStateStore, type DocumentState } from "./documentStateStore";
-import { useResourceStore } from "./resourceStore";
+import { useResourceStore, type DocumentState } from "./resourceStore";
 import type { ProjectResourceMeta, ResourceKey } from "./resourceTypes";
 
 export interface ResourceProjectionSnapshot {
@@ -16,11 +15,11 @@ function buildSnapshot(): DeepReadonly<ResourceProjectionSnapshot> {
   return {
     resources: resourceState.resources,
     graphOrder: resourceState.graphOrder,
-    documents: useDocumentStateStore.getState().documents,
+    documents: resourceState.documents,
   };
 }
 
-const projection = createReadProjection(buildSnapshot, [useResourceStore, useDocumentStateStore]);
+const projection = createReadProjection(buildSnapshot, [useResourceStore]);
 export const getResourceSnapshot = projection.getSnapshot;
 export function useResourceRead<T>(
   selector: (snapshot: DeepReadonly<ResourceProjectionSnapshot>) => T,

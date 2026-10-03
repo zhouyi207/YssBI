@@ -102,12 +102,15 @@ function click(element: Element): void {
 describe("SettingsView preferences", () => {
   let host: HTMLDivElement;
   let root: Root;
+  let modalId: string;
 
   beforeEach(() => {
     vi.clearAllMocks();
     settings.resetAllToDefaults.mockResolvedValue(undefined);
     settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
+    uiStore.showSettings();
+    modalId = uiStore.getState().modals.find((modal) => modal.type === "settings")!.id;
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -121,7 +124,7 @@ describe("SettingsView preferences", () => {
   });
 
   function render(): void {
-    act(() => root.render(<SettingsView />));
+    act(() => root.render(<SettingsView modalId={modalId} />));
   }
 
   async function flushPromises(): Promise<void> {

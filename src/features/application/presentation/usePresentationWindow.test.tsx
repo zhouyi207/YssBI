@@ -63,7 +63,7 @@ const ready: PresentationWindowState = {
     totalCount: 1,
     title: "Plot",
   },
-  payload: { mode: "plot", chart: "scatter", data: { points: [1, 2, 3] } },
+  payload: { mode: "plot", plot: { kind: "scatter", data: { data: [{ x: 1, y: 2 }] } } },
 };
 let state: PresentationWindowState;
 function WindowProbe() {

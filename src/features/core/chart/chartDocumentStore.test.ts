@@ -4,14 +4,12 @@ import { ProjectService } from "@/services/project/projectService";
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import type { ChartDocument } from "@/shared/types/domain/chart";
-import { useChartDocumentStore } from "./chartDocumentStore";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
 import {
   isResourceDocumentDirty,
   markResourceDirty,
   resourceKey,
-  useDocumentStateStore,
   useResourceStore,
 } from "@/features/core/resource";
 
@@ -98,8 +96,6 @@ function commitChart(operationId: string, before: ChartDocument, after: ChartDoc
 describe("chart authoritative mutation results", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    useChartDocumentStore.getState().clear();
-    useDocumentStateStore.getState().clear();
     useResourceStore.getState().clear();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useProjectIOStore.setState({ projectInstanceId });
@@ -131,9 +127,91 @@ describe("chart authoritative mutation results", () => {
     vi.spyOn(ChartService, "loadChart").mockImplementation(async () => committedDocument);
   });
 
+  it("publishes chart content and resource flags together through load, edit, save and close", async () => {
+    registerChartResource();
+    const key = resourceKey({ id: chartPath, kind: "chart" });
+    const observed: unknown[] = [];
+    const stop = useResourceStore.subscribe((state) =>
+      observed.push({
+        chartType: useResourceStore.getState().chartDocuments[chartPath]?.chartType,
+        loaded: state.documents[key]?.loaded,
+        dirty: state.documents[key]?.dirty,
+        summaryDirty: state.resources[key]?.hasDirtyDocument,
+      }),
+    );
+    try {
+      useResourceStore.getState().upsertChartDocument(chartPath, chart("scatter"));
+      expect
+        .soft(observed)
+        .toEqual([{ chartType: "scatter", loaded: true, dirty: false, summaryDirty: false }]);
+      observed.length = 0;
+      const draft = useResourceStore
+        .getState()
+        .updateChartDocument(chartPath, { chartType: "line" })!;
+      expect
+        .soft(observed)
+        .toEqual([{ chartType: "line", loaded: true, dirty: true, summaryDirty: true }]);
+      observed.length = 0;
+      const authoritative = chart("histogram");
+      vi.spyOn(ChartService, "saveChart").mockImplementation(async (_project, operationId) =>
+        commitChart(operationId, draft, authoritative),
+      );
+      expect(await saveChartDocument(chartPath)).toBe(true);
+      expect
+        .soft(
+          observed.filter((value) => (value as { chartType: string }).chartType === "histogram"),
+        )
+        .toEqual([{ chartType: "histogram", loaded: true, dirty: false, summaryDirty: false }]);
+      observed.length = 0;
+      useResourceStore.getState().removeChartDocument(chartPath);
+      expect(observed).toEqual([
+        { chartType: undefined, loaded: undefined, dirty: undefined, summaryDirty: false },
+      ]);
+      observed.length = 0;
+      useResourceStore.getState().setSnapshot({
+        resources: Object.values(useResourceStore.getState().resources),
+        documents: {},
+        chartDocuments: { [chartPath]: chart("line") },
+      });
+      expect(observed).toEqual([
+        { chartType: "line", loaded: true, dirty: false, summaryDirty: false },
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("keeps chart references and clean state for equal installs and no-op edits", () => {
+    registerChartResource();
+    const document = chart("scatter");
+    useResourceStore.getState().upsertChartDocument(chartPath, document);
+    const before = useResourceStore.getState().chartDocuments;
+    const notifications = vi.fn();
+    const stop = useResourceStore.subscribe(notifications);
+    try {
+      useResourceStore.getState().upsertChartDocument(chartPath, structuredClone(document));
+      const unchanged = useResourceStore.getState().updateChartDocument(chartPath, {
+        chartType: "scatter",
+        encodings: { x: "x" },
+      });
+      expect.soft(notifications).not.toHaveBeenCalled();
+      expect.soft(unchanged).toBe(before[chartPath]);
+      expect.soft(isResourceDocumentDirty({ id: chartPath, kind: "chart" })).toBe(false);
+      notifications.mockClear();
+      const changed = useResourceStore
+        .getState()
+        .updateChartDocument(chartPath, { chartType: "line" });
+      expect(notifications).toHaveBeenCalledOnce();
+      expect(changed?.encodings).toBe(before[chartPath].encodings);
+      expect(before[chartPath].chartType).toBe("scatter");
+    } finally {
+      stop();
+    }
+  });
+
   it("ignores a delayed save completion from a replaced project", async () => {
     const draft = chart("scatter");
-    useChartDocumentStore.getState().upsertDocument(chartPath, draft);
+    useResourceStore.getState().upsertChartDocument(chartPath, draft);
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
     const request = deferred<Awaited<ReturnType<typeof ChartService.saveChart>>>();
     vi.spyOn(ChartService, "saveChart").mockReturnValue(request.promise);
@@ -142,11 +220,11 @@ describe("chart authoritative mutation results", () => {
     await vi.waitFor(() => expect(ChartService.saveChart).toHaveBeenCalled());
     useProjectIOStore.setState({ projectInstanceId: "project-b" });
     projectPublicationCoordinator.startProject("project-b", 0);
-    useChartDocumentStore.getState().clear();
+    useResourceStore.getState().clear();
     request.resolve(commitChart("00000000-0000-0000-0000-000000000502", draft, chart("line")));
 
     await expect(completion).resolves.toBe(false);
-    expect(useChartDocumentStore.getState().documents).toEqual({});
+    expect(useResourceStore.getState().chartDocuments).toEqual({});
     expect(projectPublicationCoordinator.getSnapshotForTests()).toMatchObject({
       projectInstanceId: "project-b",
       appliedRevision: 0,
@@ -157,26 +235,26 @@ describe("chart authoritative mutation results", () => {
     const draft = chart("scatter");
     const saved = chart("scatter");
     registerChartResource();
-    useChartDocumentStore.getState().upsertDocument(chartPath, draft);
+    useResourceStore.getState().upsertChartDocument(chartPath, draft);
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
     const request = deferred<Awaited<ReturnType<typeof ChartService.saveChart>>>();
     const save = vi.spyOn(ChartService, "saveChart").mockReturnValue(request.promise);
 
     const completion = saveChartDocument(chartPath);
     await vi.waitFor(() => expect(ChartService.saveChart).toHaveBeenCalled());
-    useChartDocumentStore.getState().updateDocument(chartPath, { chartType: "line" });
+    useResourceStore.getState().updateChartDocument(chartPath, { chartType: "line" });
     request.resolve(commitChart(save.mock.calls[0][1], draft, saved));
 
     await expect(completion).resolves.toBe(false);
-    expect(useChartDocumentStore.getState().documents[chartPath]).toMatchObject({
+    expect(useResourceStore.getState().chartDocuments[chartPath]).toMatchObject({
       chartType: "line",
     });
     const key = resourceKey({ id: chartPath, kind: "chart" });
     expect(isResourceDocumentDirty({ id: chartPath, kind: "chart" })).toBe(true);
-    expect(useDocumentStateStore.getState().documents[key]?.dirty).toBe(true);
+    expect(useResourceStore.getState().documents[key]?.dirty).toBe(true);
     expect(useResourceStore.getState().resources[key]?.hasDirtyDocument).toBe(true);
     expect(useResourceStore.getState().resources[key]?.revision).toBe(4);
-    expect(useDocumentStateStore.getState().documents[key]?.conflict).toBe(false);
+    expect(useResourceStore.getState().documents[key]?.conflict).toBe(false);
     expect(useResourceStore.getState().resources[key]?.hasConflictDocument).toBe(false);
     expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
   });
@@ -192,14 +270,14 @@ describe("chart authoritative mutation results", () => {
     };
     const authoritative = submitted;
     registerChartResource();
-    useChartDocumentStore.getState().upsertDocument(chartPath, submitted);
+    useResourceStore.getState().upsertChartDocument(chartPath, submitted);
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
     const submit = vi.spyOn(projectPublicationCoordinator, "submit");
     vi.spyOn(ChartService, "saveChart").mockImplementation(
       async (_projectInstanceId, operationId) => {
         const result = commitChart(operationId, before, authoritative);
         await projectPublicationCoordinator.submit({ result });
-        expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(submitted);
+        expect(useResourceStore.getState().chartDocuments[chartPath]).toEqual(submitted);
         expect(isResourceDocumentDirty({ id: chartPath, kind: "chart" })).toBe(true);
         return result;
       },
@@ -207,7 +285,7 @@ describe("chart authoritative mutation results", () => {
 
     await expect(saveChartDocument(chartPath)).resolves.toBe(true);
 
-    expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(authoritative);
+    expect(useResourceStore.getState().chartDocuments[chartPath]).toEqual(authoritative);
     expect(isResourceDocumentDirty({ id: chartPath, kind: "chart" })).toBe(false);
     expect(submit).toHaveBeenCalledTimes(2);
     expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
@@ -218,7 +296,7 @@ describe("chart authoritative mutation results", () => {
     const before = chart("histogram");
     const authoritative = chart("line");
     registerChartResource();
-    useChartDocumentStore.getState().upsertDocument(chartPath, draft);
+    useResourceStore.getState().upsertChartDocument(chartPath, draft);
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
     committedDocument = before;
     committedRevision = 4;
@@ -237,11 +315,11 @@ describe("chart authoritative mutation results", () => {
       draft,
     );
     const key = resourceKey({ id: chartPath, kind: "chart" });
-    expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(authoritative);
-    expect(useDocumentStateStore.getState().documents[key]?.dirty).toBe(false);
+    expect(useResourceStore.getState().chartDocuments[chartPath]).toEqual(authoritative);
+    expect(useResourceStore.getState().documents[key]?.dirty).toBe(false);
     expect(useResourceStore.getState().resources[key]?.hasDirtyDocument).toBe(false);
 
-    const nextDraft = useChartDocumentStore.getState().updateDocument(chartPath, {
+    const nextDraft = useResourceStore.getState().updateChartDocument(chartPath, {
       encodings: { y: "next-y" },
     })!;
     const nextSaved = nextDraft;
@@ -256,7 +334,7 @@ describe("chart authoritative mutation results", () => {
       chartPath,
       nextDraft,
     );
-    expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(nextSaved);
+    expect(useResourceStore.getState().chartDocuments[chartPath]).toEqual(nextSaved);
     expect(isResourceDocumentDirty({ id: chartPath, kind: "chart" })).toBe(false);
   });
 
@@ -264,7 +342,7 @@ describe("chart authoritative mutation results", () => {
     const draft = chart("scatter");
     const saved = draft;
     registerChartResource();
-    useChartDocumentStore.getState().upsertDocument(chartPath, draft);
+    useResourceStore.getState().upsertChartDocument(chartPath, draft);
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
     vi.spyOn(ChartService, "saveChart").mockImplementation(
       async (_projectInstanceId, operationId) => {
@@ -276,7 +354,7 @@ describe("chart authoritative mutation results", () => {
     );
 
     await expect(saveChartDocument(chartPath)).resolves.toBe(true);
-    expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(saved);
+    expect(useResourceStore.getState().chartDocuments[chartPath]).toEqual(saved);
     expect(isResourceDocumentDirty({ id: chartPath, kind: "chart" })).toBe(false);
   });
 
@@ -284,7 +362,7 @@ describe("chart authoritative mutation results", () => {
     const draft = chart("scatter");
     const saved = draft;
     registerChartResource();
-    useChartDocumentStore.getState().upsertDocument(chartPath, draft);
+    useResourceStore.getState().upsertChartDocument(chartPath, draft);
     markResourceDirty({ id: chartPath, kind: "chart" }, true);
     vi.spyOn(ChartService, "saveChart").mockImplementation(
       async (_projectInstanceId, operationId) => {
@@ -297,9 +375,9 @@ describe("chart authoritative mutation results", () => {
     );
 
     await expect(saveChartDocument(chartPath)).resolves.toBe(false);
-    expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(draft);
+    expect(useResourceStore.getState().chartDocuments[chartPath]).toEqual(draft);
     const key = resourceKey({ id: chartPath, kind: "chart" });
-    expect(useDocumentStateStore.getState().documents[key]).toMatchObject({
+    expect(useResourceStore.getState().documents[key]).toMatchObject({
       dirty: true,
       conflict: true,
     });

@@ -38,8 +38,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740993"
     },
     {
       "kind": {
@@ -48,8 +50,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -61,8 +65,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -74,8 +80,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -87,8 +95,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -100,8 +110,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -113,8 +125,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -126,8 +140,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -136,8 +152,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -152,8 +170,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     },
     {
       "kind": {
@@ -169,8 +189,10 @@
       "run": {
         "graphPath": "events/contract.yssbi-event",
         "executionSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
+        "runId": "9007199254740993",
+        "semanticInputHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "resultRevision": "9007199254740994"
     }
   ],
   "graphResultState": {

@@ -12,11 +12,9 @@ function HypothesisFormulas({ form, paramNames }: { form: string; paramNames: st
       {parts.map((part, i) => {
         const html = renderHypothesisLatex(linearFormToLatex(part, paramNames));
         return (
-          <div
-            key={i}
-            className="[&_.katex]:block [&_.katex]:text-xs [&_.katex]:text-foreground"
-            dangerouslySetInnerHTML={{ __html: html ?? part }}
-          />
+          <div key={i} className="[&_.katex]:block [&_.katex]:text-xs [&_.katex]:text-foreground">
+            {html === null ? part : <span dangerouslySetInnerHTML={{ __html: html }} />}
+          </div>
         );
       })}
     </div>

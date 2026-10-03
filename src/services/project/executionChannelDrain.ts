@@ -65,6 +65,7 @@ export function createExecutionStreamDrain(
 
   return {
     onmessage: (raw) => {
+      if (settled) return;
       try {
         deliverRunEvent(parseRunEvent(raw), onEvent, settle);
       } catch (caught) {

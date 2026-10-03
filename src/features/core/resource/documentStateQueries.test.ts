@@ -3,7 +3,6 @@ import {
   clearResourceDocumentState,
   markResourceDirty,
   markResourceLoaded,
-  useDocumentStateStore,
   useResourceStore,
   buildFileResourceMeta,
   isGraphResourceDirty,
@@ -12,7 +11,6 @@ import {
 
 describe("document state queries", () => {
   beforeEach(() => {
-    useDocumentStateStore.getState().clear();
     useResourceStore.getState().clear();
   });
 
@@ -39,7 +37,7 @@ describe("document state queries", () => {
       exists: true,
     });
     expect(
-      useDocumentStateStore.getState().documents[resourceKey({ id: meta.id, kind: "event_graph" })],
+      useResourceStore.getState().documents[resourceKey({ id: meta.id, kind: "event_graph" })],
     ).toBeUndefined();
   });
 });

@@ -1,15 +1,15 @@
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
-import type { LifecycleMutationResultDto, ProjectRecordRow } from "@/shared/types/dto/project";
+import type {
+  LifecycleMutationResultDto,
+  ProjectActivationResult,
+} from "@/shared/types/domain/project";
+import { parseProjectActivationResult, parseLifecycleMutationResult } from "./projectWireParser";
 import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
 
 type UnknownRecord = Record<string, unknown>;
 
 export interface ProjectLoadedPayload {
-  readonly result: {
-    readonly path: string;
-    readonly projectInstanceId: string;
-    readonly activationRevision: number;
-  };
+  readonly result: ProjectActivationResult;
 }
 
 export interface ProjectLifecycleCommittedPayload {
@@ -73,157 +73,26 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function isNullableNonEmptyString(value: unknown): value is string | null {
-  return value === null || isNonEmptyString(value);
-}
-
-function isRevision(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
-}
-
 function isWatcherVersion(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1;
 }
 
 function parseProjectLoadedPayload(value: unknown): ProjectLoadedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["result"]) || !isRecord(value.result)) {
+  if (!isRecord(value) || !hasExactKeys(value, ["result"])) return null;
+  try {
+    return { result: parseProjectActivationResult(value.result) };
+  } catch {
     return null;
   }
-  const result = value.result;
-  if (
-    !hasExactKeys(result, ["path", "projectInstanceId", "activationRevision"]) ||
-    !isNonEmptyString(result.path) ||
-    !isNonEmptyString(result.projectInstanceId) ||
-    !isRevision(result.activationRevision)
-  ) {
-    return null;
-  }
-  return {
-    result: {
-      path: result.path,
-      projectInstanceId: result.projectInstanceId,
-      activationRevision: result.activationRevision,
-    },
-  };
-}
-
-function parseProjectRecord(value: unknown): ProjectRecordRow | null {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, [
-      "id",
-      "name",
-      "path",
-      "createdAt",
-      "lastOpenedAt",
-      "isFavorite",
-      "rootIdentity",
-    ]) ||
-    !isNonEmptyString(value.id) ||
-    !isNonEmptyString(value.name) ||
-    !isNonEmptyString(value.path) ||
-    !isNonEmptyString(value.createdAt) ||
-    !isNullableNonEmptyString(value.lastOpenedAt) ||
-    typeof value.isFavorite !== "boolean" ||
-    !isNonEmptyString(value.rootIdentity)
-  ) {
-    return null;
-  }
-  return {
-    id: value.id,
-    name: value.name,
-    path: value.path,
-    createdAt: value.createdAt,
-    lastOpenedAt: value.lastOpenedAt,
-    isFavorite: value.isFavorite,
-    rootIdentity: value.rootIdentity,
-  };
-}
-
-function parseLifecycleRecovery(value: unknown): LifecycleMutationResultDto["recovery"] | null {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["required", "action", "path", "identity"]) ||
-    typeof value.required !== "boolean" ||
-    !isNonEmptyString(value.action) ||
-    !isNullableNonEmptyString(value.path) ||
-    !isNullableNonEmptyString(value.identity)
-  ) {
-    return null;
-  }
-  return {
-    required: value.required,
-    action: value.action,
-    path: value.path,
-    identity: value.identity,
-  };
 }
 
 function parseLifecyclePayload(value: unknown): ProjectLifecycleCommittedPayload | null {
-  if (!isRecord(value) || !hasExactKeys(value, ["result"]) || !isRecord(value.result)) {
+  if (!isRecord(value) || !hasExactKeys(value, ["result"])) return null;
+  try {
+    return { result: parseLifecycleMutationResult(value.result) };
+  } catch {
     return null;
   }
-  const result = value.result;
-  if (
-    !hasExactKeys(result, [
-      "operationId",
-      "kind",
-      "oldProjectInstanceId",
-      "newProjectInstanceId",
-      "phase",
-      "outcome",
-      "record",
-      "path",
-      "recovery",
-      "invalidation",
-    ]) ||
-    !isNonEmptyString(result.operationId) ||
-    (result.kind !== "saveAs" &&
-      result.kind !== "create" &&
-      result.kind !== "delete" &&
-      result.kind !== "registryCleanup" &&
-      result.kind !== "load" &&
-      result.kind !== "clear") ||
-    !isNullableNonEmptyString(result.oldProjectInstanceId) ||
-    !isNullableNonEmptyString(result.newProjectInstanceId) ||
-    (result.phase !== "destinationCommitted" &&
-      result.phase !== "registryCommitted" &&
-      result.phase !== "authorityCommitted") ||
-    (result.outcome !== "committed" &&
-      result.outcome !== "registryFailed" &&
-      result.outcome !== "activationFailed" &&
-      result.outcome !== "registryPending") ||
-    !isNullableNonEmptyString(result.path) ||
-    !isRecord(result.invalidation) ||
-    !hasExactKeys(result.invalidation, ["project", "registry"]) ||
-    typeof result.invalidation.project !== "boolean" ||
-    typeof result.invalidation.registry !== "boolean"
-  ) {
-    return null;
-  }
-
-  const record = result.record === null ? null : parseProjectRecord(result.record);
-  if (result.record !== null && record === null) return null;
-  const recovery = result.recovery === null ? null : parseLifecycleRecovery(result.recovery);
-  if (result.recovery !== null && recovery === null) return null;
-
-  return {
-    result: {
-      operationId: result.operationId,
-      kind: result.kind,
-      oldProjectInstanceId: result.oldProjectInstanceId,
-      newProjectInstanceId: result.newProjectInstanceId,
-      phase: result.phase,
-      outcome: result.outcome,
-      record,
-      path: result.path,
-      recovery,
-      invalidation: {
-        project: result.invalidation.project,
-        registry: result.invalidation.registry,
-      },
-    },
-  } as ProjectLifecycleCommittedPayload;
 }
 
 function parseIndexInvalidatedPayload(value: unknown): ProjectIndexInvalidatedPayload | null {

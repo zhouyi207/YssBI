@@ -31,8 +31,8 @@ export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
         <ResultReadError error={paging.error} />
       ) : (
         <ReadOnlyDataGrid
-          columns={paging.columns.map((column) => ({ ...column }))}
-          rows={paging.rows.map((row) => [...row])}
+          columns={paging.columns}
+          rows={paging.rows}
           pageStartIndex={paging.offset}
           loading={paging.loading}
           height="100%"

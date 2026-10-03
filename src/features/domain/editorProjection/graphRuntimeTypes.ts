@@ -1,8 +1,8 @@
 /**
  * Normalized editor-projection runtime structures.
  *
- * `graphProjectionStore` buckets are editor projections. `install` / `hydrate` is the
- * only bucket creation path and always installs projection basis, revision,
+ * `graphProjection` builds read-only editor buckets. ResourceStore publishes their
+ * projection basis, revision,
  * request generation, and diagnostics together with normalized entities.
  */
 

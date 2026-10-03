@@ -13,20 +13,13 @@ import {
 } from "@/features/application/graphEditing/graphConstantActions";
 import type { ApplyGraphMutationOutcome } from "@/features/application/graphEditing/graphEditCoordinator";
 import { DRAG_TYPES, type GraphConstantDragPayload } from "@/features/core/dnd";
+import type { GraphConstantDto } from "@/shared/types/domain/editorMutation";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { ConstantValueFields } from "./ConstantValueFields";
 
 export function GraphConstantsPanel({ graphPath }: { graphPath: string }) {
   const { t } = useTranslation();
   const { constants, loaded, saving } = useGraphConstants(graphPath);
-  const editableConstants = useMemo(
-    () =>
-      Object.values(constants).map((constant) => ({
-        ...constant,
-        dataValue: editableConstantValue(constant),
-      })),
-    [constants],
-  );
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +54,7 @@ export function GraphConstantsPanel({ graphPath }: { graphPath: string }) {
             {t("detail.constants.add")}
           </Button>
         </div>
-        {editableConstants.map((constant) => (
+        {Object.values(constants).map((constant) => (
           <GraphConstantRow
             key={constant.id}
             graphPath={graphPath}
@@ -92,12 +85,17 @@ function GraphConstantRow({
   onRemove,
 }: {
   graphPath: string;
-  constant: ComponentProps<typeof ConstantValueFields>["constant"];
+  constant: GraphConstantDto;
   disabled: boolean;
   onUpdate: ComponentProps<typeof ConstantValueFields>["onUpdate"];
   onRemove: () => void;
 }) {
   const { t } = useTranslation();
+  const { dataType, dataValue, tabular } = constant;
+  const editableValue = useMemo(
+    () => editableConstantValue({ dataType, dataValue, tabular }),
+    [dataType, dataValue, tabular],
+  );
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: `graph-constant-${graphPath}-${constant.id}`,
     data: {
@@ -136,7 +134,10 @@ function GraphConstantRow({
         </TooltipTrigger>
         <TooltipContent>{dragLabel}</TooltipContent>
       </Tooltip>
-      <ConstantValueFields constant={constant} onUpdate={onUpdate} />
+      <ConstantValueFields
+        constant={{ ...constant, dataValue: editableValue }}
+        onUpdate={onUpdate}
+      />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

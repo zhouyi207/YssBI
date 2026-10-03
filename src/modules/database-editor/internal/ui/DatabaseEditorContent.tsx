@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
+import type { ColumnInfo } from "@/shared/types/domain/database";
 import { useDatabaseRead } from "@/features/core/database/read";
+import { useResourceRead } from "@/features/core/resource/read";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
 import {
   useDataLoader,
   useSelection,
@@ -10,6 +14,8 @@ import {
 import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
 import { DataTable } from "./Table";
 import { Toolbar } from "./Layout";
+
+const EMPTY_COLUMNS: readonly ColumnInfo[] = [];
 
 interface DatabaseEditorContentProps {
   databaseId: string | null;
@@ -23,12 +29,20 @@ export function DatabaseEditorContent({
   refreshProjectOnRefresh = false,
 }: DatabaseEditorContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const database = useDatabaseRead((snapshot) =>
-    databaseId ? snapshot.databases[databaseId] : null,
+  const { columns, rowCount, columnCount } = useDatabaseRead(
+    useShallow((snapshot) => {
+      const database = databaseId ? snapshot.databases[databaseId] : undefined;
+      return {
+        columns: database?.columns ?? EMPTY_COLUMNS,
+        rowCount: database?.rowCount ?? 0,
+        columnCount: database?.columnCount ?? 0,
+      };
+    }),
   );
-  const columns = database?.columns ?? [];
-  const physicalSchema = JSON.stringify(
-    columns.map((column) => [column.name, column.physical ?? column.type]),
+  const revision = useResourceRead((snapshot) =>
+    databaseId
+      ? snapshot.resources[resourceKey({ kind: "database", id: databaseId })]?.revision
+      : undefined,
   );
   const dataLoader = useDataLoader(databaseId);
   const exportDatabase = useDatabaseExport(databaseId);
@@ -36,7 +50,7 @@ export function DatabaseEditorContent({
     columnCount: columns.length,
     rowCount: dataLoader.loadedRows.length,
   });
-  const { loadInitialRows, setLoadedRows } = dataLoader;
+  const { loadInitialRows, clearData } = dataLoader;
   const { clearSelection } = selection;
 
   useDatabaseEditorKeyboard({ containerRef, selectAll: selection.selectAll, clearSelection });
@@ -47,10 +61,10 @@ export function DatabaseEditorContent({
         reportViewIssue("app", error, "DatabaseEditor"),
       );
     } else {
-      setLoadedRows([]);
+      clearData();
     }
     clearSelection();
-  }, [databaseId, physicalSchema, loadInitialRows, setLoadedRows, clearSelection]);
+  }, [databaseId, revision, loadInitialRows, clearData, clearSelection]);
 
   useEffect(() => {
     clearSelection();
@@ -87,8 +101,8 @@ export function DatabaseEditorContent({
       </div>
       <Toolbar
         loading={dataLoader.loading}
-        totalRowCount={database?.rowCount ?? 0}
-        columnCount={database?.columnCount ?? 0}
+        totalRowCount={rowCount}
+        columnCount={columnCount}
         pageIndex={dataLoader.pageIndex}
         pageSize={dataLoader.pageSize}
         totalPages={dataLoader.totalPages}

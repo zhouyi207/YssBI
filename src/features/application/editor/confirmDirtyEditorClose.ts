@@ -10,15 +10,19 @@ import {
 import { showBlockingIpcError } from "./blockingErrorDialog";
 
 /** Shared save/discard/cancel decision for leaving a project or closing its window. */
-export async function confirmDirtyEditorClose(): Promise<boolean> {
+export async function confirmDirtyEditorClose(
+  isActive: () => boolean = () => true,
+): Promise<boolean> {
   const identity = captureProjectLifecycleState();
+  const isCurrent = () => isActive() && isProjectLifecycleStateCurrent(identity);
+  if (!isCurrent()) return false;
   try {
     await settleEditorFileEdits();
   } catch (error) {
-    showBlockingIpcError(error, () => i18n.t("editor.close.failed"));
+    if (isCurrent()) showBlockingIpcError(error, () => i18n.t("editor.close.failed"));
     return false;
   }
-  if (!isProjectLifecycleStateCurrent(identity)) return false;
+  if (!isCurrent()) return false;
   const dirty = collectDirtyEditorPanels();
   if (dirty.length > 0) {
     const titles = dirty.map((tab) => `• ${tab.title}`).join("\n");
@@ -35,17 +39,17 @@ export async function confirmDirtyEditorClose(): Promise<boolean> {
       type: "info",
     });
 
-    if (choice === "cancel" || !isProjectLifecycleStateCurrent(identity)) {
+    if (choice === "cancel" || !isCurrent()) {
       return false;
     }
 
     if (choice === "confirm") {
-      const saved = await saveAllDirtyDocuments();
+      const saved = await saveAllDirtyDocuments(isCurrent);
       if (!saved) {
         return false;
       }
     }
   }
 
-  return isProjectLifecycleStateCurrent(identity);
+  return isCurrent();
 }

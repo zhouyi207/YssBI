@@ -107,13 +107,11 @@ vi.mock("@/features/application/graphEditing/historyCoordinator", () => ({
   redoEditorHistory: vi.fn(),
 }));
 vi.mock("./edgeOperations", () => ({ disconnectConnectionsById: vi.fn() }));
-vi.mock("@/features/core/dataStore/graphProjectionStore", () => ({
-  useGraphProjectionStore: { getState: vi.fn(() => ({ getGraphNodePins: () => [] })) },
-}));
+
 vi.mock("./rightSidebarActions", () => ({
   setInspectionContext: mocks.setInspectionContext,
 }));
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: {
     graph: { error: mocks.graphError },
   },

@@ -6,7 +6,7 @@ import {
   REROUTE_GRIP_SIZE_PX,
   REROUTE_NODE_HEIGHT_PX,
   REROUTE_NODE_WIDTH_PX,
-} from "@/features/domain/node/utils/nodeClassNames";
+} from "./nodeAppearance";
 import { GraphPinController } from "../Pins/GraphPinController";
 
 export { REROUTE_GRIP_SIZE_PX, REROUTE_NODE_HEIGHT_PX, REROUTE_NODE_WIDTH_PX };

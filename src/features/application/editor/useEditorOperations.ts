@@ -1,7 +1,8 @@
 import { useCallback } from "react";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
 import { isUnmanagedNode } from "@/features/core/dataStore/graphNodeSelectors";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
@@ -88,7 +89,10 @@ function isCapturedNodeSelectionCurrent(context: SelectionAwareEditorOperationCo
 }
 
 function logEditorOperationError(operation: string, error: unknown): void {
-  logger.graph.error(`${operation} failed: ${String(error)}`, EDITOR_OPERATIONS_LOG_SOURCE);
+  logger.graph.error(
+    `${operation} failed: ${formatApplicationIpcError(error)}`,
+    EDITOR_OPERATIONS_LOG_SOURCE,
+  );
 }
 
 function isAppliedMutation(
@@ -190,7 +194,10 @@ export function useEditorOperations() {
           offset: { ...offset },
         });
         if (!isAppliedMutation(outcome)) {
-          logEditorOperationError("Duplicate subgraph", mutationOutcomeStatus(outcome));
+          logger.graph.error(
+            `Duplicate subgraph failed: ${mutationOutcomeStatus(outcome)}`,
+            EDITOR_OPERATIONS_LOG_SOURCE,
+          );
           return false;
         }
         if (!isEditorOperationContextCurrent(context)) return false;
@@ -238,7 +245,7 @@ export function useEditorOperations() {
   const selectLinkedNodes = useCallback(async (nodeId: string, target?: EditorCommandTarget) => {
     const context = captureEditorOperationContext(target);
     if (!context) return false;
-    const store = useGraphProjectionStore.getState();
+    const store = useResourceStore.getState();
     const pinIds = store.getGraphNodePins(context.graphPath, nodeId);
     const linked = new Set<string>();
 
@@ -301,7 +308,10 @@ export function useEditorOperations() {
           anchor: { ...pos },
         });
         if (!isAppliedMutation(outcome)) {
-          logEditorOperationError("Paste subgraph", mutationOutcomeStatus(outcome));
+          logger.graph.error(
+            `Paste subgraph failed: ${mutationOutcomeStatus(outcome)}`,
+            EDITOR_OPERATIONS_LOG_SOURCE,
+          );
           return false;
         }
         if (!isEditorOperationContextCurrent(context)) return false;
@@ -366,7 +376,7 @@ export function useEditorOperations() {
       const selectedSnapshot = [...capturedSelection.nodeIds];
       const selectedIds = new Set(selectedSnapshot);
       if (selectedIds.size === 0) return false;
-      const dataStore = useGraphProjectionStore.getState();
+      const dataStore = useResourceStore.getState();
       const idsToDelete = dataStore
         .getGraphNodeIds(context.graphPath)
         .filter((nodeId) => selectedIds.has(nodeId) && isUnmanagedNode(context.graphPath, nodeId));
@@ -409,7 +419,10 @@ export function useEditorOperations() {
           nodeIds: [...nodeIds],
         });
         if (!isAppliedMutation(outcome)) {
-          logEditorOperationError("Cut subgraph deletion", mutationOutcomeStatus(outcome));
+          logger.graph.error(
+            `Cut subgraph deletion failed: ${mutationOutcomeStatus(outcome)}`,
+            EDITOR_OPERATIONS_LOG_SOURCE,
+          );
           return false;
         }
         if (isEditorOperationContextCurrent(context) && isCapturedNodeSelectionCurrent(context)) {

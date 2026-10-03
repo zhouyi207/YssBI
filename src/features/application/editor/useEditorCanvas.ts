@@ -67,12 +67,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       const current = selection.selectedNodeIds;
       const next = typeof updater === "function" ? updater(current) : updater;
       const nodeIds = [...new Set(next)];
-      if (
-        selection.selectedConnectionIds.length ||
-        current.length !== nodeIds.length ||
-        current.some((id, index) => id !== nodeIds[index])
-      )
-        useEditorPaneStateStore.getState().setSelectedNodeIds(scope.panelInstanceId, nodeIds);
+      useEditorPaneStateStore.getState().setSelectedNodeIds(scope.panelInstanceId, nodeIds);
       syncInspection(nodeIds);
     },
     [scope.groupId, scope.panelInstanceId, paneStillMatches, syncInspection],
@@ -84,12 +79,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       const selection = getPaneSelection(scope.panelInstanceId);
       const current = selection.selectedConnectionIds;
       const next = typeof updater === "function" ? updater(current) : updater;
-      if (
-        selection.selectedNodeIds.length ||
-        current.length !== next.length ||
-        current.some((id, index) => id !== next[index])
-      )
-        useEditorPaneStateStore.getState().setSelectedConnectionIds(scope.panelInstanceId, next);
+      useEditorPaneStateStore.getState().setSelectedConnectionIds(scope.panelInstanceId, next);
       syncInspection([]);
     },
     [scope.groupId, scope.panelInstanceId, paneStillMatches, syncInspection],
@@ -198,14 +188,18 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
     ],
   );
 
+  const activeGraph = useMemo(
+    () => ({ graphPath: scope.graphPath, kind: scope.graphKind }),
+    [scope.graphPath, scope.graphKind],
+  );
   const workspace = useMemo((): EditorCanvasWorkspaceSlice => {
     return {
       groupId: scope.groupId,
-      activeGraph: { graphPath: scope.graphPath, kind: scope.graphKind },
+      activeGraph,
       selectedNodeIds: paneSelection.selectedNodeIds,
       selectedConnectionIds: paneSelection.selectedConnectionIds,
     };
-  }, [scope.groupId, scope.graphPath, scope.graphKind, paneSelection]);
+  }, [scope.groupId, activeGraph, paneSelection]);
 
   const interaction = useMemo(
     (): EditorCanvasInteractionSlice => ({

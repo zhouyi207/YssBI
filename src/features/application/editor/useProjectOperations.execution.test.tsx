@@ -15,7 +15,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 
 import { useProjectOperations } from "./useProjectOperations";
 import { revealWorkbenchView } from "@/modules/workbench/public";
@@ -26,7 +26,9 @@ const graphPath = "events/Main.yssbi-event";
 
 function runStartedEvent(): RunEvent {
   return {
+    resultRevision: "1",
     run: {
+      semanticInputHash: "0".repeat(64),
       executionSessionId: "backend-session-1",
       graphPath,
       runId: "run-stale",
@@ -37,16 +39,11 @@ function runStartedEvent(): RunEvent {
 
 const executionState = vi.hoisted(() => ({
   graphs: {} as Record<string, { status: string }>,
-  startExecution: vi.fn((): (() => boolean) => {
-    executionState.graphs[graphPath] = { status: "running" };
-    return () => true;
-  }),
   submitExecution: vi.fn(() => () => true),
   markExecutionUnknown: vi.fn(),
-  setActiveRunId: vi.fn(),
-  completeExecution: vi.fn(),
-  failExecution: vi.fn(),
-  recordRunFailure: vi.fn(),
+  applyRunEvent: vi.fn(),
+  getRunEventOutputs: vi.fn(() => []),
+  clearOutputRuns: vi.fn(),
   interruptExecution: vi.fn(),
   getGraph: vi.fn(() => ({ status: "completed" })),
   clearGraphRunProjections: vi.fn(),
@@ -100,7 +97,7 @@ describe("useProjectOperations execution demand", () => {
     vi.spyOn(ProjectService, "executeGraph").mockResolvedValue(undefined);
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     const session = makeGraphEditorSession(projection);
-    useGraphProjectionStore.getState().install(graphPath, session);
+    useResourceStore.getState().installGraphSession(graphPath, session, { mode: "load" });
     function Harness() {
       operations = useProjectOperations();
       return null;
@@ -112,7 +109,7 @@ describe("useProjectOperations execution demand", () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
     clearProjectLifecycle();
   });
 
@@ -124,8 +121,8 @@ describe("useProjectOperations execution demand", () => {
     expect(ProjectService.executeGraph).toHaveBeenCalledWith({
       projectInstanceId,
       graphPath,
-      version: useGraphProjectionStore.getState().sessions[graphPath].version,
-      semanticInputHash: useGraphProjectionStore.getState().sessions[graphPath].semanticInputHash,
+      version: useResourceStore.getState().sessions[graphPath].version,
+      semanticInputHash: useResourceStore.getState().sessions[graphPath].semanticInputHash,
       demand: { type: "default" },
       onEvent: expect.any(Function),
     });
@@ -196,8 +193,7 @@ describe("useProjectOperations execution demand", () => {
       }),
     );
     await act(async () => operations.executeGraph());
-    expect(executionState.recordRunFailure).not.toHaveBeenCalled();
-    expect(executionState.failExecution).not.toHaveBeenCalled();
+    expect(executionState.applyRunEvent).not.toHaveBeenCalled();
     expect(executionState.markExecutionUnknown).toHaveBeenCalledWith(graphPath);
     expect(revealWorkbenchView).not.toHaveBeenCalledWith("output");
   });
@@ -220,9 +216,7 @@ describe("useProjectOperations execution demand", () => {
     resolveExecution();
     await act(async () => execution);
 
-    expect(executionState.setActiveRunId).not.toHaveBeenCalled();
-    expect(executionState.completeExecution).not.toHaveBeenCalled();
-    expect(executionState.failExecution).not.toHaveBeenCalled();
+    expect(executionState.applyRunEvent).not.toHaveBeenCalled();
     expect(executionState.interruptExecution).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,8 @@
-import { applyLogFilter, type LogDomainId } from "@/features/application/log";
+import type { LogDomainId } from "@/features/application/log";
 import { LogPanelStatus } from "./LogPanelStatus";
 import { LogPanelToolbar } from "./LogPanelToolbar";
-import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
 export function LogWorkspaceActions({ domain }: { readonly domain?: LogDomainId }) {
-  const { logs, filter } = useLogWorkspaceContext();
-  const filteredLogCount = domain ? applyLogFilter(logs, filter, domain).length : 0;
   return (
     <div
       data-yssbi-logs-header-actions
@@ -13,7 +10,7 @@ export function LogWorkspaceActions({ domain }: { readonly domain?: LogDomainId 
       onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      {domain ? <LogPanelStatus filteredLogCount={filteredLogCount} /> : null}
+      {domain ? <LogPanelStatus domain={domain} /> : null}
       {domain ? <LogPanelToolbar /> : null}
     </div>
   );

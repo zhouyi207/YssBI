@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { useDatabaseRead } from "@/features/core/database/read";
-import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
+import { selectDatabaseNames, useDatabaseRead } from "@/features/core/database/read";
+import { useDatabaseMetadata } from "@/features/application/dataManagement/databaseRead";
 import { chartUi } from "@/features/core/chart/ui";
 import { useChartDocumentLoad } from "@/features/application/chart/useChartDocumentLoad";
 import { Select } from "@/shared/ui";
@@ -16,6 +17,7 @@ import { DetailSectionHeader } from "../shared/DetailText";
 import { FileDetailPanel } from "./FileDetailPanel";
 
 const CHART_TYPES: ChartType[] = ["histogram", "scatter", "line"];
+const EMPTY_COLUMNS: readonly ColumnInfo[] = [];
 
 function isNumericType(type: string): boolean {
   const t = type.toLowerCase();
@@ -54,44 +56,29 @@ export function ChartDetailPanel(
 
 function ChartDetailForm({ chartPath, name, document }: ChartDetailPanelProps) {
   const { t } = useTranslation();
-  const dataframes = useDatabaseRead((snapshot) => snapshot.databases);
-  const databases = dataframes ?? {};
-
+  const databaseNames = useDatabaseRead(useShallow(selectDatabaseNames));
   const databaseOptions = useMemo(
-    () =>
-      Object.values(databases).map((db) => ({
-        label: (db as { name?: string }).name ?? (db as { id: string }).id,
-        value: (db as { id: string }).id,
-      })),
-    [databases],
+    () => Object.entries(databaseNames).map(([value, label]) => ({ value, label })),
+    [databaseNames],
   );
+  const columns = useDatabaseRead((snapshot) => snapshot.databases[document.databaseId]?.columns);
+  useDatabaseMetadata(document.databaseId || undefined, columns !== undefined);
 
-  const columns = useMemo(() => {
-    const db = document.databaseId
-      ? (databases[document.databaseId] as { columns?: ColumnInfo[] } | undefined)
-      : undefined;
-    return db?.columns ?? [];
-  }, [document.databaseId, databases]);
-
-  useEffect(() => {
-    const databaseId = document.databaseId;
-    if (!databaseId) return;
-    const existing = databases[databaseId] as { columns?: unknown[] } | undefined;
-    if (existing?.columns && existing.columns.length > 0) return;
-    let cancelled = false;
-    void hydrateDatabaseEditorMetadata(databaseId, () => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [document.databaseId, databases]);
-
-  const numericColumns = columns.filter((c) =>
-    c.semantic
-      ? c.semantic.kind === "Numeric" || c.semantic.kind === "Datetime"
-      : isNumericType(c.type),
-  );
-  const allColumnOptions = columns.map((c) => ({ label: c.name, value: c.name }));
-  const numericColumnOptions = numericColumns.map((c) => ({ label: c.name, value: c.name }));
+  const { allColumnOptions, numericColumnOptions } = useMemo(() => {
+    const allColumnOptions: { label: string; value: string }[] = [];
+    const numericColumnOptions: { label: string; value: string }[] = [];
+    for (const column of columns ?? EMPTY_COLUMNS) {
+      const option = { label: column.name, value: column.name };
+      allColumnOptions.push(option);
+      if (
+        column.semantic
+          ? column.semantic.kind === "Numeric" || column.semantic.kind === "Datetime"
+          : isNumericType(column.type)
+      )
+        numericColumnOptions.push(option);
+    }
+    return { allColumnOptions, numericColumnOptions };
+  }, [columns]);
 
   const patch = (changes: Parameters<typeof chartUi.updateDraft>[1]) => {
     chartUi.updateDraft(chartPath, changes);
@@ -161,7 +148,10 @@ function ChartDetailForm({ chartPath, name, document }: ChartDetailPanelProps) {
           <DetailSectionHeader level="subsection">{t("chartsSidebar.columns")}</DetailSectionHeader>
         </CardHeader>
         <CardContent className="px-3 pb-2 pt-1">
-          <DetailColumnList columns={columns} emptyMessage={t("chartsSidebar.noColumns")} />
+          <DetailColumnList
+            columns={columns ?? EMPTY_COLUMNS}
+            emptyMessage={t("chartsSidebar.noColumns")}
+          />
         </CardContent>
       </Card>
     </DetailPanelShell>

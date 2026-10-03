@@ -6,15 +6,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { DatabaseService } from "@/services/database/databaseService";
 import type { LoadDatabaseResult } from "@/shared/types/dto/database";
-import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
-import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRead";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
 import { ChartDetailPanel } from "./ChartDetailPanel";
 
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-vi.mock("@/features/core/database/read", () => ({
+vi.mock("@/features/core/database/read", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/core/database/read")>()),
   useDatabaseRead: (selector: (snapshot: { databases: Record<string, never> }) => unknown) =>
     selector({ databases: {} }),
 }));
@@ -49,6 +51,24 @@ describe("chart detail metadata lifecycle ownership", () => {
     vi.restoreAllMocks();
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useResourceStore.getState().clear();
+    useResourceStore.getState().setSnapshot({
+      databases: { sales: meta },
+      resources: [
+        {
+          id: "sales",
+          kind: "database",
+          name: "Sales",
+          revision: 1,
+          uri: resourceKey({ kind: "database", id: "sales" }),
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
+      ],
+    });
   });
 
   it("renders the separately supplied Rust name as read-only metadata", () => {
@@ -81,15 +101,15 @@ describe("chart detail metadata lifecycle ownership", () => {
     const request = deferred<LoadDatabaseResult>();
     vi.spyOn(DatabaseService, "getDatabaseMeta").mockReturnValue(request.promise);
     const isCancelled = vi.fn(() => false);
-    const updateDatabase = vi.spyOn(useDatabaseStore.getState(), "updateDatabase");
+    const updateDatabase = vi.spyOn(useResourceStore.getState(), "updateDatabaseMetadata");
 
     const completion = hydrateDatabaseEditorMetadata("sales", isCancelled);
-    expect(DatabaseService.getDatabaseMeta).toHaveBeenCalledWith(projectInstanceId, "sales");
+    expect(DatabaseService.getDatabaseMeta).toHaveBeenCalledWith(projectInstanceId, "sales", 1);
     projectPublicationCoordinator.startProject(replacementProjectInstanceId, 0);
     request.resolve(meta);
     await completion;
 
-    expect(isCancelled).toHaveBeenCalledOnce();
+    expect(isCancelled).toHaveBeenCalledTimes(2);
     expect(updateDatabase).not.toHaveBeenCalled();
   });
 });

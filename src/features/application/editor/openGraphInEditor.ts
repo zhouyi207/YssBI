@@ -1,9 +1,13 @@
 import type { WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewport";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
 import { revealActiveEditorDetails } from "./editorPanelActivation";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 export interface OpenGraphInEditorOptions {
   /** Insert a newly opened editor at this TabBar index. */
@@ -17,6 +21,7 @@ export async function openGraphInEditor(
   targetGroupId?: string,
   options?: OpenGraphInEditorOptions,
 ): Promise<WorkbenchEditorPanelInfo | null> {
+  const identity = captureProjectLifecycleState();
   logger.graph.trace(
     `openGraphInEditor called: path=${graphPath}, name=${name}, type=${type}`,
     "EditorPanelCommands",
@@ -30,11 +35,14 @@ export async function openGraphInEditor(
       insertIndex: options?.insertIndex,
     });
   } catch (error) {
+    if (!isProjectLifecycleStateCurrent(identity)) return null;
     if (isEditorOpenRejectionHandled(error)) return null;
     throw error;
   }
 
+  if (!isProjectLifecycleStateCurrent(identity)) return null;
   ensureEditorViewport(editorViewportScope(panel.groupId, graphPath));
+  if (!isProjectLifecycleStateCurrent(identity)) return null;
   await revealActiveEditorDetails(panel);
-  return panel;
+  return isProjectLifecycleStateCurrent(identity) ? panel : null;
 }

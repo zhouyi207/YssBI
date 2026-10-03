@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Background,
   Handle,
@@ -9,7 +17,10 @@ import {
   useReactFlow,
   useStoreApi,
   type NodeChange,
+  type Node,
   type NodeProps,
+  type NodeMouseHandler,
+  type OnMove,
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -20,7 +31,6 @@ import {
   type EditorPanelScope,
 } from "@/modules/workbench/public";
 import type { MindSnapshot } from "@/shared/types/domain/mind";
-import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
 import { mindActions, deleteMindNodes } from "@/features/application/resource/mindActions";
 import {
   revealDetails,
@@ -37,8 +47,12 @@ import {
 import { resolveCanvasShortcut } from "@/features/core/keyboard/canvasShortcut";
 import { EDITOR_VIEWPORT_SCALE_LIMITS } from "@/features/core/viewport/editorViewport";
 import { fitWorldBounds } from "@/features/core/viewport/fitViewport";
-import { flowCanvasInteractionProps } from "@/shared/ui/flowCanvasInteraction";
-import { projectMindMap } from "./mindProjection";
+import {
+  flowCanvasInteractionProps,
+  synchronizeFlowViewport,
+} from "@/shared/ui/flowCanvasInteraction";
+import { createFlowNodeViewProjector } from "@/shared/ui/flowNodeViewProjector";
+import { createMindMapProjector } from "./mindProjection";
 import { FileEditor } from "./FileEditor";
 
 function MindNodeView({ data, selected }: NodeProps) {
@@ -58,6 +72,8 @@ const nodeTypes = { mind: MindNodeView };
 type Gesture = { target: EditorCommandTarget; cancelled: boolean };
 type SelectionSnapshot = { nodeIds: string[]; shiftKey: boolean };
 const edgeOptions = { selectable: false, focusable: false };
+const proOptions = { hideAttribution: true };
+const noPositionOverrides: ReadonlyMap<string, Pick<Node, "position" | "dragging">> = new Map();
 
 function MindEditor({
   snapshot,
@@ -75,37 +91,46 @@ function MindEditor({
   const flowStore = useStoreApi();
   const canvasElement = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
-  const paneSelection = useEditorPaneStateStore((state) => state.selections[panelInstanceId]);
-  const selectedIds = useMemo(
-    () => paneSelection?.selectedNodeIds ?? EMPTY_EDITOR_PANE_SELECTION.selectedNodeIds,
-    [paneSelection],
+  const selectedIds = useEditorPaneStateStore(
+    (state) =>
+      state.selections[panelInstanceId]?.selectedNodeIds ??
+      EMPTY_EDITOR_PANE_SELECTION.selectedNodeIds,
   );
   const collapsedIds = useEditorPaneStateStore((state) => state.collapsedNodeIds[panelInstanceId]);
   const collapsed = useMemo(() => new Set(collapsedIds), [collapsedIds]);
-  const projection = useMemo(() => projectMindMap(mind, collapsed), [mind, collapsed]);
-  const [measurements, setMeasurements] = useState<
-    Record<string, { width: number; height: number }>
-  >({});
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
-  const viewportRef = useRef(viewport);
+  const projectMindMap = useMemo(createMindMapProjector, []);
+  const projection = useMemo(
+    () => projectMindMap(mind, collapsed),
+    [projectMindMap, mind, collapsed],
+  );
+  const nodeViews = useMemo(() => createFlowNodeViewProjector<Node>(), []);
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const nodeInputs = useRef({ model: projection, selectedNodeIds: selected });
+  const publishNodes = useCallback(() => {
+    const nodes = nodeViews.project({
+      ...nodeInputs.current,
+      positions: noPositionOverrides,
+      interactive: true,
+    });
+    const state = flowStore.getState();
+    if (state.nodes !== nodes) state.setNodes(nodes);
+  }, [nodeViews, flowStore]);
+  useLayoutEffect(() => {
+    nodeInputs.current = { model: projection, selectedNodeIds: selected };
+    publishNodes();
+  }, [projection, selected, publishNodes]);
+  const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const pan = useRef<(Gesture & { start: Viewport }) | null>(null);
   const selection = useRef<(Gesture & { before: SelectionSnapshot }) | null>(null);
   const selectionPointer = useRef<SelectionSnapshot | null>(null);
   const suppressClick = useRef(false);
-  const cancelRef = useRef<() => boolean>(() => false);
-  const nodes = useMemo(() => {
-    const selected = new Set(selectedIds);
-    return projection.nodes.map((item) => ({
-      ...item,
-      selected: selected.has(item.id),
-      measured: measurements[item.id],
-    }));
-  }, [projection.nodes, measurements, selectedIds]);
-
-  const readSelection = () =>
-    useEditorPaneStateStore.getState().selections[panelInstanceId]?.selectedNodeIds ??
-    EMPTY_EDITOR_PANE_SELECTION.selectedNodeIds;
-  const captureTarget = () => {
+  const readSelection = useCallback(
+    () =>
+      useEditorPaneStateStore.getState().selections[panelInstanceId]?.selectedNodeIds ??
+      EMPTY_EDITOR_PANE_SELECTION.selectedNodeIds,
+    [panelInstanceId],
+  );
+  const captureTarget = useCallback(() => {
     if (!isVisible) return null;
     const target = captureEditorCommandTarget(panelInstanceId);
     return target?.resourceKind === "mind" &&
@@ -113,34 +138,40 @@ function MindEditor({
       isEditorCommandTargetCurrent(target)
       ? target
       : null;
-  };
-  const setSelection = (ids: string[]) => {
-    const current = readSelection();
-    if (current.length !== ids.length || current.some((id, index) => id !== ids[index]))
+  }, [isVisible, panelInstanceId, snapshot.path]);
+  const setSelection = useCallback(
+    (ids: string[]) => {
       useEditorPaneStateStore.getState().setSelectedNodeIds(panelInstanceId, ids);
-    setInspectionContext(
-      { resourceKind: "mind", resourceRef: snapshot.path, panelInstanceId },
-      ids,
-    );
-  };
-  const run = (operation: () => Promise<unknown>) => {
-    void operation().catch((error) => {
-      if (mounted.current) reportError(error);
-    });
-  };
-  const restoreViewport = (next: Viewport) => {
-    viewportRef.current = next;
-    setViewport(next);
-    flowStore.getState().panZoom?.syncViewport(next);
-  };
-  const resetSelectionOverlay = () => {
+      setInspectionContext(
+        { resourceKind: "mind", resourceRef: snapshot.path, panelInstanceId },
+        ids,
+      );
+    },
+    [panelInstanceId, snapshot.path],
+  );
+  const run = useCallback(
+    (operation: () => Promise<unknown>) => {
+      void operation().catch((error) => {
+        if (mounted.current) reportError(error);
+      });
+    },
+    [reportError],
+  );
+  const restoreViewport = useCallback(
+    (next: Viewport) => {
+      viewportRef.current = next;
+      synchronizeFlowViewport(flowStore, next);
+    },
+    [flowStore],
+  );
+  const resetSelectionOverlay = useCallback(() => {
     flowStore.setState({
       userSelectionActive: false,
       userSelectionRect: null,
       nodesSelectionActive: false,
     });
-  };
-  const cancelGesture = () => {
+  }, [flowStore]);
+  const cancelGesture = useCallback(() => {
     let cancelled = false;
     if (pan.current && !pan.current.cancelled) {
       pan.current.cancelled = true;
@@ -159,11 +190,17 @@ function MindEditor({
     }
     if (cancelled) suppressClick.current = true;
     return cancelled;
-  };
-  cancelRef.current = cancelGesture;
+  }, [
+    flowStore,
+    restoreViewport,
+    resetSelectionOverlay,
+    panelInstanceId,
+    snapshot.path,
+    setSelection,
+  ]);
   useEffect(() => {
-    if (!isVisible) cancelRef.current();
-  }, [isVisible]);
+    if (!isVisible) cancelGesture();
+  }, [isVisible, cancelGesture]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -171,42 +208,28 @@ function MindEditor({
     };
   }, []);
 
-  const onNodesChange = (changes: NodeChange[]) => {
-    const dimensions = changes.filter((change) => change.type === "dimensions");
-    if (dimensions.length)
-      setMeasurements((current) => {
-        let next = current;
-        for (const change of dimensions) {
-          const size = change.dimensions;
-          if (
-            !size ||
-            !Number.isFinite(size.width) ||
-            !Number.isFinite(size.height) ||
-            size.width <= 0 ||
-            size.height <= 0
-          )
-            continue;
-          if (
-            current[change.id]?.width === size.width &&
-            current[change.id]?.height === size.height
-          )
-            continue;
-          if (next === current) next = { ...current };
-          next[change.id] = { width: size.width, height: size.height };
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      if (selection.current && !isEditorCommandTargetCurrent(selection.current.target))
+        cancelGesture();
+      const dimensions = changes.filter((change) => change.type === "dimensions");
+      const measured = dimensions.length > 0 && nodeViews.updateMeasurements(dimensions);
+      const selectionChanges = changes.filter((change) => change.type === "select");
+      let selectionChanged = false;
+      if (captureTarget() && selectionChanges.length && !selection.current?.cancelled) {
+        const ids = new Set(readSelection());
+        for (const change of selectionChanges) {
+          if (change.selected) ids.add(change.id);
+          else ids.delete(change.id);
         }
-        return next;
-      });
-    if (!captureTarget()) return;
-    const selectionChanges = changes.filter((change) => change.type === "select");
-    if (selectionChanges.length && !selection.current?.cancelled) {
-      const ids = new Set(readSelection());
-      for (const change of selectionChanges) {
-        if (change.selected) ids.add(change.id);
-        else ids.delete(change.id);
+        setSelection([...ids]);
+        nodeInputs.current = { ...nodeInputs.current, selectedNodeIds: ids };
+        selectionChanged = true;
       }
-      setSelection([...ids]);
-    }
-  };
+      if (measured || selectionChanged) publishNodes();
+    },
+    [nodeViews, captureTarget, readSelection, setSelection, publishNodes, cancelGesture],
+  );
   const fitNodes = (ids?: readonly string[]) => {
     const selected = ids ? new Set(ids) : null;
     const visibleNodes = flow.getNodes().filter((node) => !selected || selected.has(node.id));
@@ -226,6 +249,128 @@ function MindEditor({
     if (pan.current?.cancelled) pan.current.start = view;
     restoreViewport(view);
   };
+
+  const onNodeClick = useCallback<NodeMouseHandler>(
+    (event) => {
+      if (
+        event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        suppressClick.current ||
+        !captureTarget()
+      )
+        return;
+      run(() =>
+        revealDetails(detailFocusForEditorResource("mind", snapshot.path, panelInstanceId)),
+      );
+    },
+    [captureTarget, run, snapshot.path, panelInstanceId],
+  );
+  const onSelectionStart = useCallback(() => {
+    const target = captureTarget();
+    if (!target) return;
+    const before = selectionPointer.current ?? { nodeIds: [...readSelection()], shiftKey: false };
+    selection.current = { target, before, cancelled: false };
+  }, [captureTarget, readSelection]);
+  const onPointerUp = useCallback(() => {
+    if (selection.current && !isEditorCommandTargetCurrent(selection.current.target))
+      cancelGesture();
+    // React Flow enables its group overlay after onSelectionEnd, before pointerup bubbles here.
+    resetSelectionOverlay();
+    selection.current = null;
+    selectionPointer.current = null;
+  }, [resetSelectionOverlay, cancelGesture]);
+  const onPointerCancel = useCallback(() => {
+    cancelGesture();
+    onPointerUp();
+  }, [cancelGesture, onPointerUp]);
+  const onPaneClick = useCallback(
+    (event: ReactMouseEvent) => {
+      if (!event.shiftKey && !suppressClick.current && captureTarget()) setSelection([]);
+    },
+    [captureTarget, setSelection],
+  );
+  const onContextMenuCapture = useCallback((event: ReactMouseEvent) => event.preventDefault(), []);
+  const onPointerDownCapture = useCallback(
+    (event: ReactPointerEvent) => {
+      suppressClick.current = false;
+      if (pan.current?.cancelled) {
+        pan.current = null;
+        restoreViewport(viewportRef.current);
+      }
+      if (selection.current?.cancelled) selection.current = null;
+      const target = event.target instanceof Element ? event.target : null;
+      selectionPointer.current =
+        event.button === 0 && target?.classList.contains("react-flow__pane")
+          ? { nodeIds: [...readSelection()], shiftKey: event.shiftKey }
+          : null;
+    },
+    [restoreViewport, readSelection],
+  );
+  const onPointerUpCapture = useCallback(
+    (event: ReactPointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const before = selectionPointer.current;
+      if (
+        event.button !== 0 ||
+        !target?.classList.contains("react-flow__pane") ||
+        (!selection.current?.cancelled && (selection.current || !before?.shiftKey))
+      )
+        return;
+      resetSelectionOverlay();
+      selection.current = null;
+      selectionPointer.current = null;
+      suppressClick.current = true;
+      if (target.hasPointerCapture?.(event.pointerId))
+        target.releasePointerCapture(event.pointerId);
+      event.stopPropagation();
+    },
+    [resetSelectionOverlay],
+  );
+  const onClickCapture = useCallback((event: ReactMouseEvent) => {
+    if (!suppressClick.current) return;
+    suppressClick.current = false;
+    event.stopPropagation();
+  }, []);
+  const onMoveStart = useCallback<OnMove>(
+    (event) => {
+      if (
+        !event ||
+        typeof event.type !== "string" ||
+        (selection.current && !selection.current.cancelled)
+      )
+        return;
+      const target = captureTarget();
+      if (target) pan.current = { target, start: { ...viewportRef.current }, cancelled: false };
+    },
+    [captureTarget],
+  );
+  const onMove = useCallback<OnMove>(
+    (event, next) => {
+      if (
+        event &&
+        typeof event.type === "string" &&
+        (!isVisible ||
+          pan.current?.cancelled ||
+          (pan.current && !isEditorCommandTargetCurrent(pan.current.target)))
+      ) {
+        restoreViewport(viewportRef.current);
+        return;
+      }
+      viewportRef.current = next;
+    },
+    [isVisible, restoreViewport],
+  );
+  const onMoveEnd = useCallback<OnMove>(
+    (event) => {
+      if (!event || typeof event.type !== "string") return;
+      const current = pan.current;
+      pan.current = null;
+      if (current && (current.cancelled || !isEditorCommandTargetCurrent(current.target)))
+        restoreViewport(current.cancelled ? viewportRef.current : current.start);
+    },
+    [restoreViewport],
+  );
 
   return (
     <div
@@ -269,121 +414,28 @@ function MindEditor({
         id={panelInstanceId}
         {...flowCanvasInteractionProps(isVisible)}
         nodesDraggable={false}
-        nodes={nodes}
         edges={projection.edges}
         nodeTypes={nodeTypes}
         defaultEdgeOptions={edgeOptions}
-        proOptions={{ hideAttribution: true }}
+        proOptions={proOptions}
         fitView
         minZoom={EDITOR_VIEWPORT_SCALE_LIMITS.min}
         maxZoom={EDITOR_VIEWPORT_SCALE_LIMITS.max}
-        viewport={viewport}
         nodesConnectable={false}
         edgesReconnectable={false}
         onNodesChange={onNodesChange}
-        onNodeClick={(event) => {
-          if (
-            event.shiftKey ||
-            event.ctrlKey ||
-            event.metaKey ||
-            suppressClick.current ||
-            !captureTarget()
-          )
-            return;
-          run(() =>
-            revealDetails(detailFocusForEditorResource("mind", snapshot.path, panelInstanceId)),
-          );
-        }}
-        onSelectionStart={() => {
-          const target = captureTarget();
-          if (!target) return;
-          const before = selectionPointer.current ?? {
-            nodeIds: [...readSelection()],
-            shiftKey: false,
-          };
-          selection.current = { target, before, cancelled: false };
-        }}
-        onPointerUp={() => {
-          // React Flow enables its group overlay after onSelectionEnd, before pointerup bubbles here.
-          resetSelectionOverlay();
-          selection.current = null;
-          selectionPointer.current = null;
-        }}
-        onPointerCancel={() => {
-          cancelGesture();
-          resetSelectionOverlay();
-          selection.current = null;
-          selectionPointer.current = null;
-        }}
-        onPaneClick={(event) => {
-          if (!event.shiftKey && !suppressClick.current && captureTarget()) setSelection([]);
-        }}
-        onContextMenuCapture={(event) => event.preventDefault()}
-        onPointerDownCapture={(event) => {
-          suppressClick.current = false;
-          if (pan.current?.cancelled) {
-            pan.current = null;
-            restoreViewport(viewportRef.current);
-          }
-          if (selection.current?.cancelled) selection.current = null;
-          const target = event.target instanceof Element ? event.target : null;
-          selectionPointer.current =
-            event.button === 0 && target?.classList.contains("react-flow__pane")
-              ? {
-                  nodeIds: [...readSelection()],
-                  shiftKey: event.shiftKey,
-                }
-              : null;
-        }}
-        onPointerUpCapture={(event) => {
-          const target = event.target instanceof Element ? event.target : null;
-          const before = selectionPointer.current;
-          if (
-            event.button !== 0 ||
-            !target?.classList.contains("react-flow__pane") ||
-            (!selection.current?.cancelled && (selection.current || !before?.shiftKey))
-          )
-            return;
-          resetSelectionOverlay();
-          selection.current = null;
-          selectionPointer.current = null;
-          suppressClick.current = true;
-          if (target.hasPointerCapture?.(event.pointerId))
-            target.releasePointerCapture(event.pointerId);
-          event.stopPropagation();
-        }}
-        onClickCapture={(event) => {
-          if (!suppressClick.current) return;
-          suppressClick.current = false;
-          event.stopPropagation();
-        }}
-        onMoveStart={(event) => {
-          if (
-            !event ||
-            typeof event.type !== "string" ||
-            (selection.current && !selection.current.cancelled)
-          )
-            return;
-          const target = captureTarget();
-          if (target) pan.current = { target, start: { ...viewportRef.current }, cancelled: false };
-        }}
-        onViewportChange={(next) => {
-          if (
-            !isVisible ||
-            pan.current?.cancelled ||
-            (pan.current && !isEditorCommandTargetCurrent(pan.current.target))
-          )
-            return;
-          viewportRef.current = next;
-          setViewport(next);
-        }}
-        onMoveEnd={(event) => {
-          if (!event || typeof event.type !== "string") return;
-          const current = pan.current;
-          pan.current = null;
-          if (current && (current.cancelled || !isEditorCommandTargetCurrent(current.target)))
-            restoreViewport(current.cancelled ? viewportRef.current : current.start);
-        }}
+        onNodeClick={onNodeClick}
+        onSelectionStart={onSelectionStart}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onPaneClick={onPaneClick}
+        onContextMenuCapture={onContextMenuCapture}
+        onPointerDownCapture={onPointerDownCapture}
+        onPointerUpCapture={onPointerUpCapture}
+        onClickCapture={onClickCapture}
+        onMoveStart={onMoveStart}
+        onMove={onMove}
+        onMoveEnd={onMoveEnd}
       >
         <Background />
       </ReactFlow>
@@ -395,7 +447,6 @@ export function MindFileEditor(scope: EditorPanelScope<"mind">) {
   return (
     <FileEditor
       {...scope}
-      store={useMindProjectionStore}
       actions={mindActions}
       renderContent={(snapshot, reportError) => (
         <ReactFlowProvider key={snapshot.version.sessionId}>

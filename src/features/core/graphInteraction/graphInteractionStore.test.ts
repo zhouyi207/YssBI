@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getCanvasInteraction, useGraphInteractionStore } from "./graphInteractionStore";
+import { clearCanvasInteractionGraph } from "@/features/core/canvas/canvasInteractionCleanup";
 
 beforeEach(() => useGraphInteractionStore.setState({ interactions: {} }));
 
@@ -22,7 +23,7 @@ describe("graph interaction ownership", () => {
     expect(getCanvasInteraction(useGraphInteractionStore.getState(), "two", "b").type).toBe(
       "selecting",
     );
-    store.clearGraphInteraction("two");
+    clearCanvasInteractionGraph("two");
     expect(useGraphInteractionStore.getState().interactions.two).toBeUndefined();
   });
 });

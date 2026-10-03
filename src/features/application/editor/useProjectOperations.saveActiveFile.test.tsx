@@ -53,7 +53,7 @@ vi.mock("./blockingErrorDialog", () => ({
   showBlockingIpcError: mocks.showBlockingIpcError,
 }));
 
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: {
     app: { error: vi.fn() },
     exec: { info: vi.fn(), error: vi.fn() },

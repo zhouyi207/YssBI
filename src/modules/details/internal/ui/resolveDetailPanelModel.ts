@@ -1,22 +1,18 @@
 import type { DetailTarget } from "@/features/core/editor/detail/detailTypes";
 import type { ResourceKind } from "@/shared/types/domain/resource";
 import type { FunctionResourceView } from "@/features/core/resource/functionResourceView";
-import type { GraphResourceRecord } from "@/features/core/resource/resourceSelectors";
 import type { FunctionPinSpec } from "@/shared/types/domain/graph";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { LogRecordDto } from "@/shared/types/domain/log";
 
-export interface DetailCatalogSnapshot {
-  eventGraphs: GraphResourceRecord;
-  /** 已合并名称 + 签名（`useFunctionCatalog` / `FunctionResourceView`） */
-  functionGraphs: Record<string, FunctionResourceView>;
-  dataframes: Record<string, DatabaseRecord>;
-}
-
-export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
+export interface DetailPanelResolveInput {
   target: DetailTarget | null;
   selectedLog: LogRecordDto | null;
+  eventName: string | null;
+  functionGraph: FunctionResourceView | null;
+  dataframe: DeepReadonly<DatabaseRecord> | null;
   chartDocument: ChartDocument | null;
   chartName: string | null;
 }
@@ -38,11 +34,11 @@ export type DetailPanelModel =
   | { kind: "mind"; path: string; panelInstanceId: string; nodeId: string | null }
   | { kind: "doc"; path: string }
   | { kind: "unavailable"; resourceKind: ResourceKind; resourceRef: string }
-  | { kind: "data"; id: string; dataframe: DatabaseRecord };
+  | { kind: "data"; id: string; dataframe: DeepReadonly<DatabaseRecord> };
 
-/** target + 目录快照 → Detail 面板判别联合（无回调，纯数据） */
+/** target + 当前目标的只读数据 → Detail 面板判别联合（无回调，纯数据） */
 export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailPanelModel {
-  const { target, selectedLog, eventGraphs, functionGraphs, dataframes, chartDocument } = input;
+  const { target, selectedLog, eventName, functionGraph, dataframe, chartDocument } = input;
 
   if (!target) return { kind: "empty" };
 
@@ -54,22 +50,20 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
     case "nodeDefinition":
       return { kind: "nodeDefinition", nodeType: target.nodeType };
     case "event_graph": {
-      const event = eventGraphs[target.path];
-      return event
-        ? { kind: "event_graph", path: target.path, event: { name: event.name } }
+      return eventName !== null
+        ? { kind: "event_graph", path: target.path, event: { name: eventName } }
         : { kind: "unavailable", resourceKind: "event_graph", resourceRef: target.path };
     }
     case "function_graph": {
-      const fnRecord = functionGraphs[target.path];
-      if (!fnRecord)
+      if (!functionGraph)
         return { kind: "unavailable", resourceKind: "function_graph", resourceRef: target.path };
       return {
         kind: "function_graph",
         path: target.path,
         fn: {
-          name: fnRecord.name,
-          inputs: fnRecord.functionInputs,
-          outputs: fnRecord.functionOutputs,
+          name: functionGraph.name,
+          inputs: functionGraph.functionInputs,
+          outputs: functionGraph.functionOutputs,
         },
       };
     }
@@ -90,7 +84,6 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
     case "doc":
       return { kind: "doc", path: target.path };
     case "data": {
-      const dataframe = dataframes[target.id];
       return dataframe
         ? { kind: "data", id: target.id, dataframe }
         : { kind: "unavailable", resourceKind: "database", resourceRef: target.id };

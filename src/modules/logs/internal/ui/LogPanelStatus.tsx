@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useFilteredLogs, useLiveLogs, type LogDomainId } from "@/features/application/log";
 import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
 const STATUS_COLOR = {
@@ -8,23 +9,27 @@ const STATUS_COLOR = {
 } as const;
 
 export interface LogPanelStatusProps {
-  readonly filteredLogCount: number;
+  readonly domain: LogDomainId;
 }
 
-export function LogPanelStatus({ filteredLogCount }: LogPanelStatusProps) {
+export function LogPanelStatus({ domain }: LogPanelStatusProps) {
   const { t } = useTranslation();
-  const { logs, subscriptionStatus, continuity } = useLogWorkspaceContext();
+  const { subscriptionStatus } = useLogWorkspaceContext();
+  const filteredLogCount = useFilteredLogs(domain, (entries) => entries.length);
+  const totalLogCount = useLiveLogs((snapshot) => snapshot.entries.length);
+  const truncated = useLiveLogs((snapshot) => snapshot.truncated);
+  const showTruncated = truncated && subscriptionStatus !== "error";
 
   return (
     <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
       <span
-        className={`size-1.5 shrink-0 rounded-full ${continuity === "truncated" ? "bg-amber-400" : STATUS_COLOR[subscriptionStatus]}`}
+        className={`size-1.5 shrink-0 rounded-full ${showTruncated ? "bg-amber-400" : STATUS_COLOR[subscriptionStatus]}`}
         aria-hidden
       />
       <span className="truncate">
-        {t("log.showCount", { filtered: filteredLogCount, total: logs.length })}
+        {t("log.showCount", { filtered: filteredLogCount, total: totalLogCount })}
       </span>
-      {continuity === "truncated" ? (
+      {showTruncated ? (
         <span
           role="status"
           className="truncate text-amber-600 dark:text-amber-400"

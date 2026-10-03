@@ -5,14 +5,11 @@ import {
   getEditorGroupGraphSelection,
 } from "@/modules/workbench/public";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
-import { useModifierKeyStore } from "@/features/core/keyboard";
 import { resolveCanvasShortcut } from "@/features/core/keyboard/canvasShortcut";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import {
-  isGraphSaving,
-  useGraphProjectionStore,
-} from "@/features/core/dataStore/graphProjectionStore";
+import { isGraphSaving } from "@/features/core/graph/read";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
@@ -86,20 +83,11 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
   const lastMousePosRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    const setModifierKeys = useModifierKeyStore.getState().setModifierKeys;
-    const resetModifierKeys = useModifierKeyStore.getState().resetModifierKeys;
-
     const handlePointerMove = (event: PointerEvent) => {
       lastMousePosRef.current = { x: event.clientX, y: event.clientY };
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      setModifierKeys({
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        shiftKey: event.shiftKey,
-      });
-
       if (shouldIgnoreEditorShortcutEvent(event)) return;
 
       const isControlKey = event.ctrlKey || event.metaKey;
@@ -174,7 +162,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "z") {
         const target = currentEditorCommandTarget(event);
         if (!target) return;
-        const session = useGraphProjectionStore.getState().sessions[target.resourceRef];
+        const session = useResourceStore.getState().sessions[target.resourceRef];
         const canUndo = Boolean(session?.canUndo);
         const canRedo = Boolean(session?.canRedo);
         if (!session?.saving && (event.shiftKey ? canRedo : canUndo)) {
@@ -188,7 +176,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "y") {
         const target = currentEditorCommandTarget(event);
         if (!target) return;
-        const session = useGraphProjectionStore.getState().sessions[target.resourceRef];
+        const session = useResourceStore.getState().sessions[target.resourceRef];
         if (session?.canRedo && !session.saving) {
           event.preventDefault();
           void commands.redo(target);
@@ -298,32 +286,16 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
     };
 
-    const handleKeyUp = (event: KeyboardEvent) => {
-      setModifierKeys({
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        shiftKey: event.shiftKey,
-      });
-    };
-
-    const handleBlur = () => {
-      resetModifierKeys();
-    };
-
     const cleanupKeyDown = addGlobalEventListener(window, "keydown", handleKeyDown, {
       capture: true,
     });
-    const cleanupKeyUp = addGlobalEventListener(window, "keyup", handleKeyUp, { capture: true });
     const cleanupPointerMove = addGlobalEventListener(window, "pointermove", handlePointerMove, {
       capture: true,
     });
-    const cleanupBlur = addGlobalEventListener(window, "blur", handleBlur);
 
     return () => {
       cleanupKeyDown();
-      cleanupKeyUp();
       cleanupPointerMove();
-      cleanupBlur();
     };
   }, [commands]);
 }

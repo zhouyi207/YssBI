@@ -1,5 +1,6 @@
 import { LogService } from "@/services/log";
 import { createFrontendLogBatcher } from "@/utils/frontendLogBatcher";
+import { bindFrontendLogSink } from "@/utils/frontendLogger";
 import { consoleMessage, installConsoleLogCapture } from "@/utils/consoleLogCapture";
 import { isBenignTauriCallbackWarning } from "@/shared/platform/tauriWebview";
 import {
@@ -10,22 +11,22 @@ import {
   isFrontendLogEnabled,
 } from "@/utils/logConfig";
 
-export const frontendLogBatcher = createFrontendLogBatcher({
-  maxBatchEntries: FRONTEND_LOG_BATCH_MAX_ENTRIES,
-  maxPendingEntries: FRONTEND_LOG_BATCH_MAX_PENDING,
-  maxDelayMs: FRONTEND_LOG_BATCH_MAX_DELAY_MS,
-  maxMessageBytes: FRONTEND_LOG_MESSAGE_MAX_BYTES,
-  submit: (entries) => LogService.submitFrontendLogs(entries),
-});
-
-let disposeCapture: (() => void) | undefined;
+let disposeLogging: (() => void) | undefined;
 
 export function installFrontendLogging(): () => void {
-  if (disposeCapture) return disposeCapture;
+  if (disposeLogging) return disposeLogging;
+  const batcher = createFrontendLogBatcher({
+    maxBatchEntries: FRONTEND_LOG_BATCH_MAX_ENTRIES,
+    maxPendingEntries: FRONTEND_LOG_BATCH_MAX_PENDING,
+    maxDelayMs: FRONTEND_LOG_BATCH_MAX_DELAY_MS,
+    maxMessageBytes: FRONTEND_LOG_MESSAGE_MAX_BYTES,
+    submit: (entries) => LogService.submitFrontendLogs(entries),
+  });
+  const stopLogger = bindFrontendLogSink(batcher.enqueue);
   const stopCapture = installConsoleLogCapture((level, args) => {
     if (!isFrontendLogEnabled(level)) return;
     if (import.meta.hot && isBenignTauriCallbackWarning(args)) return;
-    frontendLogBatcher.enqueue({
+    batcher.enqueue({
       level,
       domain: "ui",
       target: "frontend.console",
@@ -33,17 +34,18 @@ export function installFrontendLogging(): () => void {
       fields: {},
     });
   });
-  disposeCapture = () => {
+  const dispose = () => {
+    stopLogger();
     stopCapture();
-    disposeCapture = undefined;
+    batcher.dispose();
+    if (disposeLogging === dispose) disposeLogging = undefined;
   };
-  return disposeCapture;
+  disposeLogging = dispose;
+  return dispose;
 }
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    disposeCapture?.();
-    disposeCapture = undefined;
-    frontendLogBatcher.dispose();
+    disposeLogging?.();
   });
 }

@@ -63,9 +63,28 @@ Rust 使用普通 tracing 宏；显式 `log_domain`、`log_event`、`log_source`
 
 前端通过已有 logger 或 `LogService.submitFrontendLogs` 提交记录，经同一有界批次链进入日志插件。显式结构化记录可包含 event 和 fields；客户端不指定 origin、timestamp 或 sequence。Logs 的订阅、历史查询和统计统一使用 `plugin:tracing|` 命令。Application 不注册另一套运行诊断命令、runtime 或 buffer。
 
+前端各层共用 [`utils/frontendLogger.ts`](../../../utils/frontendLogger.ts) 生成记录：统一执行级别过滤、
+domain/source 编码和 console 回显，回显期间抑制 console 再捕获。该模块只依赖共享日志契约、
+日志配置及 console 工具，不依赖 Application、IPC 或业务 Store；Core 和共享 Markdown 不再各自
+实现 logger 或反向引用应用层。原生 console 消息仍以 `ui / frontend.console` 进入现有捕获路径，
+带类型的 Core 日志保留自己的领域和来源，不通过解析 console 前缀重建元数据。
+
+`frontendLogTransport` 是连接这些记录与 LogService 的 Application owner。`app/main.tsx` 在渲染前
+调用 `installFrontendLogging`；同一安装同时拥有 logger 的单一发送回调、console 捕获和一个现有
+batcher 实例。重复安装复用当前清理函数；释放/HMR 解除两种入口，并释放定时器与尚未发送的记录。
+迟到的旧清理不能解除新安装，已经提交给 IPC 的请求不由前端撤回。未安装或释放后仍保留 console
+回显，不建立第二个队列。这个回调是启动期传输依赖，不是日志 Store、订阅广播或业务状态。
+
 前端批量发送的条数、队列、延迟和消息字节限制统一由 `src/utils/logConfig.ts` 定义，日志传输和测试共用这一入口；Logs 面板的 recent buffer 与行高配置由 `src/shared/config-default/log.ts` 拥有。
 
 运行观测遵循日志级别过滤、SQLite 持久化及存储故障语义。字段仅保留排障所需的 ID、计数、阶段和安全错误代码。业务校验结果、Graph Problems、模型诊断、运行状态与 Results 仍从业务接口获取；用户反馈由 typed outcome 驱动。
+
+Application 的异常日志复用 `errorReference.ts` 的 IPC 归一化与 `formatApplicationIpcError`，
+仅格式化受识别的 code 和 incidentId。原始 Error.message、cause、details、任意对象的 code 和
+字符串异常不进入日志文案；未识别异常沿已有 transport/malformed 分类记录。明确的业务 outcome
+与安全诊断继续使用其领域契约，不把 typed status 重新当作未知 IPC 异常。
+报告校验日志只取已验证的结果、运行、节点身份和报告/值种类，不序列化诊断的自由文本。
+console 捕获的 Error 只记为 `[Error]`，不读取 name、message 或 cause；原生浏览器 console 仍接收原参数。
 
 ## User feedback
 

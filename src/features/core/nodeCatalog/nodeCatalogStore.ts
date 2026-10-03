@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { produce } from "immer";
 import type { ErrorReference } from "@/shared/types/domain/errorReference";
 import type {
   LocalizedCatalogCategory,
@@ -172,26 +173,23 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
       }
       stored = true;
       const responseKey = catalogResponseKey(response);
-      return {
-        responses: { ...state.responses, [responseKey]: response },
-        projectWatermarks: {
-          ...state.projectWatermarks,
-          [identity.projectInstanceId]: Math.max(
-            state.projectWatermarks[identity.projectInstanceId] ?? 0,
-            response.resourcePublicationRevision,
-          ),
-        },
-        requests: {
-          ...state.requests,
-          [catalogRequestKey(identity.projectInstanceId, identity.locale)]: {
-            status: "ready",
-            responseKey,
-            error: null,
-            requestGeneration: identity.requestGeneration,
-            minimumResourcePublicationRevision: identity.minimumResourcePublicationRevision,
-          },
-        },
-      };
+      return produce(state, (draft) => {
+        // A response key includes its project and locale, so only this request owns it.
+        if (request.responseKey && request.responseKey !== responseKey)
+          delete draft.responses[request.responseKey];
+        draft.responses[responseKey] = response;
+        draft.projectWatermarks[identity.projectInstanceId] = Math.max(
+          state.projectWatermarks[identity.projectInstanceId] ?? 0,
+          response.resourcePublicationRevision,
+        );
+        draft.requests[requestKey] = {
+          status: "ready",
+          responseKey,
+          error: null,
+          requestGeneration: identity.requestGeneration,
+          minimumResourcePublicationRevision: identity.minimumResourcePublicationRevision,
+        };
+      });
     });
     return stored;
   },
@@ -221,42 +219,36 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
 
   observeResourcePublication: (projectInstanceId, revision, indexInvalidated = false) => {
     let advanced = false;
-    set((state) => {
-      const currentRevision = state.projectWatermarks[projectInstanceId] ?? 0;
-      if (!Number.isSafeInteger(revision) || revision < 0) return state;
-      const minimumRevision = Math.max(revision, currentRevision);
-      advanced = minimumRevision > currentRevision || indexInvalidated;
-      const requests = { ...state.requests };
-      for (const [key, request] of Object.entries(requests)) {
-        const [requestProject] = JSON.parse(key) as [string, string];
-        if (
-          requestProject !== projectInstanceId ||
-          (request.minimumResourcePublicationRevision >= minimumRevision && !indexInvalidated)
-        )
-          continue;
-        const cached = request.responseKey ? state.responses[request.responseKey] : null;
-        const fresh =
-          !indexInvalidated &&
-          request.status === "ready" &&
-          cached &&
-          cached.resourcePublicationRevision >= minimumRevision;
-        requests[key] = fresh
-          ? { ...request, minimumResourcePublicationRevision: minimumRevision }
-          : {
-              ...request,
-              status: "idle",
-              error: null,
-              requestGeneration: null,
-              minimumResourcePublicationRevision: minimumRevision,
-            };
-        advanced = true;
-      }
-      if (!advanced) return state;
-      return {
-        projectWatermarks: { ...state.projectWatermarks, [projectInstanceId]: minimumRevision },
-        requests,
-      };
-    });
+    set(
+      produce((state: NodeCatalogState) => {
+        const currentRevision = state.projectWatermarks[projectInstanceId] ?? 0;
+        if (!Number.isSafeInteger(revision) || revision < 0) return;
+        const minimumRevision = Math.max(revision, currentRevision);
+        advanced = minimumRevision > currentRevision || indexInvalidated;
+        for (const [key, request] of Object.entries(state.requests)) {
+          const [requestProject] = JSON.parse(key) as [string, string];
+          if (
+            requestProject !== projectInstanceId ||
+            (request.minimumResourcePublicationRevision >= minimumRevision && !indexInvalidated)
+          )
+            continue;
+          const cached = request.responseKey ? state.responses[request.responseKey] : null;
+          const fresh =
+            !indexInvalidated &&
+            request.status === "ready" &&
+            cached &&
+            cached.resourcePublicationRevision >= minimumRevision;
+          request.minimumResourcePublicationRevision = minimumRevision;
+          if (!fresh) {
+            request.status = "idle";
+            request.error = null;
+            request.requestGeneration = null;
+          }
+          advanced = true;
+        }
+        if (advanced) state.projectWatermarks[projectInstanceId] = minimumRevision;
+      }),
+    );
     return advanced;
   },
 

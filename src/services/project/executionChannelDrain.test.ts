@@ -4,7 +4,9 @@ import { createExecutionStreamDrain } from "./executionChannelDrain";
 
 function runEvent(kind: RunEventKind): RunEvent {
   return {
+    resultRevision: "1",
     run: {
+      semanticInputHash: "0".repeat(64),
       executionSessionId: "project-session-1",
       graphPath: "events/Main.yssbi-event",
       runId: "41",
@@ -45,6 +47,7 @@ describe("createExecutionStreamDrain", () => {
 
     drain.onmessage(runEvent({ type: "runCompleted" }));
     await wait;
+    drain.onmessage(runEvent({ type: "runStarted", outputs: [] }));
 
     expect(recording).toEqual(["runStarted", "resultInspectionRequested", "runCompleted"]);
   });
@@ -87,17 +90,21 @@ describe("createExecutionStreamDrain", () => {
     const malformed = { ...runEvent({ type: "runCompleted" }), extra: true };
 
     expect(() => (drain.onmessage as (value: unknown) => void)(malformed)).not.toThrow();
+    drain.onmessage(runEvent({ type: "runStarted", outputs: [] }));
 
-    expect(callback).not.toHaveBeenCalled();
     await expect(wait).rejects.toThrow("Invalid run event");
+    expect(callback).not.toHaveBeenCalled();
   });
 
   it("rejects a pending waiter when its channel is disposed", async () => {
-    const drain = createExecutionStreamDrain();
+    const callback = vi.fn();
+    const drain = createExecutionStreamDrain(callback);
     const wait = drain.waitForStreamEnd();
 
     drain.dispose();
+    drain.onmessage(runEvent({ type: "runStarted", outputs: [] }));
 
     await expect(wait).rejects.toMatchObject({ code: "execution_channel_disposed" });
+    expect(callback).not.toHaveBeenCalled();
   });
 });

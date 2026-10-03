@@ -7,11 +7,7 @@ import { isRerouteNodeView } from "@/features/core/dataStore/nodeView";
 import { useShallow } from "zustand/react/shallow";
 import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
 import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
-import {
-  getNodeBackgroundStyle,
-  getNodeClassName,
-  getNodeMinSize,
-} from "@/features/domain/node/utils";
+import { getNodeBackgroundStyle, getNodeClassName, getNodeMinSize } from "./nodeAppearance";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NodeContextMenu } from "../ContextMenu";

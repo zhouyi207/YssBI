@@ -1,4 +1,5 @@
-import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { resourceKey } from "@/features/core/resource/resourceTypes";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import {
   captureProjectCommandContext,
@@ -6,7 +7,7 @@ import {
 } from "@/features/application/projectCommandContext";
 import type { DatabaseMutationCommandResult } from "@/services/database/databaseService";
 import { DatabaseService } from "@/services/database/databaseService";
-import type { ColumnSemantic } from "@/shared/types/domain/database";
+import type { ColumnSemantic, LoadDatabaseResult } from "@/shared/types/domain/database";
 
 interface DatabaseCommandAuthority {
   projectInstanceId: string;
@@ -33,12 +34,28 @@ async function settle<T>(
   return aggregate.data;
 }
 
-export async function executeDatabaseCreate<T>(
-  command: (authority: DatabaseCommandAuthority) => Promise<DatabaseMutationCommandResult<T>>,
-): Promise<T> {
+export async function executeDatabaseCreate(
+  command: (
+    authority: DatabaseCommandAuthority,
+  ) => Promise<DatabaseMutationCommandResult<LoadDatabaseResult>>,
+): Promise<void> {
   const context = captureProjectCommandContext();
   const aggregate = await command(context);
-  return settle(context, aggregate);
+  context.assertCurrent();
+  const { data, mutation } = aggregate;
+  const created = mutation.deltas.find(
+    (delta) =>
+      delta.resource.kind === "database" &&
+      delta.payload.kind === "database" &&
+      delta.payload.patch.before === null &&
+      delta.payload.patch.after?.id === data.id,
+  );
+  if (!created) throw new Error("database import receipt has no matching creation");
+  await settle(context, aggregate);
+  context.assertCurrent();
+  const current = useResourceStore.getState();
+  if (current.databases[data.id]?.resourcePath !== created.resource.key) return;
+  current.updateDatabaseMetadata(data.id, created.toRevision, data);
 }
 
 export async function executeDatabaseMutation<T>(
@@ -48,7 +65,7 @@ export async function executeDatabaseMutation<T>(
   ) => Promise<DatabaseMutationCommandResult<T>>,
 ): Promise<T> {
   const { context, captured: expectedRevision } = captureRevisionedProjectCommandSnapshot(
-    () => useDatabaseStore.getState().revisions[id],
+    () => useResourceStore.getState().resources[resourceKey({ kind: "database", id })]?.revision,
   );
   if (expectedRevision == null) {
     throw new Error(`Database '${id}' has no authoritative revision`);

@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { NodeData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
@@ -169,7 +169,7 @@ function chooseSelectItem(item: HTMLElement | undefined): void {
 
 afterEach(() => {
   document.body.replaceChildren();
-  useGraphProjectionStore.getState().clear();
+  useResourceStore.getState().clear();
 });
 
 beforeEach(() => {
@@ -183,7 +183,7 @@ beforeEach(() => {
 
 describe("NodePinInterfacePanel", () => {
   it("renders pin selectors with backend-projected graph options", async () => {
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -256,7 +256,7 @@ describe("NodePinInterfacePanel", () => {
   });
 
   it("uses the output slots to add and remove exact graph connections", async () => {
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -304,7 +304,7 @@ describe("NodePinInterfacePanel", () => {
     connectedBucket.pinConnections[output.id] = ["edge-1"];
     connectedBucket.pinConnections["target-input"] = ["edge-1"];
     await act(async () => {
-      useGraphProjectionStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
+      useResourceStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
@@ -331,7 +331,7 @@ describe("NodePinInterfacePanel", () => {
   it("does not expose a raw node id when a connection target lacks its node projection", async () => {
     const bucket = graphBucket();
     delete bucket.nodes.target;
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: bucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -365,7 +365,7 @@ describe("NodePinInterfacePanel", () => {
   });
 
   it("uses the input selector to connect or clear its upstream output", async () => {
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement("div");
     const root = createRoot(container);
 
@@ -414,7 +414,7 @@ describe("NodePinInterfacePanel", () => {
     connectedBucket.pinConnections[input.id] = ["edge-2"];
     connectedBucket.pinConnections["source-output"] = ["edge-2"];
     await act(async () => {
-      useGraphProjectionStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
+      useResourceStore.setState({ graphEntities: { [graphPath]: connectedBucket } });
       root.render(
         createElement(NodePinInterfacePanel, {
           graphPath,
@@ -463,7 +463,7 @@ describe("NodePinInterfacePanel", () => {
       },
     ];
     bucket.nodes.current.portInstanceAdditions = additions;
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: bucket } });
+    useResourceStore.setState({ graphEntities: { [graphPath]: bucket } });
     const container = document.createElement("div");
     const root = createRoot(container);
 

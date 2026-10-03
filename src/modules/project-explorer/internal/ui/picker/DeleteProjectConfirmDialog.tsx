@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VscError, VscWarning } from "react-icons/vsc";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -79,67 +79,85 @@ export function DeleteProjectConfirmDialog({
   onOpenChange,
   onConfirm,
 }: DeleteProjectConfirmDialogProps) {
+  return (
+    <Dialog open={project != null} onOpenChange={onOpenChange}>
+      {project ? (
+        <DeleteProjectConfirmation
+          key={project.id}
+          project={project}
+          onOpenChange={onOpenChange}
+          onConfirm={onConfirm}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function DeleteProjectConfirmation({
+  project,
+  onOpenChange,
+  onConfirm,
+}: DeleteProjectConfirmDialogProps & { project: ManagedProject }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [issue, setIssue] = useState<DeleteProjectIssue | null>(null);
+  const mounted = useRef(false);
 
   useEffect(() => {
-    setIssue(null);
-  }, [project?.id]);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const handleConfirm = async () => {
-    if (!project || busy) return;
+    if (busy) return;
     setIssue(null);
     setBusy(true);
     try {
       const outcome = await onConfirm(project);
+      if (!mounted.current) return;
       if (outcome.status === "committed") {
         onOpenChange(false);
       } else {
         setIssue(outcome);
       }
     } catch (error) {
+      if (!mounted.current) return;
       setIssue({ status: "failed", error: projectPickerErrorPresentation(error) });
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   };
 
   return (
-    <Dialog open={project != null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("projectPicker.deleteProjectConfirm.title")}</DialogTitle>
-        </DialogHeader>
+    <DialogContent className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>{t("projectPicker.deleteProjectConfirm.title")}</DialogTitle>
+      </DialogHeader>
 
-        <div className="space-y-3 px-6 pb-5">
-          <DialogDescription className="text-[13px] leading-relaxed text-muted-foreground">
-            {t("projectPicker.deleteProjectConfirm.description", { name: project?.name ?? "" })}
-          </DialogDescription>
-          {issue ? <DeleteProjectIssueAlert issue={issue} /> : null}
-        </div>
+      <div className="space-y-3 px-6 pb-5">
+        <DialogDescription className="text-[13px] leading-relaxed text-muted-foreground">
+          {t("projectPicker.deleteProjectConfirm.description", { name: project.name })}
+        </DialogDescription>
+        {issue ? <DeleteProjectIssueAlert issue={issue} /> : null}
+      </div>
 
-        <DialogFooter className="gap-2 sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-          >
-            {t("common.cancel")}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={busy || !project || issue?.status === "recovery"}
-            onClick={() => void handleConfirm()}
-          >
-            {busy
-              ? t("projectPicker.deleteProjectConfirm.deleting")
-              : t("projectPicker.deleteProjectConfirm.confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter className="gap-2 sm:justify-end">
+        <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+          {t("common.cancel")}
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          disabled={busy || issue?.status === "recovery"}
+          onClick={() => void handleConfirm()}
+        >
+          {busy
+            ? t("projectPicker.deleteProjectConfirm.deleting")
+            : t("projectPicker.deleteProjectConfirm.confirm")}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

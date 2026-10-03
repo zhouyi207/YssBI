@@ -2,7 +2,9 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { PluginProvider, usePlugins } from "./PluginProvider";
+import { PluginProvider, usePluginActions, usePlugins } from "./PluginProvider";
+import type { TFunction } from "i18next";
+import type { PluginRegistrySnapshot } from "@/features/application/plugins/pluginRegistry";
 import type { InstalledPlugin } from "@/shared/types/plugins/generated";
 
 const mocks = vi.hoisted(() => ({
@@ -87,9 +89,9 @@ it("closes only after confirmed uninstall and cannot restore panels from a late 
   const kept = installed("example.kept", false);
   const initial = [removed, kept];
   mocks.list.mockRejectedValueOnce(new Error("registry unavailable"));
-  let current!: ReturnType<typeof usePlugins>;
+  let current!: PluginRegistrySnapshot & ReturnType<typeof usePluginActions>;
   function Consumer() {
-    current = usePlugins();
+    current = { ...usePlugins((state) => state), ...usePluginActions() };
     return null;
   }
   const container = document.createElement("div");
@@ -106,18 +108,24 @@ it("closes only after confirmed uninstall and cannot restore panels from a late 
     expect(mocks.sync).not.toHaveBeenCalled();
     mocks.list.mockResolvedValue(initial);
     await act(async () => current.refresh());
+    const snapshot = current.plugins;
+    const index = current.byId;
+    mocks.list.mockResolvedValue(structuredClone(initial));
+    await act(async () => current.refresh());
+    expect(current.plugins).toBe(snapshot);
+    expect(current.byId).toBe(index);
     current.open(removed.manifest.id, removed.manifest.contributes.views[0]);
     const isOpenCurrent = mocks.open.mock.calls[0][2] as () => boolean;
     expect(isOpenCurrent()).toBe(true);
 
     mocks.confirm.mockResolvedValue(false);
-    await act(async () => current.uninstall(removed));
+    await act(async () => current.uninstall(removed, mocks.t as TFunction));
     expect(mocks.uninstall).not.toHaveBeenCalled();
     expect(mocks.sync.mock.lastCall?.[0]).toEqual([removed.manifest.id, kept.manifest.id]);
     const beforeFailure = mocks.sync.mock.calls.length;
     mocks.confirm.mockResolvedValue(true);
     mocks.uninstall.mockRejectedValueOnce(new Error("plugin busy"));
-    await act(async () => current.uninstall(removed));
+    await act(async () => current.uninstall(removed, mocks.t as TFunction));
     expect(mocks.sync).toHaveBeenCalledTimes(beforeFailure);
     expect(current.plugins).toEqual(initial);
 
@@ -141,7 +149,7 @@ it("closes only after confirmed uninstall and cannot restore panels from a late 
     );
     let uninstalling!: Promise<void>;
     await act(async () => {
-      uninstalling = current.uninstall(removed);
+      uninstalling = current.uninstall(removed, mocks.t as TFunction);
     });
     expect(current.plugins).toEqual(initial);
     expect(isOpenCurrent()).toBe(true);

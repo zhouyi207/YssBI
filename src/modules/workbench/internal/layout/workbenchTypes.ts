@@ -122,7 +122,6 @@ export class WorkbenchLayoutError extends Error {
 export interface WorkbenchLayoutReadContract {
   readonly isReady: boolean;
   readonly isHydrated: boolean;
-  whenHydrated(): Promise<{ readonly status: "hydrated" | "unbound" }>;
   /** Committed changes to the panel/group/edge read projection, excluding geometry-only changes. */
   subscribe(listener: () => void): () => void;
   subscribePersistence(listener: () => void): () => void;

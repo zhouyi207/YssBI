@@ -34,7 +34,7 @@ export async function hydrateProjectPath(): Promise<string | null> {
   }
 
   const promise = (async () => {
-    const path = await ProjectService.getProjectPath();
+    const path = await ProjectService.getProjectPath(identity.projectInstanceId);
     if (!isCurrentProjectIdentity(identity)) return null;
     if (path) {
       useProjectIOStore.getState().setCurrentPath(path);

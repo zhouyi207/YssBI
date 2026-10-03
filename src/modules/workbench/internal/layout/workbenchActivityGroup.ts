@@ -88,11 +88,10 @@ export function configureWorkbenchModel(model: Model): void {
     if (action.type === Actions.SELECT_TAB) node = model.getNodeById(action.data.tabNode);
     else if (action.type === Actions.SET_ACTIVE_TABSET)
       node = model.getNodeById(action.data.tabsetNode);
-    else if (
-      [Actions.POPOUT_TAB, Actions.POPOUT_TABSET].includes(action.type) ||
-      (action.type === Actions.MOVE_NODE && action.data.select !== false)
-    )
+    else if ([Actions.POPOUT_TAB, Actions.POPOUT_TABSET].includes(action.type))
       node = model.getNodeById(action.data.node);
+    else if (action.type === Actions.MOVE_NODE && action.data.select !== false)
+      node = model.getNodeById(action.data.fromNode);
     else if (action.type === Actions.MOVE_FLOAT_TO_FRONT)
       node =
         model.getActiveTabset(action.data.layoutId) ??
@@ -126,7 +125,8 @@ export function configureWorkbenchModel(model: Model): void {
     if (actions.length) {
       reconciling = true;
       try {
-        model.doAction(Actions.group(actions));
+        // Complete the triggering action before its binding publishes the final projection.
+        model.doAction(Actions.group(actions).setAdjusting(action !== undefined));
       } finally {
         reconciling = false;
       }

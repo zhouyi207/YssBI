@@ -8,16 +8,19 @@ import type {
   SelectionChangedEvent,
 } from "ag-grid-community";
 import type { AgGridReact } from "ag-grid-react";
-import type { DatabaseGridSelection } from "@/features/application/databaseEditor";
 import {
   createCellRange,
   createKeyboardCellSelection,
-  dataColumnIndexFromId,
   updateIndexSelection,
+  type DatabaseGridSelection,
   type DatabaseGridCellAddress,
   type DatabaseGridCellRange,
-  type DatabaseGridRow,
   type DatabaseGridSelectionModifiers,
+} from "@/features/domain/databaseEditor/gridSelection";
+import {
+  dataColumnIndexFromId,
+  selectionModifiers,
+  type DatabaseGridRow,
 } from "./databaseGridModel";
 
 interface CellDragState {
@@ -37,13 +40,6 @@ interface UseDatabaseGridSelectionAdapterParams {
 
 function browserMouseEvent(event: Event | null | undefined): MouseEvent | null {
   return event instanceof MouseEvent ? event : null;
-}
-
-function selectionModifiers(event: MouseEvent): DatabaseGridSelectionModifiers {
-  return {
-    additive: event.ctrlKey || event.metaKey,
-    extend: event.shiftKey,
-  };
 }
 
 function sameIndices(left: readonly number[], right: readonly number[]): boolean {
@@ -122,22 +118,36 @@ export function useDatabaseGridSelectionAdapter({
     [onSelectionChange],
   );
 
-  const applyControlledSelection = useCallback((api: GridApi<DatabaseGridRow>) => {
-    const current = selectionRef.current;
-    const selectedRows = new Set(current?.type === "rows" ? current.rows : []);
-    syncingRowSelectionRef.current = true;
-    try {
-      api.forEachNode((node) => {
-        const rowIndex = node.data?.sourceRowIndex;
-        const shouldSelect = rowIndex !== undefined && selectedRows.has(rowIndex);
-        if (node.isSelected() !== shouldSelect) node.setSelected(shouldSelect, false, "api");
+  const applyControlledRowSelection = useCallback(
+    (api: GridApi<DatabaseGridRow>) => {
+      const current = selectionRef.current;
+      const selectedRows = new Set(current?.type === "rows" ? current.rows : []);
+      const deselect = api
+        .getSelectedNodes()
+        .filter((node) => (node.data ? !selectedRows.has(node.data.sourceRowIndex) : true));
+      const select = [...selectedRows].flatMap((index) => {
+        const row = rowData[index];
+        const node = row ? api.getRowNode(row.rowId) : undefined;
+        return node && !node.isSelected() ? [node] : [];
       });
-    } finally {
-      syncingRowSelectionRef.current = false;
-    }
-    api.refreshCells({ force: true });
-    api.refreshHeader();
-  }, []);
+      syncingRowSelectionRef.current = true;
+      try {
+        if (deselect.length > 0)
+          api.setNodesSelected({ nodes: deselect, newValue: false, source: "api" });
+        if (select.length > 0)
+          api.setNodesSelected({ nodes: select, newValue: true, source: "api" });
+      } finally {
+        syncingRowSelectionRef.current = false;
+      }
+    },
+    [rowData],
+  );
+
+  const selectedRows = selection?.type === "rows" ? selection.rows : null;
+  useEffect(() => {
+    const api = gridRef.current?.api;
+    if (api) applyControlledRowSelection(api);
+  }, [selectedRows, gridRef, applyControlledRowSelection]);
 
   useEffect(() => {
     if (!selection) {
@@ -149,14 +159,31 @@ export function useDatabaseGridSelectionAdapter({
       cellDragRef.current = null;
     }
     const api = gridRef.current?.api;
-    if (api) applyControlledSelection(api);
-  }, [selection, rowData, gridRef, applyControlledSelection]);
+    if (api) {
+      api.refreshCells({ force: true });
+      api.refreshHeader();
+    }
+  }, [selection, rowData, gridRef]);
+
+  useEffect(() => {
+    const finishDrag = () => {
+      cellDragRef.current = null;
+    };
+    window.addEventListener("mouseup", finishDrag, true);
+    window.addEventListener("blur", finishDrag);
+    return () => {
+      window.removeEventListener("mouseup", finishDrag, true);
+      window.removeEventListener("blur", finishDrag);
+    };
+  }, []);
 
   const handleGridReady = useCallback(
     (event: GridReadyEvent<DatabaseGridRow>) => {
-      applyControlledSelection(event.api);
+      applyControlledRowSelection(event.api);
+      event.api.refreshCells({ force: true });
+      event.api.refreshHeader();
     },
-    [applyControlledSelection],
+    [applyControlledRowSelection],
   );
 
   const handleSelectionChanged = useCallback(

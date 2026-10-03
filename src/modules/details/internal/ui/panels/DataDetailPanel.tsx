@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Select } from "@/shared/ui";
-import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
+import { useDatabaseMetadata } from "@/features/application/dataManagement/databaseRead";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
@@ -10,25 +11,20 @@ import { DataColumnSettings } from "./DataColumnSettings";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 
 interface DataDetailPanelProps {
-  dataframe: DatabaseRecord;
+  dataframe: DeepReadonly<DatabaseRecord>;
 }
 
 export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
   const { t } = useTranslation();
-  const columnCount = dataframe.columnCount ?? dataframe.columns?.length ?? 0;
-  const rowCount = dataframe.rowCount ?? 0;
+  const columnCount = dataframe.columnCount ?? dataframe.columns?.length;
+  const rowCount = dataframe.rowCount;
   const [selected, setSelected] = useState("");
   const column =
     dataframe.columns?.find((column) => column.name === selected) ?? dataframe.columns?.[0];
-  const hasSemantics = Boolean(dataframe.columns?.every((column) => column.semantic));
-  useEffect(() => {
-    if (hasSemantics) return;
-    let cancelled = false;
-    void hydrateDatabaseEditorMetadata(dataframe.id, () => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [dataframe.id, hasSemantics]);
+  const revision = useDatabaseMetadata(
+    dataframe.id,
+    dataframe.columns !== undefined && dataframe.rowCount !== undefined,
+  );
 
   return (
     <DetailPanelShell>
@@ -42,10 +38,10 @@ export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
           </p>
         )}
         <DetailReadonlyField label={t("detail.fields.columns")}>
-          {t("detail.counts.columns", { count: columnCount })}
+          {columnCount === undefined ? "—" : t("detail.counts.columns", { count: columnCount })}
         </DetailReadonlyField>
         <DetailReadonlyField label={t("detail.fields.rows")}>
-          {t("detail.counts.rows", { count: rowCount })}
+          {rowCount === undefined ? "—" : t("detail.counts.rows", { count: rowCount })}
         </DetailReadonlyField>
       </DetailForm>
       {dataframe.columns && dataframe.columns.length > 0 && (
@@ -64,7 +60,7 @@ export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
           </DetailForm>
           {column && (
             <DataColumnSettings
-              key={`${dataframe.id}:${column.name}:${JSON.stringify(column)}`}
+              key={`${dataframe.id}:${column.name}:${revision}`}
               databaseId={dataframe.id}
               column={column}
             />

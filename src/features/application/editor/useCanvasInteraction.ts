@@ -19,7 +19,7 @@ import type {
   CanvasGestureLease,
   CanvasInteractionHandlers,
 } from "@/features/core/canvas/canvasMutationContracts";
-import { isGraphSaving } from "@/features/core/dataStore/graphProjectionStore";
+import { isGraphSaving } from "@/features/core/graph/read";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "./editorCommandFocus";
 import { synchronizeCurrentEditorPanel } from "./editorPanelActivation";
@@ -90,8 +90,11 @@ export function useCanvasInteraction({
       if (!target) return null;
       synchronizeCurrentEditorPanel(groupId);
       if (!isEditorCommandTargetCurrent(target)) return null;
-      startCanvasInteraction(graphPath, { type, session: { groupId, panelInstanceId } });
-      const owner = useGraphInteractionStore.getState().interactions[graphPath];
+      const owner = startCanvasInteraction(graphPath, {
+        type,
+        session: { groupId, panelInstanceId },
+      });
+      if (!owner) return null;
       let active = true;
       const unregister = registerCanvasInteractionCleanup(
         { graphPath, groupId, interactionType: type },

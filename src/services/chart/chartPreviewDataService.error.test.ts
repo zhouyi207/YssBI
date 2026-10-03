@@ -19,6 +19,7 @@ function document(chartType: ChartType): ChartDocument {
 function identity() {
   return {
     projectInstanceId,
+    databaseRevision: 4,
     isCurrent: () => true,
     assertCurrent: vi.fn(),
   };

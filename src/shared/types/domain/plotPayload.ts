@@ -7,6 +7,11 @@ import type { ResultPlotKind as PlotChart } from "@/shared/types/domain/result";
 import { type PlotCorrelogramBarDTO, parsePlotCorrelogramBar } from "@/shared/types/report";
 import { z } from "zod";
 
+const numericDomainSchema = z
+  .tuple([z.number().finite(), z.number().finite()])
+  .refine(([start, end]) => start !== end)
+  .optional();
+
 const nomogramSchema = z.object({
   axes: z
     .array(
@@ -51,6 +56,7 @@ export interface XySeriesPlotDTO {
   yFormat?: AxisFormat;
   referenceLines?: PlotReferenceLineDTO[];
   metadata?: PlotMetadataDTO;
+  yDomain?: [number, number];
 }
 
 export interface HistogramBinDTO {
@@ -288,7 +294,8 @@ export function parseXySeriesPlot(raw: unknown): XySeriesPlotDTO | null {
       ? undefined
       : parseRows(raw.referenceLines, parseReferenceLine, 0);
   const metadata = parseMetadata(raw.metadata);
-  if (referenceLines === null || metadata === null) return null;
+  const yDomain = numericDomainSchema.safeParse(raw.yDomain);
+  if (referenceLines === null || metadata === null || !yDomain.success) return null;
   return {
     data,
     xLabel: readOptionalString(raw, "xLabel"),
@@ -297,6 +304,7 @@ export function parseXySeriesPlot(raw: unknown): XySeriesPlotDTO | null {
     yFormat: readOptionalAxisFormat(raw, "yFormat"),
     referenceLines,
     metadata,
+    ...(yDomain.data ? { yDomain: yDomain.data } : {}),
   };
 }
 
@@ -592,7 +600,14 @@ export function parseCorrelogramPlot(raw: unknown): CorrelogramPlotDTO | null {
   const pacf = parseCorrelogramSeries(raw.pacf);
   const ciHalfWidth = raw.ciHalfWidth;
   const n = raw.n;
-  if (!acf || !pacf || !isFiniteNumber(ciHalfWidth) || !isNonNegativeInteger(n) || n === 0) {
+  if (
+    !acf ||
+    !pacf ||
+    !isFiniteNumber(ciHalfWidth) ||
+    ciHalfWidth <= 0 ||
+    !isNonNegativeInteger(n) ||
+    n === 0
+  ) {
     return null;
   }
   if (acf.some((bar) => bar.qStat === undefined || bar.pValue === undefined)) return null;

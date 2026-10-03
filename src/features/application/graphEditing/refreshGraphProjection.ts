@@ -1,4 +1,4 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -12,10 +12,10 @@ export async function refreshCurrentGraphProjection(
   locale: string,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  const session = useGraphProjectionStore.getState().sessions[graphPath];
+  const session = useResourceStore.getState().sessions[graphPath];
   if (!isCurrentProjectIdentity(identity) || !session || session.saving) return false;
   const isCurrent = () => {
-    const current = useGraphProjectionStore.getState().sessions[graphPath];
+    const current = useResourceStore.getState().sessions[graphPath];
     return (
       isCurrentProjectIdentity(identity) &&
       current?.sessionId === session.sessionId &&

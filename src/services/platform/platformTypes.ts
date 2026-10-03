@@ -8,7 +8,6 @@ export type PlatformOperation =
   | "readWindowMaximized"
   | "closeWindow"
   | "setWindowDecorations"
-  | "readWindowScaleFactor"
   | "subscribeWindowCloseRequested"
   | "subscribeWindowResized"
   | "createWebviewWindow"

@@ -1,5 +1,4 @@
 import { ChartService } from "@/services/chart/chartService";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -13,17 +12,22 @@ const loads = new Map<string, { isCurrent(): boolean; promise: Promise<ChartDocu
 export async function loadChartDocumentForView(chartPath: string): Promise<ChartDocument | null> {
   try {
     const identity = captureProjectIdentity();
-    const store = useChartDocumentStore.getState();
-    const cached = store.documents[chartPath];
+    const store = useResourceStore.getState();
+    const cached = store.chartDocuments[chartPath];
     if (cached) return cached;
-    const key = JSON.stringify([identity.projectInstanceId, identity.epoch, chartPath]);
+    const key = JSON.stringify([
+      identity.projectInstanceId,
+      identity.epoch,
+      store.indexRevision,
+      chartPath,
+    ]);
     const pending = loads.get(key);
     if (pending?.isCurrent()) return await pending.promise;
 
     const resourceId = resourceKey({ id: chartPath, kind: "chart" });
-    const resource = useResourceStore.getState().resources[resourceId];
-    if (resource?.exists === false) return null;
-    const ownsRead = store.beginRead(chartPath);
+    const resource = store.resources[resourceId];
+    if (!resource?.exists) return null;
+    const ownsRead = store.beginChartRead(chartPath);
     const isCurrent = () => {
       const current = useResourceStore.getState().resources[resourceId];
       return (
@@ -33,13 +37,17 @@ export async function loadChartDocumentForView(chartPath: string): Promise<Chart
         current?.exists === resource?.exists
       );
     };
-    const promise = ChartService.loadChart(identity.projectInstanceId, chartPath)
+    const promise = ChartService.loadChart(
+      identity.projectInstanceId,
+      chartPath,
+      store.indexRevision,
+    )
       .then((document) => {
         if (!isCurrentProjectIdentity(identity)) return null;
-        const current = useChartDocumentStore.getState().documents[chartPath];
+        const current = useResourceStore.getState().chartDocuments[chartPath];
         if (current) return current;
         if (!isCurrent()) return null;
-        useChartDocumentStore.getState().upsertDocument(chartPath, document);
+        useResourceStore.getState().upsertChartDocument(chartPath, document);
         return document;
       })
       .catch(() => null)

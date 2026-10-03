@@ -4,7 +4,7 @@ import { DEFAULT_VIEWPORT } from "@/shared/config-default";
 
 import type { EditorViewport } from "./editorViewport";
 import { resolveInitialGraphViewport } from "./resolveInitialGraphViewport";
-import { resetLiveViewports } from "./liveViewportState";
+import { prepareLiveViewportReset, synchronizeLiveViewports } from "./liveViewportState";
 import type { ViewportScope } from "./viewportScope";
 import { parseViewportScopeKey, viewportScopeKey } from "./viewportScope";
 
@@ -38,10 +38,20 @@ export const useViewportStore = create<ViewportStore>((set) => ({
       };
     }),
   clear: () => {
-    resetLiveViewports();
+    const resetLive = prepareLiveViewportReset();
     set({ viewports: {} });
+    resetLive();
   },
 }));
+
+// Committed publications reconcile live overrides even when no pane is observing them.
+useViewportStore.subscribe((state, previous) => {
+  synchronizeLiveViewports(
+    state.viewports,
+    previous.viewports,
+    () => useViewportStore.getState().viewports === state.viewports,
+  );
+});
 
 /** Seed pane viewport on first open in a group; project memento seeds per graph path. */
 export function ensureEditorViewport(scope: ViewportScope): void {
@@ -52,7 +62,7 @@ export function ensureEditorViewport(scope: ViewportScope): void {
 
 /** Drop pane viewport when a tab closes in one editor group. */
 export function releaseEditorViewport(scope: ViewportScope): void {
-  resetLiveViewports(scope);
+  const resetLive = prepareLiveViewportReset(scope);
   useViewportStore.setState((state) => {
     const key = viewportScopeKey(scope);
     if (!(key in state.viewports)) return state;
@@ -60,10 +70,12 @@ export function releaseEditorViewport(scope: ViewportScope): void {
     delete viewports[key];
     return { viewports };
   });
+  resetLive();
 }
 
 /** Drop all pane viewports for a graph when its document leaves memory. */
 export function releaseGraphViewport(graphPath: string): void {
+  const resetLive = prepareLiveViewportReset({ graphPath });
   useViewportStore.setState((state) => {
     const viewports = { ...state.viewports };
     let changed = false;
@@ -71,9 +83,9 @@ export function releaseGraphViewport(graphPath: string): void {
       const scope = parseViewportScopeKey(key);
       if (!scope || scope.graphPath !== graphPath) continue;
       delete viewports[key];
-      resetLiveViewports(scope);
       changed = true;
     }
     return changed ? { viewports } : state;
   });
+  resetLive();
 }

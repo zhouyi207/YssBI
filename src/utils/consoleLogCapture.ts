@@ -58,7 +58,7 @@ export function consoleMessage(args: readonly unknown[], maxCharacters: number):
   for (const arg of args.slice(0, 32)) {
     if (remaining <= 0) break;
     let value: string;
-    if (arg instanceof Error) value = `${arg.name}: ${arg.message}`;
+    if (arg instanceof Error) value = "[Error]";
     else if (Array.isArray(arg)) value = `[Array(${arg.length})]`;
     else if (arg !== null && typeof arg === "object") value = "[Object]";
     else if (typeof arg === "function") value = "[Function]";

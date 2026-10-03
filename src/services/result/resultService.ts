@@ -6,12 +6,14 @@ import type {
 } from "@/shared/types/domain/resultReport";
 import {
   resultReference,
+  resultReferenceKey,
   type ResultReference,
   type ResultLease,
   type GraphResultState,
 } from "@/shared/types/domain/result";
 import { parseResultAnalysis } from "@/shared/types/report/parseLinearRegression";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
+import { portAddressKey } from "@/shared/types/domain/portAddressKey";
 import type { ResultDescriptor, ResultPage, ResultValue } from "@/shared/types/dto/result";
 import {
   parseResultDescriptor,
@@ -46,10 +48,14 @@ export class ResultService {
   }
 
   static async getDescriptor(reference: ResultReference): Promise<ResultDescriptor | null> {
+    const expected = resultReference(reference);
     const value = await invokeCommand<unknown>("get_result_descriptor", {
-      reference: resultReference(reference),
+      reference: expected,
     });
-    return nullable(value, parseResultDescriptor);
+    const descriptor = nullable(value, parseResultDescriptor);
+    if (descriptor && resultReferenceKey(descriptor) !== resultReferenceKey(expected))
+      throw new Error("Mismatched result descriptor");
+    return descriptor;
   }
 
   static async getValue(reference: ResultReference): Promise<ResultValue | null> {
@@ -65,19 +71,28 @@ export class ResultService {
     limit: number,
     part?: ResultTablePart,
   ): Promise<ResultPage | null> {
+    const expected = resultReference(reference);
     const value = part
       ? await invokeCommand<unknown>("get_result_table_page", {
-          reference: resultReference(reference),
+          reference: expected,
           part,
           offset,
           limit,
         })
       : await invokeCommand<unknown>("get_result_page", {
-          reference: resultReference(reference),
+          reference: expected,
           offset,
           limit,
         });
-    return nullable(value, parseResultPage);
+    const page = nullable(value, parseResultPage);
+    if (
+      page &&
+      (page.resultId !== expected.resultId ||
+        page.requestedLimit !== limit ||
+        page.offset !== (page.totalCount === null ? offset : Math.min(offset, page.totalCount)))
+    )
+      throw new Error("Mismatched result page");
+    return page;
   }
 
   static async retain(
@@ -95,7 +110,11 @@ export class ResultService {
   }
 
   static async claim(leaseId: string): Promise<ResultLease> {
-    return parseResultLease(await invokeCommand<unknown>("claim_result_lease", { lease: leaseId }));
+    const lease = parseResultLease(
+      await invokeCommand<unknown>("claim_result_lease", { lease: leaseId }),
+    );
+    if (lease.leaseId !== leaseId) throw new Error("Mismatched result lease");
+    return lease;
   }
 
   static async release(leaseId: string): Promise<void> {
@@ -121,7 +140,18 @@ export class ResultService {
     graphPath: string,
     output: PortAddressDto,
   ): Promise<ResultDescriptor | null> {
+    const expectedOutput = portAddressKey(output);
     const value = await invokeCommand<unknown>("get_pin_result", { graphPath, output });
-    return nullable(value, parseResultDescriptor);
+    const descriptor = nullable(value, parseResultDescriptor);
+    if (descriptor) {
+      const source = descriptor.provenance.output;
+      if (
+        !source ||
+        source.graphPath !== graphPath ||
+        portAddressKey(source.port) !== expectedOutput
+      )
+        throw new Error("Mismatched result output");
+    }
+    return descriptor;
   }
 }

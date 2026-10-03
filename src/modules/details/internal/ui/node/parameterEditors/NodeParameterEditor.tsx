@@ -116,8 +116,6 @@ export function NodeParameterEditor({
   formatFallback,
 }: NodeParameterEditorProps) {
   const { t } = useTranslation();
-  const { constants } = useGraphConstants(graphPath);
-  const errorId = useId();
   const [pending, setPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const pendingRef = useRef(false);
@@ -165,28 +163,13 @@ export function NodeParameterEditor({
 
   if (parameter.editor.kind === "graphConstant") {
     return (
-      <div className="space-y-1">
-        <select
-          aria-label={parameter.display.title}
-          className={detailInlineInputClass}
-          value={String(parameter.value ?? "")}
-          disabled={pending}
-          aria-invalid={errors.length > 0}
-          onChange={(event) => void commit(event.target.value)}
-        >
-          {!constants[String(parameter.value ?? "")] && (
-            <option value={String(parameter.value ?? "")} disabled>
-              {t("detail.constants.choose")}
-            </option>
-          )}
-          {Object.values(constants).map((constant) => (
-            <option key={constant.id} value={constant.id}>
-              {constant.name}
-            </option>
-          ))}
-        </select>
-        <ParameterErrorList id={errorId} errors={errors} />
-      </div>
+      <GraphConstantValueEditor
+        graphPath={graphPath}
+        parameter={parameter}
+        pending={pending}
+        errors={errors}
+        onCommit={commit}
+      />
     );
   }
   return (
@@ -197,6 +180,43 @@ export function NodeParameterEditor({
       onCommit={commit}
       formatFallback={formatFallback}
     />
+  );
+}
+
+function GraphConstantValueEditor({
+  graphPath,
+  parameter,
+  pending,
+  errors,
+  onCommit,
+}: OrdinaryValueEditorProps & { graphPath: string }) {
+  const { t } = useTranslation();
+  const { constants } = useGraphConstants(graphPath);
+  const errorId = useId();
+  return (
+    <div className="space-y-1">
+      <select
+        aria-label={parameter.display.title}
+        className={detailInlineInputClass}
+        value={String(parameter.value ?? "")}
+        disabled={pending}
+        aria-invalid={errors.length > 0}
+        aria-describedby={errors.length > 0 ? errorId : undefined}
+        onChange={(event) => onCommit(event.target.value)}
+      >
+        {!constants[String(parameter.value ?? "")] && (
+          <option value={String(parameter.value ?? "")} disabled>
+            {t("detail.constants.choose")}
+          </option>
+        )}
+        {Object.values(constants).map((constant) => (
+          <option key={constant.id} value={constant.id}>
+            {constant.name}
+          </option>
+        ))}
+      </select>
+      <ParameterErrorList id={errorId} errors={errors} />
+    </div>
   );
 }
 
@@ -309,19 +329,22 @@ interface OrdinaryValueEditorProps {
   onCommit(value: unknown, callbacks?: CommitCallbacks): void;
 }
 
+const EMPTY_LIST_VALUES: readonly unknown[] = [];
+
 function ListValueEditor({ parameter, pending, errors, onCommit }: OrdinaryValueEditorProps) {
   const { t } = useTranslation();
   const errorId = useId();
-  const values = Array.isArray(parameter.value) ? parameter.value : [];
-  const signature = JSON.stringify(values);
+  const values: readonly unknown[] = Array.isArray(parameter.value)
+    ? parameter.value
+    : EMPTY_LIST_VALUES;
   const latest = useRef(values);
   latest.current = values;
-  const [projection, setProjection] = useState(signature);
+  const [projection, setProjection] = useState(values);
   const [draft, setDraft] = useState<string[]>(() => values.map(String));
   const [parseError, setParseError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  if (projection !== signature) {
-    setProjection(signature);
+  if (projection !== values) {
+    setProjection(values);
     setDraft(values.map(String));
     setParseError(null);
   }
@@ -347,7 +370,8 @@ function ListValueEditor({ parameter, pending, errors, onCommit }: OrdinaryValue
       } else parsed.push(value);
     }
     setParseError(null);
-    if (JSON.stringify(parsed) !== signature) onCommit(parsed, { onRejected: reset });
+    if (parsed.length !== values.length || parsed.some((value, index) => value !== values[index]))
+      onCommit(parsed, { onRejected: reset });
   };
   const change = (next: string[]) => {
     setDraft(next);

@@ -3,14 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildFileResourceMeta,
   markResourceDirty,
-  useDocumentStateStore,
   useResourceStore,
 } from "@/features/core/resource";
 import { collectDirtyEditorPanels } from "./editorPanelDirty";
 
 describe("collectDirtyEditorPanels", () => {
   beforeEach(() => {
-    useDocumentStateStore.getState().clear();
     useResourceStore.getState().clear();
   });
 

@@ -1,4 +1,4 @@
-import { Actions } from "flexlayout-react";
+import { Actions, DockLocation, Model } from "flexlayout-react";
 import { describe, expect, it } from "vitest";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { configureWorkbenchModel } from "./workbenchActivityGroup";
@@ -16,6 +16,80 @@ function createRuntime() {
 }
 
 describe("workbench notification boundaries", () => {
+  it("publishes only the completed panel when opening or revealing an editor", () => {
+    const { read, internal, ops } = createRuntime();
+    const first = ops.openEditor({
+      resourceKind: "event_graph",
+      resourceRef: "events/A",
+      title: "A",
+      mode: "reuse-resource",
+    });
+    const observed: { active: string | undefined; title: string | undefined; panels: number }[] =
+      [];
+    const unsubscribe = read.subscribePersistence(() => {
+      observed.push({
+        active: read.getActivePanel()?.panelInstanceId,
+        title: read.getActivePanel()?.title,
+        panels: read.listPanels().length,
+      });
+    });
+    try {
+      const second = ops.openEditor({
+        resourceKind: "event_graph",
+        resourceRef: "events/B",
+        title: "B",
+        mode: "reuse-resource",
+      });
+      expect(observed).toEqual([{ active: second.panelInstanceId, title: "B", panels: 2 }]);
+      observed.length = 0;
+      const reused = ops.openEditor({
+        resourceKind: "event_graph",
+        resourceRef: "events/A",
+        title: "A renamed",
+        mode: "reuse-resource",
+      });
+      expect(reused.panelInstanceId).toBe(first.panelInstanceId);
+      expect(observed).toEqual([{ active: first.panelInstanceId, title: "A renamed", panels: 2 }]);
+    } finally {
+      unsubscribe();
+      internal.unbind();
+    }
+  });
+
+  it("commits a native move into a float with that panel as the only active target", () => {
+    const { binding, read, internal, ops } = createRuntime();
+    const open = (name: string) =>
+      ops.openEditor({
+        resourceKind: "event_graph",
+        resourceRef: `events/${name}`,
+        title: name,
+        mode: "reuse-resource",
+      });
+    const first = open("A");
+    open("B");
+    const floating = open("C");
+    ops.floatPanel(floating.panelInstanceId);
+    const target = ops.getPanel(floating.panelInstanceId)!;
+    ops.activate(first.panelInstanceId);
+    const observed: (string | undefined)[] = [];
+    const unsubscribe = read.subscribePersistence(() =>
+      observed.push(read.getActivePanel()?.panelInstanceId),
+    );
+    try {
+      binding
+        .getModel()
+        .doAction(
+          Actions.moveNode(first.panelInstanceId, target.groupId, DockLocation.CENTER, -1, true),
+        );
+      expect(observed).toEqual([first.panelInstanceId]);
+      expect(read.getPanel(first.panelInstanceId)?.groupId).toBe(target.groupId);
+      expect(binding.getModel().getActiveTabset(Model.MAIN_LAYOUT_ID)?.getId()).toBeUndefined();
+    } finally {
+      unsubscribe();
+      internal.unbind();
+    }
+  });
+
   it("routes committed geometry, panel data, selection and membership to their actual consumers", () => {
     const { binding, read, internal, ops } = createRuntime();
     const first = ops.openEditor({
@@ -139,5 +213,53 @@ describe("workbench notification boundaries", () => {
     model.doAction(Actions.updateNodeAttributes(panel.panelInstanceId, { name: "Committed" }));
     expect([semantic, persisted]).toEqual([1, 1]);
     internal.unbind(binding);
+  });
+
+  it("preserves result metadata on model replacement while publishing reference and lease changes", () => {
+    const { binding, read, internal, ops } = createRuntime();
+    const panel = ops.upsertResult({
+      reference: { executionSessionId: "00000000-0000-0000-0000-000000000091", resultId: "1" },
+      leaseId: "00000000-0000-0000-0000-000000000092",
+      title: "Result",
+      presentation: { kind: "inspector" },
+    });
+    const previous = read.getPanel(panel.panelInstanceId)!;
+    const groups = read.listGroups();
+    let members = 0;
+    const unsubscribe = read.subscribePanelSet(() => members++);
+    try {
+      binding.replace(ops.serialize());
+      expect(read.getPanel(panel.panelInstanceId)).toBe(previous);
+      expect(read.listGroups()).toBe(groups);
+      expect(members).toBe(0);
+      if (previous.metadata.role !== "result") throw new Error("Expected result metadata");
+
+      const currentOps = new WorkbenchModelOperations(binding.getModel());
+      currentOps.replaceResult(previous.metadata.reference, {
+        reference: { ...previous.metadata.reference, resultId: "2" },
+        leaseId: "00000000-0000-0000-0000-000000000093",
+        title: "New result",
+        presentation: { ...previous.metadata.presentation },
+      });
+      const changed = read.getPanel(panel.panelInstanceId)!;
+      expect(changed.metadata).toMatchObject({
+        reference: { resultId: "2" },
+        leaseId: "00000000-0000-0000-0000-000000000093",
+        title: "New result",
+      });
+      expect(members).toBe(1);
+      if (changed.metadata.role !== "result") throw new Error("Expected result metadata");
+      expect(changed.metadata.presentation).toBe(previous.metadata.presentation);
+      expect(changed.location).toBe(previous.location);
+      expect(read.listGroups()).toBe(groups);
+      expect(previous.metadata.reference.resultId).toBe("1");
+
+      currentOps.removePanels([panel.panelInstanceId]);
+      expect(read.getPanel(panel.panelInstanceId)).toBeUndefined();
+      expect(members).toBe(2);
+    } finally {
+      unsubscribe();
+      internal.unbind(binding);
+    }
   });
 });

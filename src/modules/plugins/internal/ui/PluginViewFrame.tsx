@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import type { InstalledPlugin, PluginView } from "@/shared/types/plugins/generated";
+import type { PluginView } from "@/shared/types/plugins/generated";
+import type { PluginSnapshot } from "@/features/application/plugins/pluginRegistry";
 import { usePluginView } from "@/features/application/plugins/usePluginView";
 import { pluginViewFailureMessage } from "@/features/application/plugins/pluginViewSession";
 
 export function PluginViewFrame(props: {
-  plugin: InstalledPlugin | undefined;
+  plugin: PluginSnapshot | undefined;
   viewId: string;
   visible?: boolean;
   onOpen(pluginId: string, view: PluginView): void;

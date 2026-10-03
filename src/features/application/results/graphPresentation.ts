@@ -1,4 +1,5 @@
-import { shareProjection } from "@/features/core/state/readProjection";
+import { produce } from "immer";
+import { shallow } from "zustand/shallow";
 import { freezePublishedValue } from "@/shared/types/deepReadonly";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { RunFailureProjection } from "@/features/core/execution/executionTypes";
@@ -62,7 +63,24 @@ export function projectGraphResultCache(
             ? "stale"
             : "new";
   }
-  const result = shareProjection(previous, { nodes, inputs, outputs, connections });
+  const result = produce<GraphCachePresentation>(
+    previous ?? { nodes: {}, inputs: {}, outputs: {}, connections: {} },
+    (draft) => {
+      for (const id in nodes) {
+        if (!shallow(previous?.nodes[id], nodes[id])) draft.nodes[id] = nodes[id];
+      }
+      for (const id in draft.nodes) if (!nodes[id]) delete draft.nodes[id];
+      for (const id in inputs) draft.inputs[id] = inputs[id];
+      for (const id in draft.inputs) if (!(id in inputs)) delete draft.inputs[id];
+      for (const id in outputs) draft.outputs[id] = outputs[id];
+      for (const id in draft.outputs) if (!(id in outputs)) delete draft.outputs[id];
+      for (const id in connections) {
+        if (!shallow(previous?.connections[id], connections[id]))
+          draft.connections[id] = connections[id];
+      }
+      for (const id in draft.connections) if (!connections[id]) delete draft.connections[id];
+    },
+  );
   // These wide scalar dictionaries have no child objects. Publish them as roots so the
   // outer read projection can skip them when only execution appearance changes.
   freezePublishedValue(result.inputs);
@@ -78,16 +96,15 @@ export function projectGraphPresentation(
   previous?: GraphResultPresentation,
 ): GraphResultPresentation {
   const runningNodes = new Set(runningNodeIds);
-  return shareProjection(previous, {
+  const next = {
     ...cache,
     runningNodes:
-      previous &&
-      previous.runningNodes.size === runningNodes.size &&
-      [...runningNodes].every((id) => previous.runningNodes.has(id))
+      previous && shallow(previous.runningNodes, runningNodes)
         ? previous.runningNodes
         : runningNodes,
     failure,
-  });
+  };
+  return previous && shallow(previous, next) ? previous : next;
 }
 
 interface GraphCachePresentation {

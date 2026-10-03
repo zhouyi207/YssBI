@@ -5,9 +5,28 @@ import {
   parseHarnessMemoryRecord,
   parseHarnessSessions,
   parseHarnessEvent,
+  parseHarnessTurnResult,
 } from "./harnessContract";
 
 describe("Harness wire contract", () => {
+  it("accepts empty successful turn text in both the receipt and completion event", () => {
+    for (const finalText of ["", "Completed"]) {
+      const result = { finalText };
+      expect(parseHarnessTurnResult(result)).toEqual(result);
+      const event = {
+        sequence: 1,
+        sessionId: "session",
+        turnId: "turn",
+        occurredAt: 1,
+        type: "turn_completed",
+        payload: result,
+      };
+      expect(parseHarnessEvent(event)).toEqual(event);
+    }
+    for (const finalText of [undefined, null, 0, false, {}]) {
+      expect(() => parseHarnessTurnResult({ finalText })).toThrow(InvalidHarnessPayloadError);
+    }
+  });
   it("parses memory lifecycle records and rejects unknown states", () => {
     const memory = {
       recordId: "memory-1",

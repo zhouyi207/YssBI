@@ -24,15 +24,17 @@ export function useCurrentWindowActions(): CurrentWindowActions {
   const window = useMemo(() => currentAppWindow(), []);
   const [maximized, setMaximized] = useState(false);
   const [issue, setIssue] = useState<ErrorReference | null>(null);
-  const mounted = useRef(true);
+  const lifetime = useRef<object | null>(null);
 
   useEffect(() => {
-    mounted.current = true;
+    const current = {};
+    lifetime.current = current;
+    const isCurrent = () => lifetime.current === current;
     let cleanup: (() => void) | null = null;
 
     const refresh = async (): Promise<void> => {
       const outcome = await window.isMaximized();
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       if (!outcome.ok) {
         setIssue(platformIssue(outcome.failure));
         return;
@@ -43,15 +45,15 @@ export function useCurrentWindowActions(): CurrentWindowActions {
     const setup = async (): Promise<void> => {
       try {
         await refresh();
-        if (!mounted.current) return;
+        if (!isCurrent()) return;
 
         const subscription = await window.onResized(() => {
-          if (!mounted.current) return;
+          if (!isCurrent()) return;
           void refresh().catch((error: unknown) => {
-            if (mounted.current) setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
+            if (isCurrent()) setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
           });
         });
-        if (!mounted.current) {
+        if (!isCurrent()) {
           if (subscription.ok) subscription.value();
           return;
         }
@@ -61,13 +63,13 @@ export function useCurrentWindowActions(): CurrentWindowActions {
           setIssue(platformIssue(subscription.failure));
         }
       } catch (error) {
-        if (mounted.current) setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
+        if (isCurrent()) setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
       }
     };
 
     void setup();
     return () => {
-      mounted.current = false;
+      lifetime.current = null;
       cleanup?.();
       cleanup = null;
     };
@@ -75,10 +77,11 @@ export function useCurrentWindowActions(): CurrentWindowActions {
 
   const run = useCallback(
     async (operation: () => Promise<PlatformOutcome<void>>): Promise<WindowActionOutcome> => {
-      if (!mounted.current) return { status: "stale" };
+      const current = lifetime.current;
+      if (current === null) return { status: "stale" };
       try {
         const outcome = await operation();
-        if (!mounted.current) return { status: "stale" };
+        if (lifetime.current !== current) return { status: "stale" };
         if (!outcome.ok) {
           setIssue(platformIssue(outcome.failure));
           return { status: "failed" };
@@ -86,7 +89,7 @@ export function useCurrentWindowActions(): CurrentWindowActions {
         setIssue(null);
         return { status: "completed" };
       } catch (error) {
-        if (!mounted.current) return { status: "stale" };
+        if (lifetime.current !== current) return { status: "stale" };
         setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
         return { status: "failed" };
       }
@@ -100,11 +103,13 @@ export function useCurrentWindowActions(): CurrentWindowActions {
   const close = useCallback(() => run(window.close), [run, window]);
 
   const toggleMaximize = useCallback(async (): Promise<WindowActionOutcome> => {
+    const current = lifetime.current;
     const outcome = await run(window.toggleMaximize);
-    if (outcome.status !== "completed" || !mounted.current) return outcome;
+    if (outcome.status !== "completed") return outcome;
+    if (lifetime.current !== current) return { status: "stale" };
     try {
       const refreshed = await window.isMaximized();
-      if (!mounted.current) return { status: "stale" };
+      if (lifetime.current !== current) return { status: "stale" };
       if (!refreshed.ok) {
         setIssue(platformIssue(refreshed.failure));
         return { status: "failed" };
@@ -112,7 +117,7 @@ export function useCurrentWindowActions(): CurrentWindowActions {
       setMaximized(refreshed.value);
       return outcome;
     } catch (error) {
-      if (!mounted.current) return { status: "stale" };
+      if (lifetime.current !== current) return { status: "stale" };
       setIssue(toErrorReference(error, WINDOW_ACTION_ERROR_CODE));
       return { status: "failed" };
     }

@@ -11,11 +11,14 @@ import type {
 import { isBackendDataType } from "@/shared/types/domain/valueType";
 
 const fingerprintPattern = /^[0-9a-f]{64}$/;
+export function isFingerprint(value: unknown): value is string {
+  return typeof value === "string" && fingerprintPattern.test(value);
+}
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const portDirections = new Set(["input", "output"]);
 const bindingKinds = new Set(["connections", "literal", "protocolDefault", "unbound"]);
 const scalarTypes = new Set<unknown>([...SEMANTIC_TYPES, null]);
-const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "derived"]);
+const schemaKinds = new Set(["input", "fixed", "project", "append", "rename", "filter", "derived"]);
 const portStatuses = new Set(["resolved", "orphan"]);
 const parameterPresentations = new Set(["detailPanel", "inlineAndDetail"]);
 const diagnosticSeverities = new Set(["error", "warning", "information"]);
@@ -94,11 +97,9 @@ function isProjectionBasis(value: unknown): boolean {
       "resourceVersions",
       "resourceObservations",
     ]) &&
-    typeof value.semanticInputHash === "string" &&
-    fingerprintPattern.test(value.semanticInputHash) &&
+    isFingerprint(value.semanticInputHash) &&
     isGraphResourcePath(value.graphPath) &&
-    typeof value.registryFingerprint === "string" &&
-    fingerprintPattern.test(value.registryFingerprint) &&
+    isFingerprint(value.registryFingerprint) &&
     isStringRecord(value.resourceVersions) &&
     typeof value.resourceObservations === "object" &&
     value.resourceObservations !== null &&

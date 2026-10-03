@@ -5,7 +5,6 @@ import { MarkdownRenderer } from "@/shared/ui/MarkdownRenderer";
 import { markdownProseClass } from "@/shared/ui/markdownProseClass";
 import type { EditorPanelScope } from "@/modules/workbench/public";
 import type { DocSnapshot } from "@/shared/types/domain/doc";
-import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
 import { docActions } from "@/features/application/resource/docActions";
 import { useFileTextInput } from "@/features/application/resource/useFileTextInput";
 import { FileEditor } from "./FileEditor";
@@ -65,7 +64,6 @@ export function DocFileEditor(scope: EditorPanelScope<"doc">) {
   return (
     <FileEditor
       {...scope}
-      store={useDocProjectionStore}
       actions={docActions}
       renderContent={(snapshot, reportError) => (
         <MarkdownEditor

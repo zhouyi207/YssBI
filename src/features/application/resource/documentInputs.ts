@@ -1,5 +1,9 @@
 import type { FileVersion } from "@/shared/types/domain/fileDocument";
-import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+  ProjectLifecycleError,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 /** Text composition belongs to the file, even while its field is unmounted. */
 interface DocumentInput {
@@ -39,15 +43,23 @@ export function remapDocumentInputs(
   toVersion?: FileVersion,
 ): void {
   if (from === to) return;
-  const source = inputs.get(activeKey(from));
+  const owner = captureProjectLifecycleState();
+  const sourceKey = owner.projectInstanceId + ":" + from;
+  const targetKey = owner.projectInstanceId + ":" + to;
+  const source = inputs.get(sourceKey);
   if (!source) return;
-  const target = inputs.get(activeKey(to)) ?? new Map<string, DocumentInput>();
-  for (const [id, input] of source) {
+  const moving = [...source];
+  const target = inputs.get(targetKey) ?? new Map<string, DocumentInput>();
+  // Transfer registrations before buffer notifications can release or replace them.
+  for (const [id, input] of moving) target.set(id, input);
+  inputs.set(targetKey, target);
+  inputs.delete(sourceKey);
+  for (const [id, input] of moving) {
+    if (!isProjectLifecycleStateCurrent(owner)) throw new ProjectLifecycleError();
+    if (inputs.get(targetKey) !== target || target.get(id) !== input) continue;
     input.remap?.(to, fromVersion, toVersion);
-    target.set(id, input);
+    if (!isProjectLifecycleStateCurrent(owner)) throw new ProjectLifecycleError();
   }
-  inputs.set(activeKey(to), target);
-  inputs.delete(activeKey(from));
 }
 
 export function releaseDocumentInputs(path: string): void {

@@ -2,9 +2,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useDatabaseStore } from "@/features/core/dataStore";
 import { useEditorStore } from "@/features/core/editor";
-import { useResourceStore } from "@/features/core/resource";
+import { useResourceStore, resourceKey } from "@/features/core/resource";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { ProjectService } from "@/services/project/projectService";
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
@@ -16,9 +15,31 @@ import { useDatabaseManagement } from "./useDatabaseManagement";
 vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog: vi.fn() }));
 
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
+const otherDatabase = {
+  id: "other",
+  name: "Other",
+  resourcePath: "another database resource path",
+  engine: { dataset: {} },
+  schemaVersion: 1,
+  required: false,
+};
+const salesDatabase = {
+  id: "sales",
+  name: "Sales",
+  resourcePath: "opaque database resource path",
+  engine: { dataset: {} },
+  schemaVersion: 1,
+  required: false,
+};
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function aggregate(afterName: string | null, operationId: string) {
+function aggregate(afterName: string | null, operationId: string, createdId?: string) {
+  const id = createdId ?? "sales";
+  const resourcePath = createdId
+    ? "opaque imported database resource path"
+    : salesDatabase.resourcePath;
+  const fromRevision = createdId ? 0 : 4;
+  const toRevision = fromRevision + 1;
   vi.mocked(ProjectService.getProjectIndex).mockResolvedValue(
     projectIndexSnapshotFixture({
       projectInstanceId,
@@ -30,24 +51,27 @@ function aggregate(afterName: string | null, operationId: string) {
       minds: [],
       docs: [],
       charts: [],
-      databases:
-        afterName === null
+      databases: [
+        { ...otherDatabase, revision: 2 },
+        ...(createdId ? [{ ...salesDatabase, revision: 4 }] : []),
+        ...(afterName === null
           ? []
           : [
               {
-                id: "sales",
-                resourcePath: "opaque database resource path",
-                revision: 5,
+                id,
+                resourcePath,
+                revision: toRevision,
                 engine: { dataset: {} },
                 schemaVersion: 1,
                 required: false,
                 name: afterName,
               },
-            ],
+            ]),
+      ],
     }),
   );
   const before = {
-    id: "sales",
+    id,
     engine: { dataset: {} },
     schemaVersion: 1,
     required: false,
@@ -62,13 +86,16 @@ function aggregate(afterName: string | null, operationId: string) {
       moves: [],
       deltas: [
         {
-          resource: { kind: "database" as const, key: "opaque database resource path" },
-          fromRevision: 4,
-          toRevision: 5,
+          resource: { kind: "database" as const, key: resourcePath },
+          fromRevision,
+          toRevision,
           causedBy: operationId,
           payload: {
             kind: "database" as const,
-            patch: { before, after: afterName === null ? null : { ...before, name: afterName } },
+            patch: {
+              before: createdId ? null : before,
+              after: afterName === null ? null : { ...before, name: afterName },
+            },
           },
         },
       ],
@@ -91,18 +118,36 @@ describe("useDatabaseManagement revision authority", () => {
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useEditorStore.getState().clearDetailFocus();
     useResourceStore.getState().clear();
-    useDatabaseStore.setState({
+    useResourceStore.setState({
       databases: {
-        sales: {
-          id: "sales",
-          name: "Sales",
-          resourcePath: "opaque database resource path",
-          engine: { dataset: {} },
-          schemaVersion: 1,
-          required: false,
-        },
+        other: otherDatabase,
+        sales: salesDatabase,
       },
-      revisions: { sales: 4 },
+      resources: Object.fromEntries(
+        (
+          [
+            ["sales", 4],
+            ["other", 2],
+          ] as const
+        ).map(([id, revision]) => {
+          const uri = resourceKey({ kind: "database", id });
+          return [
+            uri,
+            {
+              id,
+              kind: "database",
+              name: id === "sales" ? "Sales" : "Other",
+              revision,
+              uri,
+              exists: true,
+              loaded: true,
+              hasDirtyDocument: false,
+              hasStaleDocument: false,
+              hasConflictDocument: false,
+            },
+          ];
+        }),
+      ),
     });
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -118,7 +163,7 @@ describe("useDatabaseManagement revision authority", () => {
     act(() => root.unmount());
     host.remove();
     for (const modal of uiStore.getState().modals) uiStore.closeModal(modal.id);
-    uiStore.finishProgress();
+    expect(uiStore.getState().progress).toBeNull();
   });
 
   it("keeps a canceled import open and closes only that dialog after a sheet finishes importing", async () => {
@@ -132,9 +177,9 @@ describe("useDatabaseManagement revision authority", () => {
         new Promise((resolve) => {
           completeImport = () =>
             resolve({
-              ...aggregate("Imported sales", operation),
+              ...aggregate("Imported sales", operation, "imported-sales"),
               data: {
-                id: "sales",
+                id: "imported-sales",
                 name: "Imported sales",
                 rowCount: 1,
                 columnCount: 1,
@@ -175,7 +220,11 @@ describe("useDatabaseManagement revision authority", () => {
       expect.any(String),
       { excel: { path: "C:/sales.xlsx", sheet: "Sales" } },
     );
-    expect(useDatabaseStore.getState().databases.sales?.name).toBe("Imported sales");
+    expect(useResourceStore.getState().databases["imported-sales"]).toMatchObject({
+      name: "Imported sales",
+      rowCount: 1,
+      columns: [{ name: "value", type: "Int64" }],
+    });
     uiStore.closeModal(notice.id);
     await noticeDismissed;
   });
@@ -194,8 +243,11 @@ describe("useDatabaseManagement revision authority", () => {
       "sales",
       "Renamed",
     );
-    expect(useDatabaseStore.getState().revisions.sales).toBe(5);
-    expect(useDatabaseStore.getState().databases.sales?.name).toBe("Renamed");
+    expect(
+      useResourceStore.getState().resources[resourceKey({ kind: "database", id: "sales" })]
+        .revision,
+    ).toBe(5);
+    expect(useResourceStore.getState().databases.sales?.name).toBe("Renamed");
   });
 
   it("does not perform an independent delete outside canonical publication application", async () => {
@@ -212,8 +264,10 @@ describe("useDatabaseManagement revision authority", () => {
       4,
       "sales",
     );
-    expect(useDatabaseStore.getState().databases.sales).toBeUndefined();
-    expect(useDatabaseStore.getState().revisions.sales).toBeUndefined();
+    expect(useResourceStore.getState().databases.sales).toBeUndefined();
+    expect(
+      useResourceStore.getState().resources[resourceKey({ kind: "database", id: "sales" })],
+    ).toBeUndefined();
     expect(progress).not.toHaveBeenCalled();
   });
 

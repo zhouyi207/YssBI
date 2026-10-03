@@ -127,7 +127,7 @@ export function useUiPage(source: ResultReference) {
           await close();
           return () => Promise.resolve();
         }
-        if (!entry.page && !loading) await entry.reload();
+        if (!entry.page && !loading) void entry.reload();
         return close;
       })
       .catch((error) => {

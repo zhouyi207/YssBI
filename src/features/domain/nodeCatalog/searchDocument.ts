@@ -1,17 +1,6 @@
 import { pinyin } from "pinyin-pro";
 import type { LocalizedCatalogItemDto } from "@/shared/types/domain/localizedCatalog";
 
-export interface CatalogSearchDocument {
-  nodeTypeId: string;
-  localizedTitle: string;
-  aliases: string[];
-  technicalTerms: string[];
-  backendSearchText: string[];
-  resourceNames: string[];
-  pinyinFull: string[];
-  pinyinInitials: string[];
-}
-
 const HAN_CHARACTER = /\p{Script=Han}/u;
 const PINYIN_OPTIONS = {
   toneType: "none",
@@ -34,25 +23,18 @@ function normalizedUnique(values: Iterable<string>): string[] {
 }
 
 function pinyinForms(values: readonly string[], pattern: "pinyin" | "first"): string[] {
-  return normalizedUnique(
-    values
-      .filter((value) => HAN_CHARACTER.test(value))
-      .map((value) =>
-        pinyin(value, {
-          ...PINYIN_OPTIONS,
-          pattern,
-        }).join(pattern === "first" ? "" : " "),
-      ),
-  );
+  return values
+    .filter((value) => HAN_CHARACTER.test(value))
+    .map((value) =>
+      pinyin(value, {
+        ...PINYIN_OPTIONS,
+        pattern,
+      }).join(pattern === "first" ? "" : " "),
+    );
 }
 
-export function buildCatalogSearchDocument(item: LocalizedCatalogItemDto): CatalogSearchDocument {
-  const localizedTitle = normalizeCatalogSearchText(item.title);
-  const aliases = normalizedUnique(item.aliases);
-  const technicalTerms = normalizedUnique(item.technicalTerms);
-  const backendSearchText = normalizedUnique(item.backendSearchText);
-  const resourceNames = normalizedUnique(item.resourceNames);
-  const pinyinSources = [
+export function buildCatalogSearchDocument(item: LocalizedCatalogItemDto): string {
+  const sources = [
     item.title,
     ...item.aliases,
     ...item.technicalTerms,
@@ -60,34 +42,18 @@ export function buildCatalogSearchDocument(item: LocalizedCatalogItemDto): Catal
     ...item.resourceNames,
   ];
 
-  return {
-    nodeTypeId: item.nodeTypeId,
-    localizedTitle,
-    aliases,
-    technicalTerms,
-    backendSearchText,
-    resourceNames,
-    pinyinFull: pinyinForms(pinyinSources, "pinyin"),
-    pinyinInitials: pinyinForms(pinyinSources, "first"),
-  };
+  return normalizedUnique([
+    item.nodeTypeId,
+    ...sources,
+    ...pinyinForms(sources, "pinyin"),
+    ...pinyinForms(sources, "first"),
+  ]).join(" ");
 }
 
-export function matchesCatalogSearchDocument(
-  document: CatalogSearchDocument,
-  query: string,
-): boolean {
-  const terms = normalizeCatalogSearchText(query).split(" ").filter(Boolean);
-  if (terms.length === 0) return true;
+export function catalogSearchTerms(query: string): string[] {
+  return normalizeCatalogSearchText(query).split(" ").filter(Boolean);
+}
 
-  const text = normalizedUnique([
-    document.nodeTypeId,
-    document.localizedTitle,
-    ...document.aliases,
-    ...document.technicalTerms,
-    ...document.backendSearchText,
-    ...document.resourceNames,
-    ...document.pinyinFull,
-    ...document.pinyinInitials,
-  ]).join(" ");
-  return terms.every((term) => text.includes(term));
+export function matchesCatalogSearchDocument(document: string, terms: readonly string[]): boolean {
+  return terms.every((term) => document.includes(term));
 }

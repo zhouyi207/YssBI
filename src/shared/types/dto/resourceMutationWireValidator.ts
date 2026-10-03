@@ -1,17 +1,13 @@
 import { hasValidResourceDeltaRevisions } from "@/shared/types/domain/resourceMutationValidation";
 import { isMindPath } from "@/shared/types/domain/mind";
+import { isDatabaseEngine } from "@/shared/types/domain/database";
+import { isChartDocumentState } from "@/shared/types/domain/chart";
 import { isDocPath } from "@/shared/types/domain/doc";
 import type { ResourceDeltaDto } from "@/shared/types/dto/editorMutation";
-import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuards";
-import { isTypedLiteralWire, isTypeExprWire } from "@/shared/types/dto/editorMutationWireParser";
+import { isFunctionSignatureDto } from "@/shared/types/domain/editorMutation";
+import { isGraphResourcePath, isUuid } from "@/shared/types/domain/editorProjectionGuards";
 
 type UnknownRecord = Record<string, unknown>;
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && UUID_PATTERN.test(value);
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -29,156 +25,9 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-function isPosition(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value.x === "number" &&
-    Number.isFinite(value.x) &&
-    typeof value.y === "number" &&
-    Number.isFinite(value.y)
-  );
-}
-
-function isDocumentNode(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    isUuid(value.id) &&
-    typeof value.node_type === "string" &&
-    isPosition(value.position) &&
-    isRecord(value.parameters) &&
-    isNullableString(value.user_label)
-  );
-}
-
-function isDocumentPortAddress(value: unknown): boolean {
-  if (!isRecord(value) || !isUuid(value.node_id) || !isRecord(value.port)) return false;
-  if (value.port.kind === "declared") return typeof value.port.key === "string";
-  return (
-    value.port.kind === "instance" &&
-    typeof value.port.template === "string" &&
-    isUuid(value.port.instance_id)
-  );
-}
-
-function isDynamicMemberLocator(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  if (value.kind === "function_parameter") {
-    return typeof value.function === "string" && typeof value.parameter === "string";
-  }
-  return (
-    value.kind === "schema_field" &&
-    typeof value.source === "string" &&
-    typeof value.field === "string"
-  );
-}
-
-function isLastKnownPortMetadata(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.label !== "string") return false;
-  return (
-    hasExactKeys(value, ["label"]) ||
-    (hasExactKeys(value, ["label", "value_type"]) && isTypeExprWire(value.value_type))
-  );
-}
-
-function isDynamicPortBinding(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.order !== "string") return false;
-  if (value.kind === "user_created") return hasExactKeys(value, ["kind", "order"]);
-  if (value.kind === "resolved") {
-    return (
-      hasExactKeys(value, ["kind", "origin", "order", "last_known"]) &&
-      isDynamicMemberLocator(value.origin) &&
-      isLastKnownPortMetadata(value.last_known)
-    );
-  }
-  return (
-    value.kind === "orphan" &&
-    hasExactKeys(value, ["kind", "origin", "order", "last_known"]) &&
-    isDynamicMemberLocator(value.origin) &&
-    isLastKnownPortMetadata(value.last_known)
-  );
-}
-
-function isDocumentConnection(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    isUuid(value.id) &&
-    isDocumentPortAddress(value.output) &&
-    isDocumentPortAddress(value.input) &&
-    isNullableString(value.order)
-  );
-}
-
-function isInputState(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasOwn(value, "literal_override") &&
-    (value.literal_override === null || isTypedLiteralWire(value.literal_override))
-  );
-}
-
-function isNullableInputState(value: unknown): boolean {
-  return value === null || isInputState(value);
-}
-
-function isGraphOperation(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.operation !== "string") return false;
-  switch (value.operation) {
-    case "insert_node":
-    case "remove_node":
-      return isDocumentNode(value.node);
-    case "update_node":
-      return isDocumentNode(value.before) && isDocumentNode(value.after);
-    case "insert_port_binding":
-    case "remove_port_binding":
-      return isDocumentPortAddress(value.address) && isDynamicPortBinding(value.binding);
-    case "insert_connection":
-    case "remove_connection":
-      return isDocumentConnection(value.connection);
-    case "set_input_state":
-      return (
-        isDocumentPortAddress(value.address) &&
-        isNullableInputState(value.before) &&
-        isNullableInputState(value.after)
-      );
-    default:
-      return false;
-  }
-}
-
-function isGraphPatch(value: unknown): boolean {
-  return (
-    isRecord(value) && Array.isArray(value.operations) && value.operations.every(isGraphOperation)
-  );
-}
-
-function isFunctionParameter(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.type_name === "string"
-  );
-}
-
-function isFunctionSignature(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.parameters) &&
-    value.parameters.every(isFunctionParameter) &&
-    isNullableString(value.return_type)
-  );
-}
-
 function isFunctionPatch(value: unknown): boolean {
-  return isRecord(value) && isFunctionSignature(value.before) && isFunctionSignature(value.after);
-}
-
-function isDatabaseEngine(value: unknown): boolean {
   return (
-    isRecord(value) &&
-    hasExactKeys(value, ["dataset"]) &&
-    isRecord(value.dataset) &&
-    Object.keys(value.dataset).length === 0
+    isRecord(value) && isFunctionSignatureDto(value.before) && isFunctionSignatureDto(value.after)
   );
 }
 
@@ -222,20 +71,6 @@ function isResourcePathMovePatch(
     (graphPath ? isGraphResourcePath(value.from) : isNonEmptyPath(value.from)) &&
     (graphPath ? isGraphResourcePath(value.to) : isNonEmptyPath(value.to)) &&
     value.from !== value.to
-  );
-}
-
-function isChartDocumentState(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["databaseId", "chartType", "encodings"]) &&
-    typeof value.databaseId === "string" &&
-    (value.chartType === "histogram" ||
-      value.chartType === "scatter" ||
-      value.chartType === "line") &&
-    isRecord(value.encodings) &&
-    Object.keys(value.encodings).every((key) => key === "x" || key === "y") &&
-    Object.values(value.encodings).every((entry) => typeof entry === "string")
   );
 }
 
@@ -305,9 +140,8 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
   if (kind === "graph") {
     return (
       isGraphResourcePath(key) &&
-      ((value.payload.kind === "graph" && isGraphPatch(value.payload.patch)) ||
-        (value.payload.kind === "resource_lifecycle" &&
-          isResourceLifecyclePatch(value.payload.patch, key, "graph")) ||
+      ((value.payload.kind === "resource_lifecycle" &&
+        isResourceLifecyclePatch(value.payload.patch, key, "graph")) ||
         (value.payload.kind === "resource_move" &&
           isResourcePathMovePatch(value.payload.patch, true)))
     );

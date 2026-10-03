@@ -27,12 +27,11 @@ export function buildLocalizedCatalogBrowser({
   const searching = query.trim().length > 0;
   const items = !catalog ? [] : searching ? (searchIndex?.search(query) ?? []) : catalog.items;
   const tree = catalog ? buildLocalizedCatalogTree(catalog.categories, items) : [];
-  const effectiveExpandedCategoryIds = searching
-    ? collectLocalizedCatalogCategoryIds(tree)
-    : expandedCategoryIds;
+  const categoryIds = collectLocalizedCatalogCategoryIds(tree);
+  const effectiveExpandedCategoryIds = searching ? categoryIds : expandedCategoryIds;
 
   return {
-    categoryIds: collectLocalizedCatalogCategoryIds(tree),
+    categoryIds,
     expandedCategoryIds: effectiveExpandedCategoryIds,
     rows: flattenLocalizedCatalogTree(tree, effectiveExpandedCategoryIds),
   };

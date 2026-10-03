@@ -3,7 +3,6 @@
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
 import { chartUi } from "@/features/core/chart/ui";
@@ -11,10 +10,6 @@ import { editorUi } from "@/features/core/editor/ui";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
-vi.mock("@/features/core/editor", () => {
-  const resources = { eventGraphs: {}, functionGraphs: {}, dataframes: {} };
-  return { useEditorCollections: () => resources };
-});
 vi.mock("@/features/application/log", () => ({
   useLogStore: (selector: (state: { selectedLog: null }) => unknown) =>
     selector({ selectedLog: null }),
@@ -34,7 +29,6 @@ describe("Chart detail subscriptions", () => {
 
   beforeEach(() => {
     useResourceStore.getState().clear();
-    useChartDocumentStore.getState().clear();
     editorUi.clearDetailFocus();
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -44,7 +38,6 @@ describe("Chart detail subscriptions", () => {
   afterEach(() => {
     act(() => root.unmount());
     editorUi.clearDetailFocus();
-    useChartDocumentStore.getState().clear();
     useResourceStore.getState().clear();
     host.remove();
   });
@@ -57,7 +50,7 @@ describe("Chart detail subscriptions", () => {
       chartType: "scatter",
       encodings: { x: "time", y: "amount" },
     };
-    const store = useChartDocumentStore.getState();
+    const store = useResourceStore.getState();
     const chartResource = { kind: "chart" as const, id: chartPath };
     useResourceStore.getState().setSnapshot({
       resources: [
@@ -74,7 +67,7 @@ describe("Chart detail subscriptions", () => {
         },
       ],
     });
-    store.upsertDocument(chartPath, document);
+    store.upsertChartDocument(chartPath, document);
     act(() =>
       root.render(
         <StrictMode>
@@ -100,7 +93,7 @@ describe("Chart detail subscriptions", () => {
     act(() => chartUi.updateDraft(chartPath, { chartType: "line" }));
     expect(host.textContent).toBe("line");
     expect(latest.kind === "chart" && latest.document).toBe(
-      useChartDocumentStore.getState().documents[chartPath],
+      useResourceStore.getState().chartDocuments[chartPath],
     );
     expect(document.chartType).toBe("scatter");
 

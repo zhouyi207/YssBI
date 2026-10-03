@@ -8,13 +8,13 @@ import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { markResourceLoaded, useDocumentStateStore } from "@/features/core/resource";
+import { markResourceLoaded, useResourceStore } from "@/features/core/resource";
 import { useExecutionStore } from "@/features/core/execution";
 import { ProjectService } from "@/services/project/projectService";
 import { ResultService } from "@/services/result/resultService";
@@ -59,9 +59,9 @@ describe("Pin result View", () => {
     useProjectIOStore.setState({ projectInstanceId: "project-session-1" });
     clearProjectLifecycle();
     startProjectLifecycle("project-session-1");
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
     useGraphSessionStore.getState().reset();
-    useDocumentStateStore.getState().clear();
+    useResourceStore.getState().clear();
     useExecutionStore.setState({
       graphs: {},
     });
@@ -86,7 +86,7 @@ describe("Pin result View", () => {
     installGraphProjectionFixture(graphPath, fixture.projection);
     markResourceLoaded({ id: graphPath, kind: "event_graph" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
-    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
+    const pin = useResourceStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
     const execute = vi.spyOn(ProjectService, "executeGraph");
 
@@ -128,7 +128,7 @@ describe("Pin result View", () => {
   it("keeps the Pin context menu limited to actions after viewing a result", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     installGraphProjectionFixture(graphPath, fixture.projection);
-    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
+    const pin = useResourceStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
 
     const current = {
@@ -196,7 +196,7 @@ describe("Pin result View", () => {
     installGraphProjectionFixture(functionPath, fixture.projection);
     markResourceLoaded({ id: functionPath, kind: "function_graph" });
     useGraphSessionStore.getState().setFocusedSession("editor-a", functionPath);
-    const pin = useGraphProjectionStore.getState().getGraphPin(functionPath, fixture.outputKey);
+    const pin = useResourceStore.getState().getGraphPin(functionPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected function output pin");
     const execute = vi.spyOn(ProjectService, "executeGraph");
 

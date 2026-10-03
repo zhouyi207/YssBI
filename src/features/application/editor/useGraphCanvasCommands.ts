@@ -3,7 +3,7 @@ import type { GraphCanvasViewportCommands } from "./editorCanvasTypes";
 import { setInspectionContext } from "./rightSidebarActions";
 import { isEditorCommandTargetCurrent, type EditorCommandTarget } from "./editorCommandFocus";
 import { collectCanvasNodeWorldBounds } from "@/features/core/canvas";
-import { useGraphProjectionStore } from "@/features/core/dataStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedNodeIds,
@@ -36,7 +36,7 @@ function activeGraphContext(target: EditorCommandTarget): ActiveGraphContext | n
     return null;
   const graphPath = target.resourceRef;
   if (!getDocumentState({ id: graphPath, kind: target.resourceKind })?.loaded) return null;
-  if (!useGraphProjectionStore.getState().graphEntities[graphPath]) return null;
+  if (!useResourceStore.getState().graphEntities[graphPath]) return null;
 
   return {
     target,
@@ -78,7 +78,7 @@ export function useGraphCanvasCommands(): GraphCanvasViewportCommands {
       async selectAllNodes(target: EditorCommandTarget): Promise<boolean> {
         const context = activeGraphContext(target);
         if (!context) return false;
-        const bucket = useGraphProjectionStore.getState().graphEntities[context.graphPath];
+        const bucket = useResourceStore.getState().graphEntities[context.graphPath];
         const selectableNodeIds = bucket.graphNodes.filter(
           (nodeId) => bucket.nodes[nodeId]?.capabilities?.managed === false,
         );

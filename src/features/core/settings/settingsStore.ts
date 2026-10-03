@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { shallow } from "zustand/shallow";
 import { parseSettingsPatch } from "@/shared/types/settings/parseSettings";
 import type {
   AiSettings,
@@ -8,7 +9,7 @@ import type {
 } from "@/shared/types/settings";
 import { DEFAULT_APPEARANCE, DEFAULT_AI } from "@/shared/config-default";
 import { getThemeModeForPreset } from "@/shared/theme/colorThemePresets";
-import { logger } from "@/features/core/observability/logger";
+import { logger } from "@/utils/frontendLogger";
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
 
@@ -19,13 +20,6 @@ export function setClientSettingsPublisher(
   publisher: ((settings: PartialAppSettings) => void) | null,
 ): void {
   publishClientSettings = publisher;
-}
-
-function clientSettingsFingerprint(s: AppSettings): string {
-  return JSON.stringify({
-    ai: s.ai,
-    appearance: s.appearance,
-  });
 }
 
 function mergeAppearanceSettings(source?: Partial<AppearanceSettings>): AppearanceSettings {
@@ -105,9 +99,9 @@ export function applyClientSettingsFromRemote(incoming: PartialAppSettings): voi
   if (!patch) return;
   const current = useSettingsStore.getState();
   const merged = mergeSettings(mergePatches(mergePatches(current, patch), pendingSettings));
-  if (clientSettingsFingerprint(current) === clientSettingsFingerprint(merged)) return;
+  if (shallow(current.ai, merged.ai) && shallow(current.appearance, merged.appearance)) return;
   saveLocalSettings(mergeSettings(mergePatches(loadLocalSettings(), patch)));
-  useSettingsStore.setState({ ...merged, isLoading: false });
+  useSettingsStore.setState((state) => settingsUpdate(state, merged, false));
 }
 
 interface SettingsStore {
@@ -132,8 +126,24 @@ interface SettingsStore {
   resetAllToDefaults: () => Promise<void>;
 }
 
+function settingsUpdate(
+  current: SettingsStore,
+  next: AppSettings,
+  isLoading = current.isLoading,
+): Partial<SettingsStore> {
+  const ai = shallow(current.ai, next.ai) ? current.ai : next.ai;
+  const appearance = shallow(current.appearance, next.appearance)
+    ? current.appearance
+    : next.appearance;
+  if (ai === current.ai && appearance === current.appearance && isLoading === current.isLoading)
+    return current;
+  return { ai, appearance, isLoading };
+}
+
 export const useSettingsStore = create<SettingsStore>((set, get) => {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const installSettings = (settings: AppSettings, isLoading?: boolean) =>
+    set((current) => settingsUpdate(current, settings, isLoading));
 
   const saveImmediately = async () => {
     // 取消任何待处理的防抖保存
@@ -145,7 +155,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const settings = mergeSettings(mergePatches(loadLocalSettings(), patch));
     saveLocalSettings(settings);
     pendingSettings = {};
-    if (clientSettingsFingerprint(get()) !== clientSettingsFingerprint(settings)) set(settings);
+    installSettings(settings);
     if (Object.keys(patch.ai ?? {}).length || Object.keys(patch.appearance ?? {}).length)
       publishClientSettings?.(patch);
   };
@@ -166,18 +176,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = null;
       pendingSettings = {};
-      set({ isLoading: true });
-      set({
-        ...loadLocalSettings(),
-        isLoading: false,
-      });
+      installSettings(loadLocalSettings(), false);
     },
 
     updateAi: (updates) => {
       const patch = parseSettingsPatch({ ai: updates });
       if (!patch) throw new Error("Invalid AI settings fields");
       pendingSettings = mergePatches(pendingSettings, patch);
-      set((state) => ({ ai: { ...state.ai, ...patch.ai } }));
+      const current = get();
+      installSettings({ ai: { ...current.ai, ...patch.ai }, appearance: current.appearance });
       scheduleSave();
     },
 
@@ -193,7 +200,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       if (next.lastDarkColorTheme !== current.lastDarkColorTheme)
         patch.lastDarkColorTheme = next.lastDarkColorTheme;
       pendingSettings = mergePatches(pendingSettings, { appearance: patch });
-      set({ appearance: next });
+      installSettings({ ai: get().ai, appearance: next });
       scheduleSave();
     },
 
@@ -202,20 +209,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
     resetAiToDefaults: async () => {
       pendingSettings = mergePatches(pendingSettings, { ai: DEFAULT_AI });
-      set({ ai: DEFAULT_AI });
+      installSettings({ ai: DEFAULT_AI, appearance: get().appearance });
       await saveImmediately();
     },
 
     resetAppearanceToDefaults: async () => {
       pendingSettings = mergePatches(pendingSettings, { appearance: DEFAULT_APPEARANCE });
-      set({ appearance: DEFAULT_APPEARANCE });
+      installSettings({ ai: get().ai, appearance: DEFAULT_APPEARANCE });
       await saveImmediately();
     },
 
     resetAllToDefaults: async () => {
       const defaults = mergeSettings({});
       pendingSettings = defaults;
-      set(defaults);
+      installSettings(defaults);
       await saveImmediately();
     },
   };

@@ -5,12 +5,9 @@ import type { LogRecordDto } from "@/shared/types/domain/log";
 import { isLogViewportPinnedToBottom } from "./logPanelScroll";
 import { snapLogViewportToBottom } from "./logPanelViewport";
 
-export type LogPanelPresentation = "embedded" | "standalone";
-
 export interface UseLogPanelVirtualListOptions {
   readonly filteredLogs: readonly LogRecordDto[];
   readonly autoScroll: boolean;
-  readonly presentation: LogPanelPresentation;
   readonly refreshScrollToken: number;
 }
 

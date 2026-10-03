@@ -1,29 +1,29 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import type { FileSnapshot } from "@/shared/types/domain/fileDocument";
-import type { FileResourceKind } from "@/shared/types/domain/resource";
-import type { createFileProjectionStore } from "@/features/core/resource/fileProjectionStore";
-import { resourceKey, useResourceStore } from "@/features/core/resource";
+import {
+  resourceKey,
+  useResourceStore,
+  type FileSnapshotKind,
+  type FileSnapshotByKind,
+} from "@/features/core/resource";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
-export function FileEditor<S extends FileSnapshot<FileResourceKind, unknown>>({
+export function FileEditor<K extends FileSnapshotKind>({
   resourceRef,
   resourceKind,
-  store,
   actions,
   renderContent,
 }: {
   resourceRef: string;
-  resourceKind: S["kind"];
-  store: ReturnType<typeof createFileProjectionStore<S>>["store"];
+  resourceKind: K;
   actions: {
-    load(path: string): Promise<S>;
+    load(path: string): Promise<FileSnapshotByKind[K]>;
     save(path: string): Promise<boolean>;
   };
-  renderContent(snapshot: S, reportError: (error: unknown) => void): ReactNode;
+  renderContent(snapshot: FileSnapshotByKind[K], reportError: (error: unknown) => void): ReactNode;
 }) {
   const { t } = useTranslation();
-  const snapshot = store((state) => state.documents[resourceRef]);
+  const snapshot = useResourceStore((state) => state.fileSnapshots[resourceKind][resourceRef]);
   const revision = useResourceStore(
     (state) => state.resources[resourceKey({ id: resourceRef, kind: resourceKind })]?.revision,
   );
@@ -33,7 +33,7 @@ export function FileEditor<S extends FileSnapshot<FileResourceKind, unknown>>({
     [t],
   );
   useEffect(() => {
-    const loaded = store.getState().documents[resourceRef];
+    const loaded = useResourceStore.getState().fileSnapshots[resourceKind][resourceRef];
     if (loaded && (revision === undefined || loaded.version.revision === revision)) return;
     let current = true;
     void actions.load(resourceRef).catch((error) => {
@@ -42,7 +42,7 @@ export function FileEditor<S extends FileSnapshot<FileResourceKind, unknown>>({
     return () => {
       current = false;
     };
-  }, [resourceRef, revision, reportError, actions, store]);
+  }, [resourceKind, resourceRef, revision, reportError, actions]);
   const save = () => {
     setError(null);
     void actions.save(resourceRef).catch(reportError);

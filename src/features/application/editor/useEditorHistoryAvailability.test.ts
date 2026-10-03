@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -17,8 +17,7 @@ vi.mock("./editorGroupContext", () => ({
     activeEditor.activeResourceRef ? { graphPath: activeEditor.activeResourceRef } : null,
 }));
 
-const draftDocument = { nodes: {}, port_bindings: [], connections: {}, input_states: [] };
-const version = { document: draftDocument, projection: {} as never };
+const version = { constants: undefined, projection: {} as never };
 
 describe("useEditorHistoryAvailability", () => {
   let host: HTMLDivElement;
@@ -32,7 +31,7 @@ describe("useEditorHistoryAvailability", () => {
 
   beforeEach(() => {
     activeEditor.activeResourceRef = graphPath;
-    useGraphProjectionStore.setState({ sessions: {} });
+    useResourceStore.setState({ sessions: {} });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -44,7 +43,7 @@ describe("useEditorHistoryAvailability", () => {
   });
 
   it("derives undo/redo only from the active Rust graph projection and masks both while saving", () => {
-    useGraphProjectionStore.setState({
+    useResourceStore.setState({
       sessions: {
         [graphPath]: {
           ...version,
@@ -67,7 +66,7 @@ describe("useEditorHistoryAvailability", () => {
       pending: false,
     });
 
-    act(() => useGraphProjectionStore.getState().beginSave(graphPath));
+    act(() => useResourceStore.getState().beginGraphSave(graphPath));
     expect(current).toEqual({
       activeResourceRef: graphPath,
       canUndo: false,

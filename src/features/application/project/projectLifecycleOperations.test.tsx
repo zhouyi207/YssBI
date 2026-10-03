@@ -20,13 +20,14 @@ import { normalizeIpcError } from "@/services/ipc";
 import type {
   LifecycleMutationOutcome,
   LifecycleMutationResultDto,
+  ProjectIndexRow,
   ProjectRecordRow,
 } from "@/shared/types/domain/project";
 
 import { useProjectOperations } from "@/features/application/editor/useProjectOperations";
 import { useProjectPicker } from "./useProjectPicker";
 import { saveAllDirtyDocuments } from "@/features/application/editor/saveAllDirtyDocuments";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
 import { removeProjectScopedWorkbenchPanels } from "./projectWorkbenchLifecycle";
@@ -78,6 +79,7 @@ function record(id = "record-b", path = "C:/project-b/metadata.yssbi"): ProjectR
     lastOpenedAt: null,
     isFavorite: false,
     rootIdentity: "native-id",
+    rootIdentityState: "valid",
   };
 }
 
@@ -130,7 +132,7 @@ function activeTerminalRowRejectionReceipt(
   };
 }
 
-function mockProjectBHydration(): void {
+function mockProjectBHydration(eventGraphs: ProjectIndexRow["eventGraphs"] = []): void {
   vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
   vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
     databases: {},
@@ -140,7 +142,7 @@ function mockProjectBHydration(): void {
       projectInstanceId: "project-b",
       publicationRevision: 0,
       projectName: "Project B",
-      eventGraphs: [],
+      eventGraphs,
       functionGraphs: [],
 
       minds: [],
@@ -189,6 +191,7 @@ describe("project lifecycle initiating operations", () => {
   let root: Root;
   let operations!: ReturnType<typeof useProjectOperations>;
   let picker!: ReturnType<typeof useProjectPicker>;
+  let stopProgressObservation = () => {};
 
   beforeEach(async () => {
     vi.restoreAllMocks();
@@ -209,6 +212,7 @@ describe("project lifecycle initiating operations", () => {
       projectInstanceId: "project-a",
     });
     projectPublicationCoordinator.startProject("project-a", 4);
+    useResourceStore.getState().clear();
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -227,7 +231,9 @@ describe("project lifecycle initiating operations", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
-    uiStore.finishProgress();
+    stopProgressObservation();
+    stopProgressObservation = () => {};
+    expect(uiStore.getState().progress).toBeNull();
   });
 
   it("resets project-scoped editor context after authoritative replacement", async () => {
@@ -293,7 +299,9 @@ describe("project lifecycle initiating operations", () => {
     );
     const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
-    mockProjectBHydration();
+    mockProjectBHydration([
+      { path: "events/ProjectB.yssbi-event", name: "Project B", type: "event_graph", revision: 0 },
+    ]);
     const unsubscribe = useResourceStore.subscribe(() => {
       order.push("resources:published");
     });
@@ -466,6 +474,62 @@ describe("project lifecycle initiating operations", () => {
     expect(picker.pageIssue).toEqual(outcome.status === "issue" ? outcome.issue : null);
   });
 
+  it("keeps registry mutations outside an unfinished picker refresh", async () => {
+    const read = deferred<ProjectRecordRow[]>();
+    vi.mocked(ProjectService.listRegisteredProjects).mockReturnValueOnce(read.promise);
+    const remove = vi.spyOn(ProjectService, "removeRegisteredProject").mockResolvedValue();
+    let refresh!: ReturnType<typeof picker.refresh>;
+    act(() => {
+      refresh = picker.refresh();
+    });
+    let rejected!: Awaited<ReturnType<typeof picker.removeProject>>;
+    await act(async () => {
+      rejected = await picker.removeProject("project-a");
+    });
+    const busyDuringRefresh = picker.busy;
+    const callsDuringRefresh = remove.mock.calls.length;
+    await act(async () => {
+      read.resolve([record("project-a", "C:/project-a/metadata.yssbi")]);
+      await refresh;
+    });
+
+    expect(rejected).toMatchObject({
+      status: "issue",
+      issue: { operation: "remove", error: { code: "project_picker_busy" } },
+    });
+    expect(callsDuringRefresh).toBe(0);
+    expect(busyDuringRefresh).toBe("refresh");
+    expect(picker.pageIssue).toBeNull();
+    await act(async () => {
+      expect(await picker.removeProject("project-a")).toEqual({ status: "completed" });
+    });
+    expect(remove).toHaveBeenCalledOnce();
+    expect(picker.projects).toEqual([]);
+    expect(picker.busy).toBe("idle");
+  });
+
+  it("owns picker file selection and stops unsubmitted work when the page closes", async () => {
+    const selection = deferred<{ ok: true; value: string }>();
+    openPathDialog.mockReturnValueOnce(selection.promise);
+    const scan = vi
+      .spyOn(ProjectService, "scanProjectsInDirectory")
+      .mockRejectedValue(new Error("closed picker must not scan"));
+    let completion!: ReturnType<typeof picker.scanProjectsFromFolder>;
+    act(() => {
+      completion = picker.scanProjectsFromFolder();
+    });
+    const busyDuringSelection = picker.busy;
+    act(() => root.render(null));
+    await act(async () => {
+      selection.resolve({ ok: true, value: "C:/late-selection" });
+      await completion;
+    });
+
+    expect(busyDuringSelection).toBe("scan");
+    expect(scan).not.toHaveBeenCalled();
+    expect(await completion).toEqual({ status: "stale" });
+  });
+
   it("keeps lifecycle state unchanged after a current direct transport failure", async () => {
     vi.spyOn(ProjectService, "saveProjectAs").mockRejectedValue(new Error("transport down"));
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
@@ -486,7 +550,10 @@ describe("project lifecycle initiating operations", () => {
     const create = vi.spyOn(ProjectService, "createProject").mockReturnValue(request.promise);
     const created = record("created", "C:/created/metadata.yssbi");
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([created]);
-    const progress = vi.spyOn(uiStore, "updateProgress");
+    const progress: number[] = [];
+    stopProgressObservation = uiStore.subscribe((state) => {
+      if (state.progress?.percent !== undefined) progress.push(state.progress.percent);
+    });
 
     let completion!: ReturnType<typeof picker.createProject>;
     await act(async () => {
@@ -509,7 +576,7 @@ describe("project lifecycle initiating operations", () => {
 
     expect(await completion).toEqual({ status: "committed" });
     expect(picker.projects.map((project) => project.id)).toContain("created");
-    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
+    expect(progress).toContain(1);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
@@ -783,7 +850,10 @@ describe("project lifecycle initiating operations", () => {
     });
     const request = deferred<LifecycleMutationResultDto>();
     const create = vi.spyOn(ProjectService, "createProject").mockReturnValue(request.promise);
-    const progress = vi.spyOn(uiStore, "updateProgress");
+    const progress: number[] = [];
+    stopProgressObservation = uiStore.subscribe((state) => {
+      if (state.progress?.percent !== undefined) progress.push(state.progress.percent);
+    });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     let completion!: ReturnType<typeof picker.createProject>;
@@ -811,7 +881,7 @@ describe("project lifecycle initiating operations", () => {
 
     expect(await completion).toEqual({ status: "stale" });
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
-    expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
+    expect(progress).not.toContain(1);
   });
 
   it("gives an inactive delete completion zero effects after application generation replacement", async () => {

@@ -103,5 +103,19 @@ describe("spawnNodeFromTemplate", () => {
     expect(
       findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "function_graph"),
     ).toBeNull();
+
+    const replacement = {
+      ...items[0],
+      available: true,
+      title: "Updated",
+      resourceRevision: 10,
+      creation: { ...descriptor, resourceRevision: 10 },
+    };
+    expect(
+      findResourceNodeSpawnTemplate([replacement], descriptor.resourcePath, "function_graph"),
+    ).toEqual({ title: "Updated", descriptor: replacement.creation });
+    expect(
+      findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "function_graph"),
+    ).toBeNull();
   });
 });

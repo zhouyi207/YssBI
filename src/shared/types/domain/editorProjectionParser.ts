@@ -4,10 +4,8 @@ import {
   isParameterEditor,
 } from "@/shared/types/domain/editorProjectionGuards";
 import { isPublishedValue } from "@/shared/types/deepReadonly";
-import type {
-  EditorGraphProjectionDto,
-  PortAddressDto,
-} from "@/shared/types/domain/editorProjection";
+import { portAddressKey } from "@/shared/types/domain/portAddressKey";
+import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
 
 type NodeProjection = EditorGraphProjectionDto["nodes"][number];
 const validatedNodePortKeys = new WeakMap<NodeProjection, readonly string[]>();
@@ -134,10 +132,4 @@ function validateNode(
     portDirections.set(key, node.ports[index].direction);
   }
   if (!cachedKeys && isPublishedValue(node)) validatedNodePortKeys.set(node, portKeys);
-}
-
-export function portAddressKey(address: PortAddressDto): string {
-  return address.kind === "declared"
-    ? JSON.stringify(["declared", address.nodeId, address.portKey])
-    : JSON.stringify(["instance", address.nodeId, address.templateKey, address.instanceId]);
 }

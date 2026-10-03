@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
+import * as results from "@/features/application/results";
 import {
   ProjectLifecycleProtocolError,
   PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS,
@@ -26,9 +27,9 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function startProject(projectInstanceId: string, revision = 0): void {
+function startProject(projectInstanceId: string, revision = 0) {
   useProjectIOStore.setState({ projectInstanceId });
-  projectPublicationCoordinator.startProject(projectInstanceId, revision);
+  return projectPublicationCoordinator.startProject(projectInstanceId, revision);
 }
 
 function receipt(
@@ -176,7 +177,7 @@ describe("project lifecycle pending receipt registry", () => {
     const hydration = deferred<{
       projectInstanceId: string;
       publicationRevision: number;
-      commit(): Promise<void>;
+      commit(): Promise<ReturnType<typeof startProject>>;
     } | null>();
     const eventDeps = dependencies({ prepareProjectTransition: vi.fn(() => hydration.promise) });
     const directDeps = dependencies();
@@ -302,6 +303,7 @@ describe("project lifecycle pending receipt registry", () => {
           lastOpenedAt: null,
           isFavorite: false,
           rootIdentity: "",
+          rootIdentityState: "invalid",
         },
         path: null,
         recovery: {
@@ -371,6 +373,67 @@ describe("project lifecycle pending receipt registry", () => {
     expect(deps.clearProject).toHaveBeenCalledOnce();
     expect(deps.refreshRegistry).toHaveBeenCalledOnce();
     expect(projectPublicationCoordinator.getSnapshotForTests().projectInstanceId).toBeNull();
+  });
+
+  it("resets results once for owned project invalidation across direct and event delivery", async () => {
+    const resetResults = vi.spyOn(results, "resetResultQueryProject").mockImplementation(() => {});
+    const pending = registerPendingProjectLifecycleOperation({ kind: "saveAs" });
+    const result = receipt(pending.operationId);
+    const deps = dependencies();
+    let reentered = false;
+    let reentrant: Promise<unknown> | undefined;
+    deps.prepareProjectTransition = vi.fn(async () => {
+      if (!reentered) {
+        reentered = true;
+        reentrant = deliverLifecycleEvent(result, deps).catch((error: unknown) => error);
+      }
+      return {
+        projectInstanceId: "project-b",
+        publicationRevision: 0,
+        commit: async () => startProject("project-b", 0),
+      };
+    });
+    const direct = await applyProjectLifecycleReceipt(result, "direct", deps).catch(
+      (error: unknown) => error,
+    );
+    const joined = await reentrant;
+    expect(direct).toMatchObject({ status: "applied" });
+    expect(joined).toMatchObject({ status: "duplicate" });
+    expect(deps.prepareProjectTransition).toHaveBeenCalledOnce();
+    expect(resetResults).toHaveBeenCalledOnce();
+    await expect(deliverLifecycleEvent(result, deps)).resolves.toMatchObject({
+      status: "duplicate",
+    });
+    expect(resetResults).toHaveBeenCalledOnce();
+
+    startProject("project-successor", 0);
+    await expect(deliverLifecycleEvent(result, deps)).resolves.toMatchObject({ status: "stale" });
+    const registryOnly = registerPendingProjectLifecycleOperation({ kind: "create" });
+    await applyProjectLifecycleReceipt(
+      receipt(registryOnly.operationId, {
+        kind: "create",
+        oldProjectInstanceId: null,
+        newProjectInstanceId: null,
+        invalidation: { project: false, registry: true },
+      }),
+      "direct",
+      deps,
+    );
+    expect(resetResults).toHaveBeenCalledOnce();
+
+    const interrupted = registerPendingProjectLifecycleOperation({ kind: "saveAs" });
+    resetResults.mockImplementationOnce(() => {
+      startProject("project-after-reset", 0);
+    });
+    await expect(
+      applyProjectLifecycleReceipt(
+        receipt(interrupted.operationId, { oldProjectInstanceId: "project-successor" }),
+        "direct",
+        deps,
+      ),
+    ).resolves.toMatchObject({ status: "stale" });
+    expect(claimProjectLifecycleInitiatorSettlement(interrupted.operationId)).toBeUndefined();
+    expect(useProjectIOStore.getState().projectInstanceId).toBe("project-after-reset");
   });
 
   it("evicts completed receipts before rejecting a new pending operation", async () => {

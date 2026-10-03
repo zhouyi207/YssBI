@@ -1,11 +1,12 @@
 import { bench } from "vitest";
 import {
   prepareGraphSessions,
-  useGraphProjectionStore,
   type GraphProjectionData,
-} from "@/features/core/dataStore/graphProjectionStore";
+} from "@/features/core/dataStore/graphProjection";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useExecutionStore } from "@/features/core/execution";
 import type { RunFailureProjection } from "@/features/core/execution/executionTypes";
+import { graphOutputKey } from "@/features/domain/editorProjection";
 import { freezePublishedValue } from "@/shared/types/deepReadonly";
 import {
   makeEditorProjectionFixture,
@@ -73,31 +74,66 @@ for (const count of [1000, 5000]) {
   const graphPath = `events/Presentation-${count}.yssbi-event`;
   const session = sessionFixture(graphPath, count);
   const failure: RunFailureProjection = {
-    runId: "1",
+    run: {
+      graphPath,
+      runId: "1",
+      executionSessionId: session.resultState.executionSessionId,
+      semanticInputHash: session.projection.basis.semanticInputHash,
+    },
     code: "kernelFailed",
     phase: "execution",
     source: { graphPath, nodeId: session.projection.nodes[0].nodeId, portAddress: null },
     incidentId: null,
   };
+  const outputRuns = Object.fromEntries(
+    session.resultState.outputs.map(({ output }) => [
+      graphOutputKey(output),
+      {
+        run: failure.run,
+        output,
+        active: false,
+        resultRevision: session.resultState.revision,
+      },
+    ]),
+  );
+  freezePublishedValue(outputRuns);
   let failed = false;
   bench(
-    `${count} outputs: failure presentation update`,
+    `${count} outputs and run records: failure presentation update`,
     () => {
       const execution = useExecutionStore.getState();
       failed = !failed;
-      if (failed) execution.recordRunFailure(graphPath, failure);
-      else execution.clearRunFailure(graphPath);
+      useExecutionStore.setState({
+        graphs: {
+          ...execution.graphs,
+          [graphPath]: {
+            ...execution.graphs[graphPath],
+            status: failed ? "error" : "idle",
+            run: null,
+            request: null,
+            runFailure: failed ? failure : null,
+          },
+        },
+      });
     },
     {
       time: 500,
       iterations: 30,
       warmupTime: 100,
       setup: () => {
-        useGraphProjectionStore.getState().clear();
-        useExecutionStore.setState({ graphs: {} });
-        useGraphProjectionStore.getState().install(graphPath, session);
-        useExecutionStore.getState().startExecution(graphPath);
-        useExecutionStore.getState().setActiveRunId(graphPath, "1");
+        useResourceStore.getState().clear();
+        useExecutionStore.setState({
+          graphs: {
+            [graphPath]: {
+              status: "idle",
+              run: null,
+              request: null,
+              runFailure: null,
+              outputRuns,
+            },
+          },
+        });
+        useResourceStore.getState().installGraphSession(graphPath, session, { mode: "load" });
         failed = false;
       },
     },

@@ -4,12 +4,14 @@ import {
   resultReference,
   type ResultReference,
 } from "@/shared/types/domain/result";
+import type { ResultDescriptor } from "@/shared/types/domain/result";
+import { parsePlotPayload, type ParsedPlotPayload } from "@/shared/types/domain/plotPayload";
 import {
-  type ResultDescriptor,
-  type ResultPlotKind,
-  type ResultReportKind,
-} from "@/shared/types/domain/result";
-import { logger } from "@/features/application/observability/appLogger";
+  validateReportPayload,
+  type ReportValidationResult,
+} from "@/shared/types/report/reportValidation";
+import { logger } from "@/utils/frontendLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
 
 export type PresentationWindowState =
   | { status: "loading" }
@@ -20,8 +22,8 @@ export type PresentationWindowState =
 
 export type PresentationPayload =
   | { mode: "inspector"; descriptor: ResultDescriptor }
-  | { mode: "plot"; chart: ResultPlotKind; data: unknown }
-  | { mode: "report"; report: ResultReportKind; data: unknown };
+  | { mode: "plot"; plot: ParsedPlotPayload | null }
+  | { mode: "report"; data: unknown; validation: ReportValidationResult };
 
 async function loadReadyPayload(descriptor: ResultDescriptor): Promise<PresentationPayload> {
   if (descriptor.presentation.kind === "inspector") {
@@ -37,8 +39,16 @@ async function loadReadyPayload(descriptor: ResultDescriptor): Promise<Presentat
       throw new Error("Presentation results require a canonical scalar value");
     }
     return descriptor.presentation.kind === "plot"
-      ? { mode: "plot", chart: descriptor.presentation.chart, data: value.value }
-      : { mode: "report", report: descriptor.presentation.report, data: value.value };
+      ? { mode: "plot", plot: parsePlotPayload(descriptor.presentation.chart, value.value) }
+      : {
+          mode: "report",
+          data: value.value,
+          validation: validateReportPayload(
+            descriptor,
+            descriptor.presentation.report,
+            value.value,
+          ),
+        };
   }
 
   throw new Error("Plot and report presentations require a complete scalar payload");
@@ -58,7 +68,7 @@ export async function loadPresentationWindow(
     return { status: "ready", descriptor, payload: await loadReadyPayload(descriptor) };
   } catch (error) {
     logger.app.error(
-      `Failed to load presentation result: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to load presentation result: ${formatApplicationIpcError(error)}`,
       "loadPresentationWindow",
     );
     return { status: "load_failed" };

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VscEdit } from "react-icons/vsc";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,10 +14,14 @@ import {
   CONSTANT_SELECTABLE_DATA_TYPE_KINDS,
   DATA_SERIES_ELEMENT_TYPE_KINDS,
 } from "@/shared/types/domain/valueType";
-import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
+import { dataValueToRaw } from "@/shared/types/domain/dataValue";
+import {
+  parseConstantValueInput,
+  type ConstantValueInputError,
+} from "@/features/domain/graphConstants/valueInput";
 import { DetailCommitInput } from "../shared/DetailForm";
 import { ConstantValueEditorModal } from "../constantValue/ConstantValueEditorModal";
-import { formatConstantValueSummary } from "../constantValue/constantValueUtils";
+import { formatConstantValueSummary } from "../constantValue/constantValuePresentation";
 
 interface ConstantValueFieldsProps {
   constant: {
@@ -34,7 +38,19 @@ interface ConstantValueFieldsProps {
 export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsProps) {
   const { t } = useTranslation();
   const typeInputId = useId();
+  const valueErrorId = useId();
+  const [valueError, setValueError] = useState<ConstantValueInputError | null>(null);
   const [valueEditorOpen, setValueEditorOpen] = useState(false);
+  useEffect(() => setValueError(null), [constant.dataType, constant.dataValue]);
+  const commitValue = (raw: string | boolean) => {
+    const result = parseConstantValueInput(raw, constant.dataType);
+    if (!result.ok) {
+      setValueError(result.error);
+      return;
+    }
+    setValueError(null);
+    onUpdate({ dataValue: result.value });
+  };
   const numeric = dataTypeKind(constant.dataType) === "Numeric";
   const typeOptions = CONSTANT_SELECTABLE_DATA_TYPE_KINDS.flatMap((kind) =>
     kind === "DataSeries"
@@ -82,9 +98,7 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
                   id={`constant-bool-${constant.id}`}
                   aria-label={t("detail.fields.value")}
                   checked={!!dataValueToRaw(constant.dataValue)}
-                  onCheckedChange={(checked) =>
-                    onUpdate({ dataValue: dataValueFromRaw(checked === true, constant.dataType) })
-                  }
+                  onCheckedChange={(checked) => commitValue(checked === true)}
                 />
                 <Label htmlFor={`constant-bool-${constant.id}`} className="text-xs font-normal">
                   {String(!!dataValueToRaw(constant.dataValue))}
@@ -101,9 +115,9 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
                       ? String(constant.dataValue.value)
                       : String(dataValueToRaw(constant.dataValue) ?? "")
                   }
-                  onCommit={(draft) =>
-                    onUpdate({ dataValue: dataValueFromRaw(draft, constant.dataType) })
-                  }
+                  onCommit={commitValue}
+                  aria-invalid={Boolean(valueError)}
+                  aria-describedby={valueError ? valueErrorId : undefined}
                 />
               </label>
             )}
@@ -121,6 +135,11 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
             <span className="truncate">{valueSummary}</span>
             <VscEdit aria-hidden />
           </Button>
+        )}
+        {valueError && (
+          <p id={valueErrorId} role="alert" className="col-span-3 text-xs text-destructive">
+            {t(`detail.constantValue.errors.${valueError}`)}
+          </p>
         )}
       </div>
 

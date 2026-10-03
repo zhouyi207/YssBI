@@ -1,6 +1,6 @@
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDataSignaturePin } from "@/shared/types/domain/functionSignaturePin";
-import { useGraphProjectionStore, useGraphMetaStore } from "@/features/core/dataStore";
 import * as graphDocumentActions from "./graphDocumentActions";
 
 const commitFunctionSignature = vi.hoisted(() => vi.fn());
@@ -12,8 +12,7 @@ vi.mock("@/features/application/editorMutation/functionSignatureCoordinator", ()
 describe("graphDocumentActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGraphMetaStore.setState({ graphs: {} });
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
   });
 
   it("delegates signature edits to the revisioned authoritative coordinator", async () => {
@@ -29,7 +28,7 @@ describe("graphDocumentActions", () => {
     expect(commitFunctionSignature).toHaveBeenCalledWith("functions/Compute.yssbi-function", {
       inputs,
     });
-    expect(useGraphMetaStore.getState().graphs).toEqual({});
-    expect(useGraphProjectionStore.getState().graphEntities).toEqual({});
+    expect(useResourceStore.getState().graphMeta).toEqual({});
+    expect(useResourceStore.getState().graphEntities).toEqual({});
   });
 });

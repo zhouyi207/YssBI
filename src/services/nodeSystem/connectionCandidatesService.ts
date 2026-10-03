@@ -1,5 +1,6 @@
 import { invokeCommand } from "@/services/ipc";
 import { isPortAddressDto } from "@/shared/types/dto/editorProjectionGuards";
+import { portAddressKey } from "@/shared/types/domain/portAddressKey";
 import type {
   ConnectionCandidates,
   ConnectionCandidatesRequest,
@@ -31,12 +32,6 @@ function decision(value: unknown): value is ConnectionDecision {
   );
 }
 
-function addressKey(value: ConnectionCandidatesRequest["sourcePort"]): string {
-  return value.kind === "declared"
-    ? JSON.stringify([value.kind, value.nodeId, value.portKey])
-    : JSON.stringify([value.kind, value.nodeId, value.templateKey, value.instanceId]);
-}
-
 export async function getConnectionCandidates(
   request: ConnectionCandidatesRequest,
 ): Promise<ConnectionCandidates> {
@@ -59,7 +54,7 @@ export async function getConnectionCandidates(
     typeof response.semanticInputHash !== "string" ||
     !/^[0-9a-f]{64}$/.test(response.semanticInputHash) ||
     !isPortAddressDto(response.sourcePort) ||
-    addressKey(response.sourcePort) !== addressKey(request.sourcePort) ||
+    portAddressKey(response.sourcePort) !== portAddressKey(request.sourcePort) ||
     response.intent !== request.intent ||
     !Array.isArray(response.candidates)
   )
@@ -73,7 +68,7 @@ export async function getConnectionCandidates(
     ) {
       throw new Error("Invalid connection candidate");
     }
-    const key = addressKey(candidate.port);
+    const key = portAddressKey(candidate.port);
     if (seen.has(key)) throw new Error("Duplicate connection candidate");
     seen.add(key);
   }

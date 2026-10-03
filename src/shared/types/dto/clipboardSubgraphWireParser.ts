@@ -1,5 +1,5 @@
 import type { ClipboardSubgraphDto } from "./clipboardSubgraph";
-import { isGraphConstant, isTypedLiteralWire } from "./editorMutationWireParser";
+import { isGraphConstant, isTypedLiteralWire, isTypeExprWire } from "./editorMutationWireParser";
 
 interface UnknownRecord {
   [key: string]: unknown;
@@ -41,25 +41,6 @@ function isPosition(value: unknown): boolean {
     hasExactKeys(value, ["x", "y"]) &&
     isFiniteNumber(value.x) &&
     isFiniteNumber(value.y)
-  );
-}
-
-function isTypeExpr(value: unknown): boolean {
-  if (value === "Unknown") return true;
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if (hasExactKeys(value, ["Concrete"])) return typeof value.Concrete === "string";
-  if (hasExactKeys(value, ["Generic"])) return typeof value.Generic === "string";
-  if (hasExactKeys(value, ["Applied"])) {
-    return (
-      isRecord(value.Applied) &&
-      hasExactKeys(value.Applied, ["constructor", "arguments"]) &&
-      typeof value.Applied.constructor === "string" &&
-      Array.isArray(value.Applied.arguments) &&
-      value.Applied.arguments.every(isTypeExpr)
-    );
-  }
-  return (
-    hasExactKeys(value, ["Union"]) && Array.isArray(value.Union) && value.Union.every(isTypeExpr)
   );
 }
 
@@ -141,7 +122,7 @@ function isLastKnown(value: unknown): boolean {
   if (!isRecord(value) || typeof value.label !== "string") return false;
   return (
     hasExactKeys(value, ["label"]) ||
-    (hasExactKeys(value, ["label", "valueType"]) && isTypeExpr(value.valueType))
+    (hasExactKeys(value, ["label", "valueType"]) && isTypeExprWire(value.valueType))
   );
 }
 

@@ -15,7 +15,6 @@ export interface AppWindowHandle {
   isMaximized(): Promise<PlatformOutcome<boolean>>;
   close(): Promise<PlatformOutcome<void>>;
   setDecorations(enabled: boolean): Promise<PlatformOutcome<void>>;
-  scaleFactor(): Promise<PlatformOutcome<number>>;
   onCloseRequested(
     listener: () => CloseRequestDecision | Promise<CloseRequestDecision>,
   ): Promise<PlatformOutcome<PlatformUnsubscribe>>;
@@ -53,7 +52,6 @@ export function currentAppWindow(): AppWindowHandle {
     isMaximized: () => call("readWindowMaximized", () => native.isMaximized()),
     close: () => call("closeWindow", () => native.close()),
     setDecorations: (enabled) => call("setWindowDecorations", () => native.setDecorations(enabled)),
-    scaleFactor: () => call("readWindowScaleFactor", () => native.scaleFactor()),
     onCloseRequested: (listener) =>
       call("subscribeWindowCloseRequested", () =>
         native.onCloseRequested(async (event) => {

@@ -38,26 +38,35 @@ function parseMind(value: unknown): MindDocument {
     mind.nodes.length > 5_000
   )
     throw new Error("Invalid mind document");
-  const ids = new Set<string>();
+  const parents = new Map<string, string | null>();
   for (const node of mind.nodes) {
     if (
       !record(node) ||
       !exact(node, ["id", "parentId", "content"], ["reference"]) ||
       typeof node.id !== "string" ||
       !node.id ||
-      ids.has(node.id) ||
+      parents.has(node.id) ||
       (node.parentId !== null && typeof node.parentId !== "string") ||
       typeof node.content !== "string" ||
       (node.reference !== undefined && !reference(node.reference))
     )
       throw new Error("Invalid mind node");
-    ids.add(node.id);
+    parents.set(node.id, node.parentId);
   }
-  if (
-    !ids.has(mind.rootId) ||
-    mind.nodes.some((node) => node.parentId !== null && !ids.has(node.parentId))
-  )
-    throw new Error("Invalid mind hierarchy");
+  if (parents.get(mind.rootId) !== null) throw new Error("Invalid mind hierarchy");
+  const connected = new Set([mind.rootId]);
+  for (const id of parents.keys()) {
+    const chain = new Set<string>();
+    let current = id;
+    while (!connected.has(current)) {
+      if (chain.has(current)) throw new Error("Invalid mind hierarchy");
+      chain.add(current);
+      const parent = parents.get(current);
+      if (parent === null || parent === undefined) throw new Error("Invalid mind hierarchy");
+      current = parent;
+    }
+    for (const ancestor of chain) connected.add(ancestor);
+  }
   return mind as unknown as MindDocument;
 }
 export function parseMindSnapshot(value: unknown): MindSnapshot {

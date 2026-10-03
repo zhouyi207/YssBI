@@ -6,7 +6,7 @@ import type { GraphEditInvocation } from "./commandExecutor";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { portAddressKey } from "@/features/domain/editorProjection";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { executeGraphEdit } from "./commandExecutor";
 
 const applyGraphMutation = vi.hoisted(() => vi.fn());
@@ -62,7 +62,7 @@ function installProjection() {
 describe("forward-only editor commands", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
   });
 
   it.each([
@@ -156,7 +156,7 @@ describe("forward-only editor commands", () => {
     "sends $type as exactly one high-level intent without pre-response entity edits",
     async ({ type, build, mutation }) => {
       const fixture = installProjection();
-      const before = useGraphProjectionStore.getState().graphEntities[graphPath];
+      const before = useResourceStore.getState().graphEntities[graphPath];
       const pending = deferred<{ status: "applied" }>();
       applyGraphMutation.mockReturnValueOnce(pending.promise);
       const randomId = vi.spyOn(crypto, "randomUUID");
@@ -168,7 +168,7 @@ describe("forward-only editor commands", () => {
         graphPath,
         mutation: mutation(fixture),
       });
-      expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toBe(before);
+      expect(useResourceStore.getState().graphEntities[graphPath]).toBe(before);
       expect(randomId).not.toHaveBeenCalled();
 
       pending.resolve({ status: "applied" });

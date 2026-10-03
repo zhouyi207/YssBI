@@ -116,12 +116,7 @@ function text(value: unknown, maximum: number): asserts value is string {
 }
 function source(value: unknown): asserts value is ResultReference {
   record(value, ["executionSessionId", "resultId"]);
-  if (
-    !isResultReference(value) ||
-    value.resultId.length > 20 ||
-    BigInt(value.resultId) > 18446744073709551615n
-  )
-    fail();
+  if (!isResultReference(value)) fail();
 }
 function revision(value: unknown): asserts value is number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) fail();

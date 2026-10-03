@@ -1,9 +1,6 @@
 import { currentProjectionLocale } from "./projectionLocale";
-import {
-  useGraphProjectionStore,
-  isGraphModified,
-  isGraphSaving,
-} from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { isGraphModified, isGraphSaving } from "@/features/core/graph/read";
 
 import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
@@ -12,8 +9,8 @@ import { getNodeFileKind } from "@/features/core/resource/resourceSelectors";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import type { GraphEditingStateDto } from "@/shared/types/domain/editorMutation";
 import { ensureGraphActivity, resetGraphActivity } from "./graphActivity";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
-import { logger } from "@/features/application/observability/appLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
+import { logger } from "@/utils/frontendLogger";
 import { refreshCurrentGraphProjection } from "@/features/application/graphEditing/refreshGraphProjection";
 import {
   enqueueGraphTask,
@@ -25,16 +22,16 @@ import {
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
-const lifecycleTokenByGraph = new Map<string, number>();
+const lifecycleByGraph = new Map<string, { token: number; unloading: boolean }>();
 const pendingActivityRefreshes = new Map<
   string,
   { editing?: GraphEditingStateDto; again: boolean; promise: Promise<boolean> }
 >();
 let nextLifecycleToken = Date.now() * 1_000;
 
-function startGraphLifecycle(graphPath: string): number {
+function startGraphLifecycle(graphPath: string, unloading = false): number {
   const lifecycleToken = ++nextLifecycleToken;
-  lifecycleTokenByGraph.set(graphPath, lifecycleToken);
+  lifecycleByGraph.set(graphPath, { token: lifecycleToken, unloading });
   return lifecycleToken;
 }
 
@@ -55,33 +52,33 @@ async function requestGraphProjection(
   ) => Promise<GraphEditorSessionDto>,
   locale = currentProjectionLocale(),
 ): Promise<boolean> {
-  if (!isCurrentProjectIdentity(identity) || !isGraphLifecycleCurrent(graphPath, lifecycleToken))
-    return false;
+  const isCurrent = () =>
+    isCurrentProjectIdentity(identity) && isGraphLifecycleCurrent(graphPath, lifecycleToken);
+  if (!isCurrent()) return false;
   setGraphProjectionStale(graphPath, true);
+  if (!isCurrent() || isGraphSaving(graphPath)) return false;
   let session: GraphEditorSessionDto;
   try {
     session = await request(graphPath, locale, lifecycleToken);
   } catch (error) {
-    if (!isCurrentProjectIdentity(identity)) return false;
+    if (!isCurrent()) return false;
     logger.graph.error(
-      `Graph projection ${operation} IPC failed for '${graphPath}': ${formatErrorMessage(error, "Unknown IPC error")}`,
+      `Graph projection ${operation} IPC failed for '${graphPath}': ${formatApplicationIpcError(error)}`,
       "GraphProjectionLifecycle",
     );
     return false;
   }
 
-  if (
-    !isCurrentProjectIdentity(identity) ||
-    lifecycleTokenByGraph.get(graphPath) !== lifecycleToken ||
-    isGraphSaving(graphPath)
-  ) {
+  if (!isCurrent() || isGraphSaving(graphPath)) {
     return false;
   }
   try {
-    return installGraphSession(graphPath, session, operation === "load" ? "load" : "update");
+    return installGraphSession(graphPath, session, {
+      mode: operation === "load" ? "load" : "update",
+    });
   } catch (error) {
     logger.graph.error(
-      `Graph projection ${operation} contract invalid for '${graphPath}': ${formatErrorMessage(error)}`,
+      `Graph projection ${operation} contract invalid for '${graphPath}': ${formatApplicationIpcError(error)}`,
       "GraphProjectionLifecycle",
     );
     return false;
@@ -93,7 +90,16 @@ export function beginGraphLoadLifecycle(graphPath: string): number {
 }
 
 export function beginGraphUnloadLifecycle(graphPath: string): number {
-  return startGraphLifecycle(graphPath);
+  return startGraphLifecycle(graphPath, true);
+}
+
+export function isGraphUnloading(graphPath: string): boolean {
+  return lifecycleByGraph.get(graphPath)?.unloading === true;
+}
+
+export function finishGraphUnloadLifecycle(graphPath: string, token: number): void {
+  const current = lifecycleByGraph.get(graphPath);
+  if (current?.token === token) current.unloading = false;
 }
 
 export function beginGraphRenameLifecycle(graphPath: string): number {
@@ -101,7 +107,7 @@ export function beginGraphRenameLifecycle(graphPath: string): number {
 }
 
 export function isGraphLifecycleCurrent(graphPath: string, lifecycleToken: number): boolean {
-  return lifecycleTokenByGraph.get(graphPath) === lifecycleToken;
+  return lifecycleByGraph.get(graphPath)?.token === lifecycleToken;
 }
 
 export async function prepareGraphSessionForPublication(
@@ -131,7 +137,7 @@ export async function prepareGraphSessionForPublication(
         );
         if (
           !isCurrentProjectIdentity(identity) ||
-          lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
+          !isGraphLifecycleCurrent(graphPath, lifecycleToken)
         ) {
           return false;
         }
@@ -139,7 +145,7 @@ export async function prepareGraphSessionForPublication(
       } catch (error) {
         if (!isCurrentProjectIdentity(identity)) return false;
         logger.graph.error(
-          `Graph projection publication prepare failed for '${graphPath}': ${formatErrorMessage(error, "Unknown IPC error")}`,
+          `Graph projection publication prepare failed for '${graphPath}': ${formatApplicationIpcError(error)}`,
           "GraphProjectionLifecycle",
         );
         return false;
@@ -173,29 +179,26 @@ export async function loadGraphProjection(
 export function hydrateGraphProjection(graphPath: string, locale: string): Promise<boolean> {
   const identity = captureProjectIdentity();
   const lifecycleToken = startGraphLifecycle(graphPath);
+  const isCurrent = () =>
+    isCurrentProjectIdentity(identity) && isGraphLifecycleCurrent(graphPath, lifecycleToken);
   return enqueueGraphTask(
     graphPath,
     async () => {
-      if (
-        !isCurrentProjectIdentity(identity) ||
-        !isGraphLifecycleCurrent(graphPath, lifecycleToken)
-      )
-        return false;
-      if (!useGraphProjectionStore.getState().hasGraph(graphPath)) {
+      if (!isCurrent()) return false;
+      if (!useResourceStore.getState().hasGraph(graphPath)) {
         setGraphProjectionStale(graphPath, true);
         return Promise.resolve(false);
       }
       if (isGraphSaving(graphPath)) return false;
       if (isGraphModified(graphPath)) {
         setGraphProjectionStale(graphPath, true);
+        if (!isCurrent() || isGraphSaving(graphPath)) return false;
         return refreshCurrentGraphProjection(graphPath, locale)
-          .then((resolved) => {
-            if (resolved) setGraphProjectionStale(graphPath, false);
-            return resolved;
-          })
+          .then((resolved) => resolved && isCurrent())
           .catch((error) => {
+            if (!isCurrent()) return false;
             logger.graph.error(
-              `Graph draft resolve failed: ${formatErrorMessage(error)}`,
+              `Graph draft resolve failed: ${formatApplicationIpcError(error)}`,
               "GraphProjectionLifecycle",
             );
             return false;
@@ -227,7 +230,7 @@ export async function hydrateGraphProjections(
 export function resetGraphProjectionLifecycle(): void {
   clearGraphSyncBaselines();
   resetGraphActivity();
-  lifecycleTokenByGraph.clear();
+  lifecycleByGraph.clear();
   pendingActivityRefreshes.clear();
 }
 
@@ -250,7 +253,7 @@ function refreshGraphFromActivity(
       entry.again = false;
       const editing = entry.editing;
       if (!isCurrentProjectIdentity(identity)) return false;
-      const current = useGraphProjectionStore.getState().sessions[graphPath];
+      const current = useResourceStore.getState().sessions[graphPath];
       if (
         editing &&
         current?.version.sessionId === editing.version.sessionId &&
@@ -277,7 +280,10 @@ function refreshGraphFromActivity(
     pendingActivityRefreshes.delete(graphPath);
     if (entry.again && isCurrentProjectIdentity(identity))
       void refreshGraphFromActivity(graphPath, entry.editing).catch((error: unknown) => {
-        logger.graph.error(`Graph refresh failed: ${formatErrorMessage(error)}`, "GraphActivity");
+        logger.graph.error(
+          `Graph refresh failed: ${formatApplicationIpcError(error)}`,
+          "GraphActivity",
+        );
       });
   });
   return entry.promise;

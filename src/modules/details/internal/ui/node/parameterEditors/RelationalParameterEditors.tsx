@@ -197,11 +197,10 @@ export function FilterPredicateEditor({
   const id = useId();
   const latestEditor = useRef(editor);
   latestEditor.current = editor;
-  const signature = JSON.stringify(editor);
-  const [projection, setProjection] = useState(signature);
+  const [projection, setProjection] = useState(editor);
   const [draft, setDraft] = useState(() => projectedPredicate(editor));
-  if (projection !== signature) {
-    setProjection(signature);
+  if (projection !== editor) {
+    setProjection(editor);
     setDraft(projectedPredicate(editor));
   }
   const { column, operator, literalType, value } = draft;

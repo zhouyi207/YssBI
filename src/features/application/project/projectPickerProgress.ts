@@ -4,7 +4,7 @@ import type { ProgressState } from "@/shared/types/ui";
 import type {
   ProjectCleanupProgressEvent,
   ProjectScanProgressEvent,
-} from "@/services/project/projectService";
+} from "@/services/project/projectWireParser";
 
 export interface ProjectPickerProgressHandle {
   update: (patch: Partial<ProgressState>) => void;
@@ -63,7 +63,7 @@ export async function runWithProjectPickerProgress<T>(
 ): Promise<ProjectPickerProgressRun<T>> {
   let cancelled = false;
 
-  uiStore.startProgress(
+  const progress = uiStore.startProgress(
     options.initial,
     options.onCancel
       ? {
@@ -79,14 +79,14 @@ export async function runWithProjectPickerProgress<T>(
     const result = await run({
       update: (patch) => {
         if (!cancelled) {
-          uiStore.updateProgress(patch);
+          progress.update(patch);
         }
       },
       isCancelled: () => cancelled,
     });
     return { result, cancelled };
   } finally {
-    uiStore.finishProgress();
+    progress.finish();
   }
 }
 

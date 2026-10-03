@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useStore } from "zustand";
 
 import { uiStore } from "@/features/core/ui/UIStore";
 import type { ApplicationUiState } from "@/features/core/ui/applicationUiTypes";
@@ -12,20 +12,8 @@ export type {
   SqlRemoteTableSelectDialogOptions,
 } from "@/features/core/ui/applicationUiTypes";
 
-function getApplicationUiSnapshot(): ApplicationUiState {
-  return uiStore.getState();
-}
-
-function subscribeApplicationUi(listener: () => void): () => void {
-  return uiStore.subscribe(listener);
-}
-
-export function useApplicationUiRead(): ApplicationUiState {
-  return useSyncExternalStore(
-    subscribeApplicationUi,
-    getApplicationUiSnapshot,
-    getApplicationUiSnapshot,
-  );
+export function useApplicationUiRead<T>(selector: (state: ApplicationUiState) => T): T {
+  return useStore(uiStore, selector);
 }
 
 /** Global overlay read/actions exposed to App composition. Core owns the mutable store. */

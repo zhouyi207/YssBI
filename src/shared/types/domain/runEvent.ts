@@ -40,6 +40,7 @@ export interface GraphRunIdentityDto {
   executionSessionId: string;
   graphPath: string;
   runId: string;
+  semanticInputHash: string;
 }
 
 export type RunEventKind =
@@ -69,5 +70,6 @@ export const RUN_EVENT_KIND_TYPES = {
 
 export interface RunEvent {
   run: GraphRunIdentityDto;
+  resultRevision: string;
   kind: RunEventKind;
 }

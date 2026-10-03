@@ -1,6 +1,12 @@
-import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectionGuards";
+import {
+  isFingerprint,
+  isGraphResourcePath,
+  isPortAddressDto,
+  isUuid,
+} from "./editorProjectionGuards";
 import { isPublishedValue } from "@/shared/types/deepReadonly";
-import { portAddressKey } from "@/shared/types/domain/editorProjectionParser";
+import { graphOutputKey, portAddressKey } from "@/shared/types/domain/portAddressKey";
+import { isResultId } from "@/shared/types/domain/result";
 import { isResultPlotKind, isResultReportKind } from "./result";
 import type {
   GraphOutputRefDto,
@@ -56,11 +62,17 @@ function parseGraphOutput(value: unknown): GraphOutputRefDto {
   return { graphPath: value.graphPath, port: value.port };
 }
 
+export function isResultRevision(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^(0|[1-9][0-9]{0,19})$/u.test(value) &&
+    BigInt(value) <= 18446744073709551615n
+  );
+}
+
 export function parseGraphResultState(value: unknown): GraphResultState {
   const cached = isRecord(value) ? validatedGraphResults.get(value) : undefined;
   if (cached) return cached;
-  const isHash = (input: unknown): input is string =>
-    typeof input === "string" && /^[0-9a-f]{64}$/.test(input);
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [
@@ -71,10 +83,8 @@ export function parseGraphResultState(value: unknown): GraphResultState {
       "connections",
     ]) ||
     !isUuid(value.executionSessionId) ||
-    typeof value.revision !== "string" ||
-    !/^(0|[1-9][0-9]{0,19})$/u.test(value.revision) ||
-    BigInt(value.revision) > 18446744073709551615n ||
-    !isHash(value.semanticInputHash) ||
+    !isResultRevision(value.revision) ||
+    !isFingerprint(value.semanticInputHash) ||
     !Array.isArray(value.outputs) ||
     !Array.isArray(value.connections)
   )
@@ -87,14 +97,10 @@ export function parseGraphResultState(value: unknown): GraphResultState {
       !["missing", "stale", "valid"].includes(entry.state as string)
     )
       return fail("output result state");
-    if (
-      entry.state === "valid"
-        ? !isDecimalId(entry.resultId) || entry.resultId === "0"
-        : entry.resultId !== null
-    )
+    if (entry.state === "valid" ? !isResultId(entry.resultId) : entry.resultId !== null)
       return fail("output result identity");
     const output = parseGraphOutput(entry.output);
-    const key = JSON.stringify([output.graphPath, portAddressKey(output.port)]);
+    const key = graphOutputKey(output);
     if (keys.has(key)) return fail("duplicate output result state");
     keys.add(key);
   }
@@ -108,11 +114,7 @@ export function parseGraphResultState(value: unknown): GraphResultState {
     )
       return fail("connection result state");
     const output = parseGraphOutput(entry.output);
-    const key = JSON.stringify([
-      output.graphPath,
-      portAddressKey(output.port),
-      portAddressKey(entry.input),
-    ]);
+    const key = JSON.stringify([graphOutputKey(output), portAddressKey(entry.input)]);
     if (connectionKeys.has(key)) return fail("duplicate connection result state");
     connectionKeys.add(key);
   }
@@ -155,11 +157,14 @@ function parseResultProvenance(value: unknown): ResultProvenance {
     !isDecimalId(value.createdAtMs)
   )
     return fail("result provenance");
+  const output = value.output === null ? null : parseGraphOutput(value.output);
+  if (output && (output.graphPath !== value.graphPath || output.port.nodeId !== value.nodeId))
+    return fail("result provenance output");
   return {
     runId: value.runId,
     graphPath: value.graphPath,
     nodeId: value.nodeId,
-    output: value.output === null ? null : parseGraphOutput(value.output),
+    output,
     createdAtMs: value.createdAtMs,
   };
 }
@@ -208,7 +213,7 @@ export function parseResultDescriptor(value: unknown): ResultDescriptor {
       "totalCount",
       "title",
     ]) ||
-    !isDecimalId(value.resultId) ||
+    !isResultId(value.resultId) ||
     !isUuid(value.executionSessionId) ||
     !(value.totalCount === null || isNonNegativeInteger(value.totalCount)) ||
     typeof value.title !== "string"
@@ -256,7 +261,7 @@ export function parseResultPage(value: unknown): ResultPage {
       "metadata",
       "values",
     ]) ||
-    !isDecimalId(value.resultId) ||
+    !isResultId(value.resultId) ||
     !isNonNegativeInteger(value.offset) ||
     !isNonNegativeInteger(value.requestedLimit) ||
     !isNonNegativeInteger(value.actualCount) ||

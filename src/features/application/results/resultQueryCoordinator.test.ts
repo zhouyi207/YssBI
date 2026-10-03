@@ -234,7 +234,10 @@ describe("ResultQueryCoordinator", () => {
       analysis: { kind: "acfPacf" },
     });
     fixture.coordinator.resetResult(resultReferenceFixture("17"));
-    analysis.resolve({ kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } });
+    analysis.resolve({
+      kind: "acfPacf",
+      value: { acf: [1, 0.5], pacf: [0.5], n: 53940, ciHalfWidth: 0.00844 },
+    });
     expect(await pending).toEqual({ status: "stale" });
   });
 

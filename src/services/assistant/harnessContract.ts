@@ -292,8 +292,8 @@ export function parseHarnessSessions(value: unknown): readonly HarnessSession[] 
 
 export function parseHarnessTurnResult(value: unknown): HarnessTurnResult {
   const source = record(value);
-  const finalText = source && stringField(source, "finalText");
-  if (!finalText) throw new InvalidHarnessPayloadError("HarnessTurnResult");
+  const finalText = source?.finalText;
+  if (typeof finalText !== "string") throw new InvalidHarnessPayloadError("HarnessTurnResult");
   return { finalText };
 }
 

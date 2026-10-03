@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { InstalledPlugin } from "@/shared/types/plugins/generated";
+import type { PluginSnapshot } from "@/features/application/plugins/pluginRegistry";
 
 export function PluginsPanel({
   plugins,
@@ -24,18 +24,23 @@ export function PluginsPanel({
   onToggle,
   onUninstall,
 }: {
-  plugins: InstalledPlugin[];
+  plugins: ReadonlyMap<string, PluginSnapshot>;
   loading: boolean;
   busy: boolean;
   error: string | null;
   onRefresh(): void;
   onInstall(): void;
-  onOpen(plugin: InstalledPlugin): void;
-  onToggle(plugin: InstalledPlugin): void;
-  onUninstall(plugin: InstalledPlugin): void;
+  onOpen(plugin: PluginSnapshot): void;
+  onToggle(plugin: PluginSnapshot): void;
+  onUninstall(plugin: PluginSnapshot): void;
 }) {
   const { t } = useTranslation();
-  const [maintenance, setMaintenance] = useState<string | null>(null);
+  const [maintenance, setMaintenance] = useState<{ id: string; generation: string } | null>(null);
+  const selectedPlugin = maintenance ? plugins.get(maintenance.id) : undefined;
+  const maintenancePlugin =
+    selectedPlugin?.installationGeneration === maintenance?.generation
+      ? (selectedPlugin ?? null)
+      : null;
   const query = useActivityPanelDocument("plugins", plugins);
   return (
     <>
@@ -60,7 +65,7 @@ export function PluginsPanel({
         }}
         renderItem={(item) => {
           if (item.kind !== "plugin") return null;
-          const plugin = plugins.find((entry) => entry.manifest.id === item.id);
+          const plugin = plugins.get(item.id);
           if (!plugin) return null;
           return (
             <article
@@ -100,7 +105,14 @@ export function PluginsPanel({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => setMaintenance(plugin.manifest.id)}>
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          setMaintenance({
+                            id: plugin.manifest.id,
+                            generation: plugin.installationGeneration,
+                          })
+                        }
+                      >
                         {t("plugins.manageData")}
                       </DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => onOpen(plugin)} disabled={!plugin.enabled}>
@@ -120,10 +132,7 @@ export function PluginsPanel({
           );
         }}
       />
-      <PluginMaintenanceDialog
-        plugin={plugins.find((plugin) => plugin.manifest.id === maintenance) ?? null}
-        onClose={() => setMaintenance(null)}
-      />
+      <PluginMaintenanceDialog plugin={maintenancePlugin} onClose={() => setMaintenance(null)} />
     </>
   );
 }

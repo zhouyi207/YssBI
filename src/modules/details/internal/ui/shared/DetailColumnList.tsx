@@ -18,7 +18,7 @@ import {
 import { DetailText } from "./DetailText";
 
 interface DetailColumnListProps {
-  columns: Array<{ name: string; type: string }>;
+  columns: readonly { name: string; type: string }[];
   emptyMessage?: string;
   variant?: "list" | "table";
   columnLabel?: string;

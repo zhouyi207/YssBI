@@ -1,6 +1,6 @@
 import type { IJsonModel } from "flexlayout-react";
 import type { LayoutModelBinding } from "../layout/layoutModelBinding";
-import { modelTabs, readSerializedEdge } from "../layout/workbenchLayoutOperations";
+import { modelTabs } from "../layout/workbenchLayoutOperations";
 
 import { DEFAULT_LOGS_LAYOUT } from "../layout/logsLayoutModel";
 import { createLogsLayoutRuntime } from "../layout/logsRuntime";
@@ -8,26 +8,22 @@ import { logsLayoutRead, type LogsLayoutRead } from "../layout/logsRead";
 import { logsLayoutControl, type LogsLayoutControl } from "../layout/logsControl";
 import {
   createPersistedWorkbenchLayout,
-  parsePersistedWorkbenchLayout,
-  scrubProjectScopedRootLayout,
+  parseStoredWorkbenchLayout,
+  scrubStoredProjectRoot,
+  workbenchLayoutStorage,
+  type WorkbenchLayoutStorage,
   workbenchLayoutStorageKey,
 } from "../layout/workbenchLayoutPersistence";
 import {
-  WORKBENCH_ACTIVITY_DEFAULT_ORDER,
-  WORKBENCH_EDGE_SIZES,
-  WORKBENCH_BOTTOM_DEFAULT_ORDER,
+  installDefaultRootLayout,
+  ensureRestoredRootPanels,
 } from "../layout/workbenchLayoutDefaults";
 import {
   createWorkbenchLayoutRuntime,
   workbenchLayoutInternal,
   type WorkbenchLayoutInternal,
 } from "../layout/workbenchLayoutInternal";
-import { type WorkbenchLayoutTransaction } from "../layout/workbenchTypes";
-import {
-  workbenchLayoutRead,
-  type WorkbenchLayoutRead,
-  type WorkbenchPanelInfo,
-} from "../layout/workbenchRead";
+import { workbenchLayoutRead, type WorkbenchLayoutRead } from "../layout/workbenchRead";
 import { workbenchLayoutControl, type WorkbenchLayoutControl } from "../layout/workbenchControl";
 
 export interface ProjectResourcesReadyContext {
@@ -48,8 +44,6 @@ export interface WorkbenchLayoutController {
   ): void;
 }
 
-type LayoutStorage = Pick<Storage, "getItem" | "setItem">;
-
 type LayoutReader = (key: string) => string | null | Promise<string | null>;
 
 type ControllerDependencies = {
@@ -58,7 +52,7 @@ type ControllerDependencies = {
   readonly internal?: WorkbenchLayoutInternal;
   readonly logsRead?: LogsLayoutRead;
   readonly logsControl?: LogsLayoutControl;
-  readonly storage?: LayoutStorage;
+  readonly storage?: WorkbenchLayoutStorage;
   readonly read?: LayoutReader;
   readonly debounceMs?: number;
 };
@@ -80,6 +74,7 @@ type HydrationCycle = {
   settled: boolean;
   successful: boolean;
   completing: boolean;
+  writeSuspensionDepth: number;
 };
 
 type PendingResourcesReady = {
@@ -91,15 +86,6 @@ type PendingResourcesReady = {
 };
 
 const DEFAULT_PERSISTENCE_DEBOUNCE_MS = 250;
-
-const browserStorage: LayoutStorage = {
-  getItem(key) {
-    return typeof localStorage === "undefined" ? null : localStorage.getItem(key);
-  },
-  setItem(key, value) {
-    if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
-  },
-};
 
 function createHydrationCycle(epoch: number, bound: BoundRoot): HydrationCycle {
   let resolvePromise!: () => void;
@@ -119,142 +105,12 @@ function createHydrationCycle(epoch: number, bound: BoundRoot): HydrationCycle {
     settled: false,
     successful: false,
     completing: false,
+    writeSuspensionDepth: 0,
   };
 }
 
 function rootIsEmpty(api: LayoutModelBinding): boolean {
   return modelTabs(api.getModel()).length === 0;
-}
-
-const DETAILS_VIEW_REQUEST = {
-  viewId: "details",
-  title: "Details",
-} as const;
-
-const ASSISTANT_VIEW_REQUEST = {
-  viewId: "assistant",
-  title: "Assistant",
-} as const;
-
-function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): number {
-  const right = readSerializedEdge(transaction.serialize(), "right");
-  return typeof right?.size === "number" ? right.size : WORKBENCH_EDGE_SIZES.right;
-}
-
-function configurePermanentDetailsSidebar(
-  transaction: WorkbenchLayoutTransaction,
-  details: WorkbenchPanelInfo,
-  size = persistedRightSidebarSize(transaction),
-): string {
-  const right = transaction.configureEdge({
-    position: "right",
-    size,
-    collapsed: false,
-  });
-  transaction.move({
-    panelInstanceId: details.panelInstanceId,
-    groupId: right.groupId,
-    index: 0,
-    activate: false,
-  });
-  return right.groupId;
-}
-
-function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction): void {
-  const activePanelInstanceId = transaction.getActivePanel()?.panelInstanceId;
-  const right = readSerializedEdge(transaction.serialize(), "right");
-  const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
-  configurePermanentDetailsSidebar(transaction, details);
-  if (right) {
-    if (right.activePanelId && transaction.getPanel(right.activePanelId)) {
-      transaction.activate(right.activePanelId);
-    }
-    transaction.configureEdge({ position: "right", size: right.size, collapsed: right.collapsed });
-  }
-  if (activePanelInstanceId && transaction.getPanel(activePanelInstanceId)) {
-    transaction.activate(activePanelInstanceId);
-  }
-}
-
-function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void {
-  transaction.ensureCentralGroup();
-  const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
-    transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) }),
-  );
-  const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
-  const assistant = transaction.ensureView(ASSISTANT_VIEW_REQUEST);
-  const logs = transaction.ensureView({ viewId: "logs", title: "Logs" });
-  const output = transaction.ensureView({ viewId: "output", title: "Output" });
-  const problems = transaction.ensureView({ viewId: "problems", title: "Problems" });
-  const left = transaction.configureEdge({
-    position: "left",
-    size: WORKBENCH_EDGE_SIZES.left,
-    collapsed: false,
-  });
-  const rightGroupId = configurePermanentDetailsSidebar(transaction, details);
-  const bottom = transaction.configureEdge({
-    position: "bottom",
-    size: WORKBENCH_EDGE_SIZES.bottom,
-    collapsed: false,
-  });
-  activityPanels.forEach((panel, index) => {
-    transaction.move({
-      panelInstanceId: panel.panelInstanceId,
-      groupId: left.groupId,
-      index,
-    });
-  });
-  transaction.move({
-    panelInstanceId: assistant.panelInstanceId,
-    groupId: rightGroupId,
-    index: 1,
-    activate: false,
-  });
-  for (const [index, viewId] of WORKBENCH_BOTTOM_DEFAULT_ORDER.entries()) {
-    transaction.move({
-      panelInstanceId: { logs, output, problems }[viewId].panelInstanceId,
-      groupId: bottom.groupId,
-      index,
-    });
-  }
-  const project = activityPanels.find(
-    (panel) => panel.metadata.role === "view" && panel.metadata.viewId === "project",
-  );
-  if (project) transaction.activate(project.panelInstanceId);
-  transaction.configureEdge({
-    position: "bottom",
-    size: WORKBENCH_EDGE_SIZES.bottom,
-    collapsed: true,
-  });
-}
-
-function parseStoredLayout(raw: string | null) {
-  if (raw === null) return null;
-  try {
-    return parsePersistedWorkbenchLayout(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
-function scrubStoredProjectRoot(storage: LayoutStorage, key: string): void {
-  try {
-    const raw = storage.getItem(key);
-    if (raw === null) return;
-    const candidate: unknown = JSON.parse(raw);
-    const parsed = parsePersistedWorkbenchLayout(candidate);
-    if (!parsed || parsed.root.status !== "valid") return;
-
-    storage.setItem(
-      key,
-      JSON.stringify({
-        ...(candidate as Record<string, unknown>),
-        root: scrubProjectScopedRootLayout(parsed.root.value),
-      }),
-    );
-  } catch {
-    // Startup hydration owns fallback for unreadable or unwritable snapshots.
-  }
 }
 
 export function createWorkbenchLayoutController(
@@ -300,7 +156,7 @@ export function createWorkbenchLayoutController(
       captureBoundSnapshot: isolatedLogs!.captureBoundSnapshot,
       resetToDefault: isolatedLogs!.resetToDefault,
     } satisfies LogsLayoutControl);
-  const storage = dependencies.storage ?? browserStorage;
+  const storage = dependencies.storage ?? workbenchLayoutStorage;
   const storageRead = dependencies.read ?? ((key: string) => storage.getItem(key));
   const debounceMs = dependencies.debounceMs ?? DEFAULT_PERSISTENCE_DEBOUNCE_MS;
 
@@ -315,7 +171,6 @@ export function createWorkbenchLayoutController(
   let persistenceDisposers: Array<() => void> = [];
   let persistenceTimer: ReturnType<typeof setTimeout> | undefined;
   let persistenceRequest = 0;
-  let writeSuspensionDepth = 0;
 
   let projectGeneration = 0;
   let resourcesReadyRequest = 0;
@@ -412,7 +267,7 @@ export function createWorkbenchLayoutController(
 
   const writePersistedLayout = async (cycle: HydrationCycle, request: number): Promise<void> => {
     if (
-      writeSuspensionDepth > 0 ||
+      cycle.writeSuspensionDepth > 0 ||
       persistenceCycle !== cycle ||
       request !== persistenceRequest ||
       !isSuccessfullyHydrated(cycle)
@@ -423,7 +278,7 @@ export function createWorkbenchLayoutController(
     if (!currentBound) return;
     const root = await control.serialize();
     if (
-      writeSuspensionDepth > 0 ||
+      cycle.writeSuspensionDepth > 0 ||
       persistenceCycle !== cycle ||
       request !== persistenceRequest ||
       !isSuccessfullyHydrated(cycle) ||
@@ -435,7 +290,11 @@ export function createWorkbenchLayoutController(
   };
 
   const schedulePersistence = (cycle: HydrationCycle): void => {
-    if (writeSuspensionDepth > 0 || persistenceCycle !== cycle || !isSuccessfullyHydrated(cycle))
+    if (
+      cycle.writeSuspensionDepth > 0 ||
+      persistenceCycle !== cycle ||
+      !isSuccessfullyHydrated(cycle)
+    )
       return;
 
     invalidateScheduledWrites();
@@ -493,28 +352,9 @@ export function createWorkbenchLayoutController(
   };
 
   const finishRestoredRoot = async (cycle: HydrationCycle): Promise<void> => {
+    if (!isCurrentCycle(cycle)) return;
     try {
-      internal.installHydrationLayout(cycle.internalHydrationEpoch, (transaction) => {
-        ensurePermanentDetailsSidebar(transaction);
-        if (
-          !transaction
-            .listPanels()
-            .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "plugins")
-        ) {
-          const active = transaction.getActivePanel();
-          const left = readSerializedEdge(transaction.serialize(), "left");
-          const leftGroup = left ? { activeView: left.activePanelId } : undefined;
-          transaction.ensureView({ viewId: "plugins", title: "Plugins" });
-          if (leftGroup?.activeView) transaction.activate(leftGroup.activeView);
-          if (active) transaction.activate(active.panelInstanceId);
-          if (left)
-            transaction.configureEdge({
-              position: "left",
-              size: left.size,
-              collapsed: left.collapsed ?? false,
-            });
-        }
-      });
+      internal.installHydrationLayout(cycle.internalHydrationEpoch, ensureRestoredRootPanels);
     } catch {
       // A restored root remains usable if permanent-sidebar enforcement fails.
     }
@@ -580,7 +420,7 @@ export function createWorkbenchLayoutController(
     }
     if (!isCurrentCycle(cycle) || bound !== currentBound) return;
 
-    const parsed = parseStoredLayout(raw);
+    const parsed = parseStoredWorkbenchLayout(raw);
     const logsLayout = parsed?.logs.status === "valid" ? parsed.logs.value : DEFAULT_LOGS_LAYOUT;
     if (!stageLogsLayout(cycle, logsRestoreEpoch, logsLayout)) return;
 
@@ -628,17 +468,21 @@ export function createWorkbenchLayoutController(
         (!currentCycle.settled || currentCycle.successful)
       )
         return;
+      const previousGeneration = bindingGeneration;
       if (bound) controller.unbind(bound.api);
+      // Final capture may synchronously bind a successor, including the same API.
+      if (bound || bindingGeneration !== previousGeneration) return;
+      const generation = ++bindingGeneration;
       currentStorageKey = key;
 
       pausePersistence();
       const logsRestoreEpoch = logsControl.beginRestore();
       const internalHydrationEpoch = internal.beginHydration();
-      bindingGeneration += 1;
+      if (bindingGeneration !== generation || bound) return;
       const nextBound: BoundRoot = {
         api,
         key,
-        generation: bindingGeneration,
+        generation,
         internalHydrationEpoch,
       };
       bound = nextBound;
@@ -661,30 +505,35 @@ export function createWorkbenchLayoutController(
       const cycle = currentCycle;
       const canPersist = cycle !== undefined && isSuccessfullyHydrated(cycle);
 
-      writeSuspensionDepth += 1;
+      if (cycle) cycle.writeSuspensionDepth += 1;
       invalidateScheduledWrites();
       try {
         if (canPersist) {
           try {
             logsControl.captureBoundSnapshot();
             if (isSuccessfullyHydrated(cycle) && bound === currentBound) {
-              writePayload(currentBound, currentBound.api.getModel().toJson());
+              const root = currentBound.api.getModel().toJson();
+              if (isSuccessfullyHydrated(cycle) && bound === currentBound) {
+                writePayload(currentBound, root);
+              }
             }
           } catch {
             // Unbind must still release the live FlexLayout API.
           }
         }
       } finally {
-        writeSuspensionDepth -= 1;
-        pausePersistence();
-        settleInvalidatedCycle();
-        restoreEpoch += 1;
-        hydratedEpoch = undefined;
-        currentCycle = undefined;
-        logsControl.beginRestore();
-        resourcesReady = false;
-        internal.unbind(currentBound.api);
-        if (bound === currentBound) bound = undefined;
+        if (cycle) cycle.writeSuspensionDepth -= 1;
+        if (bound === currentBound) {
+          pausePersistence();
+          settleInvalidatedCycle();
+          restoreEpoch += 1;
+          hydratedEpoch = undefined;
+          currentCycle = undefined;
+          logsControl.beginRestore();
+          resourcesReady = false;
+          bound = undefined;
+          internal.unbind(currentBound.api);
+        }
       }
     },
 
@@ -699,7 +548,7 @@ export function createWorkbenchLayoutController(
       await cycle.promise;
       if (!isSuccessfullyHydrated(cycle) || bound !== currentBound) return;
 
-      writeSuspensionDepth += 1;
+      cycle.writeSuspensionDepth += 1;
       invalidateScheduledWrites();
       try {
         await internal.whenIdle();
@@ -710,8 +559,8 @@ export function createWorkbenchLayoutController(
         if (!isSuccessfullyHydrated(cycle) || bound !== currentBound) return;
         writePayload(currentBound, root);
       } finally {
-        invalidateScheduledWrites();
-        writeSuspensionDepth -= 1;
+        if (persistenceCycle === cycle) invalidateScheduledWrites();
+        cycle.writeSuspensionDepth -= 1;
       }
     },
 
@@ -790,5 +639,5 @@ export const workbenchLayoutController = createWorkbenchLayoutController({
   internal: workbenchLayoutInternal,
   logsRead: logsLayoutRead,
   logsControl: logsLayoutControl,
-  storage: browserStorage,
+  storage: workbenchLayoutStorage,
 });

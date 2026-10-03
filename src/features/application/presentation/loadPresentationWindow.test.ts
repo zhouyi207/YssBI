@@ -1,4 +1,5 @@
 import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { loadPresentationWindow } from "./loadPresentationWindow";
@@ -11,7 +12,7 @@ vi.mock("@/services/result/resultService", () => ({
   },
 }));
 
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: { app: { error: vi.fn() } },
 }));
 
@@ -47,7 +48,18 @@ describe("loadPresentationWindow", () => {
   it.each(["linearRegressionSummary", "structured"] as const)(
     "loads a ready %s result as the canonical object only",
     async (kind) => {
-      const report = { title: "Linear Regression Summary", model_basic_info: {} };
+      const report =
+        kind === "linearRegressionSummary"
+          ? {
+              ...JSON.parse(
+                readFileSync(
+                  "src/tests/fixtures/node-system-contracts/ols-summary-report.json",
+                  "utf8",
+                ),
+              ),
+              resultRef: resultReferenceFixture("20"),
+            }
+          : { title: "Summary", model_basic_info: {} };
       vi.mocked(ResultService.getDescriptor).mockResolvedValue(
         descriptor("20", {
           presentation: { kind: "report", report: kind },
@@ -57,10 +69,31 @@ describe("loadPresentationWindow", () => {
 
       await expect(loadPresentationWindow(resultReferenceFixture("20"))).resolves.toMatchObject({
         status: "ready",
-        payload: { mode: "report", report: kind, data: report },
+        payload: {
+          mode: "report",
+          data: report,
+          validation: { ok: true, value: { kind, data: report } },
+        },
       });
       expect(ResultService.getValue).toHaveBeenCalledWith(resultReferenceFixture("20"));
       expect(ResultService.getPage).not.toHaveBeenCalled();
+      vi.mocked(ResultService.getValue).mockResolvedValue({
+        kind: "value",
+        value:
+          kind === "linearRegressionSummary"
+            ? { ...report, resultRef: resultReferenceFixture("21") }
+            : [],
+      });
+      await expect(loadPresentationWindow(resultReferenceFixture("20"))).resolves.toMatchObject({
+        status: "ready",
+        payload: {
+          mode: "report",
+          validation: {
+            ok: false,
+            diagnostic: { fieldPath: kind === "linearRegressionSummary" ? "resultRef" : "$" },
+          },
+        },
+      });
     },
   );
 
@@ -118,6 +151,24 @@ describe("loadPresentationWindow", () => {
     });
     expect(ResultService.getValue).not.toHaveBeenCalled();
     expect(ResultService.getPage).not.toHaveBeenCalled();
+  });
+
+  it("delivers validated plot payloads and preserves the invalid-plot state", async () => {
+    const plot = { data: [{ x: 1, y: 2 }] };
+    vi.mocked(ResultService.getDescriptor).mockResolvedValue(
+      descriptor("23", { presentation: { kind: "plot", chart: "scatter" } }),
+    );
+    vi.mocked(ResultService.getValue).mockResolvedValue({ kind: "value", value: plot });
+    await expect(loadPresentationWindow(resultReferenceFixture("23"))).resolves.toMatchObject({
+      status: "ready",
+      payload: { mode: "plot", plot: { kind: "scatter", data: plot } },
+    });
+
+    vi.mocked(ResultService.getValue).mockResolvedValue({ kind: "value", value: { data: [] } });
+    await expect(loadPresentationWindow(resultReferenceFixture("23"))).resolves.toMatchObject({
+      status: "ready",
+      payload: { mode: "plot", plot: null },
+    });
   });
 
   it("returns explicit missing states", async () => {

@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
 import { uiStore } from "@/features/core/ui/UIStore";
+import {
+  startProjectLifecycle,
+  clearProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { UIHost } from "./UIHost";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -43,6 +47,7 @@ describe("UIHost modal stack", () => {
   let root: Root;
 
   beforeEach(async () => {
+    startProjectLifecycle("modal-stack-project");
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -60,6 +65,7 @@ describe("UIHost modal stack", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     for (const modal of uiStore.getState().modals) uiStore.closeModal(modal.id);
+    clearProjectLifecycle();
     host.remove();
     await flushDialogEffects();
   });
@@ -144,6 +150,8 @@ describe("UIHost modal stack", () => {
       overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     await flushDialogEffects();
+    const discard = document.querySelectorAll<HTMLElement>('[role="dialog"]')[2];
+    await clickButton(discard, "importModal.discardConnectionConfirm");
 
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(document.querySelector('[role="dialog"]')).toBe(parent);

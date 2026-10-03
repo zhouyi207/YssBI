@@ -43,10 +43,9 @@ export interface GraphInteractionState {
   startInteraction(
     graphPath: GraphPath,
     interaction: Exclude<CanvasInteraction, { type: "idle" }>,
-  ): void;
+  ): Exclude<CanvasInteraction, { type: "idle" }>;
   finishInteraction(graphPath: GraphPath, groupId: string): CanvasInteraction["type"];
   cancelInteraction(graphPath: GraphPath, groupId: string): CanvasInteraction["type"];
-  clearGraphInteraction(graphPath: GraphPath): void;
 }
 
 export const useGraphInteractionStore = create<GraphInteractionState>((set, get) => {
@@ -60,17 +59,14 @@ export const useGraphInteractionStore = create<GraphInteractionState>((set, get)
   };
   return {
     interactions: {},
-    startInteraction: (graphPath, interaction) =>
+    startInteraction: (graphPath, interaction) => {
+      const installed = structuredClone(interaction);
       set((state) => ({
-        interactions: { ...state.interactions, [graphPath]: structuredClone(interaction) },
-      })),
+        interactions: { ...state.interactions, [graphPath]: installed },
+      }));
+      return installed;
+    },
     finishInteraction,
     cancelInteraction: finishInteraction,
-    clearGraphInteraction: (graphPath) =>
-      set((state) => {
-        const interactions = { ...state.interactions };
-        delete interactions[graphPath];
-        return { interactions };
-      }),
   };
 });

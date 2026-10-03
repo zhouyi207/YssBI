@@ -1,11 +1,8 @@
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useEffect, useState } from "react";
-import {
-  pendingUiIntents,
-  settleUiIntent,
-  subscribeUi,
-} from "@/services/workbench/presentationService";
-import type { UiIntent, UiIntentReceipt } from "@/shared/types/domain/uiPresentation";
+import { subscribeUi } from "@/services/workbench/presentationService";
+import type { UiIntent } from "@/shared/types/domain/uiPresentation";
+import { createUiIntentDelivery } from "./uiIntentDelivery";
 import {
   captureProjectLifecycleState,
   isCurrentProjectIdentity,
@@ -20,7 +17,7 @@ import { currentProjectionLocale } from "@/features/application/graphProjection/
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
 import { revealWorkbenchView, workbenchLayoutRead } from "@/modules/workbench/public";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 async function execute(intent: UiIntent, current: () => boolean): Promise<boolean> {
   if (!current()) return false;
@@ -70,49 +67,17 @@ export function useUiIntents() {
     const identity = captureProjectLifecycleState();
     if (identity.projectInstanceId !== projectInstanceId) return;
     let closed = false;
-    let queue = Promise.resolve();
-    let resync: Promise<void> | null = null;
-    const queued = new Set<string>();
     const current = () =>
       !closed && isCurrentProjectIdentity({ projectInstanceId, epoch: identity.epoch });
     const failed = () => {
       if (current()) logger.app.warn("UI intent delivery failed", "UiIntents");
     };
-    const accept = (receipt: UiIntentReceipt) => {
-      if (
-        receipt.status !== "pending" ||
-        !current() ||
-        queued.has(receipt.id) ||
-        queued.size >= 128
-      )
-        return;
-      queued.add(receipt.id);
-      queue = queue
-        .then(async () => {
-          if (!current() || !(await settleUiIntent(projectInstanceId, receipt.id, "claimed")))
-            return;
-          let applied = false;
-          try {
-            applied = await execute(receipt.intent, current);
-          } finally {
-            if (current())
-              await settleUiIntent(projectInstanceId, receipt.id, applied ? "applied" : "failed");
-          }
-        })
-        .catch(failed)
-        .finally(() => queued.delete(receipt.id));
-    };
-    const recover = () => {
-      if (resync || !current()) return;
-      resync = pendingUiIntents(projectInstanceId)
-        .then((receipts) => {
-          if (current()) receipts.forEach(accept);
-        })
-        .catch(failed)
-        .finally(() => {
-          resync = null;
-        });
-    };
+    const delivery = createUiIntentDelivery(
+      projectInstanceId,
+      current,
+      (intent) => execute(intent, current),
+      failed,
+    );
     const subscription = subscribeUi(
       projectInstanceId,
       true,
@@ -122,12 +87,12 @@ export function useUiIntents() {
           setConnection((value) => value + 1);
           return;
         }
-        if (event.kind === "intent") accept(event.receipt);
-        else if (event.kind === "resync") recover();
+        if (event.kind === "intent") void delivery.accept(event.receipt);
+        else if (event.kind === "resync") void delivery.recover(true);
       },
       () => {
         failed();
-        recover();
+        void delivery.recover(true);
       },
     )
       .then(async (close) => {
@@ -135,7 +100,7 @@ export function useUiIntents() {
           await close();
           return () => Promise.resolve();
         }
-        recover();
+        void delivery.recover();
         return close;
       })
       .catch(() => {

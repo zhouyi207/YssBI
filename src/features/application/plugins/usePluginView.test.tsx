@@ -14,7 +14,7 @@ const mocked = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ i18n: { language: "en-US" } }) }));
 vi.mock("@/features/application/settings/applicationSettings", () => ({
-  useApplicationSettings: () => ({ theme: mocked.theme }),
+  useApplicationTheme: () => mocked.theme,
 }));
 vi.mock("@/features/application/project/projectIOStore", () => ({
   useProjectIOStore: () => undefined,

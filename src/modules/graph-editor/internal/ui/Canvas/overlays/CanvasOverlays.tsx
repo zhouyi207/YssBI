@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { createPortal } from "react-dom";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
@@ -41,7 +42,7 @@ export interface CanvasOverlaysModel {
   execution: CanvasExecutionOverlayModel;
 }
 
-export default function CanvasOverlays({
+export default memo(function CanvasOverlays({
   model,
   catalogRowRenderer,
 }: {
@@ -85,4 +86,4 @@ export default function CanvasOverlays({
         : null}
     </>
   );
-}
+});

@@ -21,9 +21,10 @@ export function applyProjectClosed(projectInstanceId: string): Promise<void> {
   const current = captureProjectLifecycleState();
   if (current.projectInstanceId !== projectInstanceId) return Promise.resolve();
 
-  projectPublicationCoordinator.cancelProject();
+  const owner = projectPublicationCoordinator.cancelProject();
+  if (!isProjectLifecycleStateCurrent(owner)) return Promise.resolve();
   resetResultQueryProject();
-  const owner = captureProjectLifecycleState();
+  if (!isProjectLifecycleStateCurrent(owner)) return Promise.resolve();
   const entry = {
     projectInstanceId,
     promise: createProjectLifecycleReceiptDependencies().clearProject(owner),

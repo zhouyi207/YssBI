@@ -24,9 +24,7 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
       return {
         projectInstanceId: prepared.index.projectInstanceId,
         publicationRevision: prepared.index.publicationRevision,
-        commit: async () => {
-          await commitPreparedAuthoritativeProjectLoad(prepared);
-        },
+        commit: () => commitPreparedAuthoritativeProjectLoad(prepared),
       };
     },
     refreshRegistry: () => ProjectService.listRegisteredProjects(),

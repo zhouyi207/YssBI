@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { patchEditorViewStateViewport } from "./editorViewStateMemento";
+import { editorViewStateStorageKey, patchEditorViewStateViewport } from "./editorViewStateMemento";
 import { resolveInitialGraphViewport } from "./resolveInitialGraphViewport";
 
 describe("resolveInitialGraphViewport", () => {
@@ -24,7 +24,12 @@ describe("resolveInitialGraphViewport", () => {
     });
   });
 
-  it("uses default viewport when memento is missing", () => {
+  it("uses default viewport when memento is missing or invalid", () => {
+    expect(resolveInitialGraphViewport("events/A.yssbi-event")).toEqual({ x: 0, y: 0, scale: 1 });
+    localStorage.setItem(
+      editorViewStateStorageKey("/projects/demo"),
+      '{"events/A.yssbi-event":{"x":1e400,"y":"20","scale":0}}',
+    );
     expect(resolveInitialGraphViewport("events/A.yssbi-event")).toEqual({ x: 0, y: 0, scale: 1 });
   });
 });

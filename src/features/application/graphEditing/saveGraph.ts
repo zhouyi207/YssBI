@@ -3,12 +3,11 @@ import {
   enqueueGraphTask,
   installGraphSession,
 } from "@/features/application/graphEditing/graphEditCoordinator";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { markResourceDirty, useResourceStore } from "@/features/core/resource";
 import type { ResourceKind } from "@/features/core/resource";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
 
@@ -17,12 +16,13 @@ export async function saveGraph(
   graphKind: Extract<ResourceKind, "event_graph" | "function_graph">,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  const drafts = useGraphProjectionStore.getState();
-  if (!drafts.beginSave(graphPath)) return false;
-  const sessionId = useGraphProjectionStore.getState().sessions[graphPath].sessionId;
+  const drafts = useResourceStore.getState();
+  const sessionId = drafts.sessions[graphPath]?.sessionId;
+  if (sessionId === undefined || !drafts.beginGraphSave(graphPath)) return false;
   const isCurrentSave = () =>
     isCurrentProjectIdentity(identity) &&
-    useGraphProjectionStore.getState().sessions[graphPath]?.sessionId === sessionId;
+    useResourceStore.getState().sessions[graphPath]?.sessionId === sessionId;
+  if (!isCurrentSave()) return false;
 
   let completed = false;
   try {
@@ -31,8 +31,8 @@ export async function saveGraph(
       async () => {
         if (!isCurrentSave()) return false;
         const projectionGeneration =
-          useGraphProjectionStore.getState().sessions[graphPath].projectionGeneration;
-        const version = useGraphProjectionStore.getState().sessions[graphPath].version;
+          useResourceStore.getState().sessions[graphPath].projectionGeneration;
+        const version = useResourceStore.getState().sessions[graphPath].version;
         const saved = await GraphEditingService.save(
           identity.projectInstanceId,
           graphPath,
@@ -42,7 +42,7 @@ export async function saveGraph(
         );
         if (
           !isCurrentSave() ||
-          useGraphProjectionStore.getState().sessions[graphPath].projectionGeneration !==
+          useResourceStore.getState().sessions[graphPath].projectionGeneration !==
             projectionGeneration
         )
           return false;
@@ -59,14 +59,10 @@ export async function saveGraph(
               editing: saved.editing,
               resultState: saved.resultState,
             },
-            "save",
+            { mode: "save", resource: { kind: graphKind, revision: saved.resourceRevision } },
           )
         )
           return false;
-        useResourceStore
-          .getState()
-          .patchResource({ id: graphPath, kind: graphKind }, { revision: saved.resourceRevision });
-        markResourceDirty({ id: graphPath, kind: graphKind }, saved.editing.dirty);
         completed = true;
         return true;
       },
@@ -77,7 +73,7 @@ export async function saveGraph(
     throw error;
   } finally {
     if (!completed && isCurrentSave()) {
-      useGraphProjectionStore.getState().failSave(graphPath);
+      useResourceStore.getState().failGraphSave(graphPath);
     }
   }
 }

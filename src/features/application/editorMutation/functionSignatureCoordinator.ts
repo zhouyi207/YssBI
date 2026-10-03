@@ -1,7 +1,7 @@
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { hydrateGraphProjection } from "@/features/application/graphProjection/graphProjectionLifecycle";
 
-import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { captureRevisionedProjectCommandSnapshot } from "@/features/application/projectCommandContext";
 
 import {
@@ -22,7 +22,7 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { isGraphSaving } from "@/features/core/dataStore/graphProjectionStore";
+import { isGraphSaving } from "@/features/core/graph/read";
 
 export interface ExecuteFunctionSignatureMutationInput {
   functionPath: string;
@@ -127,7 +127,7 @@ export async function executeFunctionSignatureMutation(
   if (isGraphSaving(input.functionPath)) return { status: "stale" };
   const dependencies = { ...defaultDependencies, ...overrides };
   const { context, captured: meta } = captureRevisionedProjectCommandSnapshot(
-    () => useGraphMetaStore.getState().graphs[input.functionPath],
+    () => useResourceStore.getState().graphMeta[input.functionPath],
   );
   if (meta?.type !== "function_graph" || meta.functionRevision == null || !meta.functionSignature) {
     throw new Error(`function signature resource '${input.functionPath}' is not hydrated`);

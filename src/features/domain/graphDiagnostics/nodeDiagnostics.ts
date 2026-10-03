@@ -63,9 +63,7 @@ export function formatGraphDiagnostic(
 export function isUnboundInputDiagnostic(
   diagnostic: { readonly code: string } | undefined,
 ): boolean {
-  return (
-    diagnostic?.code === "graph.input.unbound" || diagnostic?.code === "node.input.not_connected"
-  );
+  return diagnostic?.code === "graph.input.unbound";
 }
 
 export function formatDiagnosticLocationLabel(

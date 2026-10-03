@@ -1,8 +1,8 @@
-import { readSerializedEdge } from "../layout/workbenchLayoutOperations";
 import i18n from "i18next";
 
 import { logsLayoutControl } from "../layout/logsControl";
 import {
+  readSerializedEdge,
   orderWorkbenchPanelIdsForReset,
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,

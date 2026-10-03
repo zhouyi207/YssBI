@@ -1,10 +1,11 @@
 import { DatabaseService } from "@/services/database/databaseService";
 import { toErrorReference } from "@/services/ipc";
 import { ChartService } from "@/services/chart/chartService";
-import type { ColumnDistribution, ChartDocument, ChartPreviewPayload } from "@/shared/types/domain";
+import type { ChartDocument, ChartPreviewPayload } from "@/shared/types/domain";
 
 export interface ChartPreviewProjectIdentity {
   readonly projectInstanceId: string;
+  readonly databaseRevision: number | null;
   isCurrent(): boolean;
   assertCurrent(): void;
 }
@@ -15,7 +16,7 @@ export async function fetchChartPreview(
 ): Promise<ChartPreviewPayload> {
   const { databaseId, chartType, encodings } = document;
 
-  if (!databaseId) {
+  if (!databaseId || identity.databaseRevision === null) {
     return { kind: "empty" };
   }
 
@@ -24,10 +25,11 @@ export async function fetchChartPreview(
       const column = encodings.y ?? encodings.x;
       if (!column) return { kind: "empty" };
 
-      const distributions = (await DatabaseService.getColumnDistribution(
+      const distributions = await DatabaseService.getColumnDistribution(
         identity.projectInstanceId,
         databaseId,
-      )) as ColumnDistribution[];
+        identity.databaseRevision,
+      );
       identity.assertCurrent();
       const match = distributions.find((d) => d.columnName === column);
       if (!match) {
@@ -62,6 +64,7 @@ export async function fetchChartPreview(
       const pair = await ChartService.getPlotColumnPair(
         identity.projectInstanceId,
         databaseId,
+        identity.databaseRevision,
         xCol,
         yCol,
       );

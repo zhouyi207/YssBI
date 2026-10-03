@@ -76,6 +76,15 @@ function cloneSnapshot(): Record<string, unknown> {
 describe("parseClipboardSubgraphDto", () => {
   it("accepts one complete strict version-1 camelCase fixture", () => {
     expect(parseClipboardSubgraphDto(completeSnapshot)).toEqual(completeSnapshot);
+    const withClass = cloneSnapshot();
+    const port = (withClass.portBindings as Array<Record<string, unknown>>)[1];
+    (port.binding as Record<string, unknown>).lastKnown = {
+      label: "Input",
+      valueType: {
+        Applied: { constructor: "core.sequence", arguments: [{ Class: "core.numeric" }] },
+      },
+    };
+    expect(parseClipboardSubgraphDto(withClass)).toBe(withClass);
   });
 
   it("rejects foreign top-level and nested keys", () => {

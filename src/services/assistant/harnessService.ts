@@ -65,9 +65,15 @@ export class HarnessService {
   ): Promise<HarnessEventSubscription> {
     let subscriptionId: string | null = null;
     let cleaned = false;
+    let unsubscribed = false;
+    const unsubscribeRemote = async () => {
+      if (unsubscribed || !subscriptionId) return;
+      unsubscribed = true;
+      await HarnessService.unsubscribeEvents(subscriptionId);
+    };
     const channel = trackChannel(new Channel<unknown>(), () => {
       cleanup();
-      if (subscriptionId) void HarnessService.unsubscribeEvents(subscriptionId).catch(() => {});
+      void unsubscribeRemote().catch(() => {});
     });
     const cleanup = () => {
       if (cleaned) return;
@@ -76,6 +82,7 @@ export class HarnessService {
       clearChannelMessageHandler(channel);
     };
     channel.onmessage = (value) => {
+      if (cleaned) return;
       try {
         onEvent(parseHarnessEvent(value));
       } catch (error) {
@@ -91,18 +98,18 @@ export class HarnessService {
         }),
       );
       subscriptionId = snapshot.subscriptionId;
-      if (cleaned) await HarnessService.unsubscribeEvents(subscriptionId).catch(() => {});
+      if (cleaned) {
+        await unsubscribeRemote().catch(() => {});
+        throw new Error("Harness subscription was disposed before activation");
+      }
     } catch (error) {
       cleanup();
       throw error;
     }
-    let unsubscribed = false;
     return {
       unsubscribe: async () => {
-        if (unsubscribed) return;
-        unsubscribed = true;
         cleanup();
-        if (subscriptionId) await HarnessService.unsubscribeEvents(subscriptionId);
+        await unsubscribeRemote();
       },
     };
   }
@@ -129,7 +136,7 @@ export class HarnessService {
     await invokeCommand("delete_harness_memory", { sessionId, recordId });
   }
 
-  static async unsubscribeEvents(subscriptionId: string): Promise<void> {
+  private static async unsubscribeEvents(subscriptionId: string): Promise<void> {
     await invokeCommand("unsubscribe_harness_events", { subscriptionId });
   }
 }

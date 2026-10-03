@@ -81,12 +81,20 @@ export async function openInspectableResult(ref: InspectableResultRef): Promise<
 
 /** Open pin/context-menu targets; tries upstream pins in order for input direction. */
 export async function openPinInspectableView(params: ResolvePinViewTargetParams): Promise<boolean> {
+  let project: ReturnType<typeof captureProjectIdentity>;
+  try {
+    project = captureProjectIdentity();
+  } catch {
+    return false;
+  }
   const refs = inspectableRefsFromPinView(
     params,
     getGraphSnapshot().graphEntities[params.graphPath],
   );
   for (const ref of refs) {
-    if (await openInspectableResult(ref)) {
+    const opened = await openInspectableResult(ref);
+    if (!isCurrentProjectIdentity(project)) return false;
+    if (opened) {
       return true;
     }
   }

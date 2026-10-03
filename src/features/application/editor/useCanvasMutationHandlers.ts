@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CanvasInteractionHandlers, CanvasMutationOutcome } from "@/features/core/canvas";
 import { executeGraphEdit } from "@/features/application/graphEditing";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import { insertRerouteAtConnection } from "./edgeOperations";
 
 function toCanvasMutationOutcome(

@@ -5,7 +5,7 @@ import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
 } from "@/features/application/editor/editorCommandFocus";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useEditorPaneStateStore } from "@/modules/workbench/public";
 import { useReadProjection } from "@/features/core/state/readProjection";
 import { workbenchLayoutRead } from "@/modules/workbench/public";
@@ -77,10 +77,10 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     graphTarget ? (state.selections[graphTarget.panelInstanceId]?.selectedNodeIds.length ?? 0) : 0,
   );
   const graphPath = graphTarget?.resourceRef;
-  const nodeCount = useGraphProjectionStore((state) =>
+  const nodeCount = useResourceStore((state) =>
     graphPath ? (state.graphEntities[graphPath]?.graphNodes.length ?? 0) : 0,
   );
-  const connections = useGraphProjectionStore((state) =>
+  const connections = useResourceStore((state) =>
     graphPath ? state.graphEntities[graphPath]?.connections : undefined,
   );
   const connectionCount = useMemo(

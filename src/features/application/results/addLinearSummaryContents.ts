@@ -3,7 +3,7 @@ import {
   enqueueGraphTask,
 } from "@/features/application/graphEditing/graphEditCoordinator";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -43,10 +43,11 @@ export async function addLinearSummaryContents(
     throw unavailable();
   const outcome = await applyGraphMutation({
     graphPath,
-    mutation(document) {
+    mutation() {
       if (!isCurrent()) throw changed();
-      const node = document.nodes[descriptor.provenance.nodeId];
-      if (node?.node_type !== "yssbi.statistics.linear.summary") throw unavailable();
+      const node =
+        useResourceStore.getState().graphEntities[graphPath]?.nodes[descriptor.provenance.nodeId];
+      if (node?.nodeType !== "yssbi.statistics.linear.summary") throw unavailable();
       // setParameters merges these additions into the current Rust-owned values.
       return { type: "setParameters", payload: { nodeId: node.id, parameters: additions } };
     },
@@ -56,7 +57,7 @@ export async function addLinearSummaryContents(
     throw outcome.status === "rejected" ? { code: outcome.code, incidentId: null } : changed();
   const version = outcome.result.editing.version;
   const currentVersion = () => {
-    const current = useGraphProjectionStore.getState().sessions[graphPath];
+    const current = useResourceStore.getState().sessions[graphPath];
     return (
       isCurrent() &&
       current?.version.sessionId === version.sessionId &&
@@ -68,7 +69,7 @@ export async function addLinearSummaryContents(
     graphPath,
     async () => {
       if (!currentVersion()) throw changed();
-      const draft = useGraphProjectionStore.getState().sessions[graphPath];
+      const draft = useResourceStore.getState().sessions[graphPath];
       if (draft.saving) throw changed();
       return {
         completion: ProjectService.executeGraph({
@@ -105,6 +106,10 @@ export async function addLinearSummaryContents(
   if (!currentVersion() || !result || result.executionSessionId !== completedSessionId)
     throw changed();
   const held = await resultLeases.acquire(result);
+  if (!currentVersion()) {
+    await resultLeases.finish(held.leaseId, false);
+    throw changed();
+  }
   const releasePayload = resultQueryCoordinator.retainPayload(result);
   let released = false;
   const finish = (installed: boolean) => {

@@ -1,7 +1,8 @@
 import { FILE_RESOURCE_KINDS } from "@/shared/types/domain/resource";
 import { fileResourceHandlers } from "@/features/application/resource/resourceActions";
-import { useCallback, useMemo, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 
 import {
   SidebarRenameDialog,
@@ -18,10 +19,11 @@ import { buildProjectSidebarContextMenuSections } from "./buildProjectSidebarCon
 import type { ProjectSidebarContextMenuTarget } from "./projectSidebarTypes";
 import type { SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
 import { SidebarProjectTab } from "./SidebarProjectTab";
-import { useProjectActivityActions } from "./useProjectActivityActions";
+import { useProjectActivityActions } from "@/features/application/sidebar/useProjectActivityActions";
 
 function ProjectActivityPanelController() {
   const { t } = useTranslation();
+  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const {
     contextMenu,
     closeActionMenu,
@@ -34,6 +36,11 @@ function ProjectActivityPanelController() {
     cancelLabel,
   } = useSidebarContextMenu<ProjectSidebarContextMenuTarget>(formatInlineUserError);
   const actions = useProjectActivityActions(openInputDialog);
+
+  useEffect(() => {
+    closeActionMenu();
+    cancelInputDialog();
+  }, [projectInstanceId, closeActionMenu, cancelInputDialog]);
 
   const contextMenuSections = useMemo(
     () =>

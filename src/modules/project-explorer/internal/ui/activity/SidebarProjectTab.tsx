@@ -1,4 +1,5 @@
-import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
+import { memo } from "react";
+import { isActivityFileItem } from "@/shared/types/domain/activityPanel";
 import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
 import { useActiveProjectResource } from "@/features/application/sidebar/useActiveProjectResource";
 import { ActivityPanelDocumentView } from "@/modules/workbench/public";
@@ -8,10 +9,13 @@ import {
 } from "@/features/core/sidebar/projectTreeState";
 import { SidebarProjectTreeRow, type SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
 
-export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActions }) {
+export const SidebarProjectTab = memo(function SidebarProjectTab({
+  actions,
+}: {
+  actions: SidebarProjectTreeActions;
+}) {
   const query = useActivityPanelDocument("project");
   const activeResource = useActiveProjectResource();
-  const graphDiagnosticCounts = useGraphDiagnosticCounts();
   return (
     <ActivityPanelDocumentView
       panelId="project"
@@ -37,10 +41,13 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
           item={item}
           depth={depth}
           actions={actions}
-          activeResource={activeResource}
-          graphDiagnosticCounts={graphDiagnosticCounts}
+          isSelected={
+            activeResource?.kind === item.kind &&
+            activeResource.id ===
+              (isActivityFileItem(item) ? item.path : item.kind === "database" ? item.id : null)
+          }
         />
       )}
     />
   );
-}
+});

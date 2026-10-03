@@ -26,8 +26,6 @@ const mocks = vi.hoisted(() => ({
   groupPanels: [] as TestPanel[],
   interaction: { type: "idle" } as { type: string },
   selection: { nodeIds: new Set<string>(), connectionIds: new Set<string>() },
-  setModifierKeys: vi.fn(),
-  resetModifierKeys: vi.fn(),
   activate: vi.fn(async () => true),
   requestCloseWorkbenchPanel: vi.fn(async () => true),
   toggleActivityWorkbenchGroup: vi.fn(async () => undefined),
@@ -92,14 +90,6 @@ vi.mock("./editorCommandFocus", () => ({
     );
   },
   shouldIgnoreEditorShortcutEvent: () => mocks.ignoreShortcut,
-}));
-vi.mock("@/features/core/keyboard", () => ({
-  useModifierKeyStore: {
-    getState: () => ({
-      setModifierKeys: mocks.setModifierKeys,
-      resetModifierKeys: mocks.resetModifierKeys,
-    }),
-  },
 }));
 vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
   workbenchLayoutRead: {

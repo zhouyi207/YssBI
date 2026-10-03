@@ -31,6 +31,34 @@ const snapshot = (latestSequence: number): LogSubscriptionDto => ({
 });
 
 describe("recordBatchReceiver", () => {
+  it("queues reentrant batches behind pending records and stops when the consumer disposes", () => {
+    const received: number[] = [];
+    const onError = vi.fn();
+    const receiver = createRecordBatchReceiver(
+      parseLogBatchDto,
+      (next) => {
+        const sequence = next.entries[0].sequence;
+        received.push(sequence);
+        if (sequence === 1) {
+          receiver.onmessage(batch(4));
+          receiver.onmessage(batch(5));
+        }
+        if (sequence === 2) receiver.dispose();
+      },
+      onError,
+    );
+    receiver.onmessage(batch(1));
+    receiver.onmessage(batch(2));
+    receiver.onmessage(batch(3));
+    expect(receiver.prepare(snapshot(0))).toBeNull();
+
+    receiver.activate();
+    receiver.onmessage(batch(6));
+
+    expect(received).toEqual([1, 2]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("stops log delivery on storage failure without advancing the stream", () => {
     const received = vi.fn();
     const onError = vi.fn();
@@ -44,6 +72,7 @@ describe("recordBatchReceiver", () => {
       expect.objectContaining({ reason: "storage-unavailable" }),
     );
     expect(() => parseLogBatchDto({ ...batch(2), failure: "storage_unavailable" })).toThrow();
+    expect(() => parseLogBatchDto({ ...batch(2), failure: "subscriber_lagged" })).toThrow();
   });
   it("reports preactivation overflow instead of dropping old batches", () => {
     const receiver = createRecordBatchReceiver(parseLogBatchDto, vi.fn(), vi.fn(), 2);
@@ -53,6 +82,24 @@ describe("recordBatchReceiver", () => {
 
     expect(receiver.prepare(snapshot(0))).toBe("preactivation-overflow");
     expect(() => receiver.activate()).toThrow(RecordStreamDiscontinuityError);
+
+    const received: number[] = [];
+    const onError = vi.fn();
+    const active = createRecordBatchReceiver(
+      parseLogBatchDto,
+      (next) => {
+        received.push(next.entries[0].sequence);
+        for (let sequence = 2; sequence <= 4; sequence++) active.onmessage(batch(sequence));
+      },
+      onError,
+      2,
+    );
+    expect(active.prepare(snapshot(0))).toBeNull();
+    active.activate();
+    active.onmessage(batch(1));
+    active.onmessage(batch(5));
+    expect(received).toEqual([1]);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ reason: "subscriber-lagged" }));
   });
 
   it("reports a preactivation sequence gap so the service can reconnect", () => {

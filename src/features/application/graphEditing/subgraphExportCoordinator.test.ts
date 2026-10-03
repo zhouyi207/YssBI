@@ -6,7 +6,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { GraphSubgraphService } from "@/services/nodeSystem/graphSubgraphService";
 import type { ClipboardSubgraphDto } from "@/shared/types/dto/clipboardSubgraph";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { exportEditorSubgraph } from "./subgraphExportCoordinator";
 import {
   makeEditorProjectionFixture,
@@ -34,15 +34,20 @@ describe("exportEditorSubgraph", () => {
     vi.restoreAllMocks();
     clearProjectLifecycle();
     startProjectLifecycle("project-a");
-    useGraphProjectionStore.getState().install("events/main.yssbi-event", {
-      resultState: makeGraphEditorSession(
-        makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" }).projection,
-      ).resultState,
+    useResourceStore.getState().installGraphSession(
+      "events/main.yssbi-event",
+      {
+        resultState: makeGraphEditorSession(
+          makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" }).projection,
+        ).resultState,
 
-      editing: makeGraphEditingState(),
-      document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
-      projection: makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" }).projection,
-    });
+        editing: makeGraphEditingState(),
+        document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
+        projection: makeEditorProjectionFixture({ graphPath: "events/main.yssbi-event" })
+          .projection,
+      },
+      { mode: "load" },
+    );
   });
 
   it("captures the project identity for the read-only export", async () => {

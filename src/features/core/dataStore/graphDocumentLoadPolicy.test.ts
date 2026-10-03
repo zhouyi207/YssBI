@@ -3,13 +3,12 @@ import {
   makeEditorProjectionFixture,
 } from "@/tests/helpers/editorProjectionFixtures";
 import { describe, expect, it, beforeEach } from "vitest";
-import { useGraphProjectionStore } from "./graphProjectionStore";
-import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
+
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   buildFileResourceMeta,
   markResourceLoaded,
   markResourceStale,
-  useResourceStore,
 } from "@/features/core/resource";
 import { isGraphCachedInMemory } from "./graphDocumentLoadPolicy";
 
@@ -17,8 +16,7 @@ describe("graphDocumentLoadPolicy", () => {
   const graphPath = "opaque graph resource";
 
   beforeEach(() => {
-    useGraphProjectionStore.getState().clear();
-    useDocumentStateStore.getState().clear();
+    useResourceStore.getState().clear();
     useResourceStore
       .getState()
       .setSnapshot({ resources: [buildFileResourceMeta("event_graph", graphPath, "Main")] });
@@ -37,6 +35,7 @@ describe("graphDocumentLoadPolicy", () => {
   it("returns false when a bucket exists for an unloaded graph resource", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     installGraphProjectionFixture(graphPath, fixture.projection);
+    markResourceLoaded({ id: graphPath, kind: "event_graph" }, false);
 
     expect(isGraphCachedInMemory(graphPath)).toBe(false);
   });

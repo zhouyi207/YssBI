@@ -23,18 +23,12 @@ export type {
   ProjectEventIngressDependencies,
   ProjectEventIngressIssue,
   ProjectEventIngressRecoveryReason,
-  ProjectEventStreamItem,
 } from "./projectEventIngress";
 export { createProjectEventConsumer } from "./projectEventConsumer";
 export { initializeProjectForCurrentWindow } from "./projectRuntime";
 export { getDefaultProjectParentDirectory, openProjectPathDialog } from "./projectPlatformActions";
 export type {
-  ProjectEvent,
   ProjectEventConsumer,
   ProjectEventConsumerDependencies,
-  ProjectIndexInvalidatedPayload,
-  ProjectLifecycleCommittedPayload,
-  ProjectLoadedPayload,
   ProjectEventConsumptionOutcome,
-  ResourceMutationCommittedPayload,
 } from "./projectEventConsumer";

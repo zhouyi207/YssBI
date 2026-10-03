@@ -8,13 +8,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { usePluginMaintenance } from "@/features/application/plugins/usePluginMaintenance";
-import type { InstalledPlugin } from "@/shared/types/plugins/generated";
+import type { PluginSnapshot } from "@/features/application/plugins/pluginRegistry";
 
 export function PluginMaintenanceDialog({
   plugin,
   onClose,
 }: {
-  plugin: InstalledPlugin | null;
+  plugin: PluginSnapshot | null;
+  onClose(): void;
+}) {
+  return plugin ? (
+    <PluginMaintenanceContent
+      key={`${plugin.manifest.id}:${plugin.installationGeneration}`}
+      plugin={plugin}
+      onClose={onClose}
+    />
+  ) : null;
+}
+
+function PluginMaintenanceContent({
+  plugin,
+  onClose,
+}: {
+  plugin: PluginSnapshot;
   onClose(): void;
 }) {
   const { t } = useTranslation();
@@ -22,16 +38,14 @@ export function PluginMaintenanceDialog({
   const mib = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
   return (
     <Dialog
-      open={plugin !== null}
+      open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
       <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {t("plugins.maintenance", { name: plugin?.manifest.name ?? "" })}
-          </DialogTitle>
+          <DialogTitle>{t("plugins.maintenance", { name: plugin.manifest.name })}</DialogTitle>
           <DialogDescription>{t("plugins.maintenanceDescription")}</DialogDescription>
         </DialogHeader>
         {model.error ? (
@@ -52,7 +66,7 @@ export function PluginMaintenanceDialog({
           ) : null}
           <p className="text-xs text-muted-foreground">{t("plugins.softBudget")}</p>
           <p className="break-all text-xs text-muted-foreground">
-            {(plugin?.manifest.cacheDirectories ?? []).join(", ")}
+            {(plugin.manifest.cacheDirectories ?? []).join(", ")}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

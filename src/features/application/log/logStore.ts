@@ -3,8 +3,8 @@ import { LOG_LEVELS, type LogLevel, type LogRecordDto } from "@/shared/types/dom
 import type { LogDomainId } from "@/features/domain/log/logDomains";
 
 export interface LogLogFilter {
-  levels: Set<LogLevel>;
-  searchText: string;
+  readonly levels: ReadonlySet<LogLevel>;
+  readonly searchText: string;
 }
 
 export interface LogStore {
@@ -28,7 +28,8 @@ export const useLogStore = create<LogStore>((set) => ({
   selectedLog: null,
   autoScroll: true,
 
-  setSelectedLog: (log) => set({ selectedLog: log }),
+  setSelectedLog: (log) =>
+    set((state) => (state.selectedLog === log ? state : { selectedLog: log })),
   toggleLevel: (level) =>
     set((state) => {
       const levels = new Set(state.filter.levels);
@@ -37,19 +38,33 @@ export const useLogStore = create<LogStore>((set) => ({
       return { filter: { ...state.filter, levels } };
     }),
   setSearchText: (searchText) =>
-    set((state) => ({
-      filter: { ...state.filter, searchText },
-    })),
-  setAutoScroll: (autoScroll) => set({ autoScroll }),
+    set((state) =>
+      state.filter.searchText === searchText ? state : { filter: { ...state.filter, searchText } },
+    ),
+  setAutoScroll: (autoScroll) =>
+    set((state) => (state.autoScroll === autoScroll ? state : { autoScroll })),
 }));
+
+// List and count consumers share results for immutable buffer/filter inputs. Old inputs do not
+// remain alive through the cache when the buffer is trimmed or the filter is replaced.
+const filteredEntries = new WeakMap<
+  readonly LogRecordDto[],
+  WeakMap<LogLogFilter, Partial<Record<LogDomainId, readonly LogRecordDto[]>>>
+>();
 
 export function applyLogFilter(
   logs: readonly LogRecordDto[],
   filter: LogLogFilter,
   domain: LogDomainId,
-): LogRecordDto[] {
+): readonly LogRecordDto[] {
+  let filters = filteredEntries.get(logs);
+  if (!filters) filteredEntries.set(logs, (filters = new WeakMap()));
+  let domains = filters.get(filter);
+  if (!domains) filters.set(filter, (domains = {}));
+  const cached = domains[domain];
+  if (cached) return cached;
   const search = filter.searchText.trim().toLowerCase();
-  return logs.filter((log) => {
+  const result = logs.filter((log) => {
     if (!filter.levels.has(log.level)) return false;
     if (domain !== "all" && log.domain !== domain) return false;
     if (!search) return true;
@@ -63,4 +78,6 @@ export function applyLogFilter(
       JSON.stringify(log.fields),
     ].some((value) => value?.toLowerCase().includes(search));
   });
+  domains[domain] = result;
+  return result;
 }

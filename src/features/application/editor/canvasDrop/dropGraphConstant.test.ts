@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { GraphConstantDragState } from "@/features/core/dnd";
 import { DRAG_TYPES } from "@/features/core/dnd";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -26,6 +26,7 @@ vi.mock("../editorCommandFocus", () => ({
 
 const graphPath = "events/constants.yssbi-event";
 const constantId = "00000000-0000-0000-0000-000000000004";
+let loadedSession: ReturnType<typeof makeGraphEditorSession>;
 const canvas = {
   getBoundingClientRect: () => ({ left: 100, top: 50, right: 900, bottom: 650 }),
 } as HTMLElement;
@@ -43,9 +44,10 @@ beforeEach(() => {
   clearProjectLifecycle();
   startProjectLifecycle("constant-project");
   resetGraphEditCoordinator();
-  useGraphProjectionStore.getState().clear();
+  useResourceStore.getState().clear();
   useViewportStore.getState().clear();
   const session = makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection);
+  loadedSession = session;
   session.document.constants = {
     [constantId]: {
       id: constantId,
@@ -54,7 +56,7 @@ beforeEach(() => {
       dataValue: { Integer: "7" },
     },
   };
-  useGraphProjectionStore.getState().install(graphPath, session);
+  useResourceStore.getState().installGraphSession(graphPath, session, { mode: "load" });
   mocks.captureTarget.mockReturnValue({
     panelInstanceId: "editor-1",
     groupId: "group-1",
@@ -70,7 +72,7 @@ it("adds the existing constant at the target pane's zoomed and panned drop posit
     .spyOn(GraphEditingService, "transform")
     .mockImplementation(async (_project, _path, _locale, version) => ({
       ...makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection),
-      document: structuredClone(useGraphProjectionStore.getState().sessions[graphPath].document),
+      document: structuredClone(loadedSession.document),
       changed: true,
       editing: {
         version: { ...version, revision: String(BigInt(version.revision) + 1n) },
@@ -107,7 +109,7 @@ it("does not edit a different graph or an unavailable drop target", async () => 
     dropGraphConstantIntoCanvas(canvas, "editor-1", "group-1", graphPath, dragState),
   ).resolves.toBe(false);
   mocks.isTargetCurrent.mockReturnValue(true);
-  useGraphProjectionStore.getState().beginSave(graphPath);
+  useResourceStore.getState().beginGraphSave(graphPath);
   await expect(
     dropGraphConstantIntoCanvas(canvas, "editor-1", "group-1", graphPath, dragState),
   ).resolves.toBe(false);

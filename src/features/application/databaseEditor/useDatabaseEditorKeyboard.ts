@@ -8,7 +8,7 @@ interface useDatabaseEditorKeyboardParams {
   clearSelection: () => void;
 }
 
-function isTextEntryTarget(target: EventTarget | null): boolean {
+export function isTextEntryTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   return (
@@ -16,6 +16,14 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement
   );
+}
+
+export function isSelectAllShortcut(event: {
+  ctrlKey: boolean;
+  metaKey: boolean;
+  key: string;
+}): boolean {
+  return (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a";
 }
 
 export function useDatabaseEditorKeyboard(params: useDatabaseEditorKeyboardParams) {
@@ -37,7 +45,7 @@ export function useDatabaseEditorKeyboard(params: useDatabaseEditorKeyboardParam
 
       if (e.key === "Escape") {
         clearSelection();
-      } else if (e.ctrlKey && e.key === "a") {
+      } else if (isSelectAllShortcut(e)) {
         e.preventDefault();
         selectAll();
       }

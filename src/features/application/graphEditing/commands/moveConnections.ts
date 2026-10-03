@@ -1,4 +1,4 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
 import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
@@ -9,7 +9,7 @@ export interface MoveConnectionsArgs {
 
 export const moveConnectionsCommand: CommandHandler<MoveConnectionsArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    const store = useGraphProjectionStore.getState();
+    const store = useResourceStore.getState();
     const source = store.getGraphPin(graphPath, args.sourcePinId);
     const target = store.getGraphPin(graphPath, args.targetPinId);
     if (!source || !target) return { status: "unavailable" };

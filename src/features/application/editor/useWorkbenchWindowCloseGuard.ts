@@ -3,7 +3,11 @@ import { useEffect } from "react";
 import { currentAppWindow } from "@/services/platform/appWindow";
 import { workbenchLayoutController } from "@/modules/workbench/public";
 import { showWorkbenchLayoutError } from "@/modules/workbench/public";
-import { logger } from "@/features/application/observability/appLogger";
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { logger } from "@/utils/frontendLogger";
 
 /** Flushes layout and protects dirty documents before the workbench window closes. */
 export function useWorkbenchWindowCloseGuard(): void {
@@ -11,21 +15,27 @@ export function useWorkbenchWindowCloseGuard(): void {
     const appWindow = currentAppWindow();
     let cancelled = false;
     let unlistenClose: (() => void) | null = null;
-    let allowDestructiveClose = false;
+    let closePermit: (() => boolean) | null = null;
     let inFlight = false;
 
     const setupCloseListener = async () => {
       try {
         const subscription = await appWindow.onCloseRequested(async () => {
-          if (allowDestructiveClose) {
-            allowDestructiveClose = false;
-            return "allow";
+          if (closePermit) {
+            const permit = closePermit;
+            closePermit = null;
+            if (permit()) return "allow";
+            inFlight = false;
+            return "prevent";
           }
+          if (cancelled) return "prevent";
 
           if (inFlight) return "prevent";
           inFlight = true;
+          const identity = captureProjectLifecycleState();
+          const isCurrent = () => !cancelled && isProjectLifecycleStateCurrent(identity);
 
-          if (!(await confirmDirtyEditorClose())) {
+          if (!(await confirmDirtyEditorClose(isCurrent)) || !isCurrent()) {
             inFlight = false;
             return "prevent";
           }
@@ -34,16 +44,25 @@ export function useWorkbenchWindowCloseGuard(): void {
             await workbenchLayoutController.flushBeforeWindowClose();
           } catch (error) {
             inFlight = false;
-            showWorkbenchLayoutError(error);
+            if (isCurrent()) showWorkbenchLayoutError(error);
+            return "prevent";
+          }
+          if (!isCurrent()) {
+            inFlight = false;
             return "prevent";
           }
 
-          allowDestructiveClose = true;
+          closePermit = isCurrent;
           const closeResult = await appWindow.close();
           if (!closeResult.ok) {
-            logger.app.error("window close after confirmation failed", "WorkbenchWindow");
-            allowDestructiveClose = false;
-            inFlight = false;
+            const current = isCurrent();
+            if (closePermit === isCurrent || current) {
+              closePermit = null;
+              inFlight = false;
+            }
+            if (current) {
+              logger.app.error("window close after confirmation failed", "WorkbenchWindow");
+            }
           }
           return "prevent";
         });
@@ -56,7 +75,9 @@ export function useWorkbenchWindowCloseGuard(): void {
           logger.app.warn("workbench window close guard unavailable", "WorkbenchWindow");
         }
       } catch {
-        logger.app.warn("workbench window close guard unavailable", "WorkbenchWindow");
+        if (!cancelled) {
+          logger.app.warn("workbench window close guard unavailable", "WorkbenchWindow");
+        }
       }
     };
 

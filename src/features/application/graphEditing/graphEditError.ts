@@ -41,9 +41,13 @@ const ERROR_MESSAGE_KEYS: Record<GraphEditErrorCode, GraphEditErrorMessageKey> =
 export function graphEditErrorCode(error: unknown): GraphEditErrorCode | null {
   if (error instanceof GraphEditBusyError) return error.code;
   if (!isApplicationIpcError(error)) return null;
-  return error.code in ERROR_MESSAGE_KEYS ? (error.code as GraphEditErrorCode) : null;
+  return Object.prototype.hasOwnProperty.call(ERROR_MESSAGE_KEYS, error.code)
+    ? (error.code as GraphEditErrorCode)
+    : null;
 }
 
 export function graphEditErrorMessageKey(code: string): GraphEditErrorMessageKey | null {
-  return code in ERROR_MESSAGE_KEYS ? ERROR_MESSAGE_KEYS[code as GraphEditErrorCode] : null;
+  return Object.prototype.hasOwnProperty.call(ERROR_MESSAGE_KEYS, code)
+    ? ERROR_MESSAGE_KEYS[code as GraphEditErrorCode]
+    : null;
 }

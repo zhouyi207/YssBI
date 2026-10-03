@@ -14,7 +14,16 @@ import { AgGridReact } from "ag-grid-react";
 import { VscDatabase } from "react-icons/vsc";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { buildAgGridTheme } from "@/components/data-grid/agGridTheme";
-import type { DatabaseGridSelection } from "@/features/application/databaseEditor";
+import {
+  isGridCellActive,
+  isGridCellSelected,
+  isGridColumnSelected,
+  type DatabaseGridSelection,
+} from "@/features/domain/databaseEditor/gridSelection";
+import {
+  isSelectAllShortcut,
+  isTextEntryTarget,
+} from "@/features/application/databaseEditor/useDatabaseEditorKeyboard";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { resolveThemeTokens } from "@/shared/theme/themeTokens";
 import type { ColumnInfo, DatabaseRow } from "@/shared/types/domain/database";
@@ -28,13 +37,7 @@ import {
   DatabaseColumnHeader,
   DatabaseRowMarker,
 } from "./DatabaseGridRenderers";
-import {
-  dataColumnId,
-  isGridCellActive,
-  isGridCellSelected,
-  isGridColumnSelected,
-  type DatabaseGridRow,
-} from "./databaseGridModel";
+import { dataColumnId, type DatabaseGridRow } from "./databaseGridModel";
 import { databaseGridSelectionToClipboardText } from "./databaseGridClipboard";
 import { useDatabaseGridSelectionAdapter } from "./useDatabaseGridSelectionAdapter";
 
@@ -68,7 +71,7 @@ const BASE_COLUMN_DEF: ColDef<DatabaseGridRow> = {
 interface DataTableProps {
   columns: readonly ColumnInfo[];
   loadedRows: DatabaseRow[];
-  loadedRowIds: number[];
+  loadedRowIds: string[];
   pageStartIndex: number;
   loading: boolean;
   selection: DatabaseGridSelection | null;
@@ -76,17 +79,7 @@ interface DataTableProps {
 }
 
 function getRowId({ data }: GetRowIdParams<DatabaseGridRow>): string {
-  return String(data.rowId);
-}
-
-function isTextEntryTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement)
-  );
+  return data.rowId;
 }
 
 export const DataTable: React.FC<DataTableProps> = ({
@@ -107,10 +100,10 @@ export const DataTable: React.FC<DataTableProps> = ({
     () =>
       loadedRows.map((values, rowIndex) => ({
         values,
-        rowId: loadedRowIds[rowIndex] ?? `page:${pageStartIndex + rowIndex}`,
+        rowId: loadedRowIds[rowIndex],
         sourceRowIndex: rowIndex,
       })),
-    [loadedRows, loadedRowIds, pageStartIndex],
+    [loadedRows, loadedRowIds],
   );
 
   const {
@@ -138,8 +131,7 @@ export const DataTable: React.FC<DataTableProps> = ({
       suppressKeyboardEvent: ({ editing, event }) => {
         if (editing) return false;
         captureCellKeyboard(event);
-        const commandKey = event.ctrlKey || event.metaKey;
-        return commandKey && event.key.toLowerCase() === "a";
+        return isSelectAllShortcut(event);
       },
     }),
     [captureCellKeyboard],

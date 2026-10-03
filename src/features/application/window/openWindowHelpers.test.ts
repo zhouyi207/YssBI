@@ -1,12 +1,19 @@
 import { resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { resultLeases } from "@/features/application/results/resultLeases";
+const acquire = vi.hoisted(() =>
+  vi.fn(async () => ({ leaseId: "00000000-0000-0000-0000-000000000100" })),
+);
 vi.mock("@/features/application/results/resultLeases", () => ({
   resultLeases: {
-    acquire: vi.fn(async () => ({ leaseId: "00000000-0000-0000-0000-000000000100" })),
+    acquire,
     finish: vi.fn(async () => {}),
   },
 }));
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { IPC_TRANSPORT_FAILURE_CODE, normalizeIpcError } from "@/services/ipc";
 import { openDatabaseEditorWindow } from "./openDatabaseEditor";
 import { openLogsWindow } from "./openLogsWindow";
@@ -18,7 +25,7 @@ const execError = vi.hoisted(() => vi.fn());
 
 vi.mock("./createPersistedWindow", () => ({ createPersistedWindow }));
 vi.mock("./windowLabels", () => ({ createEphemeralWindowLabel: (kind: string) => `${kind}-test` }));
-vi.mock("@/features/application/observability/appLogger", () => ({
+vi.mock("@/utils/frontendLogger", () => ({
   logger: { app: { error: appError }, exec: { error: execError } },
 }));
 vi.mock("@/app/i18n", () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
@@ -29,7 +36,11 @@ const helpers = [
 ] as const;
 
 describe("window opening helpers", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearProjectLifecycle();
+  });
+  afterEach(() => clearProjectLifecycle());
 
   it.each(helpers)("records and rethrows a %s window failure", async (_label, openWindow) => {
     const failure = new Error("sensitive native window failure");
@@ -75,6 +86,36 @@ describe("window opening helpers", () => {
       "sensitive presentation window failure",
     );
     expect(resultLeases.finish).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000100", false);
+  });
+
+  it("releases a late handoff instead of opening after project lifecycle replacement", async () => {
+    const reference = resultReferenceFixture("17");
+    const presentation = { kind: "plot", windowTitle: "Plot" } as const;
+    createPersistedWindow.mockResolvedValue(undefined);
+    await openPresentationWindow(reference, presentation);
+    expect(createPersistedWindow).toHaveBeenCalledOnce();
+    expect(resultLeases.finish).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000100", true);
+
+    for (const previous of [null, "project-a"]) {
+      vi.clearAllMocks();
+      clearProjectLifecycle();
+      if (previous) startProjectLifecycle(previous);
+      let resolve!: (value: { leaseId: string }) => void;
+      acquire.mockReturnValueOnce(
+        new Promise((settle) => {
+          resolve = settle;
+        }),
+      );
+      const opening = openPresentationWindow(reference, presentation);
+      startProjectLifecycle("project-a");
+      resolve({ leaseId: "00000000-0000-0000-0000-000000000100" });
+      await opening;
+      expect.soft(createPersistedWindow, String(previous)).not.toHaveBeenCalled();
+      expect
+        .soft(resultLeases.finish, String(previous))
+        .toHaveBeenCalledExactlyOnceWith("00000000-0000-0000-0000-000000000100", false);
+      expect.soft(execError, String(previous)).not.toHaveBeenCalled();
+    }
   });
 
   it("records a backend incident ID before rethrowing the original IPC error", async () => {

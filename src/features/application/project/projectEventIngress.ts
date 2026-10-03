@@ -1,15 +1,8 @@
-import type { ErrorReference } from "@/features/application/errorReference";
-import type {
-  ProjectEvent,
-  ProjectEventConsumer,
-  ProjectEventConsumptionOutcome,
-} from "./projectEventConsumer";
+import type { ProjectEvent } from "@/services/project/projectEventParser";
+import type { ProjectEventStreamItem } from "@/services/project/projectEventStream";
+import type { ProjectEventConsumer, ProjectEventConsumptionOutcome } from "./projectEventConsumer";
 
 type Awaitable<T> = T | PromiseLike<T>;
-
-export type ProjectEventStreamItem =
-  | { readonly kind: "event"; readonly event: ProjectEvent }
-  | { readonly kind: "failure"; readonly issue: ErrorReference };
 
 export type ProjectEventEnqueueOutcome = "accepted" | "closed" | "overflowRecovery";
 export type ProjectEventDrainOutcome = { readonly status: "drained" };
@@ -66,7 +59,7 @@ export function createProjectEventIngress(
   },
 ): ProjectEventIngress {
   const capacity = dependencies.capacity ?? DEFAULT_PROJECT_EVENT_QUEUE_CAPACITY;
-  const queue: ProjectEventStreamItem[] = [];
+  const queue: ProjectEvent[] = [];
   let state: "open" | "recovering" | "closed" = "open";
   let active: Promise<void> | null = null;
   let recovery: Promise<void> | null = null;
@@ -82,18 +75,17 @@ export function createProjectEventIngress(
 
   const waitFor = (promise: Promise<void> | null): Promise<void> => promise ?? Promise.resolve();
 
-  const beginRecovery = (
+  const requestRecovery = (
     reason: ProjectEventIngressRecoveryReason,
     incidentId: string | null,
-    waitForActive: Promise<void> | null,
-  ): Promise<void> => {
+  ): void => {
     queue.length = 0;
-    if (recovery) return recovery;
+    if (recovery) return;
     if (state !== "closed") state = "recovering";
-    publishIssue(issueFor(reason, incidentId));
 
     let recoveryPromise!: Promise<void>;
-    recoveryPromise = waitFor(waitForActive)
+    // Recovery follows the event worker. The worker requests it without waiting back on it.
+    recoveryPromise = waitFor(active)
       .then(async () => {
         try {
           await dependencies.requestAuthoritativeSnapshot(reason);
@@ -107,24 +99,20 @@ export function createProjectEventIngress(
         if (state === "open" && queue.length > 0) startWorker();
       });
     recovery = recoveryPromise;
-    return recoveryPromise;
+    publishIssue(issueFor(reason, incidentId));
   };
 
   const processQueue = async (): Promise<void> => {
     while (state === "open" && queue.length > 0) {
-      const item = queue.shift()!;
+      const event = queue.shift()!;
       try {
-        if (item.kind === "failure") {
-          await beginRecovery("streamFailure", item.issue.incidentId, null);
-          return;
-        }
-        const outcome: ProjectEventConsumptionOutcome = await consumer.acceptEvent(item.event);
+        const outcome: ProjectEventConsumptionOutcome = await consumer.acceptEvent(event);
         if (outcome.status === "recoveryRequested") {
-          await beginRecovery("recoveryRequested", null, null);
+          requestRecovery("recoveryRequested", null);
           return;
         }
       } catch {
-        await beginRecovery("consumerRejected", null, null);
+        requestRecovery("consumerRejected", null);
         return;
       }
     }
@@ -145,14 +133,14 @@ export function createProjectEventIngress(
     if (state === "closed") return "closed";
     if (state === "recovering") return "overflowRecovery";
     if (item.kind === "failure") {
-      void beginRecovery("streamFailure", item.issue.incidentId, active);
+      requestRecovery("streamFailure", item.issue.incidentId);
       return "overflowRecovery";
     }
     if (queue.length >= capacity) {
-      void beginRecovery("queueOverflow", null, active);
+      requestRecovery("queueOverflow", null);
       return "overflowRecovery";
     }
-    queue.push(item);
+    queue.push(item.event);
     startWorker();
     return "accepted";
   };
@@ -161,9 +149,12 @@ export function createProjectEventIngress(
     if (closedDrain) return closedDrain;
     state = "closed";
     queue.length = 0;
-    closedDrain = Promise.all([waitFor(active), waitFor(recovery)]).then(() => ({
-      status: "drained" as const,
-    }));
+    closedDrain = (async () => {
+      await waitFor(active);
+      // The final event can request recovery after close begins.
+      await waitFor(recovery);
+      return { status: "drained" as const };
+    })();
     return closedDrain;
   };
 

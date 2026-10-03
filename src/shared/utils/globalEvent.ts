@@ -1,15 +1,5 @@
 type GlobalEventTarget = Window | Document;
 
-function withAbortSignal(
-  options: AddEventListenerOptions | boolean | undefined,
-  signal: AbortSignal,
-) {
-  if (typeof options === "boolean") {
-    return { capture: options, signal };
-  }
-  return { ...(options ?? {}), signal };
-}
-
 export function addGlobalEventListener<K extends keyof WindowEventMap>(
   target: Window,
   type: K,
@@ -34,12 +24,6 @@ export function addGlobalEventListener(
   listener: EventListener,
   options?: AddEventListenerOptions | boolean,
 ) {
-  if (typeof AbortController === "undefined") {
-    target.addEventListener(type, listener, options);
-    return () => target.removeEventListener(type, listener, options);
-  }
-
-  const controller = new AbortController();
-  target.addEventListener(type, listener, withAbortSignal(options, controller.signal));
-  return () => controller.abort();
+  target.addEventListener(type, listener, options);
+  return () => target.removeEventListener(type, listener, options);
 }

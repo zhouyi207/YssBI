@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createDataSignaturePin } from "@/shared/types/domain/functionSignaturePin";
-import { buildFunctionResourceCatalog, buildFunctionResourceView } from "./functionResourceView";
+import { buildFunctionResourceView } from "./functionResourceView";
 
 describe("functionResourceView", () => {
   it("merges resource name with graph meta signature", () => {
     const view = buildFunctionResourceView(
-      "functions/Add.yssbi-function",
       { id: "functions/Add.yssbi-function", name: "Add" },
       {
         functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
@@ -20,28 +19,6 @@ describe("functionResourceView", () => {
       name: "Add",
       functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
       functionOutputs: [createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" })],
-    });
-  });
-
-  it("builds catalog by path", () => {
-    const resources = { "fn-1": { id: "fn-1", name: "Add" } };
-    const metaGraphs = {
-      "fn-1": {
-        path: "fn-1",
-        name: "Add",
-        type: "function_graph" as const,
-        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
-        functionOutputs: [],
-      },
-    };
-
-    expect(buildFunctionResourceCatalog(resources, metaGraphs)).toEqual({
-      "fn-1": {
-        id: "fn-1",
-        name: "Add",
-        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
-        functionOutputs: [],
-      },
     });
   });
 });

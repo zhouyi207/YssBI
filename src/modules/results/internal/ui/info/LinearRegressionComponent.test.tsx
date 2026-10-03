@@ -133,7 +133,10 @@ it("loads an OLS overview and reads selected analyses and expanded plots by refe
         },
       };
     if (analysis.kind === "serialTests") return { kind: "serialTests", value: { dw: { d: 1.85 } } };
-    return { kind: "acfPacf", value: { acf: [1, 0.1], pacf: [0.1], n: 53940 } };
+    return {
+      kind: "acfPacf",
+      value: { acf: [1, 0.1], pacf: [0.1], n: 53940, ciHalfWidth: 0.00844 },
+    };
   });
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -142,16 +145,12 @@ it("loads an OLS overview and reads selected analyses and expanded plots by refe
     const ready = await loadPresentationWindow(resultReferenceFixture("17"));
     if (ready.status !== "ready" || ready.payload.mode !== "report")
       throw new Error("missing report overview");
-    const data = ready.payload.data;
+    const validation = ready.payload.validation;
     await act(async () =>
       root.render(
         <ChartThemeProvider>
           <TooltipProvider>
-            <ReportView
-              descriptor={ready.descriptor}
-              report="linearRegressionSummary"
-              data={data}
-            />
+            <ReportView descriptor={ready.descriptor} validation={validation} />
           </TooltipProvider>
         </ChartThemeProvider>,
       ),

@@ -4,8 +4,9 @@ import {
   captureProjectReadContext,
   useProjectIOStore,
 } from "@/features/application/project/projectIOStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import { useResourceStore } from "@/features/core/resource";
+import { portAddressKey } from "@/features/domain/editorProjection";
 import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
@@ -42,17 +43,18 @@ export function useCompatibleNodeCatalog({
 }: CompatibleNodeCatalogInput): LocalizedNodeCatalogState {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
-  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
+  const active = enabled && graphPath !== null && sourcePort !== null;
+  const projectInstanceId = useProjectIOStore((state) => (active ? state.projectInstanceId : null));
   const [refreshGeneration, setRefreshGeneration] = useState(0);
   const [state, setState] = useState<CompatibleRequestState>(IDLE_STATE);
-  const sourcePortKey = sourcePort ? JSON.stringify(sourcePort) : "";
-  const version = useGraphProjectionStore((store) =>
-    graphPath ? store.sessions[graphPath]?.version : undefined,
+  const sourcePortKey = sourcePort ? portAddressKey(sourcePort) : "";
+  const version = useResourceStore((store) =>
+    active ? store.sessions[graphPath]?.version : undefined,
   );
-  const semanticInputHash = useGraphProjectionStore((store) =>
-    graphPath ? store.sessions[graphPath]?.semanticInputHash : undefined,
+  const semanticInputHash = useResourceStore((store) =>
+    active ? store.sessions[graphPath]?.semanticInputHash : undefined,
   );
-  const publicationRevision = useResourceStore((store) => store.indexRevision);
+  const publicationRevision = useResourceStore((store) => (active ? store.indexRevision : null));
 
   useEffect(() => {
     if (!enabled || !projectInstanceId || !graphPath || !version || !sourcePort) {

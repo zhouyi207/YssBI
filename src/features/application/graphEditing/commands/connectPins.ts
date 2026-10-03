@@ -1,4 +1,4 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
 import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
@@ -9,7 +9,7 @@ export interface ConnectPinsArgs {
 
 export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    const store = useGraphProjectionStore.getState();
+    const store = useResourceStore.getState();
     const pinA = store.getGraphPin(graphPath, args.pinA);
     const pinB = store.getGraphPin(graphPath, args.pinB);
     if (!pinA || !pinB) throw new Error("Cannot connect ports missing from the projection");

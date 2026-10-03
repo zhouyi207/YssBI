@@ -4,7 +4,8 @@ import { useExecutionRead } from "@/features/core/execution/read";
 import { graphHasClearableArtifacts } from "@/features/core/execution/graphRunArtifacts";
 import { VscClearAll, VscDebugStop, VscRunAll } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { useShallow } from "zustand/react/shallow";
 
 function CanvasToolbarButton({
   tooltip,
@@ -37,12 +38,19 @@ export function CanvasExecutionToolbar({
   onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
-  const saving = useGraphProjectionStore((state) => state.sessions[graphPath]?.saving === true);
-  const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
-  const graphStatus = graphState?.status ?? "idle";
+  const saving = useResourceStore((state) => state.sessions[graphPath]?.saving === true);
+  const [graphStatus, hasRun, canClear] = useExecutionRead(
+    useShallow((snapshot) => {
+      const graph = snapshot.graphs[graphPath];
+      return [
+        graph?.status ?? "idle",
+        Boolean(graph?.runId),
+        graphHasClearableArtifacts(graph),
+      ] as const;
+    }),
+  );
 
   const isLiveRunning = graphStatus === "running";
-  const canClear = !isLiveRunning && graphHasClearableArtifacts(graphState);
   const canRun = canExecute && !saving && !isLiveRunning && graphStatus !== "submitting";
 
   return (
@@ -76,7 +84,7 @@ export function CanvasExecutionToolbar({
         <VscClearAll size={14} />
       </CanvasToolbarButton>
 
-      {isLiveRunning && graphState?.runId && (
+      {isLiveRunning && hasRun && (
         <CanvasToolbarButton
           type="button"
           variant="ghost"

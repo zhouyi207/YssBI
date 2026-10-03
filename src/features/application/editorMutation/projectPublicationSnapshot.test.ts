@@ -7,8 +7,10 @@ import {
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
-import { buildFileResourceMeta } from "@/features/core/resource";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { buildFileResourceMeta, resourceKey } from "@/features/core/resource";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { getGraphSnapshot } from "@/features/core/graph/read";
+import { projectSnapshotFixture } from "@/tests/helpers/projectSnapshotFixtures";
 
 import {
   captureProjectIdentity,
@@ -67,6 +69,7 @@ vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
     get isReady() {
       return flexlayoutMocks.ready;
     },
+    getPanel: (id: string) => flexlayoutMocks.panels.find((panel) => panel.panelInstanceId === id),
   },
 }));
 
@@ -86,7 +89,7 @@ vi.mock("@/modules/workbench/internal/layout/editorPaneStateStore", () => ({
 const caller = "events/Caller.yssbi-event";
 
 function callerSnapshot() {
-  return structuredClone(useGraphProjectionStore.getState().graphEntities[caller]);
+  return structuredClone(useResourceStore.getState().graphEntities[caller]);
 }
 
 describe("project snapshot projection replacement", () => {
@@ -94,7 +97,7 @@ describe("project snapshot projection replacement", () => {
     vi.clearAllMocks();
     flexlayoutMocks.ready = true;
     flexlayoutMocks.panels.splice(0);
-    useGraphProjectionStore.getState().clear();
+    useResourceStore.getState().clear();
     const projection = makeEditorProjectionFixture({
       graphPath: caller,
       nodeId: "call-1",
@@ -104,13 +107,52 @@ describe("project snapshot projection replacement", () => {
     installGraphProjectionFixture(caller, projection);
   });
 
+  it("publishes function resources and signatures in the same project frame", async () => {
+    startProjectLifecycle("project-1");
+    const { plan } = projectSnapshotFixture(0);
+    const path = "functions/Current.yssbi-function";
+    plan.index.functionGraphs = [
+      {
+        path,
+        name: "Current",
+        type: "function_graph",
+        revision: 2,
+        functionRevision: 2,
+        functionSignature: { parameters: [], return_type: "Text" },
+        functionEditorProjection: { functionRevision: 2, inputs: [], outputs: [] },
+      },
+    ];
+    const prepared = prepareProjectSnapshotCommit({ ...plan, ...captureProjectIdentity() });
+    const observed: unknown[] = [];
+    const key = resourceKey({ kind: "function_graph", id: path });
+    const stop = useResourceStore.subscribe((state) =>
+      observed.push({
+        resourceRevision: state.resources[key]?.revision,
+        functionRevision: getGraphSnapshot().graphMeta[path]?.functionRevision,
+      }),
+    );
+    try {
+      await commitPreparedProjectSnapshot(prepared);
+      expect(observed).toEqual([{ resourceRevision: 2, functionRevision: 2 }]);
+      useResourceStore.getState().clear();
+      expect(observed).toEqual([
+        { resourceRevision: 2, functionRevision: 2 },
+        { resourceRevision: undefined, functionRevision: undefined },
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
   it("does not replace a dirty Graph draft, including edits made after snapshot preparation", async () => {
     const replacement = makeEditorProjectionFixture({ graphPath: caller });
-    useGraphProjectionStore
+    useResourceStore
       .getState()
-      .install(caller, makeGraphEditorSession(replacement.projection));
+      .installGraphSession(caller, makeGraphEditorSession(replacement.projection), {
+        mode: "load",
+      });
     const setDirty = (saveDirty: boolean) =>
-      useGraphProjectionStore.setState((state) => ({
+      useResourceStore.setState((state) => ({
         sessions: { ...state.sessions, [caller]: { ...state.sessions[caller], saveDirty } },
       }));
     setDirty(true);
@@ -137,7 +179,7 @@ describe("project snapshot projection replacement", () => {
           {
             resultState: makeGraphEditorSession(replacement.projection).resultState,
 
-            document: useGraphProjectionStore.getState().sessions[caller].document,
+            document: makeGraphEditorSession(replacement.projection).document,
             editing: makeGraphEditingState(),
             projection: replacement.projection,
           },
@@ -156,8 +198,25 @@ describe("project snapshot projection replacement", () => {
     const preparedClean = prepareProjectSnapshotCommit(plan);
     expect(preparedClean.graphProjectionPlan.graphPaths).toEqual([caller]);
     setDirty(true);
-    await commitPreparedProjectSnapshot(preparedClean);
-    expect(callerSnapshot()).toEqual(before);
+    const observed: unknown[] = [];
+    const stop = useResourceStore.subscribe((state) => {
+      const key = resourceKey({ id: caller, kind: "event_graph" });
+      observed.push({
+        graphDirty: state.sessions[caller].saveDirty,
+        dirty: state.documents[key]?.dirty,
+        summaryDirty: state.resources[key]?.hasDirtyDocument,
+        loaded: state.documents[key]?.loaded,
+      });
+    });
+    try {
+      await commitPreparedProjectSnapshot(preparedClean);
+      expect(callerSnapshot()).toEqual(before);
+      expect(observed).toEqual([
+        { graphDirty: true, dirty: true, summaryDirty: true, loaded: true },
+      ]);
+    } finally {
+      stop();
+    }
   });
 });
 
@@ -227,5 +286,45 @@ describe("editor FlexLayout publication commit", () => {
     });
     expect(flexlayoutMocks.releasePane).toHaveBeenCalledOnce();
     expect(flexlayoutMocks.releasePane).toHaveBeenCalledWith("stale-panel");
+  });
+
+  it("preserves successor pane state after publication and during release notifications", async () => {
+    for (const phase of ["receipt-owner", "receipt-panel", "release-owner", "release-panel"]) {
+      const first = editorPanel("first", "functions/First.yssbi-function");
+      const second = editorPanel("second", "functions/Second.yssbi-function");
+      flexlayoutMocks.panels.splice(0, flexlayoutMocks.panels.length, first, second);
+      flexlayoutMocks.releasePane.mockReset();
+      let current = true;
+      flexlayoutMocks.runPublicationTransaction.mockImplementationOnce(async (operation) => {
+        const result = await operation({
+          listPanels: () => flexlayoutMocks.panels,
+          remapResource: flexlayoutMocks.remapResource,
+          removePanels: flexlayoutMocks.removePanels,
+        });
+        if (phase === "receipt-owner") current = false;
+        if (phase === "receipt-panel") flexlayoutMocks.panels.push(first);
+        return result;
+      });
+      flexlayoutMocks.releasePane.mockImplementation((id: string) => {
+        if (id !== first.panelInstanceId) return;
+        if (phase === "release-owner") current = false;
+        if (phase === "release-panel") flexlayoutMocks.panels.push(second);
+      });
+      await commitEditorLayoutPublication(
+        [],
+        {},
+        new Set(),
+        () => {},
+        () => current,
+      );
+      const expected =
+        phase === "receipt-owner"
+          ? []
+          : phase === "receipt-panel"
+            ? [[second.panelInstanceId]]
+            : [[first.panelInstanceId]];
+      expect.soft(flexlayoutMocks.releasePane.mock.calls, phase).toEqual(expected);
+    }
+    flexlayoutMocks.releasePane.mockReset();
   });
 });

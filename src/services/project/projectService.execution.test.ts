@@ -51,7 +51,9 @@ function backendIpcError(code: string, details: Record<string, unknown> | null =
 
 function runEvent(kind: RunEvent["kind"]): RunEvent {
   return {
+    resultRevision: "1",
     run: {
+      semanticInputHash: "0".repeat(64),
       executionSessionId: "project-session-1",
       graphPath: "events/Main.yssbi-event",
       runId: "41",
@@ -88,13 +90,16 @@ describe("ProjectService execution contract", () => {
     ).toHaveLength(1);
   });
 
-  it("invokes cancel_graph_run with an opaque decimal run ID", async () => {
+  it("invokes cancel_graph_run with its execution session and opaque decimal run ID", async () => {
     vi.mocked(invoke).mockResolvedValue(true);
 
-    await expect(ProjectService.cancelGraphRun("9007199254740993")).resolves.toBe(true);
+    await expect(
+      ProjectService.cancelGraphRun("project-session-1", "9007199254740993"),
+    ).resolves.toBe(true);
 
     expect(invoke).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith("cancel_graph_run", {
+      executionSessionId: "project-session-1",
       runId: "9007199254740993",
     });
   });

@@ -18,7 +18,14 @@ export function useSidebarContextMenu<TTarget>(
       onSubmit: SidebarInputDialogState["onSubmit"],
       submitLabel?: string,
     ) => {
-      setInputDialog({ title, value, onSubmit, submitLabel, error: null });
+      setInputDialog({
+        title,
+        value,
+        // Each opening owns its settlement even when the caller reuses a callback.
+        onSubmit: (nextValue) => onSubmit(nextValue),
+        submitLabel,
+        error: null,
+      });
     },
     [],
   );
@@ -29,12 +36,14 @@ export function useSidebarContextMenu<TTarget>(
     if (!value) return;
     try {
       await inputDialog.onSubmit(value);
-      setInputDialog(null);
+      setInputDialog((current) => (current?.onSubmit === inputDialog.onSubmit ? null : current));
     } catch (error) {
       const message = t("notifications.sidebar.actionFailed", {
         error: formatError(error, t),
       });
-      setInputDialog((prev) => (prev ? { ...prev, error: message } : null));
+      setInputDialog((current) =>
+        current?.onSubmit === inputDialog.onSubmit ? { ...current, error: message } : current,
+      );
     }
   }, [formatError, inputDialog, t]);
 

@@ -4,14 +4,14 @@ import {
 } from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useGraphProjectionStore } from "./graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { isUnmanagedNode } from "./graphNodeSelectors";
 
 const graphPath = "functions/projected-capabilities";
 const nodeId = "managed-node";
 
 describe("projected node ownership", () => {
-  beforeEach(() => useGraphProjectionStore.getState().clear());
+  beforeEach(() => useResourceStore.getState().clear());
 
   it("does not authorize operations without a node projection", () => {
     expect(isUnmanagedNode(graphPath, nodeId)).toBe(false);

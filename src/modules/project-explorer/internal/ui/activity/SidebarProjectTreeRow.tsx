@@ -1,5 +1,5 @@
+import { memo } from "react";
 import { isActivityFileItem, type ActivityItem } from "@/shared/types/domain/activityPanel";
-import type { ProjectResourceMeta } from "@/features/core/resource";
 import type { ProjectTreeCategoryId } from "@/features/core/sidebar/projectTreeState";
 import type { FileResourceKind } from "@/shared/types/domain/resource";
 import type { FileResourceRef } from "@/features/application/resource/resourceActions";
@@ -14,18 +14,16 @@ export interface SidebarProjectTreeActions {
   onCategoryContextMenu(event: React.MouseEvent, categoryId: ProjectTreeCategoryId): void;
   onDatabaseContextMenu(event: React.MouseEvent, id: string, name: string): void;
 }
-export function SidebarProjectTreeRow({
+export const SidebarProjectTreeRow = memo(function SidebarProjectTreeRow({
   item,
   depth,
   actions,
-  activeResource,
-  graphDiagnosticCounts,
+  isSelected,
 }: {
   item: ActivityItem;
   depth: number;
   actions: SidebarProjectTreeActions;
-  activeResource: Pick<ProjectResourceMeta, "id" | "kind"> | null;
-  graphDiagnosticCounts: Record<string, number>;
+  isSelected: boolean;
 }) {
   if (isActivityFileItem(item))
     return (
@@ -34,8 +32,7 @@ export function SidebarProjectTreeRow({
         name={item.name}
         kind={item.kind}
         indentDepth={depth}
-        isSelected={activeResource?.id === item.path && activeResource.kind === item.kind}
-        diagnosticCount={graphDiagnosticCounts[item.path] ?? 0}
+        isSelected={isSelected}
         onOpen={actions.onOpenFile}
         onContextMenu={(event) =>
           actions.onFileContextMenu(event, { id: item.path, kind: item.kind, name: item.name })
@@ -49,9 +46,9 @@ export function SidebarProjectTreeRow({
         name={item.name}
         resourcePath={item.resourcePath}
         indentDepth={depth}
-        isSelected={activeResource?.kind === "database" && activeResource.id === item.id}
+        isSelected={isSelected}
         onContextMenu={(event) => actions.onDatabaseContextMenu(event, item.id, item.name)}
       />
     );
   return null;
-}
+});

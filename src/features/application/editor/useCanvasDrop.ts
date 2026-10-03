@@ -128,12 +128,10 @@ export function useCanvasDrop({
     [canvasElementRef, catalog, createNode, graphPath, groupId, panelInstanceId, refreshCatalog],
   );
 
-  useEffect(() => {
-    canvasDropHandlerStore.setHandler(panelInstanceId, (dragState) =>
-      handleSidebarCanvasDrop(dragState),
-    );
-    return () => canvasDropHandlerStore.setHandler(panelInstanceId, null);
-  }, [handleSidebarCanvasDrop, panelInstanceId]);
+  useEffect(
+    () => canvasDropHandlerStore.registerHandler(panelInstanceId, handleSidebarCanvasDrop),
+    [handleSidebarCanvasDrop, panelInstanceId],
+  );
 
   return {
     handleContextMenu,

@@ -29,7 +29,6 @@ function isResourceKind(value: unknown): value is ResourceDeltaDto["resource"]["
 
 function isPayloadKind(value: unknown): value is ResourceDocumentPatchDto["kind"] {
   return (
-    value === "graph" ||
     value === "function" ||
     value === "chart" ||
     value === "resource_lifecycle" ||

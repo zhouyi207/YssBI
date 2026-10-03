@@ -44,7 +44,6 @@ function VirtualListProbe() {
   const { viewportRef } = useLogPanelVirtualList({
     filteredLogs: EMPTY_LOGS,
     autoScroll: true,
-    presentation: "standalone",
     refreshScrollToken: 0,
   });
 

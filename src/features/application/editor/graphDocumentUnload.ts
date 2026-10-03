@@ -1,15 +1,14 @@
 import { resetGraphResultQueries } from "@/features/application/results/runtime";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { invalidateGraphLoadOwnership } from "@/features/application/project/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution";
 import { clearCanvasInteractionGraph } from "@/features/core/canvas/canvasInteractionCleanup";
-import { markResourceLoaded, clearResourceDocumentState } from "@/features/core/resource";
 import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 import { releaseGraphViewport } from "@/features/core/viewport";
-import { getNodeFileKind } from "@/features/core/resource/resourceSelectors";
 import { GraphService } from "@/services/graph/graphService";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
 import { shouldRetainGraphDocument } from "./graphDocumentRetention";
 import {
   captureProjectIdentity,
@@ -18,6 +17,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   beginGraphUnloadLifecycle,
+  finishGraphUnloadLifecycle,
   isGraphLifecycleCurrent,
 } from "@/features/application/graphProjection/graphProjectionLifecycle";
 
@@ -28,65 +28,50 @@ export async function unloadGraphDocument(
 ): Promise<void> {
   if (shouldRetainGraphDocument(graphPath, !discardVersion)) return;
 
-  const lifecycleToken = beginGraphUnloadLifecycle(graphPath);
-  invalidateGraphLoadOwnership(graphPath);
-
-  const kind = getNodeFileKind(graphPath);
-  if (kind) {
-    markResourceLoaded({ id: graphPath, kind }, false);
-  }
-
   let identity: ProjectIdentitySnapshot;
   try {
     identity = captureProjectIdentity();
   } catch {
     return;
   }
+  const lifecycleToken = beginGraphUnloadLifecycle(graphPath);
+  const isCurrent = () =>
+    isCurrentProjectIdentity(identity) && isGraphLifecycleCurrent(graphPath, lifecycleToken);
+  invalidateGraphLoadOwnership(graphPath);
 
   try {
     await enqueueGraphTask(
       graphPath,
       async () => {
-        if (
-          !isCurrentProjectIdentity(identity) ||
-          !isGraphLifecycleCurrent(graphPath, lifecycleToken)
-        )
-          return;
-        if (shouldRetainGraphDocument(graphPath, !discardVersion)) {
-          if (kind) markResourceLoaded({ id: graphPath, kind }, true);
-          return;
-        }
+        if (!isCurrent()) return;
+        if (shouldRetainGraphDocument(graphPath, !discardVersion)) return;
         const removed = await GraphService.unloadProjectGraph(
           graphPath,
           lifecycleToken,
           identity.projectInstanceId,
           discardVersion,
         );
-        if (
-          !isCurrentProjectIdentity(identity) ||
-          !isGraphLifecycleCurrent(graphPath, lifecycleToken)
-        )
-          return;
-        if (!removed) {
-          if (kind) markResourceLoaded({ id: graphPath, kind }, true);
-          return;
-        }
-        useGraphProjectionStore.getState().clearGraph(graphPath);
-        resetGraphResultQueries(graphPath);
-        clearCanvasInteractionGraph(graphPath);
+        if (!isCurrent()) return;
+        if (!removed) return;
+        useResourceStore.getState().removeGraphSession(graphPath);
+        if (!isCurrent()) return;
+        resetGraphResultQueries(graphPath, isCurrent);
+        if (!isCurrent()) return;
+        clearCanvasInteractionGraph(graphPath, isCurrent);
+        if (!isCurrent()) return;
         useExecutionStore.getState().releaseGraphExecutionState(graphPath);
+        if (!isCurrent()) return;
         releaseGraphViewport(graphPath);
-        if (kind) clearResourceDocumentState({ id: graphPath, kind });
       },
       undefined,
     );
   } catch (error) {
-    if (!isCurrentProjectIdentity(identity)) return;
-    if (kind && isGraphLifecycleCurrent(graphPath, lifecycleToken))
-      markResourceLoaded({ id: graphPath, kind }, true);
+    if (!isCurrent()) return;
     logger.graph.warn(
-      `Failed to unload graph '${graphPath}': ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to unload graph '${graphPath}': ${formatApplicationIpcError(error)}`,
       "unloadGraphDocument",
     );
+  } finally {
+    finishGraphUnloadLifecycle(graphPath, lifecycleToken);
   }
 }

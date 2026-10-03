@@ -1,4 +1,4 @@
-import { readLiveViewport, writeLiveViewport } from "./liveViewportState";
+import { readLiveViewport, subscribeLiveViewport, writeLiveViewport } from "./liveViewportState";
 import type { EditorViewport } from "./editorViewport";
 import { DEFAULT_VIEWPORT } from "@/shared/config-default";
 import { useViewportStore } from "./useViewportStore";
@@ -11,12 +11,6 @@ function viewportEqual(a: EditorViewport, b: EditorViewport): boolean {
 
 function storeViewport(scope: ViewportScope): EditorViewport {
   return useViewportStore.getState().viewports[viewportScopeKey(scope)] ?? DEFAULT_VIEWPORT;
-}
-
-const listenersByScope = new Map<string, Set<(viewport: EditorViewport) => void>>();
-
-function notify(scope: ViewportScope, viewport: EditorViewport): void {
-  listenersByScope.get(viewportScopeKey(scope))?.forEach((listener) => listener(viewport));
 }
 
 /** Authoritative in-memory viewport for one editor pane (live preview ⊃ committed store). */
@@ -32,7 +26,6 @@ export function setViewportLive(
   const next = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
   if (viewportEqual(prev, next)) return;
   writeLiveViewport(scope, next);
-  notify(scope, next);
 }
 
 /** Flush live viewport into zustand (persistence / cross-panel reads). */
@@ -46,23 +39,9 @@ export function subscribeToViewport(
   scope: ViewportScope,
   listener: (viewport: EditorViewport) => void,
 ): () => void {
-  const key = viewportScopeKey(scope);
-  const set = listenersByScope.get(key) ?? new Set();
-  set.add(listener);
-  listenersByScope.set(key, set);
-  listener(getViewport(scope));
-
-  const unsubStore = useViewportStore.subscribe((state, prevState) => {
-    const next = state.viewports[key] ?? DEFAULT_VIEWPORT;
-    const prev = prevState.viewports[key] ?? DEFAULT_VIEWPORT;
-    if (viewportEqual(next, prev)) return;
-    writeLiveViewport(scope, next);
-    listener(next);
+  const unsubscribe = subscribeLiveViewport(scope, (viewport) => {
+    listener(viewport ?? storeViewport(scope));
   });
-
-  return () => {
-    set.delete(listener);
-    if (set.size === 0) listenersByScope.delete(key);
-    unsubStore();
-  };
+  listener(getViewport(scope));
+  return unsubscribe;
 }

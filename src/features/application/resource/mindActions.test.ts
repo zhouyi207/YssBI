@@ -1,7 +1,7 @@
+import { useResourceStore } from "@/features/core/resource";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MindSnapshot } from "@/shared/types/domain/mind";
 import { startProjectLifecycle } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
 import { deleteMindNodes, mindActions } from "./mindActions";
 import { retainDocumentInput, resetDocumentInputs } from "./documentInputs";
 
@@ -31,14 +31,14 @@ const snapshot: MindSnapshot = {
 
 beforeEach(() => {
   startProjectLifecycle(snapshot.projectInstanceId);
-  useMindProjectionStore.getState().clear();
-  useMindProjectionStore.getState().install(snapshot);
+  useResourceStore.getState().clear();
+  useResourceStore.getState().installFileSnapshot(snapshot);
   resetDocumentInputs();
 });
 afterEach(() => {
   vi.restoreAllMocks();
   resetDocumentInputs();
-  useMindProjectionStore.getState().clear();
+  useResourceStore.getState().clear();
 });
 
 it("deletes selected branches once while preserving the root", async () => {

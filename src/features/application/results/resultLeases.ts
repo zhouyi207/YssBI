@@ -5,7 +5,7 @@ import {
   type ResultReference,
 } from "@/shared/types/domain/result";
 import { toErrorReference } from "@/features/application/errorReference";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 type LeasePort = Pick<typeof ResultService, "retain" | "release" | "reconcileLeases">;
 
@@ -24,6 +24,11 @@ export function createResultLeaseController(
     tail = next.catch(() => undefined);
     return next;
   };
+  const release = (leaseId: string) =>
+    enqueue(() => {
+      acknowledged = undefined;
+      return port.release(leaseId);
+    }).catch(reportFailure);
   const reconcile = () => {
     if (scheduled) return;
     scheduled = true;
@@ -34,6 +39,7 @@ export function createResultLeaseController(
       const active = [...new Set([...panels, ...pending])].sort();
       const key = active.join(",");
       if (key === acknowledged) return;
+      acknowledged = undefined;
       await port.reconcileLeases(active);
       acknowledged = key;
     }).catch(reportFailure);
@@ -52,7 +58,11 @@ export function createResultLeaseController(
       const leaseId = crypto.randomUUID();
       pending.add(leaseId);
       try {
-        const held = await enqueue(() => port.retain(reference, leaseId, handoff));
+        const held = await enqueue(() => {
+          // Invalidate inside the queue: an older reconcile must finish first.
+          acknowledged = undefined;
+          return port.retain(reference, leaseId, handoff);
+        });
         if (
           held.leaseId !== leaseId ||
           resultReferenceKey(held.descriptor) !== resultReferenceKey(reference)
@@ -60,14 +70,14 @@ export function createResultLeaseController(
           throw new Error("Mismatched result lease");
         return held;
       } catch (error) {
-        await enqueue(() => port.release(leaseId)).catch(reportFailure);
+        await release(leaseId);
         pending.delete(leaseId);
         reconcile();
         throw error;
       }
     },
     async finish(leaseId: string, installed: boolean) {
-      if (!installed) await enqueue(() => port.release(leaseId)).catch(reportFailure);
+      if (!installed) await release(leaseId);
       pending.delete(leaseId);
       reconcile();
     },

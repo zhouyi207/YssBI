@@ -2,7 +2,7 @@ import {
   subscribeGraphActivity,
   readExecutionSnapshot,
 } from "@/services/nodeSystem/graphActivityService";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { useExecutionStore } from "@/features/core/execution";
 import {
   isCurrentProjectIdentity,
@@ -11,7 +11,8 @@ import {
 import { installGraphRunEvent } from "@/features/application/editor/observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import type { GraphEditingStateDto } from "@/shared/types/domain/editorMutation";
 
@@ -30,7 +31,7 @@ export function ensureGraphActivity(
   const current = () => epoch === generation && isCurrentProjectIdentity(identity);
   const failed = (error: unknown) =>
     logger.graph.error(
-      `Graph activity failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Graph activity failed: ${formatApplicationIpcError(error)}`,
       "GraphActivity",
     );
   const request = (path: string, editing?: GraphEditingStateDto) => {
@@ -90,13 +91,13 @@ export function ensureGraphActivity(
     changed: (path, editing) => {
       request(path, editing);
       if (path.startsWith("functions/")) {
-        for (const graph of Object.keys(useGraphProjectionStore.getState().sessions))
+        for (const graph of Object.keys(useResourceStore.getState().sessions))
           if (graph !== path) request(graph);
       }
     },
     resync: () => {
       if (!current()) return;
-      for (const path of Object.keys(useGraphProjectionStore.getState().sessions)) request(path);
+      for (const path of Object.keys(useResourceStore.getState().sessions)) request(path);
       recover();
     },
     failed: synchronizationFailed,

@@ -1,4 +1,4 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { GraphConstantDto } from "@/shared/types/domain/editorMutation";
 import type { NodePositionDto } from "@/shared/types/domain/editorProjection";
 import type { ValueType } from "@/shared/types/domain/valueType";
@@ -14,15 +14,17 @@ import { applyGraphMutation } from "./graphEditCoordinator";
 const EMPTY_CONSTANTS: Record<string, GraphConstantDto> = {};
 
 export function useGraphConstants(graphPath: string) {
-  const constants = useGraphProjectionStore(
-    (state) => state.sessions[graphPath]?.document.constants ?? EMPTY_CONSTANTS,
+  const constants = useResourceStore(
+    (state) => state.sessions[graphPath]?.constants ?? EMPTY_CONSTANTS,
   );
-  const loaded = useGraphProjectionStore((state) => Boolean(state.sessions[graphPath]));
-  const saving = useGraphProjectionStore((state) => state.sessions[graphPath]?.saving === true);
+  const loaded = useResourceStore((state) => Boolean(state.sessions[graphPath]));
+  const saving = useResourceStore((state) => state.sessions[graphPath]?.saving === true);
   return { constants, loaded, saving };
 }
 
-export function editableConstantValue(constant: GraphConstantDto): DataValue {
+export function editableConstantValue(
+  constant: Pick<GraphConstantDto, "dataType" | "dataValue" | "tabular">,
+): DataValue {
   if (constant.tabular) {
     const literal = JSON.stringify(constant.tabular.columns);
     if (constant.dataType.kind === "DataFrame") return { kind: "DataFrame", value: literal };
@@ -34,8 +36,8 @@ export function editableConstantValue(constant: GraphConstantDto): DataValue {
 export function createGraphConstant(graphPath: string, baseName: string) {
   return applyGraphMutation({
     graphPath,
-    mutation: (document) => {
-      const names = new Set(Object.values(document.constants ?? {}).map((value) => value.name));
+    mutation: (constants) => {
+      const names = new Set(Object.values(constants ?? {}).map((value) => value.name));
       let name = baseName;
       for (let index = 2; names.has(name); index++) name = `${baseName} ${index}`;
       const id = crypto.randomUUID();
@@ -62,8 +64,8 @@ export function updateGraphConstant(
 ) {
   return applyGraphMutation({
     graphPath,
-    mutation: (document) => {
-      const current = document.constants?.[id];
+    mutation: (constants) => {
+      const current = constants?.[id];
       if (!current) throw new Error("Graph constant is unavailable");
       const constant = {
         ...current,

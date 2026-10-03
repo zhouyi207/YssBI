@@ -17,19 +17,19 @@ import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMuta
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
 import {
   useResourceStore,
-  useDocumentStateStore,
   buildFileResourceMeta,
   markResourceLoaded,
   markResourceDirty,
   resourceKey,
 } from "@/features/core/resource";
-import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
-import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
+
+import { getResourceSnapshot } from "@/features/core/resource/read";
 
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { useViewportStore, viewportScopeKey } from "@/features/core/viewport";
 
 const eventPath = "events/Event.yssbi-event";
 
@@ -89,8 +89,7 @@ function setup(overrides: Partial<ProjectPublicationDependencies> = {}) {
     prepareGraphSession: vi.fn(async (path: string) =>
       makeGraphEditorSession(makeEditorProjectionFixture({ graphPath: path }).projection),
     ),
-    captureLoadedGraphPaths: () =>
-      new Set(Object.keys(useGraphProjectionStore.getState().graphEntities)),
+    captureLoadedGraphPaths: () => new Set(Object.keys(useResourceStore.getState().graphEntities)),
     prepareSnapshot: prepareProjectSnapshotCommit,
     commitSnapshot: vi.fn(commitPreparedProjectSnapshot),
     markProjectProjectionStale: vi.fn(),
@@ -102,13 +101,53 @@ function setup(overrides: Partial<ProjectPublicationDependencies> = {}) {
 }
 beforeEach(() => {
   useResourceStore.getState().clear();
-  useDocumentStateStore.setState({ documents: {} });
-  useGraphProjectionStore.getState().clear();
-  useGraphMetaStore.setState({ graphs: {} });
-  useChartDocumentStore.getState().clear();
-  useDatabaseStore.setState({ databases: {}, revisions: {} });
 });
 afterEach(() => coordinator?.cancelProject());
+
+it("publishes database declarations, resource revisions and the project watermark together", async () => {
+  let next = index(1);
+  next.databases = [
+    {
+      id: "sales",
+      name: "Sales",
+      resourcePath: "databases/sales.yssbi-database",
+      revision: 1,
+      engine: { dataset: {} },
+      schemaVersion: 1,
+      required: false,
+    },
+  ];
+  setup({ loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(next)) });
+  const observed: unknown[] = [];
+  const stop = useResourceStore.subscribe((state) => {
+    const resources = useResourceStore.getState();
+    const resource = resources.resources[resourceKey({ kind: "database", id: "sales" })];
+    observed.push({
+      database: state.databases.sales?.name,
+      resource: resource?.name,
+      revision: resource?.revision,
+      publication: resources.indexRevision,
+    });
+  });
+  try {
+    await coordinator.refreshIndex();
+    next = {
+      ...next,
+      publicationRevision: 2,
+      databases: [{ ...next.databases[0], name: "Renamed", revision: 2 }],
+    };
+    await coordinator.refreshIndex();
+    next = { ...next, publicationRevision: 3, databases: [] };
+    await coordinator.refreshIndex();
+  } finally {
+    stop();
+  }
+  expect(observed).toEqual([
+    { database: "Sales", resource: "Sales", revision: 1, publication: 1 },
+    { database: "Renamed", resource: "Renamed", revision: 2, publication: 2 },
+    { database: undefined, resource: undefined, revision: undefined, publication: 3 },
+  ]);
+});
 
 it("applies late delete authorization to retained dirty content after an index-only refresh", async () => {
   const dependencies = setup({
@@ -121,7 +160,7 @@ it("applies late delete authorization to retained dirty content after an index-o
     .setSnapshot({ resources: [buildFileResourceMeta("doc", path, "Report", { revision: 0 })] });
   markResourceLoaded(ref);
   markResourceDirty(ref, true);
-  useDocProjectionStore.getState().install({
+  useResourceStore.getState().installFileSnapshot({
     projectInstanceId: "project-a",
     path,
     kind: "doc",
@@ -149,7 +188,7 @@ it("applies late delete authorization to retained dirty content after an index-o
   ];
   await coordinator.submit({ result: deletion });
   expect(useResourceStore.getState().resources[resourceKey(ref)]).toBeUndefined();
-  expect(useDocProjectionStore.getState().documents[path]).toBeUndefined();
+  expect(useResourceStore.getState().fileSnapshots.doc[path]).toBeUndefined();
   expect((await coordinator.submit({ result: deletion })).status).toBe("duplicate");
   expect(dependencies.loadProjectIndex).toHaveBeenCalledTimes(2);
 });
@@ -205,6 +244,111 @@ it("does not republish unchanged index content or invalidate catalogs on repeate
   expect(useResourceStore.getState()).toBe(before);
 });
 
+it("publishes revision-only receipts and indexes without replacing unchanged resource content", async () => {
+  let snapshot = index(0);
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(snapshot)),
+  });
+  await coordinator.refreshIndex();
+  const before = getResourceSnapshot();
+  const revisions: number[] = [];
+  const stop = useResourceStore.subscribe((state) => revisions.push(state.indexRevision));
+  try {
+    const empty = { ...receipt(1), deltas: [] };
+    expect((await coordinator.submit({ result: empty })).status).toBe("applied");
+    expect.soft(useResourceStore.getState().indexRevision).toBe(1);
+    expect(dependencies.loadProjectIndex).toHaveBeenCalledOnce();
+
+    snapshot = { ...snapshot, publicationRevision: 2 };
+    await coordinator.refreshIndex();
+    expect.soft(useResourceStore.getState().indexRevision).toBe(2);
+    await coordinator.refreshIndex();
+    expect.soft(revisions).toEqual([1, 2]);
+    expect(coordinator.capturePublicationRevision()).toBe(2);
+    expect(dependencies.commitSnapshot).toHaveBeenCalledOnce();
+    expect(getResourceSnapshot()).toBe(before);
+  } finally {
+    stop();
+  }
+});
+
+it("recovers loaded clean graphs for incomplete receipts even when index content is unchanged", async () => {
+  const dirtyPath = "events/Dirty.yssbi-event";
+  const snapshot = index(0);
+  snapshot.eventGraphs = [eventPath, dirtyPath].map((path) => ({
+    path,
+    name: path,
+    type: "event_graph",
+    revision: 0,
+  }));
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(async () =>
+      projectIndexSnapshotFixture({ ...snapshot, publicationRevision: 2 }),
+    ),
+    prepareGraphSession: vi.fn(async (path) =>
+      makeGraphEditorSession(
+        makeEditorProjectionFixture({ graphPath: path, title: "Recovered" }).projection,
+      ),
+    ),
+  });
+  coordinator.startProject("project-a", 0, snapshot);
+  useResourceStore.getState().setSnapshot({
+    resources: snapshot.eventGraphs.map((graph) =>
+      buildFileResourceMeta("event_graph", graph.path, graph.name, { revision: 0 }),
+    ),
+  });
+  for (const path of [eventPath, dirtyPath]) {
+    const session = makeGraphEditorSession(
+      makeEditorProjectionFixture({ graphPath: path }).projection,
+    );
+    session.editing.dirty = path === dirtyPath;
+    useResourceStore.getState().installGraphSession(path, session, { mode: "load" });
+    markResourceLoaded({ kind: "event_graph", id: path });
+  }
+  markResourceDirty({ kind: "event_graph", id: dirtyPath }, true);
+  const previous = useResourceStore.getState();
+  const incomplete: ResourceMutationResultDto = {
+    ...receipt(2),
+    deltas: [],
+    projectionStatus: { status: "incomplete", invalidatedGraphPaths: [eventPath] },
+  };
+  expect((await coordinator.submit({ result: incomplete })).status).toBe("recovered");
+  expect(dependencies.prepareGraphSession).toHaveBeenCalledExactlyOnceWith(
+    eventPath,
+    "project-a",
+    captureProjectLifecycleState().epoch,
+  );
+  const current = useResourceStore.getState();
+  expect(current.sessions[eventPath].projection.nodes[0].display.title).toBe("Recovered");
+  expect(current.sessions[dirtyPath]).toBe(previous.sessions[dirtyPath]);
+  expect(previous.sessions[eventPath].projection.nodes[0].display.title).toBe("Projected node");
+  await coordinator.refreshIndex();
+  expect(dependencies.prepareGraphSession).toHaveBeenCalledOnce();
+  expect(dependencies.commitSnapshot).toHaveBeenCalledOnce();
+});
+
+it("retains receipt conflict detection across same-revision index refreshes", async () => {
+  let snapshot = index(1);
+  snapshot.eventGraphs = [{ path: eventPath, name: "Created", type: "event_graph", revision: 0 }];
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(snapshot)),
+  });
+  const accepted = receipt(1);
+  await coordinator.submit({ result: accepted });
+  await coordinator.refreshIndex();
+  await expect(
+    coordinator.submit({ result: receipt(1, "events/Conflict.yssbi-event") }),
+  ).rejects.toMatchObject({
+    code: "publication_protocol_error",
+  });
+  expect((await coordinator.submit({ result: accepted })).status).toBe("duplicate");
+  snapshot = { ...snapshot, publicationRevision: 2 };
+  await coordinator.refreshIndex();
+  expect((await coordinator.submit({ result: receipt(2) })).status).toBe("duplicate");
+  expect(dependencies.commitSnapshot).toHaveBeenCalledOnce();
+  expect(coordinator.capturePublicationRevision()).toBe(2);
+});
+
 it("includes move receipts delivered while another graph session is being prepared", async () => {
   const source = "events/Old.yssbi-event";
   const target = "events/New.yssbi-event";
@@ -243,15 +387,15 @@ it("includes move receipts delivered while another graph session is being prepar
   expect(vi.mocked(dependencies.commitSnapshot).mock.calls[0][0].pathRemaps.get(source)).toBe(
     target,
   );
-  expect(useGraphProjectionStore.getState().graphEntities[target]).toBeDefined();
-  expect(useGraphProjectionStore.getState().graphEntities[source]).toBeUndefined();
+  expect(useResourceStore.getState().graphEntities[target]).toBeDefined();
+  expect(useResourceStore.getState().graphEntities[source]).toBeUndefined();
   for (const path of [eventPath, target]) {
-    const graph = useGraphProjectionStore.getState();
+    const graph = useResourceStore.getState();
     expect(graph.resultStates[path]).toEqual(
       makeGraphEditorSession(graph.sessions[path].projection).resultState,
     );
   }
-  expect(useGraphProjectionStore.getState().resultStates[source]).toBeUndefined();
+  expect(useResourceStore.getState().resultStates[source]).toBeUndefined();
 });
 
 it("discards a delayed snapshot after project replacement", async () => {
@@ -267,4 +411,85 @@ it("discards a delayed snapshot after project replacement", async () => {
   await rejected;
   expect(dependencies.commitSnapshot).not.toHaveBeenCalled();
   expect(useResourceStore.getState().graphOrder).toEqual([]);
+});
+
+it("retains successor publications when synchronous revision and panel observers replace the project", async () => {
+  for (const stage of ["receipt", "index", "panels", "catalog", "snapshot"] as const) {
+    useResourceStore.getState().clear();
+    const successorIndex = deferred<ProjectIndexRow>();
+    const dependencies = setup();
+    await coordinator.refreshIndex();
+    const next = index(1);
+    if (stage === "catalog" || stage === "snapshot")
+      next.eventGraphs = [{ path: eventPath, name: "Created", type: "event_graph", revision: 0 }];
+    vi.mocked(dependencies.loadProjectIndex).mockImplementation((projectInstanceId) =>
+      projectInstanceId === "project-a"
+        ? Promise.resolve(projectIndexSnapshotFixture(next))
+        : successorIndex.promise.then(projectIndexSnapshotFixture),
+    );
+    let successorOutcome: unknown;
+    let stop = () => {};
+    const previousFocus = useGraphSessionStore.getState().focusedSession;
+    const previousViewports = useViewportStore.getState().viewports;
+    const successorFocus = { groupId: "successor-pane", graphPath: eventPath };
+    const successorViewports = {
+      [viewportScopeKey(successorFocus)]: { x: 41, y: 73, scale: 2 },
+    };
+    const replace = () => {
+      stop();
+      coordinator.startProject("project-b", 0);
+      useResourceStore.getState().setSnapshot({ resources: [], publicationRevision: 0 });
+      if (stage === "snapshot") {
+        useGraphSessionStore.setState({ focusedSession: successorFocus });
+        useViewportStore.setState({ viewports: successorViewports });
+      }
+      void coordinator.submit({ result: { ...receipt(1), projectInstanceId: "project-b" } }).then(
+        (outcome) => {
+          successorOutcome = outcome;
+        },
+        (error: unknown) => {
+          successorOutcome = error;
+        },
+      );
+    };
+    stop =
+      stage === "panels"
+        ? useSidebarStore.subscribe((state) => {
+            if (state.panels.project?.snapshot?.document.publicationRevision === 1) replace();
+          })
+        : stage === "catalog"
+          ? useNodeCatalogStore.subscribe((state) => {
+              if (state.projectWatermarks["project-a"] === 1) replace();
+            })
+          : useResourceStore.subscribe((state) => {
+              if (state.indexRevision === 1) replace();
+            });
+    try {
+      const pending =
+        stage === "receipt" || stage === "catalog"
+          ? coordinator.submit({
+              result: { ...receipt(1), ...(stage === "receipt" ? { deltas: [] } : {}) },
+            })
+          : coordinator.refreshIndex();
+      const outcome = await pending.catch((error: unknown) => error);
+      expect.soft(outcome, stage).toMatchObject({ code: "stale_project_lifecycle" });
+      expect.soft(coordinator.capturePublicationRevision(), stage).toBe(0);
+      expect.soft(coordinator.getSnapshotForTests().pendingRevisions, stage).toEqual([1]);
+      expect
+        .soft(useNodeCatalogStore.getState().projectWatermarks, stage)
+        .not.toHaveProperty("project-a");
+      if (stage === "snapshot") {
+        expect.soft(useGraphSessionStore.getState().focusedSession).toBe(successorFocus);
+        expect.soft(useViewportStore.getState().viewports).toBe(successorViewports);
+      }
+      successorIndex.resolve({ ...index(1), projectInstanceId: "project-b" });
+      await vi.waitFor(() => expect(successorOutcome, stage).toMatchObject({ status: "applied" }));
+      expect(coordinator.capturePublicationRevision()).toBe(1);
+    } finally {
+      stop();
+      successorIndex.resolve({ ...index(1), projectInstanceId: "project-b" });
+      useGraphSessionStore.setState({ focusedSession: previousFocus });
+      useViewportStore.setState({ viewports: previousViewports });
+    }
+  }
 });

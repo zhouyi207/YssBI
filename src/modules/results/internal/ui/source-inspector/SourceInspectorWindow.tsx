@@ -31,11 +31,7 @@ export const SourceInspectorWindow: React.FC = () => {
         <UnifiedResultView payload={state.payload.descriptor} />
       ) : null}
       {state.status === "ready" && state.payload.mode === "report" ? (
-        <ResultInspector
-          descriptor={state.descriptor}
-          report={state.payload.report}
-          data={state.payload.data}
-        />
+        <ResultInspector descriptor={state.descriptor} payload={state.payload} />
       ) : null}
     </PresentationWindowShell>
   );

@@ -1,4 +1,4 @@
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
 import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
@@ -10,7 +10,7 @@ export interface SetPinValueArgs {
 
 export const setPinValueCommand: CommandHandler<SetPinValueArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
+    const pin = useResourceStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin) throw new Error(`Port '${args.pinId}' is not projected`);
     if (pin.address.nodeId !== args.nodeId) {
       throw new Error(`Port '${args.pinId}' does not belong to node '${args.nodeId}'`);

@@ -1,6 +1,6 @@
 import { createPersistedWindow } from "./createPersistedWindow";
 import { createEphemeralWindowLabel } from "./windowLabels";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 import { i18n } from "@/app/i18n";
 

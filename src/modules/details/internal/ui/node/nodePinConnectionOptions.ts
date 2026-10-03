@@ -15,16 +15,6 @@ function formatPinConnectionOptionLabel(
   return formatNodePinDisplayLabel(nodeTitles[pin.nodeId], pinDisplayTitle(pin)) ?? "";
 }
 
-export function listPinConnections(
-  pinId: string,
-  direction: PinData["direction"],
-  connections: DeepReadonly<ConnectionData[]>,
-): DeepReadonly<ConnectionData>[] {
-  return connections.filter((connection) =>
-    direction === "output" ? connection.from === pinId : connection.to === pinId,
-  );
-}
-
 export function connectedPeerId(
   pinId: string,
   direction: PinData["direction"],

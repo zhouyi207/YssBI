@@ -16,13 +16,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ValueType } from "@/shared/types/domain/valueType";
 import type { DataValue } from "@/shared/types/domain/dataValue";
 import {
-  dataValueToEditableJson,
-  isJsonEditableConstantType,
-  parseArrayValueFromJson,
-  parseDataFrameValueFromJson,
-  parseDataSeriesValueFromJson,
-  parseObjectValueFromJson,
-} from "./constantValueUtils";
+  parseConstantJsonInput,
+  type ConstantValueInputError,
+} from "@/features/domain/graphConstants/valueInput";
+import { dataValueToEditableJson, isJsonEditableConstantType } from "./constantValuePresentation";
 
 interface ConstantValueEditorModalProps {
   open: boolean;
@@ -44,7 +41,7 @@ export function ConstantValueEditorModal({
 }: ConstantValueEditorModalProps) {
   const { t } = useTranslation();
   const [jsonDraft, setJsonDraft] = useState("");
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [jsonError, setJsonError] = useState<ConstantValueInputError | null>(null);
   const jsonErrorId = useId();
 
   useEffect(() => {
@@ -60,27 +57,9 @@ export function ConstantValueEditorModal({
   };
 
   const handleSave = () => {
-    let result: { ok: true; value: DataValue } | { ok: false; error: string };
-
-    switch (dataType.kind) {
-      case "Array":
-        result = parseArrayValueFromJson(jsonDraft, dataType.inner ?? { kind: "Any" });
-        break;
-      case "Object":
-        result = parseObjectValueFromJson(jsonDraft);
-        break;
-      case "DataFrame":
-        result = parseDataFrameValueFromJson(jsonDraft);
-        break;
-      case "DataSeries":
-        result = parseDataSeriesValueFromJson(jsonDraft);
-        break;
-      default:
-        return;
-    }
-
+    const result = parseConstantJsonInput(jsonDraft, dataType);
     if (!result.ok) {
-      setJsonError(t(`detail.constantValue.errors.${result.error}`));
+      setJsonError(result.error);
       return;
     }
     setJsonError(null);
@@ -122,7 +101,9 @@ export function ConstantValueEditorModal({
             {jsonError ? (
               <Alert id={jsonErrorId} variant="destructive">
                 <VscError aria-hidden="true" />
-                <AlertDescription className="text-destructive">{jsonError}</AlertDescription>
+                <AlertDescription className="text-destructive">
+                  {t(`detail.constantValue.errors.${jsonError}`)}
+                </AlertDescription>
               </Alert>
             ) : null}
           </div>

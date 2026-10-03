@@ -1,8 +1,5 @@
 import type { UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
-import {
-  parseReportDisplay,
-  structuredValueAt,
-} from "@/shared/types/domain/structuredReportDisplay";
+import type { ParsedReportPayload } from "@/shared/types/report/parseReportPayload";
 import { StructuredReportTable } from "./StructuredReportBindings";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +18,8 @@ import {
   type StructuredResultPart,
 } from "@/shared/types/domain/resultReport";
 import { ResultReportPage } from "./ResultReportPage";
+
+const EMPTY_REPORT_DATA = {};
 
 function StructuredArray({
   reference,
@@ -70,51 +69,50 @@ function StructuredArray({
 
 export function StructuredResult({
   reference,
-  value,
+  report,
 }: {
   reference: ResultReference;
-  value: unknown;
+  report: Extract<ParsedReportPayload, { kind: "structured" }>;
 }) {
   const { t } = useTranslation();
-  const renderReference: StructuredReferenceRenderer = (candidate) => {
-    if (!isStructuredTableReference(candidate)) return undefined;
-    return (
-      <Section
-        key={candidate.part}
-        title={t("sourceInspector.inspectRows", { count: candidate.rowCount })}
-        collapsible
-      >
-        <StructuredArray
-          reference={reference}
-          table={candidate}
-          renderReference={renderReference}
-        />
-      </Section>
-    );
-  };
-  const bindings: Record<string, UiResultBindings[string]> = {
-    result: { type: "structured", value, renderReference },
-  };
-  for (const [id, section] of Object.entries(parseReportDisplay(value))) {
-    const target = structuredValueAt(value, section.path);
-    if (section.kind === "equation") {
-      if (typeof target !== "string" || new TextEncoder().encode(target).length > 16384)
-        throw new Error("invalid_report_equation");
-      bindings[`report_${id}`] = {
-        type: "equation",
-        content: (
-          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/30 p-4 font-mono text-sm">
-            {target}
-          </pre>
-        ),
-      };
-    } else {
-      if (!isStructuredTableReference(target)) throw new Error("invalid_report_table");
-      bindings[`report_${id}`] = {
-        type: section.kind === "stability" ? "chart" : "table",
-        content: <StructuredReportTable reference={reference} table={target} section={section} />,
-      };
+  const bindings = useMemo<UiResultBindings>(() => {
+    const renderReference: StructuredReferenceRenderer = (candidate) => {
+      if (!isStructuredTableReference(candidate)) return undefined;
+      return (
+        <Section
+          key={candidate.part}
+          title={t("sourceInspector.inspectRows", { count: candidate.rowCount })}
+          collapsible
+        >
+          <StructuredArray
+            reference={reference}
+            table={candidate}
+            renderReference={renderReference}
+          />
+        </Section>
+      );
+    };
+    const result: Record<string, UiResultBindings[string]> = {
+      result: { type: "structured", value: report.data, renderReference },
+    };
+    for (const [id, section] of Object.entries(report.sections)) {
+      if (section.kind === "equation") {
+        result[`report_${id}`] = {
+          type: "equation",
+          content: (
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/30 p-4 font-mono text-sm">
+              {section.value}
+            </pre>
+          ),
+        };
+      } else {
+        result[`report_${id}`] = {
+          type: section.kind === "stability" ? "chart" : "table",
+          content: <StructuredReportTable reference={reference} section={section} />,
+        };
+      }
     }
-  }
-  return <ResultReportPage reference={reference} data={{}} bindings={bindings} />;
+    return result;
+  }, [reference, report, t]);
+  return <ResultReportPage reference={reference} data={EMPTY_REPORT_DATA} bindings={bindings} />;
 }

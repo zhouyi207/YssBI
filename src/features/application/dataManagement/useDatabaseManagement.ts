@@ -6,19 +6,15 @@ import {
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { i18n } from "@/app/i18n";
-import { useDatabaseStore } from "@/features/core/dataStore";
-import { useEditorStore } from "@/features/core/editor";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { DatabaseService } from "@/services/database/databaseService";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 import { openPathDialog } from "@/services/platform/pathDialog";
-import type { LoadDatabaseResult } from "@/shared/types/domain/database";
 import type { DatabaseImportSourceDTO } from "@/shared/types/domain/database";
-import type { DatabaseRecord } from "@/shared/types/domain/database";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 import { runWithDataOperationProgress } from "./dataOperationProgress";
 import { executeDatabaseCreate, executeDatabaseMutation } from "./databaseMutation";
-import { databaseRecordFromLoad } from "./databaseRecords";
 
 function showDataOperationMessage(message: string, type: "info" | "warning" = "warning"): void {
   void uiStore.alert({
@@ -49,13 +45,6 @@ function logDataOperationFailure(error: unknown, context: string): void {
   );
 }
 
-function commitLoadedDatabase(result: LoadDatabaseResult) {
-  const store = useDatabaseStore.getState();
-  const record = databaseRecordFromLoad(result, store.databases[result.id]);
-  if (store.databases[result.id]) store.updateDatabase(result.id, record);
-  else store.addDatabase(result.id, record);
-}
-
 async function loadSqliteTable(project: ProjectIdentitySnapshot, dbPath: string, table: string) {
   const engine: DatabaseImportSourceDTO = {
     sql: {
@@ -64,7 +53,7 @@ async function loadSqliteTable(project: ProjectIdentitySnapshot, dbPath: string,
       table,
     },
   };
-  const result = await runWithDataOperationProgress(
+  await runWithDataOperationProgress(
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingSqlite", { table }),
     () =>
@@ -78,7 +67,6 @@ async function loadSqliteTable(project: ProjectIdentitySnapshot, dbPath: string,
       }),
   );
   assertCurrentProjectIdentity(project);
-  commitLoadedDatabase(result);
 }
 
 type SqlRemoteEngine = "postgres" | "mysql" | "mariadb";
@@ -97,7 +85,7 @@ async function loadSqlRemoteTable(
       table,
     },
   };
-  const result = await runWithDataOperationProgress(
+  await runWithDataOperationProgress(
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingRemote", { label, table }),
     () =>
@@ -111,12 +99,11 @@ async function loadSqlRemoteTable(
       }),
   );
   assertCurrentProjectIdentity(project);
-  commitLoadedDatabase(result);
 }
 
 async function loadExcelSheet(project: ProjectIdentitySnapshot, filePath: string, sheet: string) {
   const engine: DatabaseImportSourceDTO = { excel: { path: filePath, sheet } };
-  const result = await runWithDataOperationProgress(
+  await runWithDataOperationProgress(
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingExcel", { sheet }),
     () =>
@@ -130,7 +117,6 @@ async function loadExcelSheet(project: ProjectIdentitySnapshot, filePath: string
       }),
   );
   assertCurrentProjectIdentity(project);
-  commitLoadedDatabase(result);
 }
 
 async function loadCsv(project: ProjectIdentitySnapshot, path: string) {
@@ -142,7 +128,7 @@ async function loadCsv(project: ProjectIdentitySnapshot, path: string) {
       inferSchemaLength: 1000,
     },
   };
-  const result = await runWithDataOperationProgress(
+  await runWithDataOperationProgress(
     i18n.t("dataOperation.importing"),
     i18n.t("dataOperation.importingCsv"),
     () =>
@@ -156,7 +142,6 @@ async function loadCsv(project: ProjectIdentitySnapshot, path: string) {
       }),
   );
   assertCurrentProjectIdentity(project);
-  commitLoadedDatabase(result);
 }
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
@@ -189,7 +174,7 @@ export function triggerImportData() {
     onImportSample: async (sampleId, version) => {
       if (!current()) return;
       try {
-        const result = await executeDatabaseCreate((authority) =>
+        await executeDatabaseCreate((authority) =>
           DatabaseService.importSampleDataset(
             authority.projectInstanceId,
             authority.operationId,
@@ -198,7 +183,6 @@ export function triggerImportData() {
           ),
         );
         if (!current()) return;
-        commitLoadedDatabase(result);
         uiStore.closeModal(importModalId);
       } catch (error) {
         logDataOperationFailure(error, "Sample import");
@@ -346,12 +330,8 @@ export function triggerImportData() {
 
 // database
 export function useDatabaseManagement() {
-  const updateDataFrame = useCallback((id: string, data: Partial<DatabaseRecord>) => {
-    useDatabaseStore.getState().updateDatabase(id, data);
-  }, []);
-
   const deleteDataFrame = useCallback(async (id: string) => {
-    if (!useDatabaseStore.getState().databases[id]) return;
+    if (!useResourceStore.getState().databases[id]) return;
 
     try {
       await executeDatabaseMutation(id, (authority) =>
@@ -362,10 +342,6 @@ export function useDatabaseManagement() {
           id,
         ),
       );
-      const editor = useEditorStore.getState();
-      if (editor.detailFocus?.kind === "data" && editor.detailFocus.id === id) {
-        editor.clearDetailFocus();
-      }
     } catch (e) {
       logDataOperationFailure(e, "Database deletion");
       showDataOperationError(e, (code) => i18n.t("dataOperation.deleteFailed", { error: code }));
@@ -394,7 +370,6 @@ export function useDatabaseManagement() {
 
   return {
     triggerImportData,
-    updateDataFrame,
     deleteDataFrame,
     renameDataFrame,
   };

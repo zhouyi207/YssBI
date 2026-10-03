@@ -17,7 +17,7 @@ import {
   workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import { clearDetailFocusForClosedPanel } from "@/features/application/editor/clearDetailFocusForClosedPanel";
-import { isResourceDocumentDirty } from "@/features/core/resource";
+import { isResourceDocumentDirty, useResourceStore } from "@/features/core/resource";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
 import {
   captureProjectIdentity,
@@ -25,9 +25,8 @@ import {
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { uiStore } from "@/features/core/ui/UIStore";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { editorViewportScope, releaseEditorViewport } from "@/features/core/viewport";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
 import { saveFileResource } from "@/features/application/resource/resourceActions";
 import { deactivateGraphPanelSession } from "./graphPanelSession";
@@ -35,7 +34,7 @@ import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 import { settleEditorFileEdits } from "./settleEditorFileEdits";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+
 import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 
 type EditorDocument = {
@@ -54,8 +53,6 @@ type CloseSnapshot = {
   readonly tokens: readonly WorkbenchPanelCommitToken[];
   readonly projectIdentity?: ProjectIdentitySnapshot;
 };
-
-type EditorPanelInfo = WorkbenchPanelInfo & { metadata: EditorPanelMetadata };
 
 let closeWorkflowTail: Promise<void> = Promise.resolve();
 
@@ -162,7 +159,7 @@ function documentsThatLoseTheirLastPanel(snapshot: CloseSnapshot): EditorDocumen
         metadata.resourceKind === "mind" ||
         metadata.resourceKind === "doc"
           ? undefined
-          : useGraphProjectionStore.getState().sessions[metadata.resourceRef]?.version,
+          : useResourceStore.getState().sessions[metadata.resourceRef]?.version,
     });
   }
   return [...documents.values()];
@@ -217,57 +214,73 @@ function finalizeClosedPanels(
   closedPanels: readonly WorkbenchPanelInfo[] = snapshot.panels,
   discarded: ReadonlyMap<string, GraphEditVersionDto> = new Map(),
 ): void {
-  const remainingEditors = workbenchLayoutRead
-    .listPanels()
-    .filter(
-      (panel: WorkbenchPanelInfo): panel is EditorPanelInfo => panel.metadata.role === "editor",
-    );
   const releasedViewportScopes = new Set<string>();
   const finalizedDocuments = new Set<string>();
   for (const panel of closedPanels) {
+    if (!isCloseSnapshotCurrent(snapshot)) return;
     const metadata = panel.metadata;
     if (metadata.role !== "editor") continue;
-    if (metadata.resourceKind === "mind")
+    const isPanelPresent = () =>
+      workbenchLayoutRead
+        .listPanels()
+        .some((candidate) => candidate.panelInstanceId === panel.panelInstanceId);
+    if (isPanelPresent()) continue;
+    const key = editorKey(metadata);
+    const hasDocumentPanel = () =>
+      workbenchLayoutRead
+        .listPanels()
+        .some(
+          (candidate) =>
+            candidate.metadata.role === "editor" && editorKey(candidate.metadata) === key,
+        );
+    if (metadata.resourceKind === "mind") {
       clearDetailFocusForClosedPanel(metadata.resourceRef, panel.panelInstanceId);
+      if (!isCloseSnapshotCurrent(snapshot)) return;
+      if (isPanelPresent()) continue;
+    }
     releaseEditorPaneState(panel.panelInstanceId);
+    if (!isCloseSnapshotCurrent(snapshot)) return;
 
     if (metadata.resourceKind === "database") {
-      if (
-        !remainingEditors.some((candidate) => editorKey(candidate.metadata) === editorKey(metadata))
-      )
-        clearDetailFocusForClosedPanel(metadata.resourceRef);
+      if (!hasDocumentPanel()) clearDetailFocusForClosedPanel(metadata.resourceRef);
       continue;
     }
 
     if (metadata.resourceKind === "event_graph" || metadata.resourceKind === "function_graph") {
-      const hasSameScope = remainingEditors.some(
-        (candidate: EditorPanelInfo) =>
-          candidate.groupId === panel.groupId &&
-          candidate.metadata.resourceRef === metadata.resourceRef,
-      );
+      const hasSameScope = () =>
+        workbenchLayoutRead
+          .listPanels()
+          .some(
+            (candidate) =>
+              candidate.metadata.role === "editor" &&
+              candidate.groupId === panel.groupId &&
+              candidate.metadata.resourceRef === metadata.resourceRef,
+          );
       const scopeKey = JSON.stringify([panel.groupId, metadata.resourceRef]);
-      if (!hasSameScope && !releasedViewportScopes.has(scopeKey)) {
+      if (!hasSameScope() && !releasedViewportScopes.has(scopeKey)) {
         releasedViewportScopes.add(scopeKey);
         releaseEditorViewport(editorViewportScope(panel.groupId, metadata.resourceRef));
-        deactivateGraphPanelSession(panel.groupId, metadata.resourceRef);
+        if (!isCloseSnapshotCurrent(snapshot)) return;
+        if (!hasSameScope()) {
+          deactivateGraphPanelSession(panel.groupId, metadata.resourceRef);
+          if (!isCloseSnapshotCurrent(snapshot)) return;
+        }
       }
     }
 
-    const key = editorKey(metadata);
-    if (
-      finalizedDocuments.has(key) ||
-      remainingEditors.some((candidate: EditorPanelInfo) => editorKey(candidate.metadata) === key)
-    ) {
+    if (finalizedDocuments.has(key) || hasDocumentPanel()) {
       continue;
     }
     finalizedDocuments.add(key);
     clearDetailFocusForClosedPanel(metadata.resourceRef);
+    if (!isCloseSnapshotCurrent(snapshot)) return;
+    if (hasDocumentPanel()) continue;
     if (metadata.resourceKind === "mind" || metadata.resourceKind === "doc") {
       fileActions[metadata.resourceKind].release(metadata.resourceRef);
       continue;
     }
     if (metadata.resourceKind === "chart") {
-      useChartDocumentStore.getState().removeDocument(metadata.resourceRef);
+      useResourceStore.getState().removeChartDocument(metadata.resourceRef);
       continue;
     }
 

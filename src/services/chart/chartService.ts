@@ -3,6 +3,7 @@ import type { ChartDocument } from "@/shared/types/domain/chart";
 import type { PlotColumnPairPayload } from "@/shared/types/domain/chart";
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 import { parseResourceMutationResultDto } from "@/shared/types/dto/resourceMutationResultWireParser";
+import { parseChartDocument, plotColumnPairSchema } from "./chartWireParser";
 
 export class ChartService {
   static async createChart(
@@ -40,13 +41,15 @@ export class ChartService {
   static async loadChart(
     projectInstanceId: string,
     chartPath: string,
-    expectedPublicationRevision?: number,
+    expectedPublicationRevision: number,
   ): Promise<ChartDocument> {
-    return await invokeCommand("load_chart", {
-      projectInstanceId,
-      chartPath,
-      expectedPublicationRevision,
-    });
+    return parseChartDocument(
+      await invokeCommand<unknown>("load_chart", {
+        projectInstanceId,
+        chartPath,
+        expectedPublicationRevision,
+      }),
+    );
   }
 
   static async saveChart(
@@ -104,16 +107,24 @@ export class ChartService {
   static async getPlotColumnPair(
     projectInstanceId: string,
     databaseId: string,
+    expectedRevision: number,
     xCol: string,
     yCol: string,
     maxPoints?: number,
   ): Promise<PlotColumnPairPayload> {
-    return await invokeCommand("get_plot_column_pair", {
-      projectInstanceId,
-      databaseId,
-      xCol,
-      yCol,
-      maxPoints,
-    });
+    const pair = plotColumnPairSchema.parse(
+      await invokeCommand<unknown>("get_plot_column_pair", {
+        projectInstanceId,
+        databaseId,
+        expectedRevision,
+        xCol,
+        yCol,
+        maxPoints,
+      }),
+    );
+    if (maxPoints !== undefined && pair.data.length > maxPoints) {
+      throw new TypeError("Chart plot exceeds requested point limit");
+    }
+    return pair;
   }
 }

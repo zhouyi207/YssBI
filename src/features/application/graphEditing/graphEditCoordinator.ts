@@ -1,21 +1,18 @@
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { reconcileGraphResultQueries } from "@/features/application/results/runtime";
-import { markResourceDirty, markResourceStale, useResourceStore } from "@/features/core/resource";
-import { getNodeFileKind } from "@/features/core/resource/resourceSelectors";
 import type {
   EditorGraphMutationDto,
   GraphEditResultDto,
   GraphEditVersionDto,
-  GraphEditingStateDto,
   GraphEditorSessionDto,
+  GraphConstantDto,
 } from "@/shared/types/domain/editorMutation";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
+import { isGraphSaving } from "@/features/core/graph/read";
 import {
-  canAcceptGraphSession,
-  getGraphDocumentProjection,
-  isGraphSaving,
-  useGraphProjectionStore,
-} from "@/features/core/dataStore/graphProjectionStore";
+  type GraphSessionPublication,
+  useResourceStore,
+} from "@/features/core/resource/resourceStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -32,7 +29,7 @@ export interface ApplyGraphMutationInput {
   mutation:
     | EditorGraphMutationDto
     | ((
-        document: NonNullable<ReturnType<typeof getGraphDocumentProjection>>,
+        constants: Readonly<Record<string, GraphConstantDto>> | undefined,
       ) => EditorGraphMutationDto);
 }
 
@@ -61,31 +58,14 @@ const defaultDependencies: GraphEditCoordinatorDependencies = {
 const graphTaskQueues = new Map<string, { tail: Promise<void>; pending: number }>();
 let coordinatorEpoch = 0;
 
-function publishGraphEditingState(graphPath: string, editing: GraphEditingStateDto): void {
-  const kind = getNodeFileKind(graphPath);
-  if (!kind) return;
-  const revision = Number(editing.version.revision);
-  if (Number.isSafeInteger(revision))
-    useResourceStore.getState().patchResource({ id: graphPath, kind }, { revision });
-  markResourceDirty({ id: graphPath, kind }, editing.dirty);
-}
-
 export function installGraphSession(
   graphPath: string,
   result: GraphEditorSessionDto,
-  mode: "load" | "update" | "save" = "update",
+  options: GraphSessionPublication = { mode: "update" },
 ): boolean {
-  const previous = useGraphProjectionStore.getState().sessions[graphPath];
-  if (!canAcceptGraphSession(previous, result)) return false;
-  if (mode === "load") useGraphProjectionStore.getState().install(graphPath, result);
-  else
-    useGraphProjectionStore
-      .getState()
-      .hydrate(graphPath, result, mode === "save" ? false : undefined);
+  const previous = useResourceStore.getState().sessions[graphPath];
+  if (!useResourceStore.getState().installGraphSession(graphPath, result, options)) return false;
   reconcileGraphResultQueries(graphPath, previous);
-  publishGraphEditingState(graphPath, result.editing);
-  const kind = getNodeFileKind(graphPath);
-  if (kind) markResourceStale({ id: graphPath, kind }, false);
   return true;
 }
 
@@ -98,11 +78,13 @@ async function applyDraftMutation(
   // Saving gates admission, not execution of edits already accepted by this FIFO.
 
   const identity = captureProjectIdentity();
-  const document = getGraphDocumentProjection(input.graphPath);
-  if (!document) throw new Error(`Graph draft '${input.graphPath}' is not loaded`);
-  const session = useGraphProjectionStore.getState().sessions[input.graphPath];
+  const state = useResourceStore.getState();
+  const session = state.sessions[input.graphPath];
+  if (!session) throw new Error(`Graph draft '${input.graphPath}' is not loaded`);
+  // Rust projects every document node; the existing entity index owns this membership.
+  const nodes = state.graphEntities[input.graphPath].nodes;
   const isCurrentDraft = () => {
-    const current = useGraphProjectionStore.getState().sessions[input.graphPath];
+    const current = useResourceStore.getState().sessions[input.graphPath];
     return (
       current?.sessionId === session.sessionId &&
       current.projectionGeneration === session.projectionGeneration
@@ -116,7 +98,7 @@ async function applyDraftMutation(
       input.graphPath,
       input.locale ?? currentProjectionLocale(),
       session.version,
-      typeof input.mutation === "function" ? input.mutation(document) : input.mutation,
+      typeof input.mutation === "function" ? input.mutation(session.constants) : input.mutation,
     );
   } catch (error) {
     if (
@@ -142,7 +124,7 @@ async function applyDraftMutation(
   if (!result.changed) return { status: "noop", result };
 
   const insertedNodeIds = Object.keys(result.document.nodes).filter(
-    (nodeId) => !(nodeId in document.nodes),
+    (nodeId) => !Object.prototype.hasOwnProperty.call(nodes, nodeId),
   );
   return { status: "applied", result, insertedNodeIds };
 }

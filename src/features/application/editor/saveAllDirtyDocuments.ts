@@ -1,7 +1,8 @@
 import i18n from "i18next";
 
 import { saveFileResource } from "@/features/application/resource/resourceActions";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
+import { formatApplicationIpcError } from "@/features/application/errorReference";
 
 import { showBlockingIpcError } from "./blockingErrorDialog";
 import { collectDirtyEditorPanels } from "./editorPanelDirty";
@@ -11,35 +12,41 @@ import {
   isProjectLifecycleStateCurrent,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
-async function settleBeforeSaving(): Promise<boolean> {
+async function settleBeforeSaving(isCurrent: () => boolean): Promise<boolean> {
+  if (!isCurrent()) return false;
   try {
     await settleEditorFileEdits();
-    return true;
+    return isCurrent();
   } catch (error) {
-    showBlockingIpcError(error, (code) =>
-      i18n.t("notifications.project.saveFailed", { error: code }),
-    );
+    if (isCurrent()) {
+      showBlockingIpcError(error, (code) =>
+        i18n.t("notifications.project.saveFailed", { error: code }),
+      );
+    }
     return false;
   }
 }
 
 /** Persist every dirty document currently projected by canonical editor metadata. */
-export async function saveAllDirtyDocuments(): Promise<boolean> {
+export async function saveAllDirtyDocuments(
+  isActive: () => boolean = () => true,
+): Promise<boolean> {
   const identity = captureProjectLifecycleState();
-  if (!(await settleBeforeSaving())) return false;
-  if (!isProjectLifecycleStateCurrent(identity)) return false;
+  const isCurrent = () => isActive() && isProjectLifecycleStateCurrent(identity);
+  if (!(await settleBeforeSaving(isCurrent))) return false;
+  if (!isCurrent()) return false;
   const dirty = collectDirtyEditorPanels();
   if (dirty.length === 0) return true;
 
   for (const document of dirty) {
-    if (!isProjectLifecycleStateCurrent(identity)) return false;
+    if (!isCurrent()) return false;
     try {
       const saved = await saveFileResource(document.resourceRef, document.resourceKind);
-      if (!saved || !isProjectLifecycleStateCurrent(identity)) return false;
+      if (!saved || !isCurrent()) return false;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      if (!isCurrent()) return false;
       logger.app.error(
-        `Failed to save document '${document.title}' (${document.resourceRef}): ${message}`,
+        `Failed to save document '${document.title}' (${document.resourceRef}): ${formatApplicationIpcError(error)}`,
         "saveAllDirtyDocuments",
       );
       showBlockingIpcError(error, (code) =>
@@ -51,6 +58,6 @@ export async function saveAllDirtyDocuments(): Promise<boolean> {
       return false;
     }
   }
-  if (!(await settleBeforeSaving())) return false;
-  return isProjectLifecycleStateCurrent(identity) && collectDirtyEditorPanels().length === 0;
+  if (!(await settleBeforeSaving(isCurrent))) return false;
+  return isCurrent() && collectDirtyEditorPanels().length === 0;
 }

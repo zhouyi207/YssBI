@@ -1,4 +1,4 @@
-import { isEmptyGridSelection, type DatabaseGridSelection } from "./useSelection";
+import type { DatabaseGridSelection } from "@/features/domain/databaseEditor/gridSelection";
 
 function formatCellForPreview(value: unknown): string {
   if (value === null) return "null";
@@ -36,7 +36,7 @@ export function getGridSelectionPrimaryCellText(
   rowCount: number,
   loadedRows: readonly (readonly unknown[])[],
 ): string {
-  if (!selection || isEmptyGridSelection(selection)) return "";
+  if (!selection) return "";
 
   if (selection.type === "cells") {
     return getCellText(

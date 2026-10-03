@@ -18,7 +18,11 @@ its editor and expands its category. Generic workbench commands use
 `saveActiveFile`, `saveProjectAs` and `openProject` to describe their actual scope.
 
 The Project sidebar owns rename input and errors through `SidebarRenameDialog`.
-`useProjectActivityActions` submits those values through `renameResource`.
+`application/sidebar/useProjectActivityActions` submits those values through `renameResource`.
+It captures project identity when opening a rename form and revalidates it on submission.
+Database deletion similarly checks the original project after confirmation; a replaced project
+cannot receive the old dialog's command. File deletion retains the same check in `deleteFileWithConfirm`.
+The existing file/database command owners still capture and validate resource revisions when submitting.
 
 `EventGraphService` and `FunctionGraphService` bind separate create/rename/duplicate/
 remove IPC commands. Rust rejects a path belonging to the other file kind before
@@ -29,19 +33,56 @@ describes that shared content structure, not a project file kind.
 
 Project index consumers read `eventGraphs` and `functionGraphs` independently. Function
 entries always include their signature, signature revision and editor projection.
+ResourceStore publishes these function metadata candidates with resource names and revisions
+in the same project snapshot update, and clears them together on project reset.
 `nodeFileEntries` is a derived view for shared node-editor consumers. The sidebar
 and project inspection expose each concrete file kind directly.
 
-Mind and Doc likewise have separate `mindActions` / `docActions`, services, snapshot
-stores and IPC endpoints. Their index entries live in `minds` / `docs`; mutation
+Graph sessions, normalized entities and result summaries share ResourceStore with their resource
+metadata and document flags. Graph receipts are prepared and validated before one publication;
+Save uses the Rust resource revision and clears the graph's save lock in that same update.
+Project snapshots install their graph candidates through `setSnapshot`, preserving retained dirty
+sessions and removing discarded sessions together with their document state. Rust remains the
+owner of Graph documents and history; result payloads and report leases remain with Results.
+
+Mind and Doc likewise have separate `mindActions` / `docActions`, services, typed
+snapshots and IPC endpoints. ResourceStore owns both snapshot collections together
+with their document flags and resource summaries. Their index entries live in `minds` / `docs`; mutation
 keys are `mind` / `doc`. Mind commands accept only tree edits and Doc commands only
 Markdown edits. `createFileActions` and `createFileContentService` share transport,
 queueing and publication mechanics without a mixed content or editing contract.
+
+Accepted Mind/Doc snapshots publish their content, loaded, dirty and missing flags
+together with the resource revision through Core's ResourceStore. Rename installs
+the destination and removes the source in the same update; release removes content
+and document flags together. Dirty
+state includes retained, unsubmitted inputs; a loaded snapshot cannot restore an
+externally missing resource's index membership. The resource summary and document
+flags are committed in one Immer update, preserving unchanged records. Equal snapshots
+reuse their branches and do not notify subscribers. Read ownership also captures the
+resource revision and existence, rejecting a late first read after index removal.
+
+Command acceptance correlates the parsed snapshot and resource delta with the captured project,
+operation, file kind, path and editing version before installing content or changing buffers.
+Creation and duplication require a matching creation delta; rename takes its destination from the
+matching move receipt. Source revisions and retained editing sessions must match the command,
+and snapshot revisions must match the returned delta. A null snapshot authorizes removal only for
+Delete or Discard with a corresponding removal delta. This check shares the existing command queue
+and publication coordinator; structural parsing remains at the Service boundary.
 
 `useFileTextInput` binds views to the versioned composition buffer in `fileTextInput`.
 Every field supplies a stable input ID. `documentInputs` owns one buffer table keyed
 by project, path and session/field identity; there is no separate transient registration
 table. Save, discard, rename and release all traverse that same table.
+Each retained buffer owns a Zustand store for text, dirty state, edit generation and
+base version. Snapshot reads and subscriptions use that store directly; there is no
+parallel mutable text snapshot or custom listener collection. Edit completion reads
+the current generation before clearing dirty state, preserving newer input.
+Text changes and edit completion recheck the same buffer's project lifecycle and release
+state after notifying subscribers, before updating the resource's dirty flag.
+Concurrent flushes recheck the same in-flight edit after every wait; only one caller submits
+the next dirty generation using the preceding reply's version. A failed edit leaves the input
+pending and rejects its waiters without an implicit retry.
 `documentInputs` retains Mind topic buffers across Details target changes so Save,
 Discard and close still reach unfinished text after the form unmounts. These are
 transient inputs, not a second document authority; the last file close, resource
@@ -49,6 +90,10 @@ explicit removal and project reset release them. Doc Markdown buffers use the sa
 retention mechanism. Committed renames move registrations to the new path; only an
 exact matching base version advances across that rename, preserving conflicts for
 stale text. Both command replies and earlier publication events use this path.
+Rename transfers the captured registrations before notifying their buffers and only
+remaps inputs still owned by that target registration. Notifications may release or
+replace registrations without the old rename overwriting them. A project lifecycle
+change aborts the old rename continuation before its caller publishes file state.
 External file disappearance retains dirty snapshots and buffers until explicit
 discard; editing state cannot restore a missing file's index membership.
 `applyMindEdits` flushes these inputs and
@@ -77,3 +122,8 @@ Each file handler exposes an edit-queue barrier. Window/project close, panel clo
 and save-all wait through `settleEditorFileEdits` before reading dirty state. Queue
 ownership is the only pending-operation state; snapshots carry authoritative file
 versions without a second UI revision counter.
+Rename, duplicate and Save capture the original project lifecycle before flushing inputs
+and recheck it before entering the command queue. Discard rechecks after the queue and
+after clearing captured input buffers, before updating dirty flags or releasing content;
+synchronous input notifications cannot redirect that continuation to a successor project.
+Save also verifies the original lifecycle before reporting its final clean state.

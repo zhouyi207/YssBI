@@ -10,8 +10,10 @@ import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useActiveProjectPath } from "@/features/application/project/projectSession";
 import { requestCloseProject } from "@/features/application/project/closeProject";
-import { useApplicationAppearance } from "@/features/application/settings/applicationSettings";
-import { getRememberedColorTheme } from "@/shared/theme/colorThemePresets";
+import {
+  toggleApplicationThemeMode,
+  useApplicationThemeMode,
+} from "@/features/application/settings/applicationSettings";
 import {
   openExternalUrlWithDialog,
   useCurrentWindowActions,
@@ -32,7 +34,6 @@ export type MenuItem = WorkbenchMenuItem;
 export function buildEditMenuItems(
   translate: (key: string) => string,
   state: {
-    activeResourceRef: string | null;
     canUndo: boolean;
     canRedo: boolean;
     editorCommandAuthorized: boolean;
@@ -181,7 +182,7 @@ export function WorkbenchMenuContribution({
     deleteSelected,
     createFile,
   } = commands;
-  const { canUndo, canRedo, activeResourceRef } = useEditorHistoryAvailability();
+  const { canUndo, canRedo } = useEditorHistoryAvailability();
   const {
     openSettings,
     editorCommandAuthorized,
@@ -195,21 +196,10 @@ export function WorkbenchMenuContribution({
   } = useMenubar();
   const currentPath = useActiveProjectPath();
   const projectAvailable = Boolean(currentPath);
-  const { themeMode, appearance, updateAppearance } = useApplicationAppearance();
+  const themeMode = useApplicationThemeMode();
   const isLightTheme = themeMode === "light";
   const windowControls = useCurrentWindowActions();
   const customChrome = useCustomTitleBar();
-
-  const toggleThemeMode = () => {
-    const nextMode = isLightTheme ? "dark" : "light";
-    updateAppearance({
-      colorTheme: getRememberedColorTheme(
-        nextMode,
-        appearance.lastLightColorTheme,
-        appearance.lastDarkColorTheme,
-      ),
-    });
-  };
 
   const fileItems = buildFileMenuItems(
     t,
@@ -229,7 +219,7 @@ export function WorkbenchMenuContribution({
 
   const editItems = buildEditMenuItems(
     t,
-    { activeResourceRef, canUndo, canRedo, editorCommandAuthorized },
+    { canUndo, canRedo, editorCommandAuthorized },
     {
       undo: () => void undo(),
       redo: () => void redo(),
@@ -302,7 +292,7 @@ export function WorkbenchMenuContribution({
         themeToggle={{
           isLightTheme,
           label: isLightTheme ? t("menubar.switchToDark") : t("menubar.switchToLight"),
-          onToggle: toggleThemeMode,
+          onToggle: toggleApplicationThemeMode,
         }}
         windowControls={windowControls}
       />

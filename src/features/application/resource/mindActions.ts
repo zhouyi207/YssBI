@@ -1,10 +1,9 @@
 import { MindService } from "@/services/mind/mindService";
-import { mindProjection } from "@/features/core/resource/mindProjectionStore";
 import { createFileActions } from "./createFileActions";
 import type { MindEdit, MindSnapshot } from "@/shared/types/domain/mind";
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
 import { flushDocumentInputs } from "./documentInputs";
-export const mindActions = createFileActions(mindProjection, MindService);
+export const mindActions = createFileActions("mind", MindService);
 
 export async function applyMindEdits(
   snapshot: MindSnapshot,

@@ -1,35 +1,32 @@
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { ReportKind, ResultDescriptor } from "@/features/application/results/types";
-import { validateReportPayload } from "@/shared/types/report/reportValidation";
-import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
+import type { ResultDescriptor } from "@/features/application/results/types";
+import type { ReportValidationResult } from "@/shared/types/report/reportValidation";
+import { reportInvalidReport } from "@/features/application/observability/reportViewIssue";
 import { LinearResultBindings } from "./LinearResultBindings";
 import { StructuredResult } from "./StructuredResult";
 import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 
 interface ReportViewProps {
   descriptor: ResultDescriptor;
-  report: ReportKind;
-  data: unknown;
+  validation: ReportValidationResult;
   onValueChange?: (value: LinearRegressionReportData) => void;
 }
 
-export function ReportView({ descriptor, report, data, onValueChange }: ReportViewProps) {
-  const validation = useMemo(
-    () => validateReportPayload(descriptor, report, data),
-    [descriptor, report, data],
-  );
-
+export function ReportView({ descriptor, validation, onValueChange }: ReportViewProps) {
   useEffect(() => {
     if (!validation.ok) {
-      reportViewIssue("data", JSON.stringify(validation.diagnostic), "ReportValidation");
+      reportInvalidReport(validation.diagnostic);
     }
   }, [validation]);
 
   let content: ReactNode;
   if (!validation.ok) {
-    const label = report === "linearRegressionSummary" ? "linear regression report" : "report";
+    const label =
+      validation.diagnostic.presentation.report === "linearRegressionSummary"
+        ? "linear regression report"
+        : "report";
     content = (
       <Alert variant="destructive" className="m-4 w-auto">
         <AlertDescription className="text-destructive">
@@ -40,13 +37,10 @@ export function ReportView({ descriptor, report, data, onValueChange }: ReportVi
     );
   } else {
     content =
-      report === "linearRegressionSummary" ? (
-        <LinearResultBindings
-          data={validation.value as LinearRegressionReportData}
-          onValueChange={onValueChange}
-        />
+      validation.value.kind === "linearRegressionSummary" ? (
+        <LinearResultBindings data={validation.value.data} onValueChange={onValueChange} />
       ) : (
-        <StructuredResult reference={descriptor} value={validation.value} />
+        <StructuredResult reference={descriptor} report={validation.value} />
       );
   }
 

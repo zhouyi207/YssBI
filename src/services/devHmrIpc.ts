@@ -23,20 +23,25 @@ export function trackChannel<T>(channel: Channel<T>, onDispose?: () => void): Ch
   return channel;
 }
 
-/** 操作结束后注销 Channel。生产环境为 no-op。 */
+/** 操作结束后释放 Channel 的清理登记。 */
 export function untrackChannel<T>(channel: Channel<T>): void {
   activeChannels.delete(channel);
 }
 
 export function disposeTrackedChannelsForHmr(): void {
-  for (const [channel, dispose] of activeChannels) {
+  const captured = Array.from(activeChannels);
+  activeChannels.clear();
+  let failure: { value: unknown } | undefined;
+  for (const [channel, dispose] of captured) {
     try {
       dispose?.();
+    } catch (error) {
+      failure ??= { value: error };
     } finally {
       clearChannelMessageHandler(channel);
     }
   }
-  activeChannels.clear();
+  if (failure) throw failure.value;
 }
 
 if (import.meta.hot) {

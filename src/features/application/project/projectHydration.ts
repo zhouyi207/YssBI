@@ -1,19 +1,14 @@
-import { useMindProjectionStore } from "@/features/core/resource/mindProjectionStore";
-import { useDocProjectionStore } from "@/features/core/resource/docProjectionStore";
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { PROJECT_ACTIVITY_PANEL_IDS } from "@/shared/types/domain/activityPanel";
 import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import { useProjectIOStore, resetGraphLoadOwnership } from "./projectIOStore";
 import { LoadStatus } from "@/shared/types/ui/common";
-import { ProjectService, type ProjectActivationResult } from "@/services/project/projectService";
+import { ProjectService } from "@/services/project/projectService";
+import type { ProjectActivationResult } from "@/shared/types/domain/project";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
-import { logger } from "@/features/application/observability/appLogger";
+import { logger } from "@/utils/frontendLogger";
 
-import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useResourceStore } from "@/features/core/resource";
 import { resetClientProjectState } from "@/features/application/project/projectReset";
 import { synchronizeProjectPresentation } from "@/features/application/project/projectPresentationSync";
@@ -22,8 +17,6 @@ import { projectPublicationCoordinator } from "@/features/application/editorMuta
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
 import { resetGraphEditCoordinator } from "@/features/application/graphEditing/graphEditCoordinator";
 import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
-import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useViewportStore } from "@/features/core/viewport";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
@@ -44,8 +37,7 @@ import {
   type ProjectLifecycleStateSnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
-export interface ProjectLoadReceipt {
-  readonly projectInstanceId: string;
+export interface ProjectLoadReceipt extends ProjectIdentitySnapshot {
   readonly publicationRevision: number;
 }
 
@@ -92,10 +84,6 @@ export async function prepareAuthoritativeProjectLoad(
   identity: ProjectIdentitySnapshot,
   dependencyOverrides: Partial<AuthoritativeProjectLoadPlanDependencies> = {},
 ): Promise<PreparedAuthoritativeProjectLoad> {
-  const path = await ProjectService.getProjectPath();
-  assertCurrentProjectIdentity(identity);
-  const { databases } = await ProjectService.getDatabases();
-  assertCurrentProjectIdentity(identity);
   const locale = currentProjectionLocale();
   const { index, activityPanels } = await ProjectService.getProjectIndex(
     identity.projectInstanceId,
@@ -105,10 +93,20 @@ export async function prepareAuthoritativeProjectLoad(
   if (index.projectInstanceId !== identity.projectInstanceId) {
     throw new Error("Project index identity does not match the requested project");
   }
+  const path = await ProjectService.getProjectPath(identity.projectInstanceId);
+  assertCurrentProjectIdentity(identity);
+  const { databases } = await ProjectService.getDatabases(
+    identity.projectInstanceId,
+    index.publicationRevision,
+  );
+  assertCurrentProjectIdentity(identity);
+  const current = useResourceStore.getState();
+  const sameProject = useProjectIOStore.getState().projectInstanceId === identity.projectInstanceId;
   const prepared = buildAuthoritativeProjectLoadPlan(
     { path, databases, index },
     {
-      databases: useDatabaseStore.getState().databases,
+      databases: sameProject ? current.databases : {},
+      resources: sameProject ? current.resources : {},
       detailFocus: useEditorStore.getState().detailFocus,
     },
     {
@@ -122,21 +120,17 @@ export async function prepareAuthoritativeProjectLoad(
   return { ...prepared, identity, locale, activityPanels };
 }
 
-function commitProjectLoadStep(label: string, assignment: () => void): void {
-  try {
-    assignment();
-  } catch (error) {
-    logProjectIOError(
-      `Project load commit listener failed at '${label}'`,
-      toErrorReference(error, PROJECT_LOAD_COMMIT_ERROR_CODE),
-    );
+function assertProjectLoadCurrent(identity: ProjectIdentitySnapshot, revision: number): void {
+  assertCurrentProjectIdentity(identity);
+  if (revision < projectPublicationCoordinator.capturePublicationRevision()) {
+    throw new ProjectLifecycleError();
   }
 }
 
 export async function commitPreparedAuthoritativeProjectLoad(
   prepared: PreparedAuthoritativeProjectLoad,
 ): Promise<ProjectLoadReceipt> {
-  assertCurrentProjectIdentity(prepared.identity);
+  assertProjectLoadCurrent(prepared.identity, prepared.index.publicationRevision);
   const previousProjectInstanceId = useProjectIOStore.getState().projectInstanceId;
   const nextProjectInstanceId = prepared.index.projectInstanceId;
   const isProjectReplacement =
@@ -144,16 +138,30 @@ export async function commitPreparedAuthoritativeProjectLoad(
   if (isProjectReplacement) {
     await removeProjectScopedWorkbenchPanels(previousProjectInstanceId, prepared.identity);
   }
-  assertCurrentProjectIdentity(prepared.identity);
+  assertProjectLoadCurrent(prepared.identity, prepared.index.publicationRevision);
   if (useProjectIOStore.getState().projectInstanceId !== previousProjectInstanceId) {
     throw new ProjectLifecycleError();
   }
 
-  projectPublicationCoordinator.startProject(
+  const identity = projectPublicationCoordinator.startProject(
     nextProjectInstanceId,
     prepared.index.publicationRevision,
     prepared.index,
   );
+  const assertCurrent = () =>
+    assertProjectLoadCurrent(identity, prepared.index.publicationRevision);
+  const commitProjectLoadStep = (label: string, assignment: () => void): void => {
+    assertCurrent();
+    try {
+      assignment();
+    } catch (error) {
+      logProjectIOError(
+        `Project load commit listener failed at '${label}'`,
+        toErrorReference(error, PROJECT_LOAD_COMMIT_ERROR_CODE),
+      );
+    }
+    assertCurrent();
+  };
   commitProjectLoadStep("graph projection lifecycle", resetGraphProjectionLifecycle);
   commitProjectLoadStep("graph edit coordinator", resetGraphEditCoordinator);
   resetGraphLoadOwnership();
@@ -163,53 +171,42 @@ export async function commitPreparedAuthoritativeProjectLoad(
     }),
   );
   commitProjectLoadStep("function signature coordinator", resetFunctionSignatureCoordinator);
-  commitProjectLoadStep("graph data", () => useGraphProjectionStore.getState().clear());
 
   commitProjectLoadStep("detail focus", () =>
     useEditorStore.setState({
       detailFocus: isProjectReplacement ? null : prepared.storeState.detailFocus,
     }),
   );
-  commitProjectLoadStep("viewport", () => useViewportStore.setState({ viewports: {} }));
+  commitProjectLoadStep("viewport", () => useViewportStore.getState().clear());
   commitProjectLoadStep("graph interaction", () =>
     useGraphInteractionStore.setState({
       interactions: {},
     }),
   );
-  commitProjectLoadStep("database", () =>
-    useDatabaseStore.setState({
-      databases: prepared.storeState.databases,
-      revisions: prepared.storeState.databaseRevisions,
-    }),
-  );
-  commitProjectLoadStep("chart", () => useChartDocumentStore.getState().clear());
-  commitProjectLoadStep("documents", () => {
-    useMindProjectionStore.getState().clear();
-    useDocProjectionStore.getState().clear();
-  });
-  commitProjectLoadStep("documents", () => useDocumentStateStore.setState({ documents: {} }));
   commitProjectLoadStep("resources", () =>
     useResourceStore.getState().setSnapshot({
+      databases: prepared.storeState.databases,
       resources: Object.values(prepared.storeState.resources),
+      documents: {},
+      chartDocuments: {},
+      fileSnapshots: { mind: {}, doc: {} },
+      graphProjection: { sessions: {}, graphEntities: {}, resultStates: {} },
+      graphMeta: prepared.storeState.graphMeta,
       graphOrder: prepared.storeState.graphOrder,
       publicationRevision: prepared.index.publicationRevision,
     }),
   );
   commitProjectLoadStep("activity panels", () => {
-    const identity = captureProjectIdentity();
-    const updates = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) => ({
-      binding: useSidebarStore
+    const updates = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) => {
+      assertCurrent();
+      const binding = useSidebarStore
         .getState()
-        .bindPanel({ panelId, ...identity, locale: prepared.locale }),
-      snapshot: prepared.activityPanels[panelId],
-    }));
+        .bindPanel({ panelId, ...identity, locale: prepared.locale });
+      assertCurrent();
+      return { binding, snapshot: prepared.activityPanels[panelId] };
+    });
     useSidebarStore.getState().publishPanels(updates);
   });
-  commitProjectLoadStep("function metadata", () =>
-    useGraphMetaStore.setState({
-      graphs: prepared.storeState.graphMeta,
-    }),
-  );
   commitProjectLoadStep("graph session", () =>
     useGraphSessionStore.setState({ focusedSession: null }),
   );
@@ -221,7 +218,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
     logger.sys.info("Project loaded (index from Rust)", "ProjectIOStore");
   });
   return {
-    projectInstanceId: prepared.index.projectInstanceId,
+    ...identity,
     publicationRevision: prepared.index.publicationRevision,
   };
 }
@@ -246,9 +243,11 @@ async function loadProjectForIdentity(
     key,
     promise: Promise.resolve<ProjectLoadReceipt | null>(null),
   };
-  entry.promise = (async () => {
-    useProjectIOStore.setState({ status: LoadStatus.Loading, error: null });
+  entry.promise = Promise.resolve().then(async () => {
     try {
+      assertCurrentProjectIdentity(identity);
+      useProjectIOStore.setState({ status: LoadStatus.Loading, error: null });
+      assertCurrentProjectIdentity(identity);
       const prepared = await prepareAuthoritativeProjectLoad(identity);
       assertCurrentProjectIdentity(identity);
       return await commitPreparedAuthoritativeProjectLoad(prepared);
@@ -261,7 +260,7 @@ async function loadProjectForIdentity(
     } finally {
       if (loadProjectInFlight === entry) loadProjectInFlight = null;
     }
-  })();
+  });
   loadProjectInFlight = entry;
   return entry.promise;
 }
@@ -307,18 +306,11 @@ export async function clearProjectProjection(owner: ProjectLifecycleStateSnapsho
   expectedProjectInstanceId = null;
   if (
     !commitOwnedClear(() => {
-      useGraphProjectionStore.getState().clear();
+      useResourceStore.getState().clear();
     })
   )
     return;
 
-  if (!commitOwnedClear(() => useDatabaseStore.getState().clear())) return;
-  if (
-    !commitOwnedClear(() =>
-      useResourceStore.getState().setSnapshot({ resources: [], graphOrder: [] }),
-    )
-  )
-    return;
   if (!commitOwnedClear(synchronizeProjectPresentation)) return;
   commitOwnedClear(() => {
     useProjectIOStore.setState({ status: LoadStatus.Ready, currentPath: null, error: null });
