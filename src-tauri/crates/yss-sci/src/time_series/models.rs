@@ -4,7 +4,7 @@ use crate::time_series::var::{VAR, VARConfig, VARSocResult, VarFit, var_varsoc};
 use crate::time_series::vec::{
     VECConfig, VecFit, VecRankResult, VecTrendSpec, vec_estimate, vec_vecrank_stats,
 };
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 use yss_sci_linalg::Mat;
 pub fn augmented_dickey_fuller(
     series: &[f64],
@@ -18,7 +18,7 @@ pub fn augmented_dickey_fuller(
         _ => {
             return Err(invalid_input(
                 SciOperationCode::Adf,
-                SciInputViolation::ParameterOutOfRange,
+                ScientificInputViolation::ParameterOutOfRange,
             ));
         }
     };
@@ -33,10 +33,16 @@ fn multivariate_series(
 ) -> Result<Mat<f64>, SciError> {
     let observations = series.first().map(Vec::len).unwrap_or(0);
     if series.len() < 2 || observations == 0 {
-        return Err(invalid_input(operation, SciInputViolation::EmptyInput));
+        return Err(invalid_input(
+            operation,
+            ScientificInputViolation::EmptyInput,
+        ));
     }
     if series.iter().any(|item| item.len() != observations) {
-        return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
+        return Err(invalid_input(
+            operation,
+            ScientificInputViolation::ShapeMismatch,
+        ));
     }
     Ok(Mat::from_fn(observations, series.len(), |row, col| {
         series[col][row]
@@ -74,7 +80,10 @@ pub fn var_fit_configured(
             .iter()
             .any(|x| x.len() != n || x.iter().any(|v| !v.is_finite()))
     {
-        return Err(invalid_input(op, SciInputViolation::ParameterOutOfRange));
+        return Err(invalid_input(
+            op,
+            ScientificInputViolation::ParameterOutOfRange,
+        ));
     }
     let exog =
         (!exogenous.is_empty()).then(|| Mat::from_fn(n, exogenous.len(), |i, j| exogenous[j][i]));
@@ -99,7 +108,7 @@ pub fn var_lag_order(series: Vec<Vec<f64>>, max_lags: usize) -> Result<VARSocRes
     if max_lags == 0 {
         return Err(invalid_input(
             SciOperationCode::VarLagOrder,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     let result = var_varsoc(
@@ -131,7 +140,7 @@ pub fn vec_fit_named(
     if lags == 0 {
         return Err(invalid_input(
             SciOperationCode::VecFit,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     let result = vec_estimate(
@@ -156,7 +165,7 @@ pub fn vec_rank_test(
     if lags == 0 {
         return Err(invalid_input(
             SciOperationCode::VecRank,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     let result = vec_vecrank_stats(
@@ -178,7 +187,7 @@ fn vec_trend(trend: &str, operation: SciOperationCode) -> Result<VecTrendSpec, S
         "trend" => Ok(VecTrendSpec::Trend),
         _ => Err(invalid_input(
             operation,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         )),
     }
 }

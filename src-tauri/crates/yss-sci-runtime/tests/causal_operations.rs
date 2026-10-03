@@ -1,4 +1,4 @@
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 use yss_sci_runtime::causal::did::fit_did;
 
 #[test]
@@ -25,18 +25,18 @@ fn twfe_did_preserves_treatment_effect_and_report_contract() {
         treatment.clone(),
     )
     .unwrap();
-    assert_eq!(report["family"], "panel_did_twfe");
-    assert_eq!(report["statistics"]["observations"], 48);
-    assert_eq!(report["statistics"]["entities"], 8);
-    assert_eq!(report["statistics"]["timePeriods"], 6);
-    assert!((report["coefficients"][1].as_f64().unwrap() - 1.75).abs() < 1e-10);
+    assert_eq!(report.family, "panel_did_twfe");
+    assert_eq!(report.statistics.observations, 48);
+    assert_eq!(report.statistics.entities, 8);
+    assert_eq!(report.statistics.time_periods, 6);
+    assert!((report.coefficients[1] - 1.75).abs() < 1e-10);
 
     treatment.pop();
     assert!(matches!(
         fit_did(response, vec![], entities, times, treatment),
         Err(SciError::InvalidInput {
             operation: SciOperationCode::Panel,
-            violation: SciInputViolation::ShapeMismatch,
+            violation: ScientificInputViolation::ShapeMismatch,
         })
     ));
 }

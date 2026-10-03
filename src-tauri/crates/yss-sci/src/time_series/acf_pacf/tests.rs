@@ -14,12 +14,14 @@ fn combined_computation_preserves_values_and_numerical_lag_bounds() {
     let values = (0..100).map(|i| (i as f64).sin()).collect::<Vec<_>>();
     let result = compute_acf_pacf(&values, usize::MAX, &control()).unwrap();
     assert_eq!(result.n, 100);
+    assert!((result.ci_half_width - 0.195_996_398_454_005_4).abs() < 1e-15);
     assert_eq!(result.acf.len(), 100);
     assert_eq!(result.acf, acf(&values, usize::MAX).unwrap());
     assert_eq!(result.pacf, pacf(&values, usize::MAX).unwrap());
     let constant = compute_acf_pacf(&[3.0; 4], 2, &control()).unwrap();
     assert_eq!(constant.acf, vec![1.0]);
     assert!(constant.pacf.is_empty());
+    assert!((constant.ci_half_width - 0.979_981_992_270_027).abs() < 1e-15);
 }
 
 #[test]

@@ -3,37 +3,15 @@
 // Quasi-demeaning: y*_it = y_it - θ_i·ȳ_i, where θ_i = 1 - sqrt(σ²_e/(T_i·σ²_u + σ²_e)).
 // Stata xtreg, re default: consistent variance components (harmonic mean T̄ for σ²_u).
 
+use super::data::within_transform_by_group as within_transform;
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear::OLS;
 
 use yss_sci_linalg::{MatrixExt, Solve};
 
-use yss_sci_linalg::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use std::collections::HashMap;
-
-/// Within transformation (same as FE)
-fn within_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
-    let n = v.len();
-    let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
-    for (i, &eid) in entity_id.iter().enumerate() {
-        let val = v[i];
-        if !val.is_nan() {
-            let entry = sums.entry(eid).or_insert((0.0, 0));
-            entry.0 += val;
-            entry.1 += 1;
-        }
-    }
-    let out: Vec<f64> = (0..n)
-        .map(|i| {
-            let eid = entity_id[i];
-            let (s, cnt) = sums.get(&eid).copied().unwrap_or((0.0, 0));
-            let mean = if cnt > 0 { s / cnt as f64 } else { 0.0 };
-            v[i] - mean
-        })
-        .collect();
-    (out).into_iter().collect::<Col<f64>>()
-}
+use yss_sci_linalg::{Col, Mat};
 
 /// Between transformation: replace each obs with entity mean (for quasi-demeaning)
 fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {

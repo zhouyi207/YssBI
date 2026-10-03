@@ -82,6 +82,46 @@ fn plot(
 }
 
 #[test]
+fn distribution_overview_returns_three_distinct_plot_carriers_from_all_rows() {
+    for values in [vec![3.; 640], (0..640).map(|i| i as f64).collect()] {
+        let output = run(
+            "yssbi.statistics.plot.statistical.family",
+            &[("values", series(&values))],
+            &[("bins", integer(0))],
+            &vec![ValueType::Struct("plot.data".into()); 3],
+        )
+        .unwrap();
+        assert_eq!(field(&output[0], "observations"), &integer(640));
+        let RuntimeValue::List(bins) = field(&output[0], "data") else {
+            panic!("histogram")
+        };
+        let count: i64 = bins
+            .iter()
+            .map(|b| match field(b, "count") {
+                RuntimeValue::Scalar(TabularScalar::Integer(v)) => *v,
+                _ => panic!("count"),
+            })
+            .sum();
+        assert_eq!(count, 640);
+        assert_eq!(
+            field(field(&output[1], "metadata"), "observations"),
+            &integer(640)
+        );
+        let RuntimeValue::List(points) = field(&output[1], "data") else {
+            panic!("ecdf")
+        };
+        assert_eq!(field(points.last().unwrap(), "y"), &number(1.));
+        let RuntimeValue::List(groups) = field(&output[2], "groups") else {
+            panic!("boxplot")
+        };
+        assert_eq!(field(&groups[0], "observations"), &integer(640));
+        assert_eq!(
+            field(&groups[0], "median"),
+            &number(if values[0] == values[639] { 3. } else { 319.5 })
+        );
+    }
+}
+#[test]
 fn every_visualization_kernel_executes_its_declared_input_layout_and_plot_carrier() {
     let x = series(&[1., 2., 3., 4., 5., 6., 7., 8.]);
     let y = series(&[2., 2.9, 4.2, 3.8, 5.1, 6.2, 5.9, 7.3]);

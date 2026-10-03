@@ -4,7 +4,7 @@ use crate::{
     KernelParameterKey, KernelRegistryBuilder, RuntimeValue,
 };
 use yss_data_contract::{
-    SemanticType, TabularScalar, ValueType,
+    SemanticType, TabularColumnName, TabularScalar, ValueType,
     aggregation::{AggregateOperation, ColumnAggregate},
 };
 use yss_relational_contract::RelationHandle;
@@ -49,7 +49,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(id.into()).expect("kernel id"),
-                std::num::NonZeroU32::new(1).unwrap(),
+                std::num::NonZeroU32::new(match operation {
+                    Operation::Describe | Operation::GroupBy => 2,
+                    _ => 1,
+                })
+                .unwrap(),
                 KernelContract::new(
                     [KernelInputSpec::fixed(input)],
                     parameters
@@ -73,7 +77,7 @@ fn names(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<Box<str>>, KernelE
         .iter()
         .map(|v| match v {
             RuntimeValue::Scalar(TabularScalar::String(s))
-                if !s.is_empty() && s.trim() == s.as_ref() && seen.insert(s.as_ref()) =>
+                if TabularColumnName::is_valid(s) && seen.insert(s.as_ref()) =>
             {
                 Ok(s.clone())
             }

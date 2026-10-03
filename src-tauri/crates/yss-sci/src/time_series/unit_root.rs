@@ -5,9 +5,8 @@
 //! - drift: 仅常数
 //! - trend: 常数 + 时间趋势
 
-use super::distributions::normal_cdf;
-
 use statrs::distribution::{ContinuousCDF, StudentsT};
+use yss_sci_contract::time_series::forecast::Deterministic;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
@@ -54,48 +53,6 @@ const MACKINNON_COEFFS: [[[f64; 3]; 3]; 3] = [
         [-3.1279, -3.2982, -7.0000],  // 10%
     ],
 ];
-
-/// MacKinnon (1994) p-value 近似：noconstant 与 trend 情形
-/// 参考 statsmodels tsa.adfvalues.mackinnonp
-/// polyval(coef[::-1], x) = coef[0]*x^0 + coef[1]*x^1 + ... (numpy 顺序)
-fn mackinnon_pvalue(teststat: f64, reg: AdfRegression) -> f64 {
-    // N=1 (ADF test), 使用 index 0
-    // tau_smallp: 3 系数, polyval(coef[::-1], teststat) = c2 + c1*x + c0*x^2
-    // tau_largep: 4 系数, polyval(coef[::-1], teststat) = c3 + c2*x + c1*x^2 + c0*x^3
-    let (max_stat, min_stat, star_stat, smallp, largep) = match reg {
-        AdfRegression::NoConstant => (
-            f64::INFINITY,
-            -19.04,
-            -1.04,
-            [0.6344, 1.2378, 0.032496],
-            [0.4797, 0.93557, -0.06999, 0.033066],
-        ),
-        AdfRegression::Trend => (
-            0.7,
-            -16.18,
-            -2.89,
-            [3.2512, 1.6047, 0.049588],
-            [2.5261, 0.61654, -0.37956, -0.060285],
-        ),
-        AdfRegression::Drift => return 0.0, // drift 用 t 分布，不在此调用
-    };
-
-    if teststat > max_stat {
-        return 1.0;
-    }
-    if teststat < min_stat {
-        return 0.0;
-    }
-
-    let x = if teststat <= star_stat {
-        let c = &smallp;
-        c[2] + c[1] * teststat + c[0] * teststat * teststat
-    } else {
-        let c = &largep;
-        c[3] + c[2] * teststat + c[1] * teststat * teststat + c[0] * teststat * teststat * teststat
-    };
-    normal_cdf(x)
-}
 
 fn mackinnon_critical_value(reg: AdfRegression, n: usize, level_idx: usize) -> f64 {
     let reg_idx = match reg {
@@ -162,6 +119,9 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     if n_raw < 4 {
         return Err("ADF: 至少需要 4 个观测值".to_string());
     }
+    if lags >= n_raw - 1 {
+        return Err("ADF: 滞后阶数过大，有效样本不足".to_string());
+    }
 
     let reg = AdfRegression::from_flags(constant, trend);
 
@@ -171,9 +131,6 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
 
     // 有效样本: 需要 y_{t-1} 和最多 lags 个 Δy_{t-j}，所以从 t = 1 + lags 开始
     let start = 1 + lags; // t=start 时，y_{t-1}=y[start-1] 存在，Δy_{t-1}..Δy_{t-lags} 都存在
-    if start >= n_raw {
-        return Err("ADF: 滞后阶数过大，有效样本不足".to_string());
-    }
 
     let n = n_raw - start; // 有效观测数
     if n < 2 {
@@ -272,7 +229,12 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         let cv_1 = mackinnon_critical_value(reg, n_obs, 0);
         let cv_5 = mackinnon_critical_value(reg, n_obs, 1);
         let cv_10 = mackinnon_critical_value(reg, n_obs, 2);
-        let p_val = mackinnon_pvalue(test_statistic, reg);
+        let deterministic = match reg {
+            AdfRegression::NoConstant => Deterministic::None,
+            AdfRegression::Drift => Deterministic::Constant,
+            AdfRegression::Trend => Deterministic::Trend,
+        };
+        let p_val = super::mackinnon::p_value(test_statistic, deterministic, 1);
         (cv_1, cv_5, cv_10, p_val, false)
     };
 

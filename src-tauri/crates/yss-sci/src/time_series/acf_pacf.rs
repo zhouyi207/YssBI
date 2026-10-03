@@ -32,6 +32,7 @@ pub fn compute_acf_pacf(
         acf,
         pacf,
         n: values.len(),
+        ci_half_width: 1.959_963_984_540_054 / (values.len() as f64).sqrt(),
     })
 }
 

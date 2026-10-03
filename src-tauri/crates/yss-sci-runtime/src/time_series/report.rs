@@ -226,6 +226,13 @@ fn decorate(
         );
     }
     if let Some(matrix) = report["model"]["sigma"].as_array() {
+        if matrix.len() != names.len()
+            || matrix
+                .iter()
+                .any(|row| row.as_array().is_none_or(|row| row.len() != names.len()))
+        {
+            return Err(computation_failed(SciOperationCode::VarFit));
+        }
         report["sigma_rows"] =
             json!(
                 matrix

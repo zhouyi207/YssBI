@@ -1,5 +1,7 @@
-use super::white::white_test;
-use super::white::white_test_weighted;
+use super::{
+    breusch_pagan::BreuschPaganResult,
+    white::{white_test, white_test_weighted},
+};
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 use yss_sci_linalg::{Col, Mat};
 
@@ -17,35 +19,29 @@ fn lm_chi2_aux(y: &Col<f64>, z_matrix: &yss_sci_linalg::Mat<f64>) -> Result<(f64
     if uss <= 0.0 {
         return Ok((0.0, 0));
     }
-    let s_sv = z_matrix
-        .as_ref()
-        .singular_values()
+    let svd = yss_sci_linalg::Svd::factor(z_matrix.as_ref())
         .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
-    let max_sv = s_sv.first().copied().unwrap_or(0.0);
+    let s_sv = svd.values();
+    let max_sv = s_sv.iter().next().copied().unwrap_or(0.0);
     let tol = 1e-10_f64 * max_sv.max(1e-10);
     let rank = s_sv.iter().filter(|v| **v > tol).count();
     let df = rank.saturating_sub(1);
     if df == 0 {
         return Ok((0.0, 0));
     }
-    let svd = yss_sci_linalg::Svd::factor(z_matrix.as_ref())
-        .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
     let u = svd.left_vectors();
     let v = svd.right_vectors();
     let size = Ord::min(z_matrix.nrows(), z_matrix.ncols());
-    let b_col = y.as_ref().to_owned();
-    let tmp = u.submatrix(0, 0, u.nrows(), size).transpose() * b_col.as_ref();
+    let tmp = u.submatrix(0, 0, u.nrows(), size).transpose() * y.as_ref();
     let mut tmp2 = Mat::zeros(size, 1);
-    let tmp_nd = tmp.as_ref().to_owned();
     for i in 0..size {
         let si = s_sv[i];
-        let ti = tmp_nd[i];
+        let ti = tmp[i];
         tmp2.as_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
     }
     let gamma = v.submatrix(0, 0, v.nrows(), size).as_ref() * tmp2.as_ref();
     let y_hat = z_matrix.as_ref() * gamma.as_ref();
-    let y_hat_mat = y_hat.as_ref().to_owned();
-    let y_hat_nd: Col<f64> = y_hat_mat.col(0).to_owned();
+    let y_hat_nd = y_hat.col(0);
     let rss: f64 = y
         .iter()
         .zip(y_hat_nd.iter())
@@ -71,18 +67,25 @@ pub fn im_test(x: &Mat<f64>, residuals: &Col<f64>) -> Result<ImTestResult, Strin
         return Err("im_test: need at least 2 columns in X (constant + 1 regressor)".to_string());
     }
 
-    let s2 = residuals.iter().map(|u| u * u).sum::<f64>() / n as f64;
-
     // Heteroskedasticity: White 检验
     let hetero = white_test(x, residuals)?;
+    im_test_from_white(x, residuals, hetero)
+}
+
+fn im_test_from_white(
+    x: &Mat<f64>,
+    residuals: &Col<f64>,
+    hetero: BreuschPaganResult,
+) -> Result<ImTestResult, String> {
+    let n = x.nrows();
+    let s2 = residuals.iter().map(|u| u * u).sum::<f64>() / n as f64;
 
     // Skewness: y_s = u³ - 3·σ²·u，对 X 回归
     let y_s: Col<f64> = Col::from_fn(n, |i| {
         let u = residuals[i];
         u * u * u - 3.0 * s2 * u
     });
-    let x_matrix = x.as_ref().to_owned();
-    let (chi2_s, df_s) = lm_chi2_aux(&y_s, &x_matrix)?;
+    let (chi2_s, df_s) = lm_chi2_aux(&y_s, x)?;
     let chi2_skew =
         ChiSquared::new(df_s as f64).map_err(|e| format!("im_test skewness: ChiSquared: {}", e))?;
     let p_s = if df_s > 0 {
@@ -148,20 +151,5 @@ pub fn im_test_weighted(
     weights: &Col<f64>,
 ) -> Result<ImTestResult, String> {
     let hetero = white_test_weighted(x, residuals, weights)?;
-    let mut base = im_test(x, residuals)?;
-    base.heteroskedasticity = Chi2TestResult {
-        chi2: hetero.lm_stat,
-        df: hetero.df,
-        p_value: hetero.p_value,
-    };
-    let total_chi2 = base.heteroskedasticity.chi2 + base.skewness.chi2 + base.kurtosis.chi2;
-    let total_df = base.heteroskedasticity.df + base.skewness.df + base.kurtosis.df;
-    let chi2_total = ChiSquared::new(total_df as f64)
-        .map_err(|e| format!("im_test_weighted total: ChiSquared: {}", e))?;
-    base.total = Chi2TestResult {
-        chi2: total_chi2,
-        df: total_df,
-        p_value: 1.0 - chi2_total.cdf(total_chi2),
-    };
-    Ok(base)
+    im_test_from_white(x, residuals, hetero)
 }

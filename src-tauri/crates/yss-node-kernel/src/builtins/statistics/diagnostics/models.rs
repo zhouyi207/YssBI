@@ -1,9 +1,7 @@
 use super::super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::{
-    diagnostics::model::*, execution::*, regression::fit::RegressionFit, survival::*,
-};
+use yss_sci_contract::{diagnostics::model::*, execution::*, survival::*};
 use yss_sci_runtime::diagnostics as sci;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
@@ -78,20 +76,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         );
     }
 }
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
 fn workspace(
     method: &str,
     n: usize,
@@ -142,32 +126,6 @@ fn workspace(
             .checked_add(64 * 1024)
     })())?;
     Ok(())
-}
-fn model_dimensions(v: &RuntimeValue) -> Result<(usize, usize, bool), KernelError> {
-    if let RuntimeValue::LinearRegression(m) = v {
-        return Ok((m.fitted.len(), m.design.len(), false));
-    }
-    let RuntimeValue::List(residuals) = field(v, "residuals")? else {
-        return Err(KernelError::InvalidNumericInput);
-    };
-    let RuntimeValue::List(design) = field(v, "design")? else {
-        return Err(KernelError::InvalidNumericInput);
-    };
-    Ok((residuals.len(), design.len(), true))
-}
-fn with_model<T>(
-    value: &RuntimeValue,
-    inv: &KernelInvocation<'_>,
-    f: impl FnOnce(DiagnosticModel<'_>) -> Result<T, KernelError>,
-) -> Result<T, KernelError> {
-    match value {
-        RuntimeValue::LinearRegression(model) => f(DiagnosticModel::Linear(model)),
-        RuntimeValue::Record(_) => {
-            let model: RegressionFit = decode_model_value(value, inv)?;
-            f(DiagnosticModel::Binary(&model))
-        }
-        _ => Err(KernelError::InvalidNumericInput),
-    }
 }
 fn observation_table(
     model: &yss_sci_contract::regression::linear::LinearRegressionResult,
@@ -256,7 +214,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             let RuntimeValue::LinearRegression(model) = first else {
                 return Err(KernelError::InvalidNumericInput);
             };
-            let result = sci::influence::influence(model, &control).map_err(error)?;
+            let result = sci::influence::influence(model, &control).map_err(computation_error)?;
             return Ok(vec![
                 value(&result.summary, inv)?,
                 observation_table(model, &result, inv)?,
@@ -264,7 +222,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         }
         let result = with_model(first, inv, |model| {
             if matches!(method, "aic" | "bic") {
-                let ic = sci::comparison::information_criteria(model, &control).map_err(error)?;
+                let ic = sci::comparison::information_criteria(model, &control)
+                    .map_err(computation_error)?;
                 #[derive(serde::Serialize)]
                 struct Criterion<'a> {
                     criterion: &'a str,
@@ -295,7 +254,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     };
                     value(
                         sci::comparison::compare_models(model, full, kind, &control)
-                            .map_err(error)?,
+                            .map_err(computation_error)?,
                         inv,
                     )
                 })
@@ -314,8 +273,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let result = match method {
         "collinearity" => {
             let constant = boolean(inv, "constant")?;
-            let mut result =
-                sci::design::collinearity(&numbers, constant, &control).map_err(error)?;
+            let mut result = sci::design::collinearity(&numbers, constant, &control)
+                .map_err(computation_error)?;
             for (i, term) in result
                 .terms
                 .iter_mut()
@@ -326,7 +285,10 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             }
             value(result, inv)?
         }
-        "harman" => value(sci::design::harman(&numbers, &control).map_err(error)?, inv)?,
+        "harman" => value(
+            sci::design::harman(&numbers, &control).map_err(computation_error)?,
+            inv,
+        )?,
         "nri_idi" => {
             let RuntimeValue::List(thresholds) = inv
                 .parameter("risk_thresholds")
@@ -352,7 +314,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     &thresholds,
                     &control,
                 )
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -382,7 +344,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 transform,
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             for (j, (coefficient, term)) in result
                 .coefficients
                 .iter_mut()

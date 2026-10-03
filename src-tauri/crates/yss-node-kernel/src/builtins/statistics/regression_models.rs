@@ -1,14 +1,12 @@
 use super::{
     Input,
-    common::{boolean, categories, integer, number, numeric, text, value},
+    common::{boolean, categories, computation_error, integer, number, numeric, text, value},
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
     KernelRegistryBuilder, RuntimeValue,
 };
-use yss_sci_contract::execution::{
-    ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
-};
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::regression::models::*;
 use yss_sci_runtime::regression::models as sci;
 
@@ -154,25 +152,27 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
-                std::num::NonZeroU32::new(2).unwrap(),
+                std::num::NonZeroU32::new(
+                    if matches!(
+                        method,
+                        "regression.hierarchical"
+                            | "regression.stepwise"
+                            | "regression.curve"
+                            | "workflow.regression.baseline"
+                            | "workflow.regression.univariate_multivariable"
+                            | "workflow.regression.grouped"
+                            | "transform.rcs"
+                    ) {
+                        3
+                    } else {
+                        2
+                    },
+                )
+                .unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )
             .expect("unique regression model kernel");
-    }
-}
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
     }
 }
 fn typed_columns(
@@ -416,7 +416,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     integer(inv, "knot_count")?,
                     &control,
                 )
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 "manual" => list(inv, "knots")?,
                 _ => return Err(KernelError::InvalidParameter),
             };
@@ -436,7 +436,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 sizes.iter().map(|v| *v as usize).collect()
             };
             return Ok(vec![value(
-                sci::hierarchical(&y, &predictors, &sizes, constant, &control).map_err(error)?,
+                sci::hierarchical(&y, &predictors, &sizes, constant, &control)
+                    .map_err(computation_error)?,
                 inv,
             )?]);
         }
@@ -454,21 +455,21 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             };
             return Ok(vec![value(
                 sci::stepwise(&y, &predictors, constant, direction, criterion, &control)
-                    .map_err(error)?,
+                    .map_err(computation_error)?,
                 inv,
             )?]);
         }
         "workflow.regression.univariate_multivariable" => {
             return Ok(vec![value(
                 sci::univariate_multivariable(&y, &predictors, constant, &control)
-                    .map_err(error)?,
+                    .map_err(computation_error)?,
                 inv,
             )?]);
         }
         "workflow.regression.grouped" => {
             let (codes, labels) = group.ok_or(KernelError::InvalidNumericInput)?;
             let result = sci::grouped(&y, &predictors, &codes, constant, &control)
-                .map_err(error)?
+                .map_err(computation_error)?
                 .map_labels(|i| labels[i].clone());
             return Ok(vec![value(result, inv)?]);
         }
@@ -560,7 +561,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             )
         }
     }
-    .map_err(error)?;
+    .map_err(computation_error)?;
     let model = model.map_categories(|i| labels[i].clone());
     Ok(vec![value(model, inv)?])
 }

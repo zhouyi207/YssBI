@@ -9,6 +9,50 @@
 
 ## 调用边界
 
+`builtins/statistics/decision` 分别读取共同对齐的指标列与独立行域的指标权重向量，
+按实际行列数、SVD/相关矩阵工作区和关系输出合并预算。权重长度匹配指标数量，
+不要求权重行域与观测行域相同。摘要恢复指标名；逐行评分进入固定字段可分页表，
+归一化权重另作数列输出，支持“赋权 → 评分”的图组合。
+
+Decision 适配按 `columns`、`ranking`、`systems` 拆分；只给独立性赋权计入 SVD 工作区。
+VIKOR 保留折中条件和集合，耦合/障碍度的无定义单元通过共享数值表转换保留 Null。
+该转换仍拒绝 NaN/Infinity，固定表字段继续由 Catalog 持有。
+
+`decision/preferences` 适配 NPS、KANO 与客户级 RFM；固定输入列复用共同对齐与
+预算检查，KANO 无定义系数保留空值，RFM 全部观测评分输出为可分页关系。
+
+`decision/market` 适配 PSM 全价格曲线与 TURF 精确组合结果；`matrices` 适配
+AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限制阶数。
+`fuzzy` 单独处理隶属度矩阵以及独立行域的指标权重/等级分值；`experts` 输出
+单轮德尔菲摘要和逐项评分统计。矩阵语义、循环结构和统计合成都由 SCI 持有。
+`conjoint` 将评分和分类属性送入评分型联合分析，保留原始水平标签，
+按设计矩阵和协方差工作区预算，输出效用摘要与完整拟合值关系。
+
+`builtins/statistics/psychometrics` 将共同对齐的题项列用于信度、内容效度、
+题项区分度和 KMO/Bartlett 检验，恢复题项名，输出可分页题项统计和全部观测分组。
+只有相关矩阵诊断计入平方矩阵工作区；Alpha 使用线性内存总分统计。
+
+`builtins/statistics/quality` 适配单值/移动极差控制图、过程能力和均衡交叉 Gage R&R。
+子组及零件/操作者标识复用精确分类编码；控制图同时预算完整绘图点和可分页观测表，
+不以显示抽样隐藏越界观测。统计假设和随机效应检验分母由 SCI 持有。
+`builtins/visualization/overview` 一次物化输入，复用 SCI 的直方图、ECDF 和箱线图，
+分别输出三个既有绘图载体，并按共同的结构化值预算计入全部暂存输出。
+`builtins/statistics/doe/range` 保留实验因素原始水平，输出水平汇总关系。
+`doe/design` 在生成前按完整设计矩阵和关系转换计费。`common/tables` 同时供试验设计和
+多元坐标结果转换使用；不截断行或列。
+`doe/models` 在二次项展开前计费，复用回归契约，只将紧凑拟合摘要放入报告；
+完整观测、拟合值和残差通过关系输出。
+预算按实际水平数量及正交性列联检查工作区计算，不限制试验次数或因素水平数。
+
+`builtins/transforms` 将单次插补的方法交给关系引擎，均值、中位数、数值众数和常数
+共用一个中立操作请求。适配器不收集整列，执行继续受关系查询的内存、取消与期限控制。
+
+`builtins/statistics/inference` 适配置信区间、多重比较、单维聚类稳健标准误和调整预测。
+前两者的逐行结果通过 `common/tables` 转换成 Catalog 声明的固定字段关系，报告只保留摘要。
+`common/models` 统一借用线性拟合或预算化解码二元拟合，供模型诊断与调整预测复用。
+原始观测通过共享物化路径证明对齐；聚类标识保留精确类型。输入、工作区和输出合并
+预算准入，不设置行数上限。调整预测按已存设计评估，不隐式重建交互项。
+
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
 AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型
 解码；原始列共同物化并证明对齐，二元结局支持 Bool 与 0/1。模型、矩阵、编码和观测表
@@ -71,6 +115,8 @@ Arrow 字段的 Physical 选择整数/浮点表示，除法使用浮点表示，
 六个比较节点统一支持标量、等长内存数列和同一关系行域的惰性数列，以及任一侧的标量广播；空值传播。整数/浮点混合比较复用 Tabular Contract 的精确比较，不经过有损浮点提升或 epsilon。文本按原值比较，排序采用大小写敏感的字典顺序。
 六个比较节点对数列逐元素比较，支持精确模式与数值容差模式。惰性比较通过关系契约生成 DataFusion 表达式。Kernel 可以持有 Arrow 数组、字段和批数据，不持有 DataFusion 查询上下文。
 AND/OR/NOT 同样支持标量、内存数列及同一行域的惰性数列；内存计算复用 `BooleanOperation` 的三值逻辑，惰性计算通过关系契约生成原生布尔表达式。`false AND null` 为 false，`true OR null` 为 true，`NOT null` 为 null。内存数列检查长度、输出预算及取消状态；旧的纯标量布尔执行入口已移除。
+物化 Binary 注解先复用转换适配器与 Arrow 的语义转换，按保留的正值映射归一化，再执行布尔运算；
+因此类型转换的标量/列表结果可以继续连接 AND/OR/NOT，反向正值和空值不会因剥离注解而改变含义。
 Graph 的广播说明不提前改写标量值。数值、转换、比较和关系筛选适配的行为变化会推进实现 revision。
 
 类型转换支持七种 Semantic，保留标量/数列结构。`builtins::conversion` 仅通过
@@ -83,6 +129,7 @@ Graph 的广播说明不提前改写标量值。数值、转换、比较和关�
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
 `KernelError` 表达维度、参数、行对齐、预算、调用契约、科学计算、取消和超时等稳定原因，不携带图地址。Execution 的 `OperationExecutionError` 补充图来源与阶段，IPC 和前端保留对应 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
+纵向、生存、多元分析、推断、ANOVA、空间、回归模型、时序预测、因果模型与可视化适配共用 `statistics::common::computation_error`，保持 SCI 的取消、超时、形状、参数范围与计算失败分类，不各自维护同一映射。
 
 `statistics/survival` 适配 15 个生存分析节点，复用统计输入的联合物化、精确分类标签、
 预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
@@ -159,6 +206,14 @@ Each result is one `plot.data` record; rendering does not run inside a kernel.
 
 实现行为变化需要递增 revision。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
 
+OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。WLS/GLS 的线性 Fit 与 Prais Fit 分别使用 revision 9 和 6，Summary/Predict 不重新拟合。
+DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 6。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，实现同步使用 revision 6。
+IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；非有限模型在 JSON 编码前返回 `NonFiniteResult`，两个 Fit 使用 revision 6。Summary 仍从已存运行值解码模型并按所选内容计算报告，不改其输入或输出形状。
+IV 两个 Summary 使用 revision 7；第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
+ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 6。Drift 的 Student-t 约定、辅助回归与临界值保持原契约。
+Panel Fit/Compare 使用 revision 7：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Summary/Predict 沿用已拟合模型。
+系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性 Summary 使用 revision 10，Logit/Probit/Prais Summary 为 6，IV Summary 为 7；实际复用 Summary 检验的 diagnostic.wald 为 4。普通样本均值 t 检验使用另一算法入口。
+
 ## 验证
 
 独立调用测试检查输入顺序、输出载体和资源控制；Application 集成测试检查内存表的组合、拆列顺序、关系计算与分页。扩展注册、配置、数值执行和结果查询测试继续覆盖跨边界行为。运行命令见 [Rust workspace README](../../README.md)，范围选择见[根规则](../../../.rules)。
@@ -187,6 +242,9 @@ UDF 的相等性和哈希包含源/输出字段元数据与实际转换操作，
 
 频数、数据序列描述、数据帧描述和分组聚合由 `builtins::aggregation` 注册。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系执行由 DataFusion 原生聚合、排序、连接和分位数计划承担，输出保留来源绑定、租约及受控分页能力。节点执行仅构造计划，扫描及数值失败在消费时交付；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
 
+聚合列名复用 Data Contract 的 `TabularColumnName` 校验，保留含首尾空格的原始名称，不做 trim；
+空白名称和重复选择仍被拒绝。数据帧描述与分组聚合内核使用 revision 2。
+
 仅在类型契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
 文档数列常量一次性导入 Arrow 字面量表达式，和范围生成节点共用显式位置坐标；等长常量数列可逐元素运算，不同长度返回 ShapeMismatch。带关系身份的数列保留固定行域和文件租约，
 通过 DataFusion 原生表达式及 Arrow 批运算执行，不在节点求值时整列 collect。
@@ -209,6 +267,10 @@ Logit/Probit/Prais、IV 2SLS/LIML、Panel、TWFE DID、ADF、VAR/VEC 及阶数/�
 
 独立诊断复用上游线性模型的观测、设计列、协方差及 WLS 权重；VIF、杠杆值、BP/White/IM/RESET、BG、系数 t/Wald，以及序列正态性、DW、Ljung–Box、ACF/PACF 通过对应领域适配。VAR 的 Granger/IRF/FEVD 与非稳健 2SLS 的 Hausman 在对应节点执行时计算，IRF/FEVD 的 steps 控制分析范围，不重新拟合上游模型。IV/VAR/VEC Summary 只计算所选诊断。DID 伪处理组随机化显式接收 treat/post 与随机种子，在置换之间检查取消。KDE 经 visualization 适配输出绘图数据，默认 256 个网格点，可在结果面板和 Plot 窗口查看。
 
+White/IM 沿用 Catalog 的模型要求：原拟合必须含截距。SCI 使用模型已有的 `constant` 事实准入，无截距的 OLS/WLS 在独立节点返回 `ScientificFailure`，在线性 Summary 中保留对应项目的不可用原因；诊断不补建截距或把首个预测列当作截距。
+
+IV Summary 保留 SCI 明确返回的不可用诊断，不用 JSON 将 NaN 转为空值来表达缺失。第一阶段无定义的调整 R²、零秩 Hausman 或自由度不足的内生性检验使用既有可选结果，其他可用分量与原模型仍保留。独立 Hausman 节点在检验不可用时返回 `ScientificFailure`。
+
 数据帧对齐接收表和列名参数，通过关系契约构造原生窗口、聚合、range/unnest 和连接计划，不收集输入批次、不调用 SCI 对齐。时间序列使用原始时间单位的等距网格；面板使用共享已观测时间序列的位置，在每个实体自己的起止位置内补齐。原列类型、列序和元数据保留，补入的非键值为 Null。重复键、缺失键、网格与输出预算校验保留在计划表达式中，在消费时交付失败。
 
 `LinearRegressionValue` 共享不可变拟合模型；Summary 另持有本次 `LinearSummaryOptions` 和选中检验的不可变结果。ACF/PACF、序列相关和假设检验在 Summary 执行时按选项计算，未选项不调用 SCI。模型拥有有界 memo，每类分析只缓存最近一组参数；补选复用相同模型和参数的结果，参数变化重新计算，新 Fit 使用独立缓存。计算不持有 memo 锁，遵守调用预算并在分析间检查取消；旧 Summary 继续持有原分析快照。
@@ -227,7 +289,7 @@ Inverse Gamma 使用 shape/scale，离散均匀分布包含两个端点。涉及
 Erlang 形状及泊松率限制在 2^53 内，泊松/负二项/几何输出超出精确计数范围时报错。
 离散均匀分布和超几何抽样使用精确整数，不通过 Float64 中转。
 
-`yss-node-kernel` 的统计适配、`yss-graph-execution` 的结果分析及独立 OLS benchmark、`yss-application::ipc` 的独立统计命令直接调用 runtime。独立统计命令在 IPC 层转换中性请求/结果；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和普通 Application 模块不注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
+`yss-node-kernel` 的统计适配直接调用 `yss-sci-runtime`；`yss-graph-execution` 仅在独立 OLS benchmark 中使用该开发依赖。Application 通过图执行与已组装的 Kernel registry 编排统计节点，项目与结果身份仍归各自 owner。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
 Drop NA 的检查列复用列选择器，参数投影通过 `allowEmpty` 允许清空选择以检查全部列；
 已有的投影选列参数仍要求非空。输入列结构尚未确定时，选择器显示延迟确定提示，不触发扫描。
@@ -282,6 +344,29 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 
 The built-in classical hypothesis-test adapters live in `builtins/statistics/classical.rs`. They translate node inputs into neutral `yss-sci-contract::hypothesis` requests, invoke stateless SCI runtime functions, and expose one structured `result` output. The catalog owns localized node definitions and help; kernels do not duplicate formulas.
 
+Classical adapters forward the invocation's cancellation/deadline control into all
+four SCI families and retain typed execution failures. Before SCI dispatch they
+admit retained numeric columns, ranks/order/ties and sort scratch, deviations,
+per-condition rows and report sizes. Categorical encoding admits retained prior
+columns and batch/scalar temporaries before allocation. Dictionary/Utf8View labels
+are expanded one row at a time through the existing Arrow converter, so repeated
+references do not create an unadmitted full-column string expansion. Count-table preparation
+admits linear category indexes before constructing them, then uses actual row and
+column cardinalities for the dense table. These are conservative workspace
+estimates, not process RSS limits. Classical kernels use revision 4, except the
+already revised paired t and McNemar kernels, which use revision 5.
+
+Paired t and McNemar tests materialize both measurements together through the shared
+numeric-column reader. Relational inputs must prove the same row domain; equal lengths
+alone do not establish pairing, and lazy/materialized inputs cannot be mixed. Equal-length
+materialized lists retain their declared positional pairing. Both kernels use revision 5.
+
+`builtins/statistics/meta/` owns study-input alignment, numeric conversion,
+workspace admission and output relations. Registrations, effect preparation,
+analysis dispatch and columnar output conversion are separate modules. It
+passes cancellation/deadline control to SCI and charges numeric workspaces,
+study-table conversion and structured reports together, without a fixed row cap.
+
 Binary Summary computes selected odds ratios (Logit only), continuous-regressor
 margins, in-sample classification and coefficient restrictions through SCI. Prais
 and IV Summary share the existing contrast engine with estimator-appropriate t/F
@@ -292,3 +377,30 @@ estimator's success or scientific failure independently. ADF accepts multiple al
 series with per-series outcomes. VAR exposes selected lag lists, contemporaneous
 exogenous columns, intercept and covariance df adjustment. These changes directly
 replace the current unpublished contracts; no compatibility path is maintained.
+
+Panel Fit and Compare consume Runtime's typed `PanelFit` directly, restore labels,
+and validate typed numbers before JSON output can turn NaN/infinity into null.
+Fit uses the existing output conversion; Compare reuses that finite-value validator
+before assembling its JSON report. Nonfinite model results return `NonFiniteResult`,
+including cases previously rejected as `ScientificFailure` during JSON decoding;
+explicit optional `None` fields remain valid. Panel category and model-diagnostic adapters
+share `common::computation_error`, preserving cancellation, deadline and typed input failures.
+
+`builtins/conversion` shares one controlled scalar/list/lazy-series conversion path between
+Type Conversion and Data Labels. The label entry accepts only categorical and ordinal target meanings; semantic-domain validation remains in the existing data owner.
+
+`builtins/statistics/path` separates moderation, mediation and recursive-equation adapters.
+They align source columns, admit fitting/bootstrap/effect-table storage, and map compact
+equation reports separately from full fitted-observation/effect relations. Output variable
+indices are one-based. `common/models::regression_outputs` remains shared by moderation
+and DOE; `path/reports` is the shared compact equation projection for mediation and paths.
+
+`builtins/statistics/survey` aligns every role before numeric conversion. Weight validation
+and inverse-inclusion-probability output preserve the source relation via existing numeric
+series expressions. Estimator adapters account for fit, PSU score and covariance storage.
+Shared `regression_outputs` receives explicit predictor labels, excluding survey design
+columns from coefficient-axis names; complete observations remain paged relations.
+
+`builtins/statistics/power` converts model-specific scalar parameters to neutral designs.
+There are no observation inputs; bounded report admission and cooperative scientific
+control apply independently of the proposed sample count.

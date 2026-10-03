@@ -9,17 +9,18 @@ pub fn xy(
     control: &ScientificExecutionControl,
 ) -> Result<XyPlot> {
     let length = aligned(&[x, y], control)?;
-    let mut indices = (0..length).collect::<Vec<_>>();
+    let mut indices = sample_indices(length, MAX_PLOT_POINTS);
     if sort_x {
-        indices.sort_by(|a, b| x[*a].total_cmp(&x[*b]));
+        let mut order = (0..length).collect::<Vec<_>>();
+        order.sort_by(|a, b| x[*a].total_cmp(&x[*b]));
         control.check()?;
+        for index in &mut indices {
+            *index = order[*index];
+        }
     }
-    let data = sample_indices(length, MAX_PLOT_POINTS)
+    let data = indices
         .into_iter()
-        .map(|i| PlotPoint {
-            x: x[indices[i]],
-            y: y[indices[i]],
-        })
+        .map(|i| PlotPoint { x: x[i], y: y[i] })
         .collect();
     Ok(XyPlot {
         data,

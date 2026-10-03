@@ -1,7 +1,7 @@
 use super::super::{numeric_input, series};
 use super::{
     Input,
-    common::{materialize, text, value},
+    common::{computation_error, materialize, text, value},
 };
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use std::cmp::Ordering;
@@ -59,20 +59,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn scientific_error(error: ScientificComputationError) -> KernelError {
-    match error {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
 fn options(method: Method, inv: &KernelInvocation<'_>) -> Result<AnovaOptions, KernelError> {
     if method == Method::OneWay || method == Method::Repeated {
         return Ok(AnovaOptions::default());
@@ -227,7 +213,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
     let result = if method == Method::Manova {
         value(
             sci::manova(&responses, &factors, options, &control)
-                .map_err(scientific_error)?
+                .map_err(computation_error)?
                 .map_levels(|i, level| labels[i][level].clone()),
             inv,
         )?
@@ -245,14 +231,14 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 correction,
                 &control,
             )
-            .map_err(scientific_error)?
+            .map_err(computation_error)?
             .map_levels(|i, level| labels[i][level].clone()),
             inv,
         )?
     } else {
         value(
             sci::anova(&responses[0], &factors, &covariates, options, &control)
-                .map_err(scientific_error)?
+                .map_err(computation_error)?
                 .map_levels(|i, level| labels[i][level].clone()),
             inv,
         )?

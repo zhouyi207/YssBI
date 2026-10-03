@@ -390,7 +390,7 @@ fn validate_report_fit(fit: &RegressionFit) -> Result<(), SciError> {
     {
         return Err(yss_sci_contract::SciError::InvalidInput {
             operation: SciOperationCode::Regression,
-            violation: yss_sci_contract::SciInputViolation::ShapeMismatch,
+            violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
         });
     }
     Ok(())

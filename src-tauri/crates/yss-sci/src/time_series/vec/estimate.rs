@@ -39,7 +39,6 @@ pub fn vec_estimate(
     let m_si = sindicators.map(|s| s.ncols()).unwrap_or(0);
 
     let n_lag_dy = k * (p - 1);
-    let s11_matrix = s11.as_ref().to_owned();
 
     let mut beta_tilde = Mat::<f64>::zeros(m1, r);
     for (col, &(idx, _)) in evals.iter().take(r).enumerate() {
@@ -57,8 +56,7 @@ pub fn vec_estimate(
 
     let beta_norm = beta_tilde.as_ref() * beta_1_inv.as_ref();
 
-    let beta_s11_beta =
-        ((beta_norm.transpose() * s11_matrix.as_ref()).as_ref() * beta_norm.as_ref()).to_owned();
+    let beta_s11_beta = (beta_norm.transpose() * s11.as_ref()).as_ref() * beta_norm.as_ref();
     let beta_s11_beta_inv = beta_s11_beta
         .as_ref()
         .checked_cholesky()
@@ -71,8 +69,7 @@ pub fn vec_estimate(
     let alpha_beta_s10 = (alpha_mat.as_ref() * beta_norm.transpose()).as_ref() * s10.as_ref();
     let omega = s00.as_ref() - alpha_beta_s10.as_ref();
 
-    let omega_nd = omega.as_ref().to_owned();
-    let mut omega_chol = omega_nd.clone();
+    let mut omega_chol = omega.clone();
     cholesky_lower_in_place(&mut omega_chol)
         .map_err(|_| "VEC: Omega not positive definite".to_string())?;
     let det_omega: f64 = (0..k).map(|i| omega_chol[(i, i)]).product();
@@ -91,8 +88,6 @@ pub fn vec_estimate(
 
     let beta_y = beta_norm.submatrix(0, 0, k, r).to_owned();
 
-    let alpha_nd = alpha_mat.as_ref().to_owned();
-
     let mut mu_rho: Vec<f64> = Vec::new();
     if has_const || has_trend {
         // Use Z1 (y_{t-1}) not r1 for backing out μ,ρ per Stata eq.(11)
@@ -106,48 +101,44 @@ pub fn vec_estimate(
                 x_ce[(i, r + j)] = z2[(i, j)];
             }
         }
-        let x_matrix = x_ce.as_ref().to_owned();
-        let xt = x_matrix.transpose();
-        let xtx = xt.as_ref() * x_matrix.as_ref();
+        let xt = x_ce.transpose();
+        let xtx = xt.as_ref() * x_ce.as_ref();
         let xtx_inv = xtx
             .as_ref()
             .checked_cholesky()
             .map_err(|_| "VEC: X'X not positive definite in short-run regression".to_string())?
             .solve(&Mat::<f64>::identity(xtx.nrows(), xtx.nrows()));
-        let z0_matrix = z0.as_ref().to_owned();
-        let xty = xt.as_ref() * z0_matrix.as_ref();
+        let xty = xt.as_ref() * z0.as_ref();
         let gamma_full = xtx_inv.as_ref() * xty.as_ref();
-        let gamma_nd = gamma_full.as_ref().to_owned();
 
         let const_row = r + n_lag_dy;
         let trend_row = r + n_lag_dy + 1;
 
         let v_hat = if has_const {
-            Col::from_iter((0..k).map(|i| gamma_nd[(const_row, i)]))
+            Col::from_iter((0..k).map(|i| gamma_full[(const_row, i)]))
         } else {
             Col::zeros(k)
         };
         let delta_hat = if has_trend {
-            Col::from_iter((0..k).map(|i| gamma_nd[(trend_row, i)]))
+            Col::from_iter((0..k).map(|i| gamma_full[(trend_row, i)]))
         } else {
             Col::zeros(k)
         };
 
-        let alpha_aa = alpha_nd.transpose() * alpha_nd.as_ref();
-        let alpha_aa_matrix = alpha_aa.as_ref().to_owned();
-        let alpha_aa_inv = alpha_aa_matrix
+        let alpha_aa = alpha_mat.transpose() * alpha_mat.as_ref();
+        let alpha_aa_inv = alpha_aa
             .as_ref()
             .checked_cholesky()
             .map_err(|_| "VEC: alpha'alpha singular".to_string())?
             .solve(&Mat::<f64>::identity(r, r));
         if has_const && config.trend_spec == VecTrendSpec::Constant {
-            let alpha_t_v = alpha_nd.transpose() * v_hat.as_ref();
+            let alpha_t_v = alpha_mat.transpose() * v_hat.as_ref();
             let v_col = Mat::from_fn(r, 1, |i, _| alpha_t_v[i]);
             let mu_col = alpha_aa_inv.as_ref() * v_col.as_ref();
             mu_rho.extend((0..r).map(|i| mu_col[(i, 0)]));
         }
         if has_trend {
-            let alpha_t_d = alpha_nd.transpose() * delta_hat.as_ref();
+            let alpha_t_d = alpha_mat.transpose() * delta_hat.as_ref();
             let d_col = Mat::from_fn(r, 1, |i, _| alpha_t_d[i]);
             let rho_col = alpha_aa_inv.as_ref() * d_col.as_ref();
             mu_rho.extend((0..r).map(|i| rho_col[(i, 0)]));
@@ -181,9 +172,8 @@ pub fn vec_estimate(
         }
     }
 
-    let x_matrix = x_sr.as_ref().to_owned();
-    let xt = x_matrix.transpose();
-    let xtx = xt.as_ref() * x_matrix.as_ref();
+    let xt = x_sr.transpose();
+    let xtx = xt.as_ref() * x_sr.as_ref();
     let xtx_inv = xtx
         .as_ref()
         .checked_cholesky()
@@ -202,26 +192,23 @@ pub fn vec_estimate(
 
     for eq in 0..k {
         let y_col = z0.col(eq).to_owned();
-        let y_vector = y_col.as_ref().to_owned();
-        let xty = xt.as_ref() * y_vector.as_ref();
+        let xty = xt.as_ref() * y_col.as_ref();
         let beta_sr = xtx_inv.as_ref() * xty.as_ref();
-        let y_hat = x_matrix.as_ref() * beta_sr.as_ref();
-        let u = y_vector.as_ref() - y_hat.as_ref();
-        let u_nd = u.as_ref().to_owned();
+        let y_hat = x_sr.as_ref() * beta_sr.as_ref();
+        let u = y_col.as_ref() - y_hat.as_ref();
 
-        let ss_r: f64 = u_nd.iter().map(|x| x * x).sum();
+        let ss_r: f64 = u.iter().map(|x| x * x).sum();
         let y_mean = y_col.iter().sum::<f64>() / y_col.nrows().max(1) as f64;
         let ss_t: f64 = y_col.iter().map(|x| (x - y_mean).powi(2)).sum();
         // R² = 1 - RSS/TSS per Stata reg3; TSS = Σ(Δy-Δȳ)² (standard formula)
         let ss_t_final: f64 = ss_t;
 
         let sigma2_eq = ss_r / sigma2_divisor;
-        let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-        let cov_eq = yss_sci_linalg::Scale(sigma2_eq) * &xtx_inv_nd;
-        cov_beta.push(cov_eq.clone());
+        let cov_eq = yss_sci_linalg::Scale(sigma2_eq) * &xtx_inv;
         let se: Col<f64> = Col::from_fn(cov_eq.nrows().min(cov_eq.ncols()), |i| {
             cov_eq[(i, i)].sqrt()
         });
+        cov_beta.push(cov_eq);
 
         let mut labels = Vec::with_capacity(n_z_sr);
         for j in 0..r {
@@ -252,10 +239,9 @@ pub fn vec_estimate(
             labels.push(format!("sind{}", j));
         }
 
-        let beta_nd = beta_sr.as_ref().to_owned();
-        coefficients.push(beta_nd.iter().copied().collect::<Vec<_>>());
+        coefficients.push(beta_sr.iter().copied().collect::<Vec<_>>());
         std_errs.push(se.iter().copied().collect::<Vec<_>>());
-        residuals.push(u_nd.iter().copied().collect::<Vec<_>>());
+        residuals.push(u.iter().copied().collect::<Vec<_>>());
         ss_res.push(ss_r);
         ss_tot.push(ss_t_final);
         coef_labels.push(labels);
@@ -280,15 +266,12 @@ pub fn vec_estimate(
         };
         // chi2: Wald statistic W = β̂' V^{-1} β̂ (independent of R²)
         let chi2 = {
-            let beta = Col::from_iter(coefficients[eq].clone());
+            let beta = Col::from_iter(coefficients[eq].iter().copied());
             let v = &cov_beta[eq];
-            let v_matrix = v.as_ref().to_owned();
-            let beta_vector = beta.as_ref().to_owned();
-            match v_matrix.as_ref().checked_cholesky() {
+            match v.as_ref().checked_cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(&beta_vector.as_ref());
-                    let x_nd = x.as_ref().to_owned();
-                    beta.transpose() * x_nd.as_ref()
+                    let x = llt.solve(&beta.as_ref());
+                    beta.transpose() * x.as_ref()
                 }
                 Err(_) => n as f64 * r_sq / (1.0 - r_sq.max(1e-10)),
             }
@@ -343,7 +326,7 @@ pub fn vec_estimate(
 
     // Cointegrating equations chi2 (Stata formula: Wald on free params in beta)
     let cointegrating_equations =
-        compute_cointegrating_equations_chi2(&beta_y, &alpha_nd, &omega_nd, &s11, n, d);
+        compute_cointegrating_equations_chi2(&beta_y, &alpha_mat, &omega, &s11, n, d);
 
     // beta 表 Stata 风格：Std. err., z, P>|z|, [95% conf. interval]（Stata 公式 15）
     let (
@@ -352,7 +335,7 @@ pub fn vec_estimate(
         mut beta_p_value,
         mut beta_ci_lower,
         mut beta_ci_upper,
-    ) = compute_beta_ce_stats(&beta_y, &alpha_nd, &omega_nd, &s11, n, d);
+    ) = compute_beta_ce_stats(&beta_y, &alpha_mat, &omega, &s11, n, d);
     if has_const {
         beta_std_err.push(vec![None; r]);
         beta_z_value.push(vec![None; r]);

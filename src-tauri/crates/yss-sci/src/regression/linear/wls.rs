@@ -107,6 +107,7 @@ impl WLS {
             &xtx_inv_nd,
             &u_nd,
             df_residual,
+            self.config.constant.then_some(0),
             &covariance_type,
             covariance_parameters.as_ref(),
         )?;
@@ -126,6 +127,9 @@ impl WLS {
             .zip(std_err.iter())
             .map(|(b, se)| b / se)
             .collect();
+        if t_values.iter().any(|t| t.is_nan()) {
+            return Err("WLS coefficient t-statistic is undefined".into());
+        }
 
         let t_dist = StudentsT::new(0.0, 1.0, df_residual as f64)
             .map_err(|e| format!("WLS: StudentsT: {}", e))?;

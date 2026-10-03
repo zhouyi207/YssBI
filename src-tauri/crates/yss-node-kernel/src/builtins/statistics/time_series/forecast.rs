@@ -99,20 +99,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         );
     }
 }
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-    }
-}
 fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let (data, retained) = materialize(inv)?;
     let first = data.first().ok_or(KernelError::InvalidNumericInput)?;
@@ -191,7 +177,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         })())?;
         let result =
             sci::markov_prediction(&states, k, h, number(inv, "ts_pseudocount")?, &control)
-                .map_err(error)?;
+                .map_err(computation_error)?;
         let mut out = match value(&result, inv)? {
             RuntimeValue::Record(v) => (*v).clone(),
             _ => unreachable!(),
@@ -240,10 +226,13 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?,
+            .map_err(computation_error)?,
             inv,
         )?,
-        "grey_prediction" => value(sci::grey_prediction(&y, h, &control).map_err(error)?, inv)?,
+        "grey_prediction" => value(
+            sci::grey_prediction(&y, h, &control).map_err(computation_error)?,
+            inv,
+        )?,
         "ecm" => {
             let x = data[1..]
                 .iter()
@@ -258,7 +247,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             value(result, inv)?
         }
         "phillips_perron" | "kpss" => {
@@ -275,7 +264,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 } else {
                     sci::phillips_perron(&y, bandwidth, deterministic, &control)
                 }
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -310,7 +299,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 iteration,
             };
             value(
-                sci::exponential_smoothing(&y, o, &control).map_err(error)?,
+                sci::exponential_smoothing(&y, o, &control).map_err(computation_error)?,
                 inv,
             )?
         }
@@ -336,7 +325,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     },
                     &control,
                 )
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -346,7 +335,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 integer(inv, "ts_maximum_lag")?,
                 &control,
             )
-            .map_err(error)?,
+            .map_err(computation_error)?,
             inv,
         )?,
         "time_series" => {
@@ -358,8 +347,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             if time.windows(2).any(|w| w[0] >= w[1]) {
                 return Err(KernelError::InvalidParameter);
             }
-            let mut plot =
-                yss_sci_runtime::visualization::xy(&time, &y, true, &control).map_err(error)?;
+            let mut plot = yss_sci_runtime::visualization::xy(&time, &y, true, &control)
+                .map_err(computation_error)?;
             plot.x_label = if data.len() > 1 {
                 input_label(&inv.inputs[1], "Time".into())
             } else {

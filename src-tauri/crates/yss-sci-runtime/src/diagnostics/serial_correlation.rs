@@ -6,7 +6,7 @@ use yss_sci_contract::diagnostics::serial_correlation::{
     DurbinWatsonResult, SerialTestWithLag, SerialTestsInput, SerialTestsOutput,
 };
 
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 
 pub fn compute_serial_tests(input: SerialTestsInput) -> Result<SerialTestsOutput, SciError> {
     let lags = normalized_lags(&input)?;
@@ -23,7 +23,7 @@ fn normalized_lags(input: &SerialTestsInput) -> Result<usize, SciError> {
     if n < 4 {
         return Err(SciError::InvalidInput {
             operation: SciOperationCode::SerialTests,
-            violation: SciInputViolation::EmptyInput,
+            violation: ScientificInputViolation::EmptyInput,
         });
     }
     Ok(input.lags.min(n / 2 - 1).clamp(1, 40))

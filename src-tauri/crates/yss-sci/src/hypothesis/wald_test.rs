@@ -13,7 +13,7 @@ use yss_sci_contract::hypothesis::{Alternative, WaldTestResult};
 /// - r_vec: (q) 约束向量
 /// - betas: (k) 参数估计
 /// - cov_beta: (k × k) 参数协方差矩阵
-pub fn wald_test(
+pub(super) fn wald_test(
     betas: &Col<f64>,
     cov_beta: &Mat<f64>,
     r: &Mat<f64>,

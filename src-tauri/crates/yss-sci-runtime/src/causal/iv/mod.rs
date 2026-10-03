@@ -1,28 +1,7 @@
 use crate::error::computation_failed;
-use yss_sci_contract::causal::iv::InstrumentalVariableKind;
 use yss_sci_contract::{SciError, SciOperationCode};
 
-pub fn fit_instrumental_variables(
-    kind: InstrumentalVariableKind,
-    response: Vec<f64>,
-    exogenous: &[Vec<f64>],
-    endogenous: &[Vec<f64>],
-    instruments: &[Vec<f64>],
-    options: yss_sci_contract::regression::OlsOptions,
-    small: bool,
-) -> Result<serde_json::Value, SciError> {
-    let fit = yss_sci::causal::iv::fit::fit_instrumental_variables(
-        kind,
-        response,
-        exogenous,
-        endogenous,
-        instruments,
-        options,
-        small,
-    )?;
-    serde_json::to_value(fit)
-        .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
-}
+pub use yss_sci::causal::iv::fit::fit_instrumental_variables;
 
 pub fn summary(
     fit: &yss_sci_contract::causal::iv::InstrumentalVariableFit,
@@ -35,7 +14,7 @@ pub fn summary(
     {
         return Err(yss_sci_contract::SciError::InvalidInput {
             operation: SciOperationCode::InstrumentalVariables,
-            violation: yss_sci_contract::SciInputViolation::ShapeMismatch,
+            violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
         });
     }
     let mut report = serde_json::Map::new();
@@ -56,7 +35,7 @@ pub fn summary(
             serde_json::json!({"labels":fit.parameter_names,"estimates": fit.coefficients, "inference": fit.inference}),
         );
     }
-    if options.first_stage {
+    let first_stage = if options.first_stage {
         let (mut equations, statistics) = analysis::first_stage(fit)?;
         let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
         let labels = fit.parameter_names[..included]
@@ -68,11 +47,10 @@ pub fn summary(
             equation.endog_name = fit.parameter_names[included + j].clone();
             equation.var_names = labels.clone();
         }
-        report.insert(
-            "firstStage".into(),
-            serde_json::json!({"equations": equations, "statistics": statistics}),
-        );
-    }
+        Some((equations, statistics))
+    } else {
+        None
+    };
     if options.overidentification {
         let result = if fit.family == "iv_liml" {
             serde_json::json!(analysis::liml_overidentification(fit)?)
@@ -102,7 +80,11 @@ pub fn summary(
         if hausman.is_none() && endogenous.is_none() {
             report.insert(
                 "endogeneityUnavailable".into(),
-                serde_json::json!("requires_nonrobust_covariance"),
+                serde_json::json!(if fit.statistics.covariance_type == "nonrobust" {
+                    "insufficient_residual_variation_or_degrees_of_freedom"
+                } else {
+                    "requires_nonrobust_covariance"
+                }),
             );
         }
         report.insert(
@@ -140,28 +122,13 @@ pub fn summary(
             &[],
         );
     }
-    if let Some(equations) = report["firstStage"]["equations"].as_array() {
+    if let Some((equations, statistics)) = first_stage {
         let mut rows = Vec::new();
         let mut texts = Vec::new();
-        for e in equations {
-            let labels = e["var_names"].as_array().expect("first-stage labels");
-            let names = labels
-                .iter()
-                .map(|v| v.as_str().unwrap_or("").to_string())
-                .collect::<Vec<_>>();
-            let betas = e["betas"]
-                .as_array()
-                .expect("first-stage coefficients")
-                .iter()
-                .map(|v| v.as_f64().unwrap_or(0.0))
-                .collect::<Vec<_>>();
-            texts.push(equation(
-                e["endog_name"].as_str().unwrap_or(""),
-                &names,
-                &betas,
-            ));
-            for (j, name) in labels.iter().enumerate() {
-                rows.push(serde_json::json!({"equation":e["endog_name"],"variable":name,"estimate":e["betas"][j],"standard_error":e["stds"][j],"statistic":e["tvalues"][j],"p_value":e["pvalues"][j],"ci_lower":e["conf_int_left"][j],"ci_upper":e["conf_int_right"][j]}));
+        for e in &equations {
+            texts.push(equation(&e.endog_name, &e.var_names, &e.betas));
+            for (j, name) in e.var_names.iter().enumerate() {
+                rows.push(serde_json::json!({"equation":e.endog_name,"variable":name,"estimate":e.betas[j],"standard_error":e.stds[j],"statistic":e.tvalues[j],"p_value":e.pvalues[j],"ci_lower":e.conf_int_left[j],"ci_upper":e.conf_int_right[j]}));
             }
         }
         report["first_stage_rows"] = serde_json::json!(rows);
@@ -189,8 +156,29 @@ pub fn summary(
             "/first_stage_equations",
             &[],
         );
-        let stats = &report["firstStage"]["statistics"];
-        report["weak_instrument_rows"] = serde_json::json!([{"min_eigenvalue":stats["min_eigenvalue"],"partial_r2":stats["partial_r2"],"f_stat":stats["f_stat"],"f_p_value":stats["f_p_value"],"critical_values_unavailable_reason":stats["min_eigenvalue_cv_note"],"size_10":stats["min_eigenvalue_cv"]["size"]["pct_10"],"size_15":stats["min_eigenvalue_cv"]["size"]["pct_15"],"size_20":stats["min_eigenvalue_cv"]["size"]["pct_20"],"size_25":stats["min_eigenvalue_cv"]["size"]["pct_25"],"bias_5":stats["min_eigenvalue_cv"]["bias"]["pct_5"],"bias_10":stats["min_eigenvalue_cv"]["bias"]["pct_10"],"bias_20":stats["min_eigenvalue_cv"]["bias"]["pct_20"],"bias_30":stats["min_eigenvalue_cv"]["bias"]["pct_30"],"bias_unavailable_reason":if stats["min_eigenvalue_cv"]["bias"].is_null(){serde_json::json!("not_tabulated_for_this_identification_or_covariance")}else{serde_json::Value::Null}}]);
+        let size = statistics.min_eigenvalue_cv.as_ref().map(|cv| &cv.size);
+        let bias = statistics
+            .min_eigenvalue_cv
+            .as_ref()
+            .and_then(|cv| cv.bias.as_ref());
+        report["weak_instrument_rows"] = serde_json::json!([{
+            "min_eigenvalue": statistics.min_eigenvalue,
+            "partial_r2": statistics.partial_r2,
+            "f_stat": statistics.f_stat,
+            "f_p_value": statistics.f_p_value,
+            "critical_values_unavailable_reason": statistics.min_eigenvalue_cv_note,
+            "size_10": size.map(|row| row.pct_10),
+            "size_15": size.map(|row| row.pct_15),
+            "size_20": size.map(|row| row.pct_20),
+            "size_25": size.map(|row| row.pct_25),
+            "bias_5": bias.map(|row| row.pct_5),
+            "bias_10": bias.map(|row| row.pct_10),
+            "bias_20": bias.map(|row| row.pct_20),
+            "bias_30": bias.map(|row| row.pct_30),
+            "bias_unavailable_reason": bias.is_none().then_some("not_tabulated_for_this_identification_or_covariance"),
+        }]);
+        report["firstStage"] =
+            serde_json::json!({"equations": equations, "statistics": statistics});
         section(
             &mut report,
             "weak_instruments",

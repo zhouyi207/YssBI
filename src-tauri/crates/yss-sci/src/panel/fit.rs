@@ -5,7 +5,7 @@ use crate::regression::design::design_matrix;
 use yss_sci_contract::panel::{
     PanelEffects as Effects, PanelEstimator as Estimator, PanelFit, PanelOptions,
 };
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 use yss_sci_linalg::Col;
 
 pub fn fit_panel(
@@ -18,7 +18,7 @@ pub fn fit_panel(
     let op = SciOperationCode::Panel;
     let n = response.len();
     if n == 0 || entity.len() != n || time.len() != n || predictors.iter().any(|v| v.len() != n) {
-        return Err(invalid_input(op, SciInputViolation::ShapeMismatch));
+        return Err(invalid_input(op, ScientificInputViolation::ShapeMismatch));
     }
     if response
         .iter()
@@ -27,7 +27,7 @@ pub fn fit_panel(
         .chain(predictors.iter().flatten())
         .any(|v| !v.is_finite())
     {
-        return Err(invalid_input(op, SciInputViolation::NonFiniteInput));
+        return Err(invalid_input(op, ScientificInputViolation::NonFiniteInput));
     }
     // Numeric identity treats both signed zeros alike, including sorting and level lookup.
     let normalize = |values: Vec<f64>| {
@@ -50,7 +50,10 @@ pub fn fit_panel(
             && options.effects != Effects::Entity)
         || (matches!(options.estimator, Estimator::Between) && options.effects == Effects::TwoWay)
     {
-        return Err(invalid_input(op, SciInputViolation::ParameterOutOfRange));
+        return Err(invalid_input(
+            op,
+            ScientificInputViolation::ParameterOutOfRange,
+        ));
     }
     // Sorting is required by the FD estimator. Validate duplicate keys before every estimator.
     let mut order: Vec<_> = (0..n).collect();
@@ -63,7 +66,10 @@ pub fn fit_panel(
         .windows(2)
         .any(|w| entity[w[0]] == entity[w[1]] && time[w[0]] == time[w[1]])
     {
-        return Err(invalid_input(op, SciInputViolation::ParameterOutOfRange));
+        return Err(invalid_input(
+            op,
+            ScientificInputViolation::ParameterOutOfRange,
+        ));
     }
     let ids = |values: &[f64]| -> Vec<usize> {
         let mut levels = values.to_vec();
@@ -147,7 +153,10 @@ pub fn fit_panel(
                 .iter()
                 .any(|v| v.fract() != 0.0 || *v < i64::MIN as f64 || *v >= i64::MAX as f64)
             {
-                return Err(invalid_input(op, SciInputViolation::ParameterOutOfRange));
+                return Err(invalid_input(
+                    op,
+                    ScientificInputViolation::ParameterOutOfRange,
+                ));
             }
             let original_times = order.iter().map(|&i| time[i] as i64).collect::<Vec<_>>();
             if original_times
@@ -158,14 +167,22 @@ pub fn fit_panel(
                 .checked_sub(original_times.iter().copied().min().unwrap())
                 .is_none()
             {
-                return Err(invalid_input(op, SciInputViolation::ParameterOutOfRange));
+                return Err(invalid_input(
+                    op,
+                    ScientificInputViolation::ParameterOutOfRange,
+                ));
             }
             (
                 "panel_fd",
                 fit_panel_fd(&y, &x, &entities, &original_times, c, cov, None),
             )
         }
-        _ => return Err(invalid_input(op, SciInputViolation::ParameterOutOfRange)),
+        _ => {
+            return Err(invalid_input(
+                op,
+                ScientificInputViolation::ParameterOutOfRange,
+            ));
+        }
     };
     let mut result = result.map_err(|_| computation_failed(op))?;
     result.family = family.into();
@@ -282,7 +299,7 @@ pub fn predict(fit: &PanelFit, predictors: &[Vec<f64>]) -> Result<Vec<f64>, SciE
     {
         return Err(invalid_input(
             SciOperationCode::Panel,
-            SciInputViolation::ShapeMismatch,
+            ScientificInputViolation::ShapeMismatch,
         ));
     }
     Ok(

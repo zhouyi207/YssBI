@@ -18,6 +18,32 @@ Tabular transformations and time/panel alignment use native relation plans in
 `yss-database-engine`, requested by [Node Kernel](../yss-node-kernel/README.md).
 Runtime receives prepared neutral inputs and has no Arrow dependency.
 
+Input errors share Contract's `execution::ScientificInputViolation`. The controlled
+linear/ACF error adapter preserves that violation for `Regression` and `AcfPacf`;
+other operation codes still map to `ComputationFailed` at this boundary.
+
+`hypothesis::{sample_mean_test, categorical_test, rank_test, variance_test}`
+forwards the caller's `ScientificExecutionControl` with each neutral request to
+SCI. These entries return its typed `HypothesisError` directly, preserving
+cancellation and deadlines rather than wrapping them as invalid input text.
+
+`decision` exposes weighting/ranking, customer preferences, pricing/reach,
+judgment matrices, influence structures, membership composition and expert-round
+computations. Composed workflows reuse these entries without another estimator.
+Ratings-based conjoint is exposed through the same decision boundary.
+`psychometrics` exposes alpha, item discrimination, expert CVI and shared
+multivariate adequacy computations without a second implementation.
+`quality` exposes process capability, I/MR chart data and crossed Gage R&R.
+`doe` exposes controlled designed-experiment calculations and dimension admission from SCI;
+it does not generate a second design or alter its coded levels.
+
+`inference` exposes interval, multiple-comparison and cluster computations.
+`regression::postestimation` exposes adjusted predictions; it shares retained
+linear/binary model contracts with diagnostics and delegates numerical work to SCI.
+
+`meta` exposes SCI effect conversion, inverse-variance models, diagnostics and
+plots. The runtime does not construct study tables or duplicate fitting logic.
+
 `spatial` exposes stateless `weights`, `moran` and `regression` entry points from
 SCI. Unit identity, balanced-panel ordering and restoration to input row order
 belong to Kernel; the runtime does not infer alignment from vector lengths.
@@ -30,7 +56,8 @@ lag, capped at `min(n / 2 - 1, 40)`), then passes slices and the same control to
 `yss-sci::time_series::acf_pacf::compute_acf_pacf`. SCI owns finite-input validation and the
 joint numerical calculation: one ACF feeds the PACF recursion. It checks cancellation
 and deadlines throughout input/numerical loops and before returning. The runtime
-rechecks control and rejects nonfinite ACF/PACF coefficients before delivering the shared `AcfPacfResult`; no duplicate runtime request/result
+rechecks control and rejects nonfinite ACF/PACF coefficients or a nonfinite/nonpositive
+reference-band half-width before delivering the shared `AcfPacfResult`; no duplicate runtime request/result
 records are maintained. SCI itself permits lags through `n - 1`; 40 is a report budget.
 Application queries retained results and does not depend on SCI runtime. Desktop composition
 does not call it or construct/inject a backend object.
@@ -136,16 +163,31 @@ this boundary.
 Binary and Prais entry points accept their shared options instead of rebuilding defaults.
 IV accepts separate exogenous, endogenous and instrument column collections, preserving
 fitted values, residuals, coefficient inference and the design needed for later analyses.
+Its Fit entry returns the shared `InstrumentalVariableFit` directly; Kernel restores
+source labels and applies its existing finite-value output conversion before JSON encoding.
 `causal::iv::summary` requests first-stage, overidentification and endogeneity analyses
-only when selected. Panel accepts `PanelOptions`; SCI selects the estimator/effect
+only when selected. First-stage rows, equations and weak-instrument display fields
+use the typed analysis results before JSON encoding, without decoding report values
+or replacing coefficients with zero. Undefined adjusted R² and unavailable Hausman
+or endogeneity tests arrive as SCI's existing `None` values. If both endogeneity
+tests are unavailable under nonrobust covariance, the report identifies insufficient
+residual variation or degrees of freedom; robust covariance retains its separate
+unsupported-test reason. An unavailable diagnostic does not invalidate the fit.
+Panel accepts `PanelOptions`; SCI selects the estimator/effect
 combination and owns all matrix construction. Panel Summary projects the selected
 model, coefficient, effect and estimator statistics from the shared fit contract.
 VAR/VEC Summary likewise selects report contents and calls SCI for requested
 serial tests, lag exclusion or stability. Granger, IRF and FEVD are independent
 postestimation calls; IRF/FEVD take their horizon at that stage. Summaries reuse the
 fitted model without refitting it, and fits do not cache full reports.
+VAR model-summary projection checks innovation-covariance dimensions against the
+variable names before labeling cells, including when no diagnostic is selected;
+malformed decoded shapes return the existing scientific failure.
 `causal::did::randomization_test` accepts observed data and execution control, fits the
 observed TWFE specification once and checks cancellation between permutations.
+`causal::did::fit_did` returns SCI's shared `PanelFit` directly. Kernel restores labels
+and checks finite model values before assembling the DID report; the fit does not
+pass through JSON encoding and decoding between these layers.
 
 Kernel density plot preparation uses `visualization::kde`, which passes the caller's
 execution control to SCI's density computation.
@@ -175,8 +217,10 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 
 SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随机化推断和核密度计算。假设检验也归 SCI：复用 `yss-math-expr` 解析，完成约束线性化、参数列序、矩阵构造与 t/Wald 分派；Application 保留结果身份和项目状态检查。Julia 插件不依赖任何 SCI crate，输入值、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。
 
-`panel::fit_model` forwards the shared typed `PanelFit` for the FE/RE/FD/Between
-catalog entries. `difference_gmm`, `fisher_unit_root` and `fisher_cointegration`
+`panel::fit_model` forwards the shared typed `PanelFit` for ordinary panel Fit,
+model comparison and the FE/RE/FD/Between catalog entries. Node adapters restore
+labels directly on that record before their output conversion; there is no
+intermediate JSON fit wrapper. `difference_gmm`, `fisher_unit_root` and `fisher_cointegration`
 forward neutral long-form inputs and execution control directly to SCI. They do
 not build numerical matrices, recalibrate tests or keep a second result hierarchy.
 
@@ -186,3 +230,11 @@ rows remain scientific result data; Application owns allowed presentation bindin
 and lazy table paging. Formula strings are backend formatting, not frontend math.
 Section and equation-size limits are explicit, and array shape mismatches fail.
 Binary Summary, Prais, IV, panel, ADF and VAR/VEC use this current report path.
+
+`path` re-exports controlled interaction, mediation and recursive path computations,
+including the x-index equation parser, from SCI.
+
+`survey` re-exports weight validation, Taylor-linearized means and survey regressions;
+there is no execution state or tabular identity in this layer.
+
+`power` re-exports SCI's controlled scalar prospective power/sample-size entry point.

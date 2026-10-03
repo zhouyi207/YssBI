@@ -114,20 +114,6 @@ fn is_parametric(method: &str) -> bool {
             | "survival.aft"
     )
 }
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
 fn iteration(inv: &KernelInvocation<'_>) -> Result<IterationOptions, KernelError> {
     Ok(IterationOptions {
         max_iterations: integer(inv, "max_iterations")?,
@@ -220,7 +206,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         })())?;
         return Ok(vec![value(
             evaluation::nomogram(&model, number(inv, "survival_horizon")?, ticks, &control)
-                .map_err(error)?,
+                .map_err(computation_error)?,
             inv,
         )?]);
     }
@@ -305,7 +291,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     )?;
     if let Some(status) = status {
         return Ok(vec![value(
-            nonparametric::competing_risks(&time, &status, &control).map_err(error)?,
+            nonparametric::competing_risks(&time, &status, &control).map_err(computation_error)?,
             inv,
         )?]);
     }
@@ -323,7 +309,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             value(
                 CurveResult {
                     method: r.method,
@@ -344,7 +330,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             )?
         }
         "survival.logrank" => {
-            let r = nonparametric::logrank(&time, &event, &group_codes, &control).map_err(error)?;
+            let r = nonparametric::logrank(&time, &event, &group_codes, &control)
+                .map_err(computation_error)?;
             value(
                 LogrankResult {
                     groups: r.groups.iter().map(|&g| group_labels[g].clone()).collect(),
@@ -357,10 +344,11 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             )?
         }
         "survival.cox" => {
-            let mut r = cox::fit(&time, &event, &x, cox_options(inv)?, &control).map_err(error)?;
+            let mut r = cox::fit(&time, &event, &x, cox_options(inv)?, &control)
+                .map_err(computation_error)?;
             name_cox(&mut r, &labels, 0);
-            let risks =
-                cox::event_probabilities(&r, number(inv, "survival_horizon")?).map_err(error)?;
+            let risks = cox::event_probabilities(&r, number(inv, "survival_horizon")?)
+                .map_err(computation_error)?;
             return Ok(vec![
                 value(r, inv)?,
                 prediction_table(&time, &event, &risks, inv)?,
@@ -376,7 +364,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 cox_options(inv)?,
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             name_cox(&mut r, &labels, 0);
             value(r, inv)?
         }
@@ -390,7 +378,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 cox_options(inv)?,
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             name_cox(&mut r.model, &labels, r.groups.len());
             value(
                 SubgroupResult {
@@ -413,7 +401,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 integer(inv, "calibration_bins")?,
                 &control,
             )
-            .map_err(error)?,
+            .map_err(computation_error)?,
             inv,
         )?,
         "plot.decision_curve" => value(
@@ -429,7 +417,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?,
+            .map_err(computation_error)?,
             inv,
         )?,
         _ if is_parametric(method) => {
@@ -455,7 +443,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             for ((c, t), label) in r
                 .coefficients
                 .iter_mut()

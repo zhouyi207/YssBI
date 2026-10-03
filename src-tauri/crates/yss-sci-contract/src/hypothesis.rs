@@ -1,5 +1,5 @@
 //! Neutral hypothesis requests, alternatives, computed results and errors.
-use crate::SciError;
+use crate::{SciError, execution::ScientificComputationError};
 use serde::Serialize;
 use std::collections::BTreeMap;
 /// 备择假设类型（t 检验、Wald 检验共用）
@@ -225,10 +225,18 @@ pub enum HypothesisError {
     InvalidInput(String),
     #[error(transparent)]
     Scientific(#[from] SciError),
+    #[error(transparent)]
+    Execution(#[from] ScientificComputationError),
 }
 
 impl From<String> for HypothesisError {
     fn from(detail: String) -> Self {
         Self::InvalidInput(detail)
+    }
+}
+
+impl From<&str> for HypothesisError {
+    fn from(detail: &str) -> Self {
+        Self::InvalidInput(detail.to_owned())
     }
 }

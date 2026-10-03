@@ -35,18 +35,21 @@ fn checked_fit(fit: &VarFit) -> Result<(), String> {
     Ok(())
 }
 
-fn lag_matrices(fit: &VarFit) -> Result<Vec<Mat<f64>>, String> {
+fn lag_matrices(fit: &VarFit, max_lag: usize) -> Result<Vec<Mat<f64>>, String> {
     checked_fit(fit)?;
     let k = fit.var_names.len();
     let lags = &fit.lags;
     let coefficients = &fit.coefficients;
-    let p_model = lags.iter().copied().max().unwrap_or(0);
+    let p_model = lags.iter().copied().max().unwrap_or(0).min(max_lag);
     let mut a_mats: Vec<Mat<f64>> = Vec::with_capacity(p_model + 1);
     for _ in 0..=p_model {
         a_mats.push(Mat::zeros(k, k));
     }
     let n_lags = lags.len();
     for (lag_idx, &lag) in lags.iter().enumerate() {
+        if lag > p_model {
+            continue;
+        }
         for i in 0..k {
             for j in 0..k {
                 let coef_idx = j * n_lags + lag_idx;
@@ -59,11 +62,10 @@ fn lag_matrices(fit: &VarFit) -> Result<Vec<Mat<f64>>, String> {
 }
 
 pub fn impulse_responses(fit: &VarFit, step: usize) -> Result<Vec<Vec<Vec<f64>>>, String> {
-    let a_mats = lag_matrices(fit)?;
+    let a_mats = lag_matrices(fit, step)?;
     let k = fit.var_names.len();
     let lags = &fit.lags;
     let p_model = a_mats.len() - 1;
-    let sigma = Mat::from_fn(k, k, |i, j| fit.sigma[i][j]);
     // IRF: Φ_0 = I, Φ_s = Σ A_i Φ_{s-i}
     let mut phi: Vec<Mat<f64>> = vec![Mat::identity(k, k)];
     for s in 1..=step {
@@ -77,7 +79,7 @@ pub fn impulse_responses(fit: &VarFit, step: usize) -> Result<Vec<Vec<Vec<f64>>>
     }
 
     // Cholesky: Σ = GG', G lower triangular (in-place on sigma copy)
-    let mut g_nd = sigma.clone();
+    let mut g_nd = Mat::from_fn(k, k, |i, j| fit.sigma[i][j]);
     cholesky_lower_in_place(&mut g_nd)
         .map_err(|_| "VAR: Sigma not positive definite for Cholesky".to_string())?;
 
@@ -159,13 +161,11 @@ pub fn lag_exclusion(fit: &VarFit) -> Result<Vec<VARWleRow>, String> {
                 Col::from_iter(lag_indices.iter().map(|&idx| coefficients[eq][idx]));
             let v_block = Mat::from_fn(k, k, |r, c| cov_beta[eq][(lag_indices[r], lag_indices[c])]);
             let v_matrix = v_block.as_ref();
-            let beta_vector = beta_lag.as_ref().to_owned();
             let x = v_matrix
                 .checked_cholesky()
                 .map_err(|_| "VAR varwle: lag block V not positive definite".to_string())?
-                .solve(&beta_vector.as_ref());
-            let x_nd = x.as_ref().to_owned();
-            let wald_eq: f64 = beta_lag.iter().zip(x_nd.iter()).map(|(b, xi)| b * xi).sum();
+                .solve(&beta_lag.as_ref());
+            let wald_eq: f64 = beta_lag.iter().zip(x.iter()).map(|(b, xi)| b * xi).sum();
             chi2_all += wald_eq;
 
             let p_eq = chi_squared_sf(k as f64, wald_eq);
@@ -231,13 +231,11 @@ pub fn granger(fit: &VarFit) -> Result<Vec<VARGrangerRow>, String> {
             let beta_r: Col<f64> = Col::from_iter(indices.iter().map(|&idx| beta[idx]));
             let v_block = Mat::from_fn(n_lags, n_lags, |r, c| cov[(indices[r], indices[c])]);
             let v_matrix = v_block.as_ref();
-            let beta_vector = beta_r.as_ref().to_owned();
             let x = v_matrix
                 .checked_cholesky()
                 .map_err(|_| "VAR vargranger: block V not positive definite".to_string())?
-                .solve(&beta_vector.as_ref());
-            let x_nd = x.as_ref().to_owned();
-            let wald: f64 = beta_r.iter().zip(x_nd.iter()).map(|(b, xi)| b * xi).sum();
+                .solve(&beta_r.as_ref());
+            let wald: f64 = beta_r.iter().zip(x.iter()).map(|(b, xi)| b * xi).sum();
             let p_val = chi_squared_sf(n_lags as f64, wald);
             let excluded_name = var_names
                 .get(j)
@@ -266,13 +264,11 @@ pub fn granger(fit: &VarFit) -> Result<Vec<VARGrangerRow>, String> {
             let beta_r: Col<f64> = Col::from_iter(all_indices.iter().map(|&idx| beta[idx]));
             let v_block = Mat::from_fn(r, r, |ri, ci| cov[(all_indices[ri], all_indices[ci])]);
             let v_matrix = v_block.as_ref();
-            let beta_vector = beta_r.as_ref().to_owned();
             let x = v_matrix
                 .checked_cholesky()
                 .map_err(|_| "VAR vargranger: ALL block V not positive definite".to_string())?
-                .solve(&beta_vector.as_ref());
-            let x_nd = x.as_ref().to_owned();
-            let wald: f64 = beta_r.iter().zip(x_nd.iter()).map(|(b, xi)| b * xi).sum();
+                .solve(&beta_r.as_ref());
+            let wald: f64 = beta_r.iter().zip(x.iter()).map(|(b, xi)| b * xi).sum();
             let p_val = chi_squared_sf(r as f64, wald);
             vargranger.push(VARGrangerRow {
                 eq_name: eq_name.clone(),
@@ -304,8 +300,8 @@ pub fn serial_correlation(fit: &VarFit, mlag: usize) -> Result<Vec<SerialCorrela
     // varlmar: LM 残差自相关检验（Stata varlmar 命令，Johansen 1995）
     // LM_s = (T - d - 0.5) * ln(|Σ̂| / |Σ̃_s|)，df = K²
     // varlmar 始终使用 ML 估计 Σ（除数 T）
-    let sigma_ml = (u_mat.transpose() * u_mat.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
-    let mut det_sigma_ml_var = sigma_ml.clone();
+    let mut det_sigma_ml_var =
+        (u_mat.transpose() * u_mat.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
     cholesky_lower_in_place(&mut det_sigma_ml_var)
         .map_err(|_| "VAR varlmar: Sigma_ml not positive definite".to_string())?;
     let det_g_ml: f64 = (0..k).map(|i| det_sigma_ml_var[(i, i)]).product();
@@ -326,9 +322,8 @@ pub fn serial_correlation(fit: &VarFit, mlag: usize) -> Result<Vec<SerialCorrela
             }
         }
 
-        let z_aug_matrix = z_aug.as_ref().to_owned();
-        let zt_aug = z_aug_matrix.transpose();
-        let ztz_aug = zt_aug.as_ref() * z_aug_matrix.as_ref();
+        let zt_aug = z_aug.transpose();
+        let ztz_aug = zt_aug.as_ref() * z_aug.as_ref();
         let ztz_aug_inv = ztz_aug
             .checked_cholesky()
             .map_err(|_| "VAR varlmar: augmented Z'Z not positive definite".to_string())?
@@ -337,20 +332,17 @@ pub fn serial_correlation(fit: &VarFit, mlag: usize) -> Result<Vec<SerialCorrela
         let mut u_aug = Mat::zeros(n_obs, k);
         for eq in 0..k {
             let y_col = y_dep.col(eq).to_owned();
-            let y_vector = y_col.as_ref().to_owned();
-            let zty = zt_aug.as_ref() * y_vector.as_ref();
+            let zty = zt_aug.as_ref() * y_col.as_ref();
             let beta = ztz_aug_inv.as_ref() * zty.as_ref();
-            let y_hat = z_aug_matrix.as_ref() * beta.as_ref();
-            let u = y_vector.as_ref() - y_hat.as_ref();
-            let u_nd = u.as_ref().to_owned();
+            let y_hat = z_aug.as_ref() * beta.as_ref();
+            let u = y_col.as_ref() - y_hat.as_ref();
             for i in 0..n_obs {
-                u_aug[(i, eq)] = u_nd[i];
+                u_aug[(i, eq)] = u[i];
             }
         }
 
-        let sigma_tilde =
+        let mut det_tilde =
             (u_aug.transpose() * u_aug.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
-        let mut det_tilde = sigma_tilde.clone();
         cholesky_lower_in_place(&mut det_tilde)
             .map_err(|_| "VAR varlmar: Sigma_tilde not positive definite".to_string())?;
         let det_g_tilde: f64 = (0..k).map(|i| det_tilde[(i, i)]).product();
@@ -374,7 +366,7 @@ pub fn serial_correlation(fit: &VarFit, mlag: usize) -> Result<Vec<SerialCorrela
 }
 
 pub fn stability(fit: &VarFit) -> Result<Vec<StabilityRoot>, String> {
-    let a_mats = lag_matrices(fit)?;
+    let a_mats = lag_matrices(fit, fit.lags.iter().copied().max().unwrap_or(0))?;
     let k = fit.var_names.len();
     let lags = &fit.lags;
     let p_model = a_mats.len() - 1;

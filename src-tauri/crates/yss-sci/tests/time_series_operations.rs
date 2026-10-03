@@ -1,7 +1,7 @@
 //! Numerical time-series model regressions.
 use yss_sci::time_series::unit_root::{AdfRegression, adf_test};
 use yss_sci::time_series::var::var_varsoc;
-use yss_sci::time_series::vec::{VECConfig, VecTrendSpec, vec_estimate};
+use yss_sci::time_series::vec::{VECConfig, VecTrendSpec, vec_estimate, vec_vecrank_stats};
 use yss_sci_linalg::Mat;
 
 #[test]
@@ -30,7 +30,7 @@ fn test_var_varsoc_shape_and_lr() {
 }
 
 #[test]
-fn test_adf_drift_returns_regression_stats() {
+fn test_adf_preserves_drift_and_matches_mackinnon_reference() {
     let y: Vec<f64> = (0..100)
         .map(|i| i as f64 + (i as f64 * 0.1).sin())
         .collect();
@@ -42,6 +42,46 @@ fn test_adf_drift_returns_regression_stats() {
     assert!(result.test_statistic.is_finite());
     assert!(result.p_value >= 0.0 && result.p_value <= 1.0);
     assert!(!result.regression_table.is_empty());
+    assert!(result.use_t_distribution);
+
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/panel_category_reference.json")).unwrap();
+    let data = &fixture["nonstationary"];
+    let response: Vec<f64> = serde_json::from_value(data["response"].clone()).unwrap();
+    let entity: Vec<f64> = serde_json::from_value(data["entity"].clone()).unwrap();
+    for case in data["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["method"] == "unit_root" && case["regression"] != "constant")
+    {
+        let trend = case["regression"] == "trend";
+        let lags = case["lags"].as_u64().unwrap() as usize;
+        for (index, expected) in case["entity_tests"].as_array().unwrap().iter().enumerate() {
+            let values = response
+                .iter()
+                .zip(&entity)
+                .filter_map(|(&value, &group)| (group == index as f64).then_some(value))
+                .collect::<Vec<_>>();
+            let result = adf_test(&values, lags, trend, trend).unwrap();
+            assert_eq!(
+                result.num_obs,
+                expected["observations"].as_u64().unwrap() as usize
+            );
+            assert!(!result.use_t_distribution);
+            for (name, actual) in [
+                ("statistic", result.test_statistic),
+                ("p_value", result.p_value),
+            ] {
+                let reference = expected[name].as_f64().unwrap();
+                assert!(
+                    (actual - reference).abs() < 1e-7 * (1.0 + reference.abs()),
+                    "{} entity {index} {name}: {actual} != {reference}",
+                    case["regression"]
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -64,4 +104,17 @@ fn test_vec_estimate_rejects_invalid_config() {
 
     let err = vec_estimate(&y, &config, Some(vec!["y1".into(), "y2".into()]), None).unwrap_err();
     assert!(err.contains("lags must be >= 1"));
+
+    for (observations, lags) in [(2, 3), (0, 1)] {
+        let sample = Mat::zeros(observations, 2);
+        let config = VECConfig {
+            trend_spec: VecTrendSpec::Constant,
+            lags,
+            rank: 1,
+        };
+        assert!(vec_estimate(&sample, &config, None, None).is_err());
+        assert!(
+            vec_vecrank_stats(&sample, lags, VecTrendSpec::Constant, None, true, None).is_err()
+        );
+    }
 }

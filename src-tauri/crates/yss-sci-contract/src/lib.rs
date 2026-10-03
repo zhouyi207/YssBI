@@ -10,7 +10,9 @@ pub mod diagnostics;
 pub mod distribution;
 pub mod execution;
 pub mod hypothesis;
+pub mod inference;
 pub mod longitudinal;
+pub mod meta;
 pub mod multivariate;
 pub mod panel;
 pub mod regression;
@@ -22,5 +24,13 @@ pub mod visualization;
 mod error;
 mod observation;
 
-pub use error::{SciError, SciInputViolation, SciOperationCode};
+pub use error::{SciError, SciOperationCode};
 pub use observation::{CategoricalRole, MissingValuePolicy, StatisticalObservationMetadata};
+pub mod decision;
+pub mod doe;
+pub mod psychometrics;
+pub mod quality;
+
+pub mod path;
+pub mod power;
+pub mod survey;

@@ -1,11 +1,13 @@
 //! Kernel adapters for sample-mean hypothesis tests.
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
+use std::collections::BTreeSet;
 use std::mem::size_of;
 use yss_data_contract::TabularScalar;
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{
-    Alternative, CategoricalHypothesisTest, ClassicalHypothesisTest, RankHypothesisTest,
-    VarianceHomogeneityTest,
+    Alternative, CategoricalHypothesisTest, ClassicalHypothesisTest, HypothesisError,
+    RankHypothesisTest, VarianceHomogeneityTest,
 };
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
@@ -35,7 +37,10 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         1,
         |inv| {
             let first = columns(&group(inv, "group1"), inv, 0)?.remove(0);
-            let second = columns(&group(inv, "group2"), inv, 0)?.remove(0);
+            let retained = inv
+                .control
+                .check_bytes(first.len().checked_mul(size_of::<f64>()))?;
+            let second = columns(&group(inv, "group2"), inv, retained)?.remove(0);
             execute(
                 ClassicalHypothesisTest::Independent {
                     first,
@@ -54,8 +59,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &["alternative"],
         1,
         |inv| {
-            let before = columns(&group(inv, "before"), inv, 0)?.remove(0);
-            let after = columns(&group(inv, "after"), inv, 0)?.remove(0);
+            let mut values = columns(&[group(inv, "before")[0], group(inv, "after")[0]], inv, 0)?;
+            let after = values.pop().expect("after column");
+            let before = values.pop().expect("before column");
             execute(
                 ClassicalHypothesisTest::Paired {
                     before,
@@ -203,13 +209,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         1,
         |inv| {
             ensure_aligned(inv, &["row", "column"])?;
-            execute_categorical(
-                CategoricalHypothesisTest::Independence {
-                    row: category_values(inv, "row")?,
-                    column: category_values(inv, "column")?,
-                },
-                inv,
-            )
+            let row = category_values(inv, "row", 0)?;
+            let column = category_values(inv, "column", category_bytes(&row, inv)?)?;
+            execute_categorical(CategoricalHypothesisTest::Independence { row, column }, inv)
         },
     );
     install(
@@ -238,7 +240,10 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         1,
         |inv| {
             let observed = columns(&group(inv, "observed"), inv, 0)?.remove(0);
-            let expected = columns(&group(inv, "expected"), inv, 0)?.remove(0);
+            let retained = inv
+                .control
+                .check_bytes(observed.len().checked_mul(size_of::<f64>()))?;
+            let expected = columns(&group(inv, "expected"), inv, retained)?.remove(0);
             execute_categorical(
                 CategoricalHypothesisTest::GoodnessOfFit { observed, expected },
                 inv,
@@ -253,13 +258,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         1,
         |inv| {
             ensure_aligned(inv, &["row", "column"])?;
-            execute_categorical(
-                CategoricalHypothesisTest::FisherExact {
-                    row: category_values(inv, "row")?,
-                    column: category_values(inv, "column")?,
-                },
-                inv,
-            )
+            let row = category_values(inv, "row", 0)?;
+            let column = category_values(inv, "column", category_bytes(&row, inv)?)?;
+            execute_categorical(CategoricalHypothesisTest::FisherExact { row, column }, inv)
         },
     );
     install(
@@ -269,13 +270,10 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            execute_categorical(
-                CategoricalHypothesisTest::McNemar {
-                    before: columns(&group(inv, "before"), inv, 0)?.remove(0),
-                    after: columns(&group(inv, "after"), inv, 0)?.remove(0),
-                },
-                inv,
-            )
+            let mut values = columns(&[group(inv, "before")[0], group(inv, "after")[0]], inv, 0)?;
+            let after = values.pop().expect("after column");
+            let before = values.pop().expect("before column");
+            execute_categorical(CategoricalHypothesisTest::McNemar { before, after }, inv)
         },
     );
     install(
@@ -290,11 +288,23 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         1,
         |inv| {
             ensure_aligned(inv, &["exposed", "outcome", "strata"])?;
+            let exposed = category_binary_values(inv, "exposed", 0)?;
+            let retained = inv
+                .control
+                .check_bytes(exposed.len().checked_mul(size_of::<f64>()))?;
+            let outcome = category_binary_values(inv, "outcome", retained)?;
+            let retained = inv.control.check_bytes(
+                exposed
+                    .len()
+                    .checked_add(outcome.len())
+                    .and_then(|n| n.checked_mul(size_of::<f64>())),
+            )?;
+            let strata = category_values(inv, "strata", retained)?;
             execute_categorical(
                 CategoricalHypothesisTest::Cmh {
-                    exposed: category_binary_values(inv, "exposed")?,
-                    outcome: category_binary_values(inv, "outcome")?,
-                    strata: category_values(inv, "strata")?,
+                    exposed,
+                    outcome,
+                    strata,
                 },
                 inv,
             )
@@ -374,11 +384,13 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &["alternative"],
         1,
         |inv| {
-            let values = columns(&[group(inv, "before")[0], group(inv, "after")[0]], inv, 0)?;
+            let mut values = columns(&[group(inv, "before")[0], group(inv, "after")[0]], inv, 0)?;
+            let after = values.pop().expect("second column");
+            let before = values.pop().expect("first column");
             execute_rank(
                 RankHypothesisTest::WilcoxonPaired {
-                    before: values[0].clone(),
-                    after: values[1].clone(),
+                    before,
+                    after,
                     alternative: alternative(inv)?,
                 },
                 inv,
@@ -392,11 +404,13 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &["alternative"],
         1,
         |inv| {
-            let values = columns(&[group(inv, "group1")[0], group(inv, "group2")[0]], inv, 0)?;
+            let mut values = columns(&[group(inv, "group1")[0], group(inv, "group2")[0]], inv, 0)?;
+            let second = values.pop().expect("second column");
+            let first = values.pop().expect("first column");
             execute_rank(
                 RankHypothesisTest::MannWhitney {
-                    first: values[0].clone(),
-                    second: values[1].clone(),
+                    first,
+                    second,
                     alternative: alternative(inv)?,
                 },
                 inv,
@@ -487,14 +501,19 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         |inv| {
             let values = columns(&group(inv, "groups"), inv, 0)?;
             match text(inv, "method")? {
-                "mann_whitney" if values.len() == 2 => execute_rank(
-                    RankHypothesisTest::MannWhitney {
-                        first: values[0].clone(),
-                        second: values[1].clone(),
-                        alternative: Alternative::TwoSided,
-                    },
-                    inv,
-                ),
+                "mann_whitney" if values.len() == 2 => {
+                    let mut values = values;
+                    let second = values.pop().expect("second column");
+                    let first = values.pop().expect("first column");
+                    execute_rank(
+                        RankHypothesisTest::MannWhitney {
+                            first,
+                            second,
+                            alternative: Alternative::TwoSided,
+                        },
+                        inv,
+                    )
+                }
                 "kruskal_wallis" if values.len() >= 2 => {
                     execute_rank(RankHypothesisTest::KruskalWallis { groups: values }, inv)
                 }
@@ -565,8 +584,23 @@ fn execute(
     test: ClassicalHypothesisTest,
     inv: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let report = yss_sci_runtime::hypothesis::sample_mean_test(test)
-        .map_err(|_| KernelError::InvalidNumericInput)?;
+    let observations = match &test {
+        ClassicalHypothesisTest::OneSample { values, .. }
+        | ClassicalHypothesisTest::OneSampleZ { values, .. }
+        | ClassicalHypothesisTest::Equivalence { values, .. } => Some(values.len()),
+        ClassicalHypothesisTest::PoissonRate { counts, .. } => Some(counts.len()),
+        ClassicalHypothesisTest::Independent { first, second, .. } => {
+            first.len().checked_add(second.len())
+        }
+        ClassicalHypothesisTest::Paired { before, after, .. } => {
+            before.len().checked_add(after.len())
+        }
+        _ => Some(0),
+    };
+    numeric_workspace(observations, 2, inv)?;
+    let control = scientific_control(inv);
+    let report =
+        yss_sci_runtime::hypothesis::sample_mean_test(test, &control).map_err(hypothesis_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
@@ -575,18 +609,130 @@ fn execute_categorical(
     test: CategoricalHypothesisTest,
     inv: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let report = yss_sci_runtime::hypothesis::categorical_test(test)
-        .map_err(|_| KernelError::InvalidNumericInput)?;
+    match &test {
+        CategoricalHypothesisTest::Independence { row, column }
+        | CategoricalHypothesisTest::FisherExact { row, column } => {
+            count_table_workspace(row, column, inv)?
+        }
+        CategoricalHypothesisTest::GoodnessOfFit { observed, expected } => {
+            numeric_workspace(observed.len().checked_add(expected.len()), 2, inv)?
+        }
+        CategoricalHypothesisTest::PearsonTable { observed, .. } => {
+            numeric_workspace(Some(observed.len()), 2, inv)?
+        }
+        CategoricalHypothesisTest::McNemar { before, after } => {
+            numeric_workspace(before.len().checked_add(after.len()), 2, inv)?
+        }
+        CategoricalHypothesisTest::MultipleProportions {
+            successes_and_trials,
+        } => numeric_workspace(Some(successes_and_trials.len()), 2, inv)?,
+        CategoricalHypothesisTest::Cmh {
+            exposed,
+            outcome,
+            strata,
+        } => {
+            let labels = category_bytes(strata, inv)?;
+            inv.control.check_bytes(
+                exposed
+                    .len()
+                    .checked_add(outcome.len())
+                    .and_then(|n| n.checked_mul(size_of::<f64>()))
+                    .and_then(|n| n.checked_add(labels))
+                    .and_then(|n| n.checked_add(strata.len().checked_mul(160)?))
+                    .and_then(|n| n.checked_add(4096)),
+            )?;
+        }
+    }
+    let control = scientific_control(inv);
+    let report =
+        yss_sci_runtime::hypothesis::categorical_test(test, &control).map_err(hypothesis_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
+}
+
+fn category_bytes(values: &[Box<str>], inv: &KernelInvocation<'_>) -> Result<usize, KernelError> {
+    let mut bytes = 0usize;
+    for (i, key) in values.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        bytes = inv.control.check_bytes(
+            bytes
+                .checked_add(size_of::<Box<str>>() * 2)
+                .and_then(|n| n.checked_add(key.len())),
+        )?;
+    }
+    Ok(bytes)
+}
+
+fn count_table_workspace(
+    row: &[Box<str>],
+    column: &[Box<str>],
+    inv: &KernelInvocation<'_>,
+) -> Result<(), KernelError> {
+    let retained = inv
+        .control
+        .check_bytes(category_bytes(row, inv)?.checked_add(category_bytes(column, inv)?))?;
+    // Admit the borrowed cardinality indexes before allocating them. The SCI stage
+    // also retains cloned labels and tree indexes; this is a conservative estimate, not RSS.
+    const INDEX_BYTES: usize = 128;
+    inv.control.check_bytes(
+        row.len()
+            .checked_add(column.len())
+            .and_then(|n| n.checked_mul(INDEX_BYTES))
+            .and_then(|n| n.checked_add(retained)),
+    )?;
+    let mut rows = BTreeSet::new();
+    let mut columns = BTreeSet::new();
+    for (values, levels) in [(row, &mut rows), (column, &mut columns)] {
+        for (i, key) in values.iter().enumerate() {
+            if i.is_multiple_of(1024) {
+                inv.check_control()?;
+            }
+            levels.insert(key.as_ref());
+        }
+    }
+    inv.control.check_bytes((|| {
+        let levels = rows.len().checked_add(columns.len())?;
+        let table = rows
+            .len()
+            .checked_mul(columns.len())?
+            .checked_mul(size_of::<u64>())?;
+        retained
+            .checked_mul(2)?
+            .checked_add(levels.checked_mul(INDEX_BYTES + size_of::<f64>())?)?
+            .checked_add(rows.len().checked_mul(size_of::<Vec<u64>>())?)?
+            .checked_add(table)?
+            .checked_add(4096)
+    })())?;
+    Ok(())
 }
 
 fn execute_rank(
     test: RankHypothesisTest,
     inv: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let report = yss_sci_runtime::hypothesis::rank_test(test)
-        .map_err(|_| KernelError::InvalidNumericInput)?;
+    let (observations, groups) = match &test {
+        RankHypothesisTest::WilcoxonOneSample { values, .. }
+        | RankHypothesisTest::Runs { values }
+        | RankHypothesisTest::MannKendall { values, .. } => (Some(values.len()), 1),
+        RankHypothesisTest::WilcoxonPaired { before, after, .. } => {
+            (before.len().checked_add(after.len()), 2)
+        }
+        RankHypothesisTest::MannWhitney { first, second, .. } => {
+            (first.len().checked_add(second.len()), 2)
+        }
+        RankHypothesisTest::KruskalWallis { groups }
+        | RankHypothesisTest::MoodMedian { groups }
+        | RankHypothesisTest::Friedman { conditions: groups }
+        | RankHypothesisTest::CochranQ { conditions: groups } => {
+            (group_observations(groups, inv)?, groups.len())
+        }
+    };
+    numeric_workspace(observations, groups, inv)?;
+    let control = scientific_control(inv);
+    let report =
+        yss_sci_runtime::hypothesis::rank_test(test, &control).map_err(hypothesis_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
@@ -595,104 +741,239 @@ fn execute_variance(
     test: VarianceHomogeneityTest,
     inv: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let report = yss_sci_runtime::hypothesis::variance_test(test)
-        .map_err(|_| KernelError::InvalidNumericInput)?;
+    let groups = match &test {
+        VarianceHomogeneityTest::Levene { groups }
+        | VarianceHomogeneityTest::BrownForsythe { groups }
+        | VarianceHomogeneityTest::Bartlett { groups } => groups,
+    };
+    numeric_workspace(group_observations(groups, inv)?, groups.len(), inv)?;
+    let control = scientific_control(inv);
+    let report =
+        yss_sci_runtime::hypothesis::variance_test(test, &control).map_err(hypothesis_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
 
+fn scientific_control(inv: &KernelInvocation<'_>) -> ScientificExecutionControl {
+    ScientificExecutionControl::from_shared(inv.control.cancellation.clone(), inv.control.deadline)
+}
+
+fn hypothesis_error(error: HypothesisError) -> KernelError {
+    match error {
+        HypothesisError::Execution(error) => computation_error(error),
+        HypothesisError::InvalidInput(_) | HypothesisError::Scientific(_) => {
+            KernelError::InvalidNumericInput
+        }
+    }
+}
+
+fn group_observations(
+    groups: &[Vec<f64>],
+    inv: &KernelInvocation<'_>,
+) -> Result<Option<usize>, KernelError> {
+    let mut total = Some(0usize);
+    for (i, group) in groups.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        total = total.and_then(|n| n.checked_add(group.len()));
+    }
+    Ok(total)
+}
+
+fn numeric_workspace(
+    observations: Option<usize>,
+    groups: usize,
+    inv: &KernelInvocation<'_>,
+) -> Result<(), KernelError> {
+    // Retained inputs, rank/order/tie arrays and stable-sort scratch, deviations,
+    // per-condition rows, and structured sample-size output. Admission is conservative, not RSS.
+    inv.control.check_bytes(
+        observations
+            .and_then(|n| n.checked_mul(128))
+            .and_then(|n| n.checked_add(groups.checked_mul(512)?))
+            .and_then(|n| n.checked_add(4096)),
+    )?;
+    Ok(())
+}
+
 fn binary_counts(inv: &KernelInvocation<'_>, key: &str) -> Result<(usize, usize), KernelError> {
     let values = columns(&group(inv, key), inv, 0)?.remove(0);
-    if values.is_empty() || values.iter().any(|value| *value != 0.0 && *value != 1.0) {
+    if values.is_empty() {
         return Err(KernelError::InvalidNumericInput);
     }
-    let successes = values.iter().filter(|value| **value == 1.0).count();
+    let mut successes = 0;
+    for (i, value) in values.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        if *value != 0.0 && *value != 1.0 {
+            return Err(KernelError::InvalidNumericInput);
+        }
+        successes += usize::from(*value == 1.0);
+    }
     Ok((successes, values.len()))
 }
 
-fn category_binary_values(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<f64>, KernelError> {
-    let categories = category_values(inv, key)?;
-    if categories.iter().any(|value| {
-        !matches!(
-            value.as_ref(),
-            "b:0"
-                | "b:1"
-                | "i:0"
-                | "i:1"
-                | "u:0"
-                | "u:1"
-                | "f:0000000000000000"
-                | "f:3ff0000000000000"
-        )
-    }) {
-        return Err(KernelError::InvalidNumericInput);
-    }
-    Ok(categories
+fn category_binary_values(
+    inv: &KernelInvocation<'_>,
+    key: &str,
+    retained: usize,
+) -> Result<Vec<f64>, KernelError> {
+    let categories = category_values(inv, key, retained)?;
+    let labels = category_bytes(&categories, inv)?;
+    inv.control.check_bytes(
+        categories
+            .len()
+            .checked_mul(size_of::<f64>())
+            .and_then(|n| n.checked_add(labels))
+            .and_then(|n| n.checked_add(retained)),
+    )?;
+    categories
         .iter()
-        .map(|value| {
-            if matches!(value.as_ref(), "b:1" | "i:1" | "u:1" | "f:3ff0000000000000") {
-                1.0
-            } else {
-                0.0
+        .enumerate()
+        .map(|(i, value)| {
+            if i.is_multiple_of(1024) {
+                inv.check_control()?;
+            }
+            match value.as_ref() {
+                "b:1" | "i:1" | "u:1" | "f:3ff0000000000000" => Ok(1.0),
+                "b:0" | "i:0" | "u:0" | "f:0000000000000000" => Ok(0.0),
+                _ => Err(KernelError::InvalidNumericInput),
             }
         })
-        .collect())
+        .collect()
 }
 
-fn category_values(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<Box<str>>, KernelError> {
+fn category_values(
+    inv: &KernelInvocation<'_>,
+    key: &str,
+    retained: usize,
+) -> Result<Vec<Box<str>>, KernelError> {
     let value = group(inv, key)
         .into_iter()
         .next()
         .ok_or(KernelError::InvalidNumericInput)?;
     let mut categories = Vec::new();
     let mut bytes = 0usize;
-    let mut append = |values: Vec<TabularScalar>| -> Result<(), KernelError> {
-        for scalar in values {
-            inv.check_control()?;
-            let key: Box<str> = match scalar {
-                TabularScalar::Bool(value) => format!("b:{}", u8::from(value)).into(),
-                TabularScalar::Integer(value) => format!("i:{value}").into(),
-                TabularScalar::Unsigned(value) => format!("u:{value}").into(),
-                TabularScalar::Float64(value) => {
-                    format!("f:{:016x}", value.as_f64().to_bits()).into()
-                }
-                TabularScalar::String(value) => format!("s:{value}").into(),
-                TabularScalar::Null => return Err(KernelError::InvalidNumericInput),
-            };
-            bytes = bytes
-                .checked_add(key.len() + size_of::<Box<str>>())
-                .ok_or(KernelError::BudgetExceeded)?;
-            inv.control.check_bytes(Some(bytes))?;
-            categories.push(key);
-        }
-        Ok(())
-    };
     match value {
         RuntimeValue::List(values) => {
-            let scalars = values
-                .iter()
-                .map(|value| match value.unannotated() {
-                    RuntimeValue::Scalar(value) => Ok(value.clone()),
-                    _ => Err(KernelError::InvalidNumericInput),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            append(scalars)?;
+            for value in values.iter() {
+                let RuntimeValue::Scalar(value) = value.unannotated() else {
+                    return Err(KernelError::InvalidNumericInput);
+                };
+                append_category(value, &mut categories, &mut bytes, retained, 0, inv)?;
+            }
         }
         RuntimeValue::Series(series) => {
             let relation = series
                 .as_relation()
                 .map_err(|_| KernelError::InvalidNumericInput)?;
-            relation
-                .visit_batches(&inv.relation_control(), &mut |batch| {
-                    let values = yss_database_arrow::materialized_values(batch.column(0).as_ref())
-                        .map_err(|_| yss_relational_contract::RelationError::InvalidInput)?;
-                    append(values).map_err(|_| yss_relational_contract::RelationError::InvalidInput)
+            let mut input_error = None;
+            let visited = relation.visit_batches(&inv.relation_control(), &mut |batch| {
+                let result = append_category_batch(
+                    batch.column(0).as_ref(),
+                    &mut categories,
+                    &mut bytes,
+                    retained,
+                    inv,
+                );
+                result.map_err(|error| {
+                    input_error = Some(error);
+                    yss_relational_contract::RelationError::InvalidInput
                 })
-                .map_err(super::super::relational::kernel_error)?;
+            });
+            if let Some(error) = input_error {
+                return Err(error);
+            }
+            visited.map_err(super::super::relational::kernel_error)?;
         }
         _ => return Err(KernelError::InvalidNumericInput),
     }
     Ok(categories)
+}
+
+fn append_category(
+    scalar: &TabularScalar,
+    categories: &mut Vec<Box<str>>,
+    bytes: &mut usize,
+    retained: usize,
+    temporary: usize,
+    inv: &KernelInvocation<'_>,
+) -> Result<(), KernelError> {
+    let encoded_bytes = match scalar {
+        TabularScalar::String(value) => value.len().checked_add(2),
+        TabularScalar::Null => return Err(KernelError::InvalidNumericInput),
+        _ => Some(32),
+    };
+    *bytes = inv.control.check_bytes(
+        encoded_bytes
+            .and_then(|n| n.checked_add(size_of::<Box<str>>() * 2))
+            .and_then(|n| bytes.checked_add(n)),
+    )?;
+    inv.control.check_bytes(
+        bytes
+            .checked_add(retained)
+            .and_then(|n| n.checked_add(temporary)),
+    )?;
+    let key: Box<str> = match scalar {
+        TabularScalar::Bool(value) => format!("b:{}", u8::from(*value)).into(),
+        TabularScalar::Integer(value) => format!("i:{value}").into(),
+        TabularScalar::Unsigned(value) => format!("u:{value}").into(),
+        TabularScalar::Float64(value) => format!("f:{:016x}", value.as_f64().to_bits()).into(),
+        TabularScalar::String(value) => format!("s:{value}").into(),
+        TabularScalar::Null => return Err(KernelError::InvalidNumericInput),
+    };
+    categories.push(key);
+    Ok(())
+}
+
+pub(super) fn append_category_batch(
+    array: &dyn arrow_array::Array,
+    categories: &mut Vec<Box<str>>,
+    bytes: &mut usize,
+    retained: usize,
+    inv: &KernelInvocation<'_>,
+) -> Result<(), KernelError> {
+    // Indirect strings can repeat one large buffer many times. Expand one row at
+    // a time so physical buffer admission also covers each temporary label copy.
+    let indirect = matches!(
+        array.data_type(),
+        arrow_schema::DataType::Dictionary(..) | arrow_schema::DataType::Utf8View
+    );
+    let temporary = inv.control.check_bytes(
+        (if indirect { 1 } else { array.len() })
+            .checked_mul(size_of::<TabularScalar>() * 2)
+            .and_then(|n| n.checked_add(array.get_array_memory_size().checked_mul(4)?)),
+    )?;
+    let mut append =
+        |array: &dyn arrow_array::Array, bytes: &mut usize| -> Result<(), KernelError> {
+            inv.control.check_bytes(
+                bytes
+                    .checked_add(retained)
+                    .and_then(|n| n.checked_add(temporary)),
+            )?;
+            let values = yss_database_arrow::materialized_values(array)
+                .map_err(|_| KernelError::InvalidNumericInput)?;
+            for value in &values {
+                append_category(value, categories, bytes, retained, temporary, inv)?;
+            }
+            Ok(())
+        };
+    if indirect {
+        for i in 0..array.len() {
+            // Slicing shares buffers, but is still preceded by the combined admission.
+            inv.control.check_bytes(
+                bytes
+                    .checked_add(retained)
+                    .and_then(|n| n.checked_add(temporary)),
+            )?;
+            append(array.slice(i, 1).as_ref(), bytes)?;
+        }
+    } else {
+        append(array, bytes)?;
+    }
+    Ok(())
 }
 
 fn ensure_aligned(inv: &KernelInvocation<'_>, keys: &[&str]) -> Result<(), KernelError> {

@@ -5,28 +5,6 @@ use crate::catalog_entry::{self, Entry};
 
 const ENTRIES: &[Entry] = &[
     Entry {
-        id: "yssbi.dataframe.labels",
-        method: "data.labels",
-        source_ids: &[2],
-        category: "dataframe.series",
-        en: "Data Labels",
-        zh: "数据标签",
-        aliases: &["数据标签", "variable labels", "value labels"],
-        product_form: "数据管理操作",
-        scope_note: "区分变量标签、取值标签和图节点显示名；持久化位置需定义。",
-    },
-    Entry {
-        id: "yssbi.dataframe.impute.single",
-        method: "missing.single_imputation",
-        source_ids: &[289],
-        category: "statistics.imputation",
-        en: "Single Imputation",
-        zh: "单次插补",
-        aliases: &["单次插补", "single imputation"],
-        product_form: "独立节点",
-        scope_note: "",
-    },
-    Entry {
         id: "yssbi.dataframe.impute.multiple",
         method: "missing.multiple_imputation",
         source_ids: &[290],

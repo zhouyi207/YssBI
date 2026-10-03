@@ -1,6 +1,7 @@
 //! Likelihood and nested-model diagnostics over retained OLS/WLS or binary fits.
 use crate::regression::models::common::{Result, failed, finite, inverse, parameter, validate};
 use statrs::distribution::{ChiSquared, Continuous, ContinuousCDF, FisherSnedecor, Normal};
+use yss_sci_contract::regression::fit::FittedRegression;
 use yss_sci_contract::{
     diagnostics::model::*,
     execution::ScientificExecutionControl as Control,
@@ -31,10 +32,10 @@ impl View<'_> {
     }
 }
 
-fn view<'a>(model: DiagnosticModel<'a>, control: &Control) -> Result<View<'a>> {
+fn view<'a>(model: FittedRegression<'a>, control: &Control) -> Result<View<'a>> {
     control.check()?;
     match model {
-        DiagnosticModel::Linear(m) => {
+        FittedRegression::Linear(m) => {
             super::influence::validate_linear(m, control)?;
             let n = m.residuals.len();
             let weight_scale = m
@@ -74,7 +75,7 @@ fn view<'a>(model: DiagnosticModel<'a>, control: &Control) -> Result<View<'a>> {
                 parameters: m.coefficients.len() + 1,
             })
         }
-        DiagnosticModel::Binary(m) => {
+        FittedRegression::Binary(m) => {
             let RegressionStatistics::Binary { link, model, .. } = &m.statistics else {
                 return Err(parameter());
             };
@@ -110,7 +111,7 @@ fn view<'a>(model: DiagnosticModel<'a>, control: &Control) -> Result<View<'a>> {
 }
 
 pub fn information_criteria(
-    model: DiagnosticModel<'_>,
+    model: FittedRegression<'_>,
     control: &Control,
 ) -> Result<InformationCriteria> {
     view(model, control)?.info()
@@ -135,8 +136,8 @@ fn chi_square(statistic: f64, df: usize) -> Result<ComparisonTest> {
 }
 
 pub fn compare_models(
-    restricted: DiagnosticModel<'_>,
-    full: DiagnosticModel<'_>,
+    restricted: FittedRegression<'_>,
+    full: FittedRegression<'_>,
     method: ComparisonMethod,
     control: &Control,
 ) -> Result<ModelComparison> {

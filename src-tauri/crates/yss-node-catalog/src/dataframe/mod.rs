@@ -8,6 +8,7 @@ use yss_data_contract::DataValue;
 mod aggregation;
 mod families;
 mod inventory;
+mod labels;
 mod transforms;
 pub(crate) use inventory::documentation as inventory_documentation;
 pub(crate) use transforms::documentation as transformation_documentation;
@@ -66,6 +67,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     };
     inventory::append(&mut fragment)?;
     transforms::append(&mut fragment)?;
+    labels::append(&mut fragment)?;
     Ok(fragment)
 }
 
@@ -80,7 +82,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         InterfaceKind::SeriesSelect
         | InterfaceKind::SeriesLength
         | InterfaceKind::SeriesCount
-        | InterfaceKind::DummyInfo
         | InterfaceKind::TimeLag => vec![sid("element", TypeParameterId::new)?],
         _ => vec![],
     };
@@ -113,6 +114,11 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 input: sid("dataframe", PortKey::new)?,
                 column: sid("column", ParameterKey::new)?,
                 output: sid("series", PortKey::new)?,
+            }
+        } else if spec.interface == InterfaceKind::DummyInfo {
+            NodeTypingSpec::Identity {
+                input: sid("source", PortKey::new)?,
+                output: sid("result", PortKey::new)?,
             }
         } else {
             NodeTypingSpec::Fixed
@@ -382,7 +388,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         SeriesSum => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_series_type(), None)?,
-                data_output("value", "Value", numeric_scalar_type()?, None)?,
+                data_output("value", "Value", concrete("core.numeric")?, None)?,
             ],
             vec![],
         )),
@@ -416,22 +422,30 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             ],
             vec![],
         )),
-        DummyInfo => Ok((
-            vec![
-                data_input("source", "Source", generic_series_type("element")?, None)?,
-                data_output("result", "Result", generic_series_type("element")?, None)?,
-            ],
-            vec![parameter(
-                "base_level",
-                concrete("core.text")?,
-                ParameterEditorSpec::Text { multiline: false },
-                Some(TypedValue {
-                    value_type: concrete("core.text")?,
-                    value: DataValue::String("".into()),
-                }),
-                vec![],
-            )?],
-        )),
+        DummyInfo => {
+            let series = TypeExpr::Union(
+                ["core.categorical", "core.ordinal", "core.binary"]
+                    .into_iter()
+                    .map(|id| concrete(id).map(data_series_type))
+                    .collect::<Result<_, _>>()?,
+            );
+            Ok((
+                vec![
+                    data_input("source", "Source", series.clone(), None)?,
+                    data_output("result", "Result", series, None)?,
+                ],
+                vec![parameter(
+                    "base_level",
+                    concrete("core.text")?,
+                    ParameterEditorSpec::Text { multiline: false },
+                    Some(TypedValue {
+                        value_type: concrete("core.text")?,
+                        value: DataValue::String("".into()),
+                    }),
+                    vec![],
+                )?],
+            ))
+        }
         TimeAlign => Ok((
             vec![
                 data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
@@ -888,28 +902,11 @@ fn numeric_series_type() -> TypeExpr {
 fn float_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("core.numeric")
 }
-fn numeric_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalized_union(
-        "dataframe numeric scalar union",
-        vec![concrete("core.numeric")?, concrete("core.numeric")?],
-    )
-}
 fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.numeric")?))
 }
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.numeric")?))
-}
-fn normalized_union(
-    context: &'static str,
-    members: Vec<TypeExpr>,
-) -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(members)).map_err(|error| {
-        BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-            context,
-            value: error.to_string().into(),
-        }
-    })
 }
 fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))

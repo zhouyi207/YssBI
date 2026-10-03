@@ -175,7 +175,7 @@ fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Ker
     let constant = boolean(inv, "constant")?;
     // IV first-stage and identification diagnostics form dense observation projections.
     check_fit_workspace(response.len(), data.len(), constant, "GLS", inv)?;
-    let mut encoded = yss_sci_runtime::causal::iv::fit_instrumental_variables(
+    let mut fit = yss_sci_runtime::causal::iv::fit_instrumental_variables(
         kind,
         response,
         &data[..exog],
@@ -188,27 +188,23 @@ fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Ker
         boolean(inv, "small")?,
     )
     .map_err(sci)?;
-    encoded["responseName"] = serde_json::json!(input_label(&inv.inputs[0], "response".into()));
-    encoded["parameterNames"] = serde_json::json!(
-        std::iter::once("_cons".to_string())
-            .take(usize::from(constant))
-            .chain(
-                group(inv, "predictors")
-                    .into_iter()
-                    .chain(group(inv, "endogenous"))
-                    .enumerate()
-                    .map(|(j, v)| input_label(v, format!("x{}", j + 1)))
-            )
-            .collect::<Vec<_>>()
-    );
-    encoded["instrumentNames"] = serde_json::json!(
-        group(inv, "instruments")
-            .iter()
-            .enumerate()
-            .map(|(j, v)| input_label(v, format!("z{}", j + 1)))
-            .collect::<Vec<_>>()
-    );
-    let model = value(encoded, inv)?;
+    fit.response_name = input_label(&inv.inputs[0], "response".into());
+    fit.parameter_names = std::iter::once("_cons".to_string())
+        .take(usize::from(constant))
+        .chain(
+            group(inv, "predictors")
+                .into_iter()
+                .chain(group(inv, "endogenous"))
+                .enumerate()
+                .map(|(j, v)| input_label(v, format!("x{}", j + 1))),
+        )
+        .collect();
+    fit.instrument_names = group(inv, "instruments")
+        .iter()
+        .enumerate()
+        .map(|(j, v)| input_label(v, format!("z{}", j + 1)))
+        .collect();
+    let model = value(fit, inv)?;
     Ok(vec![
         model.clone(),
         field(&model, "fitted")?.clone(),
@@ -226,10 +222,8 @@ fn did(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
         return Err(KernelError::InvalidNumericInput);
     }
     check_fit_workspace(response.len(), data.len() + 1, true, "GLS", inv)?;
-    let result = yss_sci_runtime::causal::did::fit_did(response, data, entity, time, treatment)
+    let mut fit = yss_sci_runtime::causal::did::fit_did(response, data, entity, time, treatment)
         .map_err(sci)?;
-    let mut fit: yss_sci_contract::panel::PanelFit =
-        serde_json::from_value(result).map_err(|_| KernelError::ScientificFailure)?;
     let treatment_index = group(inv, "predictors").len() + 1;
     let treatment_label = format!("x{treatment_index}");
     if fit
@@ -245,6 +239,7 @@ fn did(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
         }
     }
     super::panel::name_fit(&mut fit, inv);
+    validate_finite(&fit)?;
     let summary = yss_sci_runtime::panel::summary(&fit, Default::default()).map_err(sci)?;
     let mut report = serde_json::json!({"model":fit,"summary":summary,"estimand":"TWFE treatment coefficient; ATT interpretation requires the DID identification assumptions","treatmentName":input_label(group(inv,"treatment")[0],"treatment".into())});
     if let Some(mut display) = report["summary"].get("report_display").cloned() {

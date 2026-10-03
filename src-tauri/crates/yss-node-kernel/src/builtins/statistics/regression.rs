@@ -1,6 +1,7 @@
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
+use yss_sci_contract::regression::postestimation::Evaluation;
 use yss_sci_contract::regression::{
     discrete::BinaryOptions,
     fit::BinaryRegressionLink,
@@ -122,7 +123,6 @@ fn fit(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, 
                     "cochrane_orcutt" => PraisTransform::CochraneOrcutt,
                     _ => return Err(KernelError::InvalidParameter),
                 },
-                ..Default::default()
             },
             metadata(n),
         ),
@@ -182,8 +182,8 @@ fn summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
 
             let options = MarginalOptions {
                 evaluation: match text(inv, "marginal_evaluation")? {
-                    "average" => MarginalEvaluation::Average,
-                    "at_means" => MarginalEvaluation::AtMeans,
+                    "average" => Evaluation::Average,
+                    "at_means" => Evaluation::AtMeans,
                     _ => return Err(KernelError::InvalidParameter),
                 },
                 method: match text(inv, "marginal_method")? {

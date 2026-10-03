@@ -1,6 +1,8 @@
+use std::borrow::Cow;
+
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
-use yss_data_contract::{SemanticType, ValueType};
+use yss_data_contract::{NumericRepresentation, SemanticConversion, SemanticType, ValueType};
 use yss_relational_contract::{BooleanOperand, BooleanOperation};
 
 fn scalar(value: &RuntimeValue) -> Result<Option<bool>, KernelError> {
@@ -19,7 +21,30 @@ pub(super) fn execute(
         return Err(KernelError::Failed);
     }
     invocation.check_control()?;
-    let inputs = invocation.inputs;
+    let normalized = invocation
+        .inputs
+        .iter()
+        .map(|value| {
+            let Some(metadata) = value.metadata() else {
+                return Ok(Cow::Borrowed(value));
+            };
+            if metadata.semantic.kind != SemanticType::Binary {
+                return Err(KernelError::Failed);
+            }
+            // Retained Binary metadata can invert Boolean values or name non-Boolean codes.
+            // Normalize through the same semantic owner as lazy series before Boolean logic.
+            super::conversion::materialized(
+                value,
+                &SemanticConversion::new(SemanticType::Binary, NumericRepresentation::Auto),
+                invocation.control,
+            )
+            .map(Cow::Owned)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let inputs = normalized
+        .iter()
+        .map(|value| value.unannotated())
+        .collect::<Vec<_>>();
     let is_series = inputs
         .iter()
         .any(|v| matches!(v, RuntimeValue::List(_) | RuntimeValue::Series(_)));
@@ -65,12 +90,12 @@ pub(super) fn execute(
             .map_err(super::relational::kernel_error)
     };
     let Some(rows) = rows else {
-        for (value, input) in values.iter_mut().zip(inputs) {
+        for (value, input) in values.iter_mut().zip(&inputs) {
             *value = scalar(input)?;
         }
         return evaluate(values);
     };
-    for input in inputs {
+    for input in &inputs {
         match input {
             RuntimeValue::List(values) if values.len() == rows => {}
             RuntimeValue::List(_) => return Err(KernelError::ShapeMismatch),
@@ -84,7 +109,7 @@ pub(super) fn execute(
         if row % 1024 == 0 {
             invocation.check_control()?;
         }
-        for (value, input) in values.iter_mut().zip(inputs) {
+        for (value, input) in values.iter_mut().zip(&inputs) {
             *value = scalar(match input {
                 RuntimeValue::List(values) => &values[row],
                 value => value,

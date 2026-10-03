@@ -46,7 +46,7 @@ pub fn predict_binary(
     if x.ncols() != coefficients.len() || coefficients.iter().any(|v| !v.is_finite()) {
         return Err(crate::error::invalid_input(
             SciOperationCode::Regression,
-            yss_sci_contract::SciInputViolation::ShapeMismatch,
+            yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
         ));
     }
     let normal =
@@ -68,15 +68,17 @@ pub(crate) fn fit_logit_design(
     config: yss_sci_contract::regression::discrete::BinaryOptions,
 ) -> Result<RegressionFit, SciError> {
     let constant = config.constant;
-    let result = Logit {
-        endog: y.clone(),
-        exog: x.clone(),
+    let model = Logit {
+        endog: y,
+        exog: x,
         config,
-    }
-    .fit()
-    .map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    };
+    let result = model
+        .fit()
+        .map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    let (y, x) = (&model.endog, &model.exog);
     let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
-    let fitted = (&x * &result.betas)
+    let fitted = (x * &result.betas)
         .iter()
         .map(|&value| 1.0 / (1.0 + (-value).exp()))
         .collect::<Vec<_>>();
@@ -126,7 +128,7 @@ pub(crate) fn fit_logit_design(
                 bic: result.bic,
                 iterations: result.iterations,
                 converged: result.converged,
-                condition_number: design_condition_number(&x),
+                condition_number: design_condition_number(x),
             },
         },
         metadata,
@@ -140,17 +142,19 @@ pub(crate) fn fit_probit_design(
     config: yss_sci_contract::regression::discrete::BinaryOptions,
 ) -> Result<RegressionFit, SciError> {
     let constant = config.constant;
-    let result = Probit {
-        endog: y.clone(),
-        exog: x.clone(),
+    let model = Probit {
+        endog: y,
+        exog: x,
         config,
-    }
-    .fit()
-    .map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    };
+    let result = model
+        .fit()
+        .map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    let (y, x) = (&model.endog, &model.exog);
     let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
     let normal =
         Normal::new(0.0, 1.0).map_err(|_| computation_failed(SciOperationCode::Regression))?;
-    let fitted = (&x * &result.betas)
+    let fitted = (x * &result.betas)
         .iter()
         .map(|&value| normal.cdf(value))
         .collect::<Vec<_>>();
@@ -200,7 +204,7 @@ pub(crate) fn fit_probit_design(
                 bic: result.bic,
                 iterations: result.iterations,
                 converged: result.converged,
-                condition_number: design_condition_number(&x),
+                condition_number: design_condition_number(x),
             },
         },
         metadata,

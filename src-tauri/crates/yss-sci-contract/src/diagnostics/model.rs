@@ -1,12 +1,5 @@
 //! Model comparison, observation influence and questionnaire diagnostic contracts.
-use crate::regression::{fit::RegressionFit, linear::LinearRegressionResult};
 use serde::Serialize;
-
-#[derive(Clone, Copy)]
-pub enum DiagnosticModel<'a> {
-    Linear(&'a LinearRegressionResult),
-    Binary(&'a RegressionFit),
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct InformationCriteria {

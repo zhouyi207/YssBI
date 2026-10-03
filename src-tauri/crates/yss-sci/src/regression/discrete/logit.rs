@@ -113,11 +113,8 @@ impl Logit {
                 .map(|(zi, sw)| zi * sw)
                 .collect();
 
-            let xw_matrix = xw.as_ref().to_owned();
-            let zw_vector = zw.as_ref().to_owned();
-
-            let xtx = xw_matrix.transpose() * xw_matrix.as_ref();
-            let xtz = xw_matrix.transpose() * zw_vector.as_ref();
+            let xtx = xw.transpose() * xw.as_ref();
+            let xtz = xw.transpose() * zw.as_ref();
 
             let xtx_inv = xtx
                 .checked_cholesky()
@@ -128,16 +125,15 @@ impl Logit {
                 .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
 
             let beta_new = xtx_inv.as_ref() * xtz.as_ref();
-            let beta_new_nd = beta_new.as_ref().to_owned();
 
             // Check convergence
             let diff: f64 = beta
                 .iter()
-                .zip(beta_new_nd.iter())
+                .zip(beta_new.iter())
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0, f64::max);
 
-            beta = beta_new_nd;
+            beta = beta_new;
 
             if diff < self.config.tolerance {
                 // Compute final quantities
@@ -150,15 +146,13 @@ impl Logit {
                 for (i, mut row) in xw_final.row_iter_mut().enumerate() {
                     row *= yss_sci_linalg::Scale(w_final[i].sqrt());
                 }
-                let xtx_final = xw_final.as_ref().to_owned();
-                let xtx_f = xtx_final.transpose() * xtx_final.as_ref();
+                let xtx_f = xw_final.transpose() * xw_final.as_ref();
                 let cov_beta = xtx_f
                     .checked_cholesky()
                     .map_err(|_| "Logit: failed to invert Hessian".to_string())?
                     .solve(&Mat::identity(xtx_f.nrows(), xtx_f.nrows()));
-                let cov_beta_nd = cov_beta.as_ref().to_owned();
 
-                let std_err = cov_beta_nd.diagonal().column_vector().map(|v| v.sqrt());
+                let std_err = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
 
                 let normal = Normal::new(0.0, 1.0).map_err(|e| format!("Logit: Normal: {}", e))?;
                 let z_values: Vec<f64> = beta
@@ -171,8 +165,8 @@ impl Logit {
                     .map(|&z| 2.0 * (1.0 - normal.cdf(z.abs())))
                     .collect();
                 let z_crit = normal.inverse_cdf(0.975);
-                let ci_lower = beta.clone() - yss_sci_linalg::Scale(z_crit) * std_err.clone();
-                let ci_upper = beta.clone() + yss_sci_linalg::Scale(z_crit) * std_err.clone();
+                let ci_lower = &beta - yss_sci_linalg::Scale(z_crit) * &std_err;
+                let ci_upper = &beta + yss_sci_linalg::Scale(z_crit) * &std_err;
 
                 // Log-likelihood: L = Σ [y*log(p) + (1-y)*log(1-p)]
                 let ll: f64 = self
@@ -223,7 +217,7 @@ impl Logit {
                     pvalues: (p_values).into_iter().collect::<Col<f64>>(),
                     conf_int_left: ci_lower,
                     conf_int_right: ci_upper,
-                    cov_beta: cov_beta_nd,
+                    cov_beta,
                     log_likelihood: ll,
                     ll_null,
                     pseudo_r2,

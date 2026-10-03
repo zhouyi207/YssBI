@@ -14,15 +14,6 @@ fn invalid() -> Error {
         violation: ScientificInputViolation::ParameterOutOfRange,
     }
 }
-fn check(control: &ScientificExecutionControl) -> Result<(), Error> {
-    if control.cancellation.is_cancelled() {
-        return Err(Error::Cancelled);
-    }
-    if std::time::Instant::now() >= control.deadline {
-        return Err(Error::DeadlineExceeded);
-    }
-    Ok(())
-}
 fn finite(value: f64) -> Result<f64, Error> {
     value.is_finite().then_some(value).ok_or_else(invalid)
 }
@@ -59,7 +50,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
     rng: &mut R,
 ) -> Result<(), Error> {
     use SamplingDistribution::*;
-    check(control)?;
+    control.check()?;
     if output.is_empty() {
         return Err(invalid());
     }
@@ -67,7 +58,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
         ($distribution:expr) => {{
             let distribution = $distribution.map_err(|_| invalid())?;
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 let sample: f64 = distribution.sample(rng);
                 let positive_support = matches!(
                     spec,
@@ -160,7 +151,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
             let distribution =
                 native::Bernoulli::new(probability(p, true)?).map_err(|_| invalid())?;
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 let sample: bool = distribution.sample(rng);
                 *value = SampleValue::Integer(i64::from(sample));
             }
@@ -178,7 +169,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
                 .sampler(native::BinomialAlgorithm::Automatic)
                 .map_err(|_| invalid())?;
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 let sample: u64 = sampler.sample(rng);
                 *value = SampleValue::Integer(
                     i64::try_from(sample).map_err(|_| Error::ComputationFailed)?,
@@ -190,14 +181,14 @@ fn sample_with_rng<R: Rng + ?Sized>(
                 return Err(invalid());
             }
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 *value = SampleValue::Integer(poisson(rate, rng)?);
             }
         }
         Geometric { probability: p } => {
             probability(p, false)?;
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 // ln_1p preserves small probabilities; Open01 avoids a zero-trial endpoint.
                 let sample = if p == 1.0 {
                     1.0
@@ -226,7 +217,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
                 )
             };
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 let rate = gamma.as_ref().map_or(0.0, |gamma| gamma.sample(rng));
                 *value = SampleValue::Integer(poisson(rate, rng)?);
             }
@@ -236,7 +227,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
                 return Err(invalid());
             }
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 *value = SampleValue::Integer(rng.random_range(lower..=upper));
             }
         }
@@ -249,7 +240,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
                 return Err(invalid());
             }
             for value in output.iter_mut() {
-                check(control)?;
+                control.check()?;
                 // Sample the smaller complement using exact integer urn draws. Unlike the native
                 // per-draw f64 loop this handles zero draws and permits cooperative cancellation.
                 let complement = draws > population - draws;
@@ -257,7 +248,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
                 let (mut remaining, mut available, mut hits) = (population, successes, 0u64);
                 for index in 0..steps {
                     if index % 1024 == 0 {
-                        check(control)?;
+                        control.check()?;
                     }
                     if available == 0 {
                         break;
@@ -277,7 +268,7 @@ fn sample_with_rng<R: Rng + ?Sized>(
             }
         }
     }
-    check(control)
+    control.check()
 }
 
 fn poisson<R: Rng + ?Sized>(rate: f64, rng: &mut R) -> Result<i64, Error> {

@@ -1,6 +1,5 @@
-pub(crate) use crate::builtin::BuiltinAssemblyError;
-pub(crate) use crate::builtin::ProviderFragment;
 use crate::builtin::node_key_text;
+pub(crate) use crate::builtin::{BuiltinAssemblyError, ProviderFragment, leaf};
 use crate::builtin::{assembled_interface, assembled_parameters};
 use crate::{Aliases, Text};
 use std::sync::Arc;
@@ -70,10 +69,6 @@ impl NodeKeys {
             aliases: i18n(node_key_text(id, "aliases"))?,
         })
     }
-}
-
-pub(crate) fn leaf(protocol: NodeProtocol, kernel: &str) -> RegisteredNode {
-    super::super::builtin::leaf(protocol, kernel)
 }
 
 pub(in crate::core_nodes) fn transparent(

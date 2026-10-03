@@ -2,6 +2,13 @@
 use crate::StatisticalObservationMetadata;
 use serde::{Deserialize, Serialize};
 
+/// Borrowed retained fits accepted by diagnostics and postestimation.
+#[derive(Clone, Copy)]
+pub enum FittedRegression<'a> {
+    Linear(&'a super::linear::LinearRegressionResult),
+    Binary(&'a RegressionFit),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegressionFit {

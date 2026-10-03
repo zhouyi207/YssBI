@@ -152,11 +152,6 @@ pub enum CovParams {
     Newey {
         lag: Option<i64>,
     },
-    HacPanel {
-        entity_id: Vec<usize>,
-        time_id: Vec<usize>,
-    },
-    HacGroupsum {
-        group_id: Vec<usize>,
-    },
 }
+
+pub mod postestimation;

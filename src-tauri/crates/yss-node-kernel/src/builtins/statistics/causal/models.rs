@@ -86,21 +86,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
-
 fn iteration(inv: &KernelInvocation<'_>) -> Result<IterationOptions, KernelError> {
     Ok(IterationOptions {
         max_iterations: integer(inv, "max_iterations")?,
@@ -285,7 +270,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 GmmOptions { constant, two_step },
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             name_coefficients(&mut result.coefficients, &labels, constant);
             value(result, inv)?
         }
@@ -306,7 +291,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     },
                     &control,
                 )
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -333,7 +318,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             name_coefficients(&mut result.outcome_coefficients, &labels, true);
             let selection_labels = group(inv, "selection_predictors")
                 .iter()
@@ -360,7 +345,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             name_coefficients(&mut result.coefficients, &labels, constant);
             value(result, inv)?
         }
@@ -373,7 +358,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 constant,
                 &control,
             )
-            .map_err(error)?;
+            .map_err(computation_error)?;
             for equation in &mut result.equations {
                 name_coefficients(
                     &mut equation.coefficients,
@@ -391,7 +376,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             let (groups, group_labels) = group_data.expect("group data");
             let r =
                 designs::heterogeneity(&columns[0], &columns[1], &groups, &columns[3..], &control)
-                    .map_err(error)?;
+                    .map_err(computation_error)?;
             let mut result = HeterogeneityResult {
                 observations: r.observations,
                 groups: group_labels,
@@ -413,7 +398,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?,
+            .map_err(computation_error)?,
             inv,
         )?,
         _ => {
@@ -452,7 +437,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             };
             value(
                 treatment::estimate(&columns[0], &columns[1], &columns[2..], options, &control)
-                    .map_err(error)?,
+                    .map_err(computation_error)?,
                 inv,
             )?
         }

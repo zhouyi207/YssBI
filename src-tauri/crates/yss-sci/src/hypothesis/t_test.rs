@@ -10,7 +10,7 @@ use yss_sci_contract::hypothesis::{Alternative, TTestResult};
 /// t 检验：H0: Rβ = r（仅 q=1）
 ///
 /// t = (Rβ - r) / se(Rβ - r)，se = sqrt(R Σ R')
-pub fn t_test(
+pub(super) fn t_test(
     betas: &Col<f64>,
     cov_beta: &Mat<f64>,
     r: &Mat<f64>,
@@ -37,10 +37,11 @@ pub fn t_test(
     let c = contrast[0];
 
     let r_cov_r = (r * cov_beta) * r.transpose();
-    let se = r_cov_r[(0, 0)].sqrt();
-    if se <= 0.0 {
+    let variance = r_cov_r[(0, 0)];
+    if variance.is_nan() || variance <= 0.0 {
         return Err("R Σ R' 非正，无法计算标准误".to_string());
     }
+    let se = variance.sqrt();
 
     let t_stat = c / se;
     let dist = StudentsT::new(0.0, 1.0, df_residual as f64)

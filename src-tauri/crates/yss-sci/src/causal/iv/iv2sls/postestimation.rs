@@ -329,13 +329,13 @@ impl IV2SLS {
                 } else {
                     (0.0, 0)
                 };
-                let chi2_h = ChiSquared::new(h_df as f64).ok();
-                let p_val = chi2_h.map(|c| 1.0 - c.cdf(h_stat)).unwrap_or(f64::NAN);
-                Some(HausmanTest {
-                    stat: h_stat,
-                    p_value: p_val,
-                    df: h_df,
-                })
+                ChiSquared::new(h_df as f64)
+                    .ok()
+                    .map(|distribution| HausmanTest {
+                        stat: h_stat,
+                        p_value: 1.0 - distribution.cdf(h_stat),
+                        df: h_df,
+                    })
             } else {
                 None
             };
@@ -407,17 +407,16 @@ impl IV2SLS {
                 } else {
                     0.0
                 };
-                let f_dist = FisherSnedecor::new(p1 as f64, wudf_denom as f64).ok();
-                let wu_p = f_dist.map(|f| 1.0 - f.cdf(wu_stat)).unwrap_or(f64::NAN);
-
-                Some(EndogenousTest {
-                    durbin_stat,
-                    durbin_p_value: durbin_p,
-                    wu_stat,
-                    wu_p_value: wu_p,
-                    df: p1,
-                    wu_df_denom: wudf_denom,
-                })
+                FisherSnedecor::new(p1 as f64, wudf_denom as f64)
+                    .ok()
+                    .map(|distribution| EndogenousTest {
+                        durbin_stat,
+                        durbin_p_value: durbin_p,
+                        wu_stat,
+                        wu_p_value: 1.0 - distribution.cdf(wu_stat),
+                        df: p1,
+                        wu_df_denom: wudf_denom,
+                    })
             } else {
                 None
             };

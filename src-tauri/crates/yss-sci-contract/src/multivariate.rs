@@ -88,6 +88,17 @@ pub struct FactorReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactorabilityReport {
+    pub observations: usize,
+    pub variables: usize,
+    pub kmo: Option<f64>,
+    pub item_msa: Vec<Option<f64>>,
+    pub bartlett_chi_square: f64,
+    pub bartlett_df: usize,
+    pub bartlett_p_value: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CanonicalTest {
     /// Tests this and all remaining canonical roots, numbered from one.
     pub first_axis: usize,

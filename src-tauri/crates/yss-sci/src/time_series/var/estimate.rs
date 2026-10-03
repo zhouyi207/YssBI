@@ -87,9 +87,8 @@ impl VAR {
         }
 
         // 每方程 OLS
-        let z_matrix = z.as_ref().to_owned();
-        let zt = z_matrix.transpose();
-        let ztz = zt.as_ref() * z_matrix.as_ref();
+        let zt = z.transpose();
+        let ztz = zt.as_ref() * z.as_ref();
         let ztz_inv = ztz
             .checked_cholesky()
             .map_err(|_| "VAR: Z'Z not positive definite (check collinearity)".to_string())?
@@ -105,16 +104,12 @@ impl VAR {
 
         for eq in 0..k {
             let y_col = y_dep.col(eq).to_owned();
-            let y_vector = y_col.as_ref().to_owned();
-            let zty = zt.as_ref() * y_vector.as_ref();
+            let zty = zt.as_ref() * y_col.as_ref();
             let beta = ztz_inv.as_ref() * zty.as_ref();
-            let y_hat = z_matrix.as_ref() * beta.as_ref();
-            let u = y_vector.as_ref() - y_hat.as_ref();
+            let y_hat = z.as_ref() * beta.as_ref();
+            let u = y_col.as_ref() - y_hat.as_ref();
 
-            let beta_nd = beta.as_ref().to_owned();
-            let u_nd = u.as_ref().to_owned();
-
-            let ss_r: f64 = u_nd.iter().map(|x| x * x).sum();
+            let ss_r: f64 = u.iter().map(|x| x * x).sum();
             let y_mean = y_col.iter().sum::<f64>() / (y_col.nrows() as f64).max(1.0);
             let ss_t: f64 = y_col.iter().map(|x| (x - y_mean).powi(2)).sum();
 
@@ -127,12 +122,11 @@ impl VAR {
                 n_obs as f64
             };
             let sigma2_eq = ss_r / sigma2_divisor;
-            let xtx_inv_nd = ztz_inv.as_ref().to_owned();
-            let cov_eq = yss_sci_linalg::Scale(sigma2_eq) * &xtx_inv_nd;
-            cov_beta.push(cov_eq.clone());
+            let cov_eq = yss_sci_linalg::Scale(sigma2_eq) * &ztz_inv;
             let se: Col<f64> = Col::from_fn(cov_eq.nrows().min(cov_eq.ncols()), |i| {
                 cov_eq[(i, i)].sqrt()
             });
+            cov_beta.push(cov_eq);
 
             let mut labels = Vec::with_capacity(n_z);
             let names = self.var_names.as_deref().unwrap_or(&[]);
@@ -159,9 +153,9 @@ impl VAR {
                 labels.push("const".to_string());
             }
 
-            coefficients.push(beta_nd.iter().copied().collect::<Vec<_>>());
+            coefficients.push(beta.iter().copied().collect::<Vec<_>>());
             std_errs.push(se.iter().copied().collect::<Vec<_>>());
-            residuals.push(u_nd.iter().copied().collect::<Vec<_>>());
+            residuals.push(u.iter().copied().collect::<Vec<_>>());
             ss_residual.push(ss_r);
             ss_total.push(ss_t);
             coef_labels.push(labels);
@@ -285,7 +279,10 @@ impl VAR {
             lags: lags.clone(),
             constant,
             dfk: self.config.dfk,
-            exogenous_names: self.exog_names.clone().unwrap_or_else(||(0..n_exog).map(|j|format!("exog{j}")).collect()),
+            exogenous_names: self
+                .exog_names
+                .clone()
+                .unwrap_or_else(|| (0..n_exog).map(|j| format!("exog{j}")).collect()),
             sample_rows: row_indices,
             coefficients,
             residuals,

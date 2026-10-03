@@ -9,9 +9,10 @@ fn named_covariance_rejects_unknown_or_incomplete_configuration() {
     let inverse = Mat::from_fn(1, 1, |_, _| 1.0 / 3.0);
     let residuals = Col::from_fn(3, |i| i as f64 - 1.0);
     for name in ["HC4", "nonrobuts", "cluster", "fixed scale"] {
-        assert!(compute_cov_beta(&x, &inverse, &residuals, 2, name, None).is_err());
+        assert!(compute_cov_beta(&x, &inverse, &residuals, 2, Some(0), name, None).is_err());
     }
-    assert!(compute_cov_beta(&x, &inverse, &residuals, 2, "nonrobust", None).is_ok());
+    assert!(compute_cov_beta(&x, &inverse, &residuals, 2, Some(0), "nonrobust", None).is_ok());
+    assert!(compute_cov_beta(&x, &inverse, &residuals, 2, Some(1), "nonrobust", None).is_err());
 }
 
 #[test]

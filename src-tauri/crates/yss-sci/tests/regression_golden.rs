@@ -95,7 +95,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 + 0.5 * signal(row, 4)
                 + signal(row, 5)
         });
-        for covariance_type in ["nonrobust", "HC1"] {
+        for covariance_type in ["nonrobust", "HC1", "HAC"] {
             let estimator = IV2SLS {
                 endog: response.clone(),
                 exog: exog.clone(),
@@ -104,7 +104,12 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 config: IV2SLSConfig {
                     constant: true,
                     cov_type: covariance_type.to_owned(),
-                    cov_params: None,
+                    cov_params: (covariance_type == "HAC").then(|| {
+                        yss_sci_contract::regression::CovParams::HAC {
+                            kernel: "bartlett".into(),
+                            bandwidth: None,
+                        }
+                    }),
                     small: false,
                 },
                 endog_names: None,
@@ -123,6 +128,20 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
             assert_eq!(first_stage.len(), endogenous_count);
             assert!(first_stage_summary.min_eigenvalue.is_finite());
             assert!(first_stage_summary.min_eigenvalue > 0.0);
+            if endogenous_count == 1 {
+                let statistic = first_stage_summary.f_stat.unwrap();
+                assert!(statistic.is_finite() && statistic > 0.0);
+                assert!((0.0..=1.0).contains(&first_stage_summary.f_p_value.unwrap()));
+                assert!(
+                    [
+                        first_stage_summary.r2,
+                        first_stage_summary.r2_adjusted,
+                        first_stage_summary.partial_r2,
+                    ]
+                    .into_iter()
+                    .all(|value| value.is_some_and(f64::is_finite))
+                );
+            }
             assert!(
                 result
                     .inference
@@ -132,6 +151,131 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
             );
         }
     }
+
+    // Distinct Fourier frequencies are orthogonal to each other and the included
+    // regressor. Removing the other endogenous columns leaves signal + noise,
+    // so Shea's partial R² has the independent signal-variance ratio below.
+    let observations = 128;
+    let angle = |row: usize| 2.0 * PI * row as f64 / observations as f64;
+    let signal_scale = [2.0_f64, 1.5, 0.8];
+    let noise_scale = [1.0_f64, 0.7, 0.5];
+    let exog = Mat::from_fn(observations, 1, |row, _| (4.0 * angle(row)).cos());
+    let instruments = Mat::from_fn(observations, 3, |row, column| {
+        ((column + 1) as f64 * angle(row)).sin()
+    });
+    let endogenous = Mat::from_fn(observations, 3, |row, column| {
+        signal_scale[column] * instruments[(row, column)]
+            + noise_scale[column] * ((column + 1) as f64 * angle(row)).cos()
+            + 0.3 * (column + 1) as f64 * exog[(row, 0)]
+    });
+    let response = Col::from_fn(observations, |row| {
+        1.0 + 0.7 * exog[(row, 0)] + 2.0 * endogenous[(row, 0)] - 0.5 * endogenous[(row, 1)]
+            + 0.4 * endogenous[(row, 2)]
+            + (5.0 * angle(row)).cos()
+    });
+    for order in [[0, 1, 2], [2, 0, 1]] {
+        let estimator = IV2SLS {
+            endog: response.clone(),
+            exog: exog.clone(),
+            endog_reg: Mat::from_fn(observations, 3, |row, column| {
+                endogenous[(row, order[column])]
+            }),
+            instruments: instruments.clone(),
+            config: IV2SLSConfig {
+                constant: true,
+                cov_type: "nonrobust".into(),
+                cov_params: None,
+                small: false,
+            },
+            endog_names: None,
+            z_var_names: None,
+        };
+        let (_, summary) = estimator.first_stage(false).unwrap();
+        assert_eq!(summary.shea_partial_r2.len(), order.len());
+        for (&index, &actual) in order.iter().zip(&summary.shea_partial_r2) {
+            let expected = signal_scale[index].powi(2)
+                / (signal_scale[index].powi(2) + noise_scale[index].powi(2));
+            assert!(
+                approx_eq(actual, expected, 1e-10, 1e-10),
+                "Shea partial R² for endogenous {index}: {actual} != {expected}"
+            );
+        }
+    }
+    // A constant column remains a valid one-column design without an added intercept.
+    let estimator = IV2SLS {
+        endog: Col::from_iter((1..=16).map(f64::from)),
+        exog: Mat::zeros(16, 0),
+        endog_reg: Mat::from_fn(16, 1, |_, _| 1.0),
+        instruments: Mat::from_fn(16, 1, |_, _| 1.0),
+        config: IV2SLSConfig {
+            constant: false,
+            cov_type: "nonrobust".into(),
+            cov_params: None,
+            small: false,
+        },
+        endog_names: None,
+        z_var_names: None,
+    };
+    let fit = estimator.fit().unwrap();
+    let (equations, first_stage) = estimator.first_stage(false).unwrap();
+    let (hausman, endogenous) = estimator.endogeneity(&fit.betas).unwrap();
+    assert!(equations.iter().all(|equation| {
+        equation
+            .betas
+            .iter()
+            .chain(&equation.stds)
+            .chain(&equation.tvalues)
+            .chain(&equation.pvalues)
+            .chain(&equation.conf_int_left)
+            .chain(&equation.conf_int_right)
+            .chain([&equation.r2, &equation.r2_adjusted])
+            .all(|value| value.is_finite())
+    }));
+    assert!(
+        [
+            first_stage.r2,
+            first_stage.partial_r2,
+            first_stage.f_stat,
+            first_stage.f_p_value,
+            Some(first_stage.min_eigenvalue),
+        ]
+        .into_iter()
+        .flatten()
+        .all(f64::is_finite)
+    );
+    let endogenous = endogenous.unwrap();
+    assert!(
+        [
+            endogenous.durbin_stat,
+            endogenous.durbin_p_value,
+            endogenous.wu_stat,
+            endogenous.wu_p_value,
+        ]
+        .into_iter()
+        .all(f64::is_finite)
+    );
+    assert!(
+        first_stage.r2_adjusted.is_none() && hausman.is_none(),
+        "undefined diagnostics must stay typed None: adjusted R²={:?}, Hausman={hausman:?}",
+        first_stage.r2_adjusted,
+    );
+
+    let short = IV2SLS {
+        endog: Col::from_iter([1.0, 2.0]),
+        exog: Mat::zeros(2, 0),
+        endog_reg: Mat::from_fn(2, 1, |_, _| 1.0),
+        instruments: Mat::from_fn(2, 1, |_, _| 1.0),
+        ..estimator
+    };
+    let fit = short.fit().unwrap();
+    let (hausman, endogenous) = short.endogeneity(&fit.betas).unwrap();
+    assert!(
+        endogenous.is_none(),
+        "zero denominator degrees of freedom must be unavailable: {endogenous:?}, Hausman={hausman:?}"
+    );
+    let hausman = hausman.unwrap();
+    assert!(hausman.stat.is_finite() && hausman.p_value.is_finite());
+    assert!(hausman.df > 0);
 }
 
 #[test]

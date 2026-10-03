@@ -3,6 +3,7 @@ use super::*;
 
 #[derive(Clone, Copy)]
 enum Kind {
+    Impute,
     Sort,
     Deduplicate,
     SetColumn,
@@ -56,6 +57,13 @@ macro_rules! entry {
     };
 }
 const ENTRIES: &[Entry] = &[
+    entry!(
+        "yssbi.dataframe.impute.single",
+        "Single Imputation",
+        "单次插补",
+        Impute,
+        "impute_single"
+    ),
     entry!(
         "yssbi.dataframe.sort",
         "Sort Rows",
@@ -335,7 +343,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 documentation_key: Some(node_key(entry.id, "documentation")?),
                 aliases_key: Some(node_key(entry.id, "aliases")?),
                 category_id: sid(
-                    if frame {
+                    if matches!(entry.kind, Kind::Impute) {
+                        "statistics.imputation"
+                    } else if frame {
                         "dataframe"
                     } else {
                         "dataframe.series"
@@ -566,6 +576,25 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         ]
     };
     match kind {
+        Impute => {
+            parameters = vec![
+                choice_parameter(
+                    "imputation_method",
+                    "mean",
+                    &["mean", "median", "mode", "constant"],
+                )?,
+                parameter(
+                    "fill_value",
+                    concrete("core.numeric")?,
+                    ParameterEditorSpec::Number,
+                    Some(TypedValue {
+                        value_type: concrete("core.numeric")?,
+                        value: DataValue::Integer(0),
+                    }),
+                    vec![],
+                )?,
+            ];
+        }
         Sort => {
             parameters = vec![
                 nominal_parameter(
@@ -799,6 +828,18 @@ pub(super) fn shared_window_messages(out: &mut Vec<(&'static str, String, Messag
 }
 fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'static str) {
     match key {
+        "imputation_method" => (
+            "Imputation method",
+            "插补方法",
+            "Mean, exact median, numeric mode (smallest tie), or constant.",
+            "均值、精确中位数、数值众数（并列取最小值）或常数。",
+        ),
+        "fill_value" => (
+            "Fill value",
+            "填补常数",
+            "Used only for constant imputation.",
+            "仅在常数插补时使用。",
+        ),
         "columns" => (
             "Columns",
             "列",

@@ -1,5 +1,7 @@
 //! Scientific-computing error model.
 
+use crate::execution::ScientificInputViolation;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SciOperationCode {
     Regression,
@@ -17,20 +19,12 @@ pub enum SciOperationCode {
     WaldTest,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SciInputViolation {
-    EmptyInput,
-    NonFiniteInput,
-    ShapeMismatch,
-    ParameterOutOfRange,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SciError {
     #[error("scientific input is invalid")]
     InvalidInput {
         operation: SciOperationCode,
-        violation: SciInputViolation,
+        violation: ScientificInputViolation,
     },
     #[error("scientific computation failed")]
     ComputationFailed { operation: SciOperationCode },

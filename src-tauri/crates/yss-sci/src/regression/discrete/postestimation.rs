@@ -1,12 +1,15 @@
 //! Binary-link postestimation. Effects are derivatives for numeric regressors;
 //! the delta method differentiates the averaged effect, not observation-wise SEs.
-use statrs::distribution::{Continuous, ContinuousCDF, Normal};
+use crate::regression::postestimation::evaluation::{
+    EvaluationDesign, binary_link, delta_standard_error,
+};
+use statrs::distribution::{ContinuousCDF, Normal};
 use yss_sci_contract::regression::{discrete::*, fit::*};
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 fn invalid() -> SciError {
     SciError::InvalidInput {
         operation: SciOperationCode::Regression,
-        violation: SciInputViolation::ParameterOutOfRange,
+        violation: ScientificInputViolation::ParameterOutOfRange,
     }
 }
 fn link(fit: &RegressionFit) -> Result<BinaryRegressionLink, SciError> {
@@ -153,67 +156,26 @@ pub fn marginal_effects(
     validate(fit).map_err(|_| invalid())?;
     let link = link(fit).map_err(|_| invalid())?;
     let k = fit.coefficients.len();
-    let n = fit.fitted.len();
     let normal = Normal::new(0.0, 1.0).map_err(|_| invalid())?;
-    let mut overrides = vec![None; k];
-    for (name, &v) in &options.at {
-        let j = fit
-            .parameter_names
-            .iter()
-            .position(|s| s == name)
-            .ok_or_else(invalid)?;
-        if !v.is_finite() || (fit.constant && j == 0) {
-            return Err(invalid());
-        }
-        overrides[j] = Some(v);
-    }
-    let means: Vec<f64> = fit
-        .design
-        .iter()
-        .map(|c| c.iter().sum::<f64>() / n as f64)
-        .collect();
-    let rows = if options.evaluation == MarginalEvaluation::Average {
-        n
-    } else {
-        1
-    };
+    let grid = EvaluationDesign::new(
+        &fit.design,
+        &fit.parameter_names,
+        fit.constant,
+        options.evaluation,
+        &options.at,
+        control,
+    )?;
+    let rows = grid.rows;
     let mut values = vec![0.0; k];
     let mut gradients = vec![vec![0.0; k]; k];
     for i in 0..rows {
         control.check()?;
-        let x: Vec<f64> = (0..k)
-            .map(|j| {
-                overrides[j].unwrap_or_else(|| {
-                    if options.evaluation == MarginalEvaluation::Average {
-                        fit.design[j][i]
-                    } else {
-                        means[j]
-                    }
-                })
-            })
-            .collect();
+        let x: Vec<f64> = (0..k).map(|j| grid.value(i, j)).collect();
         let eta: f64 = x.iter().zip(&fit.coefficients).map(|(x, b)| x * b).sum();
-        let (p, d, dd, logit_q) = match link {
-            BinaryRegressionLink::Logit => {
-                let p = if eta >= 0.0 {
-                    1.0 / (1.0 + (-eta).exp())
-                } else {
-                    eta.exp() / (1.0 + eta.exp())
-                };
-                let q = if eta >= 0.0 {
-                    (-eta).exp() / (1.0 + (-eta).exp())
-                } else {
-                    1.0 / (1.0 + eta.exp())
-                };
-                let d = p * q;
-                (p, d, d * (q - p), q)
-            }
-            BinaryRegressionLink::Probit => {
-                let p = normal.cdf(eta);
-                let d = normal.pdf(eta);
-                (p, d, -eta * d, 0.0)
-            }
-        };
+        if !eta.is_finite() {
+            return Err(invalid());
+        }
+        let (p, d, dd, logit_q) = binary_link(link, eta, &normal);
         let log_y = matches!(options.method, MarginalMethod::Eyex | MarginalMethod::Eydx);
         if log_y && p <= 0.0 && link == BinaryRegressionLink::Probit {
             return Err(invalid());
@@ -245,23 +207,10 @@ pub fn marginal_effects(
     let mut coefficients = Vec::new();
     for j in usize::from(fit.constant)..k {
         control.check()?;
-        let (variance, absolute_sum) = (0..k)
-            .flat_map(|a| (0..k).map(move |b| (a, b)))
-            .map(|(a, b)| gradients[j][a] * cov[a][b] * gradients[j][b])
-            .fold((0.0, 0.0), |(sum, scale), term| {
-                (sum + term, scale + term.abs())
-            });
-        // Roundoff scales with the absolute quadratic-form terms; a tiny but
-        // materially negative variance must not be hidden by an absolute floor.
-        let roundoff = 8.0 * f64::EPSILON * (k as f64).powi(2) * absolute_sum;
-        if !variance.is_finite()
-            || !absolute_sum.is_finite()
-            || variance < -roundoff
-            || !values[j].is_finite()
-        {
+        let se = delta_standard_error(&gradients[j], cov)?;
+        if !values[j].is_finite() {
             return Err(invalid());
         }
-        let se = variance.max(0.0).sqrt();
         let z = (se > 0.0).then(|| values[j] / se);
         if z.is_some_and(|value| !value.is_finite())
             || !(values[j] - critical * se).is_finite()

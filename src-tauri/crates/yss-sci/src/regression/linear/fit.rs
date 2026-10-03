@@ -9,7 +9,7 @@ use yss_sci_contract::regression::fit::{
 };
 use yss_sci_contract::regression::linear::LinearRegressionMethod;
 use yss_sci_contract::{
-    SciError, SciInputViolation, SciOperationCode, StatisticalObservationMetadata,
+    SciError, SciOperationCode, StatisticalObservationMetadata, execution::ScientificInputViolation,
 };
 use yss_sci_linalg::{Col, Mat};
 
@@ -34,14 +34,14 @@ pub fn fit_linear_regression(
         {
             return Err(invalid_input(
                 SciOperationCode::Regression,
-                SciInputViolation::ParameterOutOfRange,
+                ScientificInputViolation::ParameterOutOfRange,
             ));
         }
         LinearRegressionMethod::Gls { sigma } => {
             if sigma.len() != y.nrows() || sigma.iter().any(|row| row.len() != y.nrows()) {
                 return Err(invalid_input(
                     SciOperationCode::Regression,
-                    SciInputViolation::ShapeMismatch,
+                    ScientificInputViolation::ShapeMismatch,
                 ));
             }
             if !matches!(
@@ -54,13 +54,13 @@ pub fn fit_linear_regression(
             }) {
                 return Err(invalid_input(
                     SciOperationCode::Regression,
-                    SciInputViolation::ParameterOutOfRange,
+                    ScientificInputViolation::ParameterOutOfRange,
                 ));
             }
         }
         _ => {}
     }
-    let mut fit = match method {
+    match method {
         LinearRegressionMethod::Ols => fit_ols_design(&y, &x, &config, metadata),
         LinearRegressionMethod::Gls { sigma } => {
             let result = GLS {
@@ -77,6 +77,7 @@ pub fn fit_linear_regression(
                 "gls",
                 &y,
                 &x,
+                config.constant,
                 result.betas.iter().copied().collect::<Vec<_>>(),
                 RegressionStatistics::Linear {
                     coefficients: RegressionCoefficientStatistics {
@@ -117,12 +118,6 @@ pub fn fit_linear_regression(
             )
         }
         LinearRegressionMethod::Wls { weights } => {
-            if weights.len() != y.nrows() {
-                return Err(invalid_input(
-                    SciOperationCode::Regression,
-                    SciInputViolation::ShapeMismatch,
-                ));
-            }
             let result = WLS {
                 endog: y.clone(),
                 exog: x.clone(),
@@ -138,6 +133,7 @@ pub fn fit_linear_regression(
                 "wls",
                 &y,
                 &x,
+                config.constant,
                 result.betas.iter().copied().collect::<Vec<_>>(),
                 RegressionStatistics::Linear {
                     coefficients: RegressionCoefficientStatistics {
@@ -177,18 +173,7 @@ pub fn fit_linear_regression(
                 metadata,
             )
         }
-    }?;
-    fit.constant = config.constant;
-    fit.parameter_names = (0..fit.coefficients.len())
-        .map(|i| {
-            if config.constant && i == 0 {
-                "_cons".into()
-            } else {
-                format!("x{}", i + usize::from(!config.constant))
-            }
-        })
-        .collect();
-    Ok(fit)
+    }
 }
 
 pub fn fit_ols(
@@ -205,7 +190,7 @@ pub fn fit_ols(
     {
         return Err(invalid_input(
             SciOperationCode::Regression,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     let y = Col::from_iter(response);
@@ -289,6 +274,7 @@ fn linear_fit(
     family: &'static str,
     y: &Col<f64>,
     x: &Mat<f64>,
+    constant: bool,
     coefficients: Vec<f64>,
     statistics: RegressionStatistics,
     metadata: StatisticalObservationMetadata,
@@ -300,10 +286,10 @@ fn linear_fit(
     Ok(RegressionFit {
         parameter_names: (0..x.ncols())
             .map(|i| {
-                if i == 0 && x.col(0).iter().all(|v| *v == 1.0) {
+                if i == 0 && constant {
                     "_cons".into()
                 } else {
-                    format!("x{}", i + usize::from(!x.col(0).iter().all(|v| *v == 1.0)))
+                    format!("x{}", i + usize::from(!constant))
                 }
             })
             .collect(),
@@ -311,7 +297,7 @@ fn linear_fit(
         design: (0..x.ncols())
             .map(|j| x.col(j).iter().copied().collect())
             .collect(),
-        constant: true,
+        constant,
         family: family.into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
@@ -351,10 +337,11 @@ pub(crate) fn fit_prais_design(
     }
     .fit()
     .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-    let mut fit = linear_fit(
+    linear_fit(
         "prais",
         &y,
         &x,
+        constant,
         result.betas.iter().copied().collect::<Vec<_>>(),
         RegressionStatistics::Prais {
             coefficients: RegressionCoefficientStatistics {
@@ -397,16 +384,5 @@ pub(crate) fn fit_prais_design(
             },
         },
         metadata,
-    )?;
-    fit.constant = constant;
-    fit.parameter_names = (0..fit.coefficients.len())
-        .map(|i| {
-            if constant && i == 0 {
-                "_cons".into()
-            } else {
-                format!("x{}", i + usize::from(!constant))
-            }
-        })
-        .collect();
-    Ok(fit)
+    )
 }

@@ -194,7 +194,10 @@ fn boolean_kernels_share_three_valued_logic_and_broadcast_shape() {
             Instant::now() + Duration::from_secs(30),
         );
         let scalar = ValueType::Scalar(yss_data_contract::SemanticType::Binary);
-        let data_type = if inputs.iter().any(|v| matches!(v, RuntimeValue::List(_))) {
+        let data_type = if inputs
+            .iter()
+            .any(|v| matches!(v.unannotated(), RuntimeValue::List(_)))
+        {
             ValueType::DataSeries(Box::new(scalar))
         } else {
             scalar
@@ -218,6 +221,69 @@ fn boolean_kernels_share_three_valued_logic_and_broadcast_shape() {
             },
         )
     };
+    for positive in ["true", "false"] {
+        use yss_data_contract::{ColumnSemantic, ConversionMetadata, SemanticType, SemanticValue};
+        let mut semantic = ColumnSemantic::new(SemanticType::Binary);
+        semantic.values = ["false", "true"]
+            .map(|value| SemanticValue {
+                value: value.into(),
+                label: value.into(),
+            })
+            .into();
+        semantic.positive_value = Some(positive.into());
+        let annotate = |value: RuntimeValue| {
+            value
+                .with_metadata(ConversionMetadata {
+                    semantic: semantic.clone(),
+                    temporal: None,
+                    dummy_base_level: None,
+                })
+                .unwrap()
+        };
+        let truth = RuntimeValue::Scalar(TabularScalar::Bool(true));
+        let falsity = RuntimeValue::Scalar(TabularScalar::Bool(false));
+        let null = RuntimeValue::Scalar(TabularScalar::Null);
+        let expected_true = RuntimeValue::Scalar(TabularScalar::Bool(positive == "false"));
+        let expected_false = RuntimeValue::Scalar(TabularScalar::Bool(positive == "true"));
+        assert_eq!(
+            evaluate("not", &[annotate(truth.clone())]).unwrap(),
+            vec![expected_true.clone()]
+        );
+        let input = annotate(RuntimeValue::List(Arc::from([
+            truth.clone(),
+            falsity.clone(),
+            null.clone(),
+        ])));
+        assert_eq!(
+            evaluate("not", std::slice::from_ref(&input)).unwrap(),
+            vec![RuntimeValue::List(Arc::from([
+                expected_true,
+                expected_false,
+                null,
+            ]))]
+        );
+        for inputs in [
+            [input.clone(), falsity.clone()],
+            [falsity.clone(), input.clone()],
+        ] {
+            assert_eq!(
+                evaluate("and", &inputs).unwrap(),
+                vec![RuntimeValue::List(Arc::from([
+                    falsity.clone(),
+                    falsity.clone(),
+                    falsity.clone(),
+                ]))]
+            );
+        }
+        assert_eq!(
+            evaluate("or", &[input, truth.clone()]).unwrap(),
+            vec![RuntimeValue::List(Arc::from([
+                truth.clone(),
+                truth.clone(),
+                truth,
+            ]))]
+        );
+    }
     for (left, right, and, or) in [
         (
             RuntimeValue::Scalar(TabularScalar::Bool(false)),

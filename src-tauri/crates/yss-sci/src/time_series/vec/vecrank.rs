@@ -32,7 +32,7 @@ pub fn vec_vecrank_stats(
         VecTrendSpec::Trend => 1,
     };
 
-    let mut s00_chol = s1.s00.clone();
+    let mut s00_chol = s1.s00;
     cholesky_lower_in_place(&mut s00_chol)
         .map_err(|_| "vecrank: S00 not positive definite".to_string())?;
     let ln_det_s00: f64 = 2.0 * (0..k).map(|i| s00_chol[(i, i)].ln()).sum::<f64>();

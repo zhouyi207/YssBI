@@ -1,9 +1,24 @@
 # yss-node-catalog
 
+`statistics/psychometrics` declares Cronbach-alpha reliability, KMO/Bartlett
+screening, expert content validity and item discrimination. Its documentation
+states scoring, tie handling and undefined-statistic rules; existing exploratory
+factor nodes remain the owner of factor extraction interfaces.
+`statistics/quality` declares I/MR plots, capability with optional rational
+subgroups, and balanced crossed continuous-measurement Gage R&R studies.
+`statistics/plot_overview` exposes histogram, ECDF and boxplot outputs from one
+numeric input in the design/quality category, using the existing plot contracts.
+`statistics/doe` owns experimental factor-level analysis and coded design generation interfaces, plus quadratic response surface and four-parameter
+continuous dose-response fits, separately
+from process monitoring and measurement-system declarations.
+
 > Status: Current
 > Scope: 内置节点定义、创建描述、分类、文档与节点目录本地化
 > Canonical owners: 本 crate 的源码拥有内置目录；Node 与 Graph 的边界见 [Graph 与 Execution](../yss-application/src/graph/README.md#module-ownership)
 > Update when: 节点目录装配、创建描述、本地化接口或依赖边界改变时
+
+`dataframe/labels` exposes categorical and ordinal value-label authoring over the
+existing semantic conversion contract. It is separate from column and node display names.
 
 Node 由三个 crate 组成：
 
@@ -21,6 +36,40 @@ Node 由三个 crate 组成：
 GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配后同样保留不可用节点；缺少实现的节点置灰并标注“暂不可用”，禁止点击、键盘选择和拖拽创建。AI 搜索只返回可用项。
 已有图中的缺少实现节点仍由编辑解析返回阻断诊断。
 目录不读取项目文件，不维护图中实例，也不推导连接后的类型、Schema 或血缘。
+
+`View Data` 的输入只接受已连接的输出，不接受内联字面量或默认值；Catalog 声明这一输入策略，
+Analysis 和 Editor 共用协议校验。View 观察已有输出结果，不创建独立的结果值；查看标量时可连接常量输出。
+
+注册失败分为注册一致性错误与规范编码错误。接口和执行声明验证产生的 `ProtocolError`
+通过 `RegistryValidationError::InvalidNodeProtocol` 保留节点身份与原始错误来源。
+
+`NodeInterfaceProtocol::port_instance_bounds` 提供接口内模板的数量范围：声明端口为 1，
+用户创建端口使用所属成员分组或自身的上下限，派生端口保持开放范围。Editor 的初始候选筛选与
+Application 的内核输入/输出数量校验共用此读取；它不保存实例、计算当前成员数或代替完整分组的创建与删除。
+
+Registry 的 `StructuralNodeRole` 拥有函数角色的引用字段约定：Call 使用 `target`，Entry/Return
+使用 `function`，节点类型 ID 不参与角色判定。`RegisteredNode::function_reference_parameter`
+提供声明字段，`function_reference` 通过 Protocol 的 `Parameters::effective_text` 借用当前适用的
+显式值或默认值；非法显式值不回退到默认值。这些读取不解释项目路径或访问资源。
+四个函数 interface resolver ID 及其引用角色映射也由 Registry 唯一提供，Catalog、Analysis、Editor 和 Project
+共用这些声明。resolver 复用同一字段约定，也可由只消费函数签名的叶节点使用；使用 resolver 本身不构成函数调用。
+
+`statistics/decision` 声明客观赋权与评分入口，共用指标方向、评分标准化和明确的
+权重方法参数。外部权重使用独立 `criterion_weights` 输入，计算权重由 `weights`
+输出；摘要和逐行评分分别输出，TOPSIS 评分表还包含两个理想点距离。
+
+同一目录按 `preferences`（NPS/KANO/RFM）、`market`（价格敏感度与 TURF）、
+`matrices`（判断矩阵、影响关系与隶属度）、`experts`（德尔菲单轮统计）分开声明。
+`parameters` 只持有本地化文案，算法定义在 SCI。PSM 明确区分两种价格区间约定；
+矩阵行列顺序、空值含义及可继续连接的权重/隶属度均在双语帮助中说明。
+
+`statistics/inference` 声明置信区间、多重比较、聚类稳健标准误和调整预测。
+`statistics/ports` 共享分类标签输入、线性/二元拟合联合类型及固定数值表输出声明。
+区间与比较表的字段由声明唯一持有，Graph 统一解析；中英文帮助明确推断自由度、
+多重校正方式及均值置信区间的含义。
+
+单次插补由 `dataframe/transforms` 声明，导航仍属于“缺失数据与插补”。输入与输出均为
+Numeric 数列，帮助说明全部样本估计填补值、空列规则和单次插补的推断局限。
 
 “数据 → 常量”提供固定的 π 和 e 节点，无输入、无参数，输出 Numeric 标量；运行值由 Kernel 使用 Rust 标准库的 Float64 常量提供。它们不引用图内自定义常量，后者仍通过“读取常量”节点访问。
 
@@ -41,6 +90,8 @@ KDE 默认 256 个网格点，系数图接收线性 Fit 的 OLS/WLS/GLS 模型�
 Cox、四种参数生存回归、AFT、Aalen–Johansen 竞争风险、时变 Cox、分层 Cox 亚组、
 列线图、校准和决策曲线。静态 Cox 的 `result` 为 `statistics.model.cox`，可接列线图；
 Cox 和参数模型另输出 `predictions` 表（`time`、`event`、`risk`），供评估节点保持行对齐。
+该表与残差/Cook 的 `observations` 都复用 `statistics/ports::fixed_numeric_table`，由 Catalog
+声明字段与 Numeric 语义。Graph 统一解析 `SchemaExpr::Fixed`，没有对应的逐方法 Schema resolver。
 
 “空间分析”分类由 `statistics/spatial.rs` 实现 10 个原有入口：权重、Moran、
 OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
@@ -91,7 +142,7 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 
 问卷多选题统计与单选/多选题型交叉组合不设独立目录入口。量表题项诊断入口显示为
 “题项分析（区分度）”（`yssbi.statistics.psychometrics.item_analysis`），支持“题项分析”
-和“区分度分析”搜索别名；当前仍为尚未接入执行内核的目录项。
+和“区分度分析”搜索别名；内核调用 SCI 题项分析，输出汇总、题项指标表及观测分组。
 
 “纵向与多层模型”的十个既有 ID 由 `statistics/longitudinal.rs` 提供完整接口及内核绑定。
 GEE 支持 Gaussian/二项/Poisson，独立或可交换工作相关，输出按组稳健协方差。
@@ -123,6 +174,8 @@ PCA 支持相关/协方差形式；主轴因子支持无旋转/正交 varimax、
 
 所有统计 Summary 的唯一输入为对应方法的已拟合 `model`，只输出结构化 `result`，不接收原始数据或估计参数。统计检验、诊断和描述结果同样不另设 `report` 端口；Inspect 在同一结果上切换数值与 JSON 报告。Fit 的模型、拟合值与残差等独立数据输出保留各自契约。
 
+IV 2SLS/LIML、Panel、VAR、VEC Summary，以及 Panel Compare 和 VAR Lag-order Selection 的 `result` 声明为既有 `statistics.report`；报告不能再连接需要拟合模型的 Summary、Predict 或估计后分析输入。真正 Fit 的模型类型保持独立，报告呈现仍由 Graph 的输出类别决定。
+
 独立的 Panel DID (TWFE) 使用 `statistics.result.panel_did` 类型的唯一 `result`，其 `model` 与 `summary` 字段分别保留拟合模型和汇总。
 Linear Summary 在 Parameters 的 Configure 分组声明内容开关及条件可见的检验参数，默认选模型概览、系数表、方程和 ANOVA。IV、Panel、VAR、VEC Summary 同样按所选内容组装报告；IV/VAR/VEC 的可选诊断默认关闭，仅在勾选后计算。Panel 默认包含模型、系数、效应及估计器统计，VEC 默认包含协整统计。内容选择是图参数，参与语义失效、历史与保存。Logit/Probit/Prais Summary 投影拟合统计，不在模型中重复保存完整报告。
 原始输入与估计配置属于 Fit；IV 2SLS、IV LIML、Panel、VAR 均有对应 Fit 定义，Panel DID 的 TWFE 节点也属于 Fit。
@@ -150,6 +203,14 @@ FE、RE FGLS、FD、Between 复用 Panel 估计器，唯一 `model` 可直接连
 残差和 Cook 距离接收 OLS/WLS 模型，另输出 `observations` 数据表供分页与下游选列。
 PH 节点从原始对齐列拟合静态无分层 Cox，使用与拟合一致的 Efron/Breslow 时间交互 Score。
 22 篇中英文帮助明确公式、推断、默认值及未定义值；新增接口不设置固定样本行数上限。
+
+Meta 分析的 20 个既有入口由 `statistics/meta/` 提供端口与参数，40 篇中英文帮助
+由 `documentation.rs` 映射。效应量换算、合并/回归和敏感性节点同时输出可分页、
+可连接的研究明细表；森林图复用系数区间图，漏斗图复用带参考线和反向纵轴的散点图。
+固定输出表由 Catalog 通过 `SchemaExpr::Fixed` 声明字段；Registry 校验唯一非空列名
+并拒绝预置运行时血缘，Graph 统一解析，不再为这些表重复注册逐方法 Schema resolver。
+具体方法、尺度与推断口径由节点帮助说明。复杂节点的暂缓范围见
+[暂缓节点](DEFERRED_NODES.md)；暂缓节点保留目录身份与不可用状态。
 
 方法清单中的统计入口由 `src/statistics/inventory/entries.rs` 维护，运行时不读取规划 CSV。频数与描述已归入数据处理，分类汇总由 GroupBy 承接，独立基线分析入口已移除；FEVD 的两条来源共享一个入口。
 这些来源记录继续保留方法身份；已经实现的诊断及后估计由 `statistics/analyses.rs`、描述统计由 `statistics/descriptive.rs` 完善原 ID 的端口、参数和内核绑定，不重复生成骨架。其余入口保留名称、搜索别名、分类、用途、来源编号和范围说明，尚无内核，仍在目录中显示为不可用且不进入 AI 可执行节点搜索。
@@ -202,6 +263,8 @@ Bernoulli/二项允许概率 0 和 1；几何/负二项要求 0 < p ≤ 1；泊�
 时序节点默认使用当前行顺序；高阶差分表达重复一阶差分，变化率采用比例值（0.1 表示 10%）。
 滚动节点支持 mean/sum/min/max/std，默认均值及完整非空窗口；`min_periods` 为零时要求完整窗口，否则按指定有效值数计算。滞后节点支持 lag/lead 并保留类型与元数据。二者可连接同一行域的可选上下文选择分组列和排序列；窗口结果恢复原始行顺序。面板差分通过实体列和时间列选项指定分组上下文，
 不要求上游先执行面板对齐；结果恢复原始行顺序。虚拟变量信息只附加参照组提示，不生成指示列。
+虚拟变量信息的输入限定为 Categorical、Ordinal 或 Binary 数列；Graph 在执行前阻断其余语义，
+输出通过类型恒等规则保留输入的精确元素类型，不成为三种类型的未定联合。
 
 时间序列和面板对齐均接收一个 DataFrame，通过 time_column、entity_column（仅面板）及正整数 interval 配置。输出保留列顺序、类型和元数据，新增非键单元格为 Null；重复键、缺失键、偏离网格或超出内存预算会失败。面板网格使用共享已观测时间的位置，仅补齐各实体自己的起止范围，详见节点帮助。
 数据帧的筛选入口为“筛选行”（配置列条件）和“筛选列”（选择并排列列）。
@@ -248,6 +311,7 @@ AIPW、ATE、ATT 和合成控制。原有 IV/DID 入口继续使用其方法族�
 ## 参数声明
 
 动态节点 ID 和本地化 key 使用拥有型字符串，由装配片段、协议和目录持有并随其释放。
+语义 ID 的 JSON 读取复用其构造校验，图文件与类型化 IPC 共用同一入口，合法 wire 仍为字符串。
 节点 key 由 `builtin::node_key` / `node_key_text` 统一构造；静态文案仍借用常量，不要求动态 key 具有永久生命周期。
 
 `yss-node-protocol` 使用 `Parameters → ParameterGroup → Parameter` 声明节点参数。
@@ -278,4 +342,19 @@ fn normal_parameters() -> Result<Parameters, ParametersError> {
 协议执行指纹；参数类型、默认值、约束及条件显隐参与指纹。条件可以引用同节点其他组的无条件参数，
 使用显式值或协议默认值判断。编辑、条件清理及执行投影见 [Graph analysis](../yss-graph-analysis/README.md)。
 
-Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. `heterogeneity` remains unimplemented; Kappa and Kendall W are implemented separately under `statistics.association`. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.
+Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. Treatment-effect `heterogeneity` is implemented by `statistics/causal_models.rs`; Kappa and Kendall W are implemented separately under `statistics.association`. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.
+
+`statistics/path` declares continuous interaction, single-mediator and recursive observed
+path interfaces. Domain-specific files share node assembly and parameter localization.
+Help specifies equation syntax, percentile inference, probing, extrapolation and the
+distinction between observed recursive OLS and latent-variable SEM.
+
+`statistics/survey` declares weight validation/inversion, three mean/proportion design
+interfaces, and Gaussian/logit/Poisson survey regressions. Optional single stratum/PSU
+ports state the design explicitly; these weights are not precision or treatment weights.
+Bilingual help documents with-replacement variance, lonely strata and degrees of freedom.
+
+`statistics/power` exposes scalar planning parameters and bilingual model-specific help.
+The principles entry has a concrete known-variance normal design; generalized-model power
+explicitly means two-group Poisson rate planning. Help distinguishes exact distribution
+calculations, approximations, per-group/pair/cluster units and unsupported extensions.

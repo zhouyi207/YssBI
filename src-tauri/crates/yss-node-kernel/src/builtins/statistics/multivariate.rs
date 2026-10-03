@@ -1,7 +1,9 @@
-use super::super::{numeric_input, relational, series};
+use super::super::{numeric_input, series};
 use super::{
     Input,
-    common::{boolean, columns, group, integer, number, numeric_list, text, value},
+    common::{
+        boolean, columns, computation_error, group, integer, matrix_table, number, text, value,
+    },
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
@@ -112,20 +114,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn scientific_error(error: ScientificComputationError) -> KernelError {
-    match error {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
 fn workspace(
     inv: &KernelInvocation<'_>,
     n: usize,
@@ -182,38 +170,6 @@ fn numeric(
         0,
     )?;
     Ok(data)
-}
-
-fn score_table(
-    data: Vec<Vec<f64>>,
-    output: usize,
-    inv: &KernelInvocation<'_>,
-) -> Result<RuntimeValue, KernelError> {
-    let fields = inv
-        .outputs
-        .get(output)
-        .and_then(|o| o.fields.as_deref())
-        .ok_or(KernelError::OutputContractMismatch)?;
-    if fields.is_empty() || data.iter().any(|row| row.len() != fields.len()) {
-        return Err(KernelError::OutputContractMismatch);
-    }
-    inv.control.check_bytes(
-        data.len()
-            .checked_mul(fields.len())
-            .and_then(|n| n.checked_mul(size_of::<RuntimeValue>() * 8)),
-    )?;
-    let mut values = Vec::with_capacity(fields.len());
-    for column in 0..fields.len() {
-        let mut data_column = inv.control.reserve(data.len())?;
-        for (i, row) in data.iter().enumerate() {
-            if i.is_multiple_of(1024) {
-                inv.check_control()?;
-            }
-            data_column.push(row[column]);
-        }
-        values.push(numeric_list(&data_column, inv)?);
-    }
-    relational::materialize(fields, &values.iter().collect::<Vec<_>>(), inv)
 }
 
 fn classification(
@@ -340,7 +296,7 @@ fn classification(
         options,
         control,
     )
-    .map_err(scientific_error)?;
+    .map_err(computation_error)?;
     let mut predicted = inv.control.reserve(result.predictions.len())?;
     for (i, index) in result.predictions.into_iter().enumerate() {
         if i.is_multiple_of(1024) {
@@ -396,10 +352,10 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 },
                 &control,
             )
-            .map_err(scientific_error)?;
+            .map_err(computation_error)?;
             Ok(vec![
                 value(result.report, inv)?,
-                score_table(result.coordinates, 1, inv)?,
+                matrix_table(result.coordinates, 1, inv)?,
             ])
         }
         Method::Factor => {
@@ -414,16 +370,16 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 tolerance: number(inv, "tolerance")?,
             };
             let result =
-                sci::exploratory_factor(&data, options, &control).map_err(scientific_error)?;
+                sci::exploratory_factor(&data, options, &control).map_err(computation_error)?;
             Ok(vec![
                 value(result.report, inv)?,
-                score_table(result.coordinates, 1, inv)?,
+                matrix_table(result.coordinates, 1, inv)?,
             ])
         }
         Method::Canonical => {
             let count = group(inv, "x").len();
             let result = sci::canonical_correlation(&data[..count], &data[count..], k, &control)
-                .map_err(scientific_error)?;
+                .map_err(computation_error)?;
             let scores = result
                 .x_scores
                 .into_iter()
@@ -435,15 +391,15 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 .collect();
             Ok(vec![
                 value(result.report, inv)?,
-                score_table(scores, 1, inv)?,
+                matrix_table(scores, 1, inv)?,
             ])
         }
         Method::Correspondence => {
-            let result = sci::correspondence(&data, k, &control).map_err(scientific_error)?;
+            let result = sci::correspondence(&data, k, &control).map_err(computation_error)?;
             Ok(vec![
                 value(result.report, inv)?,
-                score_table(result.row_coordinates, 1, inv)?,
-                score_table(result.column_coordinates, 2, inv)?,
+                matrix_table(result.row_coordinates, 1, inv)?,
+                matrix_table(result.column_coordinates, 2, inv)?,
             ])
         }
         Method::Rda => {
@@ -455,10 +411,10 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 seed: integer(inv, "seed")? as u64,
             };
             let result = sci::rda(&data[..count], &data[count..], options, &control)
-                .map_err(scientific_error)?;
+                .map_err(computation_error)?;
             Ok(vec![
                 value(result.report, inv)?,
-                score_table(result.coordinates, 1, inv)?,
+                matrix_table(result.coordinates, 1, inv)?,
             ])
         }
         Method::Mds => {
@@ -483,10 +439,10 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 },
                 &control,
             )
-            .map_err(scientific_error)?;
+            .map_err(computation_error)?;
             Ok(vec![
                 value(result.report, inv)?,
-                score_table(result.coordinates, 1, inv)?,
+                matrix_table(result.coordinates, 1, inv)?,
             ])
         }
         Method::Discriminant => unreachable!(),

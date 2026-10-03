@@ -236,14 +236,14 @@ fn fisher_interval(
         method: "fisher_z",
     }))
 }
-struct Ranks {
-    values: Vec<f64>,
+pub(crate) struct Ranks {
+    pub(crate) values: Vec<f64>,
     tie_pairs: u64,
     tie_cubic: f64,
     tie_variance: f64,
 }
-fn ranks(values: &[f64], control: &Control) -> Result<Ranks, Error> {
-    validate(values, 2, control)?;
+pub(crate) fn ranks(values: &[f64], control: &Control) -> Result<Ranks, Error> {
+    validate(values, 1, control)?;
     let mut order = (0..values.len()).collect::<Vec<_>>();
     order.sort_unstable_by(|&a, &b| values[a].total_cmp(&values[b]));
     control.check()?;

@@ -86,10 +86,6 @@ fn union_series(ids: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyError> 
     })
 }
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    fragment.schema_resolvers.push(sid(
-        "yssbi.statistics.survival.schema.predictions",
-        SchemaResolverId::new,
-    )?);
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.{method}");
         let curve = matches!(method, "survival.kaplan_meier" | "survival.nelson_aalen");
@@ -202,19 +198,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
         )?);
         if method == "survival.cox" || parametric {
-            let mut predictions = data_output(
+            ports.push(fixed_numeric_table(
                 "predictions",
                 "Time, event and predicted risk",
-                concrete("tabular.dataframe")?,
-            )?;
-            predictions.schema = Some(SchemaExpr::Derived {
-                resolver: sid(
-                    "yssbi.statistics.survival.schema.predictions",
-                    SchemaResolverId::new,
-                )?,
-                dependencies: vec![],
-            });
-            ports.push(predictions);
+                &["time", "event", "risk"],
+            )?);
         }
         let mut parameters = vec![];
         if cox {

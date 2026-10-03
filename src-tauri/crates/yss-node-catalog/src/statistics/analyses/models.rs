@@ -38,22 +38,6 @@ pub(super) fn implemented(id: &str) -> bool {
     id.strip_prefix("yssbi.statistics.diagnostic.")
         .is_some_and(|method| METHODS.iter().any(|m| m.0 == method))
 }
-fn model_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(
-        [
-            "statistics.model.linear",
-            "statistics.model.logit",
-            "statistics.model.probit",
-        ]
-        .into_iter()
-        .map(concrete)
-        .collect::<Result<Vec<_>, _>>()?,
-    ))
-    .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-        context: "diagnostic model",
-        value: e.to_string().into(),
-    })
-}
 fn binary_series() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalize_type_expr(TypeExpr::Union(vec![
         series_type()?,
@@ -66,10 +50,6 @@ fn binary_series() -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    fragment.schema_resolvers.push(sid(
-        "yssbi.statistics.diagnostic.schema.observations",
-        SchemaResolverId::new,
-    )?);
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.diagnostic.{method}");
         let mut ports = match method {
@@ -91,31 +71,32 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 bounded_user_data_input("predictors", "Predictor", series_type()?, 1, None)?,
             ],
             "lr" | "score_lm" | "nested_comparison" => vec![
-                data_input("restricted", "Restricted model", model_type()?)?,
-                data_input("full", "Full model", model_type()?)?,
+                data_input("restricted", "Restricted model", fitted_regression_type()?)?,
+                data_input("full", "Full model", fitted_regression_type()?)?,
             ],
             "residual" | "cooks_distance" => vec![data_input(
                 "model",
                 "Model",
                 concrete("statistics.model.linear")?,
             )?],
-            _ => vec![data_input("model", "Model", model_type()?)?],
+            _ => vec![data_input("model", "Model", fitted_regression_type()?)?],
         };
         ports.push(data_output("result", "Result", report_type()?)?);
         if matches!(method, "residual" | "cooks_distance") {
-            let mut observations = data_output(
+            ports.push(fixed_numeric_table(
                 "observations",
                 "Observation diagnostics",
-                concrete("tabular.dataframe")?,
-            )?;
-            observations.schema = Some(SchemaExpr::Derived {
-                resolver: sid(
-                    "yssbi.statistics.diagnostic.schema.observations",
-                    SchemaResolverId::new,
-                )?,
-                dependencies: vec![],
-            });
-            ports.push(observations);
+                &[
+                    "observation",
+                    "fitted",
+                    "residual",
+                    "weighted_residual",
+                    "leverage",
+                    "standardized_residual",
+                    "studentized_residual",
+                    "cooks_distance",
+                ],
+            )?);
         }
         let mut parameters = match method {
             "collinearity" => vec![toggle_parameter("constant", true)?],

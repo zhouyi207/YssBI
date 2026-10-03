@@ -71,7 +71,7 @@ pub fn coefficient_rows(
     if names.len() != estimates.len() || !inference.has_shape(estimates.len()) {
         return Err(yss_sci_contract::SciError::InvalidInput {
             operation: yss_sci_contract::SciOperationCode::Regression,
-            violation: yss_sci_contract::SciInputViolation::ShapeMismatch,
+            violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
         });
     }
     Ok(names.iter().enumerate().map(|(j,name)|json!({"variable":name,"estimate":estimates[j],"standard_error":inference.standard_errors[j],"statistic":inference.statistic_values[j],"p_value":inference.p_values[j],"ci_lower":inference.confidence_interval_lower[j],"ci_upper":inference.confidence_interval_upper[j]})).collect())

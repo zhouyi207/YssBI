@@ -25,6 +25,7 @@ mod tests {
 
     #[test]
     fn regression_reports_expose_hypothesis_inputs() {
+        let mut undefined_inference = Vec::new();
         for (method, label) in [
             (LinearRegressionMethod::Ols, "OLS"),
             (
@@ -46,7 +47,7 @@ mod tests {
             let predictor = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
             let fit = linear::linear_regression(
                 LinearRegressionRequest {
-                    method,
+                    method: method.clone(),
                     response,
                     predictors: vec![predictor],
                     options: Default::default(),
@@ -58,6 +59,9 @@ mod tests {
             )
             .unwrap();
 
+            assert!(fit.constant);
+            assert_eq!(fit.report.coefficients[0].variable, "_cons");
+            assert_eq!(fit.report.coefficients[1].variable, "x1");
             let report =
                 serde_json::to_value(&fit.report).expect("regression report must serialize");
 
@@ -80,7 +84,34 @@ mod tests {
                     .iter()
                     .all(|row| row.as_array().map(Vec::len) == Some(2))
             );
+            let rejected = std::panic::catch_unwind(|| {
+                linear::linear_regression(
+                    LinearRegressionRequest {
+                        method,
+                        response: vec![0.0; 6],
+                        predictors: vec![(0..6).map(f64::from).collect()],
+                        options: Default::default(),
+                    },
+                    &ScientificExecutionControl {
+                        cancellation: ScientificCancellationToken::new(),
+                        deadline: Instant::now() + Duration::from_secs(5),
+                    },
+                )
+            });
+            undefined_inference.push((
+                label,
+                matches!(
+                    rejected,
+                    Ok(Err(
+                        yss_sci_contract::execution::ScientificComputationError::ComputationFailed
+                    ))
+                ),
+            ));
         }
+        assert_eq!(
+            undefined_inference,
+            [("OLS", true), ("WLS", true), ("GLS", true)]
+        );
     }
 
     #[test]
@@ -171,6 +202,8 @@ mod tests {
         .unwrap();
 
         let report = regression_report(&fit).expect("Prais report must serialize");
+        assert!(fit.constant);
+        assert_eq!(fit.parameter_names, ["_cons", "x1"]);
         let prais = report["diagnostic_info"]["prais_info"]
             .as_object()
             .expect("Prais report must expose structured autocorrelation statistics");
@@ -179,5 +212,46 @@ mod tests {
         assert!(prais["dw_original"].as_f64().is_some());
         assert!(prais["dw_transformed"].as_f64().is_some());
         assert!(prais["iterations"].as_u64().unwrap() > 0);
+
+        let no_intercept = linear::prais::fit_prais(
+            response.clone(),
+            &[vec![1.0; response.len()]],
+            yss_sci_contract::regression::prais::PraisConfig {
+                constant: false,
+                ..Default::default()
+            },
+            regression_metadata(response.len()),
+        )
+        .unwrap();
+        assert!(!no_intercept.constant);
+        assert_eq!(no_intercept.parameter_names, ["x1"]);
+
+        let mut undefined_inference = Vec::new();
+        for (label, response, predictor) in [
+            ("F", vec![0.0; 8], (0..8).map(f64::from).collect::<Vec<_>>()),
+            ("t", vec![-2.0, -2.0, 2.0, 2.0], vec![-1.0, -1.0, 1.0, 1.0]),
+        ] {
+            let observations = response.len();
+            let rejected = std::panic::catch_unwind(|| {
+                linear::prais::fit_prais(
+                    response,
+                    &[predictor],
+                    Default::default(),
+                    regression_metadata(observations),
+                )
+            });
+            undefined_inference.push((
+                label,
+                matches!(
+                    rejected,
+                    Ok(Err(yss_sci_contract::SciError::ComputationFailed {
+                        operation: yss_sci_contract::SciOperationCode::Regression
+                    }))
+                ),
+            ));
+        }
+        assert_eq!(undefined_inference, [("F", true), ("t", true)]);
     }
 }
+
+pub mod postestimation;

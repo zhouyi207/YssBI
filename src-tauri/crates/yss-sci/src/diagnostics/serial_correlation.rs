@@ -65,7 +65,7 @@ pub fn breusch_godfrey(
 ) -> Option<(f64, f64)> {
     let n = residuals.len();
     let k = exog.first().map(|r| r.len()).unwrap_or(0);
-    if n < 4 || k == 0 || lags < 1 || exog.len() != n {
+    if n < 4 || k == 0 || lags < 1 || exog.len() != n || exog.iter().any(|row| row.len() != k) {
         return None;
     }
     let p = lags.min(n - 1).max(1);

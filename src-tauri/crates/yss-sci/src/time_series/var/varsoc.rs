@@ -19,26 +19,22 @@ pub fn var_varsoc(
     let n_obs = t - maxlag;
     let mut rows = Vec::with_capacity(maxlag + 1);
     let mut prev_ll: Option<f64> = None;
+    let mut var = VAR {
+        y,
+        exog: None,
+        config: VARConfig {
+            constant: true,
+            lags: Vec::new(),
+            dfk: false,
+            sample_start_offset: Some(maxlag),
+        },
+        var_names,
+        exog_names: None,
+        regression_times: None,
+    };
 
     for p in 0..=maxlag {
-        let lags: Vec<usize> = if p == 0 {
-            Vec::new()
-        } else {
-            (1..=p).collect()
-        };
-        let var = VAR {
-            y: y.clone(),
-            exog: None,
-            config: VARConfig {
-                constant: true,
-                lags,
-                dfk: false,
-                sample_start_offset: Some(maxlag),
-            },
-            var_names: var_names.clone(),
-            exog_names: None,
-            regression_times: None,
-        };
+        var.config.lags = (1..=p).collect();
         let r = var.fit()?;
 
         let (lr, lr_df, lr_p) = if p == 0 {
@@ -65,7 +61,9 @@ pub fn var_varsoc(
         });
     }
 
-    let names = var_names.unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
+    let names = var
+        .var_names
+        .unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
     Ok(VARSocResult {
         title: "VAR lag-order selection (varsoc)".to_string(),
         var_names: names,

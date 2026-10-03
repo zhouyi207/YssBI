@@ -123,6 +123,40 @@ fn point_sampling_preserves_endpoints_and_quadrant_counts_use_the_population() {
     assert_eq!(result.plot.data.first().unwrap().x, 0.);
     assert_eq!(result.plot.data.last().unwrap().x, 9999.);
     assert!(result.plot.metadata.sampled);
+
+    let descending = x.iter().rev().copied().collect::<Vec<_>>();
+    let scatter = xy(&descending, &y, false, &control()).unwrap();
+    let line = xy(&descending, &y, true, &control()).unwrap();
+    assert_eq!(scatter.metadata, result.plot.metadata);
+    assert_eq!(line.metadata, result.plot.metadata);
+    assert_eq!(scatter.data.len(), MAX_PLOT_POINTS);
+    assert_eq!(line.data.len(), MAX_PLOT_POINTS);
+    for ((point, scatter), line) in result.plot.data.iter().zip(&scatter.data).zip(&line.data) {
+        assert_eq!(
+            *scatter,
+            PlotPoint {
+                x: 9999. - point.x,
+                y: point.y
+            }
+        );
+        assert_eq!(
+            *line,
+            PlotPoint {
+                x: point.x,
+                y: 9999. - point.y
+            }
+        );
+    }
+    assert_eq!(
+        xy(&[2., 1., 1.], &[20., 10., 11.], true, &control())
+            .unwrap()
+            .data,
+        vec![
+            PlotPoint { x: 1., y: 10. },
+            PlotPoint { x: 1., y: 11. },
+            PlotPoint { x: 2., y: 20. },
+        ]
+    );
 }
 
 #[test]
@@ -188,6 +222,13 @@ fn matrix_plots_retain_column_orientation_and_undefined_constant_correlations() 
     let acf = correlogram(&[1., 2., 1., 4., 2., 6., 3., 7.], 20, &control()).unwrap();
     assert_eq!(acf.acf.len(), 3);
     assert_eq!(acf.pacf.len(), 3);
+    let correlations = crate::time_series::acf_pacf::compute_acf_pacf(
+        &[1., 2., 1., 4., 2., 6., 3., 7.],
+        3,
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(acf.ci_half_width, correlations.ci_half_width);
     assert!(
         acf.acf
             .iter()

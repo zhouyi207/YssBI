@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl as Control,
     ScientificInputViolation as Violation,
 };
 use yss_sci_contract::panel::PanelData;
+use yss_sci_linalg::Col;
 
 pub(super) type Result<T> = std::result::Result<T, Error>;
 pub(super) fn invalid(violation: Violation) -> Error {
@@ -13,6 +16,24 @@ pub(super) fn parameter() -> Error {
 }
 pub(super) fn failed() -> Error {
     Error::ComputationFailed
+}
+
+/// Subtract group means after the estimator has validated matching lengths.
+pub(super) fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Col<f64> {
+    let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
+    for (i, &gid) in group_id.iter().enumerate() {
+        let val = v[i];
+        if !val.is_nan() {
+            let entry = sums.entry(gid).or_insert((0.0, 0));
+            entry.0 += val;
+            entry.1 += 1;
+        }
+    }
+    Col::from_fn(v.len(), |i| {
+        let (sum, count) = sums.get(&group_id[i]).copied().unwrap_or((0.0, 0));
+        let mean = if count > 0 { sum / count as f64 } else { 0.0 };
+        v[i] - mean
+    })
 }
 
 /// Validate before indexing, then retain the source order mapping through all transforms.

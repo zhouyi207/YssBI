@@ -10,4 +10,6 @@ pub struct AcfPacfResult {
     pub acf: Vec<f64>,
     pub pacf: Vec<f64>,
     pub n: usize,
+    /// Half-width of the two-sided 95% white-noise reference band.
+    pub ci_half_width: f64,
 }

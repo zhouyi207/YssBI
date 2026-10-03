@@ -35,10 +35,6 @@ pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use core_nodes::reroute::validate_reroute_protocol_contract;
 pub use dataframe::{DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER};
-pub use project::{
-    FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
-    FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
-};
 pub fn reroute_node_type() -> yss_node_protocol::NodeTypeId {
     yss_node_protocol::NodeTypeId::new(REROUTE_NODE_TYPE)
         .expect("built-in reroute identifier is valid")
@@ -182,6 +178,7 @@ mod tests {
                 .unwrap();
             assert_eq!(model.direction, PortDirection::Output);
             assert_eq!(inputs[0].value_type, model.value_type, "{id}");
+            assert_ne!(outputs[0].value_type, model.value_type, "{id}");
             count += 1;
         }
         assert!(count > 0);

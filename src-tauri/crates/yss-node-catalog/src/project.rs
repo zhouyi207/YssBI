@@ -5,12 +5,11 @@ use crate::builtin::{node_key, node_key_text};
 use crate::{Aliases, Message, Text};
 use std::sync::Arc;
 use yss_node_protocol::*;
-use yss_node_registry::{RegisteredNode, StructuralNodeRole};
-
-pub const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
-pub const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";
-pub const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str = "yssbi.project.function.entry.parameters";
-pub const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
+use yss_node_registry::{
+    FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
+    FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER, RegisteredNode,
+    StructuralNodeRole,
+};
 
 pub(crate) fn builtin_function_interface_resolver_ids() -> Box<[InterfaceResolverId]> {
     [

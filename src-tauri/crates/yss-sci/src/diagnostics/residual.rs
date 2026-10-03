@@ -22,6 +22,9 @@ pub fn diagnose(model: &LinearRegressionResult, test: Test) -> Result<Output, St
     if model.report.model_basic_info.model_type == "GLS" && !matches!(test, Test::Vif) {
         return Err("residual diagnostic requires OLS or WLS".into());
     }
+    if !model.constant && matches!(test, Test::White | Test::InformationMatrix) {
+        return Err("White and information-matrix diagnostics require a fitted intercept".into());
+    }
     let x = Mat::from_fn(n, model.design.len(), |row, col| model.design[col][row]);
     let u = Col::from_iter(model.residuals.iter().copied());
     let fitted = Col::from_iter(model.fitted.iter().copied());

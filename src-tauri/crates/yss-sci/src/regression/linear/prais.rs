@@ -10,7 +10,7 @@ use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
-pub use yss_sci_contract::regression::prais::{PraisConfig, PraisTransform, RhoType};
+pub use yss_sci_contract::regression::prais::{PraisConfig, PraisTransform};
 
 pub struct Prais {
     pub endog: Col<f64>,
@@ -52,7 +52,7 @@ pub struct PraisResult {
     pub rho_history: Vec<f64>,
 }
 
-/// Estimate ρ from residuals using rhotype(regress): u_t = ρ u_{t-1} + e_t
+/// Estimate ρ by lagged-residual regression: u_t = ρ u_{t-1} + e_t
 fn estimate_rho_regress(residuals: &[f64]) -> Result<f64, String> {
     let n = residuals.len();
     if n < 2 {
@@ -219,6 +219,9 @@ impl Prais {
                 let ms_total = ss_total / df_total as f64;
                 let r2_adjusted = 1.0 - ms_residual / ms_total;
                 let f = ms_model / ms_residual;
+                if f.is_nan() {
+                    return Err("Prais F-statistic is undefined".into());
+                }
 
                 let dist_f = FisherSnedecor::new(df_model as f64, df_residual as f64)
                     .map_err(|e| format!("Prais: {}", e))?;
@@ -233,6 +236,9 @@ impl Prais {
                     .zip(std_err.iter())
                     .map(|(b, se)| b / se)
                     .collect();
+                if t_values.iter().any(|t| t.is_nan()) {
+                    return Err("Prais coefficient t-statistic is undefined".into());
+                }
                 let t_dist = StudentsT::new(0.0, 1.0, df_residual as f64)
                     .map_err(|e| format!("Prais: {}", e))?;
                 let p_values: Vec<f64> = t_values
@@ -318,7 +324,6 @@ mod tests {
             config: PraisConfig {
                 constant: true,
                 transform: PraisTransform::PraisWinsten,
-                rhotype: RhoType::Regress,
                 max_iter: 50,
                 tol: 1e-6,
             },
@@ -360,7 +365,6 @@ mod tests {
             config: PraisConfig {
                 constant: true,
                 transform: PraisTransform::CochraneOrcutt,
-                rhotype: RhoType::Regress,
                 max_iter: 50,
                 tol: 1e-6,
             },

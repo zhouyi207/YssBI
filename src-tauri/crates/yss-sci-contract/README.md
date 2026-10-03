@@ -16,8 +16,36 @@ the scientific runtime and numerical models.
 Domain names follow [SCI's category mapping](../yss-sci/README.md#domain-organization).
 Cross-domain execution and observation contracts remain shared.
 
+`decision/preferences` owns compact NPS/KANO summaries and row-level RFM score contracts.
+Its sibling `market`, `hierarchy`, `influence`, `fuzzy` and `experts` modules own
+price intersections, exact reach summaries, judgment weights, influence/reachability
+cells, membership composition and single-round Delphi results respectively.
+`decision/conjoint` owns centered part-worths, nullable inference and row-level rating predictions.
+`psychometrics` owns scale summaries, nullable item statistics, tail-group scores
+and expert CVI summaries. `multivariate::FactorabilityReport` owns shared KMO,
+per-item MSA and Bartlett results; contracts do not prescribe pass/fail judgments.
+`quality` defines process limits, complete control-chart rows, capability indices
+and balanced crossed Gage R&R components. Control charts reuse `visualization::XyPlot`.
+`doe` owns neutral factor ranges, level summaries, design-balance diagnostics, and coded
+design specifications/results. Design rows contain a one-based run number and factor codes;
+compact summaries are separate from full matrices. Response surface and dose-response
+results reuse regression fits, adding stationary geometry or positive curve parameters.
+`decision` owns weight/ranking methods, criterion direction and normalization
+options, weight statistics, compact summaries and observation score rows. These
+contracts have no node IDs or table handles; adapters decide how to expose tables.
+
+`inference` defines interval rows, multiplicity-adjusted contrasts and cluster
+inference reports. `regression::fit::FittedRegression` is the borrowed linear/binary
+fit input shared by diagnostics and postestimation. `regression::postestimation`
+owns evaluation settings and adjusted-mean results; binary marginal effects reuse
+the same evaluation enum. No fitted designs or covariance matrices are copied by
+the borrowed model contract.
+
 - `execution`: `ScientificExecutionControl`, cancellation and computation errors.
   These types contain no execution-plan or project identities, and define no backend trait.
+  `ScientificInputViolation` is the shared input-failure vocabulary for both
+  `SciError` and `ScientificComputationError`; operation identity and execution
+  interruption remain separate error concerns.
 - `spatial`: coordinate weight rules and serializable `SpatialWeights<L>` with
   exact unit labels; global Moran inference; seven spatial regressions and balanced
   entity fixed-effect panels. Model reports distinguish conditional/reduced fits,
@@ -35,8 +63,9 @@ Cross-domain execution and observation contracts remain shared.
   `summary` owns the selected linear-summary contents and analysis defaults; it
   does not contain UI layout, graph identity, or cache state.
   `discrete::BinaryOptions` owns binary-model intercept/convergence settings;
-  `prais` owns AR(1) transform and convergence settings. Linear results retain
-  optional original WLS weights for downstream diagnostics.
+  `prais` owns AR(1) transform and convergence settings; rho estimation uses
+  lagged-residual regression. Linear results retain optional original WLS weights
+  for downstream diagnostics.
   `models` owns predictor/category contracts, estimator/convergence
   options and structured coefficient/model/workflow results for the additional
   regression methods. Method-specific facts use `RegressionDetails`; undefined
@@ -59,7 +88,8 @@ Cross-domain execution and observation contracts remain shared.
   Generic category labels preserve caller-owned scalar identities; unavailable
   inference uses `Option`, never NaN. Bounds cover raters, controls, categories,
   exact permutations and display points.
-- `time_series::acf_pacf`: ACF/PACF requests and results. `var` and `vec` own
+- `time_series::acf_pacf`: ACF/PACF requests and results, including the computed
+  two-sided 95% white-noise reference-band half-width. `var` and `vec` own
   neutral fitted models and selected-summary options; `fit` shares multivariate
   equation/coefficient statistics, serial-test rows and stability roots.
   `forecast` owns ARIMA/smoothing/volatility options, source-aligned forecasts,
@@ -109,6 +139,11 @@ Cross-domain execution and observation contracts remain shared.
   exported from the crate root for all domains.
 - `error`: stable operation and scientific error vocabulary.
 
+- `meta`: independent study summaries and effect scales, fixed/DL/PM estimator and
+  Wald/Knapp–Hartung inference options, model covariance and heterogeneity,
+  omission records, combined P values and a funnel payload with an explicit
+  descending standard-error domain. Study row details are separate from summary records.
+
 This crate owns data and execution-control contracts, not algorithms, report rendering,
 project/database state, Tauri, Polars, faer or concrete backend implementations.
 Observation metadata records row selection counts and the applied missing-value
@@ -124,8 +159,25 @@ Scheduling, concurrency and the budget remain caller-owned.
 
 `hypothesis` carries neutral requests and result records for classical mean, proportion, count-table, rank/sequence and variance-homogeneity tests. Requests encode design and alternatives; the report keeps the statistic, reference degrees of freedom, p-value, sample sizes and method-specific finite details without depending on a node ID or backend type.
 
+`HypothesisError::Execution` preserves the shared computation error, including
+cancellation and deadline expiry, across SCI and Runtime. Existing hypothesis
+input details remain `InvalidInput(String)` and numerical model errors remain
+`Scientific(SciError)`; interruption is not converted to invalid input text.
+
 Binary effect/classification records retain nullable inference for undefined rates;
 regression fits retain named numeric designs for postestimation. Panel estimation
 samples explicitly describe transformed coordinates and source-row groups. VAR
 records retain selected lags, covariance divisor, exogenous names and sample rows.
 These neutral records do not contain graph addresses or UI-specific types.
+
+`path` owns observed-variable interaction/mediation options, conditional effects,
+Johnson–Neyman regions and recursive equations/decompositions. Variable references are
+zero-based indices; fits reuse the existing neutral regression result.
+
+`survey` owns borrowed weight/stratum/PSU designs, explicit lonely-PSU handling, weight
+summaries and design-inference records. Survey regression reuses the neutral regression
+fit and keeps design degrees of freedom separate from observation count.
+
+`power` owns prospective scalar design variants, request/alternative enums and results
+with explicit sample units and total observations. It does not consume fitted model
+state or infer effect sizes from observed significance.

@@ -1,4 +1,5 @@
 //! Validated matrix inputs for linear hypothesis tests.
+use crate::error::invalid_input;
 use yss_sci_contract::hypothesis::{Alternative, TTestResult, WaldTestResult};
 
 use yss_sci_linalg::{Col, Mat};
@@ -15,7 +16,7 @@ pub(super) struct LinearHypothesisTestInput<'a> {
 
 use super::{t_test as yss_t_test, wald_test as yss_wald_test};
 
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 
 pub(super) fn t_test(input: LinearHypothesisTestInput<'_>) -> Result<TTestResult, SciError> {
     validate_input(&input, SciOperationCode::TTest, true)?;
@@ -62,7 +63,7 @@ fn validate_input(
     {
         return Err(invalid_input(
             operation,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     if input.betas.nrows() != coefficient_count
@@ -70,7 +71,10 @@ fn validate_input(
         || input.cov_beta.ncols() != coefficient_count
         || input.r_vec.nrows() != constraint_count
     {
-        return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
+        return Err(invalid_input(
+            operation,
+            ScientificInputViolation::ShapeMismatch,
+        ));
     }
     if input
         .betas
@@ -80,16 +84,12 @@ fn validate_input(
         .chain(input.r_vec.iter())
         .any(|value| !value.is_finite())
     {
-        return Err(invalid_input(operation, SciInputViolation::NonFiniteInput));
+        return Err(invalid_input(
+            operation,
+            ScientificInputViolation::NonFiniteInput,
+        ));
     }
     Ok(())
-}
-
-fn invalid_input(operation: SciOperationCode, violation: SciInputViolation) -> SciError {
-    SciError::InvalidInput {
-        operation,
-        violation,
-    }
 }
 
 #[cfg(test)]
@@ -126,7 +126,7 @@ mod tests {
             t_test(input(&betas, &covariance, &constraint, &target, 0)).unwrap_err(),
             SciError::InvalidInput {
                 operation: SciOperationCode::TTest,
-                violation: SciInputViolation::ParameterOutOfRange,
+                violation: ScientificInputViolation::ParameterOutOfRange,
             }
         );
 
@@ -143,7 +143,7 @@ mod tests {
             .unwrap_err(),
             SciError::InvalidInput {
                 operation: SciOperationCode::WaldTest,
-                violation: SciInputViolation::ParameterOutOfRange,
+                violation: ScientificInputViolation::ParameterOutOfRange,
             }
         );
 
@@ -152,7 +152,7 @@ mod tests {
             t_test(input(&short_betas, &covariance, &constraint, &target, 10,)).unwrap_err(),
             SciError::InvalidInput {
                 operation: SciOperationCode::TTest,
-                violation: SciInputViolation::ShapeMismatch,
+                violation: ScientificInputViolation::ShapeMismatch,
             }
         );
 
@@ -161,7 +161,7 @@ mod tests {
             t_test(input(&betas, &short_covariance, &constraint, &target, 10,)).unwrap_err(),
             SciError::InvalidInput {
                 operation: SciOperationCode::TTest,
-                violation: SciInputViolation::ShapeMismatch,
+                violation: ScientificInputViolation::ShapeMismatch,
             }
         );
 
@@ -170,7 +170,7 @@ mod tests {
             wald_test(input(&betas, &covariance, &constraint, &long_target, 10,)).unwrap_err(),
             SciError::InvalidInput {
                 operation: SciOperationCode::WaldTest,
-                violation: SciInputViolation::ShapeMismatch,
+                violation: ScientificInputViolation::ShapeMismatch,
             }
         );
 
@@ -186,7 +186,7 @@ mod tests {
             .unwrap_err(),
             SciError::InvalidInput {
                 operation: SciOperationCode::TTest,
-                violation: SciInputViolation::NonFiniteInput,
+                violation: ScientificInputViolation::NonFiniteInput,
             }
         );
     }

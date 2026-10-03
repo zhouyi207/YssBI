@@ -63,6 +63,7 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
         &xtx_inv_nd,
         &u_nd,
         df_residual,
+        model.config.constant.then_some(0),
         &covariance_type,
         covariance_parameters.as_ref(),
     )
@@ -90,6 +91,11 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
         .zip(std_err.iter())
         .map(|(b, se)| b / se)
         .collect();
+    if t_values.iter().any(|t| t.is_nan()) {
+        return Err(OlsFitError::Inference(
+            "OLS coefficient t-statistic is undefined".into(),
+        ));
+    }
 
     let t_df = (df_residual as f64).max(1.0);
     let t_dist = StudentsT::new(f64::zero(), f64::one(), t_df).map_err(|e| {

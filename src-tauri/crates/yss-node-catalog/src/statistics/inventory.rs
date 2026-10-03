@@ -20,6 +20,16 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 
 fn implemented(id: &str) -> bool {
     super::time_series::implemented(id)
+        || super::meta::implemented(id)
+        || super::inference::implemented(id)
+        || super::decision::implemented(id)
+        || super::psychometrics::implemented(id)
+        || super::quality::implemented(id)
+        || super::doe::implemented(id)
+        || super::path::implemented(id)
+        || super::power::implemented(id)
+        || super::survey::implemented(id)
+        || super::plot_overview::implemented(id)
         || super::analyses::implemented(id)
         || super::causal_models::implemented(id)
         || super::spatial::implemented(id)

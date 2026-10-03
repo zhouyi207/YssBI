@@ -83,6 +83,7 @@ impl IV2SLS {
             &xtx_inv_nd,
             &u_structural,
             sigma2_df,
+            self.config.constant.then_some(0),
             &covariance_type,
             self.config.cov_params.as_ref(),
         )?;

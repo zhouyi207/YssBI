@@ -1,6 +1,6 @@
 //! Shared numerical design preparation and row-ordered covariance projection.
 use crate::error::invalid_input;
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 use yss_sci_linalg::{Mat, matrix_rank};
 
 pub(crate) fn design_matrix(
@@ -10,10 +10,16 @@ pub(crate) fn design_matrix(
     operation: SciOperationCode,
 ) -> Result<Mat<f64>, SciError> {
     if predictors.is_empty() {
-        return Err(invalid_input(operation, SciInputViolation::EmptyInput));
+        return Err(invalid_input(
+            operation,
+            ScientificInputViolation::EmptyInput,
+        ));
     }
     if predictors.iter().any(|values| values.len() != observations) {
-        return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
+        return Err(invalid_input(
+            operation,
+            ScientificInputViolation::ShapeMismatch,
+        ));
     }
     let columns = predictors.len() + usize::from(constant);
     Ok(Mat::from_fn(observations, columns, |row, column| {

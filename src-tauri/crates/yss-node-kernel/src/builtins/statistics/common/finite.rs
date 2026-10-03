@@ -3,7 +3,7 @@ use serde::{Serialize, Serializer, ser};
 
 use crate::KernelError;
 
-pub(super) fn validate(value: &impl Serialize) -> Result<(), KernelError> {
+pub(in crate::builtins::statistics) fn validate(value: &impl Serialize) -> Result<(), KernelError> {
     value.serialize(FiniteNumbers).map_err(|error| match error {
         ValidationError::NonFinite => KernelError::NonFiniteResult,
         ValidationError::Serialization => KernelError::ScientificFailure,

@@ -99,8 +99,8 @@ pub fn correlogram(
     Ok(CorrelogramPlot {
         acf,
         pacf,
-        ci_half_width: 1.959_963_984_540_054 / n.sqrt(),
-        n: values.len(),
+        ci_half_width: result.ci_half_width,
+        n: result.n,
     })
 }
 

@@ -1,51 +1,68 @@
 //! Pearson, exact 2x2, and stratified categorical tests.
+use super::checkpoint;
 use statrs::distribution::{Binomial, ChiSquared, ContinuousCDF, DiscreteCDF};
 use statrs::function::gamma::ln_gamma;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_sci_contract::hypothesis::{CategoricalHypothesisTest as Input, ClassicalTestResult};
+use yss_sci_contract::{execution::ScientificExecutionControl, hypothesis::HypothesisError};
 
-pub fn run(input: Input) -> Result<ClassicalTestResult, String> {
-    match input {
-        Input::Independence { row, column } => independence(row, column),
-        Input::GoodnessOfFit { observed, expected } => goodness(observed, expected),
+pub fn run(
+    input: Input,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    control.check()?;
+    let result = match input {
+        Input::Independence { row, column } => independence(row, column, control),
+        Input::GoodnessOfFit { observed, expected } => goodness(observed, expected, control),
         Input::PearsonTable {
             observed,
             rows,
             columns,
-        } => pearson_table(observed, rows, columns),
-        Input::FisherExact { row, column } => fisher(row, column),
-        Input::McNemar { before, after } => mcnemar(before, after),
+        } => pearson_table(observed, rows, columns, control),
+        Input::FisherExact { row, column } => fisher(row, column, control),
+        Input::McNemar { before, after } => mcnemar(before, after, control),
         Input::Cmh {
             exposed,
             outcome,
             strata,
-        } => cmh(exposed, outcome, strata),
+        } => cmh(exposed, outcome, strata, control),
         Input::MultipleProportions {
             successes_and_trials,
-        } => multiple_proportions(successes_and_trials),
-    }
+        } => multiple_proportions(successes_and_trials, control),
+    };
+    control.check()?;
+    result
 }
 
-fn independence(row: Vec<Box<str>>, column: Vec<Box<str>>) -> Result<ClassicalTestResult, String> {
+fn independence(
+    row: Vec<Box<str>>,
+    column: Vec<Box<str>>,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
     if row.len() != column.len() || row.is_empty() {
         return Err("crosstab requires aligned non-empty categorical columns".into());
     }
-    let (rows, cols, table) = count_table(row, column)?;
+    let (rows, cols, table) = count_table(row, column, control)?;
     if rows.len() < 2 || cols.len() < 2 {
         return Err("independence test requires at least two levels in both variables".into());
     }
-    let n = table.iter().flatten().sum::<u64>() as f64;
-    let row_totals = table
-        .iter()
-        .map(|cells| cells.iter().sum::<u64>() as f64)
-        .collect::<Vec<_>>();
-    let col_totals = (0..cols.len())
-        .map(|c| table.iter().map(|cells| cells[c]).sum::<u64>() as f64)
-        .collect::<Vec<_>>();
+    let mut n = 0u64;
+    let mut row_totals = vec![0.0; rows.len()];
+    let mut col_totals = vec![0.0; cols.len()];
+    for (r, cells) in table.iter().enumerate() {
+        for (c, count) in cells.iter().enumerate() {
+            checkpoint(control, r * cols.len() + c)?;
+            n += count;
+            row_totals[r] += *count as f64;
+            col_totals[c] += *count as f64;
+        }
+    }
+    let n = n as f64;
     let mut statistic = 0.0;
     let mut min_expected = f64::INFINITY;
     for r in 0..rows.len() {
         for c in 0..cols.len() {
+            checkpoint(control, r * cols.len() + c)?;
             let expected = row_totals[r] * col_totals[c] / n;
             if expected <= 0.0 {
                 return Err("crosstab contains an empty marginal".into());
@@ -60,6 +77,7 @@ fn independence(row: Vec<Box<str>>, column: Vec<Box<str>>) -> Result<ClassicalTe
         statistic,
         ((rows.len() - 1) * (cols.len() - 1)) as f64,
         n as usize,
+        control,
     )?;
     result
         .details
@@ -67,32 +85,35 @@ fn independence(row: Vec<Box<str>>, column: Vec<Box<str>>) -> Result<ClassicalTe
     Ok(result)
 }
 
-fn goodness(observed: Vec<f64>, expected: Vec<f64>) -> Result<ClassicalTestResult, String> {
-    if observed.len() != expected.len()
-        || observed.len() < 2
-        || observed
-            .iter()
-            .chain(&expected)
-            .any(|v| !v.is_finite() || *v < 0.0)
-        || expected.contains(&0.0)
-    {
+fn goodness(
+    observed: Vec<f64>,
+    expected: Vec<f64>,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    if observed.len() != expected.len() || observed.len() < 2 {
         return Err(
             "goodness-of-fit requires matching positive expected and non-negative observed counts"
                 .into(),
         );
     }
-    let statistic = observed
-        .iter()
-        .zip(&expected)
-        .map(|(o, e)| (o - e).powi(2) / e)
-        .sum::<f64>();
+    let mut statistic = 0.0;
+    let mut n = 0.0;
+    for (i, (o, e)) in observed.iter().zip(&expected).enumerate() {
+        checkpoint(control, i)?;
+        if !o.is_finite() || *o < 0.0 || !e.is_finite() || *e <= 0.0 {
+            return Err("goodness-of-fit requires matching positive expected and non-negative observed counts".into());
+        }
+        statistic += (o - e).powi(2) / e;
+        n += o;
+    }
     let df = (observed.len() - 1) as f64;
     chi_result(
         "chisquare.goodness_of_fit",
         "observed proportions match expected counts",
         statistic,
         df,
-        observed.iter().sum::<f64>() as usize,
+        n as usize,
+        control,
     )
 }
 
@@ -100,30 +121,31 @@ fn pearson_table(
     observed: Vec<f64>,
     rows: usize,
     columns: usize,
-) -> Result<ClassicalTestResult, String> {
-    if rows < 2
-        || columns < 2
-        || rows.checked_mul(columns) != Some(observed.len())
-        || observed
-            .iter()
-            .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
-    {
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    if rows < 2 || columns < 2 || rows.checked_mul(columns) != Some(observed.len()) {
         return Err(
             "Pearson table requires a rectangular count table with at least two rows and columns"
                 .into(),
         );
     }
-    let n = observed.iter().sum::<f64>();
-    let row_totals = (0..rows)
-        .map(|r| observed[r * columns..(r + 1) * columns].iter().sum::<f64>())
-        .collect::<Vec<_>>();
-    let col_totals = (0..columns)
-        .map(|c| (0..rows).map(|r| observed[r * columns + c]).sum::<f64>())
-        .collect::<Vec<_>>();
+    let mut n = 0.0;
+    let mut row_totals = vec![0.0; rows];
+    let mut col_totals = vec![0.0; columns];
+    for (i, count) in observed.iter().enumerate() {
+        checkpoint(control, i)?;
+        if !count.is_finite() || *count < 0.0 || count.fract() != 0.0 {
+            return Err("Pearson table requires a rectangular count table with at least two rows and columns".into());
+        }
+        n += count;
+        row_totals[i / columns] += count;
+        col_totals[i % columns] += count;
+    }
     let mut statistic = 0.0;
     let mut min_expected = f64::INFINITY;
     for r in 0..rows {
         for c in 0..columns {
+            checkpoint(control, r * columns + c)?;
             let expected = row_totals[r] * col_totals[c] / n;
             if expected <= 0.0 {
                 return Err("Pearson table contains an empty marginal".into());
@@ -138,6 +160,7 @@ fn pearson_table(
         statistic,
         ((rows - 1) * (columns - 1)) as f64,
         n as usize,
+        control,
     )?;
     result
         .details
@@ -145,16 +168,20 @@ fn pearson_table(
     Ok(result)
 }
 
-fn fisher(row: Vec<Box<str>>, column: Vec<Box<str>>) -> Result<ClassicalTestResult, String> {
+fn fisher(
+    row: Vec<Box<str>>,
+    column: Vec<Box<str>>,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
     if row.len() != column.len() || row.is_empty() {
         return Err("Fisher exact test requires aligned categorical columns".into());
     }
-    let (categories_row, categories_col, table) = count_table(row, column)?;
+    let (categories_row, categories_col, table) = count_table(row, column, control)?;
     if categories_row.len() != 2 || categories_col.len() != 2 {
         return Err("Fisher exact test currently requires a 2 by 2 table".into());
     }
     let [a, b, c, d] = [table[0][0], table[0][1], table[1][0], table[1][1]];
-    let p_value = fisher_two_sided(a, b, c, d)?;
+    let p_value = fisher_two_sided(a, b, c, d, control)?;
     Ok(ClassicalTestResult {
         method: "fisher_exact".into(),
         null_hypothesis: "row and column classifications are independent".into(),
@@ -178,15 +205,20 @@ fn fisher(row: Vec<Box<str>>, column: Vec<Box<str>>) -> Result<ClassicalTestResu
     })
 }
 
-fn mcnemar(before: Vec<f64>, after: Vec<f64>) -> Result<ClassicalTestResult, String> {
-    if before.is_empty()
-        || before.len() != after.len()
-        || before.iter().chain(&after).any(|v| *v != 0.0 && *v != 1.0)
-    {
+fn mcnemar(
+    before: Vec<f64>,
+    after: Vec<f64>,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    if before.is_empty() || before.len() != after.len() {
         return Err("McNemar test requires aligned paired binary observations".into());
     }
     let (mut b, mut c) = (0u64, 0u64);
-    for (x, y) in before.iter().zip(&after) {
+    for (i, (x, y)) in before.iter().zip(&after).enumerate() {
+        checkpoint(control, i)?;
+        if (*x != 0.0 && *x != 1.0) || (*y != 0.0 && *y != 1.0) {
+            return Err("McNemar test requires aligned paired binary observations".into());
+        }
         if *x == 0.0 && *y == 1.0 {
             b += 1;
         } else if *x == 1.0 && *y == 0.0 {
@@ -200,7 +232,9 @@ fn mcnemar(before: Vec<f64>, after: Vec<f64>) -> Result<ClassicalTestResult, Str
     let statistic = (b as f64 - c as f64).powi(2) / discordant as f64;
     let binomial =
         Binomial::new(0.5, discordant).map_err(|_| "invalid McNemar exact distribution")?;
+    control.check()?;
     let tail = binomial.cdf(b.min(c));
+    control.check()?;
     let p_value = (2.0 * tail).min(1.0);
     let mut result = chi_result(
         "mcnemar",
@@ -208,6 +242,7 @@ fn mcnemar(before: Vec<f64>, after: Vec<f64>) -> Result<ClassicalTestResult, Str
         statistic,
         1.0,
         before.len(),
+        control,
     )?;
     result.p_value = p_value;
     result.details.insert("discordant_0_to_1".into(), b as f64);
@@ -222,21 +257,21 @@ fn cmh(
     exposed: Vec<f64>,
     outcome: Vec<f64>,
     strata: Vec<Box<str>>,
-) -> Result<ClassicalTestResult, String> {
-    if exposed.len() != outcome.len()
-        || outcome.len() != strata.len()
-        || strata.is_empty()
-        || exposed
-            .iter()
-            .chain(&outcome)
-            .any(|v| *v != 0.0 && *v != 1.0)
-    {
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    if exposed.len() != outcome.len() || outcome.len() != strata.len() || strata.is_empty() {
         return Err(
             "CMH test requires aligned binary exposure, outcome and stratum columns".into(),
         );
     }
     let mut groups: BTreeMap<Box<str>, [f64; 4]> = BTreeMap::new();
-    for ((x, y), stratum) in exposed.iter().zip(&outcome).zip(strata) {
+    for (i, ((x, y), stratum)) in exposed.iter().zip(&outcome).zip(strata).enumerate() {
+        checkpoint(control, i)?;
+        if (*x != 0.0 && *x != 1.0) || (*y != 0.0 && *y != 1.0) {
+            return Err(
+                "CMH test requires aligned binary exposure, outcome and stratum columns".into(),
+            );
+        }
         let table = groups.entry(stratum).or_default();
         let index = match (*x, *y) {
             (1.0, 1.0) => 0,
@@ -247,7 +282,8 @@ fn cmh(
         table[index] += 1.0;
     }
     let (mut numerator, mut variance) = (0.0, 0.0);
-    for [a, b, c, d] in groups.values() {
+    for (i, [a, b, c, d]) in groups.values().enumerate() {
+        checkpoint(control, i)?;
         let n = a + b + c + d;
         if n <= 1.0 {
             continue;
@@ -267,23 +303,31 @@ fn cmh(
         numerator.powi(2) / variance,
         1.0,
         exposed.len(),
+        control,
     )
 }
 
-fn multiple_proportions(values: Vec<f64>) -> Result<ClassicalTestResult, String> {
-    if values.len() < 6
-        || values.len() % 2 != 0
-        || values
-            .iter()
-            .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
-    {
+fn multiple_proportions(
+    values: Vec<f64>,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    if values.len() < 6 || values.len() % 2 != 0 {
         return Err("multiple-proportion test requires at least three success/total pairs".into());
     }
     let groups = values.len() / 2;
     let mut counts = Vec::with_capacity(groups * 2);
     let mut total = 0.0;
     let mut successes = 0.0;
-    for pair in values.chunks_exact(2) {
+    for (i, pair) in values.chunks_exact(2).enumerate() {
+        checkpoint(control, i)?;
+        if pair
+            .iter()
+            .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
+        {
+            return Err(
+                "multiple-proportion test requires at least three success/total pairs".into(),
+            );
+        }
         let success = pair[0];
         let n = pair[1];
         if n == 0.0 || success > n {
@@ -294,7 +338,7 @@ fn multiple_proportions(values: Vec<f64>) -> Result<ClassicalTestResult, String>
         successes += success;
         total += n;
     }
-    pearson_table(counts, 2, groups).map(|mut result| {
+    pearson_table(counts, 2, groups, control).map(|mut result| {
         result.method = "proportion.multiple".into();
         result.null_hypothesis = "all group proportions are equal".into();
         result.sample_sizes = vec![total as usize];
@@ -308,37 +352,54 @@ fn multiple_proportions(values: Vec<f64>) -> Result<ClassicalTestResult, String>
 fn count_table(
     row: Vec<Box<str>>,
     column: Vec<Box<str>>,
-) -> Result<(Vec<Box<str>>, Vec<Box<str>>, Vec<Vec<u64>>), String> {
-    let rows = row
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let columns = column
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let ri = rows
-        .iter()
-        .enumerate()
-        .map(|(i, v)| (v.as_ref(), i))
-        .collect::<BTreeMap<_, _>>();
-    let ci = columns
-        .iter()
-        .enumerate()
-        .map(|(i, v)| (v.as_ref(), i))
-        .collect::<BTreeMap<_, _>>();
-    let mut table = vec![vec![0u64; columns.len()]; rows.len()];
-    for (r, c) in row.iter().zip(&column) {
+    control: &ScientificExecutionControl,
+) -> Result<(Vec<Box<str>>, Vec<Box<str>>, Vec<Vec<u64>>), HypothesisError> {
+    let mut row_levels = BTreeSet::new();
+    let mut column_levels = BTreeSet::new();
+    for (i, (r, c)) in row.iter().zip(&column).enumerate() {
+        checkpoint(control, i)?;
+        row_levels.insert(r.clone());
+        column_levels.insert(c.clone());
+    }
+    let mut rows = Vec::with_capacity(row_levels.len());
+    for (i, key) in row_levels.into_iter().enumerate() {
+        checkpoint(control, i)?;
+        rows.push(key);
+    }
+    let mut columns = Vec::with_capacity(column_levels.len());
+    for (i, key) in column_levels.into_iter().enumerate() {
+        checkpoint(control, i)?;
+        columns.push(key);
+    }
+    let mut ri = BTreeMap::new();
+    let mut ci = BTreeMap::new();
+    for (i, key) in rows.iter().enumerate() {
+        checkpoint(control, i)?;
+        ri.insert(key.as_ref(), i);
+    }
+    for (i, key) in columns.iter().enumerate() {
+        checkpoint(control, i)?;
+        ci.insert(key.as_ref(), i);
+    }
+    let mut table = Vec::with_capacity(rows.len());
+    for _ in 0..rows.len() {
+        control.check()?;
+        table.push(vec![0u64; columns.len()]);
+    }
+    for (i, (r, c)) in row.iter().zip(&column).enumerate() {
+        checkpoint(control, i)?;
         table[ri[r.as_ref()]][ci[c.as_ref()]] += 1;
     }
     Ok((rows, columns, table))
 }
 
-fn fisher_two_sided(a: u64, b: u64, c: u64, d: u64) -> Result<f64, String> {
+fn fisher_two_sided(
+    a: u64,
+    b: u64,
+    c: u64,
+    d: u64,
+    control: &ScientificExecutionControl,
+) -> Result<f64, HypothesisError> {
     let r1 = a + b;
     let r2 = c + d;
     let c1 = a + c;
@@ -350,12 +411,14 @@ fn fisher_two_sided(a: u64, b: u64, c: u64, d: u64) -> Result<f64, String> {
     };
     let log_p = |x: u64| log_choose(r1, x) + log_choose(r2, c1 - x) - log_choose(n, c1);
     let observed = log_p(a);
-    let p = (low..=high)
-        .filter_map(|x| {
-            let value = log_p(x);
-            (value <= observed + 1e-12).then_some(value.exp())
-        })
-        .sum::<f64>();
+    let mut p = 0.0;
+    for (i, x) in (low..=high).enumerate() {
+        checkpoint(control, i)?;
+        let value = log_p(x);
+        if value <= observed + 1e-12 {
+            p += value.exp();
+        }
+    }
     Ok(p.clamp(0.0, 1.0))
 }
 
@@ -365,11 +428,15 @@ fn chi_result(
     statistic: f64,
     df: f64,
     observations: usize,
-) -> Result<ClassicalTestResult, String> {
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
     if !statistic.is_finite() || statistic < 0.0 || df <= 0.0 || !df.is_finite() {
         return Err("invalid chi-square statistic or degrees of freedom".into());
     }
     let distribution = ChiSquared::new(df).map_err(|_| "invalid chi-square distribution")?;
+    control.check()?;
+    let p_value = distribution.sf(statistic).clamp(0.0, 1.0);
+    control.check()?;
     Ok(ClassicalTestResult {
         method: method.into(),
         null_hypothesis: null.into(),
@@ -377,7 +444,7 @@ fn chi_result(
         statistic_name: "chi_squared".into(),
         statistic,
         degrees_of_freedom: vec![df],
-        p_value: distribution.sf(statistic).clamp(0.0, 1.0),
+        p_value,
         estimate: None,
         standard_error: None,
         sample_sizes: vec![observations],

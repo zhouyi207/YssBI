@@ -102,7 +102,7 @@ pub fn vec_fit_named(
 #[cfg(test)]
 mod tests {
     use super::augmented_dickey_fuller;
-    use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+    use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 
     #[test]
     fn augmented_dickey_fuller_rejects_unknown_regression() {
@@ -114,8 +114,17 @@ mod tests {
             error,
             SciError::InvalidInput {
                 operation: SciOperationCode::Adf,
-                violation: SciInputViolation::ParameterOutOfRange,
+                violation: ScientificInputViolation::ParameterOutOfRange,
             }
         );
+
+        for lags in [series.len() - 1, usize::MAX] {
+            assert_eq!(
+                augmented_dickey_fuller(&series, lags, "constant").unwrap_err(),
+                SciError::ComputationFailed {
+                    operation: SciOperationCode::Adf,
+                }
+            );
+        }
     }
 }

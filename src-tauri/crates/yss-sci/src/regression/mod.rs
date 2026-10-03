@@ -5,3 +5,5 @@ pub(crate) mod design;
 pub mod discrete;
 pub mod linear;
 pub mod models;
+
+pub mod postestimation;

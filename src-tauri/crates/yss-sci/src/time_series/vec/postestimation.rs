@@ -48,8 +48,8 @@ pub fn serial_correlation(fit: &VecFit, mlag: usize) -> Result<Vec<SerialCorrela
     // veclmar: LM 残差自相关检验（Stata veclmar，与 varlmar 相同思路）
     // LM_s = (T - d - 0.5) * ln(|Σ̂| / |Σ̃_s|)，df = K²，使用 ML 估计 Σ
     let u_mat = Mat::from_fn(n, k, |i, j| residuals[j][i]);
-    let sigma_ml = (u_mat.transpose() * u_mat.as_ref()) / yss_sci_linalg::Scale(n as f64);
-    let mut det_sigma_ml_copy = sigma_ml.clone();
+    let mut det_sigma_ml_copy =
+        (u_mat.transpose() * u_mat.as_ref()) / yss_sci_linalg::Scale(n as f64);
     let det_sigma_hat = match cholesky_lower_in_place(&mut det_sigma_ml_copy) {
         Ok(()) => {
             let det_g: f64 = (0..k).map(|i| det_sigma_ml_copy[(i, i)]).product();
@@ -72,9 +72,8 @@ pub fn serial_correlation(fit: &VecFit, mlag: usize) -> Result<Vec<SerialCorrela
             }
         }
 
-        let x_aug_matrix = x_aug.as_ref().to_owned();
-        let xt_aug = x_aug_matrix.transpose();
-        let xtx_aug = xt_aug.as_ref() * x_aug_matrix.as_ref();
+        let xt_aug = x_aug.transpose();
+        let xtx_aug = xt_aug.as_ref() * x_aug.as_ref();
         let xtx_aug_inv = match xtx_aug.as_ref().checked_cholesky() {
             Ok(llt) => llt.solve(&Mat::<f64>::identity(xtx_aug.nrows(), xtx_aug.nrows())),
             Err(_) => continue,
@@ -83,19 +82,16 @@ pub fn serial_correlation(fit: &VecFit, mlag: usize) -> Result<Vec<SerialCorrela
         let mut u_aug = Mat::zeros(n, k);
         for eq in 0..k {
             let y_col = z0.col(eq).to_owned();
-            let y_vector = y_col.as_ref().to_owned();
-            let xty = xt_aug.as_ref() * y_vector.as_ref();
+            let xty = xt_aug.as_ref() * y_col.as_ref();
             let beta_aug = xtx_aug_inv.as_ref() * xty.as_ref();
-            let y_hat = x_aug_matrix.as_ref() * beta_aug.as_ref();
-            let u = y_vector.as_ref() - y_hat.as_ref();
-            let u_nd = u.as_ref().to_owned();
+            let y_hat = x_aug.as_ref() * beta_aug.as_ref();
+            let u = y_col.as_ref() - y_hat.as_ref();
             for i in 0..n {
-                u_aug[(i, eq)] = u_nd[i];
+                u_aug[(i, eq)] = u[i];
             }
         }
 
-        let sigma_tilde = (u_aug.transpose() * u_aug.as_ref()) / yss_sci_linalg::Scale(n as f64);
-        let mut det_tilde = sigma_tilde.clone();
+        let mut det_tilde = (u_aug.transpose() * u_aug.as_ref()) / yss_sci_linalg::Scale(n as f64);
         let det_sigma_tilde = match cholesky_lower_in_place(&mut det_tilde) {
             Ok(()) => {
                 let det_g: f64 = (0..k).map(|i| det_tilde[(i, i)]).product();
@@ -152,13 +148,13 @@ pub fn stability(fit: &VecFit) -> Result<Vec<StabilityRoot>, String> {
     a_mats.push(Mat::zeros(k, k));
     let eye = Mat::<f64>::identity(k, k);
     if p == 1 {
-        a_mats.push((&eye + &pi).to_owned());
+        a_mats.push(&eye + &pi);
     } else {
-        a_mats.push((&eye + &pi + &gamma_mats[1]).to_owned());
+        a_mats.push(&eye + &pi + &gamma_mats[1]);
         for i in 2..p {
-            a_mats.push((&gamma_mats[i] - &gamma_mats[i - 1]).to_owned());
+            a_mats.push(&gamma_mats[i] - &gamma_mats[i - 1]);
         }
-        a_mats.push((-&gamma_mats[p - 1]).to_owned());
+        a_mats.push(-&gamma_mats[p - 1]);
     }
 
     let kp = k * p;

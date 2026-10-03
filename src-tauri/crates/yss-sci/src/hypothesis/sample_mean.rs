@@ -1,19 +1,25 @@
 //! Independent sample mean tests. Inputs are already filtered to complete, finite observations.
+use super::checkpoint;
 use statrs::distribution::{
     Binomial, ContinuousCDF, Discrete, DiscreteCDF, Normal, Poisson, StudentsT,
 };
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{
-    Alternative, ClassicalHypothesisTest, ClassicalTestResult, SummaryTDesign,
+    Alternative, ClassicalHypothesisTest, ClassicalTestResult, HypothesisError, SummaryTDesign,
 };
 
-pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String> {
-    match input {
+pub fn run(
+    input: ClassicalHypothesisTest,
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
+    control.check()?;
+    let result = match input {
         ClassicalHypothesisTest::OneSample {
             values,
             null_mean,
             alternative,
         } => {
-            validate(&values)?;
+            validate(&values, control)?;
             if !null_mean.is_finite() || values.len() < 2 {
                 return Err(
                     "one-sample t test requires a finite null mean and at least two observations"
@@ -21,8 +27,8 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 );
             }
             let n = values.len();
-            let mean = values.iter().sum::<f64>() / n as f64;
-            let variance = sample_variance(&values, mean)?;
+            let mean = sample_sum(&values, control)? / n as f64;
+            let variance = sample_variance(&values, mean, control)?;
             finish(
                 "t.one_sample",
                 format!("mean = {null_mean}"),
@@ -32,6 +38,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 (n - 1) as f64,
                 alternative,
                 vec![n],
+                control,
             )
         }
         ClassicalHypothesisTest::Independent {
@@ -40,8 +47,8 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
             equal_variance,
             alternative,
         } => {
-            validate(&first)?;
-            validate(&second)?;
+            validate(&first, control)?;
+            validate(&second, control)?;
             if first.len() < 2 || second.len() < 2 {
                 return Err(
                     "independent t test requires at least two observations per group".into(),
@@ -54,6 +61,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 0.0,
                 alternative,
                 "t.independent",
+                control,
             )
         }
         ClassicalHypothesisTest::Paired {
@@ -61,20 +69,24 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
             after,
             alternative,
         } => {
-            validate(&before)?;
-            validate(&after)?;
+            validate(&before, control)?;
+            validate(&after, control)?;
             if before.len() != after.len() || before.len() < 2 {
                 return Err("paired t test requires at least two aligned pairs".into());
             }
             let differences = before
                 .iter()
                 .zip(after)
-                .map(|(a, b)| a - b)
-                .collect::<Vec<_>>();
-            validate(&differences)?;
+                .enumerate()
+                .map(|(index, (a, b))| {
+                    checkpoint(control, index)?;
+                    Ok(a - b)
+                })
+                .collect::<Result<Vec<_>, HypothesisError>>()?;
+            validate(&differences, control)?;
             let n = differences.len();
-            let mean = differences.iter().sum::<f64>() / n as f64;
-            let variance = sample_variance(&differences, mean)?;
+            let mean = sample_sum(&differences, control)? / n as f64;
+            let variance = sample_variance(&differences, mean, control)?;
             finish(
                 "t.paired",
                 "mean(before - after) = 0".into(),
@@ -84,6 +96,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 (n - 1) as f64,
                 alternative,
                 vec![n],
+                control,
             )
         }
         ClassicalHypothesisTest::Summary {
@@ -118,6 +131,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                         (first_count - 1) as f64,
                         alternative,
                         vec![first_count],
+                        control,
                     )
                 }
                 (SummaryTDesign::OneSample, None, None, None) => {
@@ -131,6 +145,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                         (first_count - 1) as f64,
                         alternative,
                         vec![first_count],
+                        control,
                     )
                 }
                 (SummaryTDesign::Independent, Some(n2), Some(mean2), Some(sd2))
@@ -148,6 +163,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                         df,
                         alternative,
                         vec![first_count, n2],
+                        control,
                     )
                 }
                 _ => {
@@ -163,7 +179,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
             population_sd,
             alternative,
         } => {
-            validate(&values)?;
+            validate(&values, control)?;
             if values.is_empty()
                 || !null_mean.is_finite()
                 || !population_sd.is_finite()
@@ -175,7 +191,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 );
             }
             let n = values.len();
-            let estimate = values.iter().sum::<f64>() / n as f64 - null_mean;
+            let estimate = sample_sum(&values, control)? / n as f64 - null_mean;
             finish_normal(
                 "z.mean",
                 format!("mean = {null_mean}"),
@@ -183,6 +199,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 population_sd / (n as f64).sqrt(),
                 alternative,
                 vec![n],
+                control,
             )
         }
         ClassicalHypothesisTest::OneProportionZ {
@@ -201,6 +218,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 se,
                 alternative,
                 vec![trials],
+                control,
             )
         }
         ClassicalHypothesisTest::ExactBinomial {
@@ -210,7 +228,8 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
             alternative,
         } => {
             validate_proportion(successes, trials, null_probability)?;
-            let p_value = binomial_p_value(successes, trials, null_probability, alternative)?;
+            let p_value =
+                binomial_p_value(successes, trials, null_probability, alternative, control)?;
             let estimate = successes as f64 / trials as f64;
             Ok(ClassicalTestResult {
                 method: "test.binomial".into(),
@@ -257,6 +276,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 se,
                 alternative,
                 vec![first_trials, second_trials],
+                control,
             )
         }
         ClassicalHypothesisTest::PoissonRate {
@@ -264,17 +284,20 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
             null_rate_per_observation,
             alternative,
         } => {
-            validate(&counts)?;
+            validate(&counts, control)?;
             if counts.is_empty()
-                || counts
-                    .iter()
-                    .any(|count| *count < 0.0 || count.fract() != 0.0)
                 || !null_rate_per_observation.is_finite()
                 || null_rate_per_observation < 0.0
             {
                 return Err("Poisson rate test requires non-negative integer counts and a non-negative finite null rate".into());
             }
-            let events_f = counts.iter().sum::<f64>();
+            for (index, count) in counts.iter().enumerate() {
+                checkpoint(control, index)?;
+                if *count < 0.0 || count.fract() != 0.0 {
+                    return Err("Poisson rate test requires non-negative integer counts and a non-negative finite null rate".into());
+                }
+            }
+            let events_f = sample_sum(&counts, control)?;
             if events_f >= u64::MAX as f64 {
                 return Err("Poisson event count overflow".into());
             }
@@ -285,7 +308,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                     "Poisson exact test input exceeds the supported event-count bound".into(),
                 );
             }
-            let p_value = poisson_p_value(events, expected, alternative)?;
+            let p_value = poisson_p_value(events, expected, alternative, control)?;
             let rate = events as f64 / counts.len() as f64;
             let statistic = (events as f64 - expected) / expected.sqrt().max(1.0);
             Ok(ClassicalTestResult {
@@ -311,7 +334,7 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
             lower_bound,
             upper_bound,
         } => {
-            validate(&values)?;
+            validate(&values, control)?;
             if values.len() < 2
                 || !lower_bound.is_finite()
                 || !upper_bound.is_finite()
@@ -323,8 +346,8 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 );
             }
             let n = values.len();
-            let mean = values.iter().sum::<f64>() / n as f64;
-            let se = (sample_variance(&values, mean)? / n as f64).sqrt();
+            let mean = sample_sum(&values, control)? / n as f64;
+            let se = (sample_variance(&values, mean, control)? / n as f64).sqrt();
             if se <= 0.0 || !se.is_finite() {
                 return Err("equivalence standard error is zero or non-finite".into());
             }
@@ -333,8 +356,11 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 StudentsT::new(0.0, 1.0, df).map_err(|_| "invalid equivalence t distribution")?;
             let lower_stat = (mean - lower_bound) / se;
             let upper_stat = (mean - upper_bound) / se;
+            control.check()?;
             let lower_p = dist.sf(lower_stat);
+            control.check()?;
             let upper_p = dist.cdf(upper_stat);
+            control.check()?;
             let p_value = lower_p.max(upper_p).clamp(0.0, 1.0);
             Ok(ClassicalTestResult {
                 method: "equivalence".into(),
@@ -355,7 +381,9 @@ pub fn run(input: ClassicalHypothesisTest) -> Result<ClassicalTestResult, String
                 .into(),
             })
         }
-    }
+    };
+    control.check()?;
+    result
 }
 
 fn independent(
@@ -365,13 +393,14 @@ fn independent(
     null_difference: f64,
     alternative: Alternative,
     method: &str,
-) -> Result<ClassicalTestResult, String> {
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
     let n1 = first.len();
     let n2 = second.len();
-    let mean1 = first.iter().sum::<f64>() / n1 as f64;
-    let mean2 = second.iter().sum::<f64>() / n2 as f64;
-    let var1 = sample_variance(first, mean1)?;
-    let var2 = sample_variance(second, mean2)?;
+    let mean1 = sample_sum(first, control)? / n1 as f64;
+    let mean2 = sample_sum(second, control)? / n2 as f64;
+    let var1 = sample_variance(first, mean1, control)?;
+    let var2 = sample_variance(second, mean2, control)?;
     let (se, df) = summary_independent_se_df(n1, var1.sqrt(), n2, var2.sqrt(), equal_variance)?;
     finish(
         method,
@@ -382,6 +411,7 @@ fn independent(
         df,
         alternative,
         vec![n1, n2],
+        control,
     )
 }
 
@@ -391,7 +421,7 @@ fn summary_independent_se_df(
     n2: usize,
     sd2: f64,
     equal_variance: bool,
-) -> Result<(f64, f64), String> {
+) -> Result<(f64, f64), HypothesisError> {
     let a = sd1 * sd1 / n1 as f64;
     let b = sd2 * sd2 / n2 as f64;
     let variance = if equal_variance {
@@ -415,12 +445,29 @@ fn summary_independent_se_df(
     Ok((variance.sqrt(), df))
 }
 
-fn sample_variance(values: &[f64], mean: f64) -> Result<f64, String> {
-    let variance = values
-        .iter()
-        .map(|value| (value - mean).powi(2))
-        .sum::<f64>()
-        / (values.len() - 1) as f64;
+fn sample_sum(
+    values: &[f64],
+    control: &ScientificExecutionControl,
+) -> Result<f64, HypothesisError> {
+    let mut sum = -0.0;
+    for (index, value) in values.iter().enumerate() {
+        checkpoint(control, index)?;
+        sum += value;
+    }
+    Ok(sum)
+}
+
+fn sample_variance(
+    values: &[f64],
+    mean: f64,
+    control: &ScientificExecutionControl,
+) -> Result<f64, HypothesisError> {
+    let mut sum = -0.0;
+    for (index, value) in values.iter().enumerate() {
+        checkpoint(control, index)?;
+        sum += (value - mean).powi(2);
+    }
+    let variance = sum / (values.len() - 1) as f64;
     if variance.is_finite() {
         Ok(variance)
     } else {
@@ -428,12 +475,14 @@ fn sample_variance(values: &[f64], mean: f64) -> Result<f64, String> {
     }
 }
 
-fn validate(values: &[f64]) -> Result<(), String> {
-    if values.iter().all(|value| value.is_finite()) {
-        Ok(())
-    } else {
-        Err("t test input contains a non-finite observation".into())
+fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), HypothesisError> {
+    for (index, value) in values.iter().enumerate() {
+        checkpoint(control, index)?;
+        if !value.is_finite() {
+            return Err("t test input contains a non-finite observation".into());
+        }
     }
+    Ok(())
 }
 
 fn finish(
@@ -445,7 +494,8 @@ fn finish(
     df: f64,
     alternative: Alternative,
     sample_sizes: Vec<usize>,
-) -> Result<ClassicalTestResult, String> {
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
     if !estimate.is_finite()
         || !standard_error.is_finite()
         || standard_error <= 0.0
@@ -457,12 +507,14 @@ fn finish(
     let statistic = estimate / standard_error;
     let distribution =
         StudentsT::new(0.0, 1.0, df).map_err(|_| "invalid t distribution parameters")?;
+    control.check()?;
     let p_value = match alternative {
         Alternative::TwoSided => 2.0 * (1.0 - distribution.cdf(statistic.abs())),
         Alternative::Greater => 1.0 - distribution.cdf(statistic),
         Alternative::Less => distribution.cdf(statistic),
     }
     .clamp(0.0, 1.0);
+    control.check()?;
     let alternative = match alternative {
         Alternative::TwoSided => "two-sided",
         Alternative::Greater => "greater",
@@ -490,18 +542,21 @@ fn finish_normal(
     standard_error: f64,
     alternative: Alternative,
     sample_sizes: Vec<usize>,
-) -> Result<ClassicalTestResult, String> {
+    control: &ScientificExecutionControl,
+) -> Result<ClassicalTestResult, HypothesisError> {
     if !estimate.is_finite() || !standard_error.is_finite() || standard_error <= 0.0 {
         return Err("z test has a zero or non-finite standard error".into());
     }
     let statistic = estimate / standard_error;
     let distribution = Normal::new(0.0, 1.0).map_err(|_| "invalid standard normal parameters")?;
+    control.check()?;
     let p_value = match alternative {
         Alternative::TwoSided => 2.0 * distribution.sf(statistic.abs()),
         Alternative::Greater => distribution.sf(statistic),
         Alternative::Less => distribution.cdf(statistic),
     }
     .clamp(0.0, 1.0);
+    control.check()?;
     Ok(ClassicalTestResult {
         method: method.into(),
         null_hypothesis,
@@ -525,7 +580,7 @@ fn alternative_name(alternative: Alternative) -> &'static str {
     }
 }
 
-fn validate_proportion(successes: usize, trials: usize, p: f64) -> Result<(), String> {
+fn validate_proportion(successes: usize, trials: usize, p: f64) -> Result<(), HypothesisError> {
     if trials == 0 || successes > trials || !p.is_finite() || !(0.0..=1.0).contains(&p) {
         Err(
             "proportion test requires valid successes, trials and a null probability in [0, 1]"
@@ -541,7 +596,8 @@ fn binomial_p_value(
     trials: usize,
     p: f64,
     alternative: Alternative,
-) -> Result<f64, String> {
+    control: &ScientificExecutionControl,
+) -> Result<f64, HypothesisError> {
     if trials > 1_000_000 {
         return Err("exact binomial test supports at most 1,000,000 trials".into());
     }
@@ -553,40 +609,55 @@ fn binomial_p_value(
     }
     let distribution =
         Binomial::new(p, trials as u64).map_err(|_| "invalid binomial parameters")?;
+    control.check()?;
     let value = match alternative {
         Alternative::Less => distribution.cdf(successes as u64),
         Alternative::Greater => distribution.sf(successes.saturating_sub(1) as u64),
         Alternative::TwoSided => {
             let observed = distribution.pmf(successes as u64);
-            (0..=trials)
-                .filter_map(|k| {
-                    let mass = distribution.pmf(k as u64);
-                    (mass <= observed * (1.0 + 1e-12)).then_some(mass)
-                })
-                .sum()
+            let mut sum = -0.0;
+            for k in 0..=trials {
+                checkpoint(control, k)?;
+                let mass = distribution.pmf(k as u64);
+                if mass <= observed * (1.0 + 1e-12) {
+                    sum += mass;
+                }
+            }
+            sum
         }
     };
+    control.check()?;
     Ok(value.clamp(0.0, 1.0))
 }
 
-fn poisson_p_value(observed: u64, mean: f64, alternative: Alternative) -> Result<f64, String> {
+fn poisson_p_value(
+    observed: u64,
+    mean: f64,
+    alternative: Alternative,
+    control: &ScientificExecutionControl,
+) -> Result<f64, HypothesisError> {
     if mean == 0.0 {
         return Ok(if observed == 0 { 1.0 } else { 0.0 });
     }
     let distribution = Poisson::new(mean).map_err(|_| "invalid Poisson parameters")?;
+    control.check()?;
     let p_value = match alternative {
         Alternative::Less => distribution.cdf(observed),
         Alternative::Greater => distribution.sf(observed.saturating_sub(1)),
         Alternative::TwoSided => {
             let observed_mass = distribution.pmf(observed);
             let limit = ((mean + 12.0 * mean.sqrt() + 100.0).ceil() as u64).max(observed);
-            (0..=limit)
-                .filter_map(|k| {
-                    let mass = distribution.pmf(k);
-                    (mass <= observed_mass * (1.0 + 1e-12)).then_some(mass)
-                })
-                .sum()
+            let mut sum = -0.0;
+            for k in 0..=limit {
+                checkpoint(control, k as usize)?;
+                let mass = distribution.pmf(k);
+                if mass <= observed_mass * (1.0 + 1e-12) {
+                    sum += mass;
+                }
+            }
+            sum
         }
     };
+    control.check()?;
     Ok(p_value.clamp(0.0, 1.0))
 }

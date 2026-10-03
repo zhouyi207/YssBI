@@ -57,19 +57,14 @@ fn gaussian_kernel(u: f64) -> f64 {
 }
 
 fn silverman_bandwidth(values: &[f64]) -> f64 {
-    let finite = values
-        .iter()
-        .copied()
-        .filter(|value| value.is_finite())
-        .collect::<Vec<_>>();
-    let n = finite.len() as f64;
+    let n = values.len() as f64;
     if n < 2.0 {
         return 1.0;
     }
 
-    let scale = finite.iter().map(|value| value.abs()).fold(1.0, f64::max);
-    let mean = finite.iter().map(|value| value / scale).sum::<f64>() / n;
-    let variance = finite
+    let scale = values.iter().map(|value| value.abs()).fold(1.0, f64::max);
+    let mean = values.iter().map(|value| value / scale).sum::<f64>() / n;
+    let variance = values
         .iter()
         .map(|value| (value / scale - mean).powi(2))
         .sum::<f64>()
@@ -86,7 +81,7 @@ fn silverman_bandwidth(values: &[f64]) -> f64 {
 mod tests {
     use super::{
         KernelDensityInput, ScientificExecutionControl, compute_kernel_density_controlled,
-        gaussian_kernel, silverman_bandwidth,
+        gaussian_kernel,
     };
     use std::time::{Duration, Instant};
 
@@ -97,10 +92,25 @@ mod tests {
     }
 
     #[test]
-    fn silverman_bandwidth_ignores_non_finite_values() {
-        let finite = silverman_bandwidth(&[1.0, 2.0, 3.0]);
-        let mixed = silverman_bandwidth(&[1.0, f64::NAN, 2.0, f64::INFINITY, 3.0]);
-        assert!((finite - mixed).abs() < 1e-15);
+    fn kernel_density_ignores_non_finite_values() {
+        let control = ScientificExecutionControl {
+            cancellation: Default::default(),
+            deadline: Instant::now() + Duration::from_secs(30),
+        };
+        let compute = |values| {
+            compute_kernel_density_controlled(
+                KernelDensityInput {
+                    values,
+                    grid_points: 32,
+                    min_x: None,
+                },
+                &control,
+            )
+            .unwrap()
+        };
+        let finite = compute(&[1.0, 2.0, 3.0]);
+        let mixed = compute(&[1.0, f64::NAN, 2.0, f64::INFINITY, 3.0]);
+        assert_eq!(finite, mixed);
     }
 
     #[test]

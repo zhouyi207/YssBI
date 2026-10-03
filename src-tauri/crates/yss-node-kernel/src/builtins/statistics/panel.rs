@@ -104,10 +104,8 @@ fn fit(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
         "GLS",
         inv,
     )?;
-    let encoded =
-        yss_sci_runtime::panel::fit_panel(response, data, entity, time, options).map_err(sci)?;
-    let mut fit: yss_sci_contract::panel::PanelFit =
-        serde_json::from_value(encoded).map_err(|_| KernelError::ScientificFailure)?;
+    let mut fit =
+        yss_sci_runtime::panel::fit_model(response, data, entity, time, options).map_err(sci)?;
     name_fit(&mut fit, inv);
     let fitted = numeric_list(&fit.estimation.fitted, inv)?;
     let residuals = numeric_list(&fit.estimation.residuals, inv)?;
@@ -194,7 +192,7 @@ fn compare(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
             "between" => Estimator::Between,
             _ => return Err(KernelError::InvalidParameter),
         };
-        let result = yss_sci_runtime::panel::fit_panel(
+        let result = yss_sci_runtime::panel::fit_model(
             response.clone(),
             data.clone(),
             entity.clone(),
@@ -208,8 +206,9 @@ fn compare(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
         );
         inv.check_control()?;
         match result {
-            Ok(encoded)=>{
-                let mut fit:yss_sci_contract::panel::PanelFit=serde_json::from_value(encoded).map_err(|_|KernelError::ScientificFailure)?;name_fit(&mut fit,inv);
+            Ok(mut fit)=>{
+                name_fit(&mut fit,inv);
+                validate_finite(&fit)?;
                 for mut row in yss_sci_runtime::report_display::coefficient_rows(&fit.parameter_names,&fit.coefficients,&fit.inference).map_err(sci)? {row["estimator"]=serde_json::json!(name);coefficient_rows.push(row);}
                 statuses.push(serde_json::json!({"estimator":name,"status":"success","failure":null}));models.push(serde_json::json!({"estimator":name,"model":fit}));
             },

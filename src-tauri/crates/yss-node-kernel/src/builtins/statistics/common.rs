@@ -3,12 +3,17 @@ use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
 
 mod finite;
+pub(super) use finite::validate as validate_finite;
+mod models;
+pub(super) use models::{model_dimensions, regression_outputs, with_model};
 mod inputs;
+mod tables;
 pub(super) use inputs::{categories, materialize, numeric};
+pub(super) use tables::{matrix_table, numeric_table};
 
 // Charge the temporary JSON representation and the resulting runtime containers together.
-pub(super) const STRUCTURED_VALUE_BYTES: usize = 128;
-pub(super) const STRUCTURED_VALUE_COPIES: usize = 3;
+pub(in crate::builtins) const STRUCTURED_VALUE_BYTES: usize = 128;
+pub(in crate::builtins) const STRUCTURED_VALUE_COPIES: usize = 3;
 
 pub(crate) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a str, KernelError> {
     match inv.parameter(key) {
@@ -40,14 +45,14 @@ pub(in crate::builtins) fn number(
     super::super::numeric_input(inv.parameter(key)).map_err(|_| KernelError::InvalidParameter)
 }
 pub(super) fn sci(error: yss_sci_contract::SciError) -> KernelError {
-    use yss_sci_contract::{SciError, SciInputViolation};
+    use yss_sci_contract::{SciError, execution::ScientificInputViolation};
     match error {
         SciError::InvalidInput {
-            violation: SciInputViolation::ShapeMismatch,
+            violation: ScientificInputViolation::ShapeMismatch,
             ..
         } => KernelError::ShapeMismatch,
         SciError::InvalidInput {
-            violation: SciInputViolation::ParameterOutOfRange,
+            violation: ScientificInputViolation::ParameterOutOfRange,
             ..
         } => KernelError::InvalidParameter,
         SciError::InvalidInput { .. } => KernelError::InvalidNumericInput,
@@ -132,6 +137,25 @@ pub(super) fn decode_model<T: serde::de::DeserializeOwned>(
 ) -> Result<T, KernelError> {
     let model = inv.inputs.first().ok_or(KernelError::InvalidNumericInput)?;
     decode_model_value(model, inv)
+}
+pub(in crate::builtins) fn computation_error(
+    error: yss_sci_contract::execution::ScientificComputationError,
+) -> KernelError {
+    use yss_sci_contract::execution::{
+        ScientificComputationError as Error, ScientificInputViolation as Violation,
+    };
+    match error {
+        Error::Cancelled => KernelError::Cancelled,
+        Error::DeadlineExceeded => KernelError::DeadlineExceeded,
+        Error::InvalidInput {
+            violation: Violation::ShapeMismatch,
+        } => KernelError::ShapeMismatch,
+        Error::InvalidInput {
+            violation: Violation::ParameterOutOfRange,
+        } => KernelError::InvalidParameter,
+        Error::InvalidInput { .. } => KernelError::InvalidNumericInput,
+        Error::ComputationFailed => KernelError::ScientificFailure,
+    }
 }
 pub(super) fn decode_model_value<T: serde::de::DeserializeOwned>(
     model: &RuntimeValue,

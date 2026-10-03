@@ -1,4 +1,5 @@
 //! Configuration of binary-response estimation and prediction.
+use super::postestimation::Evaluation;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BinaryOptions {
     pub constant: bool,
@@ -17,12 +18,6 @@ impl Default for BinaryOptions {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MarginalEvaluation {
-    Average,
-    AtMeans,
-}
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MarginalMethod {
     Dydx,
@@ -32,7 +27,7 @@ pub enum MarginalMethod {
 }
 #[derive(Debug, Clone)]
 pub struct MarginalOptions {
-    pub evaluation: MarginalEvaluation,
+    pub evaluation: Evaluation,
     pub method: MarginalMethod,
     pub at: std::collections::HashMap<String, f64>,
 }
@@ -48,7 +43,7 @@ pub struct EffectInference {
 }
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MarginalEffects {
-    pub evaluation: MarginalEvaluation,
+    pub evaluation: Evaluation,
     pub method: MarginalMethod,
     pub at: std::collections::HashMap<String, f64>,
     pub coefficients: Vec<EffectInference>,

@@ -11,14 +11,25 @@ mod anova;
 mod association;
 mod causal_models;
 mod classical;
+mod decision;
 mod descriptive;
+mod doe;
 mod families;
+mod inference;
 mod inventory;
 mod longitudinal;
+mod meta;
 mod multivariate;
 mod panel_models;
+mod path;
+mod plot_overview;
+mod ports;
+mod power;
+mod psychometrics;
+mod quality;
 mod regression_models;
 mod spatial;
+mod survey;
 mod survival;
 mod time_series;
 
@@ -33,6 +44,7 @@ use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, TypeRegistration};
 
 use families::{Family, NODES, NodeSpec, Stage};
+use ports::{fitted_regression_type, fixed_numeric_table, label_series};
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut messages = Vec::new();
@@ -52,6 +64,14 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ..ProviderFragment::default()
     };
     inventory::append(&mut fragment)?;
+    decision::append(&mut fragment)?;
+    psychometrics::append(&mut fragment)?;
+    path::append(&mut fragment)?;
+    power::append(&mut fragment)?;
+    survey::append(&mut fragment)?;
+    quality::append(&mut fragment)?;
+    doe::append(&mut fragment)?;
+    plot_overview::append(&mut fragment)?;
     time_series::append(&mut fragment)?;
     longitudinal::append(&mut fragment)?;
     analyses::append(&mut fragment)?;
@@ -64,6 +84,8 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     spatial::append(&mut fragment)?;
     survival::append(&mut fragment)?;
     classical::append(&mut fragment)?;
+    meta::append(&mut fragment)?;
+    inference::append(&mut fragment)?;
     descriptive::append(&mut fragment)?;
     Ok(fragment)
 }
@@ -1084,15 +1106,13 @@ fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete(match family {
         Family::Adf => "statistics.result.adf",
         Family::Linear => "statistics.result.linear",
-        Family::Iv2sls => "statistics.model.iv_2sls",
-        Family::IvLiml => "statistics.model.iv_liml",
         Family::Logit => "statistics.result.logit",
         Family::Probit => "statistics.result.probit",
         Family::Prais => "statistics.result.prais",
-        Family::Panel => "statistics.model.panel",
         Family::PanelDid => "statistics.result.panel_did",
-        Family::Var => "statistics.model.var",
-        Family::Vec => "statistics.model.vec",
+        Family::Iv2sls | Family::IvLiml | Family::Panel | Family::Var | Family::Vec => {
+            "statistics.report"
+        }
         Family::VecRank => "statistics.model.vec_rank",
     })
 }

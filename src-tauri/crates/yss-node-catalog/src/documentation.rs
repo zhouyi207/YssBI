@@ -26,6 +26,113 @@ pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<B
 
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
+        "yssbi.dataframe.labels" => markdown!("data_labels"),
+        "yssbi.statistics.workflow.mediation" => markdown!("path_mediation"),
+        "yssbi.statistics.workflow.moderated_mediation" => markdown!("path_moderated_mediation"),
+        "yssbi.statistics.sem.path" => markdown!("path_recursive"),
+        "yssbi.statistics.power.principles" => markdown!("power_principles"),
+        "yssbi.statistics.power.mean_difference" => markdown!("power_mean_difference"),
+        "yssbi.statistics.power.paired" => markdown!("power_paired"),
+        "yssbi.statistics.power.variance" => markdown!("power_variance"),
+        "yssbi.statistics.power.proportion" => markdown!("power_proportion"),
+        "yssbi.statistics.power.proportion_difference" => markdown!("power_proportion_difference"),
+        "yssbi.statistics.power.correlation" => markdown!("power_correlation"),
+        "yssbi.statistics.power.anova" => markdown!("power_anova"),
+        "yssbi.statistics.power.linear_regression" => markdown!("power_linear_regression"),
+        "yssbi.statistics.power.generalized_model" => markdown!("power_generalized_model"),
+        "yssbi.statistics.power.logistic" => markdown!("power_logistic"),
+        "yssbi.statistics.power.cox" => markdown!("power_cox"),
+        "yssbi.statistics.power.logrank" => markdown!("power_logrank"),
+        "yssbi.statistics.power.cluster_randomized" => markdown!("power_cluster_randomized"),
+        "yssbi.statistics.power.noninferiority" => markdown!("power_noninferiority"),
+        "yssbi.statistics.power.equivalence" => markdown!("power_equivalence"),
+        "yssbi.statistics.survey.weights" => markdown!("survey_weights"),
+        "yssbi.statistics.survey.mean_proportion" => markdown!("survey_mean_proportion"),
+        "yssbi.statistics.survey.stratified" => markdown!("survey_stratified"),
+        "yssbi.statistics.survey.clustered" => markdown!("survey_clustered"),
+        "yssbi.statistics.survey.linear_regression" => markdown!("survey_linear_regression"),
+        "yssbi.statistics.survey.logistic" => markdown!("survey_logistic"),
+        "yssbi.statistics.survey.poisson" => markdown!("survey_poisson"),
+        "yssbi.statistics.workflow.moderation" => markdown!("path_moderation"),
+        "yssbi.statistics.workflow.moderation_advanced" => markdown!("path_moderation_advanced"),
+        "yssbi.statistics.doe.range_analysis" => markdown!("doe_range_analysis"),
+        "yssbi.statistics.doe.family" => markdown!("doe_full_factorial"),
+        "yssbi.statistics.doe.orthogonal" => markdown!("doe_orthogonal"),
+        "yssbi.statistics.doe.uniform_design" => markdown!("doe_uniform_design"),
+        "yssbi.statistics.doe.response_surface" => markdown!("doe_response_surface"),
+        "yssbi.statistics.doe.dose_response" => markdown!("doe_dose_response"),
+        "yssbi.statistics.plot.statistical.family" => markdown!("quality_statistical_plots"),
+        "yssbi.statistics.plot.control_chart" => markdown!("quality_control_chart"),
+        "yssbi.statistics.quality.process_capability" => markdown!("quality_process_capability"),
+        "yssbi.statistics.quality.measurement_system" => markdown!("quality_measurement_system"),
+        "yssbi.statistics.psychometrics.reliability" => markdown!("psychometrics_reliability"),
+        "yssbi.statistics.psychometrics.validity" => markdown!("psychometrics_validity"),
+        "yssbi.statistics.psychometrics.content_validity" => {
+            markdown!("psychometrics_content_validity")
+        }
+        "yssbi.statistics.psychometrics.item_analysis" => markdown!("psychometrics_item_analysis"),
+        "yssbi.statistics.decision.conjoint" => markdown!("decision_conjoint"),
+        "yssbi.statistics.workflow.delphi" => markdown!("decision_delphi"),
+        "yssbi.statistics.decision.ahp" => markdown!("decision_ahp"),
+        "yssbi.statistics.decision.fahp" => markdown!("decision_fahp"),
+        "yssbi.statistics.decision.dematel" => markdown!("decision_dematel"),
+        "yssbi.statistics.decision.ism" => markdown!("decision_ism"),
+        "yssbi.statistics.decision.fuzzy_evaluation" => markdown!("decision_fuzzy_evaluation"),
+        "yssbi.statistics.decision.turf" => markdown!("decision_turf"),
+        "yssbi.statistics.decision.psm" => markdown!("decision_psm"),
+        "yssbi.statistics.decision.nps" => markdown!("decision_nps"),
+        "yssbi.statistics.decision.kano" => markdown!("decision_kano"),
+        "yssbi.statistics.decision.rfm" => markdown!("decision_rfm"),
+        "yssbi.statistics.decision.vikor" => markdown!("decision_vikor"),
+        "yssbi.statistics.decision.coupling_coordination" => {
+            markdown!("decision_coupling_coordination")
+        }
+        "yssbi.statistics.decision.obstacle_degree" => markdown!("decision_obstacle_degree"),
+        "yssbi.statistics.decision.weights" => markdown!("decision_weights"),
+        "yssbi.statistics.decision.entropy_weight" => markdown!("decision_entropy_weight"),
+        "yssbi.statistics.decision.critic" => markdown!("decision_critic"),
+        "yssbi.statistics.decision.information_weight" => markdown!("decision_information_weight"),
+        "yssbi.statistics.decision.independence_weight" => {
+            markdown!("decision_independence_weight")
+        }
+        "yssbi.statistics.decision.composite_index" => markdown!("decision_composite_index"),
+        "yssbi.statistics.decision.topsis" => markdown!("decision_topsis"),
+        "yssbi.statistics.decision.grey_relational" => markdown!("decision_grey_relational"),
+        "yssbi.statistics.decision.wrsr" => markdown!("decision_wrsr"),
+        "yssbi.statistics.decision.efficacy_coefficient" => {
+            markdown!("decision_efficacy_coefficient")
+        }
+        "yssbi.statistics.workflow.entropy_topsis" => markdown!("decision_entropy_topsis"),
+        "yssbi.statistics.inference.confidence_interval" => {
+            markdown!("inference_confidence_interval")
+        }
+        "yssbi.statistics.inference.cluster_robust" => markdown!("inference_cluster_robust"),
+        "yssbi.statistics.postestimation.adjusted_predictions" => {
+            markdown!("inference_adjusted_predictions")
+        }
+        "yssbi.statistics.posthoc.multiple_comparisons" => {
+            markdown!("inference_multiple_comparisons")
+        }
+        "yssbi.statistics.meta.continuous" => markdown!("meta_continuous"),
+        "yssbi.statistics.meta.binary" => markdown!("meta_binary"),
+        "yssbi.statistics.meta.single_proportion" => markdown!("meta_single_proportion"),
+        "yssbi.statistics.meta.mean" => markdown!("meta_mean"),
+        "yssbi.statistics.meta.correlation" => markdown!("meta_correlation"),
+        "yssbi.statistics.meta.or_hr" => markdown!("meta_or_hr"),
+        "yssbi.statistics.meta.combine_p" => markdown!("meta_combine_p"),
+        "yssbi.statistics.meta.inverse_variance" => markdown!("meta_inverse_variance"),
+        "yssbi.statistics.meta.fixed_effect" => markdown!("meta_fixed_effect"),
+        "yssbi.statistics.meta.random_effect" => markdown!("meta_random_effect"),
+        "yssbi.statistics.meta.cochran_q" => markdown!("meta_cochran_q"),
+        "yssbi.statistics.meta.i_squared" => markdown!("meta_i_squared"),
+        "yssbi.statistics.meta.tau_squared" => markdown!("meta_tau_squared"),
+        "yssbi.statistics.meta.regression" => markdown!("meta_regression"),
+        "yssbi.statistics.meta.egger" => markdown!("meta_egger"),
+        "yssbi.statistics.meta.begg" => markdown!("meta_begg"),
+        "yssbi.statistics.meta.leave_one_out" => markdown!("meta_leave_one_out"),
+        "yssbi.statistics.meta.sensitivity" => markdown!("meta_sensitivity"),
+        "yssbi.statistics.plot.forest" => markdown!("meta_forest"),
+        "yssbi.statistics.plot.funnel" => markdown!("meta_funnel"),
         "yssbi.statistics.diagnostic.collinearity" => markdown!("diagnostic_collinearity"),
         "yssbi.statistics.diagnostic.nri_idi" => markdown!("diagnostic_nri_idi"),
         "yssbi.statistics.diagnostic.harman" => markdown!("diagnostic_harman"),

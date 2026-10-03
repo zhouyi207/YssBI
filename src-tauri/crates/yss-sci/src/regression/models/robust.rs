@@ -48,11 +48,11 @@ pub fn robust(
         let residual = y.iter().zip(&pred).map(|(a, b)| a - b).collect::<Vec<_>>();
         scale = median(&residual.iter().map(|v| v.abs()).collect::<Vec<_>>()) / 0.6744897501960817;
         if scale <= f64::EPSILON * mean(&y.iter().map(|v| v.abs()).collect::<Vec<_>>()).max(1.0) {
-            if residual.iter().any(|v| {
-                v.abs()
-                    > options.iteration.tolerance
-                        * (1.0 + y.iter().map(|v| v.abs()).fold(0.0, f64::max))
-            }) {
+            let max_response = y.iter().map(|v| v.abs()).fold(0.0, f64::max);
+            if residual
+                .iter()
+                .any(|v| v.abs() > options.iteration.tolerance * (1.0 + max_response))
+            {
                 return Err(failed());
             }
             scale = 0.0;
@@ -141,7 +141,12 @@ pub fn quantile(
     let design = Design::new(predictors, y.len(), constant, true, true, control)?;
     let x = &design.x;
     let (mut beta, inv) = least_squares(x, y, None, control)?;
-    let floor = 1e-8 * (y.iter().map(|v| (v - mean(y)).abs()).fold(0.0, f64::max)).max(1.0);
+    let response_mean = mean(y);
+    let floor = 1e-8
+        * (y.iter()
+            .map(|v| (v - response_mean).abs())
+            .fold(0.0, f64::max))
+        .max(1.0);
     let mut done = None;
     for iter in 1..=iteration.max_iterations {
         control.check()?;

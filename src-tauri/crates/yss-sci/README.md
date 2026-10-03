@@ -27,6 +27,85 @@ Regenerate production plot payloads for parser checks and manual previews with
 
 ## Domain organization
 
+`decision` separates criterion preparation, objective weighting and alternative
+ranking. Entropy, CRITIC, variation-coefficient and inverse-multiple-correlation
+weights share normalization/admission conventions; the last reuses SVD collinearity.
+Composite scores, TOPSIS, ideal-reference grey relations, WRSR and efficacy scores
+share weight normalization and the existing controlled average-rank computation.
+Entropy TOPSIS composes those implementations. Weight vectors follow criterion
+order; observation scores retain every input row. References use NumPy, SciPy,
+statsmodels and PyMCDM; no external Python dependency is used at runtime.
+
+`decision/compromise` owns VIKOR's S/R/Q scores and both compromise-set conditions.
+`decision/systems` owns normalized subsystem coupling and criterion obstacle shares.
+Undefined all-zero coupling and zero-denominator obstacle percentages remain optional
+numbers rather than NaN or a fabricated share. Coupling degree uses its continuous
+zero limit when all subsystem indices are zero.
+
+`decision/preferences` owns NPS category proportions, classic KANO paired-answer
+classification and coefficients, and RFM scores using the shared average-rank
+implementation. RFM uses midpoint-rank quintiles, preserves ties, reverses recency,
+and reports row-level scores independently of marketing labels.
+
+`decision/pricing` constructs right-ECDF price curves, interpolated intersections
+and coincident-price intervals with explicit original/narrower range definitions.
+`decision/reach` exhaustively evaluates fixed-size TURF subsets using packed
+observation sets, preserving cancellation and reporting optimum ties.
+
+`decision/hierarchy` owns principal-eigenvector AHP and complementary-matrix FAHP.
+Missing reference RI leaves CR optional without bounding the matrix order.
+`decision/influence` owns convergent DEMATEL total influence and ISM transitive
+closure/SCC level extraction. Linalg remains the sole matrix-factorization owner.
+`decision/fuzzy` composes normalized criterion/grade memberships with four operators.
+`decision/experts` summarizes one Delphi round and reuses tie-corrected Kendall W.
+Type-7 sample quantiles now belong to `descriptive/quantiles` and are shared by
+Delphi and distribution plots. Undefined coefficients remain optional values.
+`decision/conjoint` fits additive ratings with the shared least-squares solver,
+then transforms coefficients and covariance to within-attribute zero-sum utilities.
+Saturated identifiable designs return utilities without residual-based standard errors.
+
+`psychometrics` separates scale reliability, total-score tail discrimination and
+expert relevance. Alpha and corrected item-total statistics share linear-memory
+score moments; item analysis reuses type-7 quantiles and Welch inference, keeping
+boundary ties together. `multivariate/adequacy` owns KMO, per-item MSA and Bartlett
+diagnostics shared by validity screening and exploratory factor extraction.
+Neither screening nor alpha is reported as proof of construct validity. Undefined
+correlations, deleted-item alpha and tail tests remain optional values.
+
+`quality/process` shares scaled measurement moments, moving-range variation and
+pooled subgroup sigma. `quality/control` builds complete I/MR plots and signal
+rows; `capability` distinguishes within Cp/Cpk from overall Pp/Ppk and target Cpm.
+`quality/gage` owns balanced crossed random-effects ANOVA and variance components;
+its part/operator denominators are interaction mean squares, unlike fixed-effects
+ANOVA. Interaction pooling is explicit, negative estimates are listed when
+truncated, and undefined statistics remain optional. These entries do not infer
+process stability or engineering acceptance from a single computed index.
+
+`doe/design` generates equal-level full factorial and orthogonal arrays; composite levels
+use full factorial construction. `doe/uniform` searches centered Latin hypercubes using
+squared centered L2 discrepancy. `design_dimensions` validates the same specification
+before the adapter admits matrix memory; generation checks cancellation/deadlines.
+
+`doe/surface` expands range-coded full quadratic terms, reuses OLS and classifies
+stationary geometry through the Linalg symmetric eigensolver. `doe/dose` reuses
+the nonlinear formula solver for four-parameter log-logistic least squares, including
+zero-dose limits, log-positive Hill/ED50 parameters and local inference.
+
+`doe/range` owns compensated factor-level aggregation, raw effect ranges and
+exact contingency-count checks for pairwise orthogonality. Descriptive summaries
+remain available for unbalanced designs, with explicit replication and level-count
+facts; they do not pretend to be ANOVA inference or a validated joint optimum.
+
+`inference` owns normal/t confidence intervals, pooled-ANOVA/Welch pairwise
+contrasts with Holm/Bonferroni adjustment, and OLS CR1 cluster inference. Cluster
+covariance reuses the linear estimator; coefficient tests use cluster-count df.
+`regression/postestimation` owns shared evaluation grids, binary-link derivatives
+and Delta variance for adjusted means and binary marginal effects. Evaluation
+retains fitted row order and applies explicit column overrides without rebuilding
+transformed designs. Conventional linear means use residual-df t inference;
+robust linear and binary means use normal inference. Independent references are
+in `tests/fixtures/inference_reference.*` and `postestimation_reference.*`.
+
 SCI, Runtime and Contract use the same domain names for capabilities they own.
 The domains follow the [node catalog](../yss-node-catalog/README.md)'s main
 categories; a category gets a module when it has an implementation or contract.
@@ -49,6 +128,13 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 | Descriptive statistics                   | `descriptive`                                                      | Empirical Gini, Dagum decomposition and Theil T                                                                          |
 | Density estimation used by visualization | `density`                                                          | Kernel-density numerical computation                                                                                     |
 | Visualization plot data                  | `visualization`                                                    | Controlled distributions, paired points, category frequencies and matrix projections                                     |
+
+`meta` separates effect conversion, inverse-variance regression, asymmetry and
+sensitivity diagnostics, and plot data. Intercept-only pooling and moderator
+models share one weighted-fit implementation; Paule–Mandel estimates residual
+heterogeneity with moderators included. Existing regression designs, coefficient
+inference, Kendall correlation and plot payloads are reused. Independent
+NumPy/SciPy/statsmodels references live in `tests/fixtures/meta_reference.*`.
 
 Each method owns its fitting, inference and postestimation modules. Fit results
 retain model facts and coefficient inference; optional diagnostics and postestimation
@@ -76,6 +162,10 @@ Numerical entry points live in `regression::linear::fit`,
 the estimators that need them. DID calls the existing panel estimator, which
 continues to reuse OLS. `causal::did::fit_did` takes an explicit treatment vector;
 `panel::fit::fit_panel` owns ordinary panel fitting.
+OLS, WLS, GLS and Prais return their existing fit error when coefficient division
+produces a NaN t-statistic, before calling the Student-t distribution. Prais also
+rejects a NaN F-statistic before its Fisher distribution call. Infinite statistics
+keep the existing distribution path; adapters retain their finite-output validation.
 
 These neutral fit entries consume shared binary/Prais and panel options, and IV
 accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers
@@ -83,9 +173,19 @@ FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and
 entity/time Between, rejecting unsupported covariance/effect combinations.
 IV 2SLS and LIML share `IvEstimate` and coefficient statistics. Their first-stage,
 overidentification and endogeneity analyses are separate calls in `causal::iv::fit`;
-first-stage analysis reuses the same implementation for both estimators. Panel
-estimators return `PanelFit` directly, grouping shared model/coefficient facts and
+first-stage analysis reuses the same implementation for both estimators.
+An undefined adjusted first-stage R² at zero centered variation remains `None`.
+Rank-zero traditional Hausman tests and endogeneity bundles without positive
+Wu denominator degrees of freedom likewise remain unavailable in the existing
+typed options, rather than returning NaN for later JSON conversion.
+First-stage residualization preserves observation rows when excluding each endogenous
+regressor, including models with three or more endogenous columns; reordering those
+columns reorders their Shea partial-R² results without changing their identities.
+Panel estimators return `PanelFit` directly, grouping shared model/coefficient facts and
 estimator-specific statistics without a parallel native result type.
+Two-way random-effects MLE keeps coefficients in retained-column order. Its likelihood
+and iterative residual calculations use that same mapping after collinear columns
+are removed, including the final and pooled likelihoods.
 DID randomization takes observed columns,
 fits the TWFE treatment interaction, then permutes treatment at entity level with
 execution checks between iterations.
@@ -93,6 +193,9 @@ execution checks between iterations.
 Diagnostics use ordinary Rust submodules with explicit imports for shared
 helpers. Residual normality belongs to `diagnostics::normality`; Durbin-Watson
 and other serial correlation tests belong to `diagnostics::serial_correlation`.
+Breusch-Godfrey requires one equally sized, nonempty design row per residual before
+building either auxiliary matrix. Invalid shapes retain its existing `None` result;
+Runtime can still return the independent Durbin-Watson and Ljung-Box results.
 `diagnostics::{comparison,influence,design,reclassification}` owns Gaussian/binary
 likelihood criteria and nested tests, OLS/WLS influence, collinearity/Harman PCA
 and paired binary NRI/IDI. Gaussian criteria count the estimated error variance;
@@ -109,6 +212,11 @@ original WLS weights, and dispatches BP/White/IM/RESET/VIF/leverage. GLS is reje
 for residual diagnostics requiring an untransformed or diagonal-weight design;
 VIF remains a property of the original predictor design. Weighted RESET allocates
 the full augmented design before inserting fitted-value or predictor powers.
+White and IM require an intercept in the fitted model. Dispatch checks the model's
+existing `constant` flag rather than treating its first predictor as an intercept
+or adding a new one. Their auxiliary rank and projection calculations reuse one
+SVD of each design. Weighted IM weights only the heteroskedasticity component;
+its skewness and kurtosis components retain the existing unweighted convention.
 The fitted-value BP/Koenker variants regress functions of residual squares on an
 intercept and fitted values; residuals and fitted values have distinct argument
 roles in both the OLS and WLS dispatch paths.
@@ -116,6 +224,9 @@ roles in both the OLS and WLS dispatch paths.
 Panel first differences take entity IDs and original time values; they do not
 require a second time-ID vector. First-stage IV summaries derive dimensions from
 their matrices and receive covariance/estimator choices through `FirstStageOptions`.
+FE and RE share the one-way group-centering calculation in `panel::data` for entity
+and time effects. It retains observation order and the existing NaN handling;
+each estimator keeps its own input admission and fitting workflow.
 Between estimators use conventional covariance; the panel dispatcher validates that
 choice before calling the estimators, which take no covariance selector or parameters.
 
@@ -125,10 +236,23 @@ from a fit; VAR additionally exposes lag exclusion, Granger, impulse responses a
 variance decomposition. Response horizons and diagnostic lags belong to these calls,
 not fit configuration. Fit results retain the design and residuals needed by those
 analyses, without embedding a complete report or precomputed postestimation arrays.
+VAR impulse responses and variance decomposition construct lag matrices only through
+the requested horizon; stability still uses the full selected-lag companion matrix.
+Lag-order selection reuses its owned observations across fits on the common sample,
+and VAR fitting/postestimation borrow existing local matrices instead of copying them
+solely for the next matrix operation.
+VEC fitting and rank tests share the Johansen sample boundary: the observation count
+must exceed the positive lag order before differencing or subtracting that order.
+They return their existing error on an empty or exhausted sample. VEC stages and
+postestimation likewise borrow local matrices for read-only linear algebra; residual
+and in-place factorization copies remain where the original matrix is still needed.
 
 `hypothesis::linear_hypothesis` owns constraint parsing, linearization, parameter order,
 matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `hypothesis::linear_test`.
+The matrix-level t/Wald routines are private to that boundary. Nonpositive or NaN
+contrast variance fails before taking its square root, preserving the existing
+typed computation-failure result instead of passing NaN to the reference distribution.
 Project/result identity checks and report retrieval remain in Application.
 
 ## Univariate time series
@@ -139,6 +263,11 @@ SES/additive ETS/Holt–Winters smoothing, Gaussian ARCH/GARCH/EGARCH/GJR likeli
 two-step ECM, GM(1,1), discrete Markov forecasts and PP/KPSS tests. It reuses the
 regression optimizer and least-squares design/inference; shared MacKinnon tau
 calibration lives in `time_series::mackinnon` and is also used by panel tests.
+ADF without a constant or with a trend uses that same p-value calibration;
+the existing drift Student-t convention, critical values and auxiliary regression
+remain explicit in its result.
+The shared ADF regression rejects lags outside the sample before adding the lag
+offset or allocating differences, including for direct SCI and Runtime callers.
 ECM suppresses ordinary long-run OLS inference for cointegrating equations.
 EGARCH averages simulated variances with an explicit seed; other volatility models
 use analytic conditional-variance forecasts. KPSS reports its table-tail bounds.
@@ -378,8 +507,15 @@ checks cancellation/deadlines at stage boundaries and every 1024 loop elements;
 callers retain worker scheduling and product lag budgets. The numerical lag bound
 is `n - 1`, independent of the runtime report policy. Constant series preserve the
 existing lag-zero-only ACF and empty PACF result.
+The joint result also owns the two-sided 95% white-noise reference-band half-width,
+using the existing normal quantile `1.959963984540054 / sqrt(n)`. Report queries and
+`visualization::correlogram` consume that value; neither maintains another formula.
 
 ## OLS model boundary
+
+Linear fit projections take intercept identity and parameter names from the
+requested `constant` option; a predictor containing only ones does not change that
+option. OLS/WLS/GLS and Prais construct this metadata once with the fitted result.
 
 `regression::linear::ols` owns the model, its fitted result and its errors:
 
@@ -411,6 +547,13 @@ WLS uses the shared typed `OlsCovariance` selection. Named covariance callers
 are validated by `OlsOptions::from_covariance_parts`; unsupported names or missing
 required parameters never fall back to nonrobust computation.
 
+Covariance callers supply the intercept column from the existing model or design
+options. Automatic HAC bandwidth excludes that column from a multicolumn pilot
+score, and includes every column when no intercept is configured; a single-column
+design retains its score. WLS preserves the column's role through weighting.
+The raw matrix entry accepts an explicit column index and rejects an out-of-range
+index instead of guessing an intercept from column values or position.
+
 GLS takes a relative error covariance structure `sigma`: `Var(error) = scale * sigma`.
 It estimates scale from whitened residual sums of squares divided by residual
 degrees of freedom. Parameter covariance includes that scale; coefficient tests
@@ -433,6 +576,15 @@ convergence policy.
 
 Classical hypothesis tests are organized under `hypothesis`: `sample_mean` owns mean, proportion, Poisson and equivalence tests; `categorical` owns count-table tests; `nonparametric` owns rank and sequence tests; and `variance` owns variance-homogeneity tests. These functions accept neutral contract requests and return common result records. The node catalog and kernel own graph-facing interfaces and dispatch.
 
+All four entrypoints also accept the caller's `ScientificExecutionControl`. Input,
+rank/tie, table and variance scans, exact binomial/Poisson/Fisher enumeration,
+Wilcoxon sign enumeration, and Mann-Kendall observations sample cancellation and
+deadline during work. Sorting and distribution-library calls have checks at their
+boundaries; their internals are not interruptible. `HypothesisError::Execution`
+preserves typed cancellation/deadline errors, while existing input/scientific
+failures retain their categories. Kernel owns admission of retained inputs,
+algorithm workspaces and reports; SCI does not introduce a second memory budget.
+
 Binary postestimation lives in `regression::discrete::postestimation`: Logit odds
 ratios transform coefficient intervals and retain the coefficient-null z test;
 Logit/Probit continuous-regressor margins support AME, MEM, explicit at values and
@@ -442,9 +594,36 @@ quadratic workspace and cubic work before dispatch. Classifier diagnostics use
 `p >= cutoff` and optional values for zero-denominator rates. Probit IRLS uses the
 inverse-link derivative in its working response; default MLE covariance uses
 observed information. A checked-in statsmodels 0.14.6 fixture verifies both links.
+Logit/Probit fit projection borrows the model-owned response and design. IRLS
+borrows its weighted matrices and vectors for cross products, then moves the
+computed coefficients and covariance into the result; only the design copies
+modified by row weighting are retained.
 
 Panel fits retain the actual estimation-scale design/response/fitted/residual
 sample with its transformation name and source-row groups. Estimation-scale
 prediction reuses those coefficients; it does not claim to predict absorbed effects
 for new entities. Selected-lag VAR fits retain exogenous labels, covariance divisor
 choice and complete source rows. Prais retains the full rho iteration sequence.
+
+`path` separates interaction fitting/probing, mediation equations and recursive path decomposition.
+`preparation` owns shared centers and sample-SD probes; `effects` owns covariance contrasts and
+observed-range Johnson–Neyman roots. `mediation` fits one observed mediator with optional
+first/second-stage moderation. `bootstrap` retains only composite effects for paired-row
+percentile inference, keeping observed probes fixed and rejecting failed replications.
+`recursive` validates explicit x-index equations as a DAG, fits OLS equations and propagates
+all directed-path products without enumerating paths. It does not implement latent-variable SEM.
+
+`survey` separates weight summaries, nested stratum/PSU preparation, mean/proportion
+linearization and regression score covariance. It implements single-stage with-replacement
+Taylor variance; certainty-stratum handling is explicit. `regression/models/glm` owns
+shared unweighted/positive-prior-weight IRLS; `likelihood` retains other likelihood models.
+Survey regression replaces model information covariance with design covariance and survey
+t degrees of freedom. Kish summaries describe unequal weighting only.
+
+`power` separates model domains/sample units, test-specific noncentralities, distribution
+tails and integer sample-size solving. Noncentral t/F tails sum centered Poisson/beta
+series with tail-mass stopping bounds; extreme-effect shortcuts have explicit probability
+bounds. Scalar planning never allocates an n-row dataset. Normal approximations are named
+for proportions, Fisher-z correlations, binary-predictor logistic, Poisson rate ratios and
+Schoenfeld survival designs. Equivalence/noninferiority use known-variance normal designs.
+SciPy references cover tails, achieved power and minimum integer sample sizes.

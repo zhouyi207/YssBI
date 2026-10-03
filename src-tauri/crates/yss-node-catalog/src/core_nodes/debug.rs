@@ -23,20 +23,18 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             source,
         }
     })?;
+    let mut input = data_port(
+        "data",
+        "Data",
+        PortDirection::Input,
+        TypeExpr::Generic(value_type.clone()),
+    )?;
+    input.input_binding = Some(InputBindingSpec {
+        literal_policy: LiteralPolicy::Forbidden,
+        default_value: None,
+    });
     fragment.nodes.push(leaf(
-        protocol(
-            ID,
-            "debug",
-            vec![data_port(
-                "data",
-                "Data",
-                PortDirection::Input,
-                TypeExpr::Generic(value_type.clone()),
-            )?],
-            vec![value_type],
-            vec![],
-            pure(),
-        )?,
+        protocol(ID, "debug", vec![input], vec![value_type], vec![], pure())?,
         ID,
     ));
     Ok(())

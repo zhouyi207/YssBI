@@ -1,4 +1,4 @@
-//! Stateless scientific entry points grouped by domain for Node Kernel and IPC commands.
+//! Stateless scientific entry points grouped by domain for Node Kernel and focused SCI benchmarks.
 //!
 //! Capability APIs prepare numeric inputs and project fitted results. The crate
 //! composes the Rust algorithms with `yss_sci_contract` and does
@@ -11,7 +11,9 @@ pub mod descriptive;
 pub mod diagnostics;
 pub mod distribution;
 pub mod hypothesis;
+pub mod inference;
 pub mod longitudinal;
+pub mod meta;
 pub mod multivariate;
 pub mod panel;
 pub mod regression;
@@ -22,4 +24,12 @@ pub mod visualization;
 
 mod error;
 
+pub mod decision;
+pub mod doe;
+pub mod psychometrics;
+pub mod quality;
 pub mod report_display;
+
+pub mod path;
+pub mod power;
+pub mod survey;

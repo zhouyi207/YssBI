@@ -45,21 +45,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn scientific_error(error: ScientificComputationError) -> KernelError {
-    match error {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
-
 fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let mut columns = columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, 0)?;
     let time = columns.pop().ok_or(KernelError::ShapeMismatch)?;
@@ -123,7 +108,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             } else {
                 yss_sci_runtime::panel::fisher_cointegration(data, options, &control)
             };
-            value(result.map_err(scientific_error)?, inv)?
+            value(result.map_err(computation_error)?, inv)?
         }
         "dynamic" => {
             let options = DynamicPanelOptions {
@@ -135,7 +120,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
             };
             let mut result = yss_sci_runtime::panel::difference_gmm(data, options, &control)
-                .map_err(scientific_error)?;
+                .map_err(computation_error)?;
             result.parameter_names[0] =
                 format!("lag({},1)", input_label(&inv.inputs[0], "response".into()));
             for (j, input) in group(inv, "predictors").iter().enumerate() {

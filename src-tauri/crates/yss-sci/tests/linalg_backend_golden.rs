@@ -90,6 +90,36 @@ fn var_full_fit_preserves_coefficients_and_stability_spectrum() {
             0.,
         ],
     );
+
+    let mut sparse = VAR {
+        y: cointegrated_sample(),
+        exog: None,
+        config: VARConfig {
+            lags: vec![1, 8],
+            ..VARConfig::default()
+        },
+        var_names: None,
+        exog_names: None,
+        regression_times: None,
+    }
+    .fit()
+    .unwrap();
+    let short = yss_sci::time_series::var::impulse_responses(&sparse, 2).unwrap();
+    let long = yss_sci::time_series::var::impulse_responses(&sparse, 9).unwrap();
+    assert_eq!(short, long[..3]);
+    let shares = yss_sci::time_series::var::variance_decomposition(&sparse, 2).unwrap();
+
+    // A decoded fit may carry a lag outside its sample. It cannot affect this
+    // horizon, nor should it determine an unused dense lag-matrix allocation.
+    sparse.lags[1] = usize::MAX;
+    assert_eq!(
+        yss_sci::time_series::var::impulse_responses(&sparse, 2).unwrap(),
+        short
+    );
+    assert_eq!(
+        yss_sci::time_series::var::variance_decomposition(&sparse, 2).unwrap(),
+        shares
+    );
 }
 
 #[test]

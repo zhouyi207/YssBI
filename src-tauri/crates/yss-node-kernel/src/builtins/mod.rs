@@ -28,6 +28,7 @@ enum BuiltinKernel {
     Boolean(yss_relational_contract::BooleanOperation),
     Comparison(yss_relational_contract::ComparisonOperation),
     Convert,
+    Labels,
     Observe,
 }
 
@@ -501,6 +502,12 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             ],
             1..=1,
         ),
+        (
+            "yssbi.dataframe.labels",
+            Labels,
+            &["target_type", "semantic_domain"],
+            1..=1,
+        ),
         ("yssbi.debug.view", Observe, &[], 0..=0),
     ];
     for (id, kind, parameters, outputs) in entries {
@@ -533,9 +540,9 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                     Comparison(_) => 8,
                     Distribution(_) => 3,
                     Series(_) => 4,
-                    Statistical(Fit) => 7,
-                    Boolean(_) => 3,
-                    Statistical(Summary) => 9,
+                    Statistical(Fit) => 9,
+                    Boolean(_) => 4,
+                    Statistical(Summary) => 11,
                     Statistical(Predict) => 4,
                     Convert => 7,
                     Constant => 5,
@@ -601,7 +608,7 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
         Relational(_) => vec![Input::fixed("source")],
         Numeric(NumericOperation::Add) => vec![Input::repeated("operands", 2..=usize::MAX)],
         Numeric(op) if op.is_unary() => vec![Input::fixed("input")],
-        Boolean(yss_relational_contract::BooleanOperation::Not) | Convert => {
+        Boolean(yss_relational_contract::BooleanOperation::Not) | Convert | Labels => {
             vec![Input::fixed("input")]
         }
         Numeric(_) | Boolean(_) | Comparison(_) => {
@@ -631,6 +638,7 @@ fn execute_kernel(
         BuiltinKernel::Boolean(operation) => boolean::execute(operation, invocation),
         BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
         BuiltinKernel::Convert => conversion::execute(invocation),
+        BuiltinKernel::Labels => conversion::labels(invocation),
         BuiltinKernel::Observe => return Ok(Vec::new()),
     }?;
     Ok(vec![value])

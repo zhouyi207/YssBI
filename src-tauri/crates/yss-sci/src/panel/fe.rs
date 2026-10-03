@@ -430,27 +430,7 @@ fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Result<Col<f64>, 
             n
         ));
     }
-    let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
-    for (i, &gid) in group_id.iter().enumerate() {
-        let val = v[i];
-        if !val.is_nan() {
-            let entry = sums.entry(gid).or_insert((0.0, 0));
-            entry.0 += val;
-            entry.1 += 1;
-        }
-    }
-    let mut out = Vec::with_capacity(n);
-    for (i, &gid) in group_id.iter().enumerate() {
-        let (s, cnt) = sums.get(&gid).copied().unwrap_or((0.0, 0));
-        let mean = if cnt > 0 { s / cnt as f64 } else { 0.0 };
-        out.push(v[i] - mean);
-    }
-    Ok((out).into_iter().collect::<Col<f64>>())
-}
-
-/// Within transformation: subtract entity-specific mean (alias for entity FE)
-fn within_transform(v: &[f64], entity_id: &[usize]) -> Result<Col<f64>, String> {
-    within_transform_by_group(v, entity_id)
+    Ok(super::data::within_transform_by_group(v, group_id))
 }
 
 /// Two-way within transformation: z̃_it = z_it - z̄_i - z̄_t + z̄
@@ -540,13 +520,13 @@ pub fn fit_panel_fe(
 
     // Within transform endog and each column of exog
     let y_vec: Vec<f64> = endog.iter().cloned().collect();
-    let y_tilde = within_transform(&y_vec, entity_id)?;
+    let y_tilde = within_transform_by_group(&y_vec, entity_id)?;
 
     let k = exog.ncols();
     let mut x_tilde = Mat::zeros(n, k);
     for c in 0..k {
         let col: Vec<f64> = exog.col(c).iter().cloned().collect();
-        let transformed = within_transform(&col, entity_id)?;
+        let transformed = within_transform_by_group(&col, entity_id)?;
         for (i, &v) in transformed.iter().enumerate() {
             x_tilde[(i, c)] = v;
         }

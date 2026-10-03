@@ -26,11 +26,13 @@ pub fn acf_pacf(
 }
 
 fn validate_result(result: &AcfPacfResult) -> Result<(), ScientificComputationError> {
-    if result
-        .acf
-        .iter()
-        .chain(&result.pacf)
-        .all(|value| value.is_finite())
+    if result.ci_half_width.is_finite()
+        && result.ci_half_width > 0.0
+        && result
+            .acf
+            .iter()
+            .chain(&result.pacf)
+            .all(|value| value.is_finite())
     {
         Ok(())
     } else {

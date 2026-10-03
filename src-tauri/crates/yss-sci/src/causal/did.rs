@@ -478,7 +478,7 @@ pub fn fit_did(
     {
         return Err(crate::error::invalid_input(
             yss_sci_contract::SciOperationCode::Panel,
-            yss_sci_contract::SciInputViolation::ShapeMismatch,
+            yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
         ));
     }
     predictors.push(treatment);

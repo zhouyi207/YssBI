@@ -1,6 +1,9 @@
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 
-pub(crate) fn invalid_input(operation: SciOperationCode, violation: SciInputViolation) -> SciError {
+pub(crate) fn invalid_input(
+    operation: SciOperationCode,
+    violation: ScientificInputViolation,
+) -> SciError {
     SciError::InvalidInput {
         operation,
         violation,

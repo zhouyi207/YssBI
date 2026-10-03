@@ -5,11 +5,10 @@ use crate::{
     KernelError, KernelInputSpec as Input, KernelInvocation, KernelRegistryBuilder, RuntimeValue,
 };
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::execution::{
-    ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
-};
+use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 use yss_sci_contract::visualization::*;
 use yss_sci_runtime::visualization as sci;
+mod overview;
 
 #[derive(Clone, Copy)]
 enum Method {
@@ -35,6 +34,7 @@ enum Method {
 }
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
+    overview::register(builder);
     use Method::*;
     for (name, method, inputs, parameters) in [
         (
@@ -167,26 +167,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn error(error: ScientificComputationError) -> KernelError {
-    match error {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-    }
-}
-
 fn encode<T: serde::Serialize>(
     result: Result<T, ScientificComputationError>,
     inv: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
-    value(result.map_err(error)?, inv)
+    value(result.map_err(computation_error)?, inv)
 }
 
 fn prepared(

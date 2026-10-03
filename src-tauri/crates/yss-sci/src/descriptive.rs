@@ -1,5 +1,7 @@
 //! Inequality measures for individual observations or population-weighted group means.
 use std::collections::BTreeMap;
+mod quantiles;
+pub(crate) use quantiles::quantile_sorted;
 use yss_sci_contract::descriptive::{DagumGroup, DagumPair, DagumResult, GiniResult};
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl, ScientificInputViolation,

@@ -49,8 +49,7 @@ impl GLS {
             .as_ref()
             .checked_cholesky()
             .map_err(|_| "GLS: Sigma is not positive definite".to_string())?
-            .lower()
-            .to_owned();
+            .lower();
 
         let mut endog = self.endog.as_ref().to_owned();
         let mut exog = self.exog.as_ref().to_owned();
@@ -106,12 +105,14 @@ impl GLS {
             Some(ms_model / ms_residual),
         )?;
         let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
-        let betas_nd = betas.as_ref().to_owned();
-        let t_values: Vec<f64> = betas_nd
+        let t_values: Vec<f64> = betas
             .iter()
             .zip(std_err.iter())
             .map(|(b, se)| b / se)
             .collect();
+        if t_values.iter().any(|t| t.is_nan()) {
+            return Err("GLS coefficient t-statistic is undefined".into());
+        }
 
         let t_dist = StudentsT::new(0.0, 1.0, df_residual as f64)
             .map_err(|e| format!("GLS: StudentsT: {}", e))?;
@@ -121,8 +122,8 @@ impl GLS {
             .collect();
 
         let t_crit = t_dist.inverse_cdf(0.975);
-        let ci_lower = betas_nd.clone() - yss_sci_linalg::Scale(t_crit) * std_err.clone();
-        let ci_upper = betas_nd.clone() + yss_sci_linalg::Scale(t_crit) * std_err.clone();
+        let ci_lower = &betas - yss_sci_linalg::Scale(t_crit) * &std_err;
+        let ci_upper = &betas + yss_sci_linalg::Scale(t_crit) * &std_err;
 
         Ok(GLSResult {
             num_observation: n,
@@ -140,7 +141,7 @@ impl GLS {
             r2_adjusted,
             fvalue: f,
             f_p_value,
-            betas: betas_nd,
+            betas,
             stds: std_err,
             tvalues: (t_values).into_iter().collect::<Col<f64>>(),
             pvalues: (p_values).into_iter().collect::<Col<f64>>(),

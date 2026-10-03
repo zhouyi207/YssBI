@@ -28,26 +28,6 @@ pub(super) fn implemented(id: &str) -> bool {
         .is_some_and(|method| METHODS.iter().any(|spec| spec.0 == method))
 }
 
-fn label_series() -> Result<TypeExpr, BuiltinAssemblyError> {
-    let members = [
-        "core.numeric",
-        "core.categorical",
-        "core.ordinal",
-        "core.binary",
-        "core.text",
-        "core.identifier",
-    ]
-    .iter()
-    .map(|id| concrete(id).map(data_series_type))
-    .collect::<Result<Vec<_>, _>>()?;
-    normalize_type_expr(TypeExpr::Union(members)).map_err(|error| {
-        BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-            context: "ANOVA factor input",
-            value: error.to_string().into(),
-        }
-    })
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.anova.{method}");

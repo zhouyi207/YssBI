@@ -36,6 +36,23 @@ fn rust_serial_tests_match_golden_fixtures() {
             fixture.tolerance.absolute,
         );
     }
+
+    let ragged_results = [true, false].map(|bg_nomiss0| {
+        let result = std::panic::catch_unwind(|| {
+            compute_serial_tests(SerialTestsInput {
+                residuals: vec![0.2, -0.4, 0.6, -0.8],
+                lags: 1,
+                exog: Some(vec![vec![1.0], vec![1.0], vec![1.0], vec![1.0, 2.0]]),
+                bg_nomiss0,
+            })
+        });
+        (
+            bg_nomiss0,
+            matches!(result, Ok(Ok(output)) if output.bg.is_none()
+                && output.q.is_some() && output.dw.d.is_finite()),
+        )
+    });
+    assert_eq!(ragged_results, [(true, true), (false, true)]);
 }
 
 fn fixtures() -> Vec<SerialTestsGoldenFixture> {

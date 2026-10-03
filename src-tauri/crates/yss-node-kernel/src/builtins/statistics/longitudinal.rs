@@ -1,6 +1,6 @@
 use super::{
     Input,
-    common::{boolean, integer, number, text, value},
+    common::{boolean, computation_error, integer, number, text, value},
 };
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
@@ -64,21 +64,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             1,
             move |inv| execute(method, inv),
         );
-    }
-}
-
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
     }
 }
 
@@ -241,7 +226,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             &control,
         )
     }
-    .map_err(error)?;
+    .map_err(computation_error)?;
     #[derive(serde::Serialize)]
     struct Report {
         #[serde(flatten)]

@@ -219,10 +219,12 @@ pub(crate) fn compute_first_stage_summary(
         } else {
             0.0
         };
-        let r2_adj = if df_z > 0 && n > 1 {
-            1.0 - (ss_resid / df_z as f64) / (ss_tot / (n - 1) as f64)
+        let r2_adj = if ss_tot == 0.0 {
+            None
+        } else if df_z > 0 && n > 1 {
+            Some(1.0 - (ss_resid / df_z as f64) / (ss_tot / (n - 1) as f64))
         } else {
-            r2
+            Some(r2)
         };
 
         // Partial R2: regress M_X1*Y on M_X1*X2
@@ -261,6 +263,7 @@ pub(crate) fn compute_first_stage_summary(
                 &ztz_inv_nd,
                 &first_stage_resid,
                 sigma2_df,
+                has_constant.then_some(0),
                 cov_type,
                 cov_params,
             )?;
@@ -304,7 +307,7 @@ pub(crate) fn compute_first_stage_summary(
 
         (
             Some(r2),
-            Some(r2_adj),
+            r2_adj,
             Some(partial_r2),
             Some(f_stat),
             Some(f_p_value),
@@ -323,9 +326,9 @@ pub(crate) fn compute_first_stage_summary(
             let (y0, y0_hat) = if k_endog > 1 {
                 let mut y0_data = Vec::with_capacity(n * (k_endog - 1));
                 let mut y0_hat_data = Vec::with_capacity(n * (k_endog - 1));
-                for jj in 0..k_endog {
-                    if jj != j {
-                        for i in 0..n {
+                for i in 0..n {
+                    for jj in 0..k_endog {
+                        if jj != j {
                             y0_data.push(endog_reg[(i, jj)]);
                             y0_hat_data.push(endog_hat[(i, jj)]);
                         }

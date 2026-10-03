@@ -4,7 +4,6 @@ pub(crate) fn computation_failed(operation: SciOperationCode) -> SciError {
     SciError::ComputationFailed { operation }
 }
 
-use yss_sci_contract::SciInputViolation;
 use yss_sci_contract::execution::{ScientificComputationError, ScientificInputViolation};
 
 pub(crate) const fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {
@@ -23,14 +22,7 @@ pub(crate) fn map_sci_error(error: SciError) -> ScientificComputationError {
             ) {
                 return ScientificComputationError::ComputationFailed;
             }
-            invalid(match violation {
-                SciInputViolation::EmptyInput => ScientificInputViolation::EmptyInput,
-                SciInputViolation::NonFiniteInput => ScientificInputViolation::NonFiniteInput,
-                SciInputViolation::ShapeMismatch => ScientificInputViolation::ShapeMismatch,
-                SciInputViolation::ParameterOutOfRange => {
-                    ScientificInputViolation::ParameterOutOfRange
-                }
-            })
+            invalid(violation)
         }
         SciError::ComputationFailed { .. } => ScientificComputationError::ComputationFailed,
     }

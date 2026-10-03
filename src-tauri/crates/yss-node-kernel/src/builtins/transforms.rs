@@ -10,6 +10,7 @@ use yss_relational_contract::*;
 
 #[derive(Clone, Copy)]
 enum Operation {
+    Impute,
     Sort,
     Deduplicate,
     SetColumn,
@@ -45,6 +46,12 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     use Operation::*;
     let window_parameters = &["partition_by", "order_by", "descending", "nulls_first"][..];
     let entries: &[(&str, Operation, &[&str], &[&str])] = &[
+        (
+            "yssbi.dataframe.impute.single",
+            Impute,
+            &["series"],
+            &["imputation_method", "fill_value"],
+        ),
         (
             "yssbi.dataframe.sort",
             Sort,
@@ -814,6 +821,17 @@ fn execute(
             )]);
         }
         IsNull(invert) => SeriesTransform::IsNull { invert },
+        Impute => SeriesTransform::Impute {
+            method: match text(inv, "imputation_method")? {
+                "mean" => ImputationMethod::Mean,
+                "median" => ImputationMethod::Median,
+                "mode" => ImputationMethod::Mode,
+                "constant" => {
+                    ImputationMethod::Constant(numeric_input(inv.parameter("fill_value"))?)
+                }
+                _ => return Err(KernelError::InvalidParameter),
+            },
+        },
         Fill => SeriesTransform::Fill {
             replacement: operands
                 .get(1)

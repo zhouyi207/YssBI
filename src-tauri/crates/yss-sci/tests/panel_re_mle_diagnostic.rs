@@ -222,4 +222,65 @@ fn panel_re_mle_lin() {
     assert_eq!(result.statistics.observations, n);
     assert_eq!(result.statistics.entities, n_entities);
     assert_eq!(result.coefficients.len(), 10);
+
+    // A redundant middle column must not change the two-way model's span or
+    // likelihood. The retained columns no longer have contiguous source indices.
+    use yss_sci_contract::panel::{PanelEffects, PanelEstimator, PanelOptions};
+    let n = 72;
+    let mut state = 177u64;
+    let noise = (0..n * 3)
+        .map(|_| {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            ((state >> 32) as u32) as f64 / u32::MAX as f64 - 0.5
+        })
+        .collect::<Vec<_>>();
+    let entity = (0..n).map(|i| (i / 6) as f64).collect::<Vec<_>>();
+    let time = (0..n).map(|i| (i % 6) as f64).collect::<Vec<_>>();
+    let x = noise[..n].to_vec();
+    let z = noise[n..n * 2].to_vec();
+    let y = (0..n)
+        .map(|i| {
+            1.0 + 0.5 * entity[i] + 1.2 * time[i] + 1.5 * x[i] - 0.3 * z[i] + 0.3 * noise[n * 2 + i]
+        })
+        .collect::<Vec<_>>();
+    let fit = |predictors| {
+        yss_sci::panel::fit::fit_panel(
+            y.clone(),
+            predictors,
+            entity.clone(),
+            time.clone(),
+            PanelOptions {
+                estimator: PanelEstimator::MaximumLikelihood,
+                effects: PanelEffects::TwoWay,
+                constant: true,
+                covariance: "nonrobust".into(),
+            },
+        )
+        .expect("two-way MLE")
+    };
+    let reference = fit(vec![x.clone(), z.clone()]);
+    let redundant = fit(vec![x.clone(), x, z]);
+    assert_eq!(redundant.omitted_indices.as_deref(), Some(&[1][..]));
+    assert_eq!(reference.coefficients.len(), redundant.coefficients.len());
+    for (expected, actual) in reference.coefficients.iter().zip(&redundant.coefficients) {
+        assert!((expected - actual).abs() < 1e-10);
+    }
+    let mle_statistics = |fit: &yss_sci_contract::panel::PanelFit| {
+        let yss_sci_contract::panel::PanelEstimatorStatistics::MaximumLikelihood {
+            log_likelihood,
+            lr_chi2,
+            chibar2,
+            ..
+        } = fit.estimator_statistics
+        else {
+            panic!("expected two-way MLE inference");
+        };
+        [log_likelihood, lr_chi2, chibar2]
+    };
+    for (expected, actual) in mle_statistics(&reference)
+        .into_iter()
+        .zip(mle_statistics(&redundant))
+    {
+        assert!((expected - actual).abs() < 1e-9, "{expected} != {actual}");
+    }
 }

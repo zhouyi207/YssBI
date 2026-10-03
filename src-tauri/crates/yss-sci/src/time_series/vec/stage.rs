@@ -38,11 +38,11 @@ pub(crate) fn johansen_stage1(
     sindicators: Option<&Mat<f64>>,
 ) -> Result<JohansenStage1, String> {
     let (n_full, k) = (y.nrows(), y.ncols());
-    let dy = diff_y(y);
-    let n = n_full - p;
-    if n == 0 {
+    if n_full <= p {
         return Err("VEC: not enough observations after lag adjustment".to_string());
     }
+    let dy = diff_y(y);
+    let n = n_full - p;
 
     let m_si = sindicators.map(|s| s.ncols()).unwrap_or(0);
     if let Some(si) = sindicators
@@ -102,8 +102,7 @@ pub(crate) fn johansen_stage1(
     let m12 = (z1.transpose() * z2.as_ref()) * yss_sci_linalg::Scale(t_inv);
     let m22 = (z2.transpose() * z2.as_ref()) * yss_sci_linalg::Scale(t_inv);
 
-    let m22_matrix = m22.as_ref().to_owned();
-    let m22_inv = m22_matrix
+    let m22_inv = m22
         .as_ref()
         .checked_cholesky()
         .map_err(|_| "VEC: M22 not positive definite (collinearity in Z2)".to_string())?
@@ -136,15 +135,13 @@ pub(crate) fn johansen_stage1(
     let s10 = (r1.transpose() * r0.as_ref()) * yss_sci_linalg::Scale(t_inv);
     let s11 = (r1.transpose() * r1.as_ref()) * yss_sci_linalg::Scale(t_inv);
 
-    let s00_matrix = s00.as_ref().to_owned();
-    let s00_inv = s00_matrix
+    let s00_inv = s00
         .as_ref()
         .checked_cholesky()
         .map_err(|_| "VEC: S00 not positive definite".to_string())?
         .solve(&Mat::<f64>::identity(s00.nrows(), s00.nrows()));
 
-    let s11_matrix = s11.as_ref().to_owned();
-    let s11_inv = s11_matrix
+    let s11_inv = s11
         .as_ref()
         .checked_cholesky()
         .map_err(|_| "VEC: S11 not positive definite".to_string())?

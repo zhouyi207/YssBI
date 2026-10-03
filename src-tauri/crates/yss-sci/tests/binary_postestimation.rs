@@ -1,6 +1,7 @@
 //! Distinct regressions: reference derivative/delta-method values; classification
 //! boundary/undefined rates and OR inference; asymptotic versus finite-sample tests.
 use yss_sci::regression::discrete::{fit::fit_binary, postestimation::*};
+use yss_sci_contract::regression::postestimation::Evaluation;
 use yss_sci_contract::regression::{discrete::*, fit::*};
 use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
 fn fixture_fit(link: BinaryRegressionLink) -> RegressionFit {
@@ -76,9 +77,9 @@ fn binary_effects_match_statsmodels_for_both_links_and_all_transformations() {
                 &fit,
                 MarginalOptions {
                     evaluation: if r["evaluation"] == "mean" {
-                        MarginalEvaluation::AtMeans
+                        Evaluation::AtMeans
                     } else {
-                        MarginalEvaluation::Average
+                        Evaluation::Average
                     },
                     method,
                     at,
@@ -137,7 +138,7 @@ fn odds_and_classification_keep_nulls_and_decision_boundary_semantics() {
     let effect = marginal_effects(
         &fit,
         MarginalOptions {
-            evaluation: MarginalEvaluation::AtMeans,
+            evaluation: Evaluation::AtMeans,
             method: MarginalMethod::Dyex,
             at: [("x1".into(), 0.)].into(),
         },
@@ -164,7 +165,7 @@ fn odds_and_classification_keep_nulls_and_decision_boundary_semantics() {
         marginal_effects(
             &negative,
             MarginalOptions {
-                evaluation: MarginalEvaluation::Average,
+                evaluation: Evaluation::Average,
                 method: MarginalMethod::Dydx,
                 at: Default::default()
             },
@@ -178,7 +179,7 @@ fn odds_and_classification_keep_nulls_and_decision_boundary_semantics() {
         marginal_effects(
             &fit,
             MarginalOptions {
-                evaluation: MarginalEvaluation::Average,
+                evaluation: Evaluation::Average,
                 method: MarginalMethod::Dydx,
                 at: Default::default()
             },
@@ -190,7 +191,7 @@ fn odds_and_classification_keep_nulls_and_decision_boundary_semantics() {
     let tail = marginal_effects(
         &fit,
         MarginalOptions {
-            evaluation: MarginalEvaluation::AtMeans,
+            evaluation: Evaluation::AtMeans,
             method: MarginalMethod::Eydx,
             at: [("x1".into(), -2000.0)].into(),
         },
@@ -223,4 +224,25 @@ fn coefficient_restrictions_use_z_and_chisquare_for_likelihood_models() {
     close(chi.stat, 5.);
     close(chi.p_value, (-2.5f64).exp());
     assert!(run_asymptotic_hypothesis_test(input("a = 0, 2*a = 0")).is_err());
+
+    for asymptotic in [false, true] {
+        let mut request = input("b = 0");
+        request.cov_beta[1][1] = -1.;
+        let result = if asymptotic {
+            run_asymptotic_hypothesis_test(request)
+        } else {
+            run_hypothesis_test(request)
+        };
+        assert!(
+            matches!(
+                &result,
+                Err(yss_sci_contract::hypothesis::HypothesisError::Scientific(
+                    yss_sci_contract::SciError::ComputationFailed {
+                        operation: yss_sci_contract::SciOperationCode::TTest
+                    }
+                ))
+            ),
+            "negative contrast variance, asymptotic={asymptotic}: {result:?}"
+        );
+    }
 }

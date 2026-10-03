@@ -180,7 +180,7 @@ pub(crate) fn fitted(x: &Mat<f64>, beta: &[f64]) -> Vec<f64> {
         .map(|i| (0..x.ncols()).map(|j| x[(i, j)] * beta[j]).sum())
         .collect()
 }
-pub(super) fn gram(x: &Mat<f64>, weights: Option<&[f64]>, control: &Control) -> Result<Mat<f64>> {
+pub(crate) fn gram(x: &Mat<f64>, weights: Option<&[f64]>, control: &Control) -> Result<Mat<f64>> {
     let p = x.ncols();
     let mut a = Mat::zeros(p, p);
     for i in 0..x.nrows() {

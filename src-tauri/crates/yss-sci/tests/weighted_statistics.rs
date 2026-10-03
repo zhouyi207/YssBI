@@ -67,10 +67,46 @@ fn gls_identity_estimates_scale_like_ols() {
     }
     near(actual_model.f_statistic, expected_model.f_statistic);
     near(actual_model.f_p_value, expected_model.f_p_value);
+
+    for method in [
+        LinearRegressionMethod::Ols,
+        LinearRegressionMethod::Wls {
+            weights: vec![1.0; 5],
+        },
+        LinearRegressionMethod::Gls {
+            sigma: (0..5)
+                .map(|i| (0..5).map(|j| f64::from(i == j)).collect())
+                .collect(),
+        },
+    ] {
+        let fit = fit_linear_regression(
+            vec![1., 2., 1., 4., 3.],
+            &[vec![1.0; 5]],
+            yss_sci_contract::regression::OlsOptions {
+                constant: false,
+                ..Default::default()
+            },
+            method,
+            StatisticalObservationMetadata {
+                original_observation_count: 5,
+                used_observation_count: 5,
+                dropped_null_count: 0,
+                dropped_nan_count: 0,
+                missing_value_policy: MissingValuePolicy::Reject,
+            },
+        )
+        .unwrap();
+        assert!(!fit.constant);
+        assert_eq!(fit.parameter_names, ["x1"]);
+        assert_eq!(fit.design, [vec![1.0; 5]]);
+    }
 }
 
 #[test]
 fn weighted_statistics_use_the_transformed_intercept() {
+    use yss_sci::regression::covariance::compute_cov_beta;
+    use yss_sci_contract::regression::{CovParams, OlsCovariance};
+    use yss_sci_linalg::{MatrixExt, Solve};
     let weights = Col::from_fn(5, |i| (1 << i) as f64);
     for constant in [true, false] {
         let exog = Mat::from_fn(5, if constant { 2 } else { 1 }, |i, j| {
@@ -121,6 +157,79 @@ fn weighted_statistics_use_the_transformed_intercept() {
             }
         }
     }
+
+    let data: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/diagnostics_reference.json")).unwrap();
+    let response: Vec<f64> = serde_json::from_value(data["y"].clone()).unwrap();
+    let predictors: Vec<Vec<f64>> = serde_json::from_value(data["x"].clone()).unwrap();
+    let weights: Vec<f64> = serde_json::from_value(data["weights"].clone()).unwrap();
+    let n = response.len();
+    let design = Mat::from_fn(n, 3, |i, j| if j == 0 { 1.0 } else { predictors[j - 1][i] });
+    let fit = |order: [usize; 3]| {
+        WLS {
+            endog: Col::from_iter(response.iter().copied()),
+            exog: Mat::from_fn(n, 3, |i, j| design[(i, order[j])]),
+            weights: Col::from_iter(weights.iter().copied()),
+            config: WLSConfig {
+                constant: true,
+                covariance: OlsCovariance::Hac {
+                    kernel: "bartlett".into(),
+                    bandwidth: None,
+                },
+            },
+        }
+        .fit()
+        .unwrap()
+    };
+    let expected = fit([0, 1, 2]);
+    let order = [0, 2, 1];
+    let reordered = fit(order);
+    for i in 0..3 {
+        for j in 0..3 {
+            near(
+                reordered.cov_beta[(i, j)],
+                expected.cov_beta[(order[i], order[j])],
+            );
+        }
+    }
+
+    // The configured intercept remains column zero after whitening; its values
+    // are no longer constant. Check forwarding to the covariance owner directly.
+    let transformed = Mat::from_fn(n, 3, |i, j| design[(i, j)] * weights[i].sqrt());
+    let residuals = Col::from_fn(n, |i| {
+        (response[i]
+            - (0..3)
+                .map(|j| design[(i, j)] * expected.betas[j])
+                .sum::<f64>())
+            * weights[i].sqrt()
+    });
+    let inverse = (transformed.transpose() * transformed.as_ref())
+        .checked_cholesky()
+        .unwrap()
+        .solve(&Mat::identity(3, 3));
+    let covariance = |intercept_col| {
+        compute_cov_beta(
+            &transformed,
+            &inverse,
+            &residuals,
+            expected.df_residual,
+            intercept_col,
+            "HAC",
+            Some(&CovParams::HAC {
+                kernel: "bartlett".into(),
+                bandwidth: None,
+            }),
+        )
+        .unwrap()
+    };
+    let configured = covariance(Some(0));
+    let omitted = covariance(None);
+    for i in 0..3 {
+        for j in 0..3 {
+            near(expected.cov_beta[(i, j)], configured[(i, j)]);
+        }
+    }
+    assert!((configured[(0, 0)] - omitted[(0, 0)]).abs() > 1e-8);
 }
 
 #[test]

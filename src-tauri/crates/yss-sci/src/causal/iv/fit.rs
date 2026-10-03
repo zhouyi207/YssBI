@@ -5,7 +5,7 @@ use crate::error::{computation_failed, invalid_input};
 use crate::regression::design::design_matrix;
 use yss_sci_contract::causal::iv::{InstrumentalVariableFit, InstrumentalVariableKind};
 use yss_sci_contract::regression::OlsOptions;
-use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 use yss_sci_linalg::Col;
 
 pub fn fit_instrumental_variables(
@@ -20,7 +20,7 @@ pub fn fit_instrumental_variables(
     let op = SciOperationCode::InstrumentalVariables;
     let observations = response.len();
     if observations == 0 || endogenous.is_empty() || instruments.len() < endogenous.len() {
-        return Err(invalid_input(op, SciInputViolation::ShapeMismatch));
+        return Err(invalid_input(op, ScientificInputViolation::ShapeMismatch));
     }
     if response
         .iter()
@@ -29,7 +29,7 @@ pub fn fit_instrumental_variables(
         .chain(instruments.iter().flatten())
         .any(|v| !v.is_finite())
     {
-        return Err(invalid_input(op, SciInputViolation::NonFiniteInput));
+        return Err(invalid_input(op, ScientificInputViolation::NonFiniteInput));
     }
     let exog = if exogenous.is_empty() {
         yss_sci_linalg::Mat::zeros(observations, 0)
@@ -130,7 +130,7 @@ fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IV2SLS, SciError> {
             .chain(&data.instruments)
             .any(|v| v.len() != n || v.iter().any(|v| !v.is_finite()))
     {
-        return Err(invalid_input(op, SciInputViolation::ShapeMismatch));
+        return Err(invalid_input(op, ScientificInputViolation::ShapeMismatch));
     }
     Ok(IV2SLS {
         endog: Col::from_iter(fit.fitted.iter().zip(&fit.residuals).map(|(f, r)| f + r)),
@@ -172,7 +172,7 @@ pub fn overidentification(
     if fit.family != "iv_2sls" {
         return Err(invalid_input(
             SciOperationCode::InstrumentalVariables,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     diagnostic_model(fit)?
@@ -186,7 +186,7 @@ pub fn liml_overidentification(
     if fit.family != "iv_liml" {
         return Err(invalid_input(
             SciOperationCode::InstrumentalVariables,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     diagnostic_model(fit)?
@@ -206,7 +206,7 @@ pub fn endogeneity(
     if fit.family != "iv_2sls" {
         return Err(invalid_input(
             SciOperationCode::InstrumentalVariables,
-            SciInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::ParameterOutOfRange,
         ));
     }
     diagnostic_model(fit)?

@@ -48,20 +48,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         );
     }
 }
-fn error(e: ScientificComputationError) -> KernelError {
-    match e {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
-        } => KernelError::InvalidParameter,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
 fn budget(
     inv: &KernelInvocation<'_>,
     units: usize,
@@ -108,7 +94,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             symmetrize: boolean(inv, "spatial_symmetrize")?,
             row_standardize: boolean(inv, "spatial_row_standardize")?,
         };
-        let w = weights::construct(&x, &y, options, &control).map_err(error)?;
+        let w = weights::construct(&x, &y, options, &control).map_err(computation_error)?;
         return Ok(vec![value(
             SpatialWeights {
                 units,
@@ -140,7 +126,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         .filter_map(|(i, k)| (*k == "predictors").then_some(i))
         .collect::<Vec<_>>();
     budget(inv, w.units.len(), n, predictor_indices.len(), retained)?;
-    weights::validate(&w.matrix, &control).map_err(error)?;
+    weights::validate(&w.matrix, &control).map_err(computation_error)?;
     let combined = super::super::series::Column {
         values: w.units.iter().chain(&columns[0].values).cloned().collect(),
         metadata: None,
@@ -201,7 +187,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 },
                 &control,
             )
-            .map_err(error)?,
+            .map_err(computation_error)?,
             inv,
         )?]);
     }
@@ -251,7 +237,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             &control,
         )
     }
-    .map_err(error)?;
+    .map_err(computation_error)?;
     let offset = usize::from(model.constant);
     for (j, label) in labels.iter().enumerate() {
         model.coefficients[offset + j].term.clone_from(label);

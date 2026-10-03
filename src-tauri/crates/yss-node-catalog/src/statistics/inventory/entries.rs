@@ -1289,7 +1289,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "信度",
         aliases: &["psychometrics.reliability", "信度"],
         product_form: "独立节点",
-        scope_note: "信度是方法族，需明确 alpha/omega/重测等范围。",
+        scope_note: "Cronbach 原始与标准化 alpha、校正题总相关和删除题项后的 alpha。",
     },
     Entry {
         id: "yssbi.statistics.psychometrics.validity",
@@ -1300,7 +1300,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "效度",
         aliases: &["psychometrics.validity", "效度"],
         product_form: "独立节点",
-        scope_note: "效度不是单一统计方法，需明确结构/聚合/区分等产物。",
+        scope_note: "KMO、各题项 MSA 与 Bartlett 球形检验；结构探索使用独立的探索性因子分析节点。",
     },
     Entry {
         id: "yssbi.statistics.psychometrics.content_validity",
@@ -1377,7 +1377,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "调节作用（进阶）",
         aliases: &["workflow.moderation_advanced", "调节作用（进阶）"],
         product_form: "工作流模板",
-        scope_note: "进阶调节的交互形式与 146 的差异尚未定义。",
+        scope_note: "两个连续调节变量，包含所有两两交互和三阶交互，输出条件简单斜率与 J–N 区间。",
     },
     Entry {
         id: "yssbi.statistics.workflow.mediation",
@@ -1707,7 +1707,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "PSM",
         aliases: &["decision.psm", "PSM"],
         product_form: "独立节点",
-        scope_note: "此处 PSM 位于决策分类，不能与因果倾向得分匹配 107 合并；需确认是否为价格敏感度模型。",
+        scope_note: "Van Westendorp 价格敏感度模型，独立于因果分类的倾向得分匹配。",
     },
     Entry {
         id: "yssbi.statistics.decision.conjoint",
@@ -2015,7 +2015,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "剂量反应",
         aliases: &["doe.dose_response", "剂量反应"],
         product_form: "独立节点",
-        scope_note: "确认剂量反应指实验设计、回归模型还是 Meta 剂量反应。",
+        scope_note: "单条连续响应的四参数对数逻辑最小二乘曲线与 ED50；不是 Meta 剂量反应。",
     },
     Entry {
         id: "yssbi.statistics.doe.response_surface",
@@ -2037,7 +2037,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "DOE试验",
         aliases: &["doe.family", "DOE试验"],
         product_form: "独立节点",
-        scope_note: "DOE 是方法族，不代表独立的单一算法。",
+        scope_note: "提供等水平全析因设计生成；其他试验设计方法由各自节点拥有。",
     },
     Entry {
         id: "yssbi.statistics.doe.uniform_design",
@@ -2081,7 +2081,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "测量系统分析MSA",
         aliases: &["quality.measurement_system", "测量系统分析MSA"],
         product_form: "独立节点",
-        scope_note: "明确重复性/再现性、计量/计数和研究设计。",
+        scope_note: "计量型均衡交叉随机效应 ANOVA，分解重复性、再现性、零件及交互变异。",
     },
     Entry {
         id: "yssbi.statistics.plot.statistical.family",
@@ -2092,7 +2092,7 @@ pub(super) const ENTRIES: &[Entry] = &[
         zh: "统计图",
         aliases: &["plot.statistical.family", "统计图"],
         product_form: "绘图节点",
-        scope_note: "统计图为泛称；关联具体图种后再定义入口。",
+        scope_note: "分布概览一次输出直方图、经验分布函数及箱线图，复用绘图类别算法。",
     },
     Entry {
         id: "yssbi.statistics.power.principles",

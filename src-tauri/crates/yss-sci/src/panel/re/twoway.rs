@@ -416,9 +416,12 @@ pub fn fit_panel_re_fgls_twoway(
         response_name: "response".into(),
         omitted_terms: vec![],
         estimation: yss_sci_contract::panel::PanelEstimationSample {
-            space: "quasi_demeaned".into(), constant: ols_re.config.constant,
+            space: "quasi_demeaned".into(),
+            constant: ols_re.config.constant,
             response: ols_re.endog.iter().copied().collect(),
-            design: (0..ols_re.exog.ncols()).map(|j|ols_re.exog.col(j).iter().copied().collect()).collect(),
+            design: (0..ols_re.exog.ncols())
+                .map(|j| ols_re.exog.col(j).iter().copied().collect())
+                .collect(),
             coefficients: result.betas.iter().copied().collect(),
             fitted: result.fitted.iter().copied().collect(),
             residuals: result.residuals.iter().copied().collect(),
@@ -461,7 +464,10 @@ pub fn fit_panel_re_fgls_twoway(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects { wald_chi2, wald_p_value: prob_wald_chi2 },
+        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects {
+            wald_chi2,
+            wald_p_value: prob_wald_chi2,
+        },
         covariance_nonrobust: Some(super::covariance_rows(&(result.cov_beta_nonrobust))),
     })
 }
@@ -519,7 +525,14 @@ fn re_mle_log_lik_twoway(
     let sl = sigma2_lambda.max(1e-12);
 
     let r: Vec<f64> = (0..n)
-        .map(|i| endog[i] - kept.iter().map(|&c| exog[(i, c)] * betas[c]).sum::<f64>())
+        .map(|i| {
+            endog[i]
+                - kept
+                    .iter()
+                    .enumerate()
+                    .map(|(j, &c)| exog[(i, c)] * betas[j])
+                    .sum::<f64>()
+        })
         .collect();
 
     let (theta_id, theta_time, theta_total) = twoway_theta(sa, sl, se, t_bar, n_bar);
@@ -852,7 +865,6 @@ pub fn fit_panel_re_mle_twoway(
     sigma2_lambda = (res_b_t.ss_residual / df_b_t as f64 - sigma2_e / n_bar).max(1e-10);
 
     let mut kept: Vec<usize>;
-    let mut betas: Vec<f64> = vec![0.0; k];
     let mut mle_iter_log_lik: Vec<f64> = Vec::new();
 
     for iter in 0..80 {
@@ -894,10 +906,7 @@ pub fn fit_panel_re_mle_twoway(
         }
         .fit()
         .map_err(|e| format!("Panel RE (Two-Way MLE): {}", e))?;
-        betas = vec![0.0; k];
-        for (idx, &c) in kept.iter().enumerate() {
-            betas[c] = res.betas[idx];
-        }
+        let betas: Vec<f64> = res.betas.iter().copied().collect();
         let ll = re_mle_log_lik_twoway(
             &y_vec,
             exog,
@@ -918,7 +927,14 @@ pub fn fit_panel_re_mle_twoway(
         mle_iter_log_lik.push(ll);
 
         let r: Vec<f64> = (0..n)
-            .map(|i| y_vec[i] - kept.iter().map(|&c| exog[(i, c)] * betas[c]).sum::<f64>())
+            .map(|i| {
+                y_vec[i]
+                    - kept
+                        .iter()
+                        .enumerate()
+                        .map(|(j, &c)| exog[(i, c)] * betas[j])
+                        .sum::<f64>()
+            })
             .collect();
         let r_w = within_transform_twoway(&r, entity_id, time_id);
         let ss_w: f64 = r_w.iter().map(|x| x * x).sum();
@@ -1120,9 +1136,12 @@ pub fn fit_panel_re_mle_twoway(
         response_name: "response".into(),
         omitted_terms: vec![],
         estimation: yss_sci_contract::panel::PanelEstimationSample {
-            space: "quasi_demeaned".into(), constant: final_ols.config.constant,
+            space: "quasi_demeaned".into(),
+            constant: final_ols.config.constant,
             response: final_ols.endog.iter().copied().collect(),
-            design: (0..final_ols.exog.ncols()).map(|j|final_ols.exog.col(j).iter().copied().collect()).collect(),
+            design: (0..final_ols.exog.ncols())
+                .map(|j| final_ols.exog.col(j).iter().copied().collect())
+                .collect(),
             coefficients: result.betas.iter().copied().collect(),
             fitted: result.fitted.iter().copied().collect(),
             residuals: result.residuals.iter().copied().collect(),
@@ -1166,14 +1185,14 @@ pub fn fit_panel_re_mle_twoway(
         effects_statistics: fe_stats,
         omitted_indices,
         estimator_statistics: super::PanelEstimatorStatistics::MaximumLikelihood {
-                log_likelihood,
-                lr_chi2,
-                lr_p_value: prob_lr_chi2,
-                chibar2,
-                chibar2_p_value: prob_chibar2,
-                constant_iterations: mle_iter_log_lik_const,
-                iterations: mle_iter_log_lik,
-            },
+            log_likelihood,
+            lr_chi2,
+            lr_p_value: prob_lr_chi2,
+            chibar2,
+            chibar2_p_value: prob_chibar2,
+            constant_iterations: mle_iter_log_lik_const,
+            iterations: mle_iter_log_lik,
+        },
         covariance_nonrobust: None,
     })
 }

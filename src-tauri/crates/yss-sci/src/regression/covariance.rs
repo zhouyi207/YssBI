@@ -10,11 +10,13 @@ use yss_sci_contract::regression::{CovParams, OlsCovariance, OlsOptions};
 /// - xtx_inv: (X'X)⁻¹
 /// - u: (n,) 残差向量
 /// - df_residual: n - k
+/// - intercept_col: configured intercept position, including after weighting
 pub fn compute_cov_beta(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
     u: &Col<f64>,
     df_residual: usize,
+    intercept_col: Option<usize>,
     cov_type: &str,
     cov_params: Option<&CovParams>,
 ) -> Result<Mat<f64>, String> {
@@ -22,6 +24,9 @@ pub fn compute_cov_beta(
         .map_err(|error| error.to_string())?;
     let n = x.nrows();
     let k = x.ncols();
+    if intercept_col.is_some_and(|column| column >= k) {
+        return Err("Intercept column is outside the design matrix".into());
+    }
 
     match selection.covariance {
         OlsCovariance::NonRobust => cov_nonrobust(xtx_inv, u, df_residual),
@@ -31,7 +36,7 @@ pub fn compute_cov_beta(
         OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k),
         OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k),
         OlsCovariance::Cluster { .. } => cov_cluster(x, xtx_inv, u, cov_params),
-        OlsCovariance::Hac { .. } => cov_hac(x, xtx_inv, u, n, k, cov_params),
+        OlsCovariance::Hac { .. } => cov_hac(x, xtx_inv, u, n, k, intercept_col, cov_params),
         OlsCovariance::Newey { .. } => cov_newey(x, xtx_inv, u, n, k, df_residual, cov_params),
     }
 }
@@ -189,12 +194,13 @@ fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
 
 /// Newey-West (1994) automatic bandwidth selection (ivreg2 bw(auto) / abw).
 /// Returns bandwidth = optlag + 1. Per NW(1994) p.639, mstar = trunc(20*(T/100)^expo).
-/// f = (u .* X) * h with h=1 for exog cols, h=0 for constant (last col).
+/// f = (u .* X) * h with h=1 for exog cols, h=0 for the configured intercept.
 fn newey_west_1994_bandwidth(
     x: &Mat<f64>,
     u: &Col<f64>,
     n: usize,
     k: usize,
+    intercept_col: Option<usize>,
     kernel: &str,
 ) -> usize {
     let t = n as f64;
@@ -211,7 +217,9 @@ fn newey_west_1994_bandwidth(
     let h: Vec<f64> = if k <= 1 {
         vec![1.0; k]
     } else {
-        (0..k).map(|c| if c == k - 1 { 0.0 } else { 1.0 }).collect()
+        (0..k)
+            .map(|c| if Some(c) == intercept_col { 0.0 } else { 1.0 })
+            .collect()
     };
     let f: Vec<f64> = (0..n)
         .map(|i| {
@@ -256,6 +264,7 @@ fn cov_hac(
     u: &Col<f64>,
     n: usize,
     k: usize,
+    intercept_col: Option<usize>,
     cov_params: Option<&CovParams>,
 ) -> Result<Mat<f64>, String> {
     let (kernel, bandwidth) = match cov_params {
@@ -273,7 +282,7 @@ fn cov_hac(
         Some(q) if q > 0 => q as usize,
         Some(0) | Some(1) => 1usize, // bandwidth 0 or 1 => max_lag 0
         Some(_) => return Err("HAC bandwidth must be non-negative".to_string()),
-        None => newey_west_1994_bandwidth(x, u, n, k, kernel),
+        None => newey_west_1994_bandwidth(x, u, n, k, intercept_col, kernel),
     };
     let max_lag = bw.saturating_sub(1);
 
@@ -546,6 +555,7 @@ mod tests {
 
     #[test]
     fn test_hac_bartlett_with_lag() {
+        use yss_sci_linalg::{MatrixExt, Solve};
         let n = 50;
         let k = 2;
         let mut exog_data = Vec::with_capacity(n * k);
@@ -583,5 +593,90 @@ mod tests {
                 );
             }
         }
+
+        let data: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/diagnostics_reference.json"
+        ))
+        .unwrap();
+        let response: Vec<f64> = serde_json::from_value(data["y"].clone()).unwrap();
+        let predictors: Vec<Vec<f64>> = serde_json::from_value(data["x"].clone()).unwrap();
+        let n = response.len();
+        for constant in [true, false] {
+            let start = usize::from(constant);
+            let k = 2 + start;
+            let design = Mat::from_fn(n, k, |i, j| {
+                if constant && j == 0 {
+                    1.0
+                } else {
+                    predictors[j - start][i]
+                }
+            });
+            for bandwidth in [None, Some(5)] {
+                let fit = |order: &[usize]| {
+                    OLS {
+                        endog: Col::from_iter(response.iter().copied()),
+                        exog: Mat::from_fn(n, k, |i, j| design[(i, order[j])]),
+                        config: OlsOptions {
+                            constant,
+                            covariance: OlsCovariance::Hac {
+                                kernel: "bartlett".into(),
+                                bandwidth,
+                            },
+                        },
+                    }
+                    .fit()
+                    .unwrap()
+                };
+                let mut order = (0..k).collect::<Vec<_>>();
+                let expected = fit(&order);
+                order.swap(start, start + 1);
+                let reordered = fit(&order);
+                for i in 0..k {
+                    for j in 0..k {
+                        assert!(
+                            (reordered.cov_beta[(i, j)] - expected.cov_beta[(order[i], order[j])])
+                                .abs()
+                                < 1e-10,
+                            "HAC covariance must follow predictor order: constant={constant}, bandwidth={bandwidth:?}, ({i}, {j})"
+                        );
+                    }
+                }
+                if constant {
+                    let order = [1, 2, 0];
+                    let inverse = (design.transpose() * design.as_ref())
+                        .checked_cholesky()
+                        .unwrap()
+                        .solve(&Mat::identity(k, k));
+                    let at_end = compute_cov_beta(
+                        &Mat::from_fn(n, k, |i, j| design[(i, order[j])]),
+                        &Mat::from_fn(k, k, |i, j| inverse[(order[i], order[j])]),
+                        &expected.residuals,
+                        expected.df_residual,
+                        Some(k - 1),
+                        "HAC",
+                        Some(&CovParams::HAC {
+                            kernel: "bartlett".into(),
+                            bandwidth,
+                        }),
+                    )
+                    .unwrap();
+                    for i in 0..k {
+                        for j in 0..k {
+                            assert!(
+                                (at_end[(i, j)] - expected.cov_beta[(order[i], order[j])]).abs()
+                                    < 1e-10
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let single = Mat::from_fn(n, 1, |_, _| 1.0);
+        let residuals = Col::from_iter(response);
+        assert_eq!(
+            newey_west_1994_bandwidth(&single, &residuals, n, 1, Some(0), "bartlett"),
+            newey_west_1994_bandwidth(&single, &residuals, n, 1, None, "bartlett")
+        );
     }
 }

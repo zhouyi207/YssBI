@@ -1,5 +1,4 @@
 use super::common::*;
-use statrs::distribution::{ChiSquared, ContinuousCDF};
 use yss_sci_contract::{execution::*, multivariate::*};
 use yss_sci_linalg::{Mat, MatrixExt, Solve, Svd};
 
@@ -92,27 +91,9 @@ pub fn exploratory_factor(
     let variance_proportions = (0..k)
         .map(|j| (0..p).map(|i| loadings[(i, j)].powi(2)).sum::<f64>() / p as f64)
         .collect();
-    let mut correlation_squares = 0.0;
-    let mut partial_squares = 0.0;
-    for i in 0..p {
-        for j in 0..i {
-            correlation_squares += corr[(i, j)].powi(2);
-            partial_squares += inverse[(i, j)].powi(2) / (inverse[(i, i)] * inverse[(j, j)]);
-        }
-    }
-    let kmo = if correlation_squares + partial_squares > 0.0 {
-        Some(correlation_squares / (correlation_squares + partial_squares))
-    } else {
-        None
-    };
     let lower = factor.lower();
     let log_determinant = (0..p).map(|i| 2.0 * lower[(i, i)].ln()).sum::<f64>();
-    let bartlett_chi_square =
-        finite(-((n - 1) as f64 - (2 * p + 5) as f64 / 6.0) * log_determinant)?.max(0.0);
-    let bartlett_df = p * (p - 1) / 2;
-    let bartlett_p_value = ChiSquared::new(bartlett_df as f64)
-        .map_err(|_| failed())?
-        .sf(bartlett_chi_square);
+    let adequacy = super::adequacy::assess(&corr, &inverse, n, log_determinant, control)?;
     let report = FactorReport {
         method: "principal_axis_factor".into(),
         observations: n,
@@ -127,10 +108,10 @@ pub fn exploratory_factor(
         uniquenesses: communalities.iter().map(|v| 1.0 - v).collect(),
         communalities,
         variance_proportions,
-        kmo,
-        bartlett_chi_square,
-        bartlett_df,
-        bartlett_p_value,
+        kmo: adequacy.kmo,
+        bartlett_chi_square: adequacy.bartlett_chi_square,
+        bartlett_df: adequacy.bartlett_df,
+        bartlett_p_value: adequacy.bartlett_p_value,
         score_method: "regression".into(),
     };
     Ok(OrdinationOutput {

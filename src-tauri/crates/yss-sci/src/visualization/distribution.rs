@@ -1,4 +1,5 @@
 use super::*;
+use crate::descriptive::quantile_sorted as quantile;
 use yss_sci_contract::density::KernelDensityInput;
 use yss_sci_contract::visualization::*;
 
@@ -8,14 +9,6 @@ fn sorted(values: &[f64], control: &ScientificExecutionControl) -> Result<Vec<f6
     sorted.sort_by(f64::total_cmp);
     control.check()?;
     Ok(sorted)
-}
-
-fn quantile(values: &[f64], probability: f64) -> f64 {
-    let position = probability * (values.len() - 1) as f64;
-    let lower = position.floor() as usize;
-    let upper = position.ceil() as usize;
-    let fraction = position - lower as f64;
-    values[lower] * (1.0 - fraction) + values[upper] * fraction
 }
 
 pub fn ecdf(values: &[f64], control: &ScientificExecutionControl) -> Result<XyPlot> {

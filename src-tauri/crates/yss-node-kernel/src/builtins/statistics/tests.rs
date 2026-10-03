@@ -1,6 +1,7 @@
 use super::common::field;
 mod causal_models;
 mod diagnostics;
+mod meta;
 mod panel_models;
 mod spatial;
 mod survival;
@@ -251,6 +252,76 @@ fn anova_adapters_preserve_exact_labels_and_enforce_shapes_and_parameters() {
         ),
         Err(KernelError::InvalidParameter)
     ));
+}
+
+#[test]
+fn classical_count_tables_admit_their_actual_workspace_before_computation() {
+    let relations = crate::tests::relations();
+    let distinct = RuntimeValue::List((0..96).map(int).collect());
+    let inputs = [distinct.clone(), distinct];
+    let mut control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    control.max_input_bytes = 32 * 1024;
+    let outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let mut inv = KernelInvocation {
+        relations: &relations,
+        inputs: &inputs,
+        input_keys: &["row", "column"],
+        parameters: Default::default(),
+        outputs: &outputs,
+        control: &control,
+    };
+    let kernels = KernelRegistry::default();
+    let id = KernelId::new("yssbi.statistics.test.chisquare.crosstab".into()).unwrap();
+    // Encoded columns fit, but the actual 96 by 96 count matrix alone exceeds the budget.
+    assert!(matches!(
+        kernels.execute(&id, &inv),
+        Err(KernelError::BudgetExceeded)
+    ));
+    let admitted = KernelControl {
+        cancellation: control.cancellation.clone(),
+        deadline: control.deadline,
+        max_input_bytes: 256 * 1024,
+    };
+    inv.control = &admitted;
+    assert!(kernels.execute(&id, &inv).is_ok());
+
+    // Equal row counts with only two levels must not be charged as a 96 by 96 table.
+    let repeated = RuntimeValue::List((0..96).map(|i| int(i % 2)).collect());
+    let repeated_inputs = [repeated.clone(), repeated];
+    inv.inputs = &repeated_inputs;
+    inv.control = &control;
+    assert!(kernels.execute(&id, &inv).is_ok());
+
+    // A small physical dictionary can expand to much larger logical string data.
+    let labels = Arc::new(arrow_array::StringArray::from(vec![
+        "a".repeat(512),
+        "b".repeat(512),
+    ]));
+    let dictionary = arrow_array::DictionaryArray::<arrow_array::types::Int8Type>::try_new(
+        arrow_array::Int8Array::from((0..256).map(|i| (i % 2) as i8).collect::<Vec<_>>()),
+        labels,
+    )
+    .unwrap();
+    let mut categories = Vec::new();
+    let mut bytes = 0;
+    assert!(matches!(
+        super::classical::append_category_batch(&dictionary, &mut categories, &mut bytes, 0, &inv),
+        Err(KernelError::BudgetExceeded)
+    ));
+    assert!(categories.len() < 256);
+    categories.clear();
+    bytes = 0;
+    inv.control = &admitted;
+    super::classical::append_category_batch(&dictionary, &mut categories, &mut bytes, 0, &inv)
+        .unwrap();
+    assert_eq!(categories.len(), 256);
+    assert_eq!(categories[0].as_ref(), format!("s:{}", "a".repeat(512)));
 }
 
 #[test]
@@ -581,7 +652,7 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
                     ("marginal_at", string("")),
                     ("classification", flag(true)),
                     ("cutoff", number(0.5)),
-                    ("hypothesis_test", flag(false)),
+                    ("hypothesis_test", flag(true)),
                     ("hypothesis", string("x1 = 0")),
                 ];
                 if method == "logit" {
@@ -594,6 +665,10 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
         .unwrap();
         assert!(field(&summary[0], "marginal_effects").is_ok());
         assert!(field(&summary[0], "classification").is_ok());
+        assert_eq!(
+            field(field(&summary[0], "hypothesis_test").unwrap(), "test_type").unwrap(),
+            &string("z")
+        );
         assert_eq!(field(&summary[0], "odds_ratios").is_ok(), method == "logit");
         assert!(field(&fit[0], "report").is_err());
         assert_eq!(
@@ -640,18 +715,81 @@ fn binary_and_prais_nodes_honor_options_and_predict_without_refitting() {
             "yssbi.statistics.prais.summary",
             &[("model", fit[0].clone())],
             &[
-                ("hypothesis_test", flag(false)),
+                ("hypothesis_test", flag(true)),
                 ("hypothesis", string("x1 = 0")),
             ],
             1,
         )
         .unwrap();
         assert!(field(field(&summary[0], "diagnostic_info").unwrap(), "prais_info").is_ok());
+        assert_eq!(
+            field(field(&summary[0], "hypothesis_test").unwrap(), "test_type").unwrap(),
+            &string("t")
+        );
     }
 }
 
 #[test]
 fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
+    let assert_first_stage_display = |summary: &RuntimeValue| {
+        let first_stage = field(summary, "firstStage").unwrap();
+        let RuntimeValue::List(equations) = field(first_stage, "equations").unwrap() else {
+            panic!("first-stage equations")
+        };
+        let RuntimeValue::List(rows) = field(summary, "first_stage_rows").unwrap() else {
+            panic!("first-stage display rows")
+        };
+        let RuntimeValue::Scalar(TabularScalar::String(text)) =
+            field(summary, "first_stage_equations").unwrap()
+        else {
+            panic!("first-stage equation text")
+        };
+        let mut row_index = 0;
+        for equation in equations.iter() {
+            let RuntimeValue::List(names) = field(equation, "var_names").unwrap() else {
+                panic!("first-stage labels")
+            };
+            for (index, name) in names.iter().enumerate() {
+                let row = &rows[row_index];
+                assert_eq!(
+                    field(row, "equation").unwrap(),
+                    field(equation, "endog_name").unwrap()
+                );
+                assert_eq!(field(row, "variable").unwrap(), name);
+                for (display, source) in [
+                    ("estimate", "betas"),
+                    ("standard_error", "stds"),
+                    ("statistic", "tvalues"),
+                    ("p_value", "pvalues"),
+                    ("ci_lower", "conf_int_left"),
+                    ("ci_upper", "conf_int_right"),
+                ] {
+                    let RuntimeValue::List(values) = field(equation, source).unwrap() else {
+                        panic!("first-stage coefficient values")
+                    };
+                    assert_eq!(field(row, display).unwrap(), &values[index]);
+                }
+                row_index += 1;
+            }
+            let RuntimeValue::Scalar(TabularScalar::String(response)) =
+                field(equation, "endog_name").unwrap()
+            else {
+                panic!("first-stage response label")
+            };
+            assert!(text.contains(&format!("{response} = ")));
+        }
+        assert_eq!(rows.len(), row_index);
+        let RuntimeValue::List(weak_rows) = field(summary, "weak_instrument_rows").unwrap() else {
+            panic!("weak-instrument rows")
+        };
+        let statistics = field(first_stage, "statistics").unwrap();
+        for name in ["min_eigenvalue", "partial_r2", "f_stat", "f_p_value"] {
+            assert_eq!(
+                field(&weak_rows[0], name).unwrap(),
+                field(statistics, name).unwrap()
+            );
+        }
+    };
     let n = 120;
     let eps = noise(n * 4);
     let x = eps[..n].to_vec();
@@ -683,8 +821,19 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         .unwrap();
         assert!(field(&fit[0], "hausman").is_err());
         assert!(field(&fit[0], "firstStage").is_err());
+        assert_eq!(field(&fit[0], "responseName").unwrap(), &string("response"));
+        assert_eq!(
+            field(&fit[0], "parameterNames").unwrap(),
+            &RuntimeValue::List(vec![string("_cons"), string("x1"), string("x2")].into())
+        );
+        assert_eq!(
+            field(&fit[0], "instrumentNames").unwrap(),
+            &RuntimeValue::List(vec![string("z1"), string("z2")].into())
+        );
+        assert_eq!(field(&fit[0], "fitted").unwrap(), &fit[1]);
+        assert_eq!(field(&fit[0], "residuals").unwrap(), &fit[2]);
         let mut options = vec![
-            ("hypothesis_test", flag(false)),
+            ("hypothesis_test", flag(true)),
             ("hypothesis", string("x1 = 0")),
             ("model_summary", flag(true)),
             ("coefficient_table", flag(true)),
@@ -701,6 +850,11 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
             1,
         )
         .unwrap();
+        assert_first_stage_display(&summary[0]);
+        assert_eq!(
+            field(field(&summary[0], "hypothesisTest").unwrap(), "test_type").unwrap(),
+            &string("z")
+        );
         assert_eq!(
             field(
                 field(field(&summary[0], "firstStage").unwrap(), "statistics").unwrap(),
@@ -760,6 +914,216 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
             field(&basic[0], "coefficients").unwrap(),
             field(&summary[0], "coefficients").unwrap()
         );
+    }
+
+    // Orthogonal signal/noise frequencies give each endogenous variable its own
+    // analytic Shea R², including when the dynamic input order changes.
+    let n = 128;
+    let angle = |row: usize| 2.0 * std::f64::consts::PI * row as f64 / n as f64;
+    let signal = [2.0_f64, 1.5, 0.8];
+    let noise = [1.0_f64, 0.7, 0.5];
+    let x = (0..n).map(|i| (4.0 * angle(i)).cos()).collect::<Vec<_>>();
+    let instruments = (1..=3)
+        .map(|j| {
+            (0..n)
+                .map(|i| (j as f64 * angle(i)).sin())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let endogenous = (0..3)
+        .map(|j| {
+            (0..n)
+                .map(|i| {
+                    signal[j] * instruments[j][i]
+                        + noise[j] * ((j + 1) as f64 * angle(i)).cos()
+                        + 0.3 * (j + 1) as f64 * x[i]
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let y = (0..n)
+        .map(|i| {
+            1.0 + 0.7 * x[i] + 2.0 * endogenous[0][i] - 0.5 * endogenous[1][i]
+                + 0.4 * endogenous[2][i]
+                + (5.0 * angle(i)).cos()
+        })
+        .collect::<Vec<_>>();
+    for method in ["2sls", "liml"] {
+        for order in [[0, 1, 2], [2, 0, 1]] {
+            let mut inputs = vec![("response", series(&y)), ("predictors", series(&x))];
+            inputs.extend(
+                order
+                    .iter()
+                    .map(|&j| ("endogenous", series(&endogenous[j]))),
+            );
+            inputs.extend(
+                instruments
+                    .iter()
+                    .map(|values| ("instruments", series(values))),
+            );
+            let fit = run(
+                &format!("yssbi.statistics.iv.{method}.fit"),
+                &inputs,
+                &[
+                    ("constant", flag(true)),
+                    ("covariance", string("nonrobust")),
+                    ("small", flag(false)),
+                ],
+                3,
+            )
+            .unwrap();
+            let mut options = vec![
+                ("model_summary", flag(false)),
+                ("coefficient_table", flag(false)),
+                ("first_stage", flag(true)),
+                ("overidentification", flag(false)),
+                ("hypothesis_test", flag(false)),
+                ("hypothesis", string("x1 = 0")),
+            ];
+            if method == "2sls" {
+                options.push(("endogeneity", flag(false)));
+            }
+            let summary = run(
+                &format!("yssbi.statistics.iv.{method}.summary"),
+                &[("model", fit[0].clone())],
+                &options,
+                1,
+            )
+            .unwrap();
+            assert_first_stage_display(&summary[0]);
+            let first_stage = field(&summary[0], "firstStage").unwrap();
+            let RuntimeValue::List(shea) =
+                field(field(first_stage, "statistics").unwrap(), "shea_partial_r2").unwrap()
+            else {
+                panic!("Shea values")
+            };
+            let RuntimeValue::List(equations) = field(first_stage, "equations").unwrap() else {
+                panic!("equations")
+            };
+            assert_eq!(shea.len(), order.len());
+            for (position, &j) in order.iter().enumerate() {
+                let expected = signal[j].powi(2) / (signal[j].powi(2) + noise[j].powi(2));
+                let actual = super::super::numeric_input(Some(&shea[position])).unwrap();
+                assert!(
+                    (actual - expected).abs() < 1e-10,
+                    "{method} endogenous {j}: {actual} != {expected}"
+                );
+                assert_eq!(
+                    field(&equations[position], "endog_name").unwrap(),
+                    &string(&format!("x{}", position + 2))
+                );
+            }
+        }
+    }
+    let response = (1..=16).map(f64::from).collect::<Vec<_>>();
+    let constant_column = vec![1.0; response.len()];
+    let fit = run(
+        "yssbi.statistics.iv.2sls.fit",
+        &[
+            ("response", series(&response)),
+            ("endogenous", series(&constant_column)),
+            ("instruments", series(&constant_column)),
+        ],
+        &[
+            ("constant", flag(false)),
+            ("covariance", string("nonrobust")),
+            ("small", flag(false)),
+        ],
+        3,
+    )
+    .unwrap();
+    let summary = run(
+        "yssbi.statistics.iv.2sls.summary",
+        &[("model", fit[0].clone())],
+        &[
+            ("model_summary", flag(false)),
+            ("coefficient_table", flag(false)),
+            ("first_stage", flag(true)),
+            ("overidentification", flag(false)),
+            ("endogeneity", flag(true)),
+            ("hypothesis_test", flag(false)),
+            ("hypothesis", string("x1 = 0")),
+        ],
+        1,
+    )
+    .unwrap();
+    let statistics = field(field(&summary[0], "firstStage").unwrap(), "statistics").unwrap();
+    assert_eq!(
+        field(statistics, "r2_adjusted").unwrap(),
+        &RuntimeValue::Scalar(TabularScalar::Null),
+        "undefined centered adjusted R² is unavailable"
+    );
+    assert_eq!(
+        field(field(&summary[0], "endogeneity").unwrap(), "hausman").unwrap(),
+        &RuntimeValue::Scalar(TabularScalar::Null),
+        "zero-rank Hausman is unavailable"
+    );
+    assert!(
+        !matches!(
+            field(field(&summary[0], "endogeneity").unwrap(), "endogenous").unwrap(),
+            RuntimeValue::Scalar(TabularScalar::Null)
+        ),
+        "the independent endogenous test remains available"
+    );
+    assert!(matches!(
+        run(
+            "yssbi.statistics.diagnostic.hausman",
+            &[("model", fit[0].clone())],
+            &[],
+            1,
+        ),
+        Err(KernelError::ScientificFailure)
+    ));
+    for (design, has_hausman) in [([1.0, 1.0], true), ([1.0, 0.0], false)] {
+        let fit = run(
+            "yssbi.statistics.iv.2sls.fit",
+            &[
+                ("response", series(&[1.0, 2.0])),
+                ("endogenous", series(&design)),
+                ("instruments", series(&design)),
+            ],
+            &[
+                ("constant", flag(false)),
+                ("covariance", string("nonrobust")),
+                ("small", flag(false)),
+            ],
+            3,
+        )
+        .unwrap();
+        let summary = run(
+            "yssbi.statistics.iv.2sls.summary",
+            &[("model", fit[0].clone())],
+            &[
+                ("model_summary", flag(false)),
+                ("coefficient_table", flag(false)),
+                ("first_stage", flag(false)),
+                ("overidentification", flag(false)),
+                ("endogeneity", flag(true)),
+                ("hypothesis_test", flag(false)),
+                ("hypothesis", string("x1 = 0")),
+            ],
+            1,
+        )
+        .unwrap();
+        let endogeneity = field(&summary[0], "endogeneity").unwrap();
+        assert_eq!(
+            field(endogeneity, "endogenous").unwrap(),
+            &RuntimeValue::Scalar(TabularScalar::Null),
+            "zero denominator degrees of freedom makes the combined test unavailable"
+        );
+        assert_eq!(
+            !matches!(
+                field(endogeneity, "hausman").unwrap(),
+                RuntimeValue::Scalar(TabularScalar::Null)
+            ),
+            has_hausman
+        );
+        if !has_hausman {
+            assert_eq!(
+                field(&summary[0], "endogeneityUnavailable").unwrap(),
+                &string("insufficient_residual_variation_or_degrees_of_freedom")
+            );
+        }
     }
 }
 
@@ -930,6 +1294,39 @@ fn time_series_nodes_preserve_multivariate_postestimation_results() {
     .unwrap();
     assert!(field(&basic[0], "serialTests").is_err());
     assert!(field(&basic[0], "stability").is_err());
+    for extra_row in [false, true] {
+        let mut malformed = fit[0].clone();
+        let RuntimeValue::Record(fields) = &mut malformed else {
+            panic!("expected fitted model");
+        };
+        let RuntimeValue::List(rows) = Arc::make_mut(fields).get_mut("sigma").unwrap() else {
+            panic!("expected covariance matrix");
+        };
+        if extra_row {
+            *rows = rows.iter().cloned().chain([rows[0].clone()]).collect();
+        } else {
+            let RuntimeValue::List(columns) = &mut Arc::make_mut(rows)[0] else {
+                panic!("expected covariance row");
+            };
+            *columns = columns.iter().cloned().chain([number(0.0)]).collect();
+        }
+        assert!(matches!(
+            run(
+                "yssbi.statistics.var.summary",
+                &[("model", malformed)],
+                &[
+                    ("model_summary", flag(true)),
+                    ("coefficient_table", flag(false)),
+                    ("lag_exclusion", flag(false)),
+                    ("serial_tests", flag(false)),
+                    ("stability", flag(false)),
+                    ("serial_lags", int(2)),
+                ],
+                1,
+            ),
+            Err(KernelError::ScientificFailure)
+        ));
+    }
     run(
         "yssbi.statistics.var.lag_order",
         &inputs,
@@ -1161,6 +1558,89 @@ fn weighted_diagnostics_and_cluster_covariance_use_fitted_observations() {
         ),
         Err(KernelError::ScientificFailure)
     ));
+
+    // Two predictors must not be mistaken for an intercept and one predictor.
+    let other = x.iter().map(|v| v.sin()).collect::<Vec<_>>();
+    let mut intercept_checks = Vec::new();
+    for method in ["OLS", "WLS"] {
+        let mut inputs = vec![
+            ("response", series(&y)),
+            ("predictors", series(&x)),
+            ("predictors", series(&other)),
+        ];
+        if method == "WLS" {
+            inputs.push(("weights", series(&weights)));
+        }
+        let no_intercept = run(
+            "yssbi.statistics.linear.fit",
+            &inputs,
+            &[
+                ("method", string(method)),
+                ("constant", flag(false)),
+                ("covariance", string("nonrobust")),
+            ],
+            3,
+        )
+        .unwrap();
+        for test in ["white", "information_matrix"] {
+            let result = run(
+                &format!("yssbi.statistics.diagnostic.{test}"),
+                &[("model", no_intercept[0].clone())],
+                &[],
+                1,
+            );
+            intercept_checks.push((
+                method,
+                test,
+                matches!(result, Err(KernelError::ScientificFailure)),
+            ));
+        }
+        let summary = run(
+            "yssbi.statistics.linear.summary",
+            &[("model", no_intercept[0].clone())],
+            &[
+                ("equation", flag(false)),
+                ("model_summary", flag(false)),
+                ("anova", flag(false)),
+                ("coefficient_table", flag(false)),
+                ("coefficient_chart", flag(false)),
+                ("diagnostics", flag(true)),
+                ("residual_plot", flag(false)),
+                ("observations", flag(false)),
+                ("acf_pacf", flag(false)),
+                ("serial_tests", flag(false)),
+                ("hypothesis_test", flag(false)),
+            ],
+            1,
+        )
+        .unwrap();
+        let RuntimeValue::LinearRegression(model) = &summary[0] else {
+            panic!("summary must retain the fitted model")
+        };
+        let diagnostics = model
+            .summary
+            .as_ref()
+            .unwrap()
+            .diagnostics
+            .as_ref()
+            .unwrap();
+        for name in ["White", "Information matrix"] {
+            let entry = diagnostics
+                .tests
+                .iter()
+                .find(|entry| entry.name == name)
+                .unwrap();
+            intercept_checks.push((
+                method,
+                name,
+                entry.value.is_none() && entry.unavailable_reason.is_some(),
+            ));
+        }
+    }
+    assert!(
+        intercept_checks.iter().all(|(_, _, rejected)| *rejected),
+        "White/IM require the fitted intercept: {intercept_checks:?}"
+    );
 }
 
 #[test]
@@ -1245,6 +1725,46 @@ fn did_randomization_node_is_reproducible_and_reports_valid_permutations() {
     assert_eq!(did.len(), 1);
     assert!(field(&did[0], "model").is_ok());
     assert!(field(&did[0], "summary").is_ok());
+
+    let zero_response = vec![0.0; n];
+    let error = yss_sci_runtime::causal::did::randomization_test(
+        yss_sci_contract::causal::did::DidRandomizationInput {
+            constant: true,
+            covariance: "nonrobust".into(),
+            observed_coefficient: None,
+            response: zero_response.clone(),
+            predictors: vec![],
+            entity: entity.clone(),
+            time: time.clone(),
+            treat: treat.clone(),
+            post: post.clone(),
+            repetitions: 20,
+            seed: 42,
+        },
+        &yss_sci_contract::execution::ScientificExecutionControl {
+            cancellation: Default::default(),
+            deadline: Instant::now() + Duration::from_secs(5),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        yss_sci_contract::causal::did::DidFakeGroupError::FitFailed { diagnostic }
+            if diagnostic == "OLS coefficient t-statistic is undefined"
+    ));
+    let mut undefined_inputs = inputs.clone();
+    undefined_inputs[0].1 = series(&zero_response);
+    let mut nonrobust_parameters = parameters.clone();
+    nonrobust_parameters[3].1 = string("nonrobust");
+    assert!(matches!(
+        run(
+            "yssbi.statistics.panel.did.randomization",
+            &undefined_inputs,
+            &nonrobust_parameters,
+            1,
+        ),
+        Err(KernelError::ScientificFailure)
+    ));
 }
 
 // Two separate boundary regressions: estimator-scale panel prediction and partial
@@ -1321,6 +1841,78 @@ fn panel_estimation_predictions_and_comparison_failures_are_explicit() {
     assert_eq!(field(&statuses[0], "status").unwrap(), &string("success"));
     assert_eq!(field(&statuses[1], "status").unwrap(), &string("failed"));
     assert!(field(&statuses[1], "failure").is_ok());
+
+    // Finite observations can still produce undefined model statistics. Keep the
+    // typed result visible to validation before JSON would turn them into null.
+    let predictor = vec![-1.0, -1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0];
+    let response = predictor.iter().map(|x| 1.0 + 2.0 * x).collect::<Vec<_>>();
+    let entity = (0..8).map(|i| (i / 2) as f64).collect::<Vec<_>>();
+    let time = (0..8).map(|i| (i % 2) as f64).collect::<Vec<_>>();
+    let undefined = yss_sci_runtime::panel::fit_model(
+        response.clone(),
+        vec![predictor.clone()],
+        entity.clone(),
+        time.clone(),
+        yss_sci_contract::panel::PanelOptions {
+            estimator: yss_sci_contract::panel::PanelEstimator::Between,
+            effects: yss_sci_contract::panel::PanelEffects::Entity,
+            constant: true,
+            covariance: "nonrobust".into(),
+        },
+    )
+    .unwrap();
+    assert!(undefined.statistics.linear.f_statistic.is_infinite());
+    let inputs = [
+        ("response", series(&response)),
+        ("predictors", series(&predictor)),
+        ("entity", series(&entity)),
+        ("time", series(&time)),
+    ];
+    for (id, estimator_key, output_count) in [
+        ("yssbi.statistics.panel.fit", "estimator", 3),
+        ("yssbi.statistics.panel.compare", "estimators", 1),
+    ] {
+        let result = run(
+            id,
+            &inputs,
+            &[
+                ("constant", flag(true)),
+                (estimator_key, string("between")),
+                ("effects", string("entity")),
+                ("covariance", string("nonrobust")),
+            ],
+            output_count,
+        );
+        assert!(
+            matches!(result, Err(KernelError::NonFiniteResult)),
+            "{id}: {result:?}"
+        );
+    }
+
+    // Undefined 0/0 coefficient inference must fail through the scientific
+    // boundary rather than pass NaN to the distribution implementation.
+    let zero_response = vec![0.0; 8];
+    let predictor = (0..8).map(|i| i as f64).collect::<Vec<_>>();
+    let result = run(
+        "yssbi.statistics.panel.fit",
+        &[
+            ("response", series(&zero_response)),
+            ("predictors", series(&predictor)),
+            ("entity", series(&entity)),
+            ("time", series(&time)),
+        ],
+        &[
+            ("constant", flag(true)),
+            ("estimator", string("between")),
+            ("effects", string("entity")),
+            ("covariance", string("nonrobust")),
+        ],
+        3,
+    );
+    assert!(
+        matches!(result, Err(KernelError::ScientificFailure)),
+        "{result:?}"
+    );
 }
 #[test]
 fn selected_lag_var_and_adf_collections_keep_real_sample_and_failure_information() {
@@ -1375,6 +1967,51 @@ fn selected_lag_var_and_adf_collections_keep_real_sample_and_failure_information
     assert_eq!(field(&tests[0], "series").unwrap(), &string("series1"));
     assert_eq!(field(&tests[0], "seriesIndex").unwrap(), &int(0));
     assert!(field(&adf[0], "report_display").is_ok());
+
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../yss-sci/tests/fixtures/panel_category_reference.json"
+    ))
+    .unwrap();
+    let data = &fixture["nonstationary"];
+    let response: Vec<f64> = serde_json::from_value(data["response"].clone()).unwrap();
+    let entity: Vec<f64> = serde_json::from_value(data["entity"].clone()).unwrap();
+    let input = response
+        .iter()
+        .zip(&entity)
+        .filter_map(|(&value, &group)| (group == 0.0).then_some(value))
+        .collect::<Vec<_>>();
+    for case in data["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["method"] == "unit_root" && case["regression"] != "constant")
+    {
+        let regression = case["regression"].as_str().unwrap();
+        let result = run(
+            "yssbi.statistics.adf.test",
+            &[("series", series(&input))],
+            &[
+                ("lags", int(case["lags"].as_i64().unwrap())),
+                ("regression", string(regression)),
+            ],
+            1,
+        )
+        .unwrap();
+        for (actual_key, reference_key) in [("statistic", "statistic"), ("pValue", "p_value")] {
+            let actual =
+                super::super::numeric_input(Some(field(&result[0], actual_key).unwrap())).unwrap();
+            let reference = case["entity_tests"][0][reference_key].as_f64().unwrap();
+            assert!(
+                (actual - reference).abs() < 1e-7 * (1.0 + reference.abs()),
+                "{regression} {actual_key}: {actual} != {reference}"
+            );
+        }
+        assert_eq!(field(&result[0], "useTDistribution").unwrap(), &flag(false));
+        assert_eq!(
+            field(&result[0], "regression").unwrap(),
+            &string(regression)
+        );
+    }
 }
 
 // Validate real emitted descriptor data, including serde field renames, instead
@@ -1540,6 +2177,39 @@ fn scale_limits_mixed_estimators_preserve_replicated_reference_fits() {
 
 #[test]
 fn scale_limits_classification_and_classical_groups_keep_valid_results() {
+    for (id, parameter, null, expected_statistic, expected_p) in [
+        (
+            "yssbi.statistics.test.t.one_sample",
+            "null_mean",
+            2.0,
+            0.0,
+            1.0,
+        ),
+        (
+            "yssbi.statistics.test.wilcoxon.one_sample",
+            "null_median",
+            0.0,
+            6.0 / 14.0_f64.sqrt(),
+            0.25,
+        ),
+    ] {
+        let result = run(
+            id,
+            &[("series", series(&[1.0, 2.0, 3.0]))],
+            &[
+                (parameter, number(null)),
+                ("alternative", string("two_sided")),
+            ],
+            1,
+        )
+        .unwrap();
+        let statistic =
+            super::super::numeric_input(Some(field(&result[0], "statistic").unwrap())).unwrap();
+        let p = super::super::numeric_input(Some(field(&result[0], "p_value").unwrap())).unwrap();
+        assert!((statistic - expected_statistic).abs() < 1e-12, "{id}");
+        assert!((p - expected_p).abs() < 1e-12, "{id}");
+    }
+
     let first = (0..600).map(|i| (i % 300) as f64).collect::<Vec<_>>();
     let second = (0..600)
         .map(|i| {

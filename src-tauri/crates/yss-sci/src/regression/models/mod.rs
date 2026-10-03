@@ -1,12 +1,14 @@
 //! Regression estimators, sharing controlled numerical preparation and structured results.
 pub(crate) mod common;
+pub(crate) mod glm;
 mod likelihood;
 mod nonlinear;
 mod regularized;
 mod robust;
 mod workflows;
 
-pub use likelihood::{firth_logit, glm, likelihood};
+pub use glm::glm;
+pub use likelihood::{firth_logit, likelihood};
 pub use nonlinear::{
     automatic_spline_knots, curve, deming, nonlinear, nonlinear_formula, restricted_cubic_spline,
 };

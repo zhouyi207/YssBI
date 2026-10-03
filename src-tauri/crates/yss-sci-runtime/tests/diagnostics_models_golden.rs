@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::time::{Duration, Instant};
+use yss_sci_contract::regression::fit::FittedRegression;
 use yss_sci_contract::{
     diagnostics::model::*,
     execution::*,
@@ -93,12 +94,12 @@ fn gaussian_criteria_comparison_and_influence_match_statsmodels_above_512_rows()
         let full = linear(&f, 3, weighted);
         let expected = &f["gaussian"][name];
         check_ic(
-            &information_criteria(DiagnosticModel::Linear(&full), &control()).unwrap(),
+            &information_criteria(FittedRegression::Linear(&full), &control()).unwrap(),
             &expected["criteria"],
         );
         let compared = compare_models(
-            DiagnosticModel::Linear(&r),
-            DiagnosticModel::Linear(&full),
+            FittedRegression::Linear(&r),
+            FittedRegression::Linear(&full),
             ComparisonMethod::All,
             &control(),
         )
@@ -144,8 +145,8 @@ fn binary_likelihood_and_expected_information_score_match_logit_and_probit_refer
         let full = binary(&f, 3, link);
         let expected = &f["binary"][name];
         let r = compare_models(
-            DiagnosticModel::Binary(&restricted),
-            DiagnosticModel::Binary(&full),
+            FittedRegression::Binary(&restricted),
+            FittedRegression::Binary(&full),
             ComparisonMethod::All,
             &control(),
         )
@@ -346,8 +347,8 @@ fn model_comparisons_reject_mismatched_samples_nonnesting_and_invalid_execution(
     let restricted = linear(&f, 1, false);
     let compare = |r: &LinearRegressionResult, f: &LinearRegressionResult| {
         compare_models(
-            DiagnosticModel::Linear(r),
-            DiagnosticModel::Linear(f),
+            FittedRegression::Linear(r),
+            FittedRegression::Linear(f),
             ComparisonMethod::All,
             &control(),
         )
@@ -367,7 +368,7 @@ fn model_comparisons_reject_mismatched_samples_nonnesting_and_invalid_execution(
         ScientificComputationError::Cancelled
     );
     assert_eq!(
-        information_criteria(DiagnosticModel::Linear(&full), &cancelled).unwrap_err(),
+        information_criteria(FittedRegression::Linear(&full), &cancelled).unwrap_err(),
         ScientificComputationError::Cancelled
     );
     let mut deadline = control();
