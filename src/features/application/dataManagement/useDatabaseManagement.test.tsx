@@ -183,7 +183,21 @@ describe("useDatabaseManagement revision authority", () => {
                 name: "Imported sales",
                 rowCount: 1,
                 columnCount: 1,
-                columns: [{ name: "value", type: "Int64" }],
+                columns: [
+                  {
+                    name: "value",
+                    type: "Int64",
+                    physical: "Int64",
+                    semantic: null,
+                    supportedSemanticTypes: [
+                      "Numeric",
+                      "Categorical",
+                      "Ordinal",
+                      "Binary",
+                      "Identifier",
+                    ] as const,
+                  },
+                ],
               },
             });
         }),
@@ -223,7 +237,21 @@ describe("useDatabaseManagement revision authority", () => {
     expect(useResourceStore.getState().databases["imported-sales"]).toMatchObject({
       name: "Imported sales",
       rowCount: 1,
-      columns: [{ name: "value", type: "Int64" }],
+      columns: [
+        {
+          name: "value",
+          type: "Int64",
+          physical: "Int64",
+          semantic: null,
+          supportedSemanticTypes: [
+            "Numeric",
+            "Categorical",
+            "Ordinal",
+            "Binary",
+            "Identifier",
+          ] as const,
+        },
+      ],
     });
     uiStore.closeModal(notice.id);
     await noticeDismissed;

@@ -21,7 +21,21 @@ const metadata: DatabaseMetadataResult = {
   dataRevision: "1",
   id: database.id,
   name: "Sales",
-  columns: [{ name: "value", type: "Float64" }],
+  columns: [
+    {
+      name: "value",
+      type: "Float64",
+      physical: "Float64",
+      semantic: null,
+      supportedSemanticTypes: [
+        "Numeric",
+        "Categorical",
+        "Ordinal",
+        "Binary",
+        "Identifier",
+      ] as const,
+    },
+  ],
   rowCount: 2,
   columnCount: 1,
 };
@@ -133,6 +147,8 @@ it("initializes complete semantic mappings without replacing existing labels or 
   const column: ColumnInfo = {
     name: "value",
     type: "Utf8",
+    physical: "Utf8",
+    supportedSemanticTypes: ["Categorical", "Ordinal", "Binary", "Text", "Identifier"],
     semantic: {
       kind: "Ordinal",
       numeric: null,

@@ -121,7 +121,7 @@ Graph 只读快照与函数详情直接读取该 owner。元数据属于项目�
 `readColumnSemanticDraft` 沿用同一读取依据，值域设置通过 `get_column_values` 获取完整去重值并与已有映射合并，保留已有标签、顺序及当前数据中未出现的已声明取值；只生成局部草稿，不写入资源投影。精确取值保持字符串，新增映射的标签默认等于原始值；值域编辑、顺序调整及数值约束统一由 Details 对话框确认，再走既有数据库修改入口。
 数据库元数据在 `services/database/databaseWireParser` 使用模块级 Zod schema 校验一次；项目 schema
 查询与单库读取、导入共用列结构，复用已有语义 guard。列名唯一、列数相符、计数为非负安全整数；
-列的 `supportedSemanticTypes` 由后端依据 Physical 与写入兼容规则生成，wire 校验类型合法且不重复；投影保留该列表及未变引用，Details 直接使用，Physical 改变后随新元数据更新选项。
+列的 `physical`、`semantic` 和 `supportedSemanticTypes` 均为必传字段，只有 `semantic` 的值可以为 `null`；投影直接使用当前契约，不从显示用的 `type` 推导 Physical，也不补充缺失字段。`supportedSemanticTypes` 由后端依据 Physical 与写入兼容规则生成，wire 校验类型合法且不重复；投影保留该列表及未变引用，Details 直接使用，Physical 改变后随新元数据更新选项。
 单库读取核对请求 ID，项目映射核对键与 ID，Application 再核对映射成员与同版索引一致。
 数据库修改响应的 `data` 按元数据、编辑状态或 null 校验，回执复用原资源 wire parser。
 索引、资源回执和元数据共用数据库引擎 guard。Application 只接收已验证的元数据，

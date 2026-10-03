@@ -16,7 +16,21 @@ it("limits database metadata writes and clears their declarations with the resou
   const database = {
     id: "sales",
     name: "Sales",
-    columns: [{ name: "value", type: "Float64" }],
+    columns: [
+      {
+        name: "value",
+        type: "Float64",
+        physical: "Float64",
+        semantic: null,
+        supportedSemanticTypes: [
+          "Numeric",
+          "Categorical",
+          "Ordinal",
+          "Binary",
+          "Identifier",
+        ] as const,
+      },
+    ],
     rowCount: 1,
     columnCount: 1,
   };

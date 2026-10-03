@@ -5,7 +5,7 @@ use arrow::datatypes::{DataType, TimeUnit};
 pub fn editable_data_type(source: &str) -> Result<DataType, TabularArrowError> {
     let source = source.trim();
     let basic = match source {
-        "Boolean" | "Bool" => Some(DataType::Boolean),
+        "Bool" => Some(DataType::Boolean),
         "Int8" => Some(DataType::Int8),
         "Int16" => Some(DataType::Int16),
         "Int32" => Some(DataType::Int32),
@@ -16,12 +16,11 @@ pub fn editable_data_type(source: &str) -> Result<DataType, TabularArrowError> {
         "UInt64" => Some(DataType::UInt64),
         "Float32" => Some(DataType::Float32),
         "Float64" => Some(DataType::Float64),
-        "String" | "Utf8" => Some(DataType::Utf8),
+        "Utf8" => Some(DataType::Utf8),
         "LargeUtf8" => Some(DataType::LargeUtf8),
         "Utf8View" => Some(DataType::Utf8View),
-        "Date" | "Date32" => Some(DataType::Date32),
+        "Date" => Some(DataType::Date32),
         "Date64" => Some(DataType::Date64),
-        "Datetime" | "DateTime" => Some(DataType::Timestamp(TimeUnit::Microsecond, None)),
         "Time" => Some(DataType::Time64(TimeUnit::Nanosecond)),
         "Dictionary(Int32, Utf8)" => Some(DataType::Dictionary(
             Box::new(DataType::Int32),

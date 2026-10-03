@@ -29,7 +29,21 @@ const oldMeta: DatabaseMetadataResult = {
   dataRevision: "1",
   id: "sales",
   name: "Old sales",
-  columns: [{ name: "amount", type: "Int64" }],
+  columns: [
+    {
+      name: "amount",
+      type: "Int64",
+      physical: "Int64",
+      semantic: null,
+      supportedSemanticTypes: [
+        "Numeric",
+        "Categorical",
+        "Ordinal",
+        "Binary",
+        "Identifier",
+      ] as const,
+    },
+  ],
   rowCount: 1,
   columnCount: 1,
 };
@@ -66,7 +80,21 @@ describe("useDataLoader project lifecycle ownership", () => {
         sales: {
           id: "sales",
           name: "Sales",
-          columns: [{ name: "amount", type: "Int64" }],
+          columns: [
+            {
+              name: "amount",
+              type: "Int64",
+              physical: "Int64",
+              semantic: null,
+              supportedSemanticTypes: [
+                "Numeric",
+                "Categorical",
+                "Ordinal",
+                "Binary",
+                "Identifier",
+              ] as const,
+            },
+          ],
           rowCount: 1,
           columnCount: 1,
         },
@@ -251,7 +279,21 @@ describe("useDataLoader project lifecycle ownership", () => {
           sales: {
             ...current.databases.sales,
             dataRevision: "2",
-            columns: [{ name: "amount", type: "Utf8" }],
+            columns: [
+              {
+                name: "amount",
+                type: "Utf8",
+                physical: "Utf8",
+                semantic: null,
+                supportedSemanticTypes: [
+                  "Categorical",
+                  "Ordinal",
+                  "Binary",
+                  "Text",
+                  "Identifier",
+                ] as const,
+              },
+            ],
           },
         },
       });

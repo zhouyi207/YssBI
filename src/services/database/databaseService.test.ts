@@ -46,6 +46,8 @@ describe("DatabaseService project lifecycle contract", () => {
 
     for (const invalid of [
       { ...metadata, columnCount: 2 },
+      { ...metadata, columns: [{ ...metadata.columns[0], physical: undefined }] },
+      { ...metadata, columns: [{ ...metadata.columns[0], semantic: undefined }] },
       { ...metadata, columns: [{ ...metadata.columns[0], semantic: { kind: "Scalar" } }] },
       { ...metadata, rowCount: -1 },
       ...[undefined, ["Int64"], ["Numeric", "Numeric"]].map((supportedSemanticTypes) => ({

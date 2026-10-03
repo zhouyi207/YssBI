@@ -28,16 +28,12 @@ export function updateDatabaseColumns(
     }
     current.name = column.name;
     current.type = column.type;
-    if ("physical" in column) current.physical = column.physical;
-    else delete current.physical;
+    current.physical = column.physical;
     if (!shallow(current.supportedSemanticTypes, column.supportedSemanticTypes)) {
-      if (column.supportedSemanticTypes)
-        current.supportedSemanticTypes = [...column.supportedSemanticTypes];
-      else delete current.supportedSemanticTypes;
+      current.supportedSemanticTypes = [...column.supportedSemanticTypes];
     }
-    if (!column.semantic || !current.semantic) {
-      if ("semantic" in column) current.semantic = castDraft(structuredClone(column.semantic));
-      else delete current.semantic;
+    if (column.semantic === null || current.semantic === null) {
+      current.semantic = castDraft(structuredClone(column.semantic));
       continue;
     }
 

@@ -57,6 +57,10 @@ Semantic choices derived by the Arrow adapter from the exact Physical type;
 none reconstructs the stored Arrow schema. The seven Semantic types and conversion constraints
 are owned by the [dataset metadata contract](../yss-database-store/README.md#field-meaning-and-physical-conversion).
 
+Boolean, string, date and timestamp edit targets use `Bool`, `Utf8`, `Date` and explicit
+`Datetime(s/ms/us/ns)` names. The Arrow edit parser does not accept aliases (`Boolean`, `String`, `Date32`) or
+infer a timestamp unit from bare `Datetime`/`DateTime`.
+
 `DatabasePageSnapshot::into_parts` transfers the owned table and stable row IDs to a consumer
 without cloning the page. Borrowed access remains available for callers that retain the snapshot.
 Application revalidates the captured query basis and application session after building its result.

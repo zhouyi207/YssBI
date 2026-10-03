@@ -92,7 +92,26 @@ it("loads fresh metadata against the captured index revision without retaining o
       }).resources,
     ),
     databases: {
-      sales: { id: "sales", name: "Sales", rowCount: 99, columns: [{ name: "old", type: "Utf8" }] },
+      sales: {
+        id: "sales",
+        name: "Sales",
+        rowCount: 99,
+        columns: [
+          {
+            name: "old",
+            type: "Utf8",
+            physical: "Utf8",
+            semantic: null,
+            supportedSemanticTypes: [
+              "Categorical",
+              "Ordinal",
+              "Binary",
+              "Text",
+              "Identifier",
+            ] as const,
+          },
+        ],
+      },
     },
     publicationRevision: 3,
   });

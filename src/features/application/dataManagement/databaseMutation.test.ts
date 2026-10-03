@@ -72,7 +72,21 @@ describe("executeDatabaseMutation", () => {
       const data = {
         id,
         name: id,
-        columns: [{ name: "old", type: "Int64" }],
+        columns: [
+          {
+            name: "old",
+            type: "Int64",
+            physical: "Int64",
+            semantic: null,
+            supportedSemanticTypes: [
+              "Numeric",
+              "Categorical",
+              "Ordinal",
+              "Binary",
+              "Identifier",
+            ] as const,
+          },
+        ],
         rowCount: 1,
         columnCount: 1,
       };
@@ -101,7 +115,21 @@ describe("executeDatabaseMutation", () => {
                     resourcePath,
                     rowCount: 99,
                     columnCount: 1,
-                    columns: [{ name: "new", type: "Utf8" }],
+                    columns: [
+                      {
+                        name: "new",
+                        type: "Utf8",
+                        physical: "Utf8",
+                        semantic: null,
+                        supportedSemanticTypes: [
+                          "Categorical",
+                          "Ordinal",
+                          "Binary",
+                          "Text",
+                          "Identifier",
+                        ] as const,
+                      },
+                    ],
                   },
           },
           publicationRevision: installedRevision,

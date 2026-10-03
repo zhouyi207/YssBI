@@ -42,7 +42,21 @@ const meta: DatabaseMetadataResult = {
   dataRevision: "1",
   id: "sales",
   name: "Old sales",
-  columns: [{ name: "amount", type: "Int64" }],
+  columns: [
+    {
+      name: "amount",
+      type: "Int64",
+      physical: "Int64",
+      semantic: null,
+      supportedSemanticTypes: [
+        "Numeric",
+        "Categorical",
+        "Ordinal",
+        "Binary",
+        "Identifier",
+      ] as const,
+    },
+  ],
   rowCount: 1,
   columnCount: 1,
 };

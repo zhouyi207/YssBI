@@ -44,6 +44,7 @@ describe("database index declarations", () => {
           name: "a",
           type: "Int64",
           physical: "Int64",
+          supportedSemanticTypes: ["Numeric", "Categorical", "Ordinal", "Binary", "Identifier"],
           semantic: { kind: "Identifier", values: [], positiveValue: null, numeric: null },
         },
       ],
@@ -218,7 +219,21 @@ describe("prepareDatabaseIndexSnapshot", () => {
         id: "df-1",
         name: "Previous Name",
         rowCount: 10,
-        columns: [{ name: "x", type: "Utf8" }],
+        columns: [
+          {
+            name: "x",
+            type: "Utf8",
+            physical: "Utf8",
+            semantic: null,
+            supportedSemanticTypes: [
+              "Categorical",
+              "Ordinal",
+              "Binary",
+              "Text",
+              "Identifier",
+            ] as const,
+          },
+        ],
       },
     };
     const rows: ProjectDatabaseIndexRow[] = ["df-1", "df-2"].map((id, index) => ({

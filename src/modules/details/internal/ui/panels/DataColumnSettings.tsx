@@ -47,8 +47,8 @@ export function DataColumnSettings({
 }) {
   const { t } = useTranslation();
   const id = useId();
-  const currentPhysical = column.physical ?? column.type;
-  const semanticTypes = column.supportedSemanticTypes ?? [];
+  const currentPhysical = column.physical;
+  const semanticTypes = column.supportedSemanticTypes;
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const active = useRef(true);
@@ -127,7 +127,7 @@ export function DataColumnSettings({
               onChange={(next) => void confirmPhysical(next)}
               options={[...new Set([currentPhysical, ...PHYSICAL_TYPES])].map((value) => ({
                 value,
-                label: value === "Boolean" ? "Bool" : value === "String" ? "Utf8" : value,
+                label: value,
               }))}
             />
           </DetailFieldRow>

@@ -52,9 +52,9 @@ export function isColumnSemantic(value: unknown): value is ColumnSemantic {
 export interface ColumnInfo {
   name: string;
   type: string;
-  physical?: string;
-  semantic?: ColumnSemantic | null;
-  supportedSemanticTypes?: readonly SemanticType[];
+  physical: string;
+  semantic: ColumnSemantic | null;
+  supportedSemanticTypes: readonly SemanticType[];
 }
 
 /** Read-only projection of an installed sample; resource paths stay in Rust. */

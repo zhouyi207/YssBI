@@ -174,7 +174,15 @@ it("publishes refreshed semantic metadata atomically without discarding the row-
     rowCount: 400,
     columnCount: 1,
     dataRevision: "7",
-    columns: [{ name: "code", type: "Int64", physical: "Int64", semantic: null }],
+    columns: [
+      {
+        name: "code",
+        type: "Int64",
+        physical: "Int64",
+        semantic: null,
+        supportedSemanticTypes: ["Numeric", "Categorical", "Ordinal", "Binary", "Identifier"],
+      },
+    ],
   };
   for (const id of ["sales", "stable"])
     useResourceStore.getState().updateDatabaseMetadata(id, 1, metadata);

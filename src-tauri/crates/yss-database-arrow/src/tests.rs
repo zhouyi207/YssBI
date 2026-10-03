@@ -284,6 +284,40 @@ fn physical_casts_reject_precision_loss_and_preserve_semantics() {
 }
 
 #[test]
+fn physical_edit_targets_require_canonical_names_and_timestamp_precision() {
+    for (name, expected) in [
+        ("Bool", DataType::Boolean),
+        ("Utf8", DataType::Utf8),
+        ("Date", DataType::Date32),
+        ("Datetime(s)", DataType::Timestamp(TimeUnit::Second, None)),
+        (
+            "Datetime(ms)",
+            DataType::Timestamp(TimeUnit::Millisecond, None),
+        ),
+        (
+            "Datetime(us)",
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+        ),
+        (
+            "Datetime(ns)",
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+        ),
+    ] {
+        assert_eq!(editable_data_type(name).unwrap(), expected, "{name}");
+    }
+    for name in [
+        "Boolean",
+        "String",
+        "Date32",
+        "Datetime",
+        "DateTime",
+        "Datetime()",
+    ] {
+        assert!(editable_data_type(name).is_err(), "{name}");
+    }
+}
+
+#[test]
 fn semantic_conversion_preserves_nulls_and_rejects_loss_without_requiring_text_identity() {
     use yss_data_contract::TabularScalar as V;
     use yss_data_contract::{NumericRepresentation as N, SemanticConversion, SemanticType as S};
