@@ -134,7 +134,7 @@ Use `docs/README.md` for the module index. Representative owners are:
   `src/features/application/observability/README.md`
 - Statistical Harness current implementation:
   `src-tauri/crates/yss-harness-core/README.md`
-- JSON pages and UI intents: `src-tauri/crates/yss-ui-contract/README.md`
+- Workbench UI intents: `src-tauri/crates/yss-ui-contract/README.md`
 - Plugin target contract: `plugins/README.md`; current behavior remains documented
   by each plugin and the host protocol/runtime READMEs.
 - Tauri/IPC transport contracts: `src-tauri/crates/yss-application/src/ipc/README.md`

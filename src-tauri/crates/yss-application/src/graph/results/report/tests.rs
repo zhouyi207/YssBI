@@ -333,7 +333,7 @@ fn overview(
 }
 
 #[test]
-fn summary_selection_limits_pages_analyses_and_layout_bindings() {
+fn summary_selection_limits_pages_and_analyses() {
     let options = LinearSummaryOptions {
         equation: false,
         coefficient_table: false,
@@ -364,7 +364,6 @@ fn summary_selection_limits_pages_analyses_and_layout_bindings() {
         app.analyze_result(reference, ResultAnalysisRequest::Hypothesis),
         Err(ReportQueryError::InvalidRequest)
     ));
-    use yss_ui_contract::*;
     let session = app.capture_session().unwrap();
     let fit = session.execution().query_graph_results("events/report.yssbi-event", 10)
         .into_iter().find(|result| matches!(result.value().value(), RuntimeValue::LinearRegression(model) if model.summary.is_none())).unwrap();
@@ -382,64 +381,6 @@ fn summary_selection_limits_pages_analyses_and_layout_bindings() {
     assert!(matches!(
         app.analyze_result(fit_reference, ResultAnalysisRequest::AcfPacf),
         Err(ReportQueryError::WrongKind)
-    ));
-    assert!(matches!(
-        app.inspect_ui(
-            session.project_instance_id(),
-            InspectUiRequest::Page {
-                source: UiSource {
-                    execution_session_id: fit_reference.execution_session_id.as_uuid().to_string(),
-                    result_id: fit_reference.result_id.get().to_string()
-                }
-            }
-        ),
-        Err(crate::presentation::UiError::Unavailable)
-    ));
-    let source = UiSource {
-        execution_session_id: reference.execution_session_id.as_uuid().to_string(),
-        result_id: reference.result_id.get().to_string(),
-    };
-    let UiInspection::Page { page } = app
-        .inspect_ui(
-            session.project_instance_id(),
-            InspectUiRequest::Page {
-                source: source.clone(),
-            },
-        )
-        .unwrap()
-    else {
-        panic!()
-    };
-    assert_eq!(
-        page.spec.elements["report"].children,
-        ["modelSummary", "anova", "acfPacf"]
-    );
-    let mut spec = page.spec;
-    spec.elements
-        .get_mut("report")
-        .unwrap()
-        .children
-        .push("extra".into());
-    spec.elements.insert(
-        "extra".into(),
-        UiElement {
-            component: UiComponent::Analysis {
-                binding: "serialTests".into(),
-            },
-            visible: true,
-            children: vec![],
-        },
-    );
-    assert!(matches!(
-        app.update_ui(
-            session.project_instance_id(),
-            UpdateUiRequest {
-                source,
-                base_revision: 1,
-                action: UiAction::Replace { spec }
-            }
-        ),
-        Err(crate::presentation::UiError::Invalid)
     ));
 }
 

@@ -241,8 +241,7 @@ Assistant 请求调整布局 当前意图支持打开图、结果和显示面板
   换。现有窗口入口 (src/features/application/window/openPresentationWindow.ts:37)
 
 应继续留在原有模块的职责包括：Graph 文档和撤销历史、节点坐标与连线、数据查询和表格选择、结果数据与租约、
-Assistant 会话、保存确认，以及模态弹窗的焦点约束。报告内部的章节布局也已有 Rust JSON 页面负责，FlexLayout
-适合管理整个报告面板的位置。底栏对齐所需的项目 CSS 同样不会因为增加库功能而自动消失。
+Assistant 会话、保存确认，以及模态弹窗的焦点约束。报告内部由 Results 组件直接呈现统计内容，FlexLayout 管理整个报告面板的位置。底栏对齐所需的项目 CSS 同样不会因为增加库功能而自动消失。
 
 我建议的实施顺序是：
 

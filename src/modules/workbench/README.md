@@ -7,7 +7,7 @@
 
 工作台使用一个原生 FlexLayout Model 保存已提交的物理布局。React 的 Layout 和组件注册表呈现该模型，Application 通过语义操作协调面板生命周期。工作台布局、Graph 文档和统计结果具有独立的 owner。
 
-Rust 可以通过受控界面意图请求打开图、定位节点、打开结果或显示固定目录中的面板。工作台先认领请求，再调用现有编辑器、结果租约与面板入口，并回传实际执行状态。页面内容的 JSON 与增量由 Rust Application session 拥有，不能直接 patch FlexLayout；具体协议见 [JSON 页面与界面意图](../../../src-tauri/crates/yss-ui-contract/README.md)。
+Rust 可以通过受控界面意图请求打开图、定位节点、打开结果或显示固定目录中的面板。工作台先认领请求，再调用现有编辑器、结果租约与面板入口，并回传实际执行状态。具体协议见 [工作台界面意图](../../../src-tauri/crates/yss-ui-contract/README.md)。
 
 Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与历史由 Harness 持久化，关闭或移动面板不结束对话。项目归属、恢复与多对话切换见 [Harness 会话契约](../../../src-tauri/crates/yss-harness-core/README.md#5-session-turn-and-events)。
 
@@ -65,6 +65,8 @@ Mind 的主题编辑操作由现有 Details 面板承载。Details 上下文包�
 Mind 画布不再内嵌属性侧栏，详情表单复用 Details 的公共样式与控件，见 [Document editors](../document-editor/README.md)。
 
 Details 的普通字段、只读行和列列表使用 28px 行高基准，缩小表单上下留白；面板与语义配置对话框中的 Select、单行 Input 统一为 28px 高度。多行输入在标签下方单独占满一行，上下排列字段的标题与控件统一间隔 8px，保留独立最小高度并允许纵向调整；折叠标题沿用原有高度。
+
+描述节点的详细信息增加“结果”折叠区，展开后读取当前有效 Result 的列摘要，每列使用同一套折叠和只读字段组件。数值列显示数值统计，分类、顺序和二元列显示分类统计，并在“类别频数”中逐项展示原值、已声明标签、频数和占比；不展示其他类型的字段。未定义指标显示占位，没有非空类别时显示空状态，长列名按现有规则截断。列摘要和类别明细从同一份完整 JSON 读取，按后端提供的顺序显示；结果查询和变化只更新该展示区；失效结果不作为当前值继续展示。
 
 数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 仅在工作台中展示只读表格、分页和选择，键盘选择仅处理表格容器内的事件；底栏左侧提供刷新和导出，中间为分页，右侧为行列计数和读取耗时，同一行居中对齐，并按面板宽度收起右侧统计信息。选中内容预览及列设置由对应的 Details 承载，不再提供独立数据库窗口。
 
@@ -530,4 +532,4 @@ src/app/workbench-layout.css 设置宿主尺寸、字体尺度、标题图标/di
 
 ## 相关模块
 
-[画布交互](../graph-editor/README.md) · [Results 生命周期](../../features/application/results/README.md) · [JSON 页面](../../../src-tauri/crates/yss-ui-contract/README.md)
+[画布交互](../graph-editor/README.md) · [Results 生命周期](../../features/application/results/README.md) · [界面意图](../../../src-tauri/crates/yss-ui-contract/README.md)

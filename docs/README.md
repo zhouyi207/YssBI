@@ -36,7 +36,7 @@
 | 工作台和图画布               | [Workbench](../src/modules/workbench/README.md)、[Graph editor](../src/modules/graph-editor/README.md)                                                                                                                                 |
 | 结果查询与报告               | [Results application](../src/features/application/results/README.md)、[Results views](../src/modules/results/README.md)                                                                                                                |
 | 图诊断与运行失败             | [Problems](../src/modules/problems/README.md)、[Output](../src/modules/output/README.md)                                                                                                                                               |
-| JSON 页面与界面意图          | [UI contract](../src-tauri/crates/yss-ui-contract/README.md)                                                                                                                                                                           |
+| 工作台界面意图               | [UI contract](../src-tauri/crates/yss-ui-contract/README.md)                                                                                                                                                                           |
 | Harness / Assistant          | [Harness Core](../src-tauri/crates/yss-harness-core/README.md)                                                                                                                                                                         |
 | 运行观测和用户反馈           | [Observability](../src/features/application/observability/README.md)                                                                                                                                                                   |
 | 日志存储与呈现               | [Tracing plugin](../src-tauri/crates/tauri-plugin-tracing/README.md)、[Logs](../src/modules/logs/README.md)                                                                                                                            |
@@ -62,6 +62,6 @@
 
 维护中的 Markdown 声明 `Status`、`Scope`、`Canonical owners` 和 `Update when`。`Current` 表示当前实现；`Accepted Decision` 加 `Contract: Target Architecture` 表示已接受目标，不表示全部落地；`Planned` 用于计划；`Historical` 用于有明确历史范围的记录。
 
-跨领域开放工作见 [TODO](../TODO.md)，计划与待验收见[组件重构](roadmap/COMPONENT_REFACTOR.md)、[JSON Driver](roadmap/jsonDriver.md)和 [motion](roadmap/motion.md)。已完成事项简记在 [v0.3](roadmap/v0_3.md)，详细历史由 Git 保留；尚未完成的验收保持开放。
+跨领域开放工作见 [TODO](../TODO.md)，计划与待验收见[组件重构](roadmap/COMPONENT_REFACTOR.md)和 [motion](roadmap/motion.md)。已完成事项简记在 [v0.3](roadmap/v0_3.md)，详细历史由 Git 保留；尚未完成的验收保持开放。
 
 移动文档时更新引用和章节链接，删除旧正文；新增细节先由现有模块 owner 承接。生成索引通过原生成器更新。

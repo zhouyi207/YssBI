@@ -68,7 +68,7 @@ pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
             Cap::InspectDatasetProfile,
             Cap::InspectResult,
             Cap::ListGraphResults,
-            Cap::InspectUi,
+            Cap::InspectUiIntent,
             Cap::RequestUiIntent,
         ],
     },

@@ -92,7 +92,7 @@ export function AddReportContents({
                       })
                     }
                   />
-                  {t(`reportLayout.sections.${section}`)}
+                  {t(`reportSections.${section}`)}
                 </label>
               ))}
             </div>

@@ -90,7 +90,7 @@ pub fn authorize_agent_capability(
         return Err(denied());
     }
     match request {
-        Request::InspectProject(_) | Request::InspectUi(_) | Request::RequestUiIntent(_) => {
+        Request::InspectProject(_) | Request::InspectUiIntent(_) | Request::RequestUiIntent(_) => {
             if scope.role == AgentRole::Manager && scope.task.is_none() {
                 Ok(())
             } else {
@@ -189,6 +189,5 @@ pub fn authorize_agent_capability(
                 Err(denied())
             }
         }
-        Request::UpdateUi(_) => Err(denied()),
     }
 }

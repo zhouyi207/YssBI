@@ -1308,15 +1308,15 @@ async fn configured_provider_uses_chat_completions_and_streams_text() {
                 tool["function"]["name"]
             );
         }
-        let inspect_ui = tools
+        let inspect_ui_intent = tools
             .iter()
-            .find(|tool| tool["function"]["name"] == "inspect_ui")
+            .find(|tool| tool["function"]["name"] == "inspect_ui_intent")
             .unwrap();
         let original = serde_json::to_value(yss_harness_contract::capability_input_schema(
-            CapabilityId::InspectUi,
+            CapabilityId::InspectUiIntent,
         ))
         .unwrap();
-        assert_eq!(inspect_ui["function"]["parameters"], original);
+        assert_eq!(inspect_ui_intent["function"]["parameters"], original);
         assert!(body.get("input").is_none());
 
         let events = concat!(

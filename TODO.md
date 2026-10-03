@@ -29,5 +29,4 @@
 - [Statistical Harness](docs/roadmap/STATISTICAL_HARNESS.md)
 - [v0.3](docs/roadmap/v0_3.md)
 - [v1.0](docs/roadmap/v1_0.md)
-- [JSON Driver](docs/roadmap/jsonDriver.md)
 - [motion](docs/roadmap/motion.md)

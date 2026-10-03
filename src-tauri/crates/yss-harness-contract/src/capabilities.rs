@@ -26,8 +26,7 @@ pub enum CapabilityId {
     ManageResource,
     EditResource,
     ExportDataset,
-    InspectUi,
-    UpdateUi,
+    InspectUiIntent,
     RequestUiIntent,
     InspectGraph,
     SearchNodeCatalog,
@@ -49,8 +48,7 @@ impl CapabilityId {
             Self::ManageResource => "manage_resource",
             Self::EditResource => "edit_resource",
             Self::ExportDataset => "export_dataset",
-            Self::InspectUi => "inspect_ui",
-            Self::UpdateUi => "update_ui",
+            Self::InspectUiIntent => "inspect_ui_intent",
             Self::RequestUiIntent => "request_ui_intent",
             Self::InspectGraph => "inspect_graph",
             Self::SearchNodeCatalog => "search_node_catalog",
@@ -68,13 +66,12 @@ impl CapabilityId {
 
     pub const fn descriptor(self) -> &'static CapabilityDescriptor {
         match self {
-            Self::InspectResource => &CAPABILITY_DESCRIPTORS[14],
-            Self::ManageResource => &CAPABILITY_DESCRIPTORS[15],
-            Self::EditResource => &CAPABILITY_DESCRIPTORS[16],
-            Self::ExportDataset => &CAPABILITY_DESCRIPTORS[17],
-            Self::InspectUi => &CAPABILITY_DESCRIPTORS[11],
-            Self::UpdateUi => &CAPABILITY_DESCRIPTORS[12],
-            Self::RequestUiIntent => &CAPABILITY_DESCRIPTORS[13],
+            Self::InspectResource => &CAPABILITY_DESCRIPTORS[13],
+            Self::ManageResource => &CAPABILITY_DESCRIPTORS[14],
+            Self::EditResource => &CAPABILITY_DESCRIPTORS[15],
+            Self::ExportDataset => &CAPABILITY_DESCRIPTORS[16],
+            Self::InspectUiIntent => &CAPABILITY_DESCRIPTORS[11],
+            Self::RequestUiIntent => &CAPABILITY_DESCRIPTORS[12],
             Self::InspectGraph => &CAPABILITY_DESCRIPTORS[0],
             Self::SearchNodeCatalog => &CAPABILITY_DESCRIPTORS[1],
             Self::InspectDatasetSchema => &CAPABILITY_DESCRIPTORS[2],
@@ -119,7 +116,7 @@ impl CapabilityDescriptor {
     }
 }
 
-pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 18] = [
+pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 17] = [
     CapabilityDescriptor {
         id: CapabilityId::InspectGraph,
         effect: ToolEffect::Inspect,
@@ -176,14 +173,9 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 18] = [
         maximum_results: 100,
     },
     CapabilityDescriptor {
-        id: CapabilityId::InspectUi,
+        id: CapabilityId::InspectUiIntent,
         effect: ToolEffect::Inspect,
-        maximum_results: 128,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateUi,
-        effect: ToolEffect::Mutate,
-        maximum_results: 128,
+        maximum_results: 1,
     },
     CapabilityDescriptor {
         id: CapabilityId::RequestUiIntent,
@@ -219,8 +211,7 @@ pub enum AutomationCapabilityRequest {
     ManageResource(ManageResourceRequest),
     EditResource(EditResourceRequest),
     ExportDataset(ExportDatasetRequest),
-    InspectUi(yss_ui_contract::InspectUiRequest),
-    UpdateUi(yss_ui_contract::UpdateUiRequest),
+    InspectUiIntent(yss_ui_contract::InspectUiIntentRequest),
     RequestUiIntent(yss_ui_contract::RequestUiIntent),
     InspectGraph(InspectGraphRequest),
     SearchNodeCatalog(SearchNodeCatalogRequest),
@@ -242,8 +233,7 @@ impl AutomationCapabilityRequest {
             Self::ManageResource(_) => CapabilityId::ManageResource,
             Self::EditResource(_) => CapabilityId::EditResource,
             Self::ExportDataset(_) => CapabilityId::ExportDataset,
-            Self::InspectUi(_) => CapabilityId::InspectUi,
-            Self::UpdateUi(_) => CapabilityId::UpdateUi,
+            Self::InspectUiIntent(_) => CapabilityId::InspectUiIntent,
             Self::RequestUiIntent(_) => CapabilityId::RequestUiIntent,
             Self::InspectGraph(_) => CapabilityId::InspectGraph,
             Self::SearchNodeCatalog(_) => CapabilityId::SearchNodeCatalog,
@@ -265,16 +255,7 @@ impl AutomationCapabilityRequest {
             Self::ManageResource(request) => request.validate(),
             Self::EditResource(request) => request.validate(),
             Self::ExportDataset(request) => request.validate(),
-            Self::InspectUi(request) => match request {
-                yss_ui_contract::InspectUiRequest::Page { source } => source
-                    .validate()
-                    .map_err(|_| CapabilityContractError::InvalidField("source")),
-                yss_ui_contract::InspectUiRequest::Intent { id } => validate_resource_id("id", id),
-                yss_ui_contract::InspectUiRequest::Catalog => Ok(()),
-            },
-            Self::UpdateUi(request) => request
-                .validate()
-                .map_err(|_| CapabilityContractError::InvalidField("page")),
+            Self::InspectUiIntent(request) => validate_resource_id("id", &request.id),
             Self::RequestUiIntent(request) => request
                 .validate()
                 .map_err(|_| CapabilityContractError::InvalidField("intent")),
@@ -361,8 +342,7 @@ pub enum AutomationCapabilityResult {
     ResourceManaged(ResourceMutationReceipt),
     ResourceEdited(ResourceMutationReceipt),
     DatasetExported(DatasetExported),
-    UiInspection(yss_ui_contract::UiInspection),
-    UiUpdate(yss_ui_contract::UiUpdate),
+    UiIntentInspection(yss_ui_contract::UiIntentReceipt),
     UiIntentReceipt(yss_ui_contract::UiIntentReceipt),
     GraphInspection(GraphInspection),
     NodeCatalogSearch(NodeCatalogSearchResult),
@@ -415,8 +395,7 @@ impl AutomationCapabilityResult {
             Self::GraphExecution(_) => CapabilityId::ExecuteGraph,
             Self::GraphSaved(_) => CapabilityId::SaveGraph,
             Self::GraphResults(_) => CapabilityId::ListGraphResults,
-            Self::UiInspection(_) => CapabilityId::InspectUi,
-            Self::UiUpdate(_) => CapabilityId::UpdateUi,
+            Self::UiIntentInspection(_) => CapabilityId::InspectUiIntent,
             Self::UiIntentReceipt(_) => CapabilityId::RequestUiIntent,
         }
     }
@@ -497,8 +476,9 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
         CapabilityId::ManageResource => schemars::schema_for!(ManageResourceRequest),
         CapabilityId::EditResource => schemars::schema_for!(EditResourceRequest),
         CapabilityId::ExportDataset => schemars::schema_for!(ExportDatasetRequest),
-        CapabilityId::InspectUi => schemars::schema_for!(yss_ui_contract::InspectUiRequest),
-        CapabilityId::UpdateUi => schemars::schema_for!(yss_ui_contract::UpdateUiRequest),
+        CapabilityId::InspectUiIntent => {
+            schemars::schema_for!(yss_ui_contract::InspectUiIntentRequest)
+        }
         CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::RequestUiIntent),
         CapabilityId::InspectGraph => schemars::schema_for!(InspectGraphRequest),
         CapabilityId::SearchNodeCatalog => schemars::schema_for!(SearchNodeCatalogRequest),

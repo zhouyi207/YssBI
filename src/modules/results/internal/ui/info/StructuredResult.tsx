@@ -1,6 +1,5 @@
-import type { UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
 import type { ParsedReportPayload } from "@/shared/types/report/parseReportPayload";
-import { StructuredReportTable } from "./StructuredReportBindings";
+import { StructuredReportTable } from "./StructuredReportTable";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -17,9 +16,6 @@ import {
   type ResultTableReference,
   type StructuredResultPart,
 } from "@/shared/types/domain/resultReport";
-import { ResultReportPage } from "./ResultReportPage";
-
-const EMPTY_REPORT_DATA = {};
 
 function StructuredArray({
   reference,
@@ -75,7 +71,7 @@ export function StructuredResult({
   report: Extract<ParsedReportPayload, { kind: "structured" }>;
 }) {
   const { t } = useTranslation();
-  const bindings = useMemo<UiResultBindings>(() => {
+  const renderReference = useMemo<StructuredReferenceRenderer>(() => {
     const renderReference: StructuredReferenceRenderer = (candidate) => {
       if (!isStructuredTableReference(candidate)) return undefined;
       return (
@@ -92,27 +88,30 @@ export function StructuredResult({
         </Section>
       );
     };
-    const result: Record<string, UiResultBindings[string]> = {
-      result: { type: "structured", value: report.data, renderReference },
-    };
-    for (const [id, section] of Object.entries(report.sections)) {
-      if (section.kind === "equation") {
-        result[`report_${id}`] = {
-          type: "equation",
-          content: (
+    return renderReference;
+  }, [reference, t]);
+  const sections = Object.entries(report.sections);
+  const raw = <StructuredData value={report.data} renderReference={renderReference} />;
+  return (
+    <>
+      {sections.map(([id, section]) => (
+        <Section key={id} title={section.title} collapsible>
+          {section.kind === "equation" ? (
             <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/30 p-4 font-mono text-sm">
               {section.value}
             </pre>
-          ),
-        };
-      } else {
-        result[`report_${id}`] = {
-          type: section.kind === "stability" ? "chart" : "table",
-          content: <StructuredReportTable reference={reference} section={section} />,
-        };
-      }
-    }
-    return result;
-  }, [reference, report, t]);
-  return <ResultReportPage reference={reference} data={EMPTY_REPORT_DATA} bindings={bindings} />;
+          ) : (
+            <StructuredReportTable reference={reference} section={section} />
+          )}
+        </Section>
+      ))}
+      {sections.length > 0 ? (
+        <Section title={t("reportSections.structuredResult")} collapsible>
+          {raw}
+        </Section>
+      ) : (
+        raw
+      )}
+    </>
+  );
 }

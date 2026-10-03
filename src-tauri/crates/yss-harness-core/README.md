@@ -168,12 +168,11 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 | `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs                    |
 | `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                                               |
 | `save_graph`              | 用户要求保存时调用正常的独立 Save                                                        |
-| `inspect_ui`              | 读取组件 Schema、当前结果页面或界面意图回执                                              |
-| `update_ui`               | 按页面修订原子替换、局部修改、排序、显隐或重置展示                                       |
+| `inspect_ui_intent`       | 按 ID 读取工作台界面操作回执                                                             |
 | `request_ui_intent`       | 请求打开六类资源/结果、定位图节点或显示允许的面板，返回待执行回执                        |
 
-页面与动作契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
-页面变更不写入 Project；模型必须区分意图被接受与前端已完成操作，具体校验、回执、恢复与会话边界见 [JSON 页面与界面意图](../yss-ui-contract/README.md)。
+界面意图契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
+模型必须区分意图被接受与前端已完成操作，具体校验、回执、恢复与会话边界见 [工作台界面意图](../yss-ui-contract/README.md)。
 
 `inspect_result` 与界面复用 Application 的有界 `query_result_projection` 和共享 `result_encoding` 映射，返回 `ResultValueInspection::Json`。内联结果受投影展开预算及 64 KiB 编码上限约束，超限明确拒绝，不静默裁剪。原生报告使用概览、参数目录与表引用，统计数据按表引用继续读取。普通结果字段、嵌套对象与文本没有 AI 专用白名单或截断规则。
 
@@ -235,14 +234,13 @@ Application 复用打开图时的基线和编辑流程的最终解析投影，�
 
 所有改变状态的模型能力按各自 owner 返回事实：
 
-| 请求                       | 返回的提交或执行事实                                             | 后续读取条件                                                       |
-| -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `apply_graph_edit`         | 新 revision/hash、创建 ID、受影响实体、删除 ID、就绪状态和诊断   | 缺少基线、语义基线不匹配、版本冲突或事实不足                       |
-| `save_graph`               | 保存前后 revision、graph hash、实际 dirty/canUndo/canRedo        | 后续状态变化或需要未掌握的图信息                                   |
-| `execute_graph`            | 实际 run 状态、失败位置、带执行会话的结果引用                    | 通过 `inspect_result` 读取所需内容或数据页，无需先重复列举本次结果 |
-| `update_ui`                | 与 GUI 共用的已提交页面差分、新 revision、完整改变元素与删除操作 | 页面基线缺失或修订冲突                                             |
-| `request_ui_intent`        | 意图身份和实际回执状态                                           | pending/claimed 时查询完成状态，不能把接受当成界面已执行           |
-| `propose_statistical_plan` | Harness 校验且持久化成功后返回 accepted 和实际记录的完整 plan    | 计划正文可直接继续使用，不代表分析已经执行                         |
+| 请求                       | 返回的提交或执行事实                                           | 后续读取条件                                                       |
+| -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `apply_graph_edit`         | 新 revision/hash、创建 ID、受影响实体、删除 ID、就绪状态和诊断 | 缺少基线、语义基线不匹配、版本冲突或事实不足                       |
+| `save_graph`               | 保存前后 revision、graph hash、实际 dirty/canUndo/canRedo      | 后续状态变化或需要未掌握的图信息                                   |
+| `execute_graph`            | 实际 run 状态、失败位置、带执行会话的结果引用                  | 通过 `inspect_result` 读取所需内容或数据页，无需先重复列举本次结果 |
+| `request_ui_intent`        | 意图身份和实际回执状态                                         | pending/claimed 时查询完成状态，不能把接受当成界面已执行           |
+| `propose_statistical_plan` | Harness 校验且持久化成功后返回 accepted 和实际记录的完整 plan  | 计划正文可直接继续使用，不代表分析已经执行                         |
 
 `apply_graph_edit` 默认自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
 它复用 Project 的文件事务，将文件、当前文档、保存指纹、可撤销历史及编辑回执作为一次提交；

@@ -10141,7 +10141,6 @@ version = "0.1.0"
 dependencies = [
  "schemars 1.2.2",
  "serde",
- "serde_json",
  "thiserror 2.0.20",
  "yss-project-identity",
 ]

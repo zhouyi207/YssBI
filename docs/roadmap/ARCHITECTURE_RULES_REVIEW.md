@@ -243,7 +243,7 @@ pnpm bench:project:publication --outputJson docs/benchmark/probes/project-snapsh
 | project-explorer                              | 已逐文件检查原呈现链并将动作移入 Application；本批资源图标颜色归回本模块，当前 21 个生产文件，诊断/选择订阅、目录扫描、弹窗及操作准入证据见下文                                                                                                                                                                                                                                                      | 桌面资源选择/拖拽、重命名、确认期间换项目、新建/删除弹窗重开、并发操作禁用与迟到回执的跨 owner 验收                        |
 | settings                                      | 已检查呈现、Application、Core 共 10 个生产文件及主题/语言/插件/弹窗消费者；收窄订阅并明确重置确认归属，33 项关联验证通过                                                                                                                                                                                                                                                                             | 真实主题/语言切换、跨窗口同步、嵌套确认焦点、页面关闭及重置反馈验收                                                        |
 | plugins                                       | 已检查全部 4 个呈现入口、当前 5 个 Application 文件及 Service/Parser、Provider/根面板消费者；共享投影、操作准入和维护身份修复后 27 项验证通过                                                                                                                                                                                                                                                        | 真实安装/卸载与维护分页、关闭/重开、隔离页面、主题/语言及用户发起运行中取消的界面验收；原生计算链证据见各批                |
-| results                                       | 已逐文件读取 16 个呈现生产文件并追踪加载、分页、报告 parser 和租约消费者；置信带统一由 SCI 产生，修复快速关闭面板的租约回收，关联检查见下文                                                                                                                                                                                                                                                          | 真实分页、报告切换/补选、布局、快速关闭及独立窗口租约验收；已修改错误语义回归见各批                                        |
+| results                                       | 已逐文件读取 16 个呈现生产文件并追踪加载、分页、报告 parser 和租约消费者；置信带统一由 SCI 产生，修复快速关闭面板的租约回收，关联检查见下文                                                                                                                                                                                                                                                          | 真实分页、报告切换/补选、快速关闭及独立窗口租约验收；已修改错误语义回归见各批                                              |
 | workbench                                     | 已逐文件读取当前 68 个生产 TS/TSX 文件；完成原生复合命令发布、移动激活与浮窗最大化修复，90 项布局及直接消费者验证通过                                                                                                                                                                                                                                                                                | 真实拖动、分屏、浮窗移入/停靠、恢复、选择、折叠和关闭，以及面板/项目 owner 的跨生命周期验收                                |
 | Rust Application、Graph、Execution、Project   | 已检查 Cargo 方向；Application 当前 113、Analysis 25、Graph Document 7、Document Edit 5、Diagnostics 1、Runtime 3、Editor 11、Execution 当前 32、Project Model 5、History 1、Registry 三包 4 及 Project 39 个含生产代码文件的生产区累计全文复核；四个图契约/映射包九文件已核对，各批实际范围另列                                                                                                     | 已修改路径的实际桌面、项目切换和文件生命周期验收；已定位并发及求解消费者回归见各批                                         |
 | Rust Database、Node、SCI、Linalg              | Database Runtime 11、Store 8、Engine 17、Arrow 7、IO 3、Schema 1、Database Contract 9、Source 7、Dataset Profile 4、Data Contract 8、Relational Contract 4、Node Registry 4、Node Protocol 10、Kernel 当前 77/77、Catalog 当前 69/69、SCI Runtime 当前 40/40、SCI Contract 55、SCI Linalg 4 个生产文件已全文检查；SCI 当前 207/207 份生产实现已全文核销，精确清单见最新批次；仅 Linalg 直接依赖 faer | 已修改统计报告与数据窗口的桌面呈现验收；SCI→Runtime→Kernel 的已定位错误边界见各批，保留无关 Meta 改动                      |
@@ -2611,7 +2611,7 @@ L1 基线 4 文件、12 项通过；完成变更后的第一组 8 文件、25 �
 TypeScript 和 lint 检查通过，仍只有原有 4 条警告。两份 Results 当前契约已同步；
 文档契约 6 项、29 份变更文件格式检查通过，交付前另行执行 `git -c core.safecrlf=false diff --check`。
 本批遵守默认规则，没有 benchmark 豁免或实测绘制加速声明；未运行 Rust、完整 CI、桌面构建或真实桌面验收。
-图表分页与展开失败、报告数值切换/补选、布局保留、坏页提示和独立窗口租约仍需桌面验收。
+图表分页与展开失败、报告数值切换/补选、坏页提示和独立窗口租约仍需桌面验收。
 本批发现的 ACF/PACF 置信带计算归属已由下批沿 SCI 和结果查询契约修复；
 不能据呈现源码读取核销所有统计边界，全模块复查和最终验收继续开放。
 
@@ -3578,11 +3578,11 @@ hook 和 service。删除菜单 builder 未使用的 activeResourceRef 参数，
 新增三项纯 Application 回归分别保护：在途成功读取后的新缺口、失败读取后恢复及绑定失效、满载
 旧队列排空后的 pending 补读。前两项在保持旧行为的提取版本实际 2 失败；第三项随后实际 1 失败/
 2 通过；最终 delivery、Service 和两个消费者 smoke 四文件 8 项通过。两个 smoke 分别只覆盖
-Workbench loading 组装与 mock useUiPage 的报告消费，不能算真实 hook 恢复集成。初次命令带了
+Workbench loading 组装与 当时带 mock 的报告消费，不能算真实 hook 恢复集成。初次命令带了
 不存在的 uiPresentation.test.ts，实际仅两文件 5 项，未将缺失文件算作通过。UI Contract README
 同步临时队列和恢复归属；原生跨窗口恢复仍需人工验收。
 
-共享 charts 的 24 个生产文件本轮全部逐读，另追踪 14 个 Chart/Results/JSON 页面消费者与适配器。
+共享 charts 的 24 个生产文件本轮全部逐读，另追踪 14 个 Chart/Results 消费者与适配器。
 未发现写回输入、重复业务 Store 或在 renderer 重新解析 IPC；尺寸和 tooltip 保持组件生命周期。
 LinePlotControls 原先漏传模型已有 referenceLines/xDomain/yDomain，现交给 LineChart 既有 domain
 与 padding 规则，恢复 SCI 生存分析等真实来源的参考线。Heatmap 复用 D3 extent，一次扫描替代
@@ -3892,7 +3892,7 @@ driver 收尾仍按原 Promise 身份判断，不清理后继 driver。没有增
 修改，由下方更晚的 Results L2 替代，两个集合不直接相加。主代理与另一子代理进行了只读交叉复核。
 本支全文覆盖 project 目录全部十七个生产文件，另覆盖 lifecycle receipt/dependencies、useProjectSync、
 appInitialization、useProjectOperations、PublicationCoordinator、Core lifecycle authority、Project event stream、
-Database useDataLoader、usePresentationWindow、useUiPage、DatabaseEditorWindow、Sidebar Store、Chart preview cache
+Database useDataLoader、usePresentationWindow、当时的报告页面加载器、DatabaseEditorWindow、Sidebar Store、Chart preview cache
 与 Chart lifecycle coordinator 十五个直接链路文件；其他 Graph/NodeCatalog/资源候选实现只按调用片段核对。
 Features 与 Rust Application Project README 更新对应契约。
 
@@ -3965,9 +3965,6 @@ projectPath、persistGraphViewport、viewportScope 和 index。Features README �
 项目加载在 Loading 通知前登记原在途 Promise，微任务开始时与 Loading 通知后核对原项目身份，
 收尾仅清理自己的 entry。新增一个纯 Application 用例在 19:13:55 实际失败：后继 B 重复发出索引
 请求，重复调用最终取得 null；19:14:14 修复后 hydration 四项通过。原去重入口与状态 owner 保留。
-useUiPage 原先等待首次 readUiPage 后才交回订阅 close，使卸载也被读取阻塞；现在首读独立启动，
-订阅成功即交回清理入口，原 current 检查继续拒绝迟到安装、错误和补读。该修复由源码及真实
-Service 调用链确认；已有 ReportView 两项不覆盖 hook 卸载时序，未将其描述为直接旧红、新绿。
 19:15:21 L2 九文件四十项通过，另一代理复核 Promise 登记、错误捕获与迟到 close 未发现问题。
 
 ```powershell
@@ -3976,7 +3973,7 @@ pnpm test:ts src/features/application/project/projectHydration.test.ts src/featu
 
 本支全文覆盖 initialization 四个生产文件和 presentation 十一个生产文件；另全文核对 hydration、
 projectRuntime、projectSession、useResultSession、useCurrentWindowActions、presentationService、
-ResultReportPage，以及 Rust lease command、Application retention 和 ResultStore retention。
+当时的报告页面容器，以及 Rust lease command、Application retention 和 ResultStore retention。
 Tauri composition 仅补读 Destroyed 接入段。窗口 owner 已包含未认领 handoff，前端无需另建租约 owner。
 Features 和 yss-ui-contract README 分别同步项目加载与订阅契约，真实 native/IPC 交互仍未验收。
 
@@ -4904,7 +4901,7 @@ owner 划分，Cargo 依次交接。只读审查并行，受影响消费者和�
 **基础呈现与主题。** 本批全文核对 `components/ui` 二十三个、`components/ui-presentation`
 十四个、`shared/theme` 五个生产文件，以及 `components/data-grid/agGridTheme.ts` 和
 `lib/utils.ts`，共四十四个；这是本批读取范围，并非声称四十四个都从未审查过。另完整阅读
-ResultReportPage、StructuredResult、WindowTitleBar 和 globalEvent，按需追踪线性报告、表格和
+当时的报告页面容器、StructuredResult、WindowTitleBar 和 globalEvent，按需追踪线性报告、表格和
 页面安装消费者。既有 shared/charts、Application 页面状态及 Service 审查不重复累计。
 
 基础控件继续透传 Radix/DOM 能力。Tooltip Context 只传稳定操作接口，拖动标记和活动提示归 ref，
@@ -4912,8 +4909,7 @@ ResultReportPage、StructuredResult、WindowTitleBar 和 globalEvent，按需追
 唯一实际调用方使用默认水平方向，没有高频完整模型广播。没有为了统一 Zustand 镜像这些框架和
 局部展示状态。`cn` 只组合现有 clsx/tailwind-merge，没有另造样式引擎。
 
-UiPageRenderer 消费已安装的树和结果绑定，按钮只交元素 ID 给原 Application 操作；Spec 的单根、
-引用、数量和深度限制仍在既有输入/安装边界。StructuredData 的分页和折叠是组件局部展示状态，
+StructuredData 的分页和折叠是组件局部展示状态，
 引用读取由调用方注入；真实 StructuredResult 继续通过 Results 的一百行分页，未新增 IPC owner。
 系数图表与公式消费原系数页，格式化和坐标缩放不重新计算统计模型。主题预设冻结且复用，AG Grid
 两个真实消费者均按主题引用 memoize 构造；没有证据要求新增缓存、store 或 benchmark 例外。
@@ -7652,7 +7648,7 @@ Panel null likelihood、非平衡 TWFE、任意溢出及一般精度探索尚无
 | 画布与高频绘制         | Graph 平移/缩放、单多节点拖动与连接反馈；Escape、隐藏/保存中断、松键一次提交；Mind 树布局/测量/选择；分屏浮窗交互（绘制量化按用户要求跳过）             | [Graph Editor](../../src/modules/graph-editor/README.md)、[Document Editor](../../src/modules/document-editor/README.md)、[Workbench](../../src/modules/workbench/README.md) |
 | 工作台、窗口与设置     | 拖动/分屏/停靠/折叠/恢复和面板状态保留；dirty 关闭取消、确认期间换项目、同路径图重开；独立窗口恢复、主题/语言与确认焦点                                 | [Workbench](../../src/modules/workbench/README.md)、[Features](../../src/features/README.md)                                                                                 |
 | 资源编辑与目标身份     | 创建/重命名/删除弹窗关闭重开及换项目；Graph/Mind/Doc/Chart 保存/放弃；Details 切换、删除回退及草稿保留；目录搜索/拖入、菜单快捷键、Problems/Output 定位 | [资源操作](../../src/features/application/resource/README.md)、[Features](../../src/features/README.md)                                                                      |
-| 导入、表格、图表与结果 | 导入选择/取消；分页、拖选、复制、全选及失焦；切换后的迟到响应；结果报告切换/补选/布局、快速关闭及独立窗口租约；PDF/外链打开                             | [Results](../../src/modules/results/README.md)、[结果应用层](../../src/features/application/results/README.md)及覆盖表对应呈现入口                                           |
+| 导入、表格、图表与结果 | 导入选择/取消；分页、拖选、复制、全选及失焦；切换后的迟到响应；结果报告切换/补选、快速关闭及独立窗口租约；PDF/外链打开                                  | [Results](../../src/modules/results/README.md)、[结果应用层](../../src/features/application/results/README.md)及覆盖表对应呈现入口                                           |
 | Logs 持续呈现          | 持续追加、领域切换/分屏、筛选、Details、自动滚动、主/独立窗口及恢复/终止状态反馈                                                                        | [Logs](../../src/modules/logs/README.md)                                                                                                                                     |
 | Assistant 流式会话     | 真实流式回复及工具/链接呈现，期间切换会话、关闭重开或失败恢复；HMR 后旧订阅不再续写                                                                     | 既有 assistantHarnessRuntime、assistantHarnessSession 与 AssistantThread 入口                                                                                                |
 | 插件页面与任务交互     | UI 安装/维护/卸载后的列表和面板；iframe 重载/关闭重开的 MessagePort 撤销；运行中取消与后继状态；公式展示及 Exponential 中英文 Rate 标签                 | [Julia 插件](../../plugins/julia/README.md)、PluginViewFrame 与 PluginsPanel 入口                                                                                            |

@@ -9,31 +9,15 @@ pub(crate) fn ui_error(error: UiError) -> CommandError {
 }
 
 #[tauri::command]
-pub async fn inspect_ui(
+pub async fn inspect_ui_intent(
     application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
-    request: InspectUiRequest,
-) -> Result<UiInspection, CommandError> {
+    request: InspectUiIntentRequest,
+) -> Result<UiIntentReceipt, CommandError> {
     let application = application.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         application
-            .inspect_ui(&project_instance_id, request)
-            .map_err(ui_error)
-    })
-    .await
-    .map_err(CommandError::internal)?
-}
-
-#[tauri::command]
-pub async fn update_ui(
-    application: State<'_, ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    request: UpdateUiRequest,
-) -> Result<UiUpdate, CommandError> {
-    let application = application.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        application
-            .update_ui(&project_instance_id, request)
+            .inspect_ui_intent(&project_instance_id, request)
             .map_err(ui_error)
     })
     .await
@@ -59,33 +43,14 @@ pub async fn request_ui_intent(
 }
 
 #[tauri::command]
-pub async fn activate_ui_element(
-    window: WebviewWindow,
-    application: State<'_, ApplicationState>,
-    project_instance_id: ProjectInstanceId,
-    request: ActivateUiRequest,
-) -> Result<UiIntentReceipt, CommandError> {
-    let application = application.inner().clone();
-    let caller = format!("window:{}", window.label());
-    tauri::async_runtime::spawn_blocking(move || {
-        application
-            .activate_ui_element(&project_instance_id, &caller, request)
-            .map_err(ui_error)
-    })
-    .await
-    .map_err(CommandError::internal)?
-}
-
-#[tauri::command]
-pub fn subscribe_ui(
+pub fn subscribe_ui_intents(
     window: WebviewWindow,
     application: State<'_, ApplicationState>,
     channels: State<'_, PresentationChannels>,
     project_instance_id: ProjectInstanceId,
-    workbench: bool,
     channel: tauri::ipc::Channel<UiEvent>,
 ) -> Result<String, CommandError> {
-    if workbench && window.label() != "main" {
+    if window.label() != "main" {
         return Err(ui_error(UiError::Workbench));
     }
     let session = application
@@ -98,24 +63,20 @@ pub fn subscribe_ui(
             let _ = sender.send(event);
         }))
         .map_err(ui_error)?;
-    if workbench {
-        session.presentation.attach_workbench();
-    }
+    session.presentation.attach_workbench();
     channels.subscribe(
         &window,
         receiver,
         move || {
             drop(subscription);
-            if workbench {
-                session.presentation.detach_workbench();
-            }
+            session.presentation.detach_workbench();
         },
         channel,
     )
 }
 
 #[tauri::command]
-pub fn unsubscribe_ui(
+pub fn unsubscribe_ui_intents(
     window: WebviewWindow,
     channels: State<'_, PresentationChannels>,
     subscription_id: String,

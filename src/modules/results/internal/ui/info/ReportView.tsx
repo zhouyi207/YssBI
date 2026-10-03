@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ResultDescriptor } from "@/features/application/results/types";
 import type { ReportValidationResult } from "@/shared/types/report/reportValidation";
 import { reportInvalidReport } from "@/features/application/observability/reportViewIssue";
-import { LinearResultBindings } from "./LinearResultBindings";
+import { LinearRegressionReport } from "./LinearRegressionReport";
 import { StructuredResult } from "./StructuredResult";
 import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 
@@ -38,7 +38,7 @@ export function ReportView({ descriptor, validation, onValueChange }: ReportView
   } else {
     content =
       validation.value.kind === "linearRegressionSummary" ? (
-        <LinearResultBindings data={validation.value.data} onValueChange={onValueChange} />
+        <LinearRegressionReport data={validation.value.data} onValueChange={onValueChange} />
       ) : (
         <StructuredResult reference={descriptor} report={validation.value} />
       );
@@ -46,7 +46,11 @@ export function ReportView({ descriptor, validation, onValueChange }: ReportView
 
   return (
     <ScrollArea className="min-h-0 flex-1" orientation="vertical">
-      {content}
+      {validation.ok ? (
+        <div className="mx-auto w-full max-w-[1100px] space-y-4 p-6">{content}</div>
+      ) : (
+        content
+      )}
     </ScrollArea>
   );
 }

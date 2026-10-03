@@ -72,7 +72,7 @@ export function structuredValueAt(root: unknown, path: string): unknown {
   return value;
 }
 
-/** Parse bounded, server-authored layout metadata; values remain in Results. */
+/** Parse bounded, server-authored result display metadata; values remain in Results. */
 export function parseReportDisplay(root: unknown): Readonly<Record<string, ReportDisplaySection>> {
   if (!isRecord(root) || !("report_display" in root)) return {};
   const display = root.report_display;
@@ -90,6 +90,7 @@ export function parseReportDisplay(root: unknown): Readonly<Record<string, Repor
         !isRecord(item) ||
         Object.keys(item).some((key) => !["title", "kind", "path", "columns"].includes(key)) ||
         typeof item.title !== "string" ||
+        !item.title.trim() ||
         new TextEncoder().encode(item.title).length > 200 ||
         (item.kind !== "table" && item.kind !== "equation" && item.kind !== "stability") ||
         typeof item.path !== "string"

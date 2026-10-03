@@ -1,6 +1,6 @@
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useEffect, useState } from "react";
-import { subscribeUi } from "@/services/workbench/presentationService";
+import { subscribeUiIntents } from "@/services/workbench/presentationService";
 import type { UiIntent } from "@/shared/types/domain/uiPresentation";
 import { createUiIntentDelivery } from "./uiIntentDelivery";
 import {
@@ -78,9 +78,8 @@ export function useUiIntents() {
       (intent) => execute(intent, current),
       failed,
     );
-    const subscription = subscribeUi(
+    const subscription = subscribeUiIntents(
       projectInstanceId,
-      true,
       (event) => {
         if (event.kind === "sessionChanged") {
           closed = true;

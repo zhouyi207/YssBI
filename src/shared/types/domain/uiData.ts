@@ -29,5 +29,3 @@ export interface UiStatCardData {
   readonly kind: "statCard";
   readonly stat: UiMetric;
 }
-
-export type UiDisplayData = UiKeyValueData | UiTableData | UiStatCardData;

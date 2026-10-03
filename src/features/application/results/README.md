@@ -69,7 +69,7 @@ Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 
 ResultService 复用既有 DTO parser 在 IPC 入口解析回复，并将 descriptor 的完整结果引用、Pin 的图与端口、
 claim 的租约 token 与原请求关联。非空 provenance 输出必须与自身的图路径和节点身份一致。
 结果 ID 使用非零、无前导零且不超过 Rust u64 范围的十进制字符串；共享 Result 类型拥有该校验，
-图结果、描述符、分页、运行事件的结果查看请求、报告引用和 UI 页面/意图复用，不在各边界重新定义范围或转换为 JS number。
+图结果、描述符、分页、运行事件的结果查看请求、报告引用和 工作台意图复用，不在各边界重新定义范围或转换为 JS number。
 分页回复的 ResultId、requestedLimit 和 offset 必须对应原请求：已知总数允许偏移截到末尾，未知总数
 保持请求偏移；普通数据页和报告表页共用这一规则。value 回复保持既有正文契约。
 这些检查先于查询缓存发布；Application 继续负责项目与查询代次接纳、面板租约申请失败清理，以及交接
@@ -125,7 +125,7 @@ Rust 的线性与二元统计摘要各自保留对应模型字段。Logit/Probit
 
 线性回归统一使用 `yssbi.statistics.linear.fit`、`linear.summary` 与 `linear.predict`。Fit 在配置中选择 OLS/WLS/GLS，输出 `model`、`fitted`、`residuals`；Summary 只接收 `model`，无拟合参数，也不重新估计；Predict 使用同一模型的系数与截距。
 
-统计目录的其他 Summary 同样只接收对应方法的已拟合模型。Summary、ADF、独立检验和诊断只输出结构化 `result`；数值与报告是同一引用的两种展示，不是独立输出。普通结构化结果使用通用 JSON 页面，ADF 及已实现方法的接入范围见 [Node Catalog](../../../../src-tauri/crates/yss-node-catalog/README.md)。
+统计目录的其他 Summary 同样只接收对应方法的已拟合模型。Summary、ADF、独立检验和诊断只输出结构化 `result`；数值与报告是同一引用的两种展示，不是独立输出。普通结构化结果由通用组件直接呈现，ADF 及已实现方法的接入范围见 [Node Catalog](../../../../src-tauri/crates/yss-node-catalog/README.md)。
 WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通过按顺序添加的 `sigma` 数列接收完整相对误差协方差矩阵的各列，验证有限、方阵、对称与正定。只允许所选方法需要的辅助输入。WLS 权重与训练列联合读取以验证共同样本；协方差矩阵的行列顺序由调用者对应训练样本。GLS 当前仅支持常规标准误；其他标准误配置被拒绝。
 执行计划保留端口实例分组身份和模板名，内核只接收中立模板名来区分 predictors/weights/sigma，不解析图地址。
 
@@ -179,7 +179,7 @@ Plot 交付稳定的 `ParsedPlotPayload` 或无效图形状态；报告交付带
 ACF/PACF 分析携带 SCI 已计算的 `ciHalfWidth`，IPC 原样映射，前端 parser 要求有限正数。
 报告和相关图共用 SCI 的 95% 白噪声参考带，视图不依据样本数重新计算，也不为缺失字段提供推断或兼容回退。
 
-报告组件与 JSON 布局见 [Results views](../../../modules/results/README.md)。
+报告组件与结果呈现见 [Results views](../../../modules/results/README.md)。
 
 可视化结果仍使用 scalar Plot 查询与租约，不通过数列分页取第一页作为整张图。
 Graph 的 20 类 `plot.data` 输出按 descriptor 的 chart kind 校验和绘制；KDE 也归 Plot。
@@ -187,3 +187,9 @@ Graph 的 20 类 `plot.data` 输出按 descriptor 的 chart kind 校验和绘制
 校准和决策曲线复用折线及参考线，不在前端拟合或计算生存概率。
 chart kind 使用实际图形名称，散点图为 `scatter`；`plot` 仅表示 presentation kind。
 完整样本计算和展示抽样在 SCI 完成，前端保留观测数、AUC、分组或区间信息。
+
+描述节点的 Details 通过 `useCurrentPinResult` 只订阅对应输出的有效 descriptor，复用
+`useResultValue` 读取按原始列名组织的 `columns` 对象，各列摘要直接包含在结果 JSON 中。
+`useDescriptionResult` 在载荷变化时按 `semantic` 验证各类型的专属字段及连续的 `position`，拒绝混入不适用字段；分类列的 `categories` 编号对象投影为有序明细，保留类别原值、标签、频数、占比以及 Null、空字符串与宽整数文本。
+组件只格式化 Rust 已计算的统计量。当前图持有有效结果，Details 不固定历史快照或另建结果存储；
+上游编辑、重新执行和项目切换沿用 Results 的有效性判定，清除过期内容，卸载后释放 payload consumer。

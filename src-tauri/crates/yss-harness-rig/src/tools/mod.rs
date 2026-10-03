@@ -285,11 +285,8 @@ fn decode_request(
             arguments::decode::<yss_harness_contract::SaveGraphRequest>(arguments, schema)
                 .map(AutomationCapabilityRequest::SaveGraph)
         }
-        CapabilityId::InspectUi => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::InspectUi)
-        }
-        CapabilityId::UpdateUi => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::UpdateUi)
+        CapabilityId::InspectUiIntent => {
+            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::InspectUiIntent)
         }
         CapabilityId::RequestUiIntent => {
             arguments::decode(arguments, schema).map(AutomationCapabilityRequest::RequestUiIntent)
@@ -315,11 +312,8 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
         CapabilityId::ExportDataset => {
             "Export the current version of a project Database to the user-specified CSV or Parquet file using the normal database export owner. Requires a Database reference and current version. Returns the actual destination after successful publication. Do not claim success or blindly retry if publication outcome is uncertain."
         }
-        CapabilityId::InspectUi => {
-            "Inspect the closed UI catalog/schema, a retained linear regression result's current page and revision, or an intent receipt by ID. UI pages contain presentation only; report sections bind to actual Results. Page state lasts for the current project execution session."
-        }
-        CapabilityId::UpdateUi => {
-            "Update a result page using the revision from inspect_ui or the latest successful update_ui. Replace the spec or apply one atomic batch of stable-element patches, change visibility, move an element within its parent, or reset. Only catalog components/actions are accepted. Send complete valid batches, never partial JSON text. Returns the committed patch with complete changed elements, removals and revision; continue from it without rereading the page when its baseRevision matches your known page. Conflicts or a missing baseline require a fresh inspection; numerical facts remain in Results."
+        CapabilityId::InspectUiIntent => {
+            "Inspect a workbench intent receipt by ID to determine whether a requested UI operation is pending, claimed, applied, failed or expired."
         }
         CapabilityId::RequestUiIntent => {
             "Request opening any existing project resource with openResource and its exact {kind,id}; nodeId is optional for Event/Function Graph node focus only. Also supports opening a retained result or revealing an allowed panel. Use a unique clientKey, reused only for the identical request. Pending is acceptance, not success: inspect the receipt ID until applied/failed/expired. Requires the workbench to be attached; does not edit/save project data or own FlexLayout."

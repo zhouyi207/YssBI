@@ -1,4 +1,4 @@
-//! Session-scoped presentation state. Business data stays with Project and Results.
+//! Session-scoped workbench intents. Business data stays with Project and Results.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{
@@ -7,19 +7,16 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use yss_graph_execution::result::ResultId;
-use yss_node_kernel::RuntimeValue;
 use yss_project_identity::ProjectInstanceId;
 use yss_ui_contract::*;
 
 use crate::session::{ApplicationSession, ApplicationState};
 
-mod templates;
-
 #[derive(Debug, thiserror::Error)]
 pub enum UiError {
-    #[error("ui_spec_invalid")]
+    #[error("ui_intent_invalid")]
     Invalid,
-    #[error("ui_revision_conflict")]
+    #[error("ui_intent_conflict")]
     Conflict,
     #[error("ui_target_unavailable")]
     Unavailable,
@@ -34,8 +31,8 @@ pub enum UiError {
 impl UiError {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::Invalid => "ui_spec_invalid",
-            Self::Conflict => "ui_revision_conflict",
+            Self::Invalid => "ui_intent_invalid",
+            Self::Conflict => "ui_intent_conflict",
             Self::Unavailable => "ui_target_unavailable",
             Self::Session => "ui_session_changed",
             Self::Capacity => "ui_capacity_exceeded",
@@ -53,7 +50,6 @@ struct IntentEntry {
 
 #[derive(Default)]
 struct PresentationState {
-    pages: BTreeMap<UiSource, UiPage>,
     intents: VecDeque<IntentEntry>,
 }
 
@@ -145,110 +141,6 @@ impl PresentationSession {
     }
     pub(crate) fn detach_workbench(&self) {
         self.workbenches.fetch_sub(1, Ordering::SeqCst);
-    }
-
-    fn page(&self, source: &UiSource, spec: UiSpec) -> Result<UiPage, UiError> {
-        let state = self.state.lock().map_err(|_| UiError::Unavailable)?;
-        Ok(state.pages.get(source).cloned().unwrap_or_else(|| UiPage {
-            source: source.clone(),
-            revision: 1,
-            spec,
-        }))
-    }
-
-    fn prune_pages(&self, available: impl Fn(&UiSource) -> bool) -> Result<(), UiError> {
-        self.state
-            .lock()
-            .map_err(|_| UiError::Unavailable)?
-            .pages
-            .retain(|source, _| available(source));
-        Ok(())
-    }
-
-    fn update(&self, request: UpdateUiRequest, spec: UiSpec) -> Result<UiUpdate, UiError> {
-        let mut state = self.state.lock().map_err(|_| UiError::Unavailable)?;
-        let default = UiPage {
-            source: request.source.clone(),
-            revision: 1,
-            spec,
-        };
-        let previous = state.pages.get(&request.source).unwrap_or(&default);
-        if previous.revision != request.base_revision {
-            return Err(UiError::Conflict);
-        }
-        let mut next = previous.clone();
-        match request.action {
-            UiAction::Replace { spec } => next.spec = spec,
-            UiAction::Reset => next.spec = default.spec.clone(),
-            UiAction::Visibility { id, visible } => {
-                next.spec
-                    .elements
-                    .get_mut(&id)
-                    .ok_or(UiError::Invalid)?
-                    .visible = visible
-            }
-            UiAction::Move { id, offset } => {
-                if offset != -1 && offset != 1 {
-                    return Err(UiError::Invalid);
-                }
-                let parent = next
-                    .spec
-                    .elements
-                    .values_mut()
-                    .find(|element| element.children.contains(&id))
-                    .ok_or(UiError::Invalid)?;
-                let index = parent
-                    .children
-                    .iter()
-                    .position(|child| child == &id)
-                    .ok_or(UiError::Invalid)?;
-                let target = index
-                    .checked_add_signed(isize::from(offset))
-                    .filter(|target| *target < parent.children.len())
-                    .ok_or(UiError::Invalid)?;
-                parent.children.swap(index, target);
-            }
-            UiAction::Patch { operations } => {
-                if operations.is_empty() || operations.len() > MAX_ELEMENTS * 2 + 1 {
-                    return Err(UiError::Invalid);
-                }
-                for operation in operations {
-                    match operation {
-                        UiPatch::Set { id, element } => {
-                            next.spec.elements.insert(id, element);
-                        }
-                        UiPatch::Remove { id } => {
-                            next.spec.elements.remove(&id).ok_or(UiError::Invalid)?;
-                        }
-                        UiPatch::Root { id } => next.spec.root = id,
-                    }
-                }
-            }
-        }
-        next.spec.validate().map_err(|_| UiError::Invalid)?;
-        templates::validate_bindings(&next.spec, &default.spec).map_err(|_| UiError::Invalid)?;
-        if next.spec != previous.spec {
-            next.revision = previous
-                .revision
-                .checked_add(1)
-                .filter(|v| *v <= 9_007_199_254_740_991)
-                .ok_or(UiError::Capacity)?;
-        }
-        let update = diff(previous, &next);
-        let changed = next.revision != previous.revision;
-        if changed {
-            if !state.pages.contains_key(&request.source) && state.pages.len() >= 64 {
-                return Err(UiError::Capacity);
-            }
-            state.pages.insert(request.source, next);
-        }
-        // Publish under the commit lock so concurrent GUI / Harness mutations keep their order.
-        if changed {
-            self.publish(UiEvent::Update {
-                update: update.clone(),
-            });
-        }
-        Ok(update)
     }
 
     fn expire(state: &mut PresentationState) {
@@ -367,49 +259,19 @@ impl ApplicationState {
         if captured.project_instance_id() != project {
             return Err(UiError::Session);
         }
-        captured
-            .presentation
-            .prune_pages(|source| validate_source(&captured, source, true).is_ok())?;
         Ok(captured)
     }
 
-    pub fn inspect_ui(
+    pub fn inspect_ui_intent(
         &self,
         project: &ProjectInstanceId,
-        request: InspectUiRequest,
-    ) -> Result<UiInspection, UiError> {
+        request: InspectUiIntentRequest,
+    ) -> Result<UiIntentReceipt, UiError> {
         let session = self.ui_session(project)?;
-        let result = match request {
-            InspectUiRequest::Catalog => catalog(),
-            InspectUiRequest::Page { source } => {
-                validate_source(&session, &source, true)?;
-                UiInspection::Page {
-                    page: session
-                        .presentation
-                        .page(&source, report_spec(&session, &source)?)?,
-                }
-            }
-            InspectUiRequest::Intent { id } => UiInspection::Intent {
-                receipt: session.presentation.receipt(&id)?,
-            },
-        };
+        let receipt = session.presentation.receipt(&request.id)?;
         self.revalidate_captured_session(&session)
             .map_err(|_| UiError::Session)?;
-        Ok(result)
-    }
-
-    pub fn update_ui(
-        &self,
-        project: &ProjectInstanceId,
-        request: UpdateUiRequest,
-    ) -> Result<UiUpdate, UiError> {
-        request.validate().map_err(|_| UiError::Invalid)?;
-        let session = self.ui_session(project)?;
-        validate_source(&session, &request.source, true)?;
-        self.revalidate_captured_session(&session)
-            .map_err(|_| UiError::Session)?;
-        let spec = report_spec(&session, &request.source)?;
-        session.presentation.update(request, spec)
+        Ok(receipt)
     }
 
     pub fn request_ui_intent(
@@ -421,7 +283,7 @@ impl ApplicationState {
         request.validate().map_err(|_| UiError::Invalid)?;
         let session = self.ui_session(project)?;
         match &request.intent {
-            UiIntent::OpenResult { source } => validate_source(&session, source, false)?,
+            UiIntent::OpenResult { source } => validate_source(&session, source)?,
             UiIntent::OpenResource { resource, node_id } => {
                 let index = session
                     .project()
@@ -467,66 +329,9 @@ impl ApplicationState {
             .presentation
             .request_intent(format!("{caller}:{}", request.client_key), request.intent)
     }
-
-    pub fn activate_ui_element(
-        &self,
-        project: &ProjectInstanceId,
-        caller: &str,
-        request: ActivateUiRequest,
-    ) -> Result<UiIntentReceipt, UiError> {
-        let session = self.ui_session(project)?;
-        validate_source(&session, &request.source, true)?;
-        let page = session
-            .presentation
-            .page(&request.source, report_spec(&session, &request.source)?)?;
-        if page.revision != request.base_revision {
-            return Err(UiError::Conflict);
-        }
-        let element = page
-            .spec
-            .elements
-            .get(&request.id)
-            .filter(|element| element.visible)
-            .ok_or(UiError::Invalid)?;
-        let UiComponent::Button { intent, .. } = &element.component else {
-            return Err(UiError::Invalid);
-        };
-        self.request_ui_intent(
-            project,
-            caller,
-            RequestUiIntent {
-                client_key: request.client_key,
-                intent: intent.clone(),
-            },
-        )
-    }
 }
 
-fn report_spec(session: &ApplicationSession, source: &UiSource) -> Result<UiSpec, UiError> {
-    validate_source(session, source, true)?;
-    let result = session
-        .execution()
-        .query_result(ResultId::from_existing(
-            source.result_id.parse().map_err(|_| UiError::Invalid)?,
-        ))
-        .ok_or(UiError::Unavailable)?;
-    match result.value().value().unannotated() {
-        RuntimeValue::LinearRegression(model) => {
-            let summary = model.summary.as_ref().ok_or(UiError::Unavailable)?;
-            Ok(templates::regression::spec_for(&summary.options))
-        }
-        RuntimeValue::Record(_) => {
-            templates::spec_for(result.value().value()).map_err(|_| UiError::Invalid)
-        }
-        _ => Err(UiError::Unavailable),
-    }
-}
-
-fn validate_source(
-    session: &ApplicationSession,
-    source: &UiSource,
-    report: bool,
-) -> Result<(), UiError> {
+fn validate_source(session: &ApplicationSession, source: &UiSource) -> Result<(), UiError> {
     source.validate().map_err(|_| UiError::Invalid)?;
     if source.execution_session_id != session.execution_session_id().as_uuid().to_string() {
         return Err(UiError::Unavailable);
@@ -535,18 +340,10 @@ fn validate_source(
     if id.to_string() != source.result_id {
         return Err(UiError::Invalid);
     }
-    let result = session
+    session
         .execution()
         .query_result(ResultId::from_existing(id))
         .ok_or(UiError::Unavailable)?;
-    let supports_report = match result.value().value().unannotated() {
-        RuntimeValue::Record(_) => true,
-        RuntimeValue::LinearRegression(model) => model.summary.is_some(),
-        _ => false,
-    };
-    if report && !supports_report {
-        return Err(UiError::Unavailable);
-    }
     Ok(())
 }
 
@@ -598,27 +395,28 @@ mod tests {
     }
 
     #[test]
-    fn pages_follow_result_retention_and_defaults_do_not_consume_capacity() {
+    fn open_result_intents_follow_result_retention() {
         let (application, reference, _) = crate::graph::results::report::tests::fixture(12);
         let session = application.capture_session().unwrap();
         let project = session.project_instance_id();
+        session.presentation.attach_workbench();
         let source = UiSource {
             execution_session_id: reference.execution_session_id.as_uuid().to_string(),
             result_id: reference.result_id.get().to_string(),
         };
-        for id in 1..100 {
-            session
-                .presentation
-                .page(
-                    &UiSource {
-                        result_id: id.to_string(),
-                        ..source.clone()
+        let open = || {
+            application.request_ui_intent(
+                project,
+                "test",
+                RequestUiIntent {
+                    client_key: "open-result".into(),
+                    intent: UiIntent::OpenResult {
+                        source: source.clone(),
                     },
-                    templates::regression::spec_for(&Default::default()),
-                )
-                .unwrap();
-        }
-        assert!(session.presentation.state.lock().unwrap().pages.is_empty());
+                },
+            )
+        };
+        let original = open().unwrap();
         let [first, second] = [uuid::Uuid::new_v4(), uuid::Uuid::new_v4()];
         application
             .retain_result(reference, first, "first", None)
@@ -626,93 +424,41 @@ mod tests {
         application
             .retain_result(reference, second, "second", None)
             .unwrap();
-        application
-            .update_ui(
-                project,
-                UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 1,
-                    action: UiAction::Visibility {
-                        id: "anova".into(),
-                        visible: false,
-                    },
-                },
-            )
-            .unwrap();
         session
             .execution()
             .invalidate_graph_results("events/report.yssbi-event");
         application.release_result_lease(first, "first").unwrap();
-        application
-            .inspect_ui(
-                project,
-                InspectUiRequest::Page {
-                    source: source.clone(),
-                },
-            )
-            .unwrap();
-        assert_eq!(
-            session
-                .presentation
-                .page(&source, report_spec(&session, &source).unwrap())
-                .unwrap()
-                .revision,
-            2
-        );
+        assert_eq!(open().unwrap(), original);
         application.release_result_lease(second, "second").unwrap();
-        application
-            .inspect_ui(project, InspectUiRequest::Catalog)
-            .unwrap();
-        assert!(session.presentation.state.lock().unwrap().pages.is_empty());
-    }
-
-    fn observe(
-        session: &PresentationSession,
-    ) -> (UiSubscription, std::sync::mpsc::Receiver<UiEvent>) {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let subscription = session
-            .subscribe(Arc::new(move |event| {
-                let _ = sender.send(event);
-            }))
-            .unwrap();
-        (subscription, receiver)
+        assert!(matches!(open(), Err(UiError::Unavailable)));
     }
 
     #[test]
-    fn gui_and_harness_share_pages_and_reject_stale_result_sessions() {
+    fn gui_and_harness_inspect_the_same_intent_receipt() {
         use yss_harness_contract::{
             AutomationCapabilityRequest, AutomationCapabilityResult, CancellationToken,
             CapabilityControl, CapabilityInvocationContext, CapabilityInvocationId,
             HarnessSessionId, PrincipalId, ProjectSessionBinding,
         };
-        let (application, reference, _) = crate::graph::results::report::tests::fixture(12);
+        let (application, _, _) = crate::graph::results::report::tests::fixture(12);
         let session = application.capture_session().unwrap();
         let project = session.project_instance_id();
-        let source = UiSource {
-            execution_session_id: reference.execution_session_id.as_uuid().to_string(),
-            result_id: reference.result_id.get().to_string(),
-        };
-        application
-            .inspect_ui(
+        session.presentation.attach_workbench();
+        let receipt = application
+            .request_ui_intent(
                 project,
-                InspectUiRequest::Page {
-                    source: source.clone(),
-                },
-            )
-            .unwrap();
-        application
-            .update_ui(
-                project,
-                UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 1,
-                    action: UiAction::Visibility {
-                        id: "anova".into(),
-                        visible: false,
+                "test",
+                RequestUiIntent {
+                    client_key: "show-details".into(),
+                    intent: UiIntent::ShowPanel {
+                        panel: UiPanel::Details,
                     },
                 },
             )
             .unwrap();
+        let request = InspectUiIntentRequest {
+            id: receipt.id.clone(),
+        };
         let context = CapabilityInvocationContext::new(
             PrincipalId::try_new("user").unwrap(),
             HarnessSessionId::try_new("session").unwrap(),
@@ -722,164 +468,32 @@ mod tests {
         let control = CapabilityControl::new(CancellationToken::default(), Duration::from_secs(10));
         let result = application
             .invoke_automation_capability(
-                context.clone(),
-                AutomationCapabilityRequest::InspectUi(InspectUiRequest::Page {
-                    source: source.clone(),
-                }),
-                &control,
-                &mut |_| {},
-            )
-            .unwrap();
-        let AutomationCapabilityResult::UiInspection(UiInspection::Page { page }) = result else {
-            panic!()
-        };
-        assert_eq!(page.revision, 2);
-        assert!(!page.spec.elements["anova"].visible);
-        let (_subscription, stream) = observe(&session.presentation);
-        application
-            .invoke_automation_capability(
                 context,
-                AutomationCapabilityRequest::UpdateUi(UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 2,
-                    action: UiAction::Reset,
-                }),
+                AutomationCapabilityRequest::InspectUiIntent(request.clone()),
                 &control,
                 &mut |_| {},
             )
             .unwrap();
-        assert!(matches!(
-            stream.try_recv().unwrap(),
-            UiEvent::Update {
-                update: UiUpdate::Patch { revision: 3, .. }
-            }
-        ));
-        let UiInspection::Page { page } = application
-            .inspect_ui(
-                project,
-                InspectUiRequest::Page {
-                    source: source.clone(),
-                },
-            )
-            .unwrap()
-        else {
+        let AutomationCapabilityResult::UiIntentInspection(inspected) = result else {
             panic!()
         };
-        assert!(page.spec.elements["anova"].visible);
-        let stale = UiSource {
-            execution_session_id: uuid::Uuid::new_v4().to_string(),
-            ..source
-        };
-        assert!(matches!(
-            application.update_ui(
-                project,
-                UpdateUiRequest {
-                    source: stale,
-                    base_revision: 3,
-                    action: UiAction::Reset
-                }
-            ),
-            Err(UiError::Unavailable)
-        ));
+        assert_eq!(inspected, receipt);
+        assert_eq!(
+            application.inspect_ui_intent(project, request).unwrap(),
+            receipt
+        );
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let _subscription = session
+            .presentation
+            .subscribe(Arc::new(move |event| {
+                let _ = sender.send(event);
+            }))
+            .unwrap();
         session.presentation.session_changed();
         assert!(matches!(
-            stream.try_recv().unwrap(),
+            receiver.try_recv().unwrap(),
             UiEvent::SessionChanged
         ));
-    }
-
-    #[test]
-    fn competing_edits_and_invalid_batches_leave_the_committed_page_intact() {
-        let session = PresentationSession::default();
-        let source = UiSource {
-            execution_session_id: "test".into(),
-            result_id: "1".into(),
-        };
-        session
-            .page(
-                &source,
-                templates::regression::spec_for(&Default::default()),
-            )
-            .unwrap();
-        let (_subscription, events) = observe(&session);
-        session
-            .update(
-                UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 1,
-                    action: UiAction::Visibility {
-                        id: "anova".into(),
-                        visible: false,
-                    },
-                },
-                templates::regression::spec_for(&Default::default()),
-            )
-            .unwrap();
-        assert!(matches!(
-            events.try_recv().unwrap(),
-            UiEvent::Update {
-                update: UiUpdate::Patch {
-                    base_revision: 1,
-                    revision: 2,
-                    ..
-                }
-            }
-        ));
-        assert!(matches!(
-            session.update(
-                UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 1,
-                    action: UiAction::Reset
-                },
-                templates::regression::spec_for(&Default::default())
-            ),
-            Err(UiError::Conflict)
-        ));
-        assert!(matches!(
-            session.update(
-                UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 2,
-                    action: UiAction::Patch {
-                        operations: vec![UiPatch::Remove { id: "anova".into() }]
-                    }
-                },
-                templates::regression::spec_for(&Default::default())
-            ),
-            Err(UiError::Invalid)
-        ));
-        assert!(matches!(
-            session.update(
-                UpdateUiRequest {
-                    source: source.clone(),
-                    base_revision: 2,
-                    action: UiAction::Patch {
-                        operations: vec![UiPatch::Set {
-                            id: "anova-content".into(),
-                            element: UiElement {
-                                component: UiComponent::Chart {
-                                    binding: "anova".into()
-                                },
-                                visible: true,
-                                children: vec![]
-                            },
-                        }]
-                    },
-                },
-                templates::regression::spec_for(&Default::default())
-            ),
-            Err(UiError::Invalid)
-        ));
-        let page = session
-            .page(
-                &source,
-                templates::regression::spec_for(&Default::default()),
-            )
-            .unwrap();
-        assert_eq!(page.revision, 2);
-        assert!(!page.spec.elements["anova"].visible);
-        assert!(events.try_recv().is_err());
     }
 
     #[test]

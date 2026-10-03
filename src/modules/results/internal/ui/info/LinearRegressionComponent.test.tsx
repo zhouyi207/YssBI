@@ -10,29 +10,6 @@ import { ResultService } from "@/services/result/resultService";
 import { loadPresentationWindow } from "@/features/application/presentation/loadPresentationWindow";
 import { resetResultQueryProject } from "@/features/application/results/runtime";
 import { ReportView } from "./ReportView";
-import type { ResultReference } from "@/shared/types/domain/result";
-
-vi.mock("@/features/application/presentation/useUiPage", async () => {
-  const { readFileSync } = await import("node:fs");
-  const spec = JSON.parse(
-    readFileSync("src/tests/fixtures/node-system-contracts/regression-ui.json", "utf8"),
-  );
-  return {
-    useUiPage: (source: ResultReference) => ({
-      page: {
-        source,
-        revision: 1,
-        spec,
-      },
-      error: null,
-      busy: false,
-      reload: vi.fn(),
-      act: vi.fn(),
-      activate: vi.fn(),
-    }),
-  };
-});
-
 vi.mock("@/services/result/resultSessionChannel", () => ({
   publishResultSessionEnd: vi.fn(),
 }));
@@ -172,7 +149,7 @@ it("loads an OLS overview and reads selected analyses and expanded plots by refe
     expect(host.textContent).toContain("H₀ 原假设");
 
     const plot = [...host.querySelectorAll("details")].find(
-      (element) => element.querySelector("summary")?.textContent === "Residuals vs Fitted",
+      (element) => element.querySelector("summary")?.textContent === "reportSections.residualPlot",
     )!;
     await act(async () => {
       plot.open = true;

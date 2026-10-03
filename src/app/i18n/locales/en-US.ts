@@ -97,35 +97,22 @@ export const enUS = {
     empty:
       "No report contents were selected for this execution. Add contents here or configure the Summary node.",
   },
-  reportLayout: {
-    title: "Report layout",
-    sessionOnly:
-      "Arrange the computed contents. Reopening keeps the layout during the same project runtime session; restarting or switching projects restores defaults.",
-    moveUp: "Move {{section}} up",
-    moveDown: "Move {{section}} down",
-    json: "Import or export layout",
-    jsonHelp:
-      "Load the layout to copy or edit its JSON and combine containers, text, report sections and buttons. Report sections always use the current result.",
-    export: "Load current layout",
-    apply: "Apply layout",
-    sections: {
-      equation: "Equation",
-      modelSummary: "Model summary",
-      anova: "ANOVA",
-      coefficientTable: "Coefficients",
-      coefficientMagnitude: "Coefficient magnitude",
-      hypothesisTest: "Hypothesis tests",
-      diagnostics: "Diagnostics overview",
-      residualPlot: "Residual plot",
-      observations: "Fitted values and residuals",
-      acfPacf: "ACF and PACF",
-      serialTests: "Serial correlation tests",
-    },
-    errors: {
-      invalidShape:
-        "Invalid layout field or structure ({{path}}). The previous layout is preserved.",
-    },
+  reportSections: {
+    diagnosticTests: "Model diagnostics",
+    structuredResult: "Structured result",
+    equation: "Equation",
+    modelSummary: "Model summary",
+    anova: "ANOVA",
+    coefficientTable: "Coefficients",
+    coefficientMagnitude: "Coefficient magnitude",
+    hypothesisTest: "Hypothesis tests",
+    diagnostics: "Diagnostics overview",
+    residualPlot: "Residual plot",
+    observations: "Fitted values and residuals",
+    acfPacf: "ACF and PACF",
+    serialTests: "Serial correlation tests",
   },
+
   common: {
     loading: "Loading...",
     initializing: "Initializing...",
@@ -334,8 +321,7 @@ export const enUS = {
       manage_resource: "Manage project resources",
       edit_resource: "Edit resource contents",
       export_dataset: "Export dataset",
-      inspect_ui: "Inspect UI",
-      update_ui: "Update UI",
+      inspect_ui_intent: "Inspect UI intent receipt",
       request_ui_intent: "Request UI action",
       inspect_project: "Inspect project",
       inspect_graph: "Inspect graph",

@@ -1,6 +1,7 @@
 import {
   createContext,
   lazy,
+  memo,
   Suspense,
   useContext,
   useEffect,
@@ -33,8 +34,9 @@ import {
   type LinearRegressionReportData,
 } from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
-import type { UiResultBindings } from "@/components/ui-presentation/UiPageRenderer";
-import { ResultReportPage } from "./ResultReportPage";
+import { KeyValue } from "@/components/ui-presentation/KeyValue";
+import { DataTable } from "@/components/ui-presentation/DataTable";
+import { StatCard } from "@/components/ui-presentation/StatCard";
 import { CoefficientTable } from "@/components/ui-presentation/CoefficientTable";
 import { HypothesisTestResultView } from "./shared/HypothesisTestBlock";
 import { AcfPacfResultView } from "./shared/ACFPACFBlock";
@@ -260,7 +262,7 @@ function CoefficientsProvider({
   );
 }
 
-export const LinearResultBindings: FC<{
+export const LinearRegressionReport: FC<{
   data: LinearRegressionReportData;
   onValueChange?: (value: LinearRegressionReportData) => void;
 }> = ({ data, onValueChange }) => {
@@ -269,7 +271,7 @@ export const LinearResultBindings: FC<{
     onValueChange?.(contents.data);
   }, [contents.data, onValueChange]);
   const report = (
-    <LinearRegressionReport
+    <LinearReportContents
       key={`${contents.data.resultRef.executionSessionId}:${contents.data.resultRef.resultId}`}
       contents={contents}
     />
@@ -349,7 +351,7 @@ function LinearAnalysisSection({
         : { kind: "serialTests" },
   );
   return (
-    <Section title={t(`reportLayout.sections.${kind}`)} collapsible={false}>
+    <Section title={t(`reportSections.${kind}`)} collapsible={false}>
       {query.error ? (
         <ResultReadError error={query.error} onRetry={() => void query.reload()} />
       ) : null}
@@ -365,78 +367,90 @@ function LinearAnalysisSection({
   );
 }
 
-function LinearRegressionReport({
+function LinearReportContents({
   contents,
 }: {
   contents: ReturnType<typeof useLinearSummaryContents>;
 }) {
   const { data } = contents;
+  const { summary } = data;
   const { t } = useTranslation();
-  const results = useMemo<UiResultBindings>(
-    () => ({
-      equation: {
-        type: "equation",
-        available:
-          data.summary.equation &&
-          data.coefficients.rowCount > 0 &&
-          data.coefficients.rowCount <= LINEAR_COEFFICIENT_PAGE_SIZE,
-        content: <LinearCoefficientsSection data={data} mode="equation" />,
-      },
-      coefficients: {
-        type: "coefficientTable",
-        available: data.summary.coefficient_table,
-        content: <LinearCoefficientsSection data={data} mode="table" />,
-      },
-      coefficientMagnitude: {
-        type: "chart",
-        available: data.summary.coefficient_chart,
-        content: <LinearCoefficientsSection data={data} mode="chart" />,
-      },
-      diagnosticTests: {
-        type: "analysis",
-        available: data.summary.diagnostics,
-        content: <LinearDiagnostics reference={data.resultRef} />,
-      },
-      residualPlot: {
-        type: "chart",
-        available: data.summary.residual_plot,
-        content: <LinearResidualPlot reference={data.resultRef} />,
-      },
-      observations: {
-        type: "table",
-        available: data.summary.observations,
-        content: <LinearObservations data={data} />,
-      },
-      hypothesis: {
-        type: "analysis",
-        available: data.summary.hypothesis_test,
-        content: <LinearAnalysisSection data={data} kind="hypothesisTest" />,
-      },
-      acfPacf: {
-        type: "analysis",
-        available: data.summary.acf_pacf,
-        content: <LinearAnalysisSection data={data} kind="acfPacf" />,
-      },
-      serialTests: {
-        type: "analysis",
-        available: data.summary.serial_tests,
-        content: <LinearAnalysisSection data={data} kind="serialTests" />,
-      },
-    }),
-    [data],
-  );
   return (
-    <ResultReportPage reference={data.resultRef} data={data.presentation} bindings={results}>
+    <>
       <AddReportContents
-        options={data.summary}
+        options={summary}
         paramNames={data.paramNames}
         busy={contents.busy}
         error={contents.error}
         onAdd={contents.add}
       />
-      {!LINEAR_SUMMARY_CONTENTS.some(({ key }) => data.summary[key]) && (
+      {!LINEAR_SUMMARY_CONTENTS.some(({ key }) => summary[key]) && (
         <p className="text-sm text-muted-foreground">{t("reportSummary.empty")}</p>
       )}
-    </ResultReportPage>
+      <LinearReportSections data={data} />
+    </>
   );
 }
+
+const LinearReportSections = memo(function LinearReportSections({
+  data,
+}: {
+  data: LinearRegressionReportData;
+}) {
+  const { summary, presentation } = data;
+  const { t } = useTranslation();
+  return (
+    <>
+      {summary.equation &&
+        data.coefficients.rowCount > 0 &&
+        data.coefficients.rowCount <= LINEAR_COEFFICIENT_PAGE_SIZE && (
+          <Section title={t("reportSections.equation")} collapsible={false}>
+            <LinearCoefficientsSection data={data} mode="equation" />
+          </Section>
+        )}
+      {summary.model_summary && (
+        <Section title={t("reportSections.modelSummary")} collapsible={false}>
+          <KeyValue items={presentation.summary.items} />
+        </Section>
+      )}
+      {summary.anova && (
+        <Section title={t("reportSections.anova")} collapsible={false}>
+          <DataTable columns={presentation.anova.columns} rows={presentation.anova.rows} />
+        </Section>
+      )}
+      {summary.coefficient_table && (
+        <Section title={t("reportSections.coefficientTable")} collapsible={false}>
+          <LinearCoefficientsSection data={data} mode="table" />
+        </Section>
+      )}
+      {summary.coefficient_chart && (
+        <Section title={t("reportSections.coefficientMagnitude")} collapsible={false}>
+          <LinearCoefficientsSection data={data} mode="chart" />
+        </Section>
+      )}
+      {summary.hypothesis_test && <LinearAnalysisSection data={data} kind="hypothesisTest" />}
+      {summary.diagnostics && (
+        <>
+          <Section title={t("reportSections.diagnostics")} collapsible={false}>
+            <StatCard {...presentation.conditionNumber.stat} />
+          </Section>
+          <Section title={t("reportSections.diagnosticTests")} collapsible>
+            <LinearDiagnostics reference={data.resultRef} />
+          </Section>
+        </>
+      )}
+      {summary.residual_plot && (
+        <Section title={t("reportSections.residualPlot")} collapsible>
+          <LinearResidualPlot reference={data.resultRef} />
+        </Section>
+      )}
+      {summary.observations && (
+        <Section title={t("reportSections.observations")} collapsible>
+          <LinearObservations data={data} />
+        </Section>
+      )}
+      {summary.acf_pacf && <LinearAnalysisSection data={data} kind="acfPacf" />}
+      {summary.serial_tests && <LinearAnalysisSection data={data} kind="serialTests" />}
+    </>
+  );
+});

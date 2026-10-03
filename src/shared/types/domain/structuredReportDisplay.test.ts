@@ -23,6 +23,8 @@ describe("structured report display boundary", () => {
     const section = parseReportDisplay(value).coefficients;
     expect(section.path).toBe("/coefficients");
     expect(section.value).toBe(value.coefficients);
+    value.report_display.sections.coefficients.title = " \t";
+    expect(() => parseReportDisplay(value)).toThrow("invalid_report_display");
     expect(structuredValueAt({}, "/constructor")).toBeUndefined();
     expect(structuredValueAt({ "a/b": 2 }, "/a~1b")).toBe(2);
     expect(structuredValueAt({}, "/a~2b")).toBeUndefined();

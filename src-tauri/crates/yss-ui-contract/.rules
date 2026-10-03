@@ -1,6 +1,6 @@
-# Presentation contract changes
+# Workbench intent contract changes
 
-- Read `README.md` before changing the page or intent protocol.
-- Component/action changes must update the Rust contract, TypeScript domain and
-  wire validators, and `UiPageRenderer` together. Harness schemas derive from
-  the Rust types; do not maintain a separate handwritten component catalog.
+- Read `README.md` before changing the intent protocol.
+- Update the Rust contract, TypeScript domain and wire validators, and workbench
+  delivery consumers together. Harness schemas derive from the Rust types;
+  do not maintain a separate handwritten intent catalog.

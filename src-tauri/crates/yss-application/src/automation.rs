@@ -80,13 +80,9 @@ fn invoke_capability(
             return resources::export_dataset(application, &captured, request, control)
                 .map(AutomationCapabilityResult::DatasetExported);
         }
-        AutomationCapabilityRequest::InspectUi(request) => application
-            .inspect_ui(captured.project_instance_id(), request)
-            .map(AutomationCapabilityResult::UiInspection)
-            .map_err(map_ui_error),
-        AutomationCapabilityRequest::UpdateUi(request) => application
-            .update_ui(captured.project_instance_id(), request)
-            .map(AutomationCapabilityResult::UiUpdate)
+        AutomationCapabilityRequest::InspectUiIntent(request) => application
+            .inspect_ui_intent(captured.project_instance_id(), request)
+            .map(AutomationCapabilityResult::UiIntentInspection)
             .map_err(map_ui_error),
         AutomationCapabilityRequest::RequestUiIntent(request) => application
             .request_ui_intent(
@@ -143,7 +139,7 @@ fn map_ui_error(error: crate::presentation::UiError) -> CapabilityFailure {
     use crate::presentation::UiError;
     let code = match error {
         UiError::Invalid => CapabilityFailureCode::InvalidRequest,
-        UiError::Conflict => CapabilityFailureCode::RevisionConflict,
+        UiError::Conflict => CapabilityFailureCode::InvocationConflict,
         UiError::Session => CapabilityFailureCode::ProjectSessionChanged,
         UiError::Capacity => CapabilityFailureCode::ResultTooLarge,
         UiError::Unavailable | UiError::Workbench => CapabilityFailureCode::ResultUnavailable,

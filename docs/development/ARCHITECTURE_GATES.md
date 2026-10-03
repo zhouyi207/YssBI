@@ -14,7 +14,7 @@
 
 - 桌面负责组装，IPC 适配调用 Application 用例，领域不依赖 UI/Tauri。
 - 前端 app 组合模块，Application 编排操作，Core/Domain 保存既有状态与规则，Services 适配 IPC。
-- React 安装后端只读投影，Graph/Execution/Results、页面状态和工作台 FlexLayout 各有独立权威。
+- React 安装后端只读投影，Graph/Execution/Results 和工作台 FlexLayout 各有独立权威，报告组件直接消费结果。
 - 科学计算、插件、项目、数据库和文件系统遵循各自专项契约，不通过扩大依赖范围绕过边界。
 
 完整规则以链接的架构文档为准，不在本文件复制一份许可表。
