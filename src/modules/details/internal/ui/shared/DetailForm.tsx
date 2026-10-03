@@ -125,11 +125,16 @@ export function DetailReadonlyField({
         as="div"
         tone={tone}
         className={cn(
-          "flex min-h-7 min-w-0 items-center justify-end truncate px-2 py-0.5 text-right",
+          "flex min-h-7 min-w-0 items-center justify-end px-2 py-0.5 text-right",
           className,
         )}
       >
-        {children}
+        <span
+          className="min-w-0 truncate"
+          title={typeof children === "string" ? children : undefined}
+        >
+          {children}
+        </span>
       </DetailText>
     </DetailFieldRow>
   );

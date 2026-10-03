@@ -2225,6 +2225,7 @@ export const enUS = {
     loadFailed: "Could not load file details.",
     unavailable: "Details for this file are currently unavailable.",
     sections: {
+      info: "Info",
       diagnostics: "Problems",
     },
     parameterEditor: {

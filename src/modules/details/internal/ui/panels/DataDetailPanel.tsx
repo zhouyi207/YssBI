@@ -23,13 +23,18 @@ export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
 
   return (
     <DetailPanelShell>
-      <DetailCollapsibleSection title={dataframe.name} defaultOpen>
+      <DetailForm>
+        <DetailReadonlyField label={t("detail.fields.name")} tone="body">
+          {dataframe.name}
+        </DetailReadonlyField>
+        {dataframe.loadFailed && (
+          <p role="alert" className="text-xs text-destructive">
+            {t("detail.loadFailed")}
+          </p>
+        )}
+      </DetailForm>
+      <DetailCollapsibleSection title={t("detail.sections.info")} defaultOpen>
         <DetailForm>
-          {dataframe.loadFailed && (
-            <p role="alert" className="text-xs text-destructive">
-              {t("detail.loadFailed")}
-            </p>
-          )}
           <DetailReadonlyField label={t("detail.fields.columns")}>
             {columnCount === undefined ? "—" : t("detail.counts.columns", { count: columnCount })}
           </DetailReadonlyField>

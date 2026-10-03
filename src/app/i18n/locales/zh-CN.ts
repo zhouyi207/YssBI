@@ -2047,6 +2047,7 @@ export const zhCN = {
     loadFailed: "无法加载文件详情。",
     unavailable: "此文件的详情暂不可用。",
     sections: {
+      info: "信息",
       diagnostics: "问题",
     },
     parameterEditor: {
