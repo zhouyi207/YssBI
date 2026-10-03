@@ -61,7 +61,6 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.statistics.doe.uniform_design" => markdown!("doe_uniform_design"),
         "yssbi.statistics.doe.response_surface" => markdown!("doe_response_surface"),
         "yssbi.statistics.doe.dose_response" => markdown!("doe_dose_response"),
-        "yssbi.statistics.plot.statistical.family" => markdown!("quality_statistical_plots"),
         "yssbi.statistics.plot.control_chart" => markdown!("quality_control_chart"),
         "yssbi.statistics.quality.process_capability" => markdown!("quality_process_capability"),
         "yssbi.statistics.quality.measurement_system" => markdown!("quality_measurement_system"),

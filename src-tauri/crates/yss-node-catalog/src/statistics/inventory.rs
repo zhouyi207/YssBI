@@ -29,7 +29,6 @@ fn implemented(id: &str) -> bool {
         || super::path::implemented(id)
         || super::power::implemented(id)
         || super::survey::implemented(id)
-        || super::plot_overview::implemented(id)
         || super::analyses::implemented(id)
         || super::causal_models::implemented(id)
         || super::spatial::implemented(id)

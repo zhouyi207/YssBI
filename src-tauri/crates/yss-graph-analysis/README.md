@@ -10,7 +10,7 @@
 它们优先于统计节点的通用结构化报告分类，继续使用既有绘图结果契约。
 质量控制图的 `result` 同样解析为 Line，`summary` 为结构化统计报告，
 `observations` 为普通关系结果；三个输出的分类互不混用。
-统计图分布概览按端口将 `result`、`ecdf`、`boxplot` 分别分类为 Histogram、Ecdf、Boxplot。
+直方图、经验累积分布图和箱线图节点的 `result` 分别分类为 Histogram、Ecdf、Boxplot。
 
 ## Semantic resolution
 

@@ -6,8 +6,6 @@ states scoring, tie handling and undefined-statistic rules; existing exploratory
 factor nodes remain the owner of factor extraction interfaces.
 `statistics/quality` declares I/MR plots, capability with optional rational
 subgroups, and balanced crossed continuous-measurement Gage R&R studies.
-`statistics/plot_overview` exposes histogram, ECDF and boxplot outputs from one
-numeric input in the design/quality category, using the existing plot contracts.
 `statistics/doe` owns experimental factor-level analysis and coded design generation interfaces, plus quadratic response surface and four-parameter
 continuous dose-response fits, separately
 from process monitoring and measurement-system declarations.
@@ -78,6 +76,7 @@ Numeric 数列，帮助说明全部样本估计填补值、空列规则和单次
 “数据处理 → 数据序列”中的“数据标签”由 `src/dataframe/labels.rs` 声明。数据编码入口已实现为数据序列目录中的“虚拟变量生成”，沿用 `yssbi.dataframe.encode`，不代替基础类型转换。
 
 “可视化 / Visualization”使用 `plot` 分类 ID，19 个节点均在 `src/plot/mod.rs` 声明并由 Kernel 执行：散点、折线、ECDF、KDE、直方、相关性、自相关、箱线、词云、误差线、P-P/Q-Q、ROC、象限、帕累托、组合、气泡、小提琴、热力和系数图。
+直方图、经验累积分布图和箱线图分别使用独立节点，可将同一数列连接到三个节点以查看分布。
 输出统一为 `plot.data` 结构化绘图数据，通过既有 Result 查询和 Plot 窗口由 D3 展示。
 配对输入需要已证明的行对齐，箱线/小提琴组可为独立样本；缺失值不隐式删除。
 KDE 默认 256 个网格点，系数图接收线性 Fit 的 OLS/WLS/GLS 模型。所有节点均有中英文帮助，说明参数、计算和展示点数限制。

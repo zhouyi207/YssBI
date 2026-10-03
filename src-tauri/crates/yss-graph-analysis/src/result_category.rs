@@ -41,14 +41,6 @@ pub(crate) fn result_category_for_output(
     node_type_id: &str,
     port_key: &str,
 ) -> GraphResultCategory {
-    if node_type_id == "yssbi.statistics.plot.statistical.family" {
-        return match port_key {
-            "result" => GraphResultCategory::PlotData(GraphPlotDataKind::Histogram),
-            "ecdf" => GraphResultCategory::PlotData(GraphPlotDataKind::Ecdf),
-            "boxplot" => GraphResultCategory::PlotData(GraphPlotDataKind::Boxplot),
-            _ => GraphResultCategory::Value,
-        };
-    }
     if port_key == "result" && node_type_id == "yssbi.statistics.linear.summary" {
         GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::LinearRegressionSummary)
     } else if node_type_id == "yssbi.statistics.plot.control_chart" && port_key == "summary" {
@@ -164,10 +156,6 @@ mod tests {
             ),
             ("yssbi.plot.line.view", GraphPlotDataKind::Line),
             (
-                "yssbi.statistics.plot.statistical.family",
-                GraphPlotDataKind::Histogram,
-            ),
-            (
                 "yssbi.statistics.plot.control_chart",
                 GraphPlotDataKind::Line,
             ),
@@ -210,15 +198,6 @@ mod tests {
             assert_eq!(
                 result_category_for_output("yssbi.statistics.linear.fit", output),
                 GraphResultCategory::Value
-            );
-        }
-        for (port, kind) in [
-            ("ecdf", GraphPlotDataKind::Ecdf),
-            ("boxplot", GraphPlotDataKind::Boxplot),
-        ] {
-            assert_eq!(
-                result_category_for_output("yssbi.statistics.plot.statistical.family", port),
-                GraphResultCategory::PlotData(kind)
             );
         }
         assert_eq!(

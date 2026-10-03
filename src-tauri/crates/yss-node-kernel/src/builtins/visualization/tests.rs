@@ -82,17 +82,16 @@ fn plot(
 }
 
 #[test]
-fn distribution_overview_returns_three_distinct_plot_carriers_from_all_rows() {
+fn distribution_plots_compute_from_all_rows() {
     for values in [vec![3.; 640], (0..640).map(|i| i as f64).collect()] {
-        let output = run(
-            "yssbi.statistics.plot.statistical.family",
+        let histogram = plot(
+            "histogram",
             &[("values", series(&values))],
             &[("bins", integer(0))],
-            &vec![ValueType::Struct("plot.data".into()); 3],
         )
         .unwrap();
-        assert_eq!(field(&output[0], "observations"), &integer(640));
-        let RuntimeValue::List(bins) = field(&output[0], "data") else {
+        assert_eq!(field(&histogram[0], "observations"), &integer(640));
+        let RuntimeValue::List(bins) = field(&histogram[0], "data") else {
             panic!("histogram")
         };
         let count: i64 = bins
@@ -103,15 +102,17 @@ fn distribution_overview_returns_three_distinct_plot_carriers_from_all_rows() {
             })
             .sum();
         assert_eq!(count, 640);
+        let ecdf = plot("ecdf", &[("values", series(&values))], &[]).unwrap();
         assert_eq!(
-            field(field(&output[1], "metadata"), "observations"),
+            field(field(&ecdf[0], "metadata"), "observations"),
             &integer(640)
         );
-        let RuntimeValue::List(points) = field(&output[1], "data") else {
+        let RuntimeValue::List(points) = field(&ecdf[0], "data") else {
             panic!("ecdf")
         };
         assert_eq!(field(points.last().unwrap(), "y"), &number(1.));
-        let RuntimeValue::List(groups) = field(&output[2], "groups") else {
+        let boxplot = plot("boxplot", &[("series", series(&values))], &[]).unwrap();
+        let RuntimeValue::List(groups) = field(&boxplot[0], "groups") else {
             panic!("boxplot")
         };
         assert_eq!(field(&groups[0], "observations"), &integer(640));

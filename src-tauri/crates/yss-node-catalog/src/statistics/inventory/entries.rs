@@ -2084,17 +2084,6 @@ pub(super) const ENTRIES: &[Entry] = &[
         scope_note: "计量型均衡交叉随机效应 ANOVA，分解重复性、再现性、零件及交互变异。",
     },
     Entry {
-        id: "yssbi.statistics.plot.statistical.family",
-        method: "plot.statistical.family",
-        source_ids: &[216],
-        category: "statistics.design_quality",
-        en: "Plot Statistical Family",
-        zh: "统计图",
-        aliases: &["plot.statistical.family", "统计图"],
-        product_form: "绘图节点",
-        scope_note: "分布概览一次输出直方图、经验分布函数及箱线图，复用绘图类别算法。",
-    },
-    Entry {
         id: "yssbi.statistics.power.principles",
         method: "power.principles",
         source_ids: &[217],

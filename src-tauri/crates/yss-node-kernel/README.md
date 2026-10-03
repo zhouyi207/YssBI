@@ -35,8 +35,6 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 `builtins/statistics/quality` 适配单值/移动极差控制图、过程能力和均衡交叉 Gage R&R。
 子组及零件/操作者标识复用精确分类编码；控制图同时预算完整绘图点和可分页观测表，
 不以显示抽样隐藏越界观测。统计假设和随机效应检验分母由 SCI 持有。
-`builtins/visualization/overview` 一次物化输入，复用 SCI 的直方图、ECDF 和箱线图，
-分别输出三个既有绘图载体，并按共同的结构化值预算计入全部暂存输出。
 `builtins/statistics/doe/range` 保留实验因素原始水平，输出水平汇总关系。
 `doe/design` 在生成前按完整设计矩阵和关系转换计费。`common/tables` 同时供试验设计和
 多元坐标结果转换使用；不截断行或列。

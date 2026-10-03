@@ -8,7 +8,6 @@ use yss_data_contract::TabularScalar;
 use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 use yss_sci_contract::visualization::*;
 use yss_sci_runtime::visualization as sci;
-mod overview;
 
 #[derive(Clone, Copy)]
 enum Method {
@@ -34,7 +33,6 @@ enum Method {
 }
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
-    overview::register(builder);
     use Method::*;
     for (name, method, inputs, parameters) in [
         (

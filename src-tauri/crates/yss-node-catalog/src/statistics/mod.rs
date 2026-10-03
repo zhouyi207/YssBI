@@ -22,7 +22,6 @@ mod meta;
 mod multivariate;
 mod panel_models;
 mod path;
-mod plot_overview;
 mod ports;
 mod power;
 mod psychometrics;
@@ -71,7 +70,6 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     survey::append(&mut fragment)?;
     quality::append(&mut fragment)?;
     doe::append(&mut fragment)?;
-    plot_overview::append(&mut fragment)?;
     time_series::append(&mut fragment)?;
     longitudinal::append(&mut fragment)?;
     analyses::append(&mut fragment)?;
