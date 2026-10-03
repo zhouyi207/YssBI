@@ -1,6 +1,8 @@
 use super::EditorSchemaResolver;
 use crate::GraphSchemaIssue;
-use crate::parameter_projection::{effective_json_parameter, effective_text_parameter};
+use crate::parameter_projection::{
+    effective_conversion_target, effective_json_parameter, effective_text_parameter,
+};
 use yss_data_contract::{ValueType, table::append_column_names};
 use yss_graph_document::{DynamicMemberLocator, DynamicPortBinding, NodeId, PortAddress, PortRef};
 use yss_node_protocol::{
@@ -178,18 +180,8 @@ impl<'a> EditorSchemaResolver<'a> {
                 };
                 return self.composition_series(&connection.output);
             }
-            NodeTypingSpec::ShapePreservingConversion { parameter, .. } => {
-                match effective_text_parameter(node, parameter, self.registry) {
-                    Some("auto") => self
-                        .automatic_outputs
-                        .get(source)
-                        .and_then(|state| state.exact())
-                        .and_then(yss_graph_type_mapping::data_type_from_resolved_type)
-                        .as_ref()
-                        .and_then(scalar_semantic),
-                    target => target
-                        .and_then(|id| SemanticType::ALL.into_iter().find(|s| s.type_id() == id)),
-                }
+            NodeTypingSpec::ShapePreservingConversion { target, .. } => {
+                effective_conversion_target(node, target, self.registry)
             }
             _ => {
                 let output = protocol

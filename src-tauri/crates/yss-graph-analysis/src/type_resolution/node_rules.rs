@@ -1,6 +1,8 @@
 //! Declared node typing rules, numeric shapes and their input coercions.
 use super::domains::{exact_type_expr, state_from_candidates};
-use crate::parameter_projection::{effective_json_parameter, effective_text_parameter};
+use crate::parameter_projection::{
+    effective_conversion_target, effective_json_parameter, effective_text_parameter,
+};
 use crate::{GraphInputCoercion, GraphPortSemanticFact};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::{PortAddress, PortRef};
@@ -134,22 +136,11 @@ pub(super) fn apply_node_rule(
         }
         NodeTypingSpec::ShapePreservingConversion {
             input,
-            parameter,
+            target,
             output,
         } => {
-            let target = effective_text_parameter(node, parameter, registry);
-            if target == Some("auto") {
-                // The demand pass has already constrained this output before cache lookup.
-                // Input meaning must never select the automatic target.
-                return;
-            }
-            let target = target
-                .filter(|value| {
-                    yss_node_protocol::SemanticType::ALL
-                        .iter()
-                        .any(|semantic| semantic.type_id() == *value)
-                })
-                .and_then(|value| yss_node_protocol::TypeId::new(value).ok());
+            let target = effective_conversion_target(node, target, registry)
+                .and_then(|value| yss_node_protocol::TypeId::new(value.type_id()).ok());
             let input = declared_port(ports, input).and_then(|port| states.get(&port.address));
             let state = match (target, input) {
                 (None, _) => TypeState::Conflict(TypeConflict::UnsupportedParameter),

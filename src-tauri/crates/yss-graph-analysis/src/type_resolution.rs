@@ -1,6 +1,5 @@
 //! Forward type resolution: prepare inputs, reuse or solve outputs, and install node facts.
 mod cache;
-mod constraints;
 mod domains;
 mod node_rules;
 
@@ -13,7 +12,6 @@ use cache::{
     CachedNodeResolution, node_input_fingerprint, semantic_fingerprint,
     semantic_fingerprint_without_document,
 };
-pub(crate) use constraints::automatic_output_constraints;
 pub use domains::type_patterns_can_connect;
 use domains::{
     bind_input_generics, exact_type_expr, expand_pattern, state_from_candidates, state_from_pattern,
@@ -32,7 +30,6 @@ pub(crate) fn resolve_node_types(
     index: &super::document_index::DocumentIndex<'_>,
     registry: &NodeRegistry,
     nodes: &mut [GraphNodeSemanticFact],
-    automatic_outputs: &BTreeMap<PortAddress, TypeState>,
     cache: &mut GraphSemanticCache,
 ) -> Vec<GraphDiagnosticFact> {
     cache.reused_nodes = 0;
@@ -89,12 +86,7 @@ pub(crate) fn resolve_node_types(
         {
             states.insert(
                 port.address.clone(),
-                automatic_outputs
-                    .get(&port.address)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        state_from_pattern(&port.accepted_type, registry.types(), &generic_bindings)
-                    }),
+                state_from_pattern(&port.accepted_type, registry.types(), &generic_bindings),
             );
         }
 

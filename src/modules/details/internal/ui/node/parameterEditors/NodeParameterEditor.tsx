@@ -39,14 +39,8 @@ function optionLabel(key: string, option: string, t: TFunction): string {
     return t(`tableComposition.${option}`);
   if (key === "target_type") {
     const labels: Record<string, string> = {
-      auto: "conversion.auto",
-      "core.numeric": "conversion.numeric",
-      "core.text": "conversion.text",
-      "core.binary": "conversion.binary",
       "core.categorical": "conversion.categorical",
       "core.ordinal": "conversion.ordinal",
-      "core.datetime": "conversion.datetime",
-      "core.identifier": "conversion.identifier",
     };
     if (labels[option]) return t(labels[option]);
   }

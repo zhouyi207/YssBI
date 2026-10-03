@@ -18,7 +18,6 @@ use yss_graph_resource_contract::{
 use yss_node_protocol::{
     ColumnSelectionExpr, ParameterKey, PortKey, RelationalScalarType, RenameExpr,
     ResolvedSchemaFact, SchemaColumnRef, SchemaExpr, SchemaField, SchemaFieldLineage, TypeExpr,
-    TypeState,
 };
 use yss_node_registry::NodeRegistry;
 
@@ -53,7 +52,6 @@ pub(crate) fn resolve_graph_schemas(
     index: &crate::document_index::DocumentIndex<'_>,
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
-    automatic_outputs: &BTreeMap<PortAddress, TypeState>,
     cache: &mut SchemaCache,
 ) -> SchemaResolution {
     #[cfg(test)]
@@ -115,7 +113,6 @@ pub(crate) fn resolve_graph_schemas(
         index,
         registry,
         resources: resources.clone(),
-        automatic_outputs,
         cache,
         resolved: SchemaResolution::default(),
         series_fields: BTreeMap::new(),
@@ -231,7 +228,6 @@ struct EditorSchemaResolver<'a> {
     index: &'a crate::document_index::DocumentIndex<'a>,
     registry: &'a NodeRegistry,
     resources: ResourceCatalogSnapshot,
-    automatic_outputs: &'a BTreeMap<PortAddress, TypeState>,
     cache: &'a mut SchemaCache,
     resolved: SchemaResolution,
     series_fields: BTreeMap<PortAddress, Result<SchemaField, GraphSchemaIssue>>,

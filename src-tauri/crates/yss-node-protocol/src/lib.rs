@@ -39,8 +39,8 @@ pub use types::{
     TypeNormalizationError, normalize_type_expr,
 };
 pub use typing::{
-    InputCoercionKind, NodeTypingSpec, PortSelector, ResolvedType, ShapeRule, TypeConflict,
-    TypeDomain, TypeState, TypeUnknownReason,
+    ConversionTarget, InputCoercionKind, NodeTypingSpec, PortSelector, ResolvedType, ShapeRule,
+    TypeConflict, TypeDomain, TypeState, TypeUnknownReason,
 };
 pub use validation::{
     LiteralValidationIssue, LocatedParameterIssue, ParameterIssueKind, ParameterValidation,

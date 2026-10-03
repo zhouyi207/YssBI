@@ -1,54 +1,42 @@
 use yss_data_contract::{
-    ConversionDomain, DatetimeRepresentation, SemanticConversion, SemanticValue, TemporalPrecision,
-    ValueType,
+    ConversionDomain, DatetimeRepresentation, NumericRepresentation, SemanticConversion,
+    SemanticType, SemanticValue, TemporalPrecision, ValueType,
 };
 
 use yss_data_contract::TabularScalar;
 
 use crate::{KernelControl, KernelError, KernelInvocation, RuntimeValue};
 
-pub(super) fn execute(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue, KernelError> {
-    let Some(RuntimeValue::Scalar(TabularScalar::String(target))) =
-        invocation.parameter("target_type")
-    else {
-        return Err(KernelError::Failed);
-    };
-    let Some(RuntimeValue::Scalar(TabularScalar::String(numeric))) =
-        invocation.parameter("numeric_mode")
-    else {
-        return Err(KernelError::Failed);
-    };
-    let target = if target.as_ref() == "auto" {
-        let [output] = invocation.outputs else {
-            return Err(KernelError::Failed);
-        };
-        match &output.data_type {
-            ValueType::Scalar(semantic) => semantic.type_id(),
-            ValueType::DataSeries(element) => match element.as_ref() {
-                ValueType::Scalar(semantic) => semantic.type_id(),
-                _ => return Err(KernelError::Failed),
-            },
-            _ => return Err(KernelError::Failed),
-        }
-    } else {
-        target.as_ref()
-    };
-    let mut conversion =
-        SemanticConversion::from_parameters(target, numeric).ok_or(KernelError::Failed)?;
-    conversion.domain = conversion_domain(
-        invocation
-            .parameter("semantic_domain")
-            .ok_or(KernelError::Failed)?,
-    )?;
+pub(super) fn execute(
+    target: SemanticType,
+    invocation: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
+    let mut conversion = SemanticConversion::new(target, NumericRepresentation::Auto);
     let text = |name| match invocation.parameter(name) {
         Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value.as_ref()),
-        _ => Err(KernelError::Failed),
+        _ => Err(KernelError::InvalidParameter),
     };
-    conversion.datetime = DatetimeRepresentation::from_parameter(text("datetime_kind")?)
-        .ok_or(KernelError::Failed)?;
-    conversion.precision = TemporalPrecision::from_parameter(text("datetime_precision")?)
-        .ok_or(KernelError::Failed)?;
-    conversion.format = text("datetime_format")?.into();
+    match target {
+        SemanticType::Numeric => {
+            conversion.numeric = NumericRepresentation::from_parameter(text("numeric_mode")?)
+                .ok_or(KernelError::InvalidParameter)?;
+        }
+        SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary => {
+            conversion.domain = conversion_domain(
+                invocation
+                    .parameter("semantic_domain")
+                    .ok_or(KernelError::InvalidParameter)?,
+            )?;
+        }
+        SemanticType::Datetime => {
+            conversion.datetime = DatetimeRepresentation::from_parameter(text("datetime_kind")?)
+                .ok_or(KernelError::InvalidParameter)?;
+            conversion.precision = TemporalPrecision::from_parameter(text("datetime_precision")?)
+                .ok_or(KernelError::InvalidParameter)?;
+            conversion.format = text("datetime_format")?.into();
+        }
+        SemanticType::Text | SemanticType::Identifier => {}
+    }
     convert(invocation, conversion)
 }
 

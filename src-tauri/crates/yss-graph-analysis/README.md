@@ -27,7 +27,7 @@
 | `schema_resolution` / `function_validation` | Schema 求解与输出缓存；函数 ABI 校验                                             |
 | `type_resolution`                           | 编排输入解析、缓存复用、输出求解和节点事实安装                                   |
 | `type_resolution/domains` / `node_rules`    | 类型域与泛型规则；节点声明规则、数值形状和 coercion                              |
-| `type_resolution/constraints` / `cache`     | 自动转换的反向约束；可丢弃缓存与语义指纹                                         |
+| `type_resolution/cache`                     | 可丢弃的类型/coercion 缓存与语义指纹                                             |
 
 完成状态统一从最终阻断诊断推导；内部解析故障仍优先于普通 incomplete。
 节点参数先按协议默认值和条件显隐投影当前有效集合，资源引用与 Schema 参数校验共用该集合；
@@ -65,7 +65,7 @@ flowchart LR
   READY --> PREPARE[Execution plan preparation]
 ```
 
-`ConcreteGraphInterface` 是 snapshot 内端口事实的借用视图，不存第二份端口表。类型使用 `Exact / Constrained / Unknown / Conflict`；`TypeExpr` 只描述声明 pattern。Add、Reroute、Convert 复用 NumericFold、Identity、ParameterOutput 规则，coercion 和 kernel specialization 与类型结果一起交付。
+`ConcreteGraphInterface` 是 snapshot 内端口事实的借用视图，不存第二份端口表。类型使用 `Exact / Constrained / Unknown / Conflict`；`TypeExpr` 只描述声明 pattern。Add、Reroute 和七个 To 节点分别使用 NumericFold、Identity、ShapePreservingConversion 规则，coercion 和 kernel specialization 与类型结果一起交付。
 
 Pin 创建目录和连接提交共用本模块的类型兼容规则：输出读取 snapshot 的已解析类型域，输入读取可接受类型域，候选节点的声明类型通过同一类型类展开与可赋值规则比较。类型域没有交集时拒绝；未解析的泛型仍允许连接，但不会绕过已知的容器形状或类型约束。Editor 在创建并连接、直接连线和迁移连线时重新校验，创建节点及连线属于同一原子补丁。
 
@@ -77,7 +77,7 @@ Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识�
 Graph Document Edit 拒绝缺失端点；Analysis 的直接调用也不能将此类文档解析为 Ready。
 拓扑仅在本次解析内存活，`GraphSemanticSnapshot` 仍是唯一语义事实源。
 
-类型域和节点规则由正向求解与反向约束复用；缓存模块仅保存已有 `GraphSemanticCache` 的
+类型域和节点规则服务正向求解；缓存模块仅保存已有 `GraphSemanticCache` 的
 可丢弃结果及其身份，不维护另一份图或类型状态。公开缓存类型与连接兼容入口继续从 crate 根导出。
 
 Schema 输出缓存校验 registry、节点参数、常量内容、输入地址与上游 Schema 状态，以及该输出实际读取的资源依赖。上游编辑没有改变 Schema 时，下游可复用已有求解结果。缓存命中也记录所依赖的资源和 absent lookup，避免资源恢复后继续复用缺失状态；cycle 清空该图的 Schema 缓存，删除节点时清除其输出。类型/coercion 缓存继续使用最新 Schema 作为输入。增量结果、诊断和依赖记录须与 full resolve 一致；缓存未命中时仍遍历图、校验输入并组装完整 snapshot，不代表整个流程只访问受影响节点。
@@ -85,19 +85,16 @@ Schema 输出缓存校验 registry、节点参数、常量内容、输入地址�
 输入指纹同时包含标量/数列的列名称、语义类型、lineage 或解析问题；输出没有表 Schema 时，
 改变转换目标仍会使合表、设列、频数等消费者重新求解。列事实复用本次解析的连接索引，并在原
 Schema resolver 内按源端口复用成功或失败结果；该临时表随请求释放，不成为第二份持久语义状态。
-Schema 与正向/反向类型求解共用 `parameter_projection` 的文本参数读取，显式值优先于协议默认值；
+Schema 与类型求解共用 `parameter_projection` 的转换目标读取；固定目标直接读取声明，参数目标按显式值优先于协议默认值解析。
 值标签节点未显式设置目标时，列语义与其默认分类类型保持一致。
 数据库来源、选列/排除列、重命名、合表与聚合的 Schema 求解也读取协议中的有效参数；ColumnOutput
 的列事实和精确类型使用同一文本读取。按 key 读取前由 Protocol 判断参数是否适用，非法显式值不回退为默认值。
 JSON 读取借用已有显式值，仅在缺失时转换协议默认值；变换求解的临时参数表借用 key 和显式 JSON，
 并排除不适用字段。合表方式和右表后缀等默认值只由 Catalog 声明，不在求解器重复保存。
 
-自动转换与 Schema 在同一次解析内共同收敛：先按已有字段构造端口，再用原反向约束求解器
-收窄自动输出类型；确定类型改变时，Schema 消费这些结果并重新准备端口。每轮保留本次已证明的
-约束，有限类型域只收窄，不使用按图大小设定的迭代截断。未确定或冲突状态仍表示未知列语义，
-不触发无效的 Schema 重建；没有自动转换时只经过一轮。约束稳定后正向求解复用同一结果，
-再执行最终校验并发布完整快照，不保留中间诊断或发布部分节点。下一次请求从空的自动约束开始，
-因此编辑目标语义或解除冲突不受上一次结果限制；已有 Schema 与类型缓存仍按当前输入复用。
+七个 To 节点通过 `ConversionTarget::Fixed` 声明目标，值标签节点通过 `ConversionTarget::Parameter`
+读取分类或顺序参数。Schema 先沿数据依赖解析列语义，再构造端口并正向求解类型；两阶段使用同一目标事实。
+下游连接只校验兼容性，不改变转换目标。无需自动目标的反向约束或收敛循环，已有 Schema 与类型缓存仍按当前输入复用。
 
 编辑器仅在操作引用端口、需要校验或 claim 派生端口时请求前置 Resolve。移动、普通节点创建、参数设置等操作直接准备文档补丁；批次在最终文档上统一解析并生成投影，批次内部的连接操作仍读取其前序操作之后的端口事实。函数正文也延后到需要解析时捕获。图活动、历史与显式保存仍由原有事务提交。
 
@@ -155,7 +152,7 @@ Schema 依赖参数并参与既有缓存失效，维数编辑同步更新下游�
 
 常量类型和值由 Graph Document 校验；DataFrame/DataSeries 将列数据持久化为常量内的 `TabularSnapshot`，句柄由 ConstantId 派生。Graph Analysis 解析输出类型及表格列 Schema；Execution 的计划准备捕获不可变值，将数列转换为值列表、数据帧转换为列记录，运行过程不读取可变项目变量。常量内容参与语义 fingerprint，名称、说明和标签不使计划缓存失效。
 
-节点投影持有已解析常量的共享事实；后续正向类型规则和反向约束借用该事实的类型，不再次解析引用 ID 或读取文档常量表。
+节点投影持有已解析常量的共享事实；后续类型规则借用该事实的类型，不再次解析引用 ID 或读取文档常量表。
 缺失选择与引用失效仍保留原有不同类型状态；计划准备继续消费同一节点常量事实。
 
 Clipboard 仅携带选中 Get 节点引用的常量。目标图已有同一身份且内容相同的常量时复用；身份或名称冲突时复制定义并重写引用。常量和节点进入同一个可撤销补丁。复制整张图则生成独立常量身份。

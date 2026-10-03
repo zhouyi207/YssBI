@@ -8,9 +8,9 @@ Ordinal levels follow the configured order from low to high.
 An empty configuration inherits a compatible existing domain; otherwise the domain must be supplied.
 Duplicate codes, invalid domains and nonnull observations outside a declared domain fail explicitly instead of becoming missing values.
 
-To recode positive/negative codes as booleans, use the binary target in Type Conversion.
+To recode positive/negative codes as booleans, use To Binary.
 
-This node reuses the Type Conversion semantic path. Its configuration is stored in graph parameters and metadata follows the output; it does not directly edit source database field settings.
+Its configuration is stored in graph parameters and metadata follows the output; it does not directly edit source database field settings.
 
 Series retain lazy relations and row alignment, with no fixed row cap.
 These are value meanings. Rename columns with the existing column-rename operation and edit graph-node display names in node properties.

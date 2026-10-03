@@ -3,7 +3,7 @@ use yss_data_contract::{DataValue, SemanticType};
 use yss_graph_document::{ConstantId, GraphConstant, normalize_constant_value};
 use yss_node_protocol::{
     NodeTypingSpec, ParameterCondition, ParameterEditorSpec, PortDirection, ResolvedType,
-    TypeUnknownReason,
+    TypeState, TypeUnknownReason,
 };
 
 fn constant(id: ConstantId, name: &str, data_type: ValueType, value: DataValue) -> GraphConstant {

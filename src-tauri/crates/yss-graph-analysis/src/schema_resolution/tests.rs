@@ -678,7 +678,7 @@ fn schema_cache_tracks_series_meaning_in_composition_and_transforms() {
 }
 
 #[test]
-fn automatic_conversion_propagates_through_schema_consumers_until_types_agree() {
+fn fixed_conversion_targets_reach_schema_consumers_and_survive_downstream_conflicts() {
     use yss_data_contract::{DataValue, SemanticType as S};
     use yss_graph_document::{ConstantId, GraphConstant};
     let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
@@ -721,7 +721,7 @@ fn automatic_conversion_propagates_through_schema_consumers_until_types_agree() 
     let mut constraint = port(demand, "value");
     let mut stages = Vec::new();
     for _ in 0..3 {
-        let convert = node(&mut document, "yssbi.value.convert", &[]);
+        let convert = node(&mut document, "yssbi.value.to_numeric", &[]);
         let equal = node(&mut document, "yssbi.logic.equal", &[]);
         let frequency = node(&mut document, "yssbi.dataframe.series.frequency", &[]);
         let selected = node(
@@ -756,6 +756,14 @@ fn automatic_conversion_propagates_through_schema_consumers_until_types_agree() 
             .unwrap();
         demand.data_type = ValueType::Scalar(semantic);
         demand.data_value = value;
+        for &(convert, _, _) in &stages {
+            document.nodes.get_mut(&convert).unwrap().node_type = format!(
+                "yssbi.value.to_{}",
+                semantic.type_id().strip_prefix("core.").unwrap()
+            )
+            .parse()
+            .unwrap();
+        }
         let snapshot = resolve_graph_semantics_with_cache(
             &document,
             &builtin.registry,
@@ -802,14 +810,19 @@ fn automatic_conversion_propagates_through_schema_consumers_until_types_agree() 
     );
     let conflict = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
     assert!(conflict.ready().is_none());
-    assert!(matches!(
+    assert_eq!(
         conflict
             .concrete_interface()
             .port(&port(last, "output"))
             .unwrap()
             .type_state,
-        yss_node_protocol::TypeState::Conflict(_)
-    ));
+        yss_node_protocol::TypeState::Exact(yss_node_protocol::ResolvedType::Applied {
+            constructor: "core.data_series".parse().unwrap(),
+            arguments: Box::new([yss_node_protocol::ResolvedType::Nominal(
+                "core.binary".parse().unwrap()
+            )]),
+        })
+    );
     document
         .connections
         .get_mut(&conflicting_edge)

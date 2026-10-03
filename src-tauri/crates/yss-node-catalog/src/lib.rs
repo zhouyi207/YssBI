@@ -313,6 +313,64 @@ mod tests {
     }
 
     #[test]
+    fn conversion_catalog_exposes_fixed_targets_with_only_relevant_parameters() {
+        use yss_node_protocol::{ConversionTarget, NodeTypingSpec, SemanticType};
+
+        let system = build_builtin_node_system().unwrap();
+        for locale in ["zh-CN", "en-US"] {
+            let catalog = system.catalog.localize(&system.registry, locale);
+            for (target, keys) in [
+                (SemanticType::Numeric, &["numeric_mode"][..]),
+                (SemanticType::Text, &[][..]),
+                (SemanticType::Categorical, &["semantic_domain"][..]),
+                (SemanticType::Ordinal, &["semantic_domain"][..]),
+                (SemanticType::Binary, &["semantic_domain"][..]),
+                (
+                    SemanticType::Datetime,
+                    &["datetime_kind", "datetime_precision", "datetime_format"][..],
+                ),
+                (SemanticType::Identifier, &[][..]),
+            ] {
+                let id = NodeTypeId::new(format!(
+                    "yssbi.value.to_{}",
+                    target.type_id().strip_prefix("core.").unwrap()
+                ))
+                .unwrap();
+                let item = catalog
+                    .items
+                    .iter()
+                    .find(|item| item.node_type_id.as_ref() == id.as_str())
+                    .unwrap();
+                assert_eq!(item.category_id.as_ref(), "conversion");
+                assert!(!item.title.is_empty());
+                assert!(
+                    item.documentation
+                        .as_ref()
+                        .is_some_and(|help| !help.is_empty())
+                );
+                let protocol = system.registry.protocol(&id).unwrap();
+                assert!(matches!(protocol.typing,
+                    NodeTypingSpec::ShapePreservingConversion { target: ConversionTarget::Fixed(actual), .. } if actual == target
+                ));
+                assert_eq!(
+                    protocol
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.key.as_str())
+                        .collect::<Vec<_>>(),
+                    keys
+                );
+            }
+        }
+        assert!(
+            system
+                .registry
+                .protocol(&NodeTypeId::new("yssbi.value.convert").unwrap())
+                .is_none()
+        );
+    }
+
+    #[test]
     fn numeric_type_class_contains_the_numeric_semantic() {
         let registry = build_builtin_node_system()
             .expect("production built-in registry must assemble")

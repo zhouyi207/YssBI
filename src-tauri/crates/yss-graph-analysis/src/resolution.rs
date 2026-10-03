@@ -10,11 +10,10 @@ use crate::{
     GraphSchemaState, GraphSemanticCache, GraphSemanticSnapshot, function_validation,
     graph_problem, semantic_validation, type_resolution,
 };
-use std::collections::BTreeMap;
 use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, PortRef};
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
-use yss_node_protocol::{PortDirection, ResolvedType, TypeState};
+use yss_node_protocol::{PortDirection, ResolvedType};
 use yss_node_registry::NodeRegistry;
 
 pub fn resolve_graph_semantics(
@@ -47,54 +46,20 @@ pub(crate) fn resolve_graph_semantics_inner(
     validate_functions: bool,
 ) -> GraphSemanticSnapshot {
     let index = DocumentIndex::new(document);
-    let mut automatic_outputs = BTreeMap::new();
-    let (resolved_schemas, mut nodes, internal_interface_node, mut diagnostics) = loop {
-        let mut diagnostics = Vec::new();
-        let schemas = resolve_graph_schemas(
-            document,
-            &index,
-            registry,
-            resources,
-            &automatic_outputs,
-            &mut cache.schemas,
-        );
-        let (mut nodes, internal_interface_node) = project_nodes(
-            document,
-            &index,
-            registry,
-            resources,
-            &schemas,
-            &mut diagnostics,
-        );
-        include_referenced_orphan_ports(document, &index, &mut nodes, &mut diagnostics);
-        let constrained_outputs = type_resolution::automatic_output_constraints(
-            document,
-            &index,
-            registry,
-            &nodes,
-            &automatic_outputs,
-        );
-        // Unresolved or conflicting targets both leave the column meaning unknown.
-        // Rebuild Schema/interface facts only when an exact automatic type changed.
-        let schema_types_stable = automatic_outputs
-            .keys()
-            .chain(constrained_outputs.keys())
-            .all(|address| {
-                automatic_outputs.get(address).and_then(TypeState::exact)
-                    == constrained_outputs.get(address).and_then(TypeState::exact)
-            });
-        automatic_outputs = constrained_outputs;
-        if schema_types_stable {
-            break (schemas, nodes, internal_interface_node, diagnostics);
-        }
-    };
-    diagnostics.extend(type_resolution::resolve_node_types(
+    let mut diagnostics = Vec::new();
+    let resolved_schemas =
+        resolve_graph_schemas(document, &index, registry, resources, &mut cache.schemas);
+    let (mut nodes, internal_interface_node) = project_nodes(
         document,
         &index,
         registry,
-        &mut nodes,
-        &automatic_outputs,
-        cache,
+        resources,
+        &resolved_schemas,
+        &mut diagnostics,
+    );
+    include_referenced_orphan_ports(document, &index, &mut nodes, &mut diagnostics);
+    diagnostics.extend(type_resolution::resolve_node_types(
+        document, &index, registry, &mut nodes, cache,
     ));
     for node in &mut nodes {
         project_schema_parameter_editors(node);

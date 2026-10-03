@@ -1,4 +1,4 @@
-use yss_data_contract::TabularScalar;
+use yss_data_contract::{SemanticType, TabularScalar};
 mod aggregation;
 mod alignment;
 mod boolean;
@@ -27,7 +27,7 @@ enum BuiltinKernel {
     Numeric(NumericOperation),
     Boolean(yss_relational_contract::BooleanOperation),
     Comparison(yss_relational_contract::ComparisonOperation),
-    Convert,
+    Convert(SemanticType),
     Labels,
     Observe,
 }
@@ -490,16 +490,45 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             1..=1,
         ),
         (
-            "yssbi.value.convert",
-            Convert,
-            &[
-                "target_type",
-                "numeric_mode",
-                "semantic_domain",
-                "datetime_kind",
-                "datetime_precision",
-                "datetime_format",
-            ],
+            "yssbi.value.to_numeric",
+            Convert(SemanticType::Numeric),
+            &["numeric_mode"],
+            1..=1,
+        ),
+        (
+            "yssbi.value.to_text",
+            Convert(SemanticType::Text),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.value.to_categorical",
+            Convert(SemanticType::Categorical),
+            &["semantic_domain"],
+            1..=1,
+        ),
+        (
+            "yssbi.value.to_ordinal",
+            Convert(SemanticType::Ordinal),
+            &["semantic_domain"],
+            1..=1,
+        ),
+        (
+            "yssbi.value.to_binary",
+            Convert(SemanticType::Binary),
+            &["semantic_domain"],
+            1..=1,
+        ),
+        (
+            "yssbi.value.to_datetime",
+            Convert(SemanticType::Datetime),
+            &["datetime_kind", "datetime_precision", "datetime_format"],
+            1..=1,
+        ),
+        (
+            "yssbi.value.to_identifier",
+            Convert(SemanticType::Identifier),
+            &[],
             1..=1,
         ),
         (
@@ -544,7 +573,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                     Boolean(_) => 4,
                     Statistical(Summary) => 11,
                     Statistical(Predict) => 4,
-                    Convert => 7,
+                    Convert(_) => 1,
                     Constant => 5,
                     Relational(
                         relational::RelationalKernel::Limit | relational::RelationalKernel::Join,
@@ -608,7 +637,7 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
         Relational(_) => vec![Input::fixed("source")],
         Numeric(NumericOperation::Add) => vec![Input::repeated("operands", 2..=usize::MAX)],
         Numeric(op) if op.is_unary() => vec![Input::fixed("input")],
-        Boolean(yss_relational_contract::BooleanOperation::Not) | Convert | Labels => {
+        Boolean(yss_relational_contract::BooleanOperation::Not) | Convert(_) | Labels => {
             vec![Input::fixed("input")]
         }
         Numeric(_) | Boolean(_) | Comparison(_) => {
@@ -637,7 +666,7 @@ fn execute_kernel(
         BuiltinKernel::Numeric(operation) => numeric::execute(operation, invocation),
         BuiltinKernel::Boolean(operation) => boolean::execute(operation, invocation),
         BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
-        BuiltinKernel::Convert => conversion::execute(invocation),
+        BuiltinKernel::Convert(target) => conversion::execute(target, invocation),
         BuiltinKernel::Labels => conversion::labels(invocation),
         BuiltinKernel::Observe => return Ok(Vec::new()),
     }?;

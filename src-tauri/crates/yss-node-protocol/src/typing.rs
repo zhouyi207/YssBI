@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{ParameterKey, PortKey, TypeConstructorId, TypeId};
+use super::{ParameterKey, PortKey, SemanticType, TypeConstructorId, TypeId};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ResolvedType {
@@ -109,7 +109,7 @@ pub enum NodeTypingSpec {
     },
     ShapePreservingConversion {
         input: PortKey,
-        parameter: ParameterKey,
+        target: ConversionTarget,
         output: PortKey,
     },
     ConstantOutput {
@@ -121,6 +121,12 @@ pub enum NodeTypingSpec {
         column: ParameterKey,
         output: PortKey,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConversionTarget {
+    Fixed(SemanticType),
+    Parameter(ParameterKey),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

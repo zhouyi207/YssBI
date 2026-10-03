@@ -224,9 +224,7 @@ Panel Fit/Compare 使用 revision 7：双向随机效应 MLE 的似然计算按�
 AND/OR/NOT 接受 Binary 标量或数列，采用 SQL 三值逻辑，内存数列要求等长并支持标量广播。NOT 保持输入类型和形状，使用类型恒等规则但仍是执行叶节点。惰性输入通过关系契约构造 DataFusion 原生 AND/OR/NOT 表达式，在结果消费时执行，不由布尔运算节点物化整列或封装自定义布尔 UDF；具备正值映射的非标准二元编码先复用语义转换规范化。关系行域必须一致。这些节点属于数据计算，不构成图的控制流或上游短路执行承诺。
 
 类型转换由 `yss-data-contract::SemanticConversion` 定义目标语义、数值表示、显式值域、时间形式/精度与解析格式，支持全部七种 Semantic。
-`ShapePreservingConversion` 按输入形状推导标量或 DataSeries 输出；原有按 Int64/Float64/String 组合拆分的数列转换定义已移除。
-目标语义默认 Auto，通过解析器内部的单调类型域约束求解下游输入 Pin 的交集，支持重路由及泛型端口反向传播；不由输入语义或数据值猜测。未连线或交集仍有多个候选时保持未确定，空交集为类型冲突，均不生成可执行 specialization。反向约束进入自动转换节点的解析缓存指纹，重连及下游类型变化会重算目标；持久化参数仍为 Auto。内核只消费当前不可变计划中已确定的输出语义。
-反向约束仅在包含自动转换节点的连通分量中分配类型域并求解；完整图仍由已有正向解析生成最终语义快照。
+`ShapePreservingConversion` 按输入形状推导标量或 DataSeries 输出。To Numeric、To Text、To Categorical、To Ordinal、To Binary、To Datetime、To Identifier 分别固定七种目标；不再提供通用目标选择或下游反向推断。数值、值域、日期时间参数仅在相关节点上声明。Data Labels 继续使用独立参数选择分类或顺序。
 数值表示的自动模式保留已有 Numeric 物理表示，文本解析为 Float64，Binary 转为 Int64；整数/实数模式显式选择 Int64/Float64。
 Null 保持 Null，非有限值、溢出及有损数值转换失败。目标配置、默认值和类型推导均由 Rust 拥有。
 Kernel 的标量和内存数列通过精确授权的 Arrow 适配入口共用批次转换规则，中立值直接构建 Arrow 数组；惰性数列通过关系契约生成 DataFusion UDF。
@@ -385,7 +383,7 @@ explicit optional `None` fields remain valid. Panel category and model-diagnosti
 share `common::computation_error`, preserving cancellation, deadline and typed input failures.
 
 `builtins/conversion` shares one controlled scalar/list/lazy-series conversion path between
-Type Conversion and Data Labels. The label entry accepts only categorical and ordinal target meanings; semantic-domain validation remains in the existing data owner.
+the seven fixed-target To nodes and Data Labels. The label entry accepts only categorical and ordinal target meanings; semantic-domain validation remains in the existing data owner.
 
 `builtins/statistics/path` separates moderation, mediation and recursive-equation adapters.
 They align source columns, admit fitting/bootstrap/effect-table storage, and map compact

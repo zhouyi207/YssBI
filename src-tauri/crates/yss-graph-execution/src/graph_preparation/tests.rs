@@ -528,7 +528,7 @@ fn plan_preparation_rejects_a_cycle_anywhere_in_the_graph() {
             node_id,
             DocumentNode {
                 id: node_id,
-                node_type: "yssbi.value.convert"
+                node_type: "yssbi.value.to_text"
                     .parse()
                     .expect("built-in node type is valid"),
                 position: NodePosition { x, y: 0.0 },

@@ -15,6 +15,22 @@ use yss_node_protocol::{
 };
 use yss_node_registry::NodeRegistry;
 
+pub(crate) fn effective_conversion_target(
+    node: &DocumentNode,
+    target: &yss_node_protocol::ConversionTarget,
+    registry: &NodeRegistry,
+) -> Option<yss_node_protocol::SemanticType> {
+    match target {
+        yss_node_protocol::ConversionTarget::Fixed(target) => Some(*target),
+        yss_node_protocol::ConversionTarget::Parameter(parameter) => {
+            let value = effective_text_parameter(node, parameter, registry)?;
+            yss_node_protocol::SemanticType::ALL
+                .into_iter()
+                .find(|target| target.type_id() == value)
+        }
+    }
+}
+
 pub(super) fn aggregate_parameter_accepts(
     node: &str,
     key: &str,

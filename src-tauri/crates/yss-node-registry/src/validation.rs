@@ -548,11 +548,13 @@ fn validate_typing(
         }
         NodeTypingSpec::ShapePreservingConversion {
             input: input_key,
-            parameter,
+            target,
             output: output_key,
         } => {
             input(&PortSelector::Declared(input_key.clone()))?;
-            if !parameters.contains_key(parameter) {
+            if let yss_node_protocol::ConversionTarget::Parameter(parameter) = target
+                && !parameters.contains_key(parameter)
+            {
                 return Err(format!(
                     "typing rule references unknown parameter '{parameter}'"
                 ));

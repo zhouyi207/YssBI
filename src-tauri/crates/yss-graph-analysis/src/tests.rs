@@ -494,7 +494,7 @@ fn physical_numeric_change_preserves_semantic_connection() {
         (left, "yssbi.dataframe.series.int_range", 0.0),
         (right, "yssbi.constant.get", 0.0),
         (add, "yssbi.numeric.add", 200.0),
-        (consumer, "yssbi.value.convert", 400.0),
+        (consumer, "yssbi.value.to_numeric", 400.0),
     ] {
         document.nodes.insert(
             node_id,
@@ -586,14 +586,14 @@ fn physical_numeric_change_preserves_semantic_connection() {
 }
 
 #[test]
-fn semantic_conversion_tracks_input_shape_and_target_changes() {
+fn fixed_semantic_conversions_preserve_shape_and_reject_incompatible_consumers() {
     let builtin = build_builtin_node_system().unwrap();
     let mut document = GraphDocument::default();
     let source = NodeId::new();
     let convert = NodeId::new();
     for (id, kind) in [
         (source, "yssbi.dataframe.series.int_range"),
-        (convert, "yssbi.value.convert"),
+        (convert, "yssbi.value.to_numeric"),
     ] {
         document.nodes.insert(
             id,
@@ -628,10 +628,6 @@ fn semantic_conversion_tracks_input_shape_and_target_changes() {
             .type_state
             .clone()
     };
-    document.nodes.get_mut(&convert).unwrap().parameters.insert(
-        "target_type".parse().unwrap(),
-        serde_json::json!("core.numeric"),
-    );
     assert_eq!(
         output_type(&document),
         TypeState::Exact(resolved_series("core.numeric"))
@@ -666,13 +662,15 @@ fn semantic_conversion_tracks_input_shape_and_target_changes() {
         ("core.datetime", false),
         ("core.identifier", false),
     ] {
-        document
-            .nodes
-            .get_mut(&convert)
-            .unwrap()
-            .parameters
-            .insert("target_type".parse().unwrap(), serde_json::json!(target));
+        document.nodes.get_mut(&convert).unwrap().node_type =
+            format!("yssbi.value.to_{}", target.strip_prefix("core.").unwrap())
+                .parse()
+                .unwrap();
         let facts = resolve_graph_semantics(&document, &builtin.registry, &empty_resources());
+        assert_eq!(
+            output_type(&document),
+            TypeState::Exact(resolved_series(target))
+        );
         assert_eq!(facts.ready().is_some(), accepted, "dummy input {target}");
         if accepted {
             assert_eq!(
@@ -696,10 +694,7 @@ fn semantic_conversion_tracks_input_shape_and_target_changes() {
     }
     document.connections.remove(&dummy_connection);
     document.nodes.remove(&dummy);
-    document.nodes.get_mut(&convert).unwrap().parameters.insert(
-        "target_type".parse().unwrap(),
-        serde_json::json!("core.text"),
-    );
+    document.nodes.get_mut(&convert).unwrap().node_type = "yssbi.value.to_text".parse().unwrap();
     assert_eq!(
         output_type(&document),
         TypeState::Exact(resolved_series("core.text"))
@@ -716,10 +711,7 @@ fn semantic_conversion_tracks_input_shape_and_target_changes() {
         output_type(&document),
         TypeState::Exact(resolved_scalar("core.text"))
     );
-    document.nodes.get_mut(&convert).unwrap().parameters.insert(
-        "target_type".parse().unwrap(),
-        serde_json::json!("core.binary"),
-    );
+    document.nodes.get_mut(&convert).unwrap().node_type = "yssbi.value.to_binary".parse().unwrap();
     assert_eq!(
         output_type(&document),
         TypeState::Exact(resolved_scalar("core.binary"))
@@ -929,7 +921,7 @@ fn editor_projection_reports_a_graph_level_value_cycle() {
             node_id,
             DocumentNode {
                 id: node_id,
-                node_type: NodeTypeId::new("yssbi.value.convert")
+                node_type: NodeTypeId::new("yssbi.value.to_text")
                     .expect("built-in node type is valid"),
                 position: NodePosition { x, y: 0.0 },
                 parameters: ParameterValues::new(),

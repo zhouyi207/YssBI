@@ -103,7 +103,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             typing: NodeTypingSpec::ShapePreservingConversion {
                 input: sid("input", PortKey::new)?,
-                parameter: sid("target_type", ParameterKey::new)?,
+                target: ConversionTarget::Parameter(sid("target_type", ParameterKey::new)?),
                 output: sid("output", PortKey::new)?,
             },
             scope: NodeScope::Any,
