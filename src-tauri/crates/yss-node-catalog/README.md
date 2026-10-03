@@ -119,31 +119,31 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 
 统计目录在 `statistics` 下按以下顺序注册，分类不表示相应算法已实现。每个节点有一个主分类；跨领域检索复用节点别名，不重复注册节点。
 
-| 目录                 | 分类 ID                       | 内容与边界                                       |
-| -------------------- | ----------------------------- | ------------------------------------------------ |
-| 描述统计             | `statistics.descriptive`      | Gini、Dagum Gini 分解、Theil T                   |
-| 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验         |
-| 缺失值处理           | `statistics.imputation`       | 单次插补、多重插补与 MICE 插补                   |
-| 相关与一致性         | `statistics.association`      | Pearson/偏相关/秩相关、Kappa、ICC、W、Ridit、rwg |
-| 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性         |
-| 方差分析             | `statistics.anova`            | 单因素、多因素、协方差分析、重复测量等入口       |
-| 多元分析             | `statistics.multivariate`     | 主成分、因子、判别、典型相关等                   |
-| 纵向与多层模型       | `statistics.longitudinal`     | GEE、LMM、GLMM、多层模型；统一导航但不混同方法   |
-| 面板模型             | `statistics.panel`            | 固定效应、随机效应、组间与差分估计等             |
-| 计量与因果分析       | `statistics.causal`           | 工具变量、GMM、DID、断点、匹配等子领域           |
-| 时间序列             | `statistics.timeseries`       | 平稳性、协整、单变量与多变量模型、预测           |
-| 生存分析             | `statistics.survival`         | 生存曲线、风险模型、参数生存模型等               |
-| 空间分析             | `statistics.spatial`          | 空间设计对象、空间相关、空间回归                 |
-| 测量、问卷与结构方程 | `statistics.psychometrics`    | 信效度、测量模型、结构方程等                     |
-| 综合评价与决策       | `statistics.decision`         | 赋权、排序、综合评价、决策方法                   |
-| 机器学习             | `statistics.machine_learning` | 树、集成、聚类等；与回归目录交叉检索             |
-| Meta 分析            | `statistics.meta`             | 效应量、合并模型、异质性、敏感性分析             |
-| 实验设计与质量控制   | `statistics.design_quality`   | 实验设计、过程能力、控制图相关分析               |
-| 功效与样本量         | `statistics.power`            | 按研究设计和检验目标组织                         |
-| 复杂抽样分析         | `statistics.survey`           | 抽样设计、加权估计、设计型方差与回归             |
-| 推断与重抽样         | `statistics.inference`        | 重抽样过程、区间构造、多重推断等                 |
-| 模型诊断与比较       | `statistics.diagnostics`      | 残差诊断、模型检验、模型比较                     |
-| 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等               |
+| 目录                 | 分类 ID                       | 内容与边界                                            |
+| -------------------- | ----------------------------- | ----------------------------------------------------- |
+| 描述统计             | `statistics.descriptive`      | 数据帧 / 数据序列描述、Gini、Dagum Gini 分解、Theil T |
+| 假设检验             | `statistics.tests`            | 均值、比例、列联表、分布检验、非参数检验              |
+| 缺失值处理           | `statistics.imputation`       | 单次插补、多重插补与 MICE 插补                        |
+| 相关与一致性         | `statistics.association`      | Pearson/偏相关/秩相关、Kappa、ICC、W、Ridit、rwg      |
+| 回归模型             | `statistics.regression`       | 线性、广义线性、离散响应、正则化、非线性              |
+| 方差分析             | `statistics.anova`            | 单因素、多因素、协方差分析、重复测量等入口            |
+| 多元分析             | `statistics.multivariate`     | 主成分、因子、判别、典型相关等                        |
+| 纵向与多层模型       | `statistics.longitudinal`     | GEE、LMM、GLMM、多层模型；统一导航但不混同方法        |
+| 面板模型             | `statistics.panel`            | 固定效应、随机效应、组间与差分估计等                  |
+| 计量与因果分析       | `statistics.causal`           | 工具变量、GMM、DID、断点、匹配等子领域                |
+| 时间序列             | `statistics.timeseries`       | 平稳性、协整、单变量与多变量模型、预测                |
+| 生存分析             | `statistics.survival`         | 生存曲线、风险模型、参数生存模型等                    |
+| 空间分析             | `statistics.spatial`          | 空间设计对象、空间相关、空间回归                      |
+| 测量、问卷与结构方程 | `statistics.psychometrics`    | 信效度、测量模型、结构方程等                          |
+| 综合评价与决策       | `statistics.decision`         | 赋权、排序、综合评价、决策方法                        |
+| 机器学习             | `statistics.machine_learning` | 树、集成、聚类等；与回归目录交叉检索                  |
+| Meta 分析            | `statistics.meta`             | 效应量、合并模型、异质性、敏感性分析                  |
+| 实验设计与质量控制   | `statistics.design_quality`   | 实验设计、过程能力、控制图相关分析                    |
+| 功效与样本量         | `statistics.power`            | 按研究设计和检验目标组织                              |
+| 复杂抽样分析         | `statistics.survey`           | 抽样设计、加权估计、设计型方差与回归                  |
+| 推断与重抽样         | `statistics.inference`        | 重抽样过程、区间构造、多重推断等                      |
+| 模型诊断与比较       | `statistics.diagnostics`      | 残差诊断、模型检验、模型比较                          |
+| 预测与估计后分析     | `statistics.postestimation`   | 新数据预测、边际效应、调整后预测等                    |
 
 问卷多选题统计与单选/多选题型交叉组合不设独立目录入口。量表题项诊断入口显示为
 “题项分析（区分度）”（`yssbi.statistics.psychometrics.item_analysis`），支持“题项分析”
@@ -217,7 +217,7 @@ Meta 分析的 20 个既有入口由 `statistics/meta/` 提供端口与参数，
 具体方法、尺度与推断口径由节点帮助说明。复杂节点的暂缓范围见
 [暂缓节点](DEFERRED_NODES.md)；暂缓节点保留目录身份与不可用状态。
 
-方法清单中的统计入口由 `src/statistics/inventory/entries.rs` 维护，运行时不读取规划 CSV。频数与描述已归入数据处理，分类汇总由 GroupBy 承接，独立基线分析入口已移除；FEVD 的两条来源共享一个入口。
+方法清单中的统计入口由 `src/statistics/inventory/entries.rs` 维护，运行时不读取规划 CSV。频数归入数据序列，描述归入描述统计，分类汇总由 GroupBy 承接，独立基线分析入口已移除；FEVD 的两条来源共享一个入口。
 这些来源记录继续保留方法身份；已经实现的诊断及后估计由 `statistics/analyses.rs`、描述统计由 `statistics/descriptive.rs` 完善原 ID 的端口、参数和内核绑定，不重复生成骨架。其余入口保留名称、搜索别名、分类、用途、来源编号和范围说明，尚无内核，仍在目录中显示为不可用且不进入 AI 可执行节点搜索。
 
 泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
@@ -279,13 +279,13 @@ Bernoulli/二项允许概率 0 和 1；几何/负二项要求 0 < p ≤ 1；泊�
 `src/dataframe/transforms.rs` 注册排序、行去重、添加或替换列、按数列筛选行、转长表、转宽表、时间重采样，以及条件选择、缺失判断、填充、值映射、文本处理、日期处理、数值限制、分箱、累计、排名和前后向填充。全部接入执行内核，并提供中英文帮助。普通取值列表和数值边界列表在 Details 中逐项编辑，列参数复用 Rust 投影的列选择器。
 排序与去重保留同值行的源顺序；添加或替换列、条件选择、掩码和窗口上下文支持按位置接收独立来源或内存计算结果；输入长度须匹配，保留既有值语义及分组/排序规则。转长表要求取值列物理类型及语义兼容；透视及虚拟变量生成显式声明类别值与输出列名，不扫描数据发现列。Graph 的 `schema.transform` 解析固定输出字段、名称冲突与选择列诊断。限制行同时支持非负 `offset`，窗口表达式先计算再截取，分页不改变窗口结果。
 
-数据序列增加“频数”和“描述”，数据帧增加“描述”和“分组聚合”。四者输出可分页、可连接的数据帧；原统计目录的频数、分类汇总、描述和基线分析占位定义已移除，不保留旧 ID 转换。
-描述支持 Numeric、Categorical、Ordinal、Binary；后三者采用分类摘要，整数编码不改变语义。Text、Datetime、Identifier 不自动作为类别；数据帧描述默认选择全部受支持列，显式选列必须受支持。
+数据序列提供“频数”，数据帧提供“分组聚合”；统一的“描述”位于“统计 → 描述统计”，由 `statistics/descriptive.rs` 声明 `yssbi.statistics.describe`。其 `source` 输入接受数据帧或数据序列，`result` 输出 `statistics.report` 结构化结果，`columns` 对象以原始列名为键保存各列统计字段，`position` 从 1 开始记录受支持列的输入顺序；已移除两个分立的描述节点。
+描述支持 Numeric、Categorical、Ordinal、Binary；后三者采用分类摘要，整数编码不改变语义。Text、Datetime、Identifier 不自动作为类别；描述节点无需配置参数：数据帧按原列顺序统计全部受支持的列，数据序列直接统计自身。
 数值摘要为有效数、缺失数、均值、样本标准差（ddof=1）、最小值、q25、中位数、q75、最大值；分位数在 `(n-1)p` 位置线性插值。
-分类摘要为有效数、缺失数、不同取值数、众数及其频数和有效样本占比。众数保留原始编码的文本；并列时 Ordinal 取声明顺序最先者，其余取原值最小者。两种描述入口复用同一结果列契约，每个变量一行；不适用或未定义的指标为 Null。
+分类摘要为有效数、缺失数、不同取值数，并在 `categories` 中直接返回每个已出现的非空类别的原值、已声明标签、频数和有效样本占比。类别对象以从 1 开始的连续编号为键，Ordinal 按声明等级排列，其余按原值升序；宽整数原值在 JSON 中保留十进制文本。每列只返回对应语义的字段，不适用字段不添加；适用但未定义的指标为 Null。全空分类列返回空类别对象和类别数 0。
 频数输出原类型的 `value`、`frequency`、`proportion`，不截断为 Top N；默认包含 Null，关闭时同时排除空值组及其分母贡献。Ordinal 按声明等级排序，其余按原值升序，Null 最后；空字符串保留。
 GroupBy 必选一个或多个分组键，始终输出 `row_count`，并可分别选择 count/sum/mean/min/max/std/median 的列。同一列可参加多种聚合，输出为 `列名_操作`；名称冲突拒绝执行。count 排除 Null，其他聚合只接受 Numeric、忽略 Null，全空数值组返回 Null；Null 分组键保留。
-数值统计要求无损提升为 Float64，非有限输入、溢出或非有限结果使结果消费失败，不转换为成功空值。选择器的可选列、参数诊断与输出 Schema 都由 Graph 的 Rust 解析产生；编辑阶段不扫描数据。
+数值统计要求无损提升为 Float64，非有限输入、溢出或非有限结果会报错，不转换为成功空值；描述节点在执行时完成统计并交付错误。选择器的可选列、参数诊断与输出 Schema 都由 Graph 的 Rust 解析产生；编辑阶段不扫描数据。
 
 “删除缺失行”和“删除缺失列”位于“数据帧”，分别对应 `yssbi.dataframe.dropna.rows` 和
 `yssbi.dataframe.dropna.columns`。`subset` 是检查列名列表，空列表表示全部列；`how` 为 `any` 或

@@ -36,7 +36,7 @@ pub(super) fn aggregate_parameter_accepts(
     key: &str,
     kind: RelationalScalarType,
 ) -> Option<bool> {
-    use yss_data_contract::aggregation::{AggregateOperation, supports_description};
+    use yss_data_contract::aggregation::AggregateOperation;
     match (node, key) {
         ("yssbi.dataframe.sort", "descending_columns")
         | ("yssbi.dataframe.deduplicate", "keys")
@@ -44,9 +44,6 @@ pub(super) fn aggregate_parameter_accepts(
         | ("yssbi.dataframe.pivot", "keys")
         | ("yssbi.dataframe.resample", "keys") => Some(true),
         (node, "partition_by" | "order_by") if node.starts_with("yssbi.dataframe.") => Some(true),
-        ("yssbi.dataframe.describe", "describe_columns") => {
-            Some(matches!(kind, RelationalScalarType::Known(s) if supports_description(s)))
-        }
         ("yssbi.dataframe.groupby", key) => AggregateOperation::ALL
             .into_iter()
             .find(|op| op.key() == key)

@@ -72,6 +72,7 @@ mod tests {
                 .any(|category| category.category_id.as_ref() == "statistics.imputation")
         );
         for (node, expected) in [
+            ("describe", "descriptive"),
             ("linear.fit", "regression"),
             ("linear.summary", "regression"),
             ("linear.predict", "postestimation"),

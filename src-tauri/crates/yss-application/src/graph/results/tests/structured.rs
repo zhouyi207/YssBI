@@ -20,7 +20,6 @@ use yss_graph_execution::{
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
-    let app = ApplicationState::initialize().unwrap();
     let mut document = GraphDocument::default();
     let [source, response, predictor, model] = std::array::from_fn(|_| NodeId::new());
     for (id, kind, parameters) in [
@@ -113,13 +112,26 @@ fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
             },
         );
     }
+    execute_report(
+        &document,
+        "events/poisson.yssbi-event",
+        "yssbi.statistics.regression.poisson",
+    )
+}
+
+fn execute_report(
+    document: &GraphDocument,
+    graph: &str,
+    node_type: &str,
+) -> (ApplicationState, ResultReference) {
+    let app = ApplicationState::initialize().unwrap();
     let captured = app.capture_session().unwrap();
     let runtime = captured.execution();
-    let graph = GraphResourcePath::new("events/poisson.yssbi-event").unwrap();
+    let graph = GraphResourcePath::new(graph).unwrap();
     let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = captured.graph().resolve_graph_document(
         &graph,
-        &document,
+        document,
         &yss_graph_analysis_contract::GraphAnalysisBasis {
             registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
                 captured.graph().registry_fingerprint(),
@@ -172,7 +184,7 @@ fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
         .plan()
         .operations()
         .iter()
-        .find(|operation| operation.node_type().as_str() == "yssbi.statistics.regression.poisson")
+        .find(|operation| operation.node_type().as_str() == node_type)
         .unwrap()
         .outputs()[0]
         .output();
@@ -331,4 +343,172 @@ fn nested_array_parts_preserve_paths_values_and_page_limits() {
     assert!(page(&root, "/stages", 0, MAX_RESULT_PAGE_ROWS + 1).is_err());
     assert!(page(&root, "/stages", usize::MAX, 1).is_err());
     assert!("structured:/bad~2".parse::<ResultTablePart>().is_err());
+}
+
+#[test]
+fn description_result_returns_complete_numeric_and_categorical_json() {
+    let mut document = GraphDocument::default();
+    let [source, describe] = std::array::from_fn(|_| NodeId::new());
+    for (id, kind) in [
+        (source, "yssbi.constant.get"),
+        (describe, "yssbi.statistics.describe"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: Default::default(),
+                user_label: None,
+            },
+        );
+    }
+    let id = ConstantId::new();
+    let mut constant = GraphConstant {
+        id,
+        name: "data".into(),
+        data_type: ValueType::DataFrame,
+        data_value: DataValue::String(
+            serde_json::json!({
+                " amount/~ ": [1, 3, null],
+                "b": [4, 8, 12],
+                "c": [9, null, null],
+                "text": ["a", "b", "c"],
+            })
+            .to_string()
+            .into(),
+        ),
+        tabular: None,
+        description: String::new(),
+        tags: vec![],
+    };
+    yss_graph_document::normalize_constant_value(&mut constant).unwrap();
+    document.constants.insert(id, constant);
+    document
+        .nodes
+        .get_mut(&source)
+        .unwrap()
+        .parameters
+        .insert("constant".parse().unwrap(), id.to_string().into());
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(source, "value".parse().unwrap()),
+            input: PortAddress::declared(describe, "source".parse().unwrap()),
+            order: None,
+        },
+    );
+    let (app, reference) = execute_report(
+        &document,
+        "events/describe.yssbi-event",
+        "yssbi.statistics.describe",
+    );
+    let snapshot = app.query_result(reference).unwrap().unwrap();
+    assert!(supports(&snapshot));
+    assert!(matches!(snapshot.value().value(), RuntimeValue::Record(_)));
+    let overview = crate::result_encoding::query_result_json(&app, reference)
+        .unwrap()
+        .unwrap();
+    let columns = overview["columns"].as_object().unwrap();
+    assert_eq!(columns.len(), 3);
+    let numeric = &columns[" amount/~ "];
+    assert_eq!(numeric["semantic"], "Numeric");
+    assert_eq!(numeric["position"], 1);
+    assert_eq!(numeric["count"], 2);
+    assert_eq!(numeric["missing"], 1);
+    assert_eq!(numeric["mean"], 2.0);
+    assert_eq!(numeric["q25"], 1.5);
+    assert!((numeric["std"].as_f64().unwrap() - 2f64.sqrt()).abs() < 1e-12);
+    assert_eq!(numeric.as_object().unwrap().len(), 11);
+    assert!(numeric.get("mode").is_none());
+    assert!(numeric.get("categories").is_none());
+    assert_eq!(columns["b"]["position"], 2);
+    assert_eq!(columns["c"]["position"], 3);
+    assert!(columns["c"]["std"].is_null());
+    assert_eq!(columns["c"]["missing"], 2);
+
+    let constant = document.constants.values_mut().next().unwrap();
+    constant.data_type = ValueType::DataSeries(Box::new(ValueType::Scalar(
+        yss_data_contract::SemanticType::Categorical,
+    )));
+    constant.data_value = DataValue::String(r#"{"value":[2,1,2,null]}"#.into());
+    constant.tabular = None;
+    yss_graph_document::normalize_constant_value(constant).unwrap();
+    let (app, reference) = execute_report(
+        &document,
+        "events/describe.yssbi-event",
+        "yssbi.statistics.describe",
+    );
+    let result = crate::result_encoding::query_result_json(&app, reference)
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["columns"].as_object().unwrap().len(), 1);
+    let categorical = &result["columns"]["value"];
+    assert_eq!(categorical["position"], 1);
+    assert_eq!(categorical["semantic"], "Categorical");
+    assert_eq!(categorical["count"], 3);
+    assert_eq!(categorical["missing"], 1);
+    assert_eq!(categorical["unique"], 2);
+    assert_eq!(categorical.as_object().unwrap().len(), 6);
+    for key in ["mode", "mode_count", "mode_proportion"] {
+        assert!(categorical.get(key).is_none());
+    }
+    assert!(categorical.get("mean").is_none());
+    assert_eq!(
+        categorical["categories"],
+        serde_json::json!({
+            "1": {"value": 1, "label": "1", "frequency": 1, "proportion": 1. / 3.},
+            "2": {"value": 2, "label": "2", "frequency": 2, "proportion": 2. / 3.}
+        })
+    );
+
+    // Empty input retains only categorical fields; no null row is invented as a category.
+    let constant = document.constants.values_mut().next().unwrap();
+    constant.data_value = DataValue::String(r#"{"value":[null,null]}"#.into());
+    constant.tabular = None;
+    yss_graph_document::normalize_constant_value(constant).unwrap();
+    let (app, reference) = execute_report(
+        &document,
+        "events/describe.yssbi-event",
+        "yssbi.statistics.describe",
+    );
+    let result = crate::result_encoding::query_result_json(&app, reference)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        result["columns"]["value"],
+        serde_json::json!({
+            "position": 1, "semantic": "Categorical", "count": 0, "missing": 2,
+            "unique": 0, "categories": {}
+        })
+    );
+
+    // The inline distribution is complete beyond the normal 100-row preview page.
+    let constant = document.constants.values_mut().next().unwrap();
+    constant.data_value = DataValue::String(
+        serde_json::json!({"value": (0..205).collect::<Vec<_>>()})
+            .to_string()
+            .into(),
+    );
+    constant.tabular = None;
+    yss_graph_document::normalize_constant_value(constant).unwrap();
+    let (app, reference) = execute_report(
+        &document,
+        "events/describe.yssbi-event",
+        "yssbi.statistics.describe",
+    );
+    let result = crate::result_encoding::query_result_json(&app, reference)
+        .unwrap()
+        .unwrap();
+    let categories = &result["columns"]["value"]["categories"];
+    assert_eq!(categories.as_object().unwrap().len(), 205);
+    assert_eq!(
+        categories["205"],
+        serde_json::json!({
+            "value": 204, "label": "204", "frequency": 1, "proportion": 1. / 205.
+        })
+    );
 }

@@ -9,10 +9,11 @@ use yss_data_contract::{
 };
 use yss_relational_contract::RelationHandle;
 
+mod description;
+
 #[derive(Clone, Copy)]
 enum Operation {
     Frequency,
-    SeriesDescribe,
     Describe,
     GroupBy,
 }
@@ -26,16 +27,10 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             vec!["include_null"],
         ),
         (
-            "yssbi.dataframe.series.describe",
-            Operation::SeriesDescribe,
-            "series",
-            vec![],
-        ),
-        (
-            "yssbi.dataframe.describe",
+            "yssbi.statistics.describe",
             Operation::Describe,
             "source",
-            vec!["describe_columns"],
+            vec![],
         ),
         (
             "yssbi.dataframe.groupby",
@@ -50,7 +45,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(id.into()).expect("kernel id"),
                 std::num::NonZeroU32::new(match operation {
-                    Operation::Describe | Operation::GroupBy => 2,
+                    Operation::Describe => 5,
+                    Operation::GroupBy => 2,
                     _ => 1,
                 })
                 .unwrap(),
@@ -143,14 +139,18 @@ fn execute(
                 return Err(KernelError::InvalidParameter);
             };
             let relation = series_relation(input, inv)?;
-            relation.frequency(relation.schema().field(0).name(), *include_null)
+            RuntimeValue::Relation(
+                relation
+                    .frequency(relation.schema().field(0).name(), *include_null)
+                    .map_err(kernel_error)?,
+            )
         }
-        Operation::SeriesDescribe => series_relation(input, inv)?.describe(&[]),
         Operation::Describe => {
-            let RuntimeValue::Relation(relation) = input else {
-                return Err(KernelError::InvalidParameter);
+            let relation = match input {
+                RuntimeValue::Relation(relation) => relation.clone(),
+                _ => series_relation(input, inv)?,
             };
-            relation.describe(&names(inv, "describe_columns")?)
+            description::describe(&relation, inv)?
         }
         Operation::GroupBy => {
             let RuntimeValue::Relation(relation) = input else {
@@ -164,10 +164,13 @@ fn execute(
                         .map(|column| ColumnAggregate { column, operation }),
                 );
             }
-            relation.aggregate(&names(inv, "keys")?, &columns)
+            RuntimeValue::Relation(
+                relation
+                    .aggregate(&names(inv, "keys")?, &columns)
+                    .map_err(kernel_error)?,
+            )
         }
-    }
-    .map_err(kernel_error)?;
+    };
     inv.check_control()?;
-    Ok(vec![RuntimeValue::Relation(result)])
+    Ok(vec![result])
 }

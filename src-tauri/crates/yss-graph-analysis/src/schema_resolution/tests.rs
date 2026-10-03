@@ -373,14 +373,7 @@ fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_e
         "yssbi.dataframe.source.get",
         &[("dataframe", serde_json::json!("data"))],
     );
-    let describe = node(
-        &mut document,
-        "yssbi.dataframe.describe",
-        &[(
-            "describe_columns",
-            serde_json::json!([" amount ", "category"]),
-        )],
-    );
+    let describe = node(&mut document, "yssbi.statistics.describe", &[]);
     let group = node(
         &mut document,
         "yssbi.dataframe.groupby",
@@ -396,7 +389,7 @@ fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_e
     );
     let frequency = node(&mut document, "yssbi.dataframe.series.frequency", &[]);
     let lag = node(&mut document, "yssbi.dataframe.timeseries.lag", &[]);
-    let one = node(&mut document, "yssbi.dataframe.series.describe", &[]);
+    let one = node(&mut document, "yssbi.statistics.describe", &[]);
     for (to, input) in [
         (describe, "source"),
         (group, "source"),
@@ -404,9 +397,8 @@ fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_e
     ] {
         connect(&mut document, port(source, "dataframe"), port(to, input));
     }
-    for to in [lag, one] {
-        connect(&mut document, port(series, "series"), port(to, "series"));
-    }
+    connect(&mut document, port(series, "series"), port(lag, "series"));
+    connect(&mut document, port(series, "series"), port(one, "source"));
     connect(
         &mut document,
         port(lag, "result"),
@@ -434,10 +426,7 @@ fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_e
             .collect::<Vec<_>>(),
         _ => panic!("column selector required"),
     };
-    assert_eq!(
-        options(describe, "describe_columns"),
-        [" amount ", "category", "level", "flag"]
-    );
+    assert!(first.node(describe).unwrap().parameters.is_empty());
     assert_eq!(options(group, "mean"), [" amount "]);
     assert_eq!(options(group, "count").len(), 6);
     let schema = |snapshot: &crate::GraphSemanticSnapshot, id| {
@@ -460,10 +449,20 @@ fn aggregate_schemas_and_column_options_use_semantics_and_refresh_on_parameter_e
         schema(&first, frequency).exact().unwrap().fields[0].scalar_type,
         RelationalScalarType::Known(S::Ordinal)
     );
-    assert_eq!(
-        schema(&first, describe).exact().unwrap().fields.len(),
-        yss_data_contract::aggregation::DESCRIPTION_FIELDS.len()
-    );
+    assert_eq!(schema(&first, describe), GraphSchemaState::NotApplicable);
+    assert_eq!(schema(&first, one), GraphSchemaState::NotApplicable);
+    for output in [port(source, "dataframe"), port(series, "series")] {
+        document
+            .connections
+            .values_mut()
+            .find(|connection| connection.input == port(one, "source"))
+            .unwrap()
+            .output = output;
+        let reconnected = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+        assert_eq!(schema(&reconnected, one), GraphSchemaState::NotApplicable);
+        assert!(!reconnected.has_blocking_diagnostics());
+        assert!(reconnected.node(one).unwrap().parameters.is_empty());
+    }
     document
         .nodes
         .get_mut(&series)

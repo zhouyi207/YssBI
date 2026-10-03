@@ -26,6 +26,7 @@ pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<B
 
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
+        "yssbi.statistics.describe" => markdown!("describe"),
         "yssbi.dataframe.labels" => markdown!("data_labels"),
         "yssbi.statistics.workflow.mediation" => markdown!("path_mediation"),
         "yssbi.statistics.workflow.moderated_mediation" => markdown!("path_moderated_mediation"),

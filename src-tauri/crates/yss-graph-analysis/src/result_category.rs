@@ -116,6 +116,7 @@ mod tests {
             ),
         );
         for node in [
+            "yssbi.statistics.describe",
             "yssbi.statistics.logit.summary",
             "yssbi.statistics.probit.summary",
             "yssbi.statistics.prais.summary",

@@ -58,7 +58,7 @@ fn descriptive_tables_dispatch_by_semantics_and_keep_ordinal_frequency_order() {
             .unwrap(),
         )
         .unwrap();
-    let description = source.describe(&[]).unwrap();
+    let description = source.describe().unwrap();
     let page = description.page(0, 10, &control()).unwrap();
     assert_eq!(page.row_count, 4);
     assert_eq!(
@@ -75,18 +75,19 @@ fn descriptive_tables_dispatch_by_semantics_and_keep_ordinal_frequency_order() {
         [V::Null, V::Null, V::Null]
     );
     assert_eq!(
-        column_values(&page, "mode")[1..],
-        [
-            V::String("2".into()),
-            V::String("20".into()),
-            V::String("1".into())
-        ]
+        column_values(&page, "unique")[1..]
+            .iter()
+            .map(number)
+            .collect::<Vec<_>>(),
+        [2., 2., 2.]
     );
-    assert_eq!(
-        number(&column_values(&page, "mode_proportion")[1]),
-        2.0 / 3.0
+    assert!(
+        source
+            .project(&["text".into()])
+            .unwrap()
+            .describe()
+            .is_err()
     );
-    assert!(source.describe(&["text".into()]).is_err());
     let frequency = source.frequency("level", true).unwrap();
     let page = frequency.page(0, 10, &control()).unwrap();
     assert_eq!(
@@ -226,10 +227,7 @@ fn descriptive_numeric_errors_fail_instead_of_becoming_null_and_empty_is_defined
         vec![Some(f64::INFINITY)],
         vec![Some(1e308), Some(-1e308), Some(1e308), Some(-1e308)],
     ] {
-        let result = relation(values)
-            .describe(&[])
-            .unwrap()
-            .page(0, 10, &control());
+        let result = relation(values).describe().unwrap().page(0, 10, &control());
         assert!(
             result.is_err(),
             "invalid arithmetic must not become a null report"
@@ -237,11 +235,7 @@ fn descriptive_numeric_errors_fail_instead_of_becoming_null_and_empty_is_defined
     }
     for values in [vec![], vec![None, None]] {
         let source = relation(values);
-        let page = source
-            .describe(&[])
-            .unwrap()
-            .page(0, 10, &control())
-            .unwrap();
+        let page = source.describe().unwrap().page(0, 10, &control()).unwrap();
         assert_eq!(number(&column_values(&page, "count")[0]), 0.0);
         assert_eq!(column_values(&page, "mean"), &[V::Null]);
         assert_eq!(column_values(&page, "std"), &[V::Null]);
@@ -267,14 +261,18 @@ fn descriptive_numeric_errors_fail_instead_of_becoming_null_and_empty_is_defined
                     .unwrap(),
                 )
                 .unwrap();
-            let page = source
-                .describe(&[])
-                .unwrap()
-                .page(0, 10, &control())
-                .unwrap();
+            let page = source.describe().unwrap().page(0, 10, &control()).unwrap();
             assert_eq!(number(&column_values(&page, "count")[0]), 0.0);
             assert_eq!(number(&column_values(&page, "unique")[0]), 0.0);
-            assert_eq!(column_values(&page, "mode"), &[V::Null]);
+            assert_eq!(
+                source
+                    .frequency("x", false)
+                    .unwrap()
+                    .page(0, 10, &control())
+                    .unwrap()
+                    .row_count,
+                0
+            );
         }
     }
 }

@@ -246,37 +246,13 @@ impl DataFusionRelation {
         )
     }
 
-    pub(crate) fn describe_columns(
-        &self,
-        selected: &[Box<str>],
-    ) -> Result<RelationHandle, RelationError> {
-        let fields = if selected.is_empty() {
-            let mut fields = Vec::new();
-            for field in self.schema.fields() {
-                if supports_description(semantic(field)?) {
-                    fields.push(field.as_ref());
-                }
+    pub(crate) fn describe_columns(&self) -> Result<RelationHandle, RelationError> {
+        let mut fields = Vec::new();
+        for field in self.schema.fields() {
+            if supports_description(semantic(field)?) {
+                fields.push(field.as_ref());
             }
-            fields
-        } else {
-            let mut names = BTreeSet::new();
-            selected
-                .iter()
-                .map(|name| {
-                    if !names.insert(name) {
-                        return Err(RelationError::InvalidInput);
-                    }
-                    let field = self
-                        .schema
-                        .field_with_name(name)
-                        .map_err(|_| RelationError::InvalidInput)?;
-                    if !supports_description(semantic(field)?) {
-                        return Err(RelationError::InvalidInput);
-                    }
-                    Ok(field)
-                })
-                .collect::<Result<Vec<_>, _>>()?
-        };
+        }
         if fields.is_empty() {
             return Err(RelationError::InvalidInput);
         }
@@ -288,8 +264,7 @@ impl DataFusionRelation {
                 (rows() - count(col(field.name()))).alias("missing"),
             ];
             let numeric = kind == SemanticType::Numeric;
-            let source = self.frame.clone();
-            let summary = if numeric {
+            if numeric {
                 let value = finite(col(field.name()), field.data_type());
                 expressions.extend([
                     checked(avg(value.clone())).alias("mean"),
@@ -300,35 +275,14 @@ impl DataFusionRelation {
                     checked(quantile(value.clone(), 0.75)).alias("q75"),
                     checked(max(value)).alias("max"),
                 ]);
-                source.aggregate(vec![], expressions).map_err(plan)?
             } else {
                 expressions.push(count_distinct(col(field.name())).alias("unique"));
-                let totals = source
-                    .clone()
-                    .aggregate(vec![], expressions)
-                    .map_err(plan)?;
-                let top = source
-                    .filter(col(field.name()).is_not_null())
-                    .and_then(|frame| {
-                        frame.aggregate(
-                            vec![col(field.name()).alias("mode_value")],
-                            vec![rows().alias("mode_count")],
-                        )
-                    })
-                    .and_then(|frame| {
-                        frame.sort(vec![
-                            col("mode_count").sort(false, false),
-                            order(field, "mode_value")
-                                .map_err(|e| DataFusionError::External(Box::new(e)))?
-                                .sort(true, false),
-                        ])
-                    })
-                    .and_then(|frame| frame.limit(0, Some(1)))
-                    .map_err(plan)?;
-                totals
-                    .join_on(top, JoinType::Left, [lit(true)])
-                    .map_err(plan)?
-            };
+            }
+            let summary = self
+                .frame
+                .clone()
+                .aggregate(vec![], expressions)
+                .map_err(plan)?;
             let projection = DESCRIPTION_FIELDS
                 .iter()
                 .map(|(name, _)| {
@@ -336,18 +290,8 @@ impl DataFusionRelation {
                         "column" => lit(field.name().clone()),
                         "semantic" => lit(kind.as_str()),
                         "count" | "missing" => col(name),
-                        "mode" if !numeric => cast(col("mode_value"), DataType::Utf8),
-                        "mode_proportion" if !numeric => when(
-                            col("count").gt(lit(0_i64)),
-                            cast(col("mode_count"), DataType::Float64)
-                                / cast(col("count"), DataType::Float64),
-                        )
-                        .otherwise(null(DataType::Float64))
-                        .expect("valid case"),
-                        "mode" => null(DataType::Utf8),
-                        "unique" | "mode_count" if numeric => null(DataType::Int64),
-                        "mode_proportion" => null(DataType::Float64),
-                        "unique" | "mode_count" => col(name),
+                        "unique" if numeric => null(DataType::Int64),
+                        "unique" => col(name),
                         _ if numeric => col(name),
                         _ => null(DataType::Float64),
                     };

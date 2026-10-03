@@ -2,10 +2,7 @@ use super::EditorSchemaResolver;
 use crate::GraphSchemaIssue;
 use crate::parameter_projection::effective_json_parameter;
 use std::collections::BTreeSet;
-use yss_data_contract::{
-    SemanticType, TabularColumnName,
-    aggregation::{AggregateOperation, DESCRIPTION_FIELDS, supports_description},
-};
+use yss_data_contract::{SemanticType, TabularColumnName, aggregation::AggregateOperation};
 use yss_graph_document::{NodeId, PortAddress};
 use yss_node_protocol::{
     ParameterKey, RelationalScalarType, SchemaColumnRef, SchemaField, SchemaFieldLineage,
@@ -80,27 +77,6 @@ impl EditorSchemaResolver<'_> {
                     field("frequency", SemanticType::Numeric),
                     field("proportion", SemanticType::Numeric),
                 ]
-            }
-            "yssbi.dataframe.describe" | "yssbi.dataframe.series.describe" => {
-                if node.node_type.as_str() == "yssbi.dataframe.describe" {
-                    let input = self.resolve_input(node_id, &"source".parse().unwrap())?;
-                    let columns = column_names(parameter("describe_columns").as_deref())?;
-                    let supported = |f: &SchemaField| matches!(f.scalar_type, RelationalScalarType::Known(s) if supports_description(s));
-                    if columns.is_empty() {
-                        if !input.iter().any(supported) {
-                            return Err(GraphSchemaIssue::InvalidParameter);
-                        }
-                    } else if columns
-                        .iter()
-                        .any(|name| !input.iter().any(|f| f.name.0 == *name && supported(f)))
-                    {
-                        return Err(GraphSchemaIssue::InvalidParameter);
-                    }
-                }
-                DESCRIPTION_FIELDS
-                    .iter()
-                    .map(|(name, kind)| field(name, *kind))
-                    .collect()
             }
             "yssbi.dataframe.groupby" => {
                 let input = self.resolve_input(node_id, &"source".parse().unwrap())?;

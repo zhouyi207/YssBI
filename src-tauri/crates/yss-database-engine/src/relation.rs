@@ -353,8 +353,8 @@ impl RelationPlan for DataFusionRelation {
     ) -> Result<RelationHandle, RelationError> {
         self.group_aggregate(keys, columns)
     }
-    fn describe(&self, columns: &[Box<str>]) -> Result<RelationHandle, RelationError> {
-        self.describe_columns(columns)
+    fn describe(&self) -> Result<RelationHandle, RelationError> {
+        self.describe_columns()
     }
     fn frequency(&self, column: &str, include_null: bool) -> Result<RelationHandle, RelationError> {
         self.frequency_table(column, include_null)

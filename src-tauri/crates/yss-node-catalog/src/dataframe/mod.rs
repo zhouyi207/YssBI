@@ -15,8 +15,6 @@ pub(crate) use transforms::documentation as transformation_documentation;
 pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<str>> {
     let kind = match id {
         "yssbi.dataframe.series.frequency" => InterfaceKind::Frequency,
-        "yssbi.dataframe.series.describe" => InterfaceKind::SeriesDescribe,
-        "yssbi.dataframe.describe" => InterfaceKind::Describe,
         "yssbi.dataframe.groupby" => InterfaceKind::GroupBy,
         _ => return None,
     };
@@ -131,7 +129,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
 fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAssemblyError> {
     use InterfaceKind::*;
     match kind {
-        Frequency | SeriesDescribe | Describe | GroupBy => aggregation::interface(kind),
+        Frequency | GroupBy => aggregation::interface(kind),
         DataframeSource => Ok((
             vec![streaming_output(
                 "dataframe",
@@ -862,7 +860,6 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::ConcatRows
         | InterfaceKind::ConcatColumns
         | InterfaceKind::Join
-        | InterfaceKind::Describe
         | InterfaceKind::GroupBy
         | InterfaceKind::TimeAlign
         | InterfaceKind::PanelAlign => "dataframe",
@@ -873,7 +870,6 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::SeriesSum
         | InterfaceKind::SeriesMean
         | InterfaceKind::Frequency
-        | InterfaceKind::SeriesDescribe
         | InterfaceKind::Standardize
         | InterfaceKind::InverseStandardize
         | InterfaceKind::DummyInfo
@@ -929,10 +925,7 @@ fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &Node
     let documentation = node_key_text(spec.id, "documentation");
     let aliases = node_key_text(spec.id, "aliases");
     let (en_documentation, zh_documentation) = match spec.interface {
-        InterfaceKind::Frequency
-        | InterfaceKind::SeriesDescribe
-        | InterfaceKind::Describe
-        | InterfaceKind::GroupBy => aggregation::help(spec.interface),
+        InterfaceKind::Frequency | InterfaceKind::GroupBy => aggregation::help(spec.interface),
         InterfaceKind::IntRange => (
             "Generates integers from start (inclusive) to end (exclusive). Step must be a nonzero integer; negative steps are supported. Output allocation is bounded by the execution budget.",
             "生成从 start（包含）到 end（不包含）的整数序列。step 必须是非零整数，支持负步长；输出分配受执行内存预算限制。",

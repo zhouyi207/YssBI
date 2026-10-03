@@ -1,4 +1,4 @@
-//! Executable descriptive statistics, retaining the inventory's method identities.
+//! Descriptive summaries and inequality statistics.
 use super::*;
 
 pub(super) const THEIL_ID: &str = "yssbi.statistics.inequality.theil";
@@ -10,6 +10,7 @@ pub(super) fn implemented(id: &str) -> bool {
 }
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    append_description(fragment)?;
     for (id, en, zh, en_help, zh_help, aliases) in [
         (
             GINI_ID,
@@ -164,6 +165,64 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 locale,
                 "parameters.statistics.theil_form.description".into(),
                 Text(form_description),
+            ),
+        ]);
+    }
+    Ok(())
+}
+
+fn append_description(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    const ID: &str = "yssbi.statistics.describe";
+    let mut input_types = vec![concrete("tabular.dataframe")?];
+    for kind in SemanticType::ALL {
+        if yss_data_contract::aggregation::supports_description(kind) {
+            input_types.push(data_series_type(concrete(kind.type_id())?));
+        }
+    }
+    let mut source = data_input("source", "Data", TypeExpr::Union(input_types))?;
+    source.consumption = Some(InputConsumption::Streaming);
+    let result = data_output("result", "Result", report_type()?)?;
+    fragment.nodes.push(leaf(
+        NodeProtocol {
+            type_id: sid(ID, NodeTypeId::new)?,
+            catalog: NodeCatalogProtocol {
+                title_key: node_key(ID, "title")?,
+                documentation_key: Some(node_key(ID, "documentation")?),
+                aliases_key: Some(node_key(ID, "aliases")?),
+                category_id: sid("statistics.descriptive", NodeCategoryId::new)?,
+                icon_id: sid("builtin.statistics", IconId::new)?,
+                style_id: sid("builtin.dataframe", NodeStyleId::new)?,
+                hidden: false,
+            },
+            interface: assembled_interface(ID, vec![source, result], vec![], vec![])?,
+            parameters: assembled_parameters(ID, vec![])?,
+            instance_display: NodeInstanceDisplaySpec::Static,
+            execution: execution(),
+            typing: NodeTypingSpec::Fixed,
+            scope: NodeScope::Any,
+            managed_role: None,
+        },
+        ID,
+    ));
+    for (locale, title, help) in [
+        (
+            "en-US",
+            "Describe",
+            "Returns a structured statistical result for each supported column of a DataFrame or DataSeries.",
+        ),
+        (
+            "zh-CN",
+            "描述",
+            "对数据帧或数据序列逐列进行描述统计，输出结构化结果并在详细信息中展示。",
+        ),
+    ] {
+        fragment.messages.extend([
+            (locale, node_key_text(ID, "title"), Text(title)),
+            (locale, node_key_text(ID, "documentation"), Text(help)),
+            (
+                locale,
+                node_key_text(ID, "aliases"),
+                Aliases(&["describe", "summary", "descriptive statistics", "描述统计"]),
             ),
         ]);
     }

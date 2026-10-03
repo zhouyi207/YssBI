@@ -74,7 +74,4 @@ pub const DESCRIPTION_FIELDS: &[(&str, SemanticType)] = &[
     ("q75", SemanticType::Numeric),
     ("max", SemanticType::Numeric),
     ("unique", SemanticType::Numeric),
-    ("mode", SemanticType::Text),
-    ("mode_count", SemanticType::Numeric),
-    ("mode_proportion", SemanticType::Numeric),
 ];

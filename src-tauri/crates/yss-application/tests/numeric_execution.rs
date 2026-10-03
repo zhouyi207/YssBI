@@ -5,6 +5,8 @@ mod causal_models;
 mod comparison;
 #[path = "numeric_execution/decision.rs"]
 mod decision;
+#[path = "numeric_execution/description.rs"]
+mod description;
 #[path = "numeric_execution/diagnostics.rs"]
 mod diagnostics;
 #[path = "numeric_execution/doe.rs"]
@@ -691,11 +693,7 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
             "yssbi.dataframe.rename",
             serde_json::json!({"from":"frequency", "to":" frequency "}),
         ),
-        (
-            describe,
-            "yssbi.dataframe.describe",
-            serde_json::json!({"describe_columns":[" value ", " frequency "]}),
-        ),
+        (describe, "yssbi.statistics.describe", serde_json::json!({})),
         (
             group,
             "yssbi.dataframe.groupby",
@@ -749,36 +747,33 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
             },
         );
     }
-    let control = yss_relational_contract::RelationControl {
-        cancellation: Arc::new(AtomicBool::new(false)),
-        deadline: Instant::now() + Duration::from_secs(30),
-        max_input_bytes: 1024 * 1024,
-    };
+    fn described_columns(document: &GraphDocument) -> Arc<BTreeMap<Box<str>, RuntimeValue>> {
+        let result = execute(document, "yssbi.statistics.describe").unwrap();
+        let RuntimeValue::Record(columns) = fixture::field(&result, "columns") else {
+            panic!("describe must contain named column records")
+        };
+        columns.clone()
+    }
+    use fixture::{field, number};
     assert_eq!(
         execute(&document, "yssbi.dataframe.series.sum").unwrap(),
         RuntimeValue::float64(4.0).unwrap()
     );
-    let RuntimeValue::Relation(result) = execute(&document, "yssbi.dataframe.describe").unwrap()
-    else {
-        panic!("describe must produce a frame")
-    };
-    let page = result.page(0, 10, &control).unwrap();
-    assert_eq!(page.row_count, 2);
+    let columns = described_columns(&document);
+    assert_eq!(columns.len(), 3);
+    for (position, name) in [" value ", " frequency ", "proportion"].iter().enumerate() {
+        assert_eq!(
+            number(field(&columns[*name], "position")),
+            (position + 1) as f64
+        );
+    }
     assert_eq!(
-        page.data.columns()[0].values(),
-        [
-            TabularScalar::String(" value ".into()),
-            TabularScalar::String(" frequency ".into()),
-        ]
+        field(&columns[" value "], "semantic"),
+        &TabularScalar::String("Categorical".into()).into()
     );
-    assert_eq!(
-        page.data.columns()[1].values()[0],
-        TabularScalar::String("Categorical".into())
-    );
-    // The single-series entry shares the same categorical summary and does not infer Numeric from codes.
-    let node = document.nodes.get_mut(&describe).unwrap();
-    node.node_type = "yssbi.dataframe.series.describe".parse().unwrap();
-    node.parameters.clear();
+    assert_eq!(number(field(&columns[" frequency "], "count")), 3.);
+    assert!((number(field(&columns[" frequency "], "mean")) - 4. / 3.).abs() < 1e-12);
+    // Reconnect the same node to a series; categorical codes keep their meaning.
     document
         .connections
         .retain(|_, c| c.input.node_id != describe);
@@ -788,22 +783,23 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
         DocumentConnection {
             id,
             output: PortAddress::declared(constant, "value".parse().unwrap()),
-            input: PortAddress::declared(describe, "series".parse().unwrap()),
+            input: PortAddress::declared(describe, "source".parse().unwrap()),
             order: None,
         },
     );
-    let RuntimeValue::Relation(result) =
-        execute(&document, "yssbi.dataframe.series.describe").unwrap()
-    else {
-        panic!("describe must produce a frame")
-    };
-    let page = result.page(0, 10, &control).unwrap();
-    assert_eq!(page.row_count, 1);
+    let columns = described_columns(&document);
+    assert_eq!(columns.len(), 1);
     assert_eq!(
-        page.data.columns()[1].values()[0],
-        TabularScalar::String("Categorical".into())
+        field(&columns["value"], "semantic"),
+        &TabularScalar::String("Categorical".into()).into()
     );
-    assert_eq!(page.data.columns()[4].values()[0], TabularScalar::Null);
+    let RuntimeValue::Record(summary) = &columns["value"] else {
+        panic!("column summary")
+    };
+    assert!(!summary.contains_key("mean"));
+    assert_eq!(number(field(&columns["value"], "count")), 3.);
+    assert_eq!(number(field(&columns["value"], "missing")), 1.);
+    assert_eq!(number(field(&columns["value"], "unique")), 2.);
     set_constant(
         &mut document,
         constant,
@@ -813,17 +809,27 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
     for c in document.constants.values_mut() {
         yss_graph_document::normalize_constant_value(c).unwrap();
     }
-    let RuntimeValue::Relation(result) =
-        execute(&document, "yssbi.dataframe.series.describe").unwrap()
-    else {
-        panic!("describe must produce a frame")
-    };
-    let page = result.page(0, 10, &control).unwrap();
+    let columns = described_columns(&document);
     assert_eq!(
-        page.data.columns()[1].values()[0],
-        TabularScalar::String("Binary".into())
+        field(&columns["value"], "semantic"),
+        &TabularScalar::String("Binary".into()).into()
     );
-    assert_eq!(page.data.columns()[4].values()[0], TabularScalar::Null);
+    let RuntimeValue::Record(summary) = &columns["value"] else {
+        panic!("column summary")
+    };
+    assert!(!summary.contains_key("mean"));
+    assert_eq!(number(field(&columns["value"], "unique")), 2.);
+    let categories = field(&columns["value"], "categories");
+    assert_eq!(
+        field(field(categories, "1"), "value"),
+        &TabularScalar::Bool(false).into()
+    );
+    assert_eq!(number(field(field(categories, "1"), "frequency")), 1.);
+    assert_eq!(
+        field(field(categories, "2"), "value"),
+        &TabularScalar::Bool(true).into()
+    );
+    assert_eq!(number(field(field(categories, "2"), "frequency")), 2.);
 }
 
 fn analyze_document(

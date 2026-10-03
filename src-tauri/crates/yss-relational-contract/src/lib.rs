@@ -250,7 +250,7 @@ pub trait RelationPlan: Send + Sync {
     ) -> Result<RelationHandle, RelationError> {
         Err(RelationError::InvalidInput)
     }
-    fn describe(&self, _columns: &[Box<str>]) -> Result<RelationHandle, RelationError> {
+    fn describe(&self) -> Result<RelationHandle, RelationError> {
         Err(RelationError::InvalidInput)
     }
     fn frequency(
@@ -454,8 +454,8 @@ impl RelationHandle {
     ) -> Result<Self, RelationError> {
         self.plan.aggregate(keys, columns)
     }
-    pub fn describe(&self, columns: &[Box<str>]) -> Result<Self, RelationError> {
-        self.plan.describe(columns)
+    pub fn describe(&self) -> Result<Self, RelationError> {
+        self.plan.describe()
     }
     pub fn frequency(&self, column: &str, include_null: bool) -> Result<Self, RelationError> {
         self.plan.frequency(column, include_null)

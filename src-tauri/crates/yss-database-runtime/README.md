@@ -106,6 +106,13 @@ Numeric reductions and arithmetic windows, including sum, difference and percent
 require Numeric field meaning as well as numeric Arrow storage. Integer Identifier fields
 are rejected; integer Numeric sums retain the exact Decimal128 aggregation path.
 
+`RelationHandle::describe()` has no column-selection parameter. It summarizes every Numeric,
+Categorical, Ordinal and Binary column in source order, skipping other semantics. A relation with
+no supported columns is rejected; each summarized column produces one row in the result.
+Rows contain non-null and missing counts, Numeric metrics, and categorical unique counts.
+Complete category frequencies come from `frequency(column, false)` and are combined with the
+summary by the description node kernel; the summary does not compute a separate mode.
+
 Single imputation uses native mean, exact median, mode windows or a constant over
 the full input row domain. Numeric modes break ties by smallest value. Nonempty
 all-null inputs require a constant; invalid or non-finite results fail when read.

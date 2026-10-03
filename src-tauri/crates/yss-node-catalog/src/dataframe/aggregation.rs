@@ -4,10 +4,7 @@ use yss_data_contract::aggregation::AggregateOperation;
 pub(super) fn interface(
     kind: InterfaceKind,
 ) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAssemblyError> {
-    let series = matches!(
-        kind,
-        InterfaceKind::Frequency | InterfaceKind::SeriesDescribe
-    );
+    let series = kind == InterfaceKind::Frequency;
     let input = if series { "series" } else { "source" };
     let value_type = if series {
         TypeExpr::Union(
@@ -35,7 +32,6 @@ pub(super) fn interface(
             }),
             vec![],
         )?],
-        InterfaceKind::Describe => vec![columns("describe_columns")?],
         InterfaceKind::GroupBy => {
             let mut parameters = vec![nominal_parameter(
                 "keys",
@@ -94,10 +90,7 @@ pub(super) fn help(kind: InterfaceKind) -> (&'static str, &'static str) {
             "Groups by one or more keys, including null keys. Always outputs row_count. Choose columns independently for count, sum, mean, min, max, sample standard deviation and median; names are column_operation. Count excludes null; numeric aggregates require Numeric semantics and ignore null. All-null numeric aggregates return null. Duplicate output names are rejected. Output is a pageable DataFrame sorted by keys.",
             "按一个或多个键分组，保留 Null 键分组。始终输出 row_count；分别选择非空计数、求和、均值、最小值、最大值、样本标准差、中位数的列，结果命名为“列名_操作”。数值聚合只接受 Numeric 并忽略 Null；全空数值组返回 Null。拒绝重复输出列名，结果按分组键排序并可分页。",
         ),
-        _ => (
-            "Describes Numeric, Categorical, Ordinal and Binary columns with one row per column. Empty column selection describes all supported columns; explicit unsupported columns fail. Numeric: non-null count, missing, mean, sample std (ddof=1), min, q25, median, q75, max. Quantiles interpolate linearly at (n-1)p. Categories: count, missing, unique, mode (original code as text), mode_count, mode_proportion among non-null values. Ties choose the first declared Ordinal level, otherwise smallest value. Undefined/inapplicable metrics are null; non-finite arithmetic fails. Text, Datetime and Identifier are not categories.",
-            "每列输出一行摘要，支持 Numeric、Categorical、Ordinal、Binary。选列为空时描述全部受支持列；显式选择其他语义会报错。数值摘要含有效数、缺失数、均值、样本标准差（ddof=1）、最小值、四分位数、中位数、最大值；分位数在 (n-1)p 位置线性插值。分类摘要含有效数、缺失数、类别数、众数（原始编码的文本）、众数频数及有效样本内占比；并列时 Ordinal 取等级最先者，其余取原值最小者。未定义或不适用指标为 Null，数值异常报错。Text、Datetime、Identifier 不自动视为分类。",
-        ),
+        _ => unreachable!("aggregation help requires an aggregation interface"),
     }
 }
 
@@ -109,13 +102,6 @@ pub(super) fn messages(out: &mut Vec<(&'static str, String, Message)>) {
             "包含空值",
             "Include null in frequencies and the denominator.",
             "将 Null 纳入频数表和比例分母。",
-        ),
-        (
-            "describe_columns",
-            "Describe Columns",
-            "描述列",
-            "Empty selects all Numeric, Categorical, Ordinal and Binary columns.",
-            "为空时选择全部数值、分类、顺序和二元字段。",
         ),
         (
             "keys",
