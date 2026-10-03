@@ -247,7 +247,7 @@ UDF 的相等性和哈希包含源/输出字段元数据与实际转换操作，
 
 ## 关系运算与统计适配
 
-频数、统一描述节点 `yssbi.statistics.describe` 和分组聚合由 `builtins::aggregation` 注册。描述从同一个 `source` 输入接收数据帧或数据序列；节点无参数，数据帧自动统计全部受支持的列，数据序列直接统计自身。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系计算由 DataFusion 原生聚合、排序、连接和分位数计划承担。频数和分组聚合保留关系输出，扫描在消费时执行；描述使用 revision 5，由 `builtins::aggregation::description` 在节点执行中受控读取内部摘要批次并生成 `{ columns: { 列名: { position, semantic, ...统计指标 } } }` Record。列名保持原值，`position` 从 1 开始记录受支持列的输入顺序；各列只包含对应语义的指标，不适用字段不添加。分类、顺序及二元列复用 `frequency(column, false)` 获取全部非空类别的原值、频数及占比，按原字段的语义编码匹配标签；`categories` 以从 1 开始的编号组织明细 Record，保持 Ordinal 的声明顺序。列摘要与类别明细直接随 JSON 返回，最终结果不保留关系句柄或数组引用。统计失败随节点执行交付，读取和构造结果都检查取消、deadline 及内存预算；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
+频数、数据描述节点 `yssbi.statistics.describe` 和分组聚合由 `builtins::aggregation` 注册。数据描述从同一个 `source` 输入接收数据帧或数据序列；节点无参数，数据帧自动统计全部受支持的列，数据序列直接统计自身。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系计算由 DataFusion 原生聚合、排序、连接和分位数计划承担。频数和分组聚合保留关系输出，扫描在消费时执行；数据描述使用 revision 5，由 `builtins::aggregation::description` 在节点执行中受控读取内部摘要批次并生成 `{ columns: { 列名: { position, semantic, ...统计指标 } } }` Record。列名保持原值，`position` 从 1 开始记录受支持列的输入顺序；各列只包含对应语义的指标，不适用字段不添加。分类、顺序及二元列复用 `frequency(column, false)` 获取全部非空类别的原值、频数及占比，按原字段的语义编码匹配标签；`categories` 以从 1 开始的编号组织明细 Record，保持 Ordinal 的声明顺序。列摘要与类别明细直接随 JSON 返回，最终结果不保留关系句柄或数组引用。统计失败随节点执行交付，读取和构造结果都检查取消、deadline 及内存预算；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
 
 聚合列名复用 Data Contract 的 `TabularColumnName` 校验，保留含首尾空格的原始名称，不做 trim；
 空白名称和重复选择仍被拒绝。分组聚合内核使用 revision 2。

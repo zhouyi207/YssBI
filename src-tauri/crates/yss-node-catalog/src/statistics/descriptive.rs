@@ -207,12 +207,12 @@ fn append_description(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
     for (locale, title, help) in [
         (
             "en-US",
-            "Describe",
+            "Data Description",
             "Returns a structured statistical result for each supported column of a DataFrame or DataSeries.",
         ),
         (
             "zh-CN",
-            "描述",
+            "数据描述",
             "对数据帧或数据序列逐列进行描述统计，输出结构化结果并在详细信息中展示。",
         ),
     ] {
