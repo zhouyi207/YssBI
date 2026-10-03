@@ -95,6 +95,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_database_meta,
         get_database_rows,
         get_column_distribution,
+        get_column_values,
         cast_column,
         set_column_semantic,
         export_database,

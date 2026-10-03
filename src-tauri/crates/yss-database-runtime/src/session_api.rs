@@ -527,6 +527,21 @@ pub fn dataset_overview_with_control(
     session.read_physical_dataset_overview(&database, control)
 }
 
+pub fn column_values(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+    column: &str,
+) -> Result<Vec<String>, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    session.read_physical_column_values(&database, column)
+}
+
 pub fn edit_state(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,

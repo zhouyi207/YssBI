@@ -431,6 +431,28 @@ pub async fn get_column_distribution(
 }
 
 #[tauri::command]
+pub async fn get_column_values(
+    application: State<'_, crate::session::ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+    id: String,
+    expected_revision: ResourceRevision,
+    col_name: String,
+) -> Result<Vec<String>, CommandError> {
+    let application = application.inner().clone();
+    run_on_blocking_pool(move || {
+        application
+            .query_column_values_for_application(
+                project_instance_id,
+                id,
+                expected_revision,
+                col_name,
+            )
+            .map_err(map_application_database_error)
+    })
+    .await
+}
+
+#[tauri::command]
 #[expect(
     clippy::too_many_arguments,
     reason = "Tauri injects app/state into the flat revision-checked command wire"

@@ -94,6 +94,11 @@ export const databaseDistributionsSchema = z
 
 export const databaseSourceEntriesSchema = z.array(z.string());
 
+export const databaseColumnValuesSchema = z
+  .array(z.string())
+  .max(65_536)
+  .refine((values) => new Set(values).size === values.length);
+
 const mutationEnvelope = z.strictObject({ data: z.unknown(), mutation: z.unknown() });
 
 export function parseDatabaseMutationResult<T>(value: unknown, dataSchema: z.ZodType<T>) {

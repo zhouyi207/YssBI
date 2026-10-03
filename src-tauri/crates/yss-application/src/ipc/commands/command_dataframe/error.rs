@@ -243,6 +243,7 @@ fn internal_error_code(operation: DatabaseApplicationOperation) -> &'static str 
         DatabaseApplicationOperation::ListSheets => "database_sheet_list_failed",
         DatabaseApplicationOperation::ReadMetadata
         | DatabaseApplicationOperation::ReadRows
+        | DatabaseApplicationOperation::ReadColumnValues
         | DatabaseApplicationOperation::ColumnDistribution
         | DatabaseApplicationOperation::ExportRead => "database_computation_failed",
         DatabaseApplicationOperation::ExportSerialize => "database_export_serialization_failed",
@@ -276,6 +277,7 @@ fn operation_name(operation: DatabaseApplicationOperation) -> &'static str {
         DatabaseApplicationOperation::ListSheets => "listSheets",
         DatabaseApplicationOperation::ReadMetadata => "readMetadata",
         DatabaseApplicationOperation::ReadRows => "readRows",
+        DatabaseApplicationOperation::ReadColumnValues => "readColumnValues",
         DatabaseApplicationOperation::ColumnDistribution => "columnDistribution",
         DatabaseApplicationOperation::ReadEditState => "readEditState",
         DatabaseApplicationOperation::EditCell => "editCell",

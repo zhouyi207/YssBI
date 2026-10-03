@@ -134,6 +134,32 @@ describe("DatabaseService project lifecycle contract", () => {
     }
   });
 
+  it("keeps exact column values and rejects incomplete domain wire data", async () => {
+    const values = ["", "001", "9007199254740993", "中文"];
+    vi.mocked(invoke).mockResolvedValue(values);
+    await expect(
+      DatabaseService.getColumnValues(projectInstanceId, "sales", expectedRevision, "value"),
+    ).resolves.toEqual(values);
+    expect(invoke).toHaveBeenLastCalledWith("get_column_values", {
+      projectInstanceId,
+      id: "sales",
+      expectedRevision,
+      colName: "value",
+    });
+    for (const invalid of [
+      [null],
+      [9007199254740992],
+      ["same", "same"],
+      { values, truncated: true },
+      Array.from({ length: 65_537 }, (_, i) => String(i)),
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(invalid);
+      await expect(
+        DatabaseService.getColumnValues(projectInstanceId, "sales", expectedRevision, "value"),
+      ).rejects.toThrow();
+    }
+  });
+
   it.each([
     [
       "getDatabaseMeta",

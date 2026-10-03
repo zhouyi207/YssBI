@@ -18,6 +18,7 @@ pub enum DatabaseApplicationOperation {
     ListSheets,
     ReadMetadata,
     ReadRows,
+    ReadColumnValues,
     ColumnDistribution,
     ReadEditState,
     EditCell,

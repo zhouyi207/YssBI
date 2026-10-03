@@ -195,10 +195,12 @@ the normal Project publication coordinator. Sample errors retain the common erro
 wire, with stable categories for missing samples, changed versions, invalid catalogs,
 integrity failures and unavailable resources. The frontend localizes these categories.
 
-`get_database_meta`, `get_database_rows`, `get_column_distribution` and `get_plot_column_pair`
+`get_database_meta`, `get_database_rows`, `get_column_distribution`, `get_column_values` and `get_plot_column_pair`
 require `expectedRevision` alongside the project and database identity. It is the caller's Project
 database resource revision. Application requires matching Project and Runtime declaration revisions
 and revalidates the read before returning; the commands do not default to a newer backend version.
+
+`get_column_values` also takes `colName` and runs on the blocking pool. It returns a complete, deterministically ordered array of distinct non-null values as canonical strings for Semantic mapping initialization. It preserves wide integers and string values without JavaScript numeric conversion, and rejects a domain above 65,536 entries or a query exceeding its budget instead of returning a truncated mapping. Frontend Services validate unique strings and the domain bound. Draft labels, order and numeric constraints remain local to the configuration dialog until `set_column_semantic` is confirmed.
 
 `get_database_rows` returns `{ rows, rowIds }` with both arrays required and the same length.
 `rowIds` contains canonical decimal strings representing Rust `i64` values. IPC owns this encoding;

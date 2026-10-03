@@ -345,6 +345,14 @@ impl DatabaseRuntimeSession {
         self.physical.read_dataset_overview(database, control)
     }
 
+    pub(crate) fn read_physical_column_values(
+        &self,
+        database: &DatabaseId,
+        column: &str,
+    ) -> Result<Vec<String>, DatabaseError> {
+        self.physical.read_column_values(database, column)
+    }
+
     pub(crate) fn read_physical_edit_state(
         &self,
         database: &DatabaseId,

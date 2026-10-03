@@ -9,6 +9,7 @@ import type {
 } from "@/shared/types/dto/database";
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 import {
+  databaseColumnValuesSchema,
   databaseDistributionsSchema,
   databaseEditStateSchema,
   databaseEmptyResultSchema,
@@ -231,6 +232,22 @@ export class DatabaseService {
         projectInstanceId,
         id,
         expectedRevision,
+      }),
+    );
+  }
+
+  static async getColumnValues(
+    projectInstanceId: string,
+    id: string,
+    expectedRevision: number,
+    colName: string,
+  ): Promise<string[]> {
+    return databaseColumnValuesSchema.parse(
+      await invokeCommand<unknown>("get_column_values", {
+        projectInstanceId,
+        id,
+        expectedRevision,
+        colName,
       }),
     );
   }

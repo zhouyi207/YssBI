@@ -77,6 +77,8 @@ Harness profile inspection calls `session_api::dataset_overview_with_control` wi
 cancellation and query budget. Chart histograms use `session_api::column_distributions` through
 the Application revision-checked read boundary.
 
+Semantic mapping initialization uses `session_api::column_values`. It projects the requested user column and reuses the engine's bounded `distinct_labels` stream over the complete effective snapshot. Arrow supplies canonical strings (including exact wide integers), nulls are omitted and values have deterministic lexical order. The query retains the existing 30-second/16 MiB budget and rejects domains above 65,536 entries rather than returning a partial mapping; it does not modify field metadata or data.
+
 A relation captures the actual dataset snapshot and the Project grant revision. Graph source,
 projection, filter, and series kernels retain that handle. Native optimizer rewrites can drop
 field metadata, so the adapter retains the source Arrow schema, validates native names/types,

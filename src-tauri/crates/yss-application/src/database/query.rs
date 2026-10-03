@@ -107,6 +107,24 @@ impl ApplicationState {
             session_api::edit_state,
         )
     }
+
+    pub fn query_column_values_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        column: String,
+    ) -> Result<Vec<String>, DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        read_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            expected_revision,
+            DatabaseApplicationOperation::ReadColumnValues,
+            |session, database| session_api::column_values(session, database, &column),
+        )
+    }
 }
 
 pub(super) fn query_database_metadata_in_captured_session(
@@ -176,7 +194,9 @@ mod tests {
     use yss_database_contract::DatabaseImportSource;
     use yss_project_identity::OperationId;
 
-    fn imported_database() -> (yss_project::fixtures::TempProject, ApplicationState, String) {
+    fn imported_database(
+        contents: &str,
+    ) -> (yss_project::fixtures::TempProject, ApplicationState, String) {
         let fixture = yss_project::fixtures::TempProject::activate(
             "database-query-session",
             yss_project_model::ProjectData::new(),
@@ -187,7 +207,7 @@ mod tests {
             .load_project_for_application(&root.as_path().to_string_lossy())
             .unwrap();
         let source = root.as_path().join("query.csv");
-        std::fs::write(&source, "value,other\n7,11\n").unwrap();
+        std::fs::write(&source, contents).unwrap();
         let id = state
             .load_database_for_application(
                 state
@@ -245,7 +265,7 @@ mod tests {
 
     #[test]
     fn reads_cannot_publish_or_restart_after_the_captured_session_is_replaced() {
-        let (_fixture, state, id) = imported_database();
+        let (_fixture, state, id) = imported_database("value,other\n7,11\n");
         let captured = state.capture_session().unwrap();
         let expected = revision(&captured, &id);
         let result = read_database_in_captured_session(
@@ -283,7 +303,7 @@ mod tests {
 
     #[test]
     fn reads_require_the_requested_project_and_runtime_revision() {
-        let (fixture, state, id) = imported_database();
+        let (fixture, state, id) = imported_database("value,other\n7,11\n");
         let captured = state.capture_session().unwrap();
         let instance = captured.project_instance_id().clone();
         let old_revision = revision(&captured, &id);
@@ -321,6 +341,15 @@ mod tests {
         );
 
         let assert_queries_stale = |expected| {
+            assert_stale(
+                state.query_column_values_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    expected,
+                    "value".into(),
+                ),
+                expected,
+            );
             assert_stale(
                 state.query_database_meta_for_application(instance.clone(), id.clone(), expected),
                 expected,
@@ -391,8 +420,118 @@ mod tests {
     }
 
     #[test]
+    fn complete_exact_column_values_initialize_all_domain_semantics_without_changing_rows() {
+        use yss_data_contract::{ColumnSemantic, SemanticType, SemanticValue};
+        let contents = format!(
+            "value,label\n{}9007199254740995,late\n,missing\n",
+            "9007199254740993,same\n".repeat(205)
+        );
+        let (_fixture, state, id) = imported_database(&contents);
+        let captured = state.capture_session().unwrap();
+        let instance = captured.project_instance_id().clone();
+        let initial_revision = revision(&captured, &id);
+        let values = state
+            .query_column_values_for_application(
+                instance.clone(),
+                id.clone(),
+                initial_revision,
+                "value".into(),
+            )
+            .unwrap();
+        assert_eq!(values, ["9007199254740993", "9007199254740995"]);
+        assert_eq!(
+            state
+                .query_column_values_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    initial_revision,
+                    "label".into()
+                )
+                .unwrap(),
+            ["late", "missing", "same"]
+        );
+        assert_eq!(revision(&captured, &id), initial_revision);
+        assert!(
+            !state
+                .query_database_edit_state_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    initial_revision
+                )
+                .unwrap()
+                .can_undo
+        );
+        assert!(
+            state
+                .query_column_values_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    initial_revision,
+                    "missing_column".into()
+                )
+                .is_err()
+        );
+        for kind in [
+            SemanticType::Categorical,
+            SemanticType::Ordinal,
+            SemanticType::Binary,
+        ] {
+            let semantic = ColumnSemantic {
+                kind,
+                values: values
+                    .iter()
+                    .map(|value| SemanticValue {
+                        value: value.clone(),
+                        label: value.clone(),
+                    })
+                    .collect(),
+                positive_value: None,
+                numeric: None,
+            };
+            state
+                .mutate_database_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    revision(&captured, &id),
+                    OperationId::new(),
+                    crate::database::DatabaseMutation::SetColumnSemantic {
+                        column: "value".into(),
+                        semantic: semantic.clone(),
+                    },
+                )
+                .unwrap();
+            let current = revision(&captured, &id);
+            let metadata = state
+                .query_database_meta_for_application(instance.clone(), id.clone(), current)
+                .unwrap();
+            assert_eq!(metadata.row_count, 207);
+            assert_eq!(metadata.columns[0].semantic(), Some(&semantic));
+            assert_eq!(
+                state
+                    .query_column_values_for_application(
+                        instance.clone(),
+                        id.clone(),
+                        current,
+                        "value".into()
+                    )
+                    .unwrap(),
+                values
+            );
+        }
+        assert_stale(
+            state.query_column_values_for_application(
+                instance,
+                id,
+                initial_revision,
+                "value".into(),
+            ),
+            initial_revision,
+        );
+    }
+
+    #[test]
     fn read_cannot_publish_after_project_revision_changes_during_conversion() {
-        let (_fixture, state, id) = imported_database();
+        let (_fixture, state, id) = imported_database("value,other\n7,11\n");
         let captured = state.capture_session().unwrap();
         let expected = revision(&captured, &id);
         let result = read_database_in_captured_session(

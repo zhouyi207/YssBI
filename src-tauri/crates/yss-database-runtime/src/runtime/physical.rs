@@ -178,6 +178,42 @@ impl DatabaseRuntimePhysicalState {
             })
             .map_err(|error| failure(database, DatabaseOperation::Query, error))
     }
+    pub(crate) fn read_column_values(
+        &self,
+        database: &DatabaseId,
+        column: &str,
+    ) -> Result<Vec<String>, DatabaseError> {
+        let instance = self.required_instance(database)?;
+        let schema = instance
+            .data_schema()
+            .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
+        if !schema
+            .columns()
+            .iter()
+            .any(|field| field.name().as_str() == column)
+        {
+            return Err(DatabaseError::invalid_request(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+            ));
+        }
+        let values = instance
+            .query()
+            .and_then(|query| {
+                query
+                    .distinct_labels(column, &query_control(16 * 1024 * 1024))
+                    .map_err(Into::into)
+            })
+            .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
+        // A partial domain cannot validate the column when the user confirms it.
+        if values.len() > 65_536 {
+            return Err(DatabaseError::invalid_request(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+            ));
+        }
+        Ok(values)
+    }
     pub(crate) fn read_dataset_overview(
         &self,
         database: &DatabaseId,
