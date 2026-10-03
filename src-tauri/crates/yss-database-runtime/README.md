@@ -44,10 +44,16 @@ DataFrame in this runtime.
 
 ## Queries and display
 
+Metadata snapshots expose the Dataset Store's existing `data_revision`. Semantic-only changes preserve
+this value; row edits, physical casts and column membership changes advance it. It identifies the
+positional row payload for an already admitted page, while query admission still checks the full
+Project/Runtime revision basis.
+
 Column snapshots use Arrow and apply projection and bounds before materialization. DataView pages include stable
 row IDs; relation reads hide internal identity/order fields. Display DTOs convert unsafe
 JavaScript integers to decimal strings. `DatabaseColumnFact` carries a semantic Graph type and
-an independent display label, exact Physical label and the field's Semantic configuration;
+an independent display label, exact Physical label, the field's Semantic configuration and supported
+Semantic choices derived by the Arrow adapter from the exact Physical type;
 none reconstructs the stored Arrow schema. The seven Semantic types and conversion constraints
 are owned by the [dataset metadata contract](../yss-database-store/README.md#field-meaning-and-physical-conversion).
 

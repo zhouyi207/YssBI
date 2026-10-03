@@ -22,6 +22,7 @@ pub struct DatabaseMetaResult {
     pub row_count: usize,
     pub column_count: usize,
     pub columns: Vec<DatabaseColumnFact>,
+    pub data_revision: u64,
 }
 
 #[derive(Debug)]
@@ -147,6 +148,7 @@ pub(super) fn query_database_metadata_in_captured_session(
                 row_count: snapshot.row_count(),
                 column_count: snapshot.schema().columns().len(),
                 columns: snapshot.schema().columns().to_vec(),
+                data_revision: snapshot.data_revision(),
             })
         },
     )
@@ -430,6 +432,10 @@ mod tests {
         let captured = state.capture_session().unwrap();
         let instance = captured.project_instance_id().clone();
         let initial_revision = revision(&captured, &id);
+        let initial_data_revision = state
+            .query_database_meta_for_application(instance.clone(), id.clone(), initial_revision)
+            .unwrap()
+            .data_revision;
         let values = state
             .query_column_values_for_application(
                 instance.clone(),
@@ -505,6 +511,7 @@ mod tests {
                 .query_database_meta_for_application(instance.clone(), id.clone(), current)
                 .unwrap();
             assert_eq!(metadata.row_count, 207);
+            assert_eq!(metadata.data_revision, initial_data_revision);
             assert_eq!(metadata.columns[0].semantic(), Some(&semantic));
             assert_eq!(
                 state
@@ -517,6 +524,40 @@ mod tests {
                     .unwrap(),
                 values
             );
+        }
+        let mut data_revision = initial_data_revision;
+        for mutation in [
+            crate::database::DatabaseMutation::CastColumn {
+                column: "value".into(),
+                dtype: "Utf8".into(),
+                force: false,
+            },
+            crate::database::DatabaseMutation::AddColumn {
+                name: "new_column".into(),
+                dtype: "Int64".into(),
+            },
+            crate::database::DatabaseMutation::DeleteColumn {
+                name: "new_column".into(),
+            },
+        ] {
+            state
+                .mutate_database_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    revision(&captured, &id),
+                    OperationId::new(),
+                    mutation,
+                )
+                .unwrap();
+            let metadata = state
+                .query_database_meta_for_application(
+                    instance.clone(),
+                    id.clone(),
+                    revision(&captured, &id),
+                )
+                .unwrap();
+            assert!(metadata.data_revision > data_revision);
+            data_revision = metadata.data_revision;
         }
         assert_stale(
             state.query_column_values_for_application(

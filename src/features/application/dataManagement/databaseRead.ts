@@ -17,6 +17,7 @@ export interface DatabaseRead {
   readonly projectInstanceId: string;
   readonly revision: number | undefined;
   isCurrent(): boolean;
+  isDataCurrent(dataRevision: string): boolean;
 }
 
 export function captureDatabaseRead(
@@ -36,6 +37,13 @@ export function captureDatabaseRead(
       const state = useResourceStore.getState();
       const resource = state.resources[key];
       return resource?.exists === true && resource.revision === revision && !!state.databases[id];
+    },
+    isDataCurrent: (dataRevision) => {
+      if (!isActive() || !isCurrentProjectIdentity(identity)) return false;
+      const state = useResourceStore.getState();
+      return (
+        state.resources[key]?.exists === true && state.databases[id]?.dataRevision === dataRevision
+      );
     },
   };
 }

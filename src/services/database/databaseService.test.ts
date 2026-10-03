@@ -13,7 +13,15 @@ const metadata = {
   name: "Sales",
   rowCount: 1,
   columnCount: 1,
-  columns: [{ name: "value", type: "Int64", physical: "Int64", semantic: null }],
+  columns: [
+    {
+      name: "value",
+      type: "Int64",
+      physical: "Int64",
+      semantic: null,
+      supportedSemanticTypes: ["Numeric", "Categorical", "Ordinal", "Binary", "Identifier"],
+    },
+  ],
 };
 const mutation = {
   operationId,
@@ -31,7 +39,7 @@ beforeEach(() => {
 
 describe("DatabaseService project lifecycle contract", () => {
   it("rejects invalid metadata before read or import consumers can accept it", async () => {
-    vi.mocked(invoke).mockResolvedValue({ ...metadata, id: "another-database" });
+    vi.mocked(invoke).mockResolvedValue({ ...metadata, dataRevision: "1", id: "another-database" });
     await expect(
       DatabaseService.getDatabaseMeta(projectInstanceId, metadata.id, expectedRevision),
     ).rejects.toThrow();
@@ -40,8 +48,12 @@ describe("DatabaseService project lifecycle contract", () => {
       { ...metadata, columnCount: 2 },
       { ...metadata, columns: [{ ...metadata.columns[0], semantic: { kind: "Scalar" } }] },
       { ...metadata, rowCount: -1 },
+      ...[undefined, ["Int64"], ["Numeric", "Numeric"]].map((supportedSemanticTypes) => ({
+        ...metadata,
+        columns: [{ ...metadata.columns[0], supportedSemanticTypes }],
+      })),
     ]) {
-      vi.mocked(invoke).mockResolvedValue(invalid);
+      vi.mocked(invoke).mockResolvedValue({ ...invalid, dataRevision: "1" });
       await expect(
         DatabaseService.getDatabaseMeta(projectInstanceId, metadata.id, expectedRevision),
       ).rejects.toThrow();
@@ -76,6 +88,19 @@ describe("DatabaseService project lifecycle contract", () => {
       await expect(DatabaseService.listSampleDatasets()).rejects.toThrow(
         "Invalid sample catalog response",
       );
+    }
+  });
+  it("requires a lossless row-data revision on metadata reads", async () => {
+    const current = { ...metadata, dataRevision: "18446744073709551615" };
+    vi.mocked(invoke).mockResolvedValue(current);
+    await expect(
+      DatabaseService.getDatabaseMeta(projectInstanceId, "sales", expectedRevision),
+    ).resolves.toEqual(current);
+    for (const dataRevision of [undefined, 1, "-1", "01", "18446744073709551616"]) {
+      vi.mocked(invoke).mockResolvedValue({ ...metadata, dataRevision });
+      await expect(
+        DatabaseService.getDatabaseMeta(projectInstanceId, "sales", expectedRevision),
+      ).rejects.toThrow();
     }
   });
   it("keeps the backend row identities aligned with their page rows", async () => {
@@ -190,7 +215,7 @@ describe("DatabaseService project lifecycle contract", () => {
       method === "getDatabaseRows"
         ? { rows: [], rowIds: [] }
         : method === "getDatabaseMeta"
-          ? metadata
+          ? { ...metadata, dataRevision: "1" }
           : method === "getColumnDistribution"
             ? []
             : undefined,

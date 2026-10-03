@@ -46,6 +46,7 @@ pub struct DatabaseMetaSnapshot {
     name: Box<str>,
     schema: DatabaseSchemaFact,
     row_count: usize,
+    data_revision: u64,
 }
 
 impl DatabaseMetaSnapshot {
@@ -59,6 +60,10 @@ impl DatabaseMetaSnapshot {
 
     pub const fn row_count(&self) -> usize {
         self.row_count
+    }
+
+    pub const fn data_revision(&self) -> u64 {
+        self.data_revision
     }
 }
 
@@ -475,6 +480,7 @@ pub fn metadata_snapshot(
         name: physical.name,
         schema: physical.schema,
         row_count: physical.row_count,
+        data_revision: physical.data_revision,
     })
 }
 

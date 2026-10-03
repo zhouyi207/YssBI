@@ -100,10 +100,9 @@ fn value_array(field: &Field, value: &str) -> Result<ArrayRef, TabularArrowError
     )
 }
 
-fn validate_semantic(field: &Field, semantic: &ColumnSemantic) -> Result<(), TabularArrowError> {
+fn supports_semantic_type(dtype: &DataType, kind: SemanticType) -> bool {
     use SemanticType::*;
-    let dtype = field.data_type();
-    let valid = match semantic.kind {
+    match kind {
         Numeric => dtype.is_numeric(),
         Datetime => matches!(
             dtype,
@@ -118,8 +117,19 @@ fn validate_semantic(field: &Field, semantic: &ColumnSemantic) -> Result<(), Tab
             DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View | DataType::Dictionary(..)
         ),
         Categorical | Ordinal | Binary | Identifier => true,
-    };
-    if !valid
+    }
+}
+
+pub(crate) fn supported_semantic_types(dtype: &DataType) -> Box<[SemanticType]> {
+    SemanticType::ALL
+        .into_iter()
+        .filter(|kind| supports_semantic_type(dtype, *kind))
+        .collect()
+}
+
+fn validate_semantic(field: &Field, semantic: &ColumnSemantic) -> Result<(), TabularArrowError> {
+    use SemanticType::*;
+    if !supports_semantic_type(field.data_type(), semantic.kind)
         || (semantic.kind != Numeric && semantic.numeric.is_some())
         || (semantic.kind != Binary && semantic.positive_value.is_some())
         || (!matches!(semantic.kind, Categorical | Ordinal | Binary) && !semantic.values.is_empty())

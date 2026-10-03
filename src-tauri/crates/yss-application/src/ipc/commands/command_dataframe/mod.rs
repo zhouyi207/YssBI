@@ -107,6 +107,7 @@ fn database_meta_to_transport(result: DatabaseMetaResult) -> DatabaseMetaResultD
         row_count: result.row_count,
         column_count: result.column_count,
         columns: crate::ipc::schema::column_info_from_schema(&result.columns),
+        data_revision: result.data_revision.to_string(),
     }
 }
 

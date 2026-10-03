@@ -27,7 +27,15 @@ it("shares current database metadata and discards it when the indexed revision c
     required: false,
   }));
   const initial = prepareProjectSnapshotCommit(plan).storeState;
-  const columns = [{ name: "value", type: "Float64", physical: "Float64", semantic: null }];
+  const columns = [
+    {
+      name: "value",
+      type: "Float64",
+      physical: "Float64",
+      semantic: null,
+      supportedSemanticTypes: ["Numeric" as const],
+    },
+  ];
   const databases: Record<string, DatabaseRecord> = {
     ...initial.databases,
     changed: { ...initial.databases.changed, columns, rowCount: 5, columnCount: 1 },

@@ -238,7 +238,15 @@ it("validates project database metadata without repairing malformed columns", as
     schemaVersion: 1,
     required: false,
     loadFailed: false,
-    columns: [{ name: "value", type: "Int64", physical: "Int64", semantic: null }],
+    columns: [
+      {
+        name: "value",
+        type: "Int64",
+        physical: "Int64",
+        semantic: null,
+        supportedSemanticTypes: ["Numeric", "Categorical", "Ordinal", "Binary", "Identifier"],
+      },
+    ],
     columnCount: 1,
   };
   ipc.response = { databases: { sales: database } };

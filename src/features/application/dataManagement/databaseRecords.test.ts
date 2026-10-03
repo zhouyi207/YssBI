@@ -86,6 +86,7 @@ describe("prepareDatabaseIndexSnapshot", () => {
           name: "category",
           type: "Utf8",
           physical: "Utf8",
+          supportedSemanticTypes: ["Categorical", "Ordinal", "Binary", "Text", "Identifier"],
           semantic: {
             kind: "Categorical",
             values: [{ value: "a", label: "First" }],
@@ -99,11 +100,19 @@ describe("prepareDatabaseIndexSnapshot", () => {
     metadata.columns[0].name = "Changed externally";
     metadata.columns[0].semantic!.values[0].label = "Changed externally";
     metadata.columns[0].semantic!.numeric!.minimum = "-10";
-    metadata.columns.push({ name: "extra", type: "Utf8", physical: "Utf8", semantic: null });
+    metadata.columns[0].supportedSemanticTypes.length = 0;
+    metadata.columns.push({
+      name: "extra",
+      type: "Utf8",
+      physical: "Utf8",
+      semantic: null,
+      supportedSemanticTypes: [],
+    });
     incomingRow.engine.dataset = {};
     expect(result[row.id].columns).toHaveLength(1);
     expect(result[row.id].columns![0]).toMatchObject({
       name: "category",
+      supportedSemanticTypes: ["Categorical", "Ordinal", "Binary", "Text", "Identifier"],
       semantic: { values: [{ value: "a", label: "First" }], numeric: { minimum: "0" } },
     });
     expect(result[row.id].engine).not.toBe(incomingRow.engine);
@@ -118,11 +127,18 @@ describe("prepareDatabaseIndexSnapshot", () => {
       loadFailed: false,
       columnCount: 3,
       columns: [
-        { name: "stable", type: "Int64", physical: "Int64", semantic: null },
+        {
+          name: "stable",
+          type: "Int64",
+          physical: "Int64",
+          semantic: null,
+          supportedSemanticTypes: ["Numeric", "Categorical", "Ordinal", "Binary", "Identifier"],
+        },
         {
           name: "category",
           type: "Utf8",
           physical: "Utf8",
+          supportedSemanticTypes: ["Categorical", "Ordinal", "Binary", "Text", "Identifier"],
           semantic: {
             kind: "Categorical",
             values: [
@@ -133,7 +149,13 @@ describe("prepareDatabaseIndexSnapshot", () => {
             numeric: { integer: false, minimum: null, maximum: null },
           },
         },
-        { name: "removed", type: "Utf8", physical: "Utf8", semantic: null },
+        {
+          name: "removed",
+          type: "Utf8",
+          physical: "Utf8",
+          semantic: null,
+          supportedSemanticTypes: [],
+        },
       ],
     };
     const before = prepareDatabaseIndexSnapshot([row], {}, {}, { [row.id]: metadata });
@@ -160,9 +182,31 @@ describe("prepareDatabaseIndexSnapshot", () => {
     expect(after[row.id].columns![0]).toBe(before[row.id].columns![0]);
     const previousSemantic = before[row.id].columns![1].semantic!;
     const nextSemantic = after[row.id].columns![1].semantic!;
+    expect(after[row.id].columns![1].supportedSemanticTypes).toBe(
+      before[row.id].columns![1].supportedSemanticTypes,
+    );
     expect(nextSemantic.numeric).toBe(previousSemantic.numeric);
     expect(nextSemantic.values[0]).toBe(previousSemantic.values[0]);
     expect(nextSemantic.values[1].label).toBe("Renamed");
+    changed.columns[1].physical = "Int64";
+    changed.columns[1].supportedSemanticTypes = [
+      "Numeric",
+      "Categorical",
+      "Ordinal",
+      "Binary",
+      "Identifier",
+    ];
+    const converted = prepareDatabaseIndexSnapshot(
+      [row],
+      after,
+      { [key]: resource },
+      { [row.id]: changed },
+    );
+    expect(converted[row.id].columns![1].supportedSemanticTypes).toEqual(
+      changed.columns[1].supportedSemanticTypes,
+    );
+    expect(converted[row.id].columns![0]).toBe(after[row.id].columns![0]);
+    expect(after[row.id].columns![1].supportedSemanticTypes).toContain("Text");
     expect(previousSemantic.values[1].label).toBe("Second");
     changed.columns[1].semantic!.values[1].label = "External mutation";
     expect(nextSemantic.values[1].label).toBe("Renamed");
@@ -213,7 +257,15 @@ describe("prepareDatabaseIndexSnapshot", () => {
         schemaVersion: 1,
         required: false,
         loadFailed: false,
-        columns: [{ name: "x", type: "Utf8", physical: "Utf8", semantic: null }],
+        columns: [
+          {
+            name: "x",
+            type: "Utf8",
+            physical: "Utf8",
+            semantic: null,
+            supportedSemanticTypes: ["Categorical", "Ordinal", "Binary", "Text", "Identifier"],
+          },
+        ],
         columnCount: 1,
       },
       "df-2": {

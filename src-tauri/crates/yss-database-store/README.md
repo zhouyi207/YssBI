@@ -16,6 +16,10 @@ only changed payloads; the size check and commit share that encoding. Committed 
 blob identities and sizes, without keeping another serialized copy of their Arrow data.
 Graph/Chart documents, Project registry and Graph history keep their existing owners.
 
+Data revisions cover positional row payloads: row edits, casts, column additions and column deletions
+advance `data_revision`. Semantic changes and renames leave it unchanged; schema revisions continue
+to track field metadata. Restore operations advance data revisions instead of reusing historical counters.
+
 `prepare_import` reserves a new generation directory, assigns stable column/row identities,
 preserves a separate display order, and writes bounded Arrow batches to Parquet parts. Parts are
 closed and synced before the preparation can be committed. Nothing is entered in the dataset
@@ -60,6 +64,10 @@ Numeric admits supported numeric Arrow representations and optional exact minimu
 integer constraints. Text admits string representations (including string dictionaries); Datetime
 admits timezone-free date, time and timestamp representations. Categorical, Ordinal, Binary and
 Identifier can use multiple scalar representations, subject to actual values and supported casts.
+The Arrow adapter derives each column's supported Semantic choices from the same Physical compatibility
+predicate used by semantic admission. Schema facts and IPC carry that list to Details; the frontend
+does not reconstruct compatibility from display labels. Choosing a supported kind still requires
+valid domain values and constraints, including the two-value Binary domain.
 Category/level/binary codes are exact strings in metadata and on the wire, so wide integers do not
 pass through JavaScript numbers. Semantic maps physical values to internal meanings; labels are
 part of that internal mapping. DataView keeps the original cell values and physical type labels,

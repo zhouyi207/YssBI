@@ -5,7 +5,7 @@
 //! this semantic vocabulary; these facts are never used to reconstruct storage types.
 
 use yss_data_contract::TabularColumnName;
-use yss_data_contract::{ColumnSemantic, ValueType};
+use yss_data_contract::{ColumnSemantic, SemanticType, ValueType};
 use yss_database_contract::DatabaseId;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -46,6 +46,7 @@ pub struct DatabaseColumnFact {
     display_type: Box<str>,
     semantic: Option<ColumnSemantic>,
     physical_type: Option<Box<str>>,
+    supported_semantic_types: Box<[SemanticType]>,
 }
 
 impl DatabaseColumnFact {
@@ -57,6 +58,7 @@ impl DatabaseColumnFact {
             nullable,
             semantic: None,
             physical_type: None,
+            supported_semantic_types: Box::new([]),
         }
     }
 
@@ -93,6 +95,15 @@ impl DatabaseColumnFact {
 
     pub fn physical_type(&self) -> &str {
         self.physical_type.as_deref().unwrap_or(&self.display_type)
+    }
+
+    pub fn with_supported_semantic_types(mut self, types: Box<[SemanticType]>) -> Self {
+        self.supported_semantic_types = types;
+        self
+    }
+
+    pub fn supported_semantic_types(&self) -> &[SemanticType] {
+        &self.supported_semantic_types
     }
 
     pub const fn nullable(&self) -> bool {

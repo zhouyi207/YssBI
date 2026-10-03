@@ -7,7 +7,7 @@ import {
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { DatabaseService, type DatabaseRowsResult } from "@/services/database/databaseService";
-import type { ColumnInfo, LoadDatabaseResult } from "@/shared/types/domain/database";
+import type { ColumnInfo, DatabaseMetadataResult } from "@/shared/types/domain/database";
 import {
   captureDatabaseRead,
   hydrateDatabaseEditorMetadata,
@@ -17,7 +17,8 @@ import {
 
 const database = { id: "sales", kind: "database" as const };
 const key = resourceKey(database);
-const metadata: LoadDatabaseResult = {
+const metadata: DatabaseMetadataResult = {
+  dataRevision: "1",
   id: database.id,
   name: "Sales",
   columns: [{ name: "value", type: "Float64" }],
@@ -62,7 +63,7 @@ afterEach(() => {
 });
 
 it("does not install delayed metadata after the same database advances revision", async () => {
-  const pending = deferred<LoadDatabaseResult>();
+  const pending = deferred<DatabaseMetadataResult>();
   const query = vi.spyOn(DatabaseService, "getDatabaseMeta").mockReturnValue(pending.promise);
   const completion = hydrateDatabaseEditorMetadata(database.id);
   expect(query).toHaveBeenCalledWith(captureProjectIdentity().projectInstanceId, database.id, 1);
@@ -104,6 +105,28 @@ it("rejects a delayed page and prevents an obsolete read from starting another r
   await expect(readDatabasePage(current, 0, 200)).rejects.toThrow(
     "Database page width does not match its metadata",
   );
+});
+
+it("retains accepted row data across semantic revisions while queries still require the current resource revision", async () => {
+  const identity = captureProjectIdentity();
+  let active = true;
+  const read = captureDatabaseRead(identity, database.id, () => active);
+  useResourceStore.getState().patchResource(database, { revision: 2 });
+  expect(read.isCurrent()).toBe(false);
+  expect(read.isDataCurrent("1")).toBe(true);
+  useResourceStore
+    .getState()
+    .updateDatabaseMetadata(database.id, 2, { ...metadata, dataRevision: "2" });
+  expect(read.isDataCurrent("1")).toBe(false);
+  expect(read.isDataCurrent("2")).toBe(true);
+  active = false;
+  expect(read.isDataCurrent("2")).toBe(false);
+  active = true;
+  useResourceStore.getState().patchResource(database, { exists: false });
+  expect(read.isDataCurrent("2")).toBe(false);
+  useResourceStore.getState().patchResource(database, { exists: true });
+  startProjectLifecycle("replacement-project");
+  expect(read.isDataCurrent("2")).toBe(false);
 });
 
 it("initializes complete semantic mappings without replacing existing labels or accepting stale reads", async () => {

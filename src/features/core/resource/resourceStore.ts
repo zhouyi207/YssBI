@@ -90,7 +90,7 @@ interface ResourceStore extends GraphProjectionData {
   updateDatabaseMetadata(
     id: string,
     expectedRevision: number,
-    metadata: Omit<LoadDatabaseResult, "id" | "name">,
+    metadata: Omit<LoadDatabaseResult, "id" | "name"> & { dataRevision?: string },
   ): void;
   patchResource(
     ref: ResourceRef,
@@ -649,6 +649,7 @@ export const useResourceStore = create<ResourceStore>((set, get) => ({
         updateDatabaseColumns(database, metadata.columns);
         database.rowCount = metadata.rowCount;
         database.columnCount = metadata.columnCount;
+        if (metadata.dataRevision !== undefined) database.dataRevision = metadata.dataRevision;
       }),
     );
   },

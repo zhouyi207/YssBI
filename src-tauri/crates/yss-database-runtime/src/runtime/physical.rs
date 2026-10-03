@@ -79,10 +79,16 @@ impl DatabaseRuntimePhysicalState {
         let row_count = instance
             .row_count()
             .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
+        let data_revision = instance
+            .snapshot()
+            .map_err(|error| failure(database, DatabaseOperation::Query, error))?
+            .metadata()
+            .data_revision;
         Ok(DatabaseRuntimeMetadata {
             name: instance.decl.name,
             schema,
             row_count,
+            data_revision,
         })
     }
     pub(crate) fn read_page(
@@ -301,6 +307,7 @@ pub(crate) struct DatabaseRuntimeMetadata {
     pub(crate) name: Box<str>,
     pub(crate) schema: DatabaseSchemaFact,
     pub(crate) row_count: usize,
+    pub(crate) data_revision: u64,
 }
 
 pub struct PreparedDatabasePhysicalMutation {

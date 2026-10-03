@@ -200,6 +200,11 @@ require `expectedRevision` alongside the project and database identity. It is th
 database resource revision. Application requires matching Project and Runtime declaration revisions
 and revalidates the read before returning; the commands do not default to a newer backend version.
 
+`get_database_meta` additionally returns `dataRevision`, the Dataset Store's `u64` data revision encoded
+as a canonical decimal string. Services validate the full integer range. The frontend publishes it with
+fresh columns and the resource revision, so Semantic changes can retain accepted row pages while
+Physical and row/column data changes invalidate them. It never replaces `expectedRevision` for queries.
+
 `get_column_values` also takes `colName` and runs on the blocking pool. It returns a complete, deterministically ordered array of distinct non-null values as canonical strings for Semantic mapping initialization. It preserves wide integers and string values without JavaScript numeric conversion, and rejects a domain above 65,536 entries or a query exceeding its budget instead of returning a truncated mapping. Frontend Services validate unique strings and the domain bound. Draft labels, order and numeric constraints remain local to the configuration dialog until `set_column_semantic` is confirmed.
 
 `get_database_rows` returns `{ rows, rowIds }` with both arrays required and the same length.
@@ -214,7 +219,10 @@ maps, ordinal ranks and binary event encodings are internal interpretations and 
 the values or physical type labels shown in DataView.
 
 Database column projections carry `name`, the existing `type` display label, exact `physical`,
-and `semantic: null | { kind, values, positiveValue, numeric }`. A present Semantic uses one of the seven field
+`semantic: null | { kind, values, positiveValue, numeric }`, and `supportedSemanticTypes`. The supported
+list comes from the same Arrow Physical compatibility check used for semantic writes. It is required
+on the wire, contains unique Semantic kinds, and is used directly by the Details selector. Domain and
+value constraints are still validated when configuring and submitting a choice. A present Semantic uses one of the seven field
 meanings specified by the [dataset contract](../../../yss-database-store/README.md#field-meaning-and-physical-conversion).
 Codes and numeric bounds are strings, preserving wide integers and decimal precision. The
 `set_column_semantic` mutation takes `projectInstanceId`, `operationId`, `expectedRevision`,

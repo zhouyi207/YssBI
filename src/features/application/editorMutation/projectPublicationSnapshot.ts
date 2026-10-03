@@ -186,6 +186,8 @@ export function prepareProjectSnapshotCommit(
     plan.index.databases,
     current.databases,
     current.resources,
+    undefined,
+    plan.databaseMetadata,
   );
   const graphs = nodeFileEntries(plan.index);
   const graphMeta = prepareGraphMetaSnapshot(graphs, useResourceStore.getState().graphMeta);

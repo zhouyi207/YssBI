@@ -530,7 +530,8 @@ impl DatasetStore {
         )
         .map_err(|_| DatasetStoreError::InvalidSchema)?;
         fields.push(Arc::new(field));
-        let mut prepared = self.prepare_change(before, operation, false, true)?;
+        // Column membership changes the positional row payload, even without rewriting files.
+        let mut prepared = self.prepare_change(before, operation, true, true)?;
         prepared.metadata.schema = Arc::new(Schema::new_with_metadata(
             fields,
             before.metadata.schema.metadata().clone(),
@@ -550,7 +551,7 @@ impl DatasetStore {
         }
         let id = yss_database_arrow::column_identity(field)
             .map_err(|_| DatasetStoreError::InvalidSchema)?;
-        let mut prepared = self.prepare_change(before, operation, false, true)?;
+        let mut prepared = self.prepare_change(before, operation, true, true)?;
         prepared.metadata.schema = Arc::new(Schema::new_with_metadata(
             before
                 .metadata

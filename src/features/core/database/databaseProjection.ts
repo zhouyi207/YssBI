@@ -30,6 +30,11 @@ export function updateDatabaseColumns(
     current.type = column.type;
     if ("physical" in column) current.physical = column.physical;
     else delete current.physical;
+    if (!shallow(current.supportedSemanticTypes, column.supportedSemanticTypes)) {
+      if (column.supportedSemanticTypes)
+        current.supportedSemanticTypes = [...column.supportedSemanticTypes];
+      else delete current.supportedSemanticTypes;
+    }
     if (!column.semantic || !current.semantic) {
       if ("semantic" in column) current.semantic = castDraft(structuredClone(column.semantic));
       else delete current.semantic;

@@ -2,6 +2,7 @@ import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixtur
 import { afterEach, expect, it, vi } from "vitest";
 import { buildFileResourceMeta, useResourceStore } from "@/features/core/resource";
 import { ProjectService } from "@/services/project/projectService";
+import { DatabaseService } from "@/services/database/databaseService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { captureProjectIdentity } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
@@ -112,7 +113,12 @@ it("loads fresh metadata against the captured index revision without retaining o
         schemaVersion: 1,
         required: false,
         loadFailed: false,
-        columns: columns.map((column) => ({ ...column, physical: "Float64", semantic: null })),
+        columns: columns.map((column) => ({
+          ...column,
+          physical: "Float64",
+          semantic: null,
+          supportedSemanticTypes: ["Numeric" as const],
+        })),
         columnCount: columns.length,
       },
     },
@@ -124,7 +130,7 @@ it("loads fresh metadata against the captured index revision without retaining o
     queryDatabases.mock.invocationCallOrder[0]!,
   );
   expect(prepared.storeState.databases.sales.columns).toEqual([
-    { ...columns[0], physical: "Float64", semantic: null },
+    { ...columns[0], physical: "Float64", semantic: null, supportedSemanticTypes: ["Numeric"] },
   ]);
   expect(prepared.storeState.databases.sales.rowCount).toBeUndefined();
   expect(useResourceStore.getState()).toBe(before);
@@ -136,8 +142,20 @@ it("loads fresh metadata against the captured index revision without retaining o
       databases: [{ ...index.databases[0], revision: 5 }],
     }),
   );
+  const queryMetadata = vi.spyOn(DatabaseService, "getDatabaseMeta").mockResolvedValue({
+    id: "sales",
+    name: "Sales",
+    dataRevision: "5",
+    rowCount: 2,
+    columnCount: columns.length,
+    columns: [
+      { ...columns[0], physical: "Float64", semantic: null, supportedSemanticTypes: ["Numeric"] },
+    ],
+  });
   expect(await refreshProjectResourceIndex()).toBe(true);
+  expect(queryMetadata).toHaveBeenCalledWith("project-a", "sales", 5);
   const advanced = useResourceStore.getState();
+  expect(advanced.databases.sales.rowCount).toBe(2);
   await expect(commitPreparedAuthoritativeProjectLoad(prepared)).rejects.toMatchObject({
     code: "stale_project_lifecycle",
   });

@@ -6,7 +6,7 @@ import {
   type ResourceKey,
 } from "@/features/core/resource/resourceTypes";
 import type { ProjectDatabaseIndexRow } from "@/shared/types/domain/project";
-import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { DatabaseMetadataResult, DatabaseRecord } from "@/shared/types/domain/database";
 import type { ProjectDatabaseMetadata } from "@/services/database/databaseWireParser";
 
 export function prepareDatabaseIndexSnapshot(
@@ -14,6 +14,7 @@ export function prepareDatabaseIndexSnapshot(
   current: Record<string, DatabaseRecord>,
   resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   freshMetadata?: Readonly<Record<string, ProjectDatabaseMetadata>>,
+  refreshedMetadata?: ReadonlyMap<string, DatabaseMetadataResult>,
 ): Record<string, DatabaseRecord> {
   if (freshMetadata && Object.keys(freshMetadata).length !== rows.length) {
     throw new TypeError("Project database metadata membership does not match the index");
@@ -29,7 +30,12 @@ export function prepareDatabaseIndexSnapshot(
         throw new TypeError("Project database metadata membership does not match the index");
       }
       const fresh = freshMetadata?.[row.id];
-      const metadata = fresh ? { ...retained, ...fresh } : retained;
+      const refreshed = refreshedMetadata?.get(row.id);
+      const metadata = refreshed
+        ? { ...refreshed, loadFailed: false }
+        : fresh
+          ? { ...retained, ...fresh }
+          : retained;
       const record = (databases[row.id] ??= { id: row.id, name: row.name ?? row.id });
       record.id = row.id;
       record.resourcePath = row.resourcePath;
@@ -44,6 +50,8 @@ export function prepareDatabaseIndexSnapshot(
       else record.rowCount = metadata.rowCount;
       if (metadata?.columnCount === undefined) delete record.columnCount;
       else record.columnCount = metadata.columnCount;
+      if (metadata?.dataRevision === undefined) delete record.dataRevision;
+      else record.dataRevision = metadata.dataRevision;
     }
     for (const id of Object.keys(databases)) {
       if (!ids.has(id)) delete databases[id];

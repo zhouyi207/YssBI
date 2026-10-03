@@ -103,6 +103,57 @@ fn prepared_conversion_validates_every_batch_without_mutating_declared_domains()
 }
 
 #[test]
+fn semantic_options_follow_physical_storage_and_match_admission() {
+    use SemanticType::{Binary, Categorical, Datetime, Identifier, Numeric, Ordinal, Text};
+    let database = DatabaseId::from_existing("semantic-options".into());
+    for (dtype, expected) in [
+        (
+            DataType::Int64,
+            vec![Numeric, Categorical, Ordinal, Binary, Identifier],
+        ),
+        (
+            DataType::Decimal128(20, 4),
+            vec![Numeric, Categorical, Ordinal, Binary, Identifier],
+        ),
+        (
+            DataType::Utf8,
+            vec![Categorical, Ordinal, Binary, Text, Identifier],
+        ),
+        (
+            DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8)),
+            vec![Categorical, Ordinal, Binary, Text, Identifier],
+        ),
+        (
+            DataType::Boolean,
+            vec![Categorical, Ordinal, Binary, Identifier],
+        ),
+        (
+            DataType::Date32,
+            vec![Categorical, Ordinal, Binary, Datetime, Identifier],
+        ),
+        (
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            vec![Categorical, Ordinal, Binary, Datetime, Identifier],
+        ),
+    ] {
+        let field = Field::new("value", dtype, true);
+        let schema = database_schema_fact(&database, &Schema::new(vec![field.clone()])).unwrap();
+        assert_eq!(
+            schema.columns()[0].supported_semantic_types(),
+            expected,
+            "{field:?}"
+        );
+        for kind in [Numeric, Datetime, Text] {
+            assert_eq!(
+                with_column_semantic(field.clone(), &ColumnSemantic::new(kind)).is_ok(),
+                expected.contains(&kind),
+                "{field:?}: {kind:?}",
+            );
+        }
+    }
+}
+
+#[test]
 fn column_semantics_enforce_explicit_domains_and_numeric_constraints() {
     let field = Field::new("code", DataType::Int64, true);
     let values = vec![

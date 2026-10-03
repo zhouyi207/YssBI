@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { DatabaseService } from "@/services/database/databaseService";
-import type { LoadDatabaseResult } from "@/shared/types/dto/database";
+import type { DatabaseMetadataResult } from "@/shared/types/dto/database";
 import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRead";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
@@ -38,7 +38,8 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const meta: LoadDatabaseResult = {
+const meta: DatabaseMetadataResult = {
+  dataRevision: "1",
   id: "sales",
   name: "Old sales",
   columns: [{ name: "amount", type: "Int64" }],
@@ -98,7 +99,7 @@ describe("chart detail metadata lifecycle ownership", () => {
   });
 
   it("does not hydrate replacement state from an old metadata completion", async () => {
-    const request = deferred<LoadDatabaseResult>();
+    const request = deferred<DatabaseMetadataResult>();
     vi.spyOn(DatabaseService, "getDatabaseMeta").mockReturnValue(request.promise);
     const isCancelled = vi.fn(() => false);
     const updateDatabase = vi.spyOn(useResourceStore.getState(), "updateDatabaseMetadata");

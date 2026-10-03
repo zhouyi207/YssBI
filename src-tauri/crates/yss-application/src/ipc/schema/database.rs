@@ -171,6 +171,7 @@ pub struct ColumnInfoDTO {
     pub dtype: String,
     pub physical: String,
     pub semantic: Option<ColumnSemanticDto>,
+    pub supported_semantic_types: Vec<yss_data_contract::SemanticType>,
 }
 
 pub(crate) fn column_info_from_schema(columns: &[DatabaseColumnFact]) -> Vec<ColumnInfoDTO> {
@@ -181,6 +182,7 @@ pub(crate) fn column_info_from_schema(columns: &[DatabaseColumnFact]) -> Vec<Col
             dtype: column.display_type().to_owned(),
             physical: column.physical_type().to_owned(),
             semantic: column.semantic().map(ColumnSemanticDto::from),
+            supported_semantic_types: column.supported_semantic_types().to_vec(),
         })
         .collect()
 }
@@ -223,6 +225,7 @@ pub struct DatabaseMetaResultDto {
     pub row_count: usize,
     pub column_count: usize,
     pub columns: Vec<ColumnInfoDTO>,
+    pub data_revision: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -393,8 +396,8 @@ mod tests {
         assert_eq!(
             wire,
             json!([
-                { "name": "value", "type": "UInt64", "physical": "UInt64", "semantic": { "kind": "Numeric", "values": [], "positiveValue": null, "numeric": null } },
-                { "name": "label", "type": "String", "physical": "Utf8", "semantic": { "kind": "Text", "values": [], "positiveValue": null, "numeric": null } },
+                { "name": "value", "type": "UInt64", "physical": "UInt64", "semantic": { "kind": "Numeric", "values": [], "positiveValue": null, "numeric": null }, "supportedSemanticTypes": ["Numeric", "Categorical", "Ordinal", "Binary", "Identifier"] },
+                { "name": "label", "type": "String", "physical": "Utf8", "semantic": { "kind": "Text", "values": [], "positiveValue": null, "numeric": null }, "supportedSemanticTypes": ["Categorical", "Ordinal", "Binary", "Text", "Identifier"] },
             ])
         );
     }

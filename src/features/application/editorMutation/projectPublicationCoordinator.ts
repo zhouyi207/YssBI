@@ -14,7 +14,7 @@ import { toErrorReference } from "@/features/application/errorReference";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ChartDocument, ProjectIndexRow } from "@/shared/types";
-import type { DatabaseRecord } from "@/shared/types/domain/database";
+import type { DatabaseMetadataResult, DatabaseRecord } from "@/shared/types/domain/database";
 import { type PreparedGraphSessions } from "@/features/core/dataStore/graphProjection";
 import { isGraphModified, isGraphSaving } from "@/features/core/graph/read";
 import {
@@ -43,6 +43,7 @@ import {
 import { validateEditorGraphProjection } from "@/shared/types/domain/editorProjectionParser";
 import { ProjectService } from "@/services/project/projectService";
 import { ChartService } from "@/services/chart/chartService";
+import { DatabaseService } from "@/services/database/databaseService";
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphSessionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
@@ -94,6 +95,7 @@ export interface ProjectSnapshotPreparation {
   readonly activityPanels: readonly ActivityPanelPublication[];
   readonly graphSessions: ReadonlyMap<string, GraphEditorSessionDto>;
   readonly chartDocuments: ReadonlyMap<string, ChartDocument>;
+  readonly databaseMetadata?: ReadonlyMap<string, DatabaseMetadataResult>;
   readonly pathRemaps: ReadonlyMap<string, string>;
   readonly filePathRemaps: ReadonlyMap<string, string>;
   readonly deletedResources: ReadonlySet<ResourceKey>;
@@ -114,6 +116,11 @@ export interface PreparedProjectSnapshot extends ProjectSnapshotPreparation {
   readonly storeState: PreparedProjectSnapshotStoreState;
 }
 export interface ProjectPublicationDependencies {
+  loadDatabaseMetadata(
+    projectInstanceId: string,
+    id: string,
+    revision: number,
+  ): Promise<DatabaseMetadataResult>;
   loadProjectIndex(
     projectInstanceId: string,
     locale: string,
@@ -424,6 +431,7 @@ export class ProjectPublicationCoordinator {
           throw protocolError("index does not cover the requested publication");
         const graphSessions = new Map<string, GraphEditorSessionDto>();
         const chartDocuments = new Map<string, ChartDocument>();
+        const databaseMetadata = new Map<string, DatabaseMetadataResult>();
         while (true) {
           const covered = [...this.pending.values()].filter(
             (p) => p.input.result.publicationRevision <= index.publicationRevision,
@@ -522,6 +530,28 @@ export class ProjectPublicationCoordinator {
               this.assertCurrent(identity);
               chartDocuments.set(chart.chartPath, document);
             }
+            for (const database of index.databases) {
+              const current = useResourceStore.getState();
+              const cached = current.databases[database.id];
+              const previous =
+                current.resources[resourceKey({ kind: "database", id: database.id })];
+              if (
+                databaseMetadata.has(database.id) ||
+                !cached?.columns ||
+                cached.loadFailed ||
+                (!recovered && previous?.revision === database.revision)
+              )
+                continue;
+              const metadata = await this.dependencies.loadDatabaseMetadata(
+                identity.projectInstanceId,
+                database.id,
+                database.revision,
+              );
+              this.assertCurrent(identity);
+              if (metadata.id !== database.id)
+                throw protocolError("database metadata identity is invalid");
+              databaseMetadata.set(database.id, metadata);
+            }
             // Include receipts delivered while documents were being prepared before committing moves.
             if (
               [...this.pending.values()].some(
@@ -538,6 +568,7 @@ export class ProjectPublicationCoordinator {
               activityPanels,
               graphSessions,
               chartDocuments,
+              databaseMetadata,
               pathRemaps,
               filePathRemaps,
               deletedResources,
@@ -597,6 +628,8 @@ export class ProjectPublicationCoordinator {
   }
 }
 export const projectPublicationCoordinator = new ProjectPublicationCoordinator({
+  loadDatabaseMetadata: (project, id, revision) =>
+    DatabaseService.getDatabaseMeta(project, id, revision),
   loadProjectIndex: (id, locale, previous) => ProjectService.getProjectIndex(id, locale, previous),
   loadChartDocument: (id, path, revision) => ChartService.loadChart(id, path, revision),
   prepareGraphSession: prepareGraphSessionForPublication,

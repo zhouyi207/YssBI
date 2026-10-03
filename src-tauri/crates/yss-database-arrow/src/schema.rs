@@ -211,6 +211,9 @@ pub fn database_schema_fact(
             )
             .with_display_type(data_type_name(field.data_type()))
             .with_physical_type(physical_type_name(field.data_type()))
+            .with_supported_semantic_types(crate::semantic::supported_semantic_types(
+                field.data_type(),
+            ))
             .with_semantic(semantic))
         })
         .collect::<Result<Box<[_]>, _>>()?;

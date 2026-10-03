@@ -4,6 +4,7 @@ import type { ColumnDistribution, EditState } from "@/shared/types/domain/datafr
 import type {
   DatabaseImportSourceDTO,
   DatabaseRow,
+  DatabaseMetadataResult,
   LoadDatabaseResult,
   SampleDatasetSummary,
 } from "@/shared/types/dto/database";
@@ -14,6 +15,7 @@ import {
   databaseEditStateSchema,
   databaseEmptyResultSchema,
   databaseMetadataSchema,
+  databaseReadMetadataSchema,
   databaseRowsSchema,
   databaseSourceEntriesSchema,
   parseDatabaseMutationResult,
@@ -112,8 +114,8 @@ export class DatabaseService {
     projectInstanceId: string,
     id: string,
     expectedRevision: number,
-  ): Promise<LoadDatabaseResult> {
-    const metadata = databaseMetadataSchema.parse(
+  ): Promise<DatabaseMetadataResult> {
+    const metadata = databaseReadMetadataSchema.parse(
       await invokeCommand<unknown>("get_database_meta", {
         projectInstanceId,
         id,

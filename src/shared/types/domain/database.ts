@@ -54,6 +54,7 @@ export interface ColumnInfo {
   type: string;
   physical?: string;
   semantic?: ColumnSemantic | null;
+  supportedSemanticTypes?: readonly SemanticType[];
 }
 
 /** Read-only projection of an installed sample; resource paths stay in Rust. */
@@ -75,6 +76,11 @@ export interface LoadDatabaseResult {
   rowCount: number;
   columnCount: number;
   columns: ColumnInfo[];
+}
+
+export interface DatabaseMetadataResult extends LoadDatabaseResult {
+  /** Dataset row-data revision, encoded losslessly by the backend. */
+  dataRevision: string;
 }
 
 export type DatabaseImportSqlEngineDTO = "sqlite" | "postgres" | "mysql";
@@ -135,4 +141,4 @@ export interface DatabaseDocumentDto {
 }
 
 /** Frontend database projection with a display name resolved by Application. */
-export type DatabaseRecord = DatabaseDeclDTO & { name: string };
+export type DatabaseRecord = DatabaseDeclDTO & { name: string; dataRevision?: string };

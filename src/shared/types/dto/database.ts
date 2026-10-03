@@ -8,6 +8,7 @@ export type {
   DatabaseEngineDTO,
   DatabaseImportSourceDTO,
   DatabaseImportSqlEngineDTO,
+  DatabaseMetadataResult,
   DatabaseRow,
   ExcelEngineConfig,
   LoadDatabaseResult,

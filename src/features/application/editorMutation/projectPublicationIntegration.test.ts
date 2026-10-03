@@ -15,6 +15,7 @@ import {
 } from "./projectPublicationSnapshot";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
+import type { DatabaseMetadataResult } from "@/shared/types/domain/database";
 import {
   useResourceStore,
   buildFileResourceMeta,
@@ -86,6 +87,7 @@ function setup(overrides: Partial<ProjectPublicationDependencies> = {}) {
   const dependencies = {
     loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(index(0))),
     loadChartDocument: vi.fn(),
+    loadDatabaseMetadata: vi.fn(),
     prepareGraphSession: vi.fn(async (path: string) =>
       makeGraphEditorSession(makeEditorProjectionFixture({ graphPath: path }).projection),
     ),
@@ -147,6 +149,83 @@ it("publishes database declarations, resource revisions and the project watermar
     { database: "Renamed", resource: "Renamed", revision: 2, publication: 2 },
     { database: undefined, resource: undefined, revision: undefined, publication: 3 },
   ]);
+});
+
+it("publishes refreshed semantic metadata atomically without discarding the row-data revision", async () => {
+  let next = index(1);
+  next.databases = ["sales", "stable"].map((id) => ({
+    id,
+    name: id,
+    resourcePath: `databases/${id}`,
+    revision: 1,
+    engine: { dataset: {} },
+    schemaVersion: 1,
+    required: false,
+  }));
+  const pending = deferred<DatabaseMetadataResult>();
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(next)),
+    loadDatabaseMetadata: vi.fn(() => pending.promise),
+  });
+  await coordinator.refreshIndex();
+  const metadata: DatabaseMetadataResult = {
+    id: "sales",
+    name: "Runtime name",
+    rowCount: 400,
+    columnCount: 1,
+    dataRevision: "7",
+    columns: [{ name: "code", type: "Int64", physical: "Int64", semantic: null }],
+  };
+  for (const id of ["sales", "stable"])
+    useResourceStore.getState().updateDatabaseMetadata(id, 1, metadata);
+  const before = useResourceStore.getState();
+  next = {
+    ...next,
+    publicationRevision: 2,
+    databases: next.databases.map((row) => (row.id === "sales" ? { ...row, revision: 2 } : row)),
+  };
+  const observed: unknown[] = [];
+  const stop = useResourceStore.subscribe((state) =>
+    observed.push({
+      database: state.databases.sales,
+      revision: state.resources[resourceKey({ kind: "database", id: "sales" })].revision,
+    }),
+  );
+  try {
+    const completion = coordinator.refreshIndex();
+    await vi.waitFor(() =>
+      expect(dependencies.loadDatabaseMetadata).toHaveBeenCalledWith("project-a", "sales", 2),
+    );
+    expect(useResourceStore.getState()).toBe(before);
+    pending.resolve({
+      ...metadata,
+      columns: [
+        {
+          ...metadata.columns[0],
+          semantic: { kind: "Identifier", values: [], positiveValue: null, numeric: null },
+        },
+      ],
+    });
+    await completion;
+    expect(dependencies.loadDatabaseMetadata).toHaveBeenCalledOnce();
+    expect(observed).toEqual([
+      {
+        revision: 2,
+        database: expect.objectContaining({
+          name: "sales",
+          rowCount: 400,
+          columnCount: 1,
+          dataRevision: "7",
+        }),
+      },
+    ]);
+    const after = useResourceStore.getState();
+    expect(after.databases.sales.columns?.[0].semantic?.kind).toBe("Identifier");
+    expect(after.databases.stable).toBe(before.databases.stable);
+    expect(before.databases.sales.columns?.[0].semantic).toBeNull();
+  } finally {
+    stop();
+  }
 });
 
 it("applies late delete authorization to retained dirty content after an index-only refresh", async () => {

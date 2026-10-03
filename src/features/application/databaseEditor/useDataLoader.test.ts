@@ -7,7 +7,7 @@ import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { resourceKey } from "@/features/core/resource/resourceTypes";
 import { DatabaseService } from "@/services/database/databaseService";
 import type { DatabaseRowsResult } from "@/services/database/databaseService";
-import type { LoadDatabaseResult } from "@/shared/types/dto/database";
+import type { DatabaseMetadataResult } from "@/shared/types/dto/database";
 import { logger } from "@/utils/frontendLogger";
 import { useDataLoader } from "./useDataLoader";
 
@@ -25,7 +25,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const oldMeta: LoadDatabaseResult = {
+const oldMeta: DatabaseMetadataResult = {
+  dataRevision: "1",
   id: "sales",
   name: "Old sales",
   columns: [{ name: "amount", type: "Int64" }],
@@ -135,7 +136,7 @@ describe("useDataLoader project lifecycle ownership", () => {
         },
       }),
     );
-    const metadata = deferred<LoadDatabaseResult>();
+    const metadata = deferred<DatabaseMetadataResult>();
     vi.spyOn(DatabaseService, "getDatabaseMeta").mockReturnValue(metadata.promise);
     const rows = vi.spyOn(DatabaseService, "getDatabaseRows");
 
@@ -200,6 +201,77 @@ describe("useDataLoader project lifecycle ownership", () => {
     expect(loader.loadedRowIds).toEqual(["200"]);
   });
 
+  it("keeps the current page and row references for semantic changes, and reloads for physical changes", async () => {
+    const metadata = { ...oldMeta, rowCount: 600 };
+    vi.spyOn(DatabaseService, "getDatabaseMeta").mockResolvedValue(metadata);
+    const rows = vi
+      .spyOn(DatabaseService, "getDatabaseRows")
+      .mockImplementation(async (_project, _id, _revision, offset) => ({
+        rows: [[offset]],
+        rowIds: [String(offset)],
+      }));
+    await act(async () => loader.loadInitialRows("sales"));
+    await act(async () => loader.goToNextPage());
+    const previous = loader;
+    const resource = { kind: "database" as const, id: "sales" };
+    const key = resourceKey(resource);
+    act(() => {
+      const current = useResourceStore.getState();
+      current.setSnapshot({
+        resources: [{ ...current.resources[key], revision: 2 }],
+        databases: {
+          sales: {
+            ...current.databases.sales,
+            columns: [
+              {
+                ...metadata.columns[0],
+                semantic: { kind: "Identifier", values: [], positiveValue: null, numeric: null },
+              },
+            ],
+          },
+        },
+      });
+    });
+    await act(async () => loader.loadInitialRows("sales"));
+    expect(loader.loadedRows).toBe(previous.loadedRows);
+    expect(loader.loadedRowIds).toBe(previous.loadedRowIds);
+    expect(loader.pageIndex).toBe(1);
+    expect(loader.lastFetchMs).toBe(previous.lastFetchMs);
+    expect(loader.loading).toBe(false);
+    expect(rows).toHaveBeenCalledTimes(2);
+    expect(DatabaseService.getDatabaseMeta).toHaveBeenCalledOnce();
+
+    await act(async () => loader.goToNextPage());
+    expect(rows).toHaveBeenLastCalledWith(projectInstanceId, "sales", 2, 400, loader.pageSize);
+    act(() => {
+      const current = useResourceStore.getState();
+      current.setSnapshot({
+        resources: [{ ...current.resources[key], revision: 3 }],
+        databases: {
+          sales: {
+            ...current.databases.sales,
+            dataRevision: "2",
+            columns: [{ name: "amount", type: "Utf8" }],
+          },
+        },
+      });
+    });
+    rows.mockResolvedValue({ rows: [["converted"]], rowIds: ["0"] });
+    await act(async () => loader.loadInitialRows("sales"));
+    expect(rows).toHaveBeenLastCalledWith(projectInstanceId, "sales", 3, 0, loader.pageSize);
+    expect(rows).toHaveBeenCalledTimes(4);
+    expect(loader.pageIndex).toBe(0);
+    expect(loader.loadedRows).toEqual([["converted"]]);
+    expect(loader.loadedRows).not.toBe(previous.loadedRows);
+
+    vi.mocked(DatabaseService.getDatabaseMeta).mockResolvedValue({
+      ...metadata,
+      dataRevision: "2",
+    });
+    await act(async () => loader.reloadAllData());
+    expect(rows).toHaveBeenCalledTimes(5);
+  });
+
   it("suppresses delayed metadata rejection after replacement with zero effects", async () => {
     act(() =>
       useResourceStore.setState({
@@ -208,7 +280,7 @@ describe("useDataLoader project lifecycle ownership", () => {
         },
       }),
     );
-    const metadata = deferred<LoadDatabaseResult>();
+    const metadata = deferred<DatabaseMetadataResult>();
     vi.spyOn(DatabaseService, "getDatabaseMeta").mockReturnValue(metadata.promise);
     const rows = vi.spyOn(DatabaseService, "getDatabaseRows");
     const warn = vi.spyOn(logger.data, "warn");

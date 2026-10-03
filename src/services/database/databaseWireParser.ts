@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  SEMANTIC_TYPES,
   isColumnSemantic,
   isDatabaseEngine,
   type ColumnSemantic,
@@ -15,6 +16,10 @@ const columns = z
       type: z.string(),
       physical: z.string(),
       semantic: z.custom<ColumnSemantic>(isColumnSemantic).nullable(),
+      supportedSemanticTypes: z
+        .array(z.enum(SEMANTIC_TYPES))
+        .max(SEMANTIC_TYPES.length)
+        .refine((types) => new Set(types).size === types.length),
     }),
   )
   .refine((value) => new Set(value.map((column) => column.name)).size === value.length);
@@ -28,6 +33,14 @@ export const databaseMetadataSchema = z
     columns,
   })
   .refine((value) => value.columnCount === value.columns.length);
+
+export const databaseReadMetadataSchema = databaseMetadataSchema.safeExtend({
+  dataRevision: z
+    .string()
+    .refine(
+      (value) => /^(?:0|[1-9][0-9]{0,19})$/.test(value) && BigInt(value) <= 18446744073709551615n,
+    ),
+});
 
 const projectDatabaseSchema = z
   .strictObject({
