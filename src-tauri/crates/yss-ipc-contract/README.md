@@ -5,6 +5,10 @@
 > Canonical owners: This crate owns shared serialization; adapters own conversion from application/runtime facts
 > Update when: A shared IPC payload changes
 
+Editor schema summaries include the `fixed` kind for Catalog-declared output
+fields. Their names and scalar types use the existing resolved-field payload;
+clients do not maintain node-specific result-table definitions.
+
 `yss-ipc-contract` defines project receipts, graph projections, Harness messages, execution stream values, project progress and `CommandErrorDto`. Command, Event and Channel consume these same types.
 
 Node editor capabilities contain only the required `managed` boolean. Copy, duplicate, delete and cut availability derive from this ownership flag; the node capability payload rejects missing or unknown fields. Parameter and inline-literal editors consume their own existing projections.
@@ -25,6 +29,14 @@ Graph editor sessions require `document`, `projection`, `editing`, and `resultSt
 The crate has no Tauri, Application, database or execution runtime dependency. It reuses neutral identity/document contracts and existing projection value types, including their value conversions. It creates no subscriptions, tasks, caches, incident records or business state. Application mappings and incident recording remain in their adapters.
 
 Execution demands use `default` or `outputs`; run events describe run lifecycle and result inspection requests. Pin View reads current results through result queries and has no separate execution demand, generation allocator or completion event.
+Every run event carries `{ executionSessionId, graphPath, runId, semanticInputHash }`.
+The required hash is the 64-character lowercase hexadecimal encoding of the semantic basis
+captured and validated for that run. Invocation channels, public notifications and recovery
+snapshots use the same identity; clients must not derive it from their current editor state.
+The event envelope also requires `resultRevision`, an unsigned 64-bit decimal string captured
+from ResultStore when that event was produced. It is independent of RunIdentity and may advance
+between start and completion. A matching graph result summary covers the event only when its
+revision is at least this value; recovery retains the original event revision.
 An `outputs` demand includes `includeDefaultResults` and the required boolean `reuseInputs`. Report extensions set `reuseInputs` to true to reuse valid upstream inputs while recomputing requested outputs; ordinary output runs set it to false. Execution owns cache validation and publication checks.
 
 Command-only request/response schemas may stay beside their handler. Shared types have one definition here, with no compatibility re-export from the former schema modules.

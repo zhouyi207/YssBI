@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 use yss_node_protocol::{
-    I18nKey, InterfaceResolverId, NodeCategoryId, NodeProtocol, NodeTypeId, ProviderId,
-    SchemaResolverId, TypeClassId, TypeConstructorId, TypeId,
+    I18nKey, InterfaceResolverId, NodeCategoryId, NodeProtocol, NodeTypeId, Parameter,
+    ParameterValues, ProviderId, SchemaResolverId, TypeClassId, TypeConstructorId, TypeId,
 };
 
 /// Stable identity of a leaf node's execution implementation.
@@ -36,6 +36,34 @@ pub enum StructuralNodeRole {
     Call,
     FunctionEntry,
     FunctionReturn,
+}
+
+pub const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
+pub const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";
+pub const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str = "yssbi.project.function.entry.parameters";
+pub const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
+
+impl StructuralNodeRole {
+    pub fn for_interface_resolver(resolver: &str) -> Option<Self> {
+        match resolver {
+            FUNCTION_CALL_ARGUMENTS_RESOLVER | FUNCTION_CALL_RESULTS_RESOLVER => Some(Self::Call),
+            FUNCTION_ENTRY_PARAMETERS_RESOLVER => Some(Self::FunctionEntry),
+            FUNCTION_RETURN_RESULTS_RESOLVER => Some(Self::FunctionReturn),
+            _ => None,
+        }
+    }
+
+    /// Reference field shared by a function role and its interface resolvers.
+    pub fn reference_parameter(self, protocol: &NodeProtocol) -> Option<&Parameter> {
+        let key = match self {
+            Self::Call => "target",
+            Self::FunctionEntry | Self::FunctionReturn => "function",
+        };
+        protocol
+            .parameters
+            .iter()
+            .find(|parameter| parameter.key.as_str() == key)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -94,6 +122,17 @@ impl RegisteredNode {
         self.structural_role
     }
 
+    /// The reference field defined by the registered function role's contract.
+    pub fn function_reference_parameter(&self) -> Option<&Parameter> {
+        self.structural_role?.reference_parameter(&self.protocol)
+    }
+
+    pub fn function_reference<'a>(&'a self, values: &'a ParameterValues) -> Option<&'a str> {
+        self.protocol
+            .parameters
+            .effective_text(&self.function_reference_parameter()?.key, values)
+    }
+
     pub fn transparent_role(&self) -> Option<TransparentNodeRole> {
         self.transparent_role
     }
@@ -135,10 +174,6 @@ impl TypeRegistry {
     pub fn get(&self, id: &TypeId) -> Option<&TypeRegistration> {
         self.types.get(id)
     }
-    pub fn constructor(&self, id: &TypeConstructorId) -> Option<&TypeConstructorRegistration> {
-        self.constructors.get(id)
-    }
-
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&TypeId, &TypeRegistration)> {
         self.types.iter()
     }
@@ -170,9 +205,6 @@ pub struct CategoryRegistry {
 }
 
 impl CategoryRegistry {
-    pub fn get(&self, id: &NodeCategoryId) -> Option<&CategoryRegistration> {
-        self.categories.get(id)
-    }
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&NodeCategoryId, &CategoryRegistration)> {
         self.categories.iter()
     }

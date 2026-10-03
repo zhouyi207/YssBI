@@ -1,4 +1,24 @@
-use super::*;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use uuid::Uuid;
+use yss_database_contract::{
+    DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId, DatabaseImportSource,
+};
+use yss_database_io::list_excel_sheets as list_workbook_sheets;
+use yss_database_schema::DatabaseColumnFact;
+use yss_database_source::list_tables as list_sql_source_tables;
+use yss_display_naming::allocate_unique_display_name;
+use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+
+use super::export::export_database_in_captured_session;
+use super::mutation::check_database_revision;
+use super::query::query_database_metadata_in_captured_session;
+use super::{
+    DatabaseApplicationOperation, DatabaseMutationResult, DatabaseOperationError,
+    DatabaseUseCaseError,
+};
+use crate::session::{ApplicationSession, ApplicationState};
 use arrow::record_batch::RecordBatchReader;
 use yss_database_store::DatasetStore;
 use yss_relational_contract::RelationControl;
@@ -50,9 +70,8 @@ pub(super) fn duplicate_database_in_captured_session(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
-    check_database_revision(captured, id, expected_revision)?;
-    let metadata = application
-        .query_database_meta_for_application(captured.project_instance_id().clone(), id.into())?;
+    let metadata =
+        query_database_metadata_in_captured_session(application, captured, id, expected_revision)?;
     let temporary = TemporarySource(
         std::env::temp_dir().join(format!("yss-database-copy-{}.parquet", Uuid::new_v4())),
     );
@@ -71,7 +90,12 @@ pub(super) fn duplicate_database_in_captured_session(
     )?;
     import_in_captured_session(captured, operation_id, move |_| {
         // The import owns the project filesystem lease before checking the source again.
-        check_database_revision(captured, id, expected_revision)?;
+        check_database_revision(
+            captured,
+            id,
+            expected_revision,
+            DatabaseApplicationOperation::Load,
+        )?;
         let reader = yss_database_io::read_parquet_batches(&temporary.0, 50_000, None)
             .map_err(import_error)?;
         Ok(ImportReader {
@@ -275,4 +299,94 @@ pub(super) fn import_in_captured_session(
         data,
         mutation: crate::events::committed_resource_mutation_from_project(mutation),
     })
+}
+
+#[derive(Debug)]
+pub struct LoadDatabaseResult {
+    pub id: String,
+    pub name: String,
+    pub row_count: usize,
+    pub column_count: usize,
+    pub columns: Vec<DatabaseColumnFact>,
+}
+
+impl ApplicationState {
+    pub fn duplicate_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = duplicate_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            expected_revision,
+            operation_id,
+        )?;
+        self.refresh_database_session(&captured)?;
+        Ok(result)
+    }
+
+    pub fn load_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        operation_id: OperationId,
+        source: DatabaseImportSource,
+    ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = load_database_in_captured_session(&captured, operation_id, source)?;
+        self.refresh_database_session(&captured)?;
+        Ok(result)
+    }
+}
+
+pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseOperationError> {
+    list_sql_source_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, path).map_err(
+        |error| {
+            DatabaseOperationError::internal_message(
+                DatabaseApplicationOperation::ListTables,
+                error.to_string(),
+            )
+        },
+    )
+}
+
+pub fn list_sql_tables(
+    engine: &str,
+    connection_string: &str,
+) -> Result<Vec<String>, DatabaseOperationError> {
+    let engine = match engine {
+        "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
+        "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
+            charset: "utf8mb4".to_string(),
+        },
+        engine => {
+            return Err(DatabaseOperationError::SqlEngineUnsupported {
+                engine: engine.to_owned(),
+            });
+        }
+    };
+    list_sql_source_tables(&engine, connection_string).map_err(|error| {
+        DatabaseOperationError::internal_message(
+            DatabaseApplicationOperation::ListTables,
+            error.to_string(),
+        )
+    })
+}
+
+pub fn list_excel_sheets(path: &str) -> Result<Vec<String>, DatabaseOperationError> {
+    list_workbook_sheets(Path::new(path)).map_err(|error| {
+        DatabaseOperationError::internal(DatabaseApplicationOperation::ListSheets, error)
+    })
+}
+
+fn name_from_path(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unnamed")
+        .to_owned()
 }

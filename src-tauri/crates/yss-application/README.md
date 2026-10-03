@@ -69,13 +69,27 @@ Harness 与界面意图共用 `ProjectResourceRef`；提交通过 IPC gateway �
 
 ### 应用会话
 
-`session/` 拥有完整应用会话；slot、factory 和数据库绑定适配保持私有，通过 `session` 的明确公开项使用。桌面宿主从 crate 根导入 `ApplicationState`，窗口销毁调用现有 `close_result_owner` 释放该窗口的结果租约。
+`session/` 拥有完整应用会话；内部模块保持私有，通过 `session` 的明确公开项使用。桌面宿主从 crate 根导入 `ApplicationState`，窗口销毁调用现有 `close_result_owner` 释放该窗口的结果租约。
+
+| 源码                                                         | 职责                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------- |
+| [application_session.rs](src/session/application_session.rs) | 不可拆分发布的身份与运行时组合，以及会话内活动入口             |
+| [slot.rs](src/session/slot.rs)                               | 唯一会话状态、候选安装、捕获和重验，以及 ApplicationState 入口 |
+| [slot/replacement.rs](src/session/slot/replacement.rs)       | 关闭准入、排空、构造和发布替换候选；未完成的替换转交恢复       |
+| [slot/recovery.rs](src/session/slot/recovery.rs)             | 单次恢复的独占领取、阶段推进与中断后归还                       |
+| [factory.rs](src/session/factory.rs)                         | 检查跨子系统身份并构造完整候选                                 |
 
 `ApplicationState::initialize()` 在现有 [session_factory](src/session/factory.rs) 中创建 Project、构造初始 candidate 并完成 slot 安装；失败通过 `ApplicationInitializationError` 返回。桌面入口无需逐步组装 Project 和应用会话。
 
+会话工厂从 Project 的数据库声明快照取得同一读取依据下的项目身份、根目录、声明及 observations，
+构造物理绑定后再次重验该快照。它不为数据库声明复制整份 ProjectData 或读取完整 ProjectIndex，
+也不自行拼接 revision/fingerprint 或补造缺失版本；数据库列表复用同一 Project 读取边界。
+数据库会话事实按值交给 Runtime 打开入口，由其复用 Contract 完成一次声明与 observation 校验；Application 不提前重复扫描同一请求。
+
 自定义节点通过 `NodeComponents::new(registry, catalog, kernel_builder)` 组装，再交给
 `ApplicationState::initialize_with_nodes`。slot 持有这份冻结配置，项目切换继续使用相同定义和实现，
-不会退回默认 kernel 表。组装检查参数字段与输出数量，编辑解析阻断未安装的实现；实现 revision 和
+不会退回默认 kernel 表。组装检查参数字段、各输入模板的数量范围及输出总数；模板数量统一读取
+Protocol 的 `port_instance_bounds`，包括成员分组的上下限。编辑解析阻断未安装的实现；实现 revision 和
 契约组成能力指纹，计划准备、资源准备和执行入口都核对该指纹。
 `kernel_builder` 来自 `yss-node-kernel`，执行函数接收已解析的中立调用并返回局部输出值；Graph 地址、资源授权和结果定位由 Execution 适配。
 [普通数值扩展示例](src/session/components/tests.rs)覆盖注册冲突、绑定不匹配、会话替换及旧产物拒绝。
@@ -93,6 +107,10 @@ ApplicationSession
 ```
 
 Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子系统继续拥有各自的项目数据、解析与计划缓存、数据库和结果；Application 管理它们在当前项目下的组合及生命周期。
+
+替换入口必须携带用例捕获的 `Arc<ApplicationSession>`。slot 在同一个状态写锁内核对当前会话的 Arc 身份并进入 `Replacing`；过期请求在关闭 Execution/Database 准入或推进 epoch 之前被拒绝。锁外提前重验不能替代这一原子判断，Database 提交后的刷新和 Project 生命周期替换共用此入口。
+
+替换和恢复共享 slot 的一个状态锁；耗时排空、候选构造和项目 I/O 在锁外执行。发布时只在锁内重验 epoch、阶段并安装候选；释放锁后才通知旧会话订阅者并释放旧 owner，因此通知回调可捕获已经发布的新会话。拒绝的候选也在锁外释放。执行排空直接采用 `cancel_and_drain` 的结果，不重复查询同一个排空期限。
 
 例如，项目 A 的计算尚未结束时用户切换到项目 B，Application 协调准入关闭、旧任务收尾与会话替换。相关用例在关键提交或返回位置重验捕获的会话、资源版本和结果身份，防止旧会话的迟到结果进入新项目。
 
@@ -141,7 +159,17 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 
 [automation](src/automation.rs) 实现中性的自动化业务能力，并将图编辑、校验、运行和保存接入已有用例。[PluginHostServices](src/plugins.rs) 实现 `yss-plugin-protocol::HostServices`，提供项目绑定的数据列表、Arrow 快照租约、来源记录和宿主结果提交。
 
+自动化 Schema/Profile 和图结果列表复用 Project 的单项数据库声明与驻留图查询，不为存在性检查复制整份项目数据。
+结果分页保留查询层的取消与期限错误，其余查询失败继续映射为结果不可用。
+
+每次插件调用只捕获一次 Application session，用该会话核对调用上下文中的项目实例与项目会话身份，
+并沿数据列表、快照和结果提交路径传递它。不能用一次捕获验证上下文，再用另一次捕获读取当前项目；
+各用例已有的返回前或提交前重验继续保留。
+数据快照的声明存在性检查复用 Project 的单项读取，并在该读取内核对捕获的项目身份，不复制整份 ProjectData；缺失数据库与过期上下文继续保留各自的错误分类。
+
 [harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，Channel 与桌面 capability gateway 由内部 IPC runtime 提供。
+
+创建、列出和打开对话先捕获应用会话，再取得 Core 的会话访问门；排队结束、协调旧绑定后及返回前重验原会话。门保持到本次持久化操作收尾，防止旧扫描或写回覆盖后继对话；当前项目仍只由 Application slot 判定，其同步锁不跨越异步等待。提交消息将打开对话时返回的项目绑定交给 Core 准入，不在排队后借用同一对话的后继绑定。
 
 插件安装、进程与任务生命周期由 Plugin Runtime 负责。Julia/Bayes 的专属编排属于插件内部的 `yss-bayes-runtime`。Application 通过通用协议向插件开放宿主能力，runtime 构造通用 Plugin Manager，业务用例通过 `PluginHostServices` 提供能力；Application 不依赖 Julia/Bayes 专属实现。
 

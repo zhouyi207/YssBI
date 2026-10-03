@@ -49,6 +49,7 @@ enum Scenario {
     Parallel,
     Cancel,
     Stale,
+    QueuedStale,
     Report(ReportDelivery),
 }
 
@@ -149,6 +150,7 @@ struct Driver {
     requests: Mutex<Vec<AgentTurnRequest>>,
     barrier: tokio::sync::Barrier,
     ready: tokio::sync::Notify,
+    proceed: tokio::sync::Notify,
 }
 impl Driver {
     fn new(scenario: Scenario) -> Self {
@@ -158,6 +160,7 @@ impl Driver {
             requests: Mutex::new(vec![]),
             barrier: tokio::sync::Barrier::new(2),
             ready: tokio::sync::Notify::new(),
+            proceed: tokio::sync::Notify::new(),
         }
     }
 }
@@ -202,7 +205,13 @@ impl AgentDriverPort for Driver {
                             .is_err()
                     );
                 }
-                if matches!(self.scenario, Scenario::Stale) && request.role == AgentRole::Report {
+                if matches!(self.scenario, Scenario::Stale | Scenario::QueuedStale)
+                    && request.role == AgentRole::Report
+                {
+                    if matches!(self.scenario, Scenario::QueuedStale) {
+                        self.ready.notify_one();
+                        self.proceed.notified().await;
+                    }
                     capabilities
                         .execute(ModelCapabilityRequest {
                             request: AutomationCapabilityRequest::ManageResource(
@@ -285,6 +294,37 @@ impl AgentDriverPort for Driver {
                         .await
                         .unwrap();
                     assert_eq!(refreshed.state, AgentRunState::Completed);
+                }
+                Scenario::QueuedStale => {
+                    let review = capabilities
+                        .delegate(task("review", AgentRole::Review, 1, false))
+                        .await
+                        .unwrap();
+                    let write = capabilities.delegate(task("save", AgentRole::Report, 1, true));
+                    tokio::pin!(write);
+                    tokio::select! {
+                        _ = self.ready.notified() => {}
+                        _ = &mut write => panic!("writer must wait while holding the access gate"),
+                    }
+                    let mut dependent = task("dependent", AgentRole::Review, 1, false);
+                    dependent.scope.resources.clear();
+                    dependent.depends_on.push(review.run_id.clone());
+                    dependent.validate().unwrap();
+                    let dependent = capabilities.delegate(dependent);
+                    tokio::pin!(dependent);
+                    std::future::poll_fn(|context| {
+                        assert!(
+                            std::future::Future::poll(dependent.as_mut(), context).is_pending()
+                        );
+                        std::task::Poll::Ready(())
+                    })
+                    .await;
+                    self.proceed.notify_one();
+                    let write = write.await.unwrap();
+                    assert_eq!(write.invalidated_runs, vec![review.run_id]);
+                    let dependent = dependent.await.unwrap();
+                    assert_eq!(dependent.state, AgentRunState::Blocked);
+                    assert_eq!(self.worker_calls.load(Ordering::Acquire), 2);
                 }
                 Scenario::Report(delivery) => {
                     let mut report = task("write-report", AgentRole::Report, 1, true);
@@ -442,6 +482,7 @@ async fn report_completion_requires_a_successful_save_after_the_final_document_e
         let (host, store, session) = setup(driver).await;
         host.submit_turn(
             &session.id,
+            &session.project,
             "Analyze the data and output an analysis report".into(),
             None,
         )
@@ -485,7 +526,7 @@ async fn delegates_parallel_readers_once_and_replays_only_parent_conversation() 
     let (host, store, session) = setup(driver.clone()).await;
     tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        host.submit_turn(&session.id, "Inspect report".into(), None),
+        host.submit_turn(&session.id, &session.project, "Inspect report".into(), None),
     )
     .await
     .unwrap()
@@ -525,7 +566,7 @@ async fn delegates_parallel_readers_once_and_replays_only_parent_conversation() 
         }
     }
     assert_eq!(store.published_events(), events);
-    host.submit_turn(&session.id, "Follow up".into(), None)
+    host.submit_turn(&session.id, &session.project, "Follow up".into(), None)
         .await
         .unwrap();
 }
@@ -536,9 +577,10 @@ async fn parent_cancellation_finishes_worker_and_parent_without_extra_user_turn(
     let (host, _, session) = setup(driver.clone()).await;
     let host_task = host.clone();
     let session_id = session.id.clone();
+    let project = session.project.clone();
     let run = tokio::spawn(async move {
         host_task
-            .submit_turn(&session_id, "Review".into(), None)
+            .submit_turn(&session_id, &project, "Review".into(), None)
             .await
     });
     tokio::time::timeout(std::time::Duration::from_secs(3), driver.ready.notified())
@@ -564,9 +606,14 @@ async fn parent_cancellation_finishes_worker_and_parent_without_extra_user_turn(
 async fn changed_inputs_invalidate_dependents_and_block_stale_versions() {
     let driver = Arc::new(Driver::new(Scenario::Stale));
     let (host, _, session) = setup(driver.clone()).await;
-    host.submit_turn(&session.id, "Revise the report".into(), None)
-        .await
-        .unwrap();
+    host.submit_turn(
+        &session.id,
+        &session.project,
+        "Revise the report".into(),
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(driver.worker_calls.load(Ordering::Acquire), 3);
     assert!(
         host.events_after(&session.id, 0)
@@ -575,6 +622,25 @@ async fn changed_inputs_invalidate_dependents_and_block_stale_versions() {
             .iter()
             .any(|event| matches!(event.event, HarnessEvent::AgentRunInvalidated { .. }))
     );
+}
+
+#[tokio::test]
+async fn queued_dependencies_are_rechecked_before_worker_execution() {
+    let driver = Arc::new(Driver::new(Scenario::QueuedStale));
+    let (host, _, session) = setup(driver.clone()).await;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        host.submit_turn(
+            &session.id,
+            &session.project,
+            "Review after the pending revision".into(),
+            None,
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(driver.worker_calls.load(Ordering::Acquire), 2);
 }
 
 #[tokio::test]

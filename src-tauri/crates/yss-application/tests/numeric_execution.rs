@@ -1,16 +1,40 @@
 use std::collections::BTreeMap;
 #[path = "numeric_execution/causal_models.rs"]
 mod causal_models;
+#[path = "numeric_execution/decision.rs"]
+mod decision;
 #[path = "numeric_execution/diagnostics.rs"]
 mod diagnostics;
+#[path = "numeric_execution/doe.rs"]
+mod doe;
+#[path = "numeric_execution/fixture.rs"]
+mod fixture;
+#[path = "numeric_execution/imputation.rs"]
+mod imputation;
+#[path = "numeric_execution/inference.rs"]
+mod inference;
+#[path = "numeric_execution/labels.rs"]
+mod labels;
 #[path = "numeric_execution/longitudinal.rs"]
 mod longitudinal;
+#[path = "numeric_execution/meta.rs"]
+mod meta;
 #[path = "numeric_execution/panel_models.rs"]
 mod panel_models;
+#[path = "numeric_execution/path.rs"]
+mod path;
+#[path = "numeric_execution/power.rs"]
+mod power;
+#[path = "numeric_execution/psychometrics.rs"]
+mod psychometrics;
+#[path = "numeric_execution/quality.rs"]
+mod quality;
 #[path = "numeric_execution/regression_models.rs"]
 mod regression_models;
 #[path = "numeric_execution/spatial.rs"]
 mod spatial;
+#[path = "numeric_execution/survey.rs"]
+mod survey;
 #[path = "numeric_execution/survival.rs"]
 mod survival;
 #[path = "numeric_execution/time_series.rs"]
@@ -35,11 +59,11 @@ use yss_graph_execution::resource_preparation::{ResourceProviderFactory, RunReso
 use yss_graph_execution::state::{
     ExecutePreparedError, ExecutionRuntimeState, RunExecutionControl,
 };
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_kernel::RuntimeValue;
 
 #[test]
-fn anova_nodes_reject_independent_relation_domains_and_mixed_materialized_columns() {
+fn paired_statistics_reject_independent_relation_domains_and_mixed_materialized_columns() {
     use arrow::{
         array::Float64Array,
         datatypes::{DataType, Field, Schema},
@@ -102,6 +126,71 @@ fn anova_nodes_reject_independent_relation_domains_and_mixed_materialized_column
             Err(KernelError::UnalignedSeries)
         ));
     }
+
+    let before = [0., 0., 1., 0., 1., 1.];
+    let after = [0., 1., 0., 1., 1., 1.];
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("before", DataType::Float64, false),
+            Field::new("after", DataType::Float64, false),
+        ])),
+        vec![
+            Arc::new(Float64Array::from(before.to_vec())),
+            Arc::new(Float64Array::from(after.to_vec())),
+        ],
+    )
+    .unwrap();
+    let left = relations
+        .clone()
+        .materialize(batch.clone(), &inv.relation_control())
+        .unwrap();
+    let right = relations
+        .clone()
+        .materialize(batch, &inv.relation_control())
+        .unwrap();
+    let paired = [
+        RuntimeValue::Series(left.select_series("before").unwrap()),
+        RuntimeValue::Series(left.select_series("after").unwrap()),
+    ];
+    let unrelated = [
+        paired[0].clone(),
+        RuntimeValue::Series(right.select_series("after").unwrap()),
+    ];
+    let materialized = [before, after].map(|values| {
+        RuntimeValue::List(
+            values
+                .into_iter()
+                .map(|v| RuntimeValue::float64(v).unwrap())
+                .collect(),
+        )
+    });
+    let mixed = [paired[0].clone(), materialized[1].clone()];
+    inv.input_keys = &["before", "after"];
+    let mut accepted_unpaired = Vec::new();
+    for suffix in ["t.paired", "mcnemar"] {
+        let id = KernelId::new(format!("yssbi.statistics.test.{suffix}").into()).unwrap();
+        inv.parameters = if suffix == "t.paired" {
+            [(
+                yss_node_kernel::KernelParameterKey::new("alternative".into()).unwrap(),
+                std::borrow::Cow::Owned(TabularScalar::String("two_sided".into()).into()),
+            )]
+            .into()
+        } else {
+            Default::default()
+        };
+        for inputs in [&paired[..], &materialized[..]] {
+            inv.inputs = inputs;
+            assert!(kernels.execute(&id, &inv).is_ok(), "{suffix}");
+        }
+        for (kind, inputs) in [("unrelated", &unrelated[..]), ("mixed", &mixed[..])] {
+            inv.inputs = inputs;
+            match kernels.execute(&id, &inv) {
+                Ok(_) => accepted_unpaired.push(format!("{suffix}/{kind}")),
+                Err(error) => assert!(matches!(error, KernelError::UnalignedSeries)),
+            }
+        }
+    }
+    assert!(accepted_unpaired.is_empty(), "{accepted_unpaired:?}");
 }
 
 #[test]
@@ -556,8 +645,17 @@ fn theil_node_executes_individual_defaults_and_grouped_relational_means() {
 fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
     use yss_data_contract::{DataValue, SemanticType as S, ValueType};
     let mut document = GraphDocument::default();
-    let [constant, lag, frequency, describe, group, select, count] =
-        std::array::from_fn(|_| NodeId::new());
+    let [
+        constant,
+        lag,
+        frequency,
+        rename_value,
+        rename_count,
+        describe,
+        group,
+        select,
+        count,
+    ] = std::array::from_fn(|_| NodeId::new());
     for (id, kind, parameters) in [
         (constant, "yssbi.constant.get", serde_json::json!({})),
         (lag, "yssbi.dataframe.timeseries.lag", serde_json::json!({})),
@@ -566,16 +664,30 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
             "yssbi.dataframe.series.frequency",
             serde_json::json!({}),
         ),
-        (describe, "yssbi.dataframe.describe", serde_json::json!({})),
+        (
+            rename_value,
+            "yssbi.dataframe.rename",
+            serde_json::json!({"from":"value", "to":" value "}),
+        ),
+        (
+            rename_count,
+            "yssbi.dataframe.rename",
+            serde_json::json!({"from":"frequency", "to":" frequency "}),
+        ),
+        (
+            describe,
+            "yssbi.dataframe.describe",
+            serde_json::json!({"describe_columns":[" value ", " frequency "]}),
+        ),
         (
             group,
             "yssbi.dataframe.groupby",
-            serde_json::json!({"keys":["value"],"sum":["frequency"]}),
+            serde_json::json!({"keys":[" value "],"sum":[" frequency "]}),
         ),
         (
             select,
             "yssbi.dataframe.series.select",
-            serde_json::json!({"column":"frequency_sum"}),
+            serde_json::json!({"column":" frequency _sum"}),
         ),
         (count, "yssbi.dataframe.series.sum", serde_json::json!({})),
     ] {
@@ -602,8 +714,10 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
     for (from, output, to, input) in [
         (constant, "value", lag, "series"),
         (lag, "result", frequency, "series"),
-        (frequency, "result", describe, "source"),
-        (frequency, "result", group, "source"),
+        (frequency, "result", rename_value, "source"),
+        (rename_value, "result", rename_count, "source"),
+        (rename_count, "result", describe, "source"),
+        (rename_count, "result", group, "source"),
         (group, "result", select, "dataframe"),
         (select, "series", count, "series"),
     ] {
@@ -632,7 +746,14 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
         panic!("describe must produce a frame")
     };
     let page = result.page(0, 10, &control).unwrap();
-    assert_eq!(page.row_count, 3);
+    assert_eq!(page.row_count, 2);
+    assert_eq!(
+        page.data.columns()[0].values(),
+        [
+            TabularScalar::String(" value ".into()),
+            TabularScalar::String(" frequency ".into()),
+        ]
+    );
     assert_eq!(
         page.data.columns()[1].values()[0],
         TabularScalar::String("Categorical".into())
@@ -640,6 +761,7 @@ fn descriptive_nodes_execute_graph_constants_and_feed_downstream_operations() {
     // The single-series entry shares the same categorical summary and does not infer Numeric from codes.
     let node = document.nodes.get_mut(&describe).unwrap();
     node.node_type = "yssbi.dataframe.series.describe".parse().unwrap();
+    node.parameters.clear();
     document
         .connections
         .retain(|_, c| c.input.node_id != describe);
@@ -801,11 +923,7 @@ fn probability_distribution_catalog_executes_all_defaults_and_rejects_invalid_or
         "normal",
         Some(serde_json::json!({"mean":0,"standard_deviation":-1,"sample_count":5})),
     );
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = analyze_document(
         &invalid,
         &GraphResourcePath::new("events/invalid.yssbi-event").unwrap(),
@@ -1529,11 +1647,7 @@ fn execute(
     document: &GraphDocument,
     output_node_type: &str,
 ) -> Result<RuntimeValue, ExecutePreparedError> {
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
     let analysis = analyze_document(document, &graph, &resources);
     let session = PlanProjectSessionId::from_existing("diagnostic-session".into());
@@ -2100,6 +2214,52 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
             RuntimeValue::Scalar(TabularScalar::Bool(true))
         ]))
     );
+
+    let convert = NodeId::new();
+    document.nodes.insert(
+        convert,
+        DocumentNode {
+            id: convert,
+            node_type: "yssbi.value.convert".parse().unwrap(),
+            position: NodePosition { x: 0., y: 0. },
+            parameters: ParameterValues::from([(
+                "target_type".parse().unwrap(),
+                serde_json::json!("core.binary"),
+            )]),
+            user_label: None,
+        },
+    );
+    set_constant(
+        &mut document,
+        flag,
+        T::Scalar(S::Text),
+        DataValue::String("false".into()),
+    );
+    document
+        .connections
+        .values_mut()
+        .find(|edge| edge.output.node_id == flag && edge.input.node_id == gate)
+        .unwrap()
+        .output = PortAddress::declared(convert, "output".parse().unwrap());
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(flag, "value".parse().unwrap()),
+            input: PortAddress::declared(convert, "input".parse().unwrap()),
+            order: None,
+        },
+    );
+    assert_eq!(
+        observed_values(execute(&document, "yssbi.logic.not").unwrap()),
+        RuntimeValue::List(std::sync::Arc::from([
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true))
+        ]))
+    );
 }
 
 #[test]
@@ -2311,11 +2471,7 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
         DataValue::Integer(1),
     );
     let graph = GraphResourcePath::new("events/comparison.yssbi-event").unwrap();
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = analyze_document(&document, &graph, &resources);
     assert!(analysis.semantic_snapshot().has_blocking_diagnostics());
 }
@@ -3189,7 +3345,6 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                 .collect(),
             },
         )]),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
     let graph = GraphResourcePath::new("events/decompose.yssbi-event").unwrap();
     let analysis = analyze_document(&document, &graph, &resources);
@@ -3888,7 +4043,13 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
             }),
         )
         .unwrap();
-    let run_id = run_graph_with_sink(
+    let before_run = app
+        .query_graph_result_state(path.clone(), ready.basis.semantic_input_hash)
+        .unwrap()
+        .unwrap()
+        .revision;
+    let mut channel_events = Vec::new();
+    let receipt = run_graph_with_sink(
         &app,
         RunGraphRequest::new(
             instance.clone(),
@@ -3896,20 +4057,47 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
             document,
             ready.basis.semantic_input_hash,
         ),
-        |_| false,
+        |event| {
+            channel_events.push(event);
+            false
+        },
     )
-    .unwrap()
-    .identity
-    .run_id();
-    assert!(receiver.try_iter().any(|event| matches!(event,
-        yss_application::graph::editing::GraphActivity::Execution(event)
-            if matches!(event.kind(), RunApplicationEventKind::RunCompleted))));
+    .unwrap();
+    let run_id = receipt.identity.run_id();
+    assert_eq!(
+        receipt.identity.semantic_input_hash(),
+        &ready.basis.semantic_input_hash
+    );
+    let public_events = receiver
+        .try_iter()
+        .filter_map(|event| match event {
+            yss_application::graph::editing::GraphActivity::Execution(event) => Some(event),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(public_events.len(), 2);
+    assert!(matches!(
+        public_events[1].kind(),
+        RunApplicationEventKind::RunCompleted
+    ));
     let snapshot = app.execution_snapshot(&instance).unwrap();
     assert_eq!(snapshot.len(), 2);
     assert!(matches!(
         snapshot[1].kind(),
         RunApplicationEventKind::RunCompleted
     ));
+    for event in public_events.iter().chain(snapshot.iter()) {
+        assert_eq!(event.identity(), &receipt.identity);
+    }
+    assert_eq!(public_events, channel_events);
+    assert_eq!(public_events, snapshot);
+    assert!(public_events[0].result_revision() > before_run);
+    assert!(public_events[1].result_revision() > public_events[0].result_revision());
+    let summary = app
+        .query_graph_result_state(path.clone(), ready.basis.semantic_input_hash)
+        .unwrap()
+        .unwrap();
+    assert!(summary.revision >= public_events[1].result_revision());
     let query = |node, key: &str| {
         ResultPinQuery::new(
             path.clone(),

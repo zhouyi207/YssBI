@@ -35,6 +35,9 @@ pub struct SeriesWindow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SeriesTransform {
+    Impute {
+        method: ImputationMethod,
+    },
     IsNull {
         invert: bool,
     },
@@ -124,6 +127,15 @@ pub enum SeriesTransform {
     DummyInformation {
         base_level: Box<str>,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ImputationMethod {
+    Mean,
+    Median,
+    /// Numeric mode; choose the smallest value when frequencies tie.
+    Mode,
+    Constant(f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

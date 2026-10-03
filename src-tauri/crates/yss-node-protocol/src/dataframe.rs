@@ -1,13 +1,13 @@
 use crate::RelationalScalarType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeSet;
-use yss_data_contract::FilterLiteral;
+use yss_data_contract::{FilterLiteral, TabularColumnName};
 
 pub const PROJECT_COLUMNS_TYPE_ID: &str = "yssbi.dataframe.project_columns";
 pub const FILTER_PREDICATE_TYPE_ID: &str = "yssbi.dataframe.filter_predicate";
 pub const PROJECT_COLUMNS_VALIDATOR_ID: &str = "yssbi.dataframe.project_columns.codec";
 pub const FILTER_PREDICATE_VALIDATOR_ID: &str = "yssbi.dataframe.filter_predicate.codec";
-pub const DATAFRAME_NOMINAL_CODEC_VERSION: u32 = 1;
+pub const DATAFRAME_NOMINAL_CODEC_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
@@ -32,9 +32,9 @@ impl<'de> Deserialize<'de> for ProjectColumns {
         }
         let mut seen = BTreeSet::new();
         for column in &columns {
-            if column.is_empty() || column.trim() != column.as_ref() {
+            if !TabularColumnName::is_valid(column) {
                 return Err(serde::de::Error::custom(
-                    "project column names must be non-empty and unpadded",
+                    "project column names must not be blank",
                 ));
             }
             if !seen.insert(column.as_ref()) {
@@ -118,10 +118,8 @@ impl<'de> Deserialize<'de> for FilterPredicate {
         D: Deserializer<'de>,
     {
         let wire = FilterPredicateWire::deserialize(deserializer)?;
-        if wire.column.is_empty() || wire.column.trim() != wire.column.as_ref() {
-            return Err(serde::de::Error::custom(
-                "filter column must be non-empty and unpadded",
-            ));
+        if !TabularColumnName::is_valid(&wire.column) {
+            return Err(serde::de::Error::custom("filter column must not be blank"));
         }
         let value = match (wire.operator.requires_value(), wire.value) {
             (true, OptionalLiteral::Present(value)) => Some(value),
@@ -197,13 +195,13 @@ mod tests {
 
     #[test]
     fn project_columns_roundtrip_exact_persisted_array() {
-        let columns: ProjectColumns = serde_json::from_value(json!(["b", "a"])).unwrap();
+        let columns: ProjectColumns = serde_json::from_value(json!([" b\t", "a"])).unwrap();
 
         assert_eq!(
             columns.as_slice(),
-            [Box::<str>::from("b"), Box::<str>::from("a")]
+            [Box::<str>::from(" b\t"), Box::<str>::from("a")]
         );
-        assert_eq!(serde_json::to_value(columns).unwrap(), json!(["b", "a"]));
+        assert_eq!(serde_json::to_value(columns).unwrap(), json!([" b\t", "a"]));
     }
 
     #[test]
@@ -212,8 +210,8 @@ mod tests {
             json!([]),
             json!(["a", "a"]),
             json!([""]),
-            json!([" a"]),
-            json!(["a "]),
+            json!([" "]),
+            json!(["\t\n"]),
             json!([1]),
             json!({"columns": ["a"]}),
         ] {
@@ -225,7 +223,7 @@ mod tests {
     fn filter_predicate_roundtrips_exact_tagged_literals() {
         let cases = [
             (
-                json!({"column":"active","operator":"equal","value":{"type":"boolean","value":true}}),
+                json!({"column":" active\t","operator":"equal","value":{"type":"boolean","value":true}}),
                 FilterLiteral::Boolean(true),
             ),
             (
@@ -348,6 +346,7 @@ mod tests {
             json!({"column":"a","operator":"equal","value":{"type":"string","value":{"type":"string","value":"x"}}}),
             json!({"column":"a","operator":"equal","value":{"type":"string","value":"x"},"extra":true}),
             json!({"column":"","operator":"equal","value":{"type":"string","value":"x"}}),
+            json!({"column":" \t","operator":"isNull"}),
         ] {
             assert!(serde_json::from_value::<FilterPredicate>(invalid).is_err());
         }

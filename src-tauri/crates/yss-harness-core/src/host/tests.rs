@@ -17,6 +17,80 @@ use yss_harness_contract::{
 };
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
+#[test]
+fn cancellation_releases_active_turns_before_waking_reentrant_waiters() {
+    use std::future::Future;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::task::{Context, Wake, Waker};
+
+    struct ReentrantWake {
+        host: std::sync::Weak<HarnessHost>,
+        session_id: HarnessSessionId,
+        calls: AtomicUsize,
+    }
+    impl Wake for ReentrantWake {
+        fn wake(self: Arc<Self>) {
+            let host = self.host.upgrade().unwrap();
+            assert!(
+                host.active_turns.try_lock().is_ok(),
+                "cancellation must release active_turns before waking waiters"
+            );
+            assert!(!host.cancel_turn(&self.session_id));
+            self.calls.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    let store = Arc::new(InMemoryHarnessStore::default());
+    let host = Arc::new(
+        HarnessHost::new(HarnessPorts {
+            agent_driver: Arc::new(MockAgentDriver::new("unused")),
+            capability_gateway: Arc::new(RejectingCapabilityGateway),
+            sessions: store.clone(),
+            events: store.clone(),
+            event_sink: store.clone(),
+            workflows: store.clone(),
+            tool_ledger: store.clone(),
+            knowledge: store.clone(),
+            memory: store.clone(),
+            approvals: store,
+            clock: Arc::new(FixedClock::new(1_000)),
+            ids: Arc::new(SequentialIds::default()),
+        })
+        .unwrap(),
+    );
+    let session_id = HarnessSessionId::try_new("session-1").unwrap();
+    for reason in [
+        CancellationReason::User,
+        CancellationReason::ProjectReplaced,
+    ] {
+        let (token, admission) = host.admit_turn(&session_id).unwrap();
+        let wake = Arc::new(ReentrantWake {
+            host: Arc::downgrade(&host),
+            session_id: session_id.clone(),
+            calls: AtomicUsize::new(0),
+        });
+        let waker = Waker::from(wake.clone());
+        let mut cancelled = Box::pin(token.cancelled());
+        assert!(
+            cancelled
+                .as_mut()
+                .poll(&mut Context::from_waker(&waker))
+                .is_pending()
+        );
+
+        let accepted = match reason {
+            CancellationReason::User => host.cancel_turn(&session_id),
+            _ => host.cancel_active_turn(&session_id, reason),
+        };
+        assert!(accepted);
+        assert_eq!(token.reason(), Some(reason));
+        assert_eq!(wake.calls.load(Ordering::Relaxed), 1);
+        assert!(!host.cancel_turn(&session_id));
+        drop(admission);
+        assert!(!host.cancel_turn(&session_id));
+    }
+}
+
 #[tokio::test]
 async fn session_turn_persists_one_gap_free_ordered_event_stream() {
     let store = Arc::new(InMemoryHarnessStore::default());
@@ -47,7 +121,12 @@ async fn session_turn_persists_one_gap_free_ordered_event_stream() {
         .unwrap();
 
     let result = host
-        .submit_turn(&session.id, "Review the dataset.".to_owned(), None)
+        .submit_turn(
+            &session.id,
+            &session.project,
+            "Review the dataset.".to_owned(),
+            None,
+        )
         .await
         .unwrap();
     let events = host.events_after(&session.id, 0).await.unwrap();
@@ -187,7 +266,9 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
         )
     };
     for index in 0..12 {
-        let outcome = host.submit_turn(&session.id, question(index), None).await;
+        let outcome = host
+            .submit_turn(&session.id, &session.project, question(index), None)
+            .await;
         assert_eq!(outcome.is_err(), index == 1 || index == 2);
     }
     let requests = driver.0.lock().unwrap();
@@ -440,9 +521,14 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
         )
         .await
         .unwrap();
-    host.submit_turn(&session.id, "Review quality.".to_owned(), None)
-        .await
-        .unwrap();
+    host.submit_turn(
+        &session.id,
+        &session.project,
+        "Review quality.".to_owned(),
+        None,
+    )
+    .await
+    .unwrap();
     let turn_id = host.events_after(&session.id, 0).await.unwrap()[1]
         .turn_id
         .clone()
@@ -525,7 +611,14 @@ async fn project_session_reconciliation_stales_old_active_sessions() {
         ProjectSessionId::new("project-session-current"),
     );
 
-    assert_eq!(host.reconcile_project_session(&current).await.unwrap(), 1);
+    assert_eq!(
+        host.session_access()
+            .await
+            .reconcile_project_session(&current)
+            .await
+            .unwrap(),
+        1
+    );
     assert_eq!(
         store.load_session(&old.id).await.unwrap().unwrap().state,
         HarnessSessionState::Stale
@@ -602,9 +695,14 @@ async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
         )
         .await
         .unwrap();
-    host.submit_turn(&session.id, "Move the node.".to_owned(), None)
-        .await
-        .unwrap();
+    host.submit_turn(
+        &session.id,
+        &session.project,
+        "Move the node.".to_owned(),
+        None,
+    )
+    .await
+    .unwrap();
     let turn_id = host.events_after(&session.id, 0).await.unwrap()[1]
         .turn_id
         .clone()

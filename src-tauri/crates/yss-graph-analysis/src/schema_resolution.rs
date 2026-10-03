@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 mod aggregation;
 mod composition;
-mod multivariate;
+mod generated_tables;
 mod transforms;
 pub(crate) use aggregation::column_names as aggregate_column_names;
 
+use crate::parameter_projection::{effective_json_parameter, effective_text_parameter};
 use crate::{GraphSchemaIssue, GraphSchemaState};
 use yss_data_contract::ValueType;
 use yss_graph_document::{
@@ -17,6 +18,7 @@ use yss_graph_resource_contract::{
 use yss_node_protocol::{
     ColumnSelectionExpr, ParameterKey, PortKey, RelationalScalarType, RenameExpr,
     ResolvedSchemaFact, SchemaColumnRef, SchemaExpr, SchemaField, SchemaFieldLineage, TypeExpr,
+    TypeState,
 };
 use yss_node_registry::NodeRegistry;
 
@@ -48,8 +50,10 @@ pub(crate) struct DerivedSchemaPortMember {
 
 pub(crate) fn resolve_graph_schemas(
     document: &GraphDocument,
+    index: &crate::document_index::DocumentIndex<'_>,
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
+    automatic_outputs: &BTreeMap<PortAddress, TypeState>,
     cache: &mut SchemaCache,
 ) -> SchemaResolution {
     #[cfg(test)]
@@ -84,7 +88,7 @@ pub(crate) fn resolve_graph_schemas(
                 })
         })
         .collect::<Vec<_>>();
-    let Some(order) = crate::type_resolution::topological_order(document) else {
+    let Some(order) = index.topological_order() else {
         cache.outputs.clear();
         return SchemaResolution(
             output_addresses
@@ -99,46 +103,36 @@ pub(crate) fn resolve_graph_schemas(
         );
     };
     let ranks = order
-        .into_iter()
+        .iter()
+        .copied()
         .enumerate()
         .map(|(index, node_id)| (node_id, index))
         .collect::<BTreeMap<_, _>>();
     output_addresses
         .sort_by_key(|address| ranks.get(&address.node_id).copied().unwrap_or(usize::MAX));
-    let mut input_sources = BTreeMap::<PortAddress, Vec<PortAddress>>::new();
-    let mut node_sources = BTreeMap::<NodeId, Vec<(PortAddress, PortAddress)>>::new();
-    for connection in document.connections.values() {
-        input_sources
-            .entry(connection.input.clone())
-            .or_default()
-            .push(connection.output.clone());
-        node_sources
-            .entry(connection.input.node_id)
-            .or_default()
-            .push((connection.input.clone(), connection.output.clone()));
-    }
     let mut resolver = EditorSchemaResolver {
         document,
+        index,
         registry,
         resources: resources.clone(),
+        automatic_outputs,
         cache,
-        input_sources: &input_sources,
-        node_sources: &node_sources,
         resolved: SchemaResolution::default(),
+        series_fields: BTreeMap::new(),
         visiting: BTreeSet::new(),
     };
     for address in output_addresses {
         let _ = resolver.resolve_output(&address);
     }
-    for (input, outputs) in &input_sources {
-        let [output] = outputs.as_slice() else {
+    for (input, connections) in &index.incoming {
+        let [connection] = connections.as_slice() else {
             resolver.resolved.insert(
                 input.clone(),
                 GraphSchemaState::Conflict(GraphSchemaIssue::ConflictingInputs),
             );
             continue;
         };
-        let state = resolver.resolve_output(output);
+        let state = resolver.resolve_output(&connection.output);
         if let GraphSchemaState::Exact(schema) = state {
             let input_key = match &input.port {
                 PortRef::Declared { key } => key.clone(),
@@ -234,12 +228,13 @@ impl SchemaResolution {
 
 struct EditorSchemaResolver<'a> {
     document: &'a GraphDocument,
+    index: &'a crate::document_index::DocumentIndex<'a>,
     registry: &'a NodeRegistry,
     resources: ResourceCatalogSnapshot,
+    automatic_outputs: &'a BTreeMap<PortAddress, TypeState>,
     cache: &'a mut SchemaCache,
-    input_sources: &'a BTreeMap<PortAddress, Vec<PortAddress>>,
-    node_sources: &'a BTreeMap<NodeId, Vec<(PortAddress, PortAddress)>>,
     resolved: SchemaResolution,
+    series_fields: BTreeMap<PortAddress, Result<SchemaField, GraphSchemaIssue>>,
     visiting: BTreeSet<PortAddress>,
 }
 
@@ -264,47 +259,42 @@ impl EditorSchemaResolver<'_> {
         };
         // Resolve upstream facts before checking this output. If a changed
         // branch produces the same Schema, downstream expressions stay cached.
-        let sources = self
-            .node_sources
-            .get(&address.node_id)
-            .cloned()
-            .unwrap_or_default();
-        for (_, source) in &sources {
-            let _ = self.resolve_output(source);
+        let sources = self.index.node_input_connections(address.node_id);
+        for connection in sources {
+            let _ = self.resolve_output(&connection.output);
         }
-        // Series outputs need not declare a table Schema. Frequency still depends on
-        // their resolved column meaning, including upstream selection/generic changes.
-        let frequency_source = (self.document.nodes[&address.node_id].node_type.as_str()
-            == "yssbi.dataframe.series.frequency")
-            .then(|| self.frequency_source(address.node_id));
+        // A scalar/series can change column meaning without declaring a table Schema.
+        // Reuse each inferred field within this resolution, including recursive inputs.
+        let series_fields = sources
+            .iter()
+            .map(|connection| self.composition_series(&connection.output))
+            .collect::<Vec<_>>();
         let node = &self.document.nodes[&address.node_id];
         let constant = self
             .registry
             .protocol(&node.node_type)
-            .and_then(|protocol| match &protocol.typing {
-                yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => {
-                    super::referenced_constant(self.document, node, parameter)
-                }
-                _ => None,
-            });
+            .and_then(|protocol| super::referenced_constant(self.document, node, protocol));
         let input_fingerprint = yss_canonical_hash::hash_canonical(
             "yssbi.graph-schema-input.v1",
             &(
                 self.registry.fingerprint().as_bytes(),
                 &node.node_type,
                 &node.parameters,
-                self.document
-                    .port_bindings
-                    .iter()
-                    .filter(|(port, _)| port.node_id == node.id)
-                    .collect::<Vec<_>>(),
+                self.index.node_bindings(node.id),
                 &expression,
-                frequency_source,
                 // Include target addresses as well: moving a source between
                 // two inputs can change Project/Append/Rename semantics.
                 sources
                     .iter()
-                    .map(|(input, source)| (input, source, self.resolved.state(source)))
+                    .zip(&series_fields)
+                    .map(|(connection, series_field)| {
+                        (
+                            &connection.input,
+                            &connection.output,
+                            self.resolved.state(&connection.output),
+                            series_field,
+                        )
+                    })
                     .collect::<Vec<_>>(),
                 constant.map(|constant| {
                     (
@@ -366,10 +356,8 @@ impl EditorSchemaResolver<'_> {
             yss_node_protocol::NodeTypingSpec::Identity { input, output } if output == key => {
                 Some(SchemaExpr::Input(input.clone()))
             }
-            yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, output }
-                if output == key =>
-            {
-                let constant = super::referenced_constant(self.document, node, parameter)?;
+            yss_node_protocol::NodeTypingSpec::ConstantOutput { output, .. } if output == key => {
+                let constant = super::referenced_constant(self.document, node, protocol)?;
                 matches!(constant.data_type, ValueType::DataFrame).then(|| SchemaExpr::Derived {
                     resolver: "yssbi.constant.schema"
                         .parse()
@@ -388,6 +376,7 @@ impl EditorSchemaResolver<'_> {
     ) -> Result<Vec<SchemaField>, GraphSchemaIssue> {
         match expression {
             SchemaExpr::Input(port) => self.resolve_input(node_id, port),
+            SchemaExpr::Fixed { fields } => Ok(fields.clone()),
             SchemaExpr::Project { input, columns } => {
                 let fields = self.resolve_expression(node_id, input)?;
                 if matches!(columns, ColumnSelectionExpr::All) {
@@ -465,46 +454,21 @@ impl EditorSchemaResolver<'_> {
             }
             SchemaExpr::Filter { input, .. } => self.resolve_expression(node_id, input),
             SchemaExpr::Derived { resolver, .. }
-                if resolver.as_str() == "yssbi.statistics.diagnostic.schema.observations" =>
-            {
-                Ok([
-                    "observation",
-                    "fitted",
-                    "residual",
-                    "weighted_residual",
-                    "leverage",
-                    "standardized_residual",
-                    "studentized_residual",
-                    "cooks_distance",
-                ]
-                .into_iter()
-                .map(|name| SchemaField {
-                    name: SchemaColumnRef(name.into()),
-                    scalar_type: RelationalScalarType::Known(
-                        yss_data_contract::SemanticType::Numeric,
-                    ),
-                    lineage: None,
-                })
-                .collect())
-            }
-            SchemaExpr::Derived { resolver, .. }
-                if resolver.as_str() == "yssbi.statistics.survival.schema.predictions" =>
-            {
-                Ok(["time", "event", "risk"]
-                    .into_iter()
-                    .map(|name| SchemaField {
-                        name: SchemaColumnRef(name.into()),
-                        scalar_type: RelationalScalarType::Known(
-                            yss_data_contract::SemanticType::Numeric,
-                        ),
-                        lineage: None,
-                    })
-                    .collect())
-            }
-            SchemaExpr::Derived { resolver, .. }
                 if resolver.as_str() == "yssbi.statistics.multivariate.schema.coordinates" =>
             {
-                self.resolve_multivariate_coordinates(node_id)
+                let prefixes = if self.document.nodes.get(&node_id).is_some_and(|node| {
+                    node.node_type.as_str() == "yssbi.statistics.association.canonical"
+                }) {
+                    &["x_axis", "y_axis"][..]
+                } else {
+                    &["axis"][..]
+                };
+                self.resolve_generated_numeric_table(node_id, "components", prefixes, false)
+            }
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.statistics.doe.schema.design" =>
+            {
+                self.resolve_generated_numeric_table(node_id, "factors", &["factor"], true)
             }
             SchemaExpr::Derived { resolver, .. }
                 if resolver.as_str() == "yssbi.dataframe.schema.transform" =>
@@ -547,10 +511,9 @@ impl EditorSchemaResolver<'_> {
         port: &PortKey,
     ) -> Result<Vec<SchemaField>, GraphSchemaIssue> {
         let input = PortAddress::declared(node_id, port.clone());
-        let outputs = self.input_sources.get(&input).cloned().unwrap_or_default();
-        let output = match outputs.as_slice() {
+        let output = match self.index.input_connections(&input) {
             [] => return Err(GraphSchemaIssue::UnconnectedInput),
-            [output] => output,
+            [connection] => &connection.output,
             _ => return Err(GraphSchemaIssue::ConflictingInputs),
         };
         let state = self.resolve_output(output);
@@ -586,11 +549,13 @@ impl EditorSchemaResolver<'_> {
             .registry
             .protocol(&node.node_type)
             .ok_or(GraphSchemaIssue::MissingResource)?;
-        let yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } = &protocol.typing
-        else {
+        if !matches!(
+            &protocol.typing,
+            yss_node_protocol::NodeTypingSpec::ConstantOutput { .. }
+        ) {
             return Err(GraphSchemaIssue::UnsupportedResolver);
-        };
-        let constant = super::referenced_constant(self.document, node, parameter)
+        }
+        let constant = super::referenced_constant(self.document, node, protocol)
             .ok_or(GraphSchemaIssue::MissingResource)?;
         Ok(constant
             .tabular
@@ -654,11 +619,12 @@ impl EditorSchemaResolver<'_> {
             .nodes
             .get(&node_id)
             .ok_or(GraphSchemaIssue::UnresolvedUpstream)?;
-        let resource = node
-            .parameters
-            .get(&ParameterKey::new("dataframe").expect("built-in parameter key"))
-            .and_then(|value| value.as_str())
-            .ok_or(GraphSchemaIssue::InvalidParameter)?;
+        let resource = effective_text_parameter(
+            node,
+            &ParameterKey::new("dataframe").expect("built-in parameter key"),
+            self.registry,
+        )
+        .ok_or(GraphSchemaIssue::InvalidParameter)?;
         let schema = self
             .resources
             .database_schema(&GraphResourceId::new(resource))
@@ -690,19 +656,14 @@ impl EditorSchemaResolver<'_> {
                 Some(columns.iter().map(|column| column.0.clone()).collect())
             }
             ColumnSelectionExpr::FromParameter(parameter)
-            | ColumnSelectionExpr::ExcludingParameter(parameter) => self
-                .document
-                .nodes
-                .get(&node_id)?
-                .parameters
-                .get(parameter)?
-                .as_array()
-                .map(|values| {
-                    values
-                        .iter()
-                        .map(|value| value.as_str().map(Box::<str>::from))
-                        .collect::<Option<Vec<_>>>()
-                })?,
+            | ColumnSelectionExpr::ExcludingParameter(parameter) => {
+                let node = self.document.nodes.get(&node_id)?;
+                effective_json_parameter(node, parameter, self.registry)?
+                    .as_array()?
+                    .iter()
+                    .map(|value| value.as_str().map(Box::<str>::from))
+                    .collect()
+            }
         }
     }
 
@@ -716,7 +677,8 @@ impl EditorSchemaResolver<'_> {
                     .collect(),
             ),
             RenameExpr::FromParameter(parameter) => {
-                let object = node.parameters.get(parameter)?.as_object()?;
+                let value = effective_json_parameter(node, parameter, self.registry)?;
+                let object = value.as_object()?;
                 Some(
                     object
                         .iter()
@@ -725,8 +687,8 @@ impl EditorSchemaResolver<'_> {
                 )
             }
             RenameExpr::FromParameters { from, to } => Some(vec![(
-                node.parameters.get(from)?.as_str()?.into(),
-                node.parameters.get(to)?.as_str()?.into(),
+                effective_text_parameter(node, from, self.registry)?.into(),
+                effective_text_parameter(node, to, self.registry)?.into(),
             )]),
         }
     }

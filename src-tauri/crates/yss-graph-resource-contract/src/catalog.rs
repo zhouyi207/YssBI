@@ -96,24 +96,10 @@ impl FunctionCatalogEntry {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ResourceCatalogFingerprint([u8; 32]);
-
-impl ResourceCatalogFingerprint {
-    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    pub const fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ResourceCatalogSnapshot {
     functions: Arc<BTreeMap<GraphResourcePath, FunctionCatalogEntry>>,
     databases: Arc<BTreeMap<GraphResourceId, DataSchema>>,
-    fingerprint: ResourceCatalogFingerprint,
     reads: Option<Arc<Mutex<BTreeSet<GraphDependencyKey>>>>,
 }
 
@@ -121,12 +107,10 @@ impl ResourceCatalogSnapshot {
     pub fn new(
         functions: BTreeMap<GraphResourcePath, FunctionCatalogEntry>,
         databases: BTreeMap<GraphResourceId, DataSchema>,
-        fingerprint: ResourceCatalogFingerprint,
     ) -> Self {
         Self {
             functions: Arc::new(functions),
             databases: Arc::new(databases),
-            fingerprint,
             reads: None,
         }
     }
@@ -160,10 +144,6 @@ impl ResourceCatalogSnapshot {
     pub fn database_schema(&self, resource: &GraphResourceId) -> Option<&DataSchema> {
         self.record(GraphDependencyKey::Database(resource.as_str().into()));
         self.databases.get(resource)
-    }
-
-    pub fn fingerprint(&self) -> &ResourceCatalogFingerprint {
-        &self.fingerprint
     }
 
     /// Tracking is private to one resolve attempt; resource facts remain immutable.
@@ -306,7 +286,7 @@ impl ResourceCatalogSnapshot {
 mod tests {
     use super::{
         FunctionCatalogEntry, FunctionParameterContract, FunctionSignature, GraphResourceId,
-        ResourceCatalogFingerprint, ResourceCatalogSnapshot,
+        ResourceCatalogSnapshot,
     };
     use crate::{ColumnSchema, DataSchema};
     use std::collections::BTreeMap;
@@ -346,11 +326,7 @@ mod tests {
             if include_missing {
                 databases.insert(missing.clone(), DataSchema { columns: vec![] });
             }
-            ResourceCatalogSnapshot::new(
-                BTreeMap::new(),
-                databases,
-                ResourceCatalogFingerprint::from_bytes([9; 32]),
-            )
+            ResourceCatalogSnapshot::new(BTreeMap::new(), databases)
         };
         let tracked = catalog(
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
@@ -410,11 +386,9 @@ mod tests {
                 data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             }],
         };
-        let fingerprint = ResourceCatalogFingerprint::from_bytes([7; 32]);
         let catalog = ResourceCatalogSnapshot::new(
             BTreeMap::from([(function_path.clone(), function.clone())]),
             BTreeMap::from([(database_id.clone(), database.clone())]),
-            fingerprint,
         );
 
         assert_eq!(
@@ -422,6 +396,5 @@ mod tests {
             Some(function.signature())
         );
         assert_eq!(catalog.database_schema(&database_id), Some(&database));
-        assert_eq!(catalog.fingerprint(), &fingerprint);
     }
 }

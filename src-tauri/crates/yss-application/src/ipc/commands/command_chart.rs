@@ -106,17 +106,15 @@ pub fn duplicate_chart(
 #[tauri::command]
 pub fn load_chart(
     application: State<crate::session::ApplicationState>,
-    project_instance_id: String,
+    project_instance_id: ProjectInstanceId,
     chart_path: ChartResourcePath,
-    expected_publication_revision: Option<u64>,
+    expected_publication_revision: u64,
 ) -> Result<ChartDocument, CommandError> {
-    let project_instance_id =
-        yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     application
         .load_chart_resource(
             project_instance_id,
             chart_path,
-            expected_publication_revision,
+            Some(expected_publication_revision),
         )
         .map_err(|error| chart_application_command_error(&error))
 }
@@ -201,6 +199,7 @@ pub fn get_plot_column_pair(
     state: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     database_id: String,
+    expected_revision: ResourceRevision,
     x_col: String,
     y_col: String,
     max_points: Option<usize>,
@@ -213,6 +212,7 @@ pub fn get_plot_column_pair(
         .query_chart_plot(ChartPlotQuery {
             project_instance_id,
             database_id: yss_database_contract::DatabaseId::from_existing(database_id.into()),
+            expected_revision,
             x_column,
             y_column,
             max_points,

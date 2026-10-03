@@ -7,7 +7,8 @@ mod worker;
 
 pub use dispatcher::LogsUnavailable;
 pub use dto::{
-    FrontendLogEntryDto, LogBatchDto, LogDomain, LogOrigin, LogRecordDto, LogSubscriptionDto,
+    FrontendLogEntryDto, LogBatchDto, LogDomain, LogOrigin, LogRecordDto, LogStreamFailure,
+    LogSubscriptionDto,
 };
 pub use runtime::{LogInitializationError, LogRuntime, SubmitFrontendLogsError};
 

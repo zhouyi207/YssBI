@@ -6,46 +6,13 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
 use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
+use crate::context::string_identity;
 use crate::{
-    AutomationCapabilityRequest, AutomationCapabilityResult, AutomationIdentityError,
-    CapabilityFailure, CapabilityId, StatisticalPlan, capability_input_schema,
+    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityFailure, CapabilityId,
+    StatisticalPlan, capability_input_schema,
 };
-
-macro_rules! string_identity {
-    ($name:ident, $label:literal) => {
-        impl $name {
-            pub fn try_new(value: impl Into<String>) -> Result<Self, AutomationIdentityError> {
-                let value = value.into();
-                if value.trim().is_empty() || value.len() > 128 {
-                    return Err(AutomationIdentityError::Invalid($label));
-                }
-                Ok(Self(value))
-            }
-
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                let value = String::deserialize(deserializer)?;
-                Self::try_new(value).map_err(serde::de::Error::custom)
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str(self.as_str())
-            }
-        }
-    };
-}
 
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
@@ -460,14 +427,16 @@ impl Future for CancellationFuture {
         if let Some(reason) = self.token.reason() {
             return Poll::Ready(reason);
         }
-        *self
+        let waker = context.waker().clone();
+        let previous = self
             .token
             .state
             .waiters
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .entry(self.waiter_id)
-            .or_insert_with(|| context.waker().clone()) = context.waker().clone();
+            .insert(self.waiter_id, waker);
+        // Waker callbacks can reenter the token, including when releasing the old one.
+        drop(previous);
         match self.token.reason() {
             Some(reason) => Poll::Ready(reason),
             None => Poll::Pending,
@@ -477,12 +446,14 @@ impl Future for CancellationFuture {
 
 impl Drop for CancellationFuture {
     fn drop(&mut self) {
-        self.token
+        let removed = self
+            .token
             .state
             .waiters
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .remove(&self.waiter_id);
+        drop(removed);
     }
 }
 
@@ -545,6 +516,71 @@ pub enum CredentialFailure {
 mod tests {
     use super::*;
     use std::task::Wake;
+
+    #[test]
+    fn cancellation_releases_replaced_and_removed_wakers_outside_waiter_lock() {
+        struct ReentrantDrop {
+            state: std::sync::Weak<CancellationState>,
+            lock_free: Arc<AtomicU8>,
+        }
+        impl Wake for ReentrantDrop {
+            fn wake(self: Arc<Self>) {}
+        }
+        impl Drop for ReentrantDrop {
+            fn drop(&mut self) {
+                let state = self.state.upgrade().unwrap();
+                let lock_free = state.waiters.try_lock().is_ok();
+                self.lock_free
+                    .store(if lock_free { 2 } else { 1 }, Ordering::Relaxed);
+                // Record a locked callback without reentering, so a regression cannot hang.
+                if lock_free {
+                    CancellationToken { state }.cancel(CancellationReason::User);
+                }
+            }
+        }
+        #[derive(Default)]
+        struct Counter(AtomicUsize);
+        impl Wake for Counter {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        for replace in [true, false] {
+            let token = CancellationToken::default();
+            let lock_free = Arc::new(AtomicU8::new(0));
+            let mut future = Box::pin(token.cancelled());
+            {
+                let waker = Waker::from(Arc::new(ReentrantDrop {
+                    state: Arc::downgrade(&token.state),
+                    lock_free: lock_free.clone(),
+                }));
+                assert!(
+                    future
+                        .as_mut()
+                        .poll(&mut Context::from_waker(&waker))
+                        .is_pending()
+                );
+            }
+            let replacement = Arc::new(Counter::default());
+            let outcome = if replace {
+                let waker = Waker::from(replacement.clone());
+                Some(future.as_mut().poll(&mut Context::from_waker(&waker)))
+            } else {
+                None
+            };
+            drop(future);
+
+            assert_eq!(lock_free.load(Ordering::Relaxed), 2, "replace={replace}");
+            assert_eq!(token.reason(), Some(CancellationReason::User));
+            assert!(!token.cancel(CancellationReason::DeadlineElapsed));
+            assert!(token.state.waiters.lock().unwrap().is_empty());
+            if let Some(outcome) = outcome {
+                assert_eq!(outcome, Poll::Ready(CancellationReason::User));
+                assert_eq!(replacement.0.load(Ordering::Relaxed), 1);
+            }
+        }
+    }
 
     #[test]
     fn cancellation_wakes_every_waiter_and_unregisters_dropped_futures() {

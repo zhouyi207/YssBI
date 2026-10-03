@@ -9,7 +9,6 @@ pub mod identity;
 mod kernel_invocation;
 pub mod package_preparation;
 pub mod plan;
-pub mod ports;
 pub mod resource_preparation;
 pub mod result;
 pub mod result_store;

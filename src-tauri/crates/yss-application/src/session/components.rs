@@ -3,7 +3,7 @@ use std::sync::Arc;
 use yss_graph_runtime::GraphRuntimeComponents;
 use yss_node_catalog::{BuiltinCatalog, BuiltinInitializationError};
 use yss_node_kernel::{KernelBindingError, KernelRegistry, KernelRegistryBuilder};
-use yss_node_protocol::{NodeTypingSpec, PortCardinality, PortDirection};
+use yss_node_protocol::{NodeTypingSpec, PortDirection, PortSpec};
 use yss_node_registry::NodeRegistry;
 
 #[cfg(test)]
@@ -55,12 +55,9 @@ impl NodeComponents {
                     .map(|parameter| (parameter.key.as_str(), parameter.visible_when.is_some()))
                     .collect()
             };
-            let arity = |cardinality: &PortCardinality| match cardinality {
-                PortCardinality::Declared => (1, 1),
-                PortCardinality::UserCreated { min, max } => {
-                    (usize::from(*min), max.map_or(usize::MAX, usize::from))
-                }
-                PortCardinality::Derived { .. } => (0, usize::MAX),
+            let arity = |port: &PortSpec| {
+                let (min, max) = protocol.interface.port_instance_bounds(port);
+                (usize::from(min), max.map_or(usize::MAX, usize::from))
             };
             let inputs = protocol
                 .interface
@@ -68,7 +65,7 @@ impl NodeComponents {
                 .iter()
                 .filter(|port| port.direction == PortDirection::Input)
                 .map(|port| {
-                    let (min, max) = arity(&port.cardinality);
+                    let (min, max) = arity(port);
                     (port.key.as_str(), min..=max)
                 });
             let (minimum, maximum) = protocol
@@ -77,7 +74,7 @@ impl NodeComponents {
                 .iter()
                 .filter(|port| port.direction == PortDirection::Output)
                 .fold((0usize, 0usize), |(minimum, maximum), port| {
-                    let (min, max) = arity(&port.cardinality);
+                    let (min, max) = arity(port);
                     (minimum.saturating_add(min), maximum.saturating_add(max))
                 });
             contract

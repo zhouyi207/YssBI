@@ -335,6 +335,10 @@ impl DataFusionRelation {
         };
         use SeriesTransform::*;
         let expression = match operation {
+            Impute { method } => {
+                output = field("result", DataType::Float64, SemanticType::Numeric, false)?;
+                crate::imputation::numeric(numeric()?, *method)?
+            }
             IsNull { invert } => {
                 output = field("result", DataType::Boolean, SemanticType::Binary, false)?;
                 if *invert {
@@ -660,6 +664,13 @@ impl DataFusionRelation {
             | Cumulative { window: spec, .. }
             | Rank { window: spec, .. }
             | FillDirection { window: spec, .. } => {
+                if matches!(
+                    operation,
+                    Difference { .. } | PercentChange { .. } | Rolling { .. } | Cumulative { .. }
+                ) && !yss_database_arrow::is_numeric_field(source)
+                {
+                    return Err(RelationError::InvalidInput);
+                }
                 let (partition, order) = self.window_keys(spec)?;
                 if spec.require_unique_keys {
                     let owner = spec
@@ -782,9 +793,6 @@ impl DataFusionRelation {
                         min_periods,
                         ..
                     } => {
-                        if !yss_database_arrow::is_numeric_field(source) {
-                            return Err(RelationError::InvalidInput);
-                        }
                         if *size == 0 || *min_periods == 0 || min_periods > size {
                             return Err(RelationError::InvalidInput);
                         }
@@ -803,9 +811,6 @@ impl DataFusionRelation {
                         operation: aggregate,
                         ..
                     } => {
-                        if !yss_database_arrow::is_numeric_field(source) {
-                            return Err(RelationError::InvalidInput);
-                        }
                         output = field("result", DataType::Float64, SemanticType::Numeric, true)?;
                         window_statistic(
                             finite(value, source.data_type(), false),
@@ -832,16 +837,15 @@ impl DataFusionRelation {
         operation: SeriesReduction,
     ) -> Result<RelationHandle, RelationError> {
         let source = series.plan().field();
+        if !matches!(operation, SeriesReduction::Length | SeriesReduction::Count)
+            && !yss_database_arrow::is_numeric_field(source)
+        {
+            return Err(RelationError::InvalidInput);
+        }
         let value = self.series_expression(series)?;
         let input = self.select_native(vec![value.alias("__yssbi_value")])?;
         let value = col("__yssbi_value");
-        let numeric = || {
-            if yss_database_arrow::is_numeric_field(source) {
-                Ok(finite(value.clone(), source.data_type(), false))
-            } else {
-                Err(RelationError::InvalidInput)
-            }
-        };
+        let numeric = || finite(value.clone(), source.data_type(), false);
         let expressions = match operation {
             SeriesReduction::Length => vec![aggregate::count(lit(1_i64)).alias("value")],
             SeriesReduction::Count => vec![aggregate::count(value).alias("value")],
@@ -849,14 +853,14 @@ impl DataFusionRelation {
                 aggregate::sum(if source.data_type().is_integer() {
                     cast(value, DataType::Decimal128(38, 0))
                 } else {
-                    numeric()?
+                    numeric()
                 })
                 .alias("value"),
             ],
-            SeriesReduction::Mean => vec![aggregate::avg(numeric()?).alias("value")],
+            SeriesReduction::Mean => vec![aggregate::avg(numeric()).alias("value")],
             SeriesReduction::StandardizationStatistics => vec![
-                aggregate::avg(numeric()?).alias("mean"),
-                aggregate::stddev(numeric()?).alias("standard_deviation"),
+                aggregate::avg(numeric()).alias("mean"),
+                aggregate::stddev(numeric()).alias("standard_deviation"),
             ],
         };
         let mut frame = input.aggregate(vec![], expressions).map_err(plan)?;

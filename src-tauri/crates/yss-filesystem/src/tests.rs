@@ -244,7 +244,7 @@ fn lifecycle_close_rejects_new_operations_and_reopens_only_after_final_lease() {
     assert_eq!(error.code(), "filesystem_root_admission_closed");
 
     lifecycle.release_initial_and_drain();
-    lifecycle.acquire_final().unwrap();
+    lifecycle.acquire_final();
     assert!(lifecycle.holds_lease());
     assert_eq!(
         coordinator.acquire(root.clone()).err().unwrap().code(),
@@ -1340,6 +1340,101 @@ fn rollback_failure_reports_transaction_rollback_failed_with_recovery_requiremen
     assert_eq!(error.code(), "transaction_rollback_failed");
     assert!(error.recovery_required());
     temporary.coordinator().set_filesystem_rollback_fault(false);
+}
+
+#[test]
+fn abandoned_preparation_releases_staged_files_without_changing_live_content() {
+    let temporary = TestDirectory::new("transaction-abandoned-preparation");
+    let document = temporary.path().join("document.json");
+    std::fs::write(&document, br#"{"live":1}"#).unwrap();
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::Write {
+            relative_path: "document.json".into(),
+            contents: br#"{"prepared":1}"#.to_vec(),
+        }],
+    )
+    .unwrap();
+    let staging_root = prepared.staging_root().to_path_buf();
+    assert!(staging_root.join("prepared/document.json").is_file());
+
+    drop(prepared);
+
+    assert!(!staging_root.exists());
+    assert_eq!(std::fs::read(document).unwrap(), br#"{"live":1}"#);
+    let _lease = temporary
+        .coordinator()
+        .acquire(normalized(temporary.path()))
+        .unwrap();
+}
+
+#[test]
+fn abandoned_preparation_marks_failed_cleanup_for_recovery() {
+    let temporary = TestDirectory::new("transaction-abandoned-cleanup-failure");
+    let marker = RecoveryMarker::default();
+    let prepared = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::Write {
+            relative_path: "document.json".into(),
+            contents: br#"{"prepared":1}"#.to_vec(),
+        }],
+        marker.clone(),
+    )
+    .unwrap();
+    temporary
+        .coordinator()
+        .set_filesystem_fault(Some(FilesystemFaultPoint::StagingCleanup));
+
+    drop(prepared);
+
+    assert!(marker.error().is_some());
+    assert!(!temporary.path().join("document.json").exists());
+}
+
+#[test]
+fn abandoned_preparation_rejects_a_redirected_staging_parent() {
+    let temporary = TestDirectory::new("transaction-abandoned-staging-redirect");
+    let outside = TestDirectory::new("transaction-abandoned-staging-outside");
+    let marker = RecoveryMarker::default();
+    let prepared = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::Write {
+            relative_path: "document.json".into(),
+            contents: br#"{"prepared":1}"#.to_vec(),
+        }],
+        marker.clone(),
+    )
+    .unwrap();
+    let staging_root = prepared.staging_root().to_path_buf();
+    let staging_parent = staging_root.parent().unwrap();
+    let external_file = outside
+        .path()
+        .join(staging_root.file_name().unwrap())
+        .join("keep.txt");
+    std::fs::create_dir_all(external_file.parent().unwrap()).unwrap();
+    std::fs::write(&external_file, b"external content").unwrap();
+    std::fs::remove_dir_all(staging_parent).unwrap();
+    #[cfg(windows)]
+    assert!(
+        std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(staging_parent)
+            .arg(outside.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(outside.path(), staging_parent).unwrap();
+
+    drop(prepared);
+
+    #[cfg(windows)]
+    std::fs::remove_dir(staging_parent).unwrap();
+    #[cfg(unix)]
+    std::fs::remove_file(staging_parent).unwrap();
+    assert_eq!(std::fs::read(external_file).unwrap(), b"external content");
+    assert!(marker.error().is_some());
 }
 
 #[test]

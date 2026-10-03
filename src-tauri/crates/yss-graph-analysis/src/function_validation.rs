@@ -1,44 +1,17 @@
+use crate::resolution::resolve_graph_semantics_inner;
 use crate::{
-    GraphDiagnosticFact, GraphDiagnosticLocation, GraphPortBacking, GraphPortSemanticFact,
+    GraphDiagnosticFact, GraphDiagnosticLocation, GraphFunctionAbi, GraphFunctionParameter,
+    GraphFunctionResult, GraphFunctionSemanticFact, GraphPortBacking, GraphPortSemanticFact,
     GraphResolutionOutcome, GraphSemanticCache, GraphSemanticSnapshot, graph_problem,
-    resolve_graph_semantics_inner,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{
-    DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
-    GraphResourcePath, PortAddress,
+    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath,
 };
 use yss_graph_resource_contract::{FunctionSignature, ResourceCatalogSnapshot};
-use yss_node_protocol::{PortDirection, ResolvedType};
-use yss_node_registry::NodeRegistry;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GraphFunctionParameter {
-    pub id: FunctionParameterId,
-    pub entry_output: PortAddress,
-    pub value_type: ResolvedType,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GraphFunctionResult {
-    pub id: FunctionParameterId,
-    pub return_input: PortAddress,
-    pub value_type: ResolvedType,
-}
-
-/// Parameter array order is the signature order; labels never identify ABI slots.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GraphFunctionAbi {
-    pub parameters: Box<[GraphFunctionParameter]>,
-    pub result: Option<GraphFunctionResult>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct GraphFunctionSemanticFact {
-    pub abi: GraphFunctionAbi,
-    pub semantics: GraphSemanticSnapshot,
-}
+use yss_node_protocol::PortDirection;
+use yss_node_registry::{NodeRegistry, StructuralNodeRole};
 
 #[derive(Default)]
 pub(crate) struct FunctionResolution {
@@ -47,19 +20,19 @@ pub(crate) struct FunctionResolution {
     pub internal_failure: Option<GraphResolutionOutcome>,
 }
 
-fn callees(document: &GraphDocument) -> Vec<GraphResourcePath> {
-    document
-        .nodes
-        .values()
-        .filter(|node| node.node_type.as_str() == "yssbi.project.function.call")
-        .filter_map(|node| {
-            node.parameters
-                .iter()
-                .find(|(key, _)| key.as_str() == "target")
-                .and_then(|(_, value)| value.as_str())
-                .and_then(|path| GraphResourcePath::new(path).ok())
-        })
-        .collect()
+/// Valid direct call targets in document order. Capture and semantic validation
+/// share this parsing; each caller owns its traversal and missing-resource policy.
+pub fn direct_function_dependencies<'a>(
+    document: &'a GraphDocument,
+    registry: &'a NodeRegistry,
+) -> impl Iterator<Item = GraphResourcePath> + 'a {
+    document.nodes.values().filter_map(|node| {
+        let registered = registry.get(&node.node_type)?;
+        if registered.structural_role() != Some(StructuralNodeRole::Call) {
+            return None;
+        }
+        GraphResourcePath::new(registered.function_reference(&node.parameters)?).ok()
+    })
 }
 
 pub(crate) fn resolve(
@@ -67,8 +40,7 @@ pub(crate) fn resolve(
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
 ) -> FunctionResolution {
-    let mut pending = callees(document)
-        .into_iter()
+    let mut pending = direct_function_dependencies(document, registry)
         .map(|path| (path, false))
         .collect::<Vec<_>>();
     let mut active = BTreeSet::new();
@@ -108,18 +80,23 @@ pub(crate) fn resolve(
         let entries = body
             .nodes
             .values()
-            .filter(|node| node.node_type.as_str() == "yssbi.project.function.entry")
+            .filter(|node| has_role(registry, &node.node_type, StructuralNodeRole::FunctionEntry))
             .collect::<Vec<_>>();
         let returns = body
             .nodes
             .values()
-            .filter(|node| node.node_type.as_str() == "yssbi.project.function.return")
+            .filter(|node| {
+                has_role(
+                    registry,
+                    &node.node_type,
+                    StructuralNodeRole::FunctionReturn,
+                )
+            })
             .collect::<Vec<_>>();
         let mismatched_owner = entries.iter().chain(returns.iter()).any(|node| {
-            node.parameters
-                .iter()
-                .find(|(key, _)| key.as_str() == "function")
-                .and_then(|(_, value)| value.as_str())
+            registry
+                .get(&node.node_type)
+                .and_then(|registered| registered.function_reference(&node.parameters))
                 != Some(path.as_str())
         });
         if entries.len() != 1
@@ -149,7 +126,7 @@ pub(crate) fn resolve(
         } else if semantics.ready().is_none() {
             diagnostics.push(problem(GraphDiagnosticKind::FunctionBlocked, &path));
         }
-        if let Some(abi) = resolve_abi(&path, body, signature, &semantics) {
+        if let Some(abi) = resolve_abi(&path, body, signature, &semantics, registry) {
             resolution
                 .functions
                 .insert(path.clone(), GraphFunctionSemanticFact { abi, semantics });
@@ -158,7 +135,7 @@ pub(crate) fn resolve(
         }
         active.insert(path.clone());
         pending.push((path, true));
-        pending.extend(callees(body).into_iter().map(|callee| (callee, false)));
+        pending.extend(direct_function_dependencies(body, registry).map(|callee| (callee, false)));
     }
     resolution
 }
@@ -168,11 +145,12 @@ fn resolve_abi(
     document: &GraphDocument,
     signature: &FunctionSignature,
     semantics: &GraphSemanticSnapshot,
+    registry: &NodeRegistry,
 ) -> Option<GraphFunctionAbi> {
     let entry = semantics
         .nodes()
         .iter()
-        .find(|node| node.node_type.as_str() == "yssbi.project.function.entry")?;
+        .find(|node| has_role(registry, &node.node_type, StructuralNodeRole::FunctionEntry))?;
     let mut identities = BTreeSet::new();
     let parameters = signature
         .parameters()
@@ -204,10 +182,13 @@ fn resolve_abi(
     let result = match signature.result() {
         Some(expected_type) => {
             let result_id = FunctionParameterId::new("return");
-            let return_node = semantics
-                .nodes()
-                .iter()
-                .find(|node| node.node_type.as_str() == "yssbi.project.function.return")?;
+            let return_node = semantics.nodes().iter().find(|node| {
+                has_role(
+                    registry,
+                    &node.node_type,
+                    StructuralNodeRole::FunctionReturn,
+                )
+            })?;
             let port = function_port(
                 document,
                 &return_node.ports,
@@ -232,6 +213,16 @@ fn resolve_abi(
     Some(GraphFunctionAbi { parameters, result })
 }
 
+fn has_role(
+    registry: &NodeRegistry,
+    node_type: &yss_node_protocol::NodeTypeId,
+    role: StructuralNodeRole,
+) -> bool {
+    registry
+        .get(node_type)
+        .is_some_and(|registered| registered.structural_role() == Some(role))
+}
+
 fn function_port<'a>(
     document: &GraphDocument,
     ports: &'a [GraphPortSemanticFact],
@@ -243,10 +234,7 @@ fn function_port<'a>(
         if port.orphan || port.direction != direction { return false; }
         let origin = match &port.backing {
             GraphPortBacking::ProjectedDerived { origin } => Some(origin),
-            _ => document.port_bindings.get(&port.address).and_then(|binding| match binding {
-                DynamicPortBinding::Resolved { origin, .. } => Some(origin),
-                _ => None,
-            }),
+            _ => document.port_bindings.get(&port.address).and_then(crate::port_projection::binding_origin),
         };
         matches!(origin, Some(DynamicMemberLocator::FunctionParameter { function: owner, parameter: identity }) if owner == function && identity == parameter)
     })
@@ -263,10 +251,10 @@ fn problem(kind: GraphDiagnosticKind, path: &GraphResourcePath) -> GraphDiagnost
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
-    use yss_graph_resource_contract::{
-        FunctionCatalogEntry, FunctionParameterContract, ResourceCatalogFingerprint,
+    use yss_graph_document::{
+        DocumentNode, DynamicPortBinding, NodeId, NodePosition, ParameterValues,
     };
+    use yss_graph_resource_contract::{FunctionCatalogEntry, FunctionParameterContract};
 
     fn path(name: &str) -> GraphResourcePath {
         GraphResourcePath::new(format!("functions/{name}.yssbi-function")).unwrap()
@@ -309,7 +297,6 @@ mod tests {
                 })
                 .collect(),
             BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
         );
         functions.iter().fold(catalog, |catalog, (path, _, body)| {
             catalog.with_function_document(path, body.clone())
@@ -390,6 +377,233 @@ mod tests {
             function.abi.parameters[0].entry_output,
             function.abi.parameters[1].entry_output
         );
+    }
+
+    #[test]
+    fn registered_function_roles_drive_dependencies_and_abi() {
+        use std::sync::Arc;
+        use yss_data_contract::{SemanticType, ValueType};
+        use yss_graph_document::{
+            ConnectionId, DocumentConnection, LastKnownPortMetadata, OrderKey, PortAddress,
+            PortInstanceId,
+        };
+        use yss_node_registry::{
+            NodeRegistryBuilder, ProviderRegistration, RegisteredNode, StructuralNodeRole,
+        };
+
+        let function = path("Extension");
+        let builtins = yss_node_catalog::build_builtin_node_system().unwrap();
+        let mut builder = NodeRegistryBuilder::new();
+        yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+        let mut provider = ProviderRegistration::new("tests.functions".parse().unwrap());
+        provider.nodes = [
+            ("call", StructuralNodeRole::Call),
+            ("entry", StructuralNodeRole::FunctionEntry),
+            ("return", StructuralNodeRole::FunctionReturn),
+        ]
+        .map(|(name, role)| {
+            let mut protocol = builtins
+                .registry
+                .protocol(&format!("yssbi.project.function.{name}").parse().unwrap())
+                .unwrap()
+                .clone();
+            protocol.type_id = format!("tests.function.{name}").parse().unwrap();
+            let reference = &mut protocol.parameters.groups[0].parameters[0];
+            reference.default_value = Some(yss_node_protocol::TypedValue {
+                value_type: reference.value_type.clone(),
+                value: yss_data_contract::DataValue::String(function.as_str().into()),
+            });
+            RegisteredNode::structural(Arc::new(protocol), role)
+        })
+        .into();
+        let mut leaf = provider.nodes[0].protocol().clone();
+        leaf.type_id = "tests.function.signature_leaf".parse().unwrap();
+        let mut nodes = provider.nodes.into_vec();
+        nodes.push(RegisteredNode::leaf(
+            Arc::new(leaf),
+            yss_node_registry::LeafImplementation::new("tests.signature"),
+        ));
+        provider.nodes = nodes.into();
+        builder.register_provider(provider).unwrap();
+        let registry = builder.freeze().unwrap();
+        let numeric = ValueType::Scalar(SemanticType::Numeric);
+        let signature = FunctionSignature::new(
+            vec![FunctionParameterContract::new(
+                FunctionParameterId::new("value"),
+                "Value",
+                numeric.clone(),
+            )],
+            Some(numeric),
+        );
+        let mut body = GraphDocument::default();
+        node(&mut body, "tests.function.entry", "function", &function);
+        node(&mut body, "tests.function.return", "function", &function);
+        for node in body.nodes.values_mut() {
+            node.parameters.clear();
+        }
+        let port = |kind: &str, template: &str| {
+            let node = body
+                .nodes
+                .values()
+                .find(|node| node.node_type.as_str() == kind)
+                .unwrap();
+            PortAddress::instance(node.id, template.parse().unwrap(), PortInstanceId::new())
+        };
+        let output = port("tests.function.entry", "parameters");
+        let input = port("tests.function.return", "results");
+        for (address, member) in [(&output, "value"), (&input, "return")] {
+            body.port_bindings.insert(
+                address.clone(),
+                DynamicPortBinding::Resolved {
+                    origin: DynamicMemberLocator::FunctionParameter {
+                        function: function.clone(),
+                        parameter: FunctionParameterId::new(member),
+                    },
+                    order: OrderKey::new("0"),
+                    last_known: LastKnownPortMetadata::default(),
+                },
+            );
+        }
+        let id = ConnectionId::new();
+        body.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: output.clone(),
+                input: input.clone(),
+                order: None,
+            },
+        );
+        let mut root = GraphDocument::default();
+        node(&mut root, "tests.function.call", "target", &function);
+        root.nodes.values_mut().next().unwrap().parameters.clear();
+        let resources = catalog(&[(function.clone(), signature, body)]);
+        let resolution = resolve(&root, &registry, &resources);
+        let resolved = resolution
+            .functions
+            .get(&function)
+            .expect("a registered call role must capture and resolve its function");
+        assert!(
+            resolution.diagnostics.is_empty(),
+            "{:?}",
+            resolution.diagnostics
+        );
+        assert_eq!(resolved.abi.parameters[0].entry_output, output);
+        assert_eq!(resolved.abi.result.as_ref().unwrap().return_input, input);
+        root.nodes
+            .values_mut()
+            .next()
+            .unwrap()
+            .parameters
+            .insert("target".parse().unwrap(), serde_json::json!(17));
+        assert_eq!(direct_function_dependencies(&root, &registry).count(), 0);
+        let node = root.nodes.values_mut().next().unwrap();
+        node.node_type = "tests.function.signature_leaf".parse().unwrap();
+        node.parameters.clear();
+        let leaf = crate::resolve_graph_semantics(&root, &registry, &resources);
+        assert_eq!(
+            leaf.nodes()[0].ports.len(),
+            2,
+            "interface resolvers remain usable independently of call execution roles"
+        );
+        assert_eq!(direct_function_dependencies(&root, &registry).count(), 0);
+    }
+
+    #[test]
+    fn restored_function_members_reuse_orphan_bindings_for_abi() {
+        use yss_data_contract::{SemanticType, ValueType};
+        use yss_graph_document::{
+            ConnectionId, DocumentConnection, LastKnownPortMetadata, OrderKey, PortAddress,
+            PortInstanceId,
+        };
+
+        let registry = yss_node_catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
+        let function = path("Restored");
+        let mut body = body(&function, &[]);
+        node(
+            &mut body,
+            "yssbi.project.function.return",
+            "function",
+            &function,
+        );
+        let port = |kind: &str, template: &str| {
+            let node = body
+                .nodes
+                .values()
+                .find(|node| node.node_type.as_str() == kind)
+                .unwrap();
+            PortAddress::instance(node.id, template.parse().unwrap(), PortInstanceId::new())
+        };
+        let output = port("yssbi.project.function.entry", "parameters");
+        let input = port("yssbi.project.function.return", "results");
+        for (address, member) in [(&output, "value"), (&input, "return")] {
+            body.port_bindings.insert(
+                address.clone(),
+                DynamicPortBinding::Orphan {
+                    origin: DynamicMemberLocator::FunctionParameter {
+                        function: function.clone(),
+                        parameter: FunctionParameterId::new(member),
+                    },
+                    order: OrderKey::new("0"),
+                    last_known: LastKnownPortMetadata::default(),
+                },
+            );
+        }
+        let id = ConnectionId::new();
+        body.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: output.clone(),
+                input: input.clone(),
+                order: None,
+            },
+        );
+        let mut root = GraphDocument::default();
+        node(
+            &mut root,
+            "yssbi.project.function.call",
+            "target",
+            &function,
+        );
+        let missing = catalog(&[(
+            function.clone(),
+            FunctionSignature::new(vec![], None),
+            body.clone(),
+        )]);
+        assert!(
+            resolve(&root, &registry, &missing)
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code.as_str() == "graph.function.blocked")
+        );
+
+        let numeric = ValueType::Scalar(SemanticType::Numeric);
+        let restored = catalog(&[(
+            function.clone(),
+            FunctionSignature::new(
+                vec![FunctionParameterContract::new(
+                    FunctionParameterId::new("value"),
+                    "Restored value",
+                    numeric.clone(),
+                )],
+                Some(numeric),
+            ),
+            body.clone(),
+        )]);
+        let resolution = resolve(&root, &registry, &restored);
+        assert!(
+            resolution.diagnostics.is_empty(),
+            "{:?}",
+            resolution.diagnostics
+        );
+        let resolved = &resolution.functions[&function];
+        assert!(resolved.semantics.ready().is_some());
+        assert_eq!(resolved.abi.parameters[0].entry_output, output);
+        assert_eq!(resolved.abi.result.as_ref().unwrap().return_input, input);
+        assert_eq!(restored.function_document(&function), Some(&body));
     }
 
     #[test]

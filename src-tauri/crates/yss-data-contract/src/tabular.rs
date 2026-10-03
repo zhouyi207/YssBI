@@ -206,7 +206,7 @@ impl TryFrom<&str> for TabularColumnName {
     type Error = TabularContractError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.trim().is_empty() {
+        if !Self::is_valid(value) {
             return Err(TabularContractError::InvalidColumnName);
         }
         Ok(Self(value.into()))
@@ -214,6 +214,11 @@ impl TryFrom<&str> for TabularColumnName {
 }
 
 impl TabularColumnName {
+    /// Names retain their exact spelling, including surrounding whitespace.
+    pub fn is_valid(value: &str) -> bool {
+        !value.trim().is_empty()
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

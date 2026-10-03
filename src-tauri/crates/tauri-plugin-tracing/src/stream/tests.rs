@@ -254,7 +254,11 @@ fn overflowing_subscriber_stops_without_delivering_queued_batches() {
     let (slow_sender, slow_receiver) = mpsc::channel();
     let _slow = hub
         .subscribe(move |batch| {
-            if batch.entries[0].message == "in-flight" {
+            if batch
+                .entries
+                .first()
+                .is_some_and(|entry| entry.message == "in-flight")
+            {
                 let _ = started_sender.send(());
                 if release_receiver
                     .recv_timeout(Duration::from_secs(2))
@@ -288,10 +292,27 @@ fn overflowing_subscriber_stops_without_delivering_queued_batches() {
 
     let first = slow_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
     assert_eq!(first.entries[0].message, "in-flight");
+    let terminal = slow_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(terminal.entries.is_empty());
+    assert_eq!(
+        serde_json::to_value(terminal.failure).unwrap(),
+        "subscriber_lagged"
+    );
     assert!(matches!(
         slow_receiver.recv_timeout(Duration::from_secs(1)),
         Err(mpsc::RecvTimeoutError::Disconnected)
     ));
+    let recovered = hub.subscribe(|_| true).unwrap();
+    assert_eq!(recovered.stream_id, first.stream_id);
+    assert_eq!(recovered.latest_sequence, 3);
+    assert_eq!(
+        recovered
+            .entries
+            .iter()
+            .map(|entry| entry.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
 }
 
 #[test]

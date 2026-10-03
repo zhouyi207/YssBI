@@ -12,7 +12,8 @@ use yss_canonical_hash::content_sha256_reader;
 use yss_project_identity::{OperationId, ProjectInstanceId};
 
 use super::import::{ImportReader, import_in_captured_session};
-use super::{ApplicationState, DatabaseMutationResult, DatabaseUseCaseError, LoadDatabaseResult};
+use super::{DatabaseMutationResult, DatabaseUseCaseError, LoadDatabaseResult};
+use crate::session::ApplicationState;
 
 const MAX_CATALOG_BYTES: u64 = 256 * 1024;
 const MAX_SAMPLE_BYTES: u64 = 64 * 1024 * 1024;
@@ -248,7 +249,7 @@ impl ApplicationState {
         let captured = self.capture_database_session(&project_instance_id)?;
         let reader = catalog.open_sample(sample_id, version)?;
         let result = import_in_captured_session(&captured, operation_id, |_| Ok(reader))?;
-        self.refresh_database_session()?;
+        self.refresh_database_session(&captured)?;
         Ok(result)
     }
 }

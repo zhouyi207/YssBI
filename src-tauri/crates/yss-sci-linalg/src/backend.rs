@@ -40,7 +40,6 @@ impl Cholesky {
 
 pub struct Lu {
     factor: faer::linalg::solvers::PartialPivLu<f64>,
-    size: usize,
 }
 
 impl Lu {
@@ -56,19 +55,16 @@ impl Lu {
         {
             return Err(LinalgError::Singular);
         }
-        Ok(Self {
-            factor,
-            size: matrix.nrows(),
-        })
+        Ok(Self { factor })
     }
 
     pub(crate) fn solve_matrix(&self, rhs: MatRef<'_, f64>) -> Mat<f64> {
-        assert_eq!(self.size, rhs.nrows(), "solve dimensions");
+        assert_eq!(self.factor.U().nrows(), rhs.nrows(), "solve dimensions");
         Mat(self.factor.solve(rhs.0))
     }
 
     pub(crate) fn solve_vector(&self, rhs: ColRef<'_, f64>) -> Col<f64> {
-        assert_eq!(self.size, rhs.nrows(), "solve dimensions");
+        assert_eq!(self.factor.U().nrows(), rhs.nrows(), "solve dimensions");
         Col(self.factor.solve(rhs.0))
     }
 }

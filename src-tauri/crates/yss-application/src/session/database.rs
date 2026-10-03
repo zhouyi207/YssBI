@@ -6,7 +6,6 @@ use thiserror::Error;
 use yss_database_contract::DatabaseSessionOpenRequest;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
-    DatabaseSessionOpenRequestError,
 };
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
@@ -14,7 +13,7 @@ use yss_project_identity::ProjectSessionId;
 
 /// Owned Project facts used to open one Database runtime session. The Database
 /// module receives only the converted contract request, never this type.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct ProjectDatabaseSessionFacts {
     project_session_id: ProjectSessionId,
     generation: NonZeroU64,
@@ -42,14 +41,12 @@ impl ProjectDatabaseSessionFacts {
 pub(crate) enum DatabaseSessionApplicationError {
     #[error("project database session identity is empty")]
     EmptyProjectSession,
-    #[error("project database session facts are invalid")]
-    InvalidFacts(#[source] DatabaseSessionOpenRequestError),
     #[error("database runtime session could not be opened")]
     Open(#[source] DatabaseError),
 }
 
 pub(crate) fn prepare_database_session_with_instances(
-    facts: &ProjectDatabaseSessionFacts,
+    facts: ProjectDatabaseSessionFacts,
     instances: impl IntoIterator<Item = yss_database_runtime::DatabaseInstance>,
 ) -> Result<Arc<DatabaseRuntimeSession>, DatabaseSessionApplicationError> {
     if facts.project_session_id.as_str().is_empty() {
@@ -58,12 +55,9 @@ pub(crate) fn prepare_database_session_with_instances(
     let request = DatabaseSessionOpenRequest::new(
         DatabaseSessionIdentity::from_existing(facts.project_session_id.as_str().into()),
         facts.generation,
-        Arc::clone(&facts.declarations),
-        facts.observations.clone(),
+        facts.declarations,
+        facts.observations,
     );
-    request
-        .validate()
-        .map_err(DatabaseSessionApplicationError::InvalidFacts)?;
     DatabaseRuntimeRegistry::new()
         .open_session_with_instances(request, instances)
         .map(Arc::new)

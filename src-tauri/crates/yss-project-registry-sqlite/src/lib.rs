@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{FromRow, SqlitePool};
-use std::str::FromStr;
 
 use yss_project_identity::{ProjectRegistrationId, ProjectRootIdentity};
 use yss_project_registry_contract::{
@@ -36,8 +35,8 @@ impl SqliteProjectRegistryStore {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(sqlx::Error::Io)?;
         }
-        let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
-        let options = SqliteConnectOptions::from_str(&url)?
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
             .create_if_missing(true)
             .foreign_keys(true)
             .journal_mode(SqliteJournalMode::Wal)

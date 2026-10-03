@@ -12,11 +12,7 @@ fn components() -> GraphRuntimeComponents {
     }
 }
 fn empty_resource_catalog() -> ResourceCatalogSnapshot {
-    ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    )
+    ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new())
 }
 fn basis(runtime: &GraphRuntimeState) -> GraphAnalysisBasis {
     GraphAnalysisBasis {
@@ -168,7 +164,6 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
                 ),
             )]),
             BTreeMap::new(),
-            yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
         )
     };
     let entry = document.nodes.get_mut(&node_id).unwrap();

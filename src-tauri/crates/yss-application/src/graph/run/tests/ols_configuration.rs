@@ -17,7 +17,7 @@ use yss_graph_execution::{
     resource_preparation::{ResourceProviderFactory, RunResourceBindings},
     state::{ExecutionRuntimeState, RunExecutionControl},
 };
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 use yss_node_kernel::RuntimeValue;
 
@@ -136,11 +136,7 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             order: None,
         },
     );
-    let catalog = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([1; 32]),
-    );
+    let catalog = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: yss_node_kernel::KernelRegistry::default()
             .fingerprint()

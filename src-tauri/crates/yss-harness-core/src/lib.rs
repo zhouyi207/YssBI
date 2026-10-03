@@ -23,7 +23,7 @@ pub use agents::{
 };
 pub use approval::{ApprovalError, ApprovalService};
 pub use error::HarnessError;
-pub use host::HarnessHost;
+pub use host::{HarnessHost, HarnessSessionAccess};
 pub use knowledge::{
     KnowledgeError, KnowledgeQuery, KnowledgeService, install_builtin_statistical_knowledge,
 };

@@ -21,6 +21,7 @@ mod function_mutation;
 mod graph_editing;
 #[path = "project_state/graph_lifecycle.rs"]
 mod graph_lifecycle;
+pub use graph_lifecycle::GraphResourceRenameRequest;
 mod graph_operation;
 mod graph_references;
 pub use graph_editing::{
@@ -41,7 +42,7 @@ pub use graph_operation::{
 };
 use resource_patch::CommittedResourceMutation;
 use resource_publication::{
-    affected_projection_paths, canonical_resource_lifecycle_events, chart_publication_deltas,
+    canonical_resource_lifecycle_events, chart_publication_deltas,
     normalize_function_patch_revisions, normalize_function_resource_revision,
     patch_projection_paths, validate_chart_path_insertion,
 };

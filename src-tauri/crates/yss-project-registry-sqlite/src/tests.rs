@@ -45,7 +45,7 @@ fn record(id: &str, path: &str) -> ProjectRecord {
 
 #[tokio::test]
 async fn sqlite_store_round_trips_updates_and_removes_canonical_records() {
-    let directory = TestDirectory::new("round-trip");
+    let directory = TestDirectory::new("round-trip-%23");
     let store = SqliteProjectRegistryStore::connect(directory.path().to_path_buf())
         .await
         .expect("connect store");
@@ -53,6 +53,7 @@ async fn sqlite_store_round_trips_updates_and_removes_canonical_records() {
         store.path(),
         directory.path().join("db").join("projects.sqlite")
     );
+    assert!(store.path().is_file());
 
     let mut expected = record("registration-1", "C:/projects/one/metadata.yssbi");
     store.upsert(&expected).await.expect("insert record");

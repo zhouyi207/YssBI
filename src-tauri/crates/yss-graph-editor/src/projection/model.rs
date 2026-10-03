@@ -128,6 +128,7 @@ pub struct EditorSchemaField {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EditorSchemaSummaryKind {
     Input,
+    Fixed,
     Project,
     Append,
     Rename,
@@ -280,12 +281,6 @@ pub enum EditorProjectionError {
     RegistryMismatch,
     #[error("semantic snapshot does not match the graph document")]
     SemanticSnapshotMismatch,
-    #[error("projection basis is stale")]
-    StaleProjectionBasis,
-    #[error("projection graphs are incompatible")]
-    IncompatibleProjectionGraphs,
-    #[error("projection delta is invalid")]
-    InvalidDelta,
 }
 
 pub struct EditorProjectionInput<'a> {

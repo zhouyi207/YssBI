@@ -104,6 +104,10 @@ pub(crate) fn type_expr_sort_key(value: &TypeExpr) -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SchemaExpr {
     Input(PortKey),
+    /// New output fields declared by the node; no source-row lineage is implied.
+    Fixed {
+        fields: Vec<SchemaField>,
+    },
     Project {
         input: Box<SchemaExpr>,
         columns: ColumnSelectionExpr,

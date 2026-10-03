@@ -589,7 +589,7 @@ fn chart_edits_persist_and_reject_an_old_baseline_at_the_writer_boundary() {
         &std::fs::read_to_string(f.directory.join("project").join(&resource.id)).unwrap(),
     )
     .unwrap();
-    assert_eq!(disk.chart_type, "line");
+    assert_eq!(disk.chart_type, ChartType::Line);
     assert_eq!(disk.encodings.y.as_deref(), Some("amount"));
 }
 

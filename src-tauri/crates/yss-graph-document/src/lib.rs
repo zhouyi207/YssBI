@@ -3,7 +3,7 @@ pub use change::{GraphDocumentOperation, GraphDocumentPatch};
 mod constant_value;
 mod identity;
 pub use constant_value::{
-    ConstantValueError, InvalidConstantDefinition, default_value_for, normalize_constant_value,
+    ConstantValueError, InvalidConstantDefinition, normalize_constant_value,
     validate_constant_definitions,
 };
 mod model;

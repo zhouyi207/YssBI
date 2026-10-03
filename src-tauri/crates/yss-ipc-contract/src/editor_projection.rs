@@ -270,6 +270,7 @@ pub type RelationalScalarTypeDto = Option<yss_data_contract::SemanticType>;
 #[serde(rename_all = "camelCase")]
 pub enum SchemaSummaryKindDto {
     Input,
+    Fixed,
     Project,
     Append,
     Rename,

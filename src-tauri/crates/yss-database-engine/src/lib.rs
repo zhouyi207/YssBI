@@ -428,5 +428,6 @@ impl Drop for DataFusionRuntime {
     }
 }
 
+mod imputation;
 #[cfg(test)]
 mod tests;

@@ -176,13 +176,13 @@ pub async fn submit_harness_turn(
     let session_id = parse_session_id(session_id)?;
     let principal =
         PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?;
-    application
+    let session = application
         .open_harness_session(&runtime.host, &principal, &session_id)
         .await
         .map_err(map_session_error)?;
     runtime
         .host
-        .submit_turn(&session_id, message, active_graph_path)
+        .submit_turn(&session_id, &session.project, message, active_graph_path)
         .await
         .map(|result| HarnessTurnResultDto {
             final_text: result.final_text,

@@ -9,6 +9,35 @@ use yss_harness_contract::{
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 #[tokio::test]
+async fn connect_preserves_literal_percent_encoded_directory_names() {
+    let directory = std::env::temp_dir().join(format!(
+        "yss-harness-literal-path-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let literal = directory.join("profile%20literal");
+    let decoded = directory.join("profile literal");
+    // Both directories exist so decoding would silently select the wrong database.
+    std::fs::create_dir_all(decoded.join("db")).unwrap();
+    let store = SqliteHarnessStore::connect(literal.clone()).await.unwrap();
+    let database = std::path::Path::new("db").join("statistical-harness.sqlite");
+    let literal_exists = literal.join(&database).is_file();
+    let decoded_exists = decoded.join(&database).exists();
+    store.pool.close().await;
+    std::fs::remove_dir_all(directory).unwrap();
+
+    assert!(
+        literal_exists,
+        "the database must use the literal directory name"
+    );
+    assert!(!decoded_exists, "a filesystem path must not be URL-decoded");
+}
+
+#[tokio::test]
 async fn capability_workflow_definitions_round_trip_and_reject_version_replacement() {
     let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
     let definition: WorkflowDefinition = serde_json::from_value(serde_json::json!({

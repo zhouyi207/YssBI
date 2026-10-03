@@ -528,6 +528,38 @@ mod project_manifest_adapter_tests {
                 .collect::<Vec<_>>(),
             ["First", "Second"]
         );
+
+        let path = session.root.as_path().join("events/First.yssbi-event");
+        let mut wire: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let node_id = "00000000-0000-0000-0000-000000000001";
+        wire["document"]["nodes"][node_id] = serde_json::json!({
+            "id": node_id,
+            "node_type": "acme.extension.source",
+            "position": {"x": 0, "y": 0},
+            "parameters": {"value": 1},
+            "user_label": null,
+        });
+        let parse = |wire: &serde_json::Value| {
+            super::parse_graph_resource_document(
+                &serde_json::to_vec(wire).unwrap(),
+                &path,
+                GraphResourceKind::EventGraph,
+            )
+        };
+        assert!(parse(&wire).is_ok());
+        for field in ["node_type", "parameters"] {
+            let mut invalid = wire.clone();
+            invalid["document"]["nodes"][node_id][field] = if field == "node_type" {
+                serde_json::json!(" Invalid Node Type ")
+            } else {
+                serde_json::json!({"bad key": 1})
+            };
+            assert!(matches!(
+                parse(&invalid),
+                Err(super::ProjectError::Deserialize(_))
+            ));
+        }
     }
 
     #[test]

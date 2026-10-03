@@ -1,6 +1,11 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::session::{
+    ApplicationSessionRefreshError, SessionCaptureError, SessionRevalidationError,
+};
+use yss_database_runtime::error::{DatabaseError, DatabaseErrorCode};
+
 use yss_project::ProjectDatabaseError;
 use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
@@ -232,5 +237,64 @@ impl DatabaseOperationError {
             },
             ProjectDatabaseError::Operation(message) => Self::internal_message(operation, message),
         }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("database mutation failed")]
+pub struct DatabaseMutationFailure {
+    #[source]
+    source: crate::database::mutation::DatabaseMutationApplicationError,
+}
+
+impl From<crate::database::mutation::DatabaseMutationApplicationError> for DatabaseMutationFailure {
+    fn from(source: crate::database::mutation::DatabaseMutationApplicationError) -> Self {
+        Self { source }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DatabaseUseCaseError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("captured application session changed during database operation")]
+    SessionChanged(#[source] SessionRevalidationError),
+    #[error("application database session refresh failed")]
+    SessionRefresh(#[source] ApplicationSessionRefreshError),
+    #[error(transparent)]
+    Database(#[from] DatabaseOperationError),
+    #[error("database mutation failed")]
+    Mutation(#[source] Box<DatabaseMutationFailure>),
+}
+
+pub(super) fn map_database_runtime_error(
+    error: DatabaseError,
+    operation: DatabaseApplicationOperation,
+    database_id: &str,
+) -> DatabaseOperationError {
+    let resource = error
+        .resource()
+        .map(|resource| resource.as_str())
+        .unwrap_or(database_id)
+        .to_owned();
+    match error.code() {
+        DatabaseErrorCode::NotFound => DatabaseOperationError::NotFound {
+            database_id: resource,
+        },
+        DatabaseErrorCode::InvalidRequest => DatabaseOperationError::InvalidInput {
+            database_id: resource,
+            operation,
+            field: "databaseId",
+        },
+        DatabaseErrorCode::AdmissionClosed
+        | DatabaseErrorCode::Conflict
+        | DatabaseErrorCode::Schema => DatabaseOperationError::InvalidAccess {
+            database_id: resource,
+            operation,
+        },
+        DatabaseErrorCode::Constraint
+        | DatabaseErrorCode::Driver
+        | DatabaseErrorCode::Cancelled
+        | DatabaseErrorCode::Deadline => DatabaseOperationError::internal(operation, error),
     }
 }

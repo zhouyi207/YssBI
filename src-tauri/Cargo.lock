@@ -9390,6 +9390,7 @@ dependencies = [
 name = "yss-chart-document"
 version = "0.1.0"
 dependencies = [
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -9455,6 +9456,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "calamine",
+ "chrono",
  "parquet",
  "serde_json",
  "thiserror 2.0.20",
@@ -9710,6 +9712,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "yss-chart-document",
  "yss-project-identity",
  "yss-ui-contract",
 ]
@@ -9953,7 +9956,9 @@ dependencies = [
  "yss-function-editor-projection",
  "yss-graph-document",
  "yss-graph-document-edit",
+ "yss-node-catalog",
  "yss-node-protocol",
+ "yss-node-registry",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",

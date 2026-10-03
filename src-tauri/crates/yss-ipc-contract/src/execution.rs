@@ -110,10 +110,13 @@ pub struct GraphRunIdentityDto {
     pub execution_session_id: String,
     pub graph_path: String,
     pub run_id: String,
+    pub semantic_input_hash: String,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RunEventDto {
     pub run: GraphRunIdentityDto,
+    pub result_revision: String,
     pub kind: RunEventKindDto,
 }

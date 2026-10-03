@@ -421,14 +421,12 @@ mod tests {
             .expect("function resource item is present");
         assert_eq!(item["resourceRevision"], 0);
         assert_eq!(item["available"], true);
-        for (id, expected) in [
+        let builtin_availability = [
             ("yssbi.statistics.logit.fit", true),
             ("yssbi.statistics.inequality.gini", true),
-            (
-                "yssbi.statistics.postestimation.adjusted_predictions",
-                false,
-            ),
-        ] {
+            ("yssbi.statistics.postestimation.adjusted_predictions", true),
+        ];
+        for (id, expected) in builtin_availability {
             let node = wire["items"]
                 .as_array()
                 .unwrap()
@@ -473,14 +471,7 @@ mod tests {
             .unwrap();
         assert_eq!(function["item"]["creation"], item["creation"]);
         assert_eq!(function["item"]["available"], true);
-        for (id, expected) in [
-            ("yssbi.statistics.logit.fit", true),
-            ("yssbi.statistics.inequality.gini", true),
-            (
-                "yssbi.statistics.postestimation.adjusted_predictions",
-                false,
-            ),
-        ] {
+        for (id, expected) in builtin_availability {
             assert!(
                 rows.iter()
                     .any(|row| row["item"]["creation"]["nodeTypeId"] == id

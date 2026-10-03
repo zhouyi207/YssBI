@@ -231,12 +231,18 @@ impl ProjectState {
                     chart_revisions.insert(path, next_revision);
                 }
                 ProjectDataPatch::MoveChart { from, to, moved } => {
-                    let revision =
-                        checked_resource_revision(from.as_str(), chart_revisions[&from])?;
+                    let source_revision = chart_revisions[&from];
+                    let source_tombstone =
+                        checked_resource_revision(from.as_str(), source_revision)?;
+                    let target_revision = super::resource_publication::chart_move_revision(
+                        &to,
+                        source_revision,
+                        chart_revisions.get(&to).copied(),
+                    )?;
                     data.charts.remove(&from);
                     data.charts.insert(to.clone(), moved);
-                    chart_revisions.insert(from, revision);
-                    chart_revisions.insert(to, revision);
+                    chart_revisions.insert(from, source_tombstone);
+                    chart_revisions.insert(to, target_revision);
                 }
             }
 

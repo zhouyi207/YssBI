@@ -20,6 +20,13 @@ RootBinding 接收明确的目录路径；它不会把某个文件名当作项�
 
 `FilesystemTransaction::prepare` 默认接受任意字节，不执行 JSON 或业务文档校验。需要校验时，调用方使用 `prepare_with_validator` 或 `prepare_with_file_validator` 提供规则。提交后必须调用 `finalize` 确认，或调用 `rollback` 撤销；未确认的提交沿用 Drop 回滚语义。失败恢复状态只描述文件系统结果，上层决定如何暂停或恢复业务。
 
+`transaction.rs` 定义公开事务契约；内部 `prepare` 与 `commit` 编排准备、提交和回滚，
+`paths` 负责路径校验与目录原语，`mutation` 负责文件替换和移动，`journal` 持有修改前状态及恢复逻辑。
+`workspace` 同时拥有暂存目录、事务上下文和文件 lease，从准备阶段移交到已提交事务，不另建事务 registry。
+调用方在准备后因版本重验失败而放弃候选，或准备过程提前退出时，工作区在释放 lease 前清理暂存文件；
+清理失败写入调用方提供的 RecoveryMarker。已提交事务继续按原有 finalize/rollback 协议处理真实文件。
+所有清理入口先从租约根目录重验到暂存目录的完整路径，再校验目录树，拒绝沿被替换的父目录重定向清理。
+
 ```rust
 use yss_filesystem::{
     FilesystemCoordinator, FilesystemError, FilesystemTransaction, RootBinding,
@@ -45,6 +52,17 @@ fn write_bytes(directory: &std::path::Path) -> Result<(), FilesystemError> {
 
 同一协调范围应复用同一个 FilesystemCoordinator，以共享 lease 和准入状态。文件树读取会跳过本库的事务暂存目录 `.yssbi-transaction`；该目录保留原有名称以维持已有暂存区排除行为。
 
+RootLifecycleGuard 在关闭新准入后允许已准入操作排空，再取得最终 lease；这一取得过程只等待现有持有者，
+不返回没有实际失败分支的 Result。lease 对外只提供根身份的包含性检查，不暴露内部根列表。
+
 `NotifyFileWatcher::new()` 默认观察所有安全的根内文件变化。`with_filter` 接收调用方定义的相对路径过滤器；根目录变化和后端 rescan 请求仍交付重扫信号。原生事件按有界队列合并为 RescanRequired，满队列不会丢掉“仍需重扫”的事实。WatcherState 负责新旧会话 epoch 隔离及可重试排空，不更新任何业务状态。
+
+`watcher/mod.rs` 定义公开监听契约；`lifecycle` 持有会话切换状态，`admission` 过滤已关闭或不匹配的 epoch，
+`drain` 唯一持有待关闭的 source session、可重试排空句柄及真实终态。底层关闭和排空在锁外执行；
+并发 finish 按各自的截止时间等待同一 owner，超时返回同一排空过程的重试句柄，不能把“正在排空”当作工作线程失败。
+成功与 WorkerPanicked 终态都会保留，底层关闭/排空回调的 unwind 也会发布失败终态并唤醒等待者。
+启动候选的守卫在错误或 unwind 时关闭其 epoch 并释放 Starting 状态，旧 sink 不能继续交付变化。
+新候选安装前若已被另一个 watch 抢占空位，会重新处理当前会话；不会等待 Active 状态自行消失。
+epoch 过滤只决定准入，已经进入的回调由 source session 的排空契约负责完成；不另建无人消费的在途计数。
 
 Project 在自己的模块中解释项目入口、选择索引输入路径、校验文档，并将 FilesystemError 转成 ProjectOperationError；Application 决定项目切换时何时启动或关闭监听。CSV/Parquet 等格式与数据集存储继续由各自的业务 owner 管理。

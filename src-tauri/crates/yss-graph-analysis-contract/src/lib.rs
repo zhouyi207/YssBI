@@ -10,6 +10,4 @@ pub use basis::{
     GraphAnalysisBasis, ResourceKey, ResourceObservationSet, ResourceObservedState,
     ResourceVersion, ResourceVersionSet,
 };
-pub use diagnostic::{
-    DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
-};
+pub use diagnostic::{DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity};

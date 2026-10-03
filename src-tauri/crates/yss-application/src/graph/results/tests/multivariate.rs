@@ -15,7 +15,7 @@ use yss_graph_execution::{
     resource_preparation::RunResourceBindings,
     state::RunExecutionControl,
 };
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 fn node(document: &mut GraphDocument, kind: &str) -> NodeId {
     let id = NodeId::new();
@@ -107,11 +107,7 @@ fn execute(
     let captured = app.capture_session().unwrap();
     let runtime = captured.execution();
     let graph = GraphResourcePath::new("events/multivariate.yssbi-event").unwrap();
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = captured.graph().resolve_graph_document(
         &graph,
         document,

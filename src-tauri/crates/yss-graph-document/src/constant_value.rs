@@ -6,23 +6,6 @@ use std::fmt;
 use yss_data_contract::{DataValue, ValueType};
 use yss_data_contract::{TabularColumn, TabularContractError, TabularScalar, TabularSnapshot};
 
-/// Returns an inert value suitable for a constant whose type has just changed.
-///
-/// Compound defaults are deliberately empty. Populating arrays or objects with
-/// sample data would invent user data and can violate the declared element type.
-pub fn default_value_for(data_type: &ValueType) -> DataValue {
-    use yss_data_contract::SemanticType;
-    match data_type {
-        ValueType::Scalar(SemanticType::Binary) => DataValue::Bool(false),
-        ValueType::Scalar(SemanticType::Numeric) => DataValue::Integer(0),
-        ValueType::Scalar(_) => DataValue::String("".into()),
-        ValueType::Array(_) => DataValue::List(Vec::new()),
-        ValueType::Object => DataValue::Object(std::collections::BTreeMap::new()),
-        ValueType::OneOf(types) => types.first().map_or(DataValue::Null, default_value_for),
-        _ => DataValue::Null,
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConstantValueError {
     #[error("constant value does not match its declared type")]
@@ -286,31 +269,6 @@ mod tests {
             description: String::new(),
             tags: vec![],
         }
-    }
-
-    #[test]
-    fn compound_defaults_are_empty_instead_of_inventing_user_data() {
-        assert_eq!(
-            default_value_for(&ValueType::Array(Box::new(ValueType::Scalar(
-                yss_data_contract::SemanticType::Text
-            )))),
-            DataValue::List(Vec::new())
-        );
-        assert_eq!(
-            default_value_for(&ValueType::Object),
-            DataValue::Object(std::collections::BTreeMap::new())
-        );
-        assert_eq!(
-            default_value_for(&ValueType::OneOf(vec![
-                ValueType::Scalar(yss_data_contract::SemanticType::Binary),
-                ValueType::Scalar(yss_data_contract::SemanticType::Numeric)
-            ])),
-            DataValue::Bool(false)
-        );
-        assert_eq!(
-            default_value_for(&ValueType::OneOf(Vec::new())),
-            DataValue::Null
-        );
     }
 
     #[test]

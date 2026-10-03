@@ -14,5 +14,5 @@ pub use plugin::init;
 pub use store::{LOG_DATABASE_NAME, LogPage, LogQuery, LogStatistics, LogStoreError};
 pub use stream::{
     FrontendLogEntryDto, LogBatchDto, LogDomain, LogInitializationError, LogOrigin, LogRecordDto,
-    LogRuntime, LogSubscriptionDto, LogsUnavailable, SubmitFrontendLogsError,
+    LogRuntime, LogStreamFailure, LogSubscriptionDto, LogsUnavailable, SubmitFrontendLogsError,
 };

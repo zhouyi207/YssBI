@@ -5,16 +5,70 @@ use yss_harness_contract::{
     HarnessSessionState, MemoryRecord, MemoryRecordId, PrincipalId, ProjectSessionBinding,
 };
 
+/// Serializes session selection and binding writes without owning the current project.
+pub struct HarnessSessionAccess<'a> {
+    host: &'a HarnessHost,
+    _guard: tokio::sync::MutexGuard<'a, ()>,
+}
+
+impl HarnessSessionAccess<'_> {
+    pub async fn create_conversation(
+        &mut self,
+        principal_id: PrincipalId,
+        project_key: String,
+        project: ProjectSessionBinding,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        self.host
+            .create_conversation(principal_id, project_key, project)
+            .await
+    }
+
+    pub async fn list_conversations(
+        &mut self,
+        principal: &PrincipalId,
+        project_key: &str,
+    ) -> Result<Vec<HarnessSessionRecord>, HarnessError> {
+        self.host.list_conversations(principal, project_key).await
+    }
+
+    pub async fn open_conversation(
+        &mut self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+        project: ProjectSessionBinding,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        self.host
+            .open_conversation(session_id, principal, project_key, project)
+            .await
+    }
+
+    pub async fn reconcile_project_session(
+        &mut self,
+        current: &ProjectSessionBinding,
+    ) -> Result<usize, HarnessError> {
+        self.host.reconcile_project_session(current).await
+    }
+}
+
 impl HarnessHost {
+    pub async fn session_access(&self) -> HarnessSessionAccess<'_> {
+        HarnessSessionAccess {
+            host: self,
+            _guard: self.session_access.lock().await,
+        }
+    }
+
     pub async fn create_session(
         &self,
         principal_id: PrincipalId,
         project: ProjectSessionBinding,
     ) -> Result<HarnessSessionRecord, HarnessError> {
+        let _access = self.session_access().await;
         self.new_session(principal_id, project, None).await
     }
 
-    pub async fn create_conversation(
+    async fn create_conversation(
         &self,
         principal_id: PrincipalId,
         project_key: String,
@@ -29,7 +83,7 @@ impl HarnessHost {
             .await
     }
 
-    pub async fn list_conversations(
+    async fn list_conversations(
         &self,
         principal: &PrincipalId,
         project_key: &str,
@@ -74,7 +128,7 @@ impl HarnessHost {
         Ok(session)
     }
 
-    pub async fn open_conversation(
+    async fn open_conversation(
         &self,
         session_id: &HarnessSessionId,
         principal: &PrincipalId,
@@ -125,7 +179,7 @@ impl HarnessHost {
         Ok(session)
     }
 
-    pub(super) async fn new_session(
+    async fn new_session(
         &self,
         principal_id: PrincipalId,
         project: ProjectSessionBinding,
@@ -150,7 +204,7 @@ impl HarnessHost {
         Ok(record)
     }
 
-    pub async fn reconcile_project_session(
+    async fn reconcile_project_session(
         &self,
         current: &ProjectSessionBinding,
     ) -> Result<usize, HarnessError> {

@@ -1,5 +1,10 @@
 use super::*;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
+use std::path::{Path, PathBuf};
+use uuid::Uuid;
+use yss_database_contract::{DatabaseImportSource, EditState};
+use yss_project::{ProjectOperationError, ProjectState};
+use yss_project_identity::{OperationId, ResourceRevision};
 use yss_relational_contract::RelationControl;
 
 struct Directory(PathBuf);
@@ -57,7 +62,7 @@ fn edit(app: &ApplicationState, id: &str, mutation: DatabaseMutation) -> EditSta
 }
 fn rows(app: &ApplicationState, id: &str) -> DatabaseRowsResult {
     let instance = app.capture_session().unwrap().project_instance_id().clone();
-    app.query_database_rows_for_application(instance, id.into(), 0, 20)
+    app.query_database_rows_for_application(instance, id.into(), revision(app, id), 0, 20)
         .unwrap()
 }
 
@@ -184,6 +189,113 @@ fn bundled_samples_import_edit_and_reopen_as_independent_project_datasets() {
 }
 
 #[test]
+fn project_database_query_rejects_an_unpublished_declaration() {
+    let directory = Directory::new();
+    let project = Arc::new(ProjectState::new());
+    let created = project
+        .create_project_transaction(
+            "Database handoff",
+            &directory.0.join("project"),
+            OperationId::new(),
+        )
+        .unwrap();
+    project
+        .activate_project_from_path(&created.metadata_path)
+        .unwrap();
+    let app = application(Arc::clone(&project));
+    let captured = app.capture_session().unwrap();
+    let declarations = project.read_database_snapshot().unwrap();
+    let publication_revision = || {
+        project
+            .read_project_index(captured.project_instance_id())
+            .unwrap()
+            .publication_revision
+    };
+    let other = yss_project_identity::ProjectInstanceId::from_existing("other-project".into());
+    for result in [
+        app.query_project_path(other.clone()).map(|_| ()),
+        app.query_project_databases(other, publication_revision())
+            .map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(
+                crate::project::query::ProjectQueryApplicationError::ProjectIdentityMismatch { .. }
+            )
+        ));
+    }
+    assert!(matches!(
+        app.query_project_databases(
+            captured.project_instance_id().clone(),
+            publication_revision() + 1,
+        ),
+        Err(
+            crate::project::query::ProjectQueryApplicationError::Project(
+                ProjectOperationError::CatalogResourceStale { .. }
+            )
+        )
+    ));
+    assert!(
+        app.query_project_databases(
+            captured.project_instance_id().clone(),
+            publication_revision()
+        )
+        .unwrap()
+        .databases()
+        .is_empty()
+    );
+
+    project
+        .commit_database_declaration_add(
+            captured.project_instance_id(),
+            yss_database_contract::DatabaseDecl {
+                id: database_id("pending"),
+                engine: yss_database_contract::DatabaseEngine::Dataset {},
+                schema_version: 1,
+                required: false,
+                name: "Pending".into(),
+            },
+            OperationId::new(),
+        )
+        .unwrap();
+
+    assert!(matches!(
+        project.revalidate_database_snapshot(&declarations),
+        Err(ProjectOperationError::CatalogResourceStale { .. })
+    ));
+    assert!(
+        app.query_project_databases(
+            captured.project_instance_id().clone(),
+            publication_revision()
+        )
+        .is_err(),
+        "a declaration must not be combined with another runtime catalog basis"
+    );
+    project
+        .commit_database_declaration_delete(
+            captured.project_instance_id(),
+            "pending",
+            revision(&app, "pending"),
+            OperationId::new(),
+        )
+        .unwrap();
+    app.rebuild_application_session(&captured).unwrap();
+    assert!(
+        app.query_project_databases(
+            captured.project_instance_id().clone(),
+            publication_revision()
+        )
+        .unwrap()
+        .databases()
+        .is_empty()
+    );
+    assert!(matches!(
+        app.query_project_databases_in_session(&captured, None),
+        Err(crate::project::query::ProjectQueryApplicationError::SessionChanged(_))
+    ));
+}
+
+#[test]
 fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budget() {
     use yss_plugin_protocol::{CallContext, HostServices, ResourceBudget};
     let directory = Directory::new();
@@ -215,7 +327,7 @@ fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budge
         .unwrap()
         .data
         .id;
-    let host = crate::plugins::PluginHostServices::new(app);
+    let host = crate::plugins::PluginHostServices::new(app.clone());
     let mut context = CallContext {
         context_id: "budget-context".into(),
         plugin_id: "example.plugin".into(),
@@ -231,6 +343,22 @@ fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budge
             ..ResourceBudget::default()
         },
     };
+    let listing = host
+        .invoke(&context, "data.list", serde_json::Value::Null, &directory.0)
+        .unwrap();
+    assert_eq!(listing["datasets"][0]["id"], id);
+    assert_eq!(listing["datasets"][0]["columns"][0]["name"], "x");
+    assert_eq!(
+        host.invoke(
+            &context,
+            "data.snapshot",
+            serde_json::json!({"datasetId":"missing-dataset","columns":["x"]}),
+            &directory.0
+        )
+        .unwrap_err()
+        .code,
+        "plugin_dataset_invalid"
+    );
     let selection = serde_json::json!({"datasetId":id,"columns":["x"]});
     assert_eq!(
         host.invoke(&context, "data.snapshot", selection.clone(), &directory.0)
@@ -267,6 +395,14 @@ fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budge
         "plugin_resource_exhausted"
     );
     assert!(!directory.0.join("project/extension-results").exists());
+    let instance = app.capture_session().unwrap().project_instance_id().clone();
+    app.clear_project_for_application(&instance).unwrap();
+    assert_eq!(
+        host.invoke(&context, "data.list", serde_json::Value::Null, &directory.0)
+            .unwrap_err()
+            .code,
+        "plugin_stale_context"
+    );
 }
 
 #[test]
@@ -353,7 +489,7 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
         serde_json::json!(9.25)
     );
     assert_eq!(
-        app.query_database_meta_for_application(instance.clone(), id.clone())
+        app.query_database_meta_for_application(instance.clone(), id.clone(), revision(&app, &id))
             .unwrap()
             .columns[1]
             .display_type(),
@@ -381,7 +517,7 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
         },
     );
     let semantic_kind = || {
-        app.query_database_meta_for_application(instance.clone(), id.clone())
+        app.query_database_meta_for_application(instance.clone(), id.clone(), revision(&app, &id))
             .unwrap()
             .columns[0]
             .semantic()
@@ -394,7 +530,7 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
         original_view
     );
     let column = &app
-        .query_database_meta_for_application(instance.clone(), id.clone())
+        .query_database_meta_for_application(instance.clone(), id.clone(), revision(&app, &id))
         .unwrap()
         .columns[0];
     assert_eq!(column.display_type(), "Int64");
@@ -453,7 +589,8 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
                         .unwrap()
                         .project_instance_id()
                         .clone(),
-                    id.clone()
+                    id.clone(),
+                    revision(&reopened, &id),
                 )
                 .unwrap()
                 .columns[0]

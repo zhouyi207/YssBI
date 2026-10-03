@@ -200,6 +200,26 @@ impl Parameters {
         })
     }
 
+    /// Read an applicable text value without materializing protocol defaults.
+    /// An explicit value of the wrong kind never falls back to the default.
+    pub fn effective_text<'a>(
+        &'a self,
+        key: &ParameterKey,
+        values: &'a ParameterValues,
+    ) -> Option<&'a str> {
+        let parameter = self.get(key)?;
+        if !self.is_visible(parameter, values) {
+            return None;
+        }
+        if let Some(value) = values.get(key) {
+            return value.as_str();
+        }
+        match &parameter.default_value.as_ref()?.value {
+            DataValue::String(value) => Some(value.as_ref()),
+            _ => None,
+        }
+    }
+
     /// Apply a partial edit against current values. Defaults remain protocol-owned;
     /// changing a selector removes inactive values in the same document transaction.
     pub fn merge_values(

@@ -239,10 +239,6 @@ impl FilesystemLeaseSet {
         self.coordinator.run_before_move_target_delete_hook();
     }
 
-    pub fn roots(&self) -> &[NormalizedRoot] {
-        &self.roots
-    }
-
     pub fn contains(&self, root: &NormalizedRoot) -> bool {
         self.roots.binary_search(root).is_ok()
     }
@@ -287,14 +283,14 @@ impl RootLifecycleGuard {
         }
     }
 
-    pub fn acquire_final(&mut self) -> Result<(), FilesystemError> {
+    pub fn acquire_final(&mut self) {
         if self.lease.is_none() {
             self.lease = Some(self.coordinator.acquire_lifecycle_lease(&self.root));
         }
-        Ok(())
     }
 
-    pub fn holds_lease(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn holds_lease(&self) -> bool {
         self.lease.is_some()
     }
 }

@@ -87,6 +87,11 @@ pub fn execution_event_to_transport(
         execution_session_id: identity.execution_session_id().as_uuid().to_string(),
         graph_path: identity.graph_path().as_str().to_owned(),
         run_id: identity.run_id().get().to_string(),
+        semantic_input_hash: identity
+            .semantic_input_hash()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
     };
     let kind = match event.kind() {
         RunApplicationEventKind::RunStarted { outputs } => RunEventKindDto::RunStarted {
@@ -108,7 +113,11 @@ pub fn execution_event_to_transport(
             }
         }
     };
-    Ok(RunEventDto { run, kind })
+    Ok(RunEventDto {
+        run,
+        result_revision: event.result_revision().to_string(),
+        kind,
+    })
 }
 
 pub struct TauriExecutionChannelAdapter {
@@ -142,8 +151,17 @@ mod tests {
                 None,
             )),
         };
-        let actual = serde_json::to_value(RunEventKindDto::RunErrored {
-            outcome: run_failure_to_transport(&failure),
+        let actual = serde_json::to_value(RunEventDto {
+            result_revision: "9007199254740994".into(),
+            run: GraphRunIdentityDto {
+                execution_session_id: "contract-session".into(),
+                graph_path: "events/contract.yssbi-event".into(),
+                run_id: "9007199254740993".into(),
+                semantic_input_hash: "0".repeat(64),
+            },
+            kind: RunEventKindDto::RunErrored {
+                outcome: run_failure_to_transport(&failure),
+            },
         })
         .unwrap();
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
@@ -156,6 +174,6 @@ mod tests {
             .iter()
             .find(|event| event["kind"]["code"] == "divisionByZero")
             .unwrap();
-        assert_eq!(actual, expected["kind"]);
+        assert_eq!(actual, *expected);
     }
 }

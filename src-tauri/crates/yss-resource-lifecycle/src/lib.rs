@@ -320,7 +320,13 @@ impl ResourceLifecycleBoundary<'_> {
     }
 
     pub fn take_state(&mut self) -> ResourceLifecycleState {
-        std::mem::take(&mut *self.state)
+        // Retired guards can outlive project activation, so their registration
+        // identities must never be reused within this registry.
+        let empty = ResourceLifecycleState {
+            next_registration_id: self.state.next_registration_id,
+            ..Default::default()
+        };
+        std::mem::replace(&mut *self.state, empty)
     }
 }
 
@@ -855,6 +861,35 @@ mod tests {
         assert_eq!(guards[1].owner().token, 2);
         assert_stale(registry.validate(guards[0].owner()).unwrap_err());
         registry.validate(guards[1].owner()).unwrap();
+    }
+
+    #[test]
+    fn retired_project_guard_cannot_abandon_a_replacement_registration() {
+        let registry = ResourceLifecycleRegistry::default();
+        let previous = project("retired");
+        let replacement = project("replacement");
+        let path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
+        let retired = registry
+            .register(&previous, &path, 1, ResourceLifecycleIntent::Load)
+            .unwrap();
+
+        drop(registry.boundary().take_state());
+
+        let current = registry
+            .register(&replacement, &path, 1, ResourceLifecycleIntent::Load)
+            .unwrap();
+        let superseding = registry
+            .register(&replacement, &path, 2, ResourceLifecycleIntent::Load)
+            .unwrap();
+        assert_stale(registry.validate(retired.owner()).unwrap_err());
+
+        drop(retired);
+        drop(superseding);
+
+        registry.validate(current.owner()).unwrap();
+        drop(current);
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(registry.registration_count(), 0);
     }
 
     #[test]

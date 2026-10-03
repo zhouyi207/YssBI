@@ -2,17 +2,14 @@ use super::inputs::GraphResolutionContext;
 use super::resources::ResourceMutationApplicationError;
 use crate::events::GraphProjectionReplacement;
 use crate::session::{ApplicationSession, ApplicationState};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
 use yss_graph_editor::projection::{EditorProjectionInput, build_editor_projection};
 use yss_graph_editor::{
-    CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
-use yss_node_catalog::CatalogResourcePath;
 use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
@@ -23,45 +20,6 @@ pub struct GraphDocumentChange {
     pub projection_replacement: GraphProjectionReplacement,
     pub patch: yss_graph_document::GraphDocumentPatch,
     pub result_inputs: yss_graph_execution::result::GraphResultInputs,
-}
-
-fn build_catalog_mutation_validation_snapshot(
-    index: &yss_project::ProjectIndex,
-) -> CatalogMutationValidationSnapshot {
-    let mut resources = BTreeMap::new();
-
-    for function in &index.function_graphs {
-        let signature = function.function_signature.clone();
-        resources.insert(
-            CatalogResourcePath::new(function.path.clone()),
-            CatalogMutationResource::Function {
-                revision: function.function_revision.get(),
-                signature: CatalogFunctionSignature {
-                    parameters: signature
-                        .parameters
-                        .into_iter()
-                        .map(|parameter| CatalogFunctionParameter {
-                            id: parameter.id,
-                            name: parameter.name,
-                            type_name: parameter.type_name,
-                        })
-                        .collect(),
-                    return_type: signature.return_type,
-                },
-            },
-        );
-    }
-
-    for database in &index.databases {
-        resources.insert(
-            CatalogResourcePath::new(database.resource_path.as_str()),
-            CatalogMutationResource::Database {
-                authority_revision: database.revision.get(),
-            },
-        );
-    }
-
-    CatalogMutationValidationSnapshot { resources }
 }
 
 fn capture_editor_context(
@@ -77,8 +35,11 @@ fn capture_editor_context(
     let index = captured
         .project()
         .read_project_index(captured.project_instance_id())?;
-    let catalog = build_catalog_mutation_validation_snapshot(&index);
     let project = super::catalog::localized_project_facts_from_index(captured, index)
+        .map_err(ResourceMutationApplicationError::Catalog)?;
+    let catalog = project
+        .resources()
+        .mutation_validation_snapshot()
         .map_err(ResourceMutationApplicationError::Catalog)?;
     Ok((
         GraphResolutionContext::from_project_facts(captured, project)?,
@@ -192,7 +153,7 @@ impl<'a> GraphDocumentEditor<'a> {
         &mut self,
         mutation: EditorGraphMutation,
     ) -> Result<(), ResourceMutationApplicationError> {
-        if !mutation.referenced_ports().is_empty() {
+        if !mutation.referenced_ports(&self.document).is_empty() {
             self.context
                 .include_functions(self.captured, &self.document)?;
         }
@@ -301,7 +262,14 @@ impl ApplicationState {
         let index = captured
             .project()
             .read_project_index(captured.project_instance_id())?;
-        let catalog = build_catalog_mutation_validation_snapshot(&index);
+        let publication_revision = index.publication_revision;
+        let authority_generation = index.authority_generation();
+        let project = super::catalog::localized_project_facts_from_index(&captured, index)
+            .map_err(ResourceMutationApplicationError::Catalog)?;
+        let catalog = project
+            .resources()
+            .mutation_validation_snapshot()
+            .map_err(ResourceMutationApplicationError::Catalog)?;
         if !captured
             .project()
             .has_resident_graph(&graph_path)
@@ -320,8 +288,8 @@ impl ApplicationState {
             .map_err(ResourceMutationApplicationError::Mutation)?;
         captured.project().validate_project_index_version(
             captured.project_instance_id(),
-            index.publication_revision,
-            index.authority_generation(),
+            publication_revision,
+            authority_generation,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;

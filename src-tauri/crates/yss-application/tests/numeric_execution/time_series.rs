@@ -144,11 +144,7 @@ fn time_series_category_defaults_execute_relational_inputs_and_publish_reports_o
             };
             connect(&mut document, select, "series", address);
         }
-        let resources = ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
-        );
+        let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
         let analysis = analyze_document(
             &document,
             &GraphResourcePath::new("events/New Event.yssbi-event").unwrap(),

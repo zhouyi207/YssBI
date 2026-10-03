@@ -8,6 +8,7 @@ use yss_database_contract::{
 use yss_function_editor_projection::parse_function_data_type;
 use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
+use yss_graph_editor::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
 use yss_graph_runtime::GraphRuntimeCatalogError;
 use yss_node_catalog::{
@@ -264,7 +265,6 @@ pub(crate) struct ProjectCatalogResources {
 
 impl ProjectCatalogResources {
     fn from_index(index: ProjectIndex) -> Result<Self, ProjectCatalogReadSource> {
-        let authority_generation = index.authority_generation();
         let mut functions = BTreeMap::new();
         let mut databases = BTreeMap::new();
         let mut entries = Vec::new();
@@ -324,12 +324,7 @@ impl ProjectCatalogResources {
         let database_observations =
             DatabaseDeclarationObservationSet::try_from_iter(declaration_observations)
                 .map_err(|_| ProjectCatalogReadSource::invalid_declaration_facts())?;
-        let graph = ProjectGraphResourceSnapshot::new(
-            ProjectInstanceId::from_existing(index.project_instance_id),
-            authority_generation,
-            functions,
-            databases,
-        );
+        let graph = ProjectGraphResourceSnapshot::new(functions, databases);
         Ok(Self {
             graph,
             entries: entries.into_boxed_slice(),
@@ -343,6 +338,37 @@ impl ProjectCatalogResources {
 
     pub(crate) fn entries(&self) -> &[CatalogResourceEntry] {
         &self.entries
+    }
+
+    pub(crate) fn mutation_validation_snapshot(
+        &self,
+    ) -> Result<CatalogMutationValidationSnapshot, ProjectCatalogReadError> {
+        let resources = self
+            .entries
+            .iter()
+            .map(|entry| {
+                let resource = match entry.create_args {
+                    ResourceBoundCreateArgs::FunctionGraph => {
+                        let path = GraphResourcePath::new(entry.resource_path.as_str())
+                            .map_err(ProjectCatalogReadSource::invalid_graph_path)?;
+                        let signature = self
+                            .graph
+                            .function_signature(&path)
+                            .ok_or_else(ProjectCatalogReadSource::invalid_declaration_facts)?;
+                        CatalogMutationResource::Function {
+                            revision: entry.resource_revision,
+                            signature: signature.clone(),
+                        }
+                    }
+                    ResourceBoundCreateArgs::Database => CatalogMutationResource::Database {
+                        authority_revision: entry.resource_revision,
+                    },
+                };
+                Ok((entry.resource_path.clone(), resource))
+            })
+            .collect::<Result<_, ProjectCatalogReadSource>>()
+            .map_err(ProjectCatalogReadError::Internal)?;
+        Ok(CatalogMutationValidationSnapshot { resources })
     }
 
     pub(crate) fn database_observations(&self) -> &DatabaseDeclarationObservationSet {

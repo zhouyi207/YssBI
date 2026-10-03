@@ -39,7 +39,10 @@ an explicit editable-dataset policy; integer width/sign, decimal precision/scale
 column identities, and category domains remain exact. Datetimes are stored without a timezone:
 import removes the source zone while retaining its calendar/clock fields, timestamp unit and nulls.
 CSV timestamps are decoded from their original text before any offset conversion. Cell edits and
-whole-column temporal casts use the same rule; forced invalid casts become null. Export and display
+whole-column temporal casts use the same rule; forced invalid casts become null.
+Temporal cell edits and filter literals also reject precision or calendar-field loss instead of
+silently truncating to the column's timestamp unit or date representation. They retain Arrow's
+existing calendar syntax, including short times and integer time ticks in the target unit. Export and display
 also retain calendar/clock fields when reading older zoned data. Existing project files are not
 rewritten merely by opening or displaying them. Internal RowId and DisplayOrder
 columns stay non-null. Row IDs increase monotonically; insertion creates an independent order

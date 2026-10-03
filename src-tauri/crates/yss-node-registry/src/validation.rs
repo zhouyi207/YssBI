@@ -675,6 +675,18 @@ fn validate_schema(
     };
     match expr {
         SchemaExpr::Input(key) => input(key),
+        SchemaExpr::Fixed { fields } => {
+            let mut names = BTreeSet::new();
+            for field in fields {
+                if field.name.0.trim().is_empty() || !names.insert(&field.name.0) {
+                    return Err("fixed schema requires distinct, nonempty field names".into());
+                }
+                if field.lineage.is_some() {
+                    return Err("fixed schema cannot declare runtime field lineage".into());
+                }
+            }
+            Ok(())
+        }
         SchemaExpr::Project {
             input: nested,
             columns,
@@ -811,6 +823,45 @@ fn validate_parameter_constraints(parameter: &Parameter) -> Result<(), String> {
 #[cfg(test)]
 mod nominal_schema_tests {
     use super::*;
+
+    #[test]
+    fn fixed_schema_validates_names_and_prevents_declared_runtime_lineage() {
+        let field = SchemaField {
+            name: SchemaColumnRef("effect".into()),
+            scalar_type: RelationalScalarType::Known(SemanticType::Numeric),
+            lineage: None,
+        };
+        let check = |fields| {
+            validate_schema(
+                &SchemaExpr::Fixed { fields },
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &BTreeSet::new(),
+                &BTreeSet::new(),
+                &builtin_nominal_type_ids().unwrap(),
+            )
+        };
+        assert!(check(vec![field.clone()]).is_ok());
+        assert!(check(vec![]).is_ok());
+        assert!(check(vec![field.clone(), field.clone()]).is_err());
+        assert!(
+            check(vec![SchemaField {
+                name: SchemaColumnRef(" ".into()),
+                ..field.clone()
+            }])
+            .is_err()
+        );
+        assert!(
+            check(vec![SchemaField {
+                lineage: Some(SchemaFieldLineage {
+                    source: "source".into(),
+                    field: "effect".into()
+                }),
+                ..field
+            }])
+            .is_err()
+        );
+    }
 
     #[test]
     fn invalid_builtin_nominal_type_id_preserves_identity_source() {

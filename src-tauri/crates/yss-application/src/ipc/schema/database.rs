@@ -229,7 +229,7 @@ pub struct DatabaseMetaResultDto {
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseRowsResultDto {
     pub rows: Vec<Vec<serde_json::Value>>,
-    pub row_ids: Vec<i64>,
+    pub row_ids: Vec<String>,
 }
 
 impl From<&yss_database_contract::DatabaseDecl> for DatabaseDeclDTO {

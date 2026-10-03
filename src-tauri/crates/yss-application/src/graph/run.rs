@@ -23,7 +23,6 @@ use yss_graph_execution::state::{
     ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, PreparedExecutionEvent,
     RunExecutionControl,
 };
-use yss_project::ProjectOperationError;
 use yss_project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
@@ -31,7 +30,6 @@ use yss_project::execution_authority::{
     ProjectResourceRequirement,
 };
 use yss_project_identity::ProjectInstanceId;
-use yss_project_model::ProjectData;
 
 /// A run demand is an Application-owned interpretation of the graph execution
 /// request. It contains only Pure Leaf graph/plan identities, never transport
@@ -133,6 +131,7 @@ pub struct RunIdentity {
     execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
     graph_path: GraphResourcePath,
     run_id: RunId,
+    semantic_input_hash: [u8; 32],
 }
 
 impl RunIdentity {
@@ -140,11 +139,13 @@ impl RunIdentity {
         execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
         graph_path: GraphResourcePath,
         run_id: RunId,
+        semantic_input_hash: [u8; 32],
     ) -> Self {
         Self {
             execution_session_id,
             graph_path,
             run_id,
+            semantic_input_hash,
         }
     }
 
@@ -158,6 +159,10 @@ impl RunIdentity {
 
     pub const fn run_id(&self) -> RunId {
         self.run_id
+    }
+
+    pub const fn semantic_input_hash(&self) -> &[u8; 32] {
+        &self.semantic_input_hash
     }
 }
 
@@ -194,12 +199,21 @@ pub enum RunApplicationEventKind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RunApplicationEvent {
     identity: RunIdentity,
+    result_revision: u64,
     kind: RunApplicationEventKind,
 }
 
 impl RunApplicationEvent {
-    fn new(identity: RunIdentity, kind: RunApplicationEventKind) -> Self {
-        Self { identity, kind }
+    fn new(
+        execution: &yss_graph_execution::state::ExecutionRuntimeState,
+        identity: RunIdentity,
+        kind: RunApplicationEventKind,
+    ) -> Self {
+        Self {
+            identity,
+            result_revision: execution.result_revision(),
+            kind,
+        }
     }
 
     pub fn identity(&self) -> &RunIdentity {
@@ -208,6 +222,10 @@ impl RunApplicationEvent {
 
     pub fn kind(&self) -> &RunApplicationEventKind {
         &self.kind
+    }
+
+    pub const fn result_revision(&self) -> u64 {
+        self.result_revision
     }
 }
 
@@ -223,8 +241,6 @@ pub enum ExecutionApplicationError {
     DeadlineExceeded,
     #[error("project execution preparation failed")]
     ProjectPreparation(#[source] ProjectExecutionPreparationError),
-    #[error("project snapshot failed")]
-    ProjectSnapshot(#[source] ProjectOperationError),
     #[error("project resource binding failed")]
     ResourceBindings(#[source] ResourceBindingError),
     #[error("project facts could not be captured for execution")]
@@ -321,15 +337,11 @@ where
 
     check_control(&request)?;
 
-    let initial_data = captured
-        .project()
-        .get_data()
-        .map_err(ExecutionApplicationError::ProjectSnapshot)?;
     yss_graph_document_edit::validate_graph_document(&request.document)
         .map_err(ExecutionApplicationError::InvalidDocument)?;
     let required_resources = merge_resource_requirements(
         request.required_resources.iter().cloned(),
-        graph_resource_requirements(&initial_data, &request.graph_path, Some(&request.document))?,
+        graph_resource_requirements(&request.document)?,
     );
     if let Some(allowed) = &request.resource_authorizations {
         for required in &required_resources {
@@ -447,9 +459,11 @@ where
                     captured.execution().session_id(),
                     request.graph_path.clone(),
                     run_id,
+                    request.semantic_input_hash,
                 );
                 started_identity = Some(identity.clone());
                 let _ = deliver(RunApplicationEvent::new(
+                    captured.execution(),
                     identity,
                     RunApplicationEventKind::RunStarted { outputs },
                 ));
@@ -466,7 +480,11 @@ where
                         failure: error.failure(),
                     }
                 };
-                let _ = deliver(RunApplicationEvent::new(identity, kind));
+                let _ = deliver(RunApplicationEvent::new(
+                    captured.execution(),
+                    identity,
+                    kind,
+                ));
             }
             return Err(ExecutionApplicationError::PreparedExecution(error));
         }
@@ -477,6 +495,7 @@ where
             captured.execution().session_id(),
             request.graph_path.clone(),
             run_id,
+            request.semantic_input_hash,
         )
     });
 
@@ -568,6 +587,7 @@ where
     };
     for inspection in outcome.inspection_requests() {
         let _ = deliver(RunApplicationEvent::new(
+            captured.execution(),
             identity.clone(),
             RunApplicationEventKind::ResultInspectionRequested {
                 result_id: inspection.result_id(),
@@ -576,6 +596,7 @@ where
         ));
     }
     let _ = deliver(RunApplicationEvent::new(
+        captured.execution(),
         identity,
         RunApplicationEventKind::RunCompleted,
     ));
@@ -585,11 +606,17 @@ where
 
 pub fn cancel_run(
     state: &ApplicationState,
+    execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
     run_id: RunId,
 ) -> Result<CancelRunOutcome, ExecutionApplicationError> {
     let captured = state
         .capture_session()
         .map_err(ExecutionApplicationError::SessionCapture)?;
+    if captured.execution_session_id() != execution_session_id {
+        return Err(ExecutionApplicationError::StaleSession(
+            SessionRevalidationError::Changed,
+        ));
+    }
     Ok(match captured.execution().cancel_run(run_id) {
         ExecutionCancelOutcome::NotFound => CancelRunOutcome::NotFound,
         ExecutionCancelOutcome::AlreadyCancelled => CancelRunOutcome::AlreadyCancelled,
@@ -639,7 +666,11 @@ fn publish_run_failure<D>(
     } else {
         let _ = execution.finalize_run_failure(run_id);
     }
-    let _ = deliver(RunApplicationEvent::new(identity.clone(), terminal));
+    let _ = deliver(RunApplicationEvent::new(
+        execution,
+        identity.clone(),
+        terminal,
+    ));
 }
 
 fn revalidate_final_session(
@@ -683,19 +714,8 @@ fn merge_resource_requirements(
 }
 
 fn graph_resource_requirements(
-    data: &ProjectData,
-    graph_path: &GraphResourcePath,
-    draft: Option<&yss_graph_document::GraphDocument>,
+    document: &GraphDocument,
 ) -> Result<Vec<ProjectResourceRequirement>, ExecutionApplicationError> {
-    let document = match draft {
-        Some(document) => document,
-        None => {
-            let Some(graph) = data.graphs.get(graph_path) else {
-                return Ok(Vec::new());
-            };
-            &graph.document
-        }
-    };
     let mut requirements = Vec::new();
     for value in document
         .nodes
@@ -952,6 +972,37 @@ mod tests {
             Err(ExecutionApplicationError::StaleSession(
                 SessionRevalidationError::Changed
             ))
+        ));
+    }
+
+    #[test]
+    fn cancellation_rejects_a_replaced_execution_sessions_same_run_id() {
+        let slot = Arc::new(crate::session::ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        ));
+        let first = session(1);
+        let run_id = RunId::from_existing(1);
+        first.execution().runs().admit(run_id).unwrap();
+        slot.publish_for_test(Arc::clone(&first));
+        let state = ApplicationState::new(Arc::clone(&slot));
+
+        let successor = session(2);
+        successor.execution().runs().admit(run_id).unwrap();
+        slot.publish_for_test(Arc::clone(&successor));
+
+        let outcome = cancel_run(&state, first.execution_session_id(), run_id);
+        assert!(
+            matches!(
+                outcome,
+                Err(ExecutionApplicationError::StaleSession(
+                    SessionRevalidationError::Changed
+                ))
+            ),
+            "old execution session must not cancel the successor's same-ID run: {outcome:?}"
+        );
+        assert!(matches!(
+            cancel_run(&state, successor.execution_session_id(), run_id),
+            Ok(CancelRunOutcome::Requested)
         ));
     }
 

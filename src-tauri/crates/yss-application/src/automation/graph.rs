@@ -1049,10 +1049,8 @@ pub(crate) fn list_graph_results(
         .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
     if !captured
         .project()
-        .get_data()
+        .has_resident_graph(&path)
         .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
-        .graphs
-        .contains_key(&path)
     {
         return Err(graph_failure(CapabilityFailureCode::GraphUnavailable));
     }

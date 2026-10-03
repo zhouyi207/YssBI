@@ -1,7 +1,14 @@
-use super::*;
+use super::EditorSchemaResolver;
+use crate::GraphSchemaIssue;
+use crate::parameter_projection::effective_json_parameter;
+use std::collections::BTreeSet;
 use yss_data_contract::{
-    SemanticType,
+    SemanticType, TabularColumnName,
     aggregation::{AggregateOperation, DESCRIPTION_FIELDS, supports_description},
+};
+use yss_graph_document::{NodeId, PortAddress};
+use yss_node_protocol::{
+    ParameterKey, RelationalScalarType, SchemaColumnRef, SchemaField, SchemaFieldLineage,
 };
 
 pub(crate) fn column_names(
@@ -17,7 +24,7 @@ pub(crate) fn column_names(
         .map(|value| {
             let name = value
                 .as_str()
-                .filter(|name| !name.is_empty() && name.trim() == *name)
+                .filter(|name| TabularColumnName::is_valid(name))
                 .ok_or(GraphSchemaIssue::InvalidParameter)?;
             if !names.insert(name) {
                 return Err(GraphSchemaIssue::InvalidParameter);
@@ -41,15 +48,10 @@ impl EditorSchemaResolver<'_> {
         node_id: NodeId,
     ) -> Result<SchemaField, GraphSchemaIssue> {
         let input = PortAddress::declared(node_id, "series".parse().unwrap());
-        let source = self
-            .input_sources
-            .get(&input)
-            .and_then(|sources| match sources.as_slice() {
-                [source] => Some(source.clone()),
-                _ => None,
-            })
-            .ok_or(GraphSchemaIssue::UnconnectedInput)?;
-        self.composition_series(&source)
+        let [connection] = self.index.input_connections(&input) else {
+            return Err(GraphSchemaIssue::UnconnectedInput);
+        };
+        self.composition_series(&connection.output)
     }
 
     pub(super) fn resolve_aggregation(
@@ -60,11 +62,14 @@ impl EditorSchemaResolver<'_> {
             .document
             .nodes
             .get(&node_id)
-            .ok_or(GraphSchemaIssue::MissingResource)?
-            .clone();
+            .ok_or(GraphSchemaIssue::MissingResource)?;
+        let registry = self.registry;
         let parameter = |key: &str| {
-            node.parameters
-                .get(&key.parse::<ParameterKey>().expect("parameter key"))
+            effective_json_parameter(
+                node,
+                &key.parse::<ParameterKey>().expect("parameter key"),
+                registry,
+            )
         };
         let mut fields = match node.node_type.as_str() {
             "yssbi.dataframe.series.frequency" => {
@@ -79,7 +84,7 @@ impl EditorSchemaResolver<'_> {
             "yssbi.dataframe.describe" | "yssbi.dataframe.series.describe" => {
                 if node.node_type.as_str() == "yssbi.dataframe.describe" {
                     let input = self.resolve_input(node_id, &"source".parse().unwrap())?;
-                    let columns = column_names(parameter("describe_columns"))?;
+                    let columns = column_names(parameter("describe_columns").as_deref())?;
                     let supported = |f: &SchemaField| matches!(f.scalar_type, RelationalScalarType::Known(s) if supports_description(s));
                     if columns.is_empty() {
                         if !input.iter().any(supported) {
@@ -99,7 +104,7 @@ impl EditorSchemaResolver<'_> {
             }
             "yssbi.dataframe.groupby" => {
                 let input = self.resolve_input(node_id, &"source".parse().unwrap())?;
-                let keys = column_names(parameter("keys"))?;
+                let keys = column_names(parameter("keys").as_deref())?;
                 if keys.is_empty() {
                     return Err(GraphSchemaIssue::InvalidParameter);
                 }
@@ -115,7 +120,7 @@ impl EditorSchemaResolver<'_> {
                     .collect::<Result<Vec<_>, _>>()?;
                 fields.push(field("row_count", SemanticType::Numeric));
                 for operation in AggregateOperation::ALL {
-                    for name in column_names(parameter(operation.key()))? {
+                    for name in column_names(parameter(operation.key()).as_deref())? {
                         let source = input
                             .iter()
                             .find(|f| f.name.0 == name)

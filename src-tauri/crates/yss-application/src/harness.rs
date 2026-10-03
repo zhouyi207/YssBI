@@ -43,7 +43,10 @@ impl ApplicationState {
         let host = Arc::new(HarnessHost::new(ports)?);
         // Recover interrupted work before reconciling project bindings and workflow state.
         host.recover_interrupted_turns().await?;
-        host.reconcile_project_session(&current_project).await?;
+        host.session_access()
+            .await
+            .reconcile_project_session(&current_project)
+            .await?;
         host.recover_workflows().await?;
         Ok(host)
     }
@@ -54,8 +57,13 @@ impl ApplicationState {
         principal: PrincipalId,
     ) -> Result<HarnessSessionRecord, HarnessSessionError> {
         let (captured, binding, project_key) = self.harness_conversation_scope()?;
-        host.reconcile_project_session(&binding).await?;
-        let record = host
+        let mut access = host.session_access().await;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        access.reconcile_project_session(&binding).await?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        let record = access
             .create_conversation(principal, project_key, binding)
             .await?;
         self.revalidate_captured_session(&captured)
@@ -69,8 +77,13 @@ impl ApplicationState {
         principal: &PrincipalId,
     ) -> Result<Vec<HarnessSessionRecord>, HarnessSessionError> {
         let (captured, binding, key) = self.harness_conversation_scope()?;
-        host.reconcile_project_session(&binding).await?;
-        let sessions = host.list_conversations(principal, &key).await?;
+        let mut access = host.session_access().await;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        access.reconcile_project_session(&binding).await?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        let sessions = access.list_conversations(principal, &key).await?;
         self.revalidate_captured_session(&captured)
             .map_err(|_| HarnessSessionError::Changed)?;
         Ok(sessions)
@@ -83,8 +96,13 @@ impl ApplicationState {
         session_id: &HarnessSessionId,
     ) -> Result<HarnessSessionRecord, HarnessSessionError> {
         let (captured, binding, key) = self.harness_conversation_scope()?;
-        host.reconcile_project_session(&binding).await?;
-        let session = host
+        let mut access = host.session_access().await;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        access.reconcile_project_session(&binding).await?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        let session = access
             .open_conversation(session_id, principal, &key, binding)
             .await?;
         self.revalidate_captured_session(&captured)
@@ -147,6 +165,9 @@ impl ApplicationState {
         ))
     }
 }
+
+#[cfg(test)]
+mod concurrency_tests;
 
 #[cfg(test)]
 mod tests {
@@ -233,9 +254,14 @@ mod tests {
             .create_harness_session(&host, principal.clone())
             .await
             .unwrap();
-        host.submit_turn(&first.id, "Remember the first conversation".into(), None)
-            .await
-            .unwrap();
+        host.submit_turn(
+            &first.id,
+            &first.project,
+            "Remember the first conversation".into(),
+            None,
+        )
+        .await
+        .unwrap();
         clock.advance(10);
         let second = application
             .create_harness_session(&host, principal.clone())
@@ -243,6 +269,7 @@ mod tests {
             .unwrap();
         host.submit_turn(
             &second.id,
+            &second.project,
             "Keep the second conversation separate".into(),
             None,
         )
@@ -296,9 +323,14 @@ mod tests {
             .validate_harness_session(&host, &principal, &restored.id)
             .await
             .unwrap();
-        host.submit_turn(&restored.id, "Continue the first conversation".into(), None)
-            .await
-            .unwrap();
+        host.submit_turn(
+            &restored.id,
+            &restored.project,
+            "Continue the first conversation".into(),
+            None,
+        )
+        .await
+        .unwrap();
         let messages = |events: Vec<yss_harness_contract::HarnessEventEnvelope>| {
             events
                 .into_iter()

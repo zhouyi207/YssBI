@@ -18,9 +18,17 @@ YssBI's desktop IPC boundary has an Application-owned command module and three s
 
 Event and Channel depend on Contract and never depend on Application. Contract has no Tauri or runtime dependency. Execution encoding and graph-client handoff consume Application types, so they live in [channel/](channel/mod.rs) within this module. Business workflows and committed state remain in their use-case/domain owners.
 
-Result JSON encoding is shared by the desktop and Harness adapters in [result_encoding.rs](../result_encoding.rs). Graph Results returns typed, bounded projections; the shared mapping owns field names and the final inline wire budget, counted without a second encoded buffer. Command handlers do not rebuild report JSON or duplicate this limit.
+Result JSON encoding is shared by the desktop and Harness adapters in [result_encoding.rs](../result_encoding.rs). Graph Results returns typed, bounded projections; the shared mapping owns field names and the final inline wire budget, counted without a second encoded buffer. Graph result-state mapping borrows the original projection and creates the owned wire output without cloning the complete result state. Command handlers do not rebuild report JSON or duplicate this limit.
 
 ## Public surface
+
+Frontend project command replies and project events share the existing activation, registry-record and
+lifecycle-result parsers in `services/project/projectWireParser`. Scalar paths and acknowledgements,
+scan/cleanup results and progress are validated at the Service boundary. Scan counts agree with returned
+records; progress counters are nonnegative safe integers bounded by their totals. Invalid progress is
+logged and ignored, independently of the authoritative command result. Both successful and failed
+scan/cleanup requests clear their Channel handlers before removing the existing HMR tracking entry.
+Their typed cancellation maps to `picker_task_cancelled` without an incident; other registry failures retain their diagnosed error mapping. Cancellation does not roll back work already committed by the registry.
 
 `get_connection_candidates` 接收一个包含项目身份、图路径、编辑版本、起点地址和操作意图的 `request`，在 blocking pool 查询 Application。
 响应回显请求身份，并交付语义输入 hash、候选地址及 append / replace / invalid 决策；replace 包含被替换的连接 ID，invalid 只携带稳定原因码。
@@ -30,6 +38,14 @@ Frontend wire parsing and application publication share receipt correlation,
 revision and replacement invariants in `src/shared/types/domain/resourceMutationValidation.ts`.
 Wire adapters additionally validate exact payload shapes; they do not maintain a
 second copy of the receipt's semantic rules.
+Graph resource deltas carry lifecycle and path moves only; Graph document edits and history use
+the existing Graph editor session synchronization protocol, not a resource document patch payload.
+
+Project index signatures and function resource deltas reuse the strict
+`isFunctionSignatureDto` guard beside the frontend signature type. It checks the
+same exact signature/parameter fields and nullable return type at both boundaries;
+Rust type-name strings remain opaque. Resource patches still validate their
+`before/after` envelope and receipt correlation before publication.
 
 Event Graph and Function Graph file creation have separate application entry points and IPC
 commands. Creation receives `name`; rename/duplicate/remove commands receive
@@ -51,7 +67,9 @@ plus the shared resource mutation receipt, and publish the same committed resour
 notification used by existing file types. Snapshots contain `kind` and typed `content`
 alongside project identity, path, version and dirty state. Project indexes expose
 separate `minds` and `docs` arrays. Snapshots are bounded by the domain's
-document limits. The current transport returns full document snapshots; tree edges
+document limits. Before updating its projection or input buffers, the frontend Application correlates
+snapshot identity and version with the submitted command and its existing lifecycle/move delta.
+Creation and rename targets come from those receipts. The current transport returns full document snapshots; tree edges
 and renderer/session state are derived locally. See [Project model](../../../yss-project-model/README.md)
 and [Document editors](../../../../../src/modules/document-editor/README.md).
 
@@ -65,7 +83,11 @@ dataset overview reads. See [Database application](../database/README.md).
 Execution recovery reads `get_execution_snapshot` for the current project session and then applies
 Graph activity notifications. RunId state remains internal to the execution registry.
 
-`get_project_path` and `get_project_databases` take no wire arguments and query the active Application session. Frontend hydration rechecks its captured project lifecycle identity before publishing either response; these queries do not accept a caller-supplied project identity.
+`get_project_path` requires `projectInstanceId`; `get_project_databases` requires both
+`projectInstanceId` and `expectedPublicationRevision`. Hydration reads the index first and binds
+its database schema query to that publication. Application validates the original project and
+publication before and after reading; frontend acceptance also rechecks the captured lifecycle.
+Path normalization belongs to Application and is not repeated by the command adapter.
 
 Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, Application startup plugin or binding registry. Platform plugins own their namespaced command registries.
 
@@ -173,15 +195,24 @@ the normal Project publication coordinator. Sample errors retain the common erro
 wire, with stable categories for missing samples, changed versions, invalid catalogs,
 integrity failures and unavailable resources. The frontend localizes these categories.
 
+`get_database_meta`, `get_database_rows`, `get_column_distribution` and `get_plot_column_pair`
+require `expectedRevision` alongside the project and database identity. It is the caller's Project
+database resource revision. Application requires matching Project and Runtime declaration revisions
+and revalidates the read before returning; the commands do not default to a newer backend version.
+
 `get_database_rows` returns `{ rows, rowIds }` with both arrays required and the same length.
-The frontend keeps these stable row identities and rejects bare row arrays or incomplete pages;
-it does not substitute an empty identity array for an obsolete response shape.
+`rowIds` contains canonical decimal strings representing Rust `i64` values. IPC owns this encoding;
+Application and Runtime keep their integer identities. Frontend Services validate the integer range,
+unique IDs, uniform row width, primitive cells and requested page bound. The table keeps the exact
+strings, without numeric conversion or a generated page-position fallback. Application also checks
+the page width against known metadata after revision admission. Bare row arrays and incomplete pages
+are rejected; no old numeric-ID response is accepted.
 Rows contain the original physical values, using the existing exact display encoding. Semantic
 maps, ordinal ranks and binary event encodings are internal interpretations and never replace
 the values or physical type labels shown in DataView.
 
 Database column projections carry `name`, the existing `type` display label, exact `physical`,
-and `semantic: { kind, values, positiveValue, numeric }`. Semantic is one of the seven field
+and `semantic: null | { kind, values, positiveValue, numeric }`. A present Semantic uses one of the seven field
 meanings specified by the [dataset contract](../../../yss-database-store/README.md#field-meaning-and-physical-conversion).
 Codes and numeric bounds are strings, preserving wide integers and decimal precision. The
 `set_column_semantic` mutation takes `projectInstanceId`, `operationId`, `expectedRevision`,
@@ -189,6 +220,17 @@ Codes and numeric bounds are strings, preserving wide integers and decimal preci
 aggregate; no data values or Physical changes accompany the semantic edit. `cast_column`
 converts Physical while retaining and validating Semantic. Both commands perform scanning and
 conversion on the blocking pool, then publish the normal revision-checked resource changes.
+
+Frontend Services validate metadata at the wire boundary with the shared database schemas.
+Project database entries include columns and their matching count; an omitted row count remains
+unknown. Single-database metadata and import results require both counts. Malformed columns,
+duplicate names, mismatching counts or response IDs are rejected before Application installs data.
+Database mutation envelopes reuse the existing resource receipt parser; the associated data is
+validated as metadata, edit state or null according to the command. Application retains ownership
+of project/revision admission and index membership checks, without repairing malformed wire data.
+Column distributions are validated as the existing numeric/string variants with unique column names
+and nonnegative safe-integer counts. Source discovery responses are string arrays shared by SQLite,
+remote SQL and Excel; frontend validation preserves their exact names and order.
 
 `get_result_page` 在 blocking worker 上调用 Application 的页面查询；命令不直接执行关系查询或持有数据库锁。
 `ResultPage.totalCount` 为可空整数，未知总数使用 null；`hasMore` 与 `nextOffset` 决定是否可继续翻页。
@@ -271,10 +313,13 @@ prepares loaded clean documents, and deduplicates late receipts already covered 
 Unchanged indexes do not republish sidebar state. Watcher refreshes do not reactivate the project or rebuild the workbench.
 
 `save_chart` takes project identity, operation ID, resource path and a complete document, with no
-`expectedRevision` argument. Chart documents carry no resource revision. `load_chart` accepts an optional
-`expectedPublicationRevision` for reads prepared against an authoritative index; Rust rejects a mismatched
-project snapshot before returning the document. Save and publication ownership are defined in
-[Graph and Execution](../graph/README.md#save).
+`expectedRevision` argument. Chart documents carry no resource revision. `load_chart` requires
+`expectedPublicationRevision` for both initial view reads and reads prepared against an authoritative index;
+Rust rejects a mismatched project snapshot before returning the document. The frontend validates the schema
+version 4 envelope and reuses the Chart state guard shared with resource receipts. Plot column pairs require
+finite coordinates, number/date/datetime axis formats and both nullable label fields; explicit point limits
+also bound accepted responses. These checks run once at the Service boundary. Save, read and publication
+ownership are defined in [Chart application](../chart/README.md).
 
 ## Presentation delivery
 
@@ -315,13 +360,14 @@ Frontend application code localizes `code + safe details`; `IpcError.message` is
 
 Harness event types use snake_case while envelope and payload fields use camelCase. Provider turn failures retain stable categories for authentication, rate limits, rejected requests, connection failures, unavailable services and invalid responses. The error wire never includes a raw provider response or credential. See [Statistical Harness](../../../yss-harness-core/README.md).
 
-Execution channels deliver `RunEventDto` directly for lifecycle and result notifications. Analysis Graph has no stdout/stderr message or callback. Terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire. Harness events and plugin process communication retain their own protocols.
+Execution channels deliver `RunEventDto` directly for lifecycle and result notifications. Each event's `run` contains `executionSessionId`, `graphPath`, `runId` and the required `semanticInputHash`, encoded from the Application run identity as 64 lowercase hexadecimal characters. The envelope also carries the event's captured `resultRevision` as an unsigned 64-bit decimal string; frontend parsers share the result-summary revision guard and compare values with BigInt. The same mapper serves public activity and recovery without recapturing the revision. Analysis Graph has no stdout/stderr message or callback. Terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire. Harness events and plugin process communication retain their own protocols.
 
 `get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null.
 Descriptor/value/page commands take `{ executionSessionId, resultId }` references and read either current or leased results.
 Descriptors carry this identity and immutable provenance; reading a retained descriptor does not change the current output index.
 Run event identity uses `executionSessionId`, `graphPath`, and `runId`. `RunStarted { outputs }` invalidates current output bindings;
 it does not revoke report leases. Failed or cancelled runs never expose an older successful payload as current.
+`cancel_graph_run` takes the started run's `executionSessionId` and `runId`; Application rejects a replaced execution session before looking up the run. Run IDs are local to their execution session.
 
 `retain_result(reference, lease, handoff?)` atomically retains a snapshot and returns its descriptor.
 `release_result_lease(lease)` is idempotent and validates the caller window; `reconcile_result_leases(leases)` releases
@@ -343,11 +389,31 @@ Project owns the current graph document, reversible history and saved-content fi
 
 Plugin transport uses `command_plugin.rs` and the generic Rust Plugin Manager. Installation, enabled state, view attachment and task projections never depend on Julia availability. Julia/Bayes commands and DTOs are private to the external plugin; they are not Tauri commands. Generated plugin projections come from `yss-plugin-protocol` through `pnpm generate:plugins`. Plugin frames receive a scoped MessagePort, not Tauri access. The transport retains the exact common error wire; plugin failures expose only a stable `details.pluginCode` category.
 
+The frontend Plugin Service validates command replies before handing them to Application. Its
+`pluginWireParser` reuses the generated object schemas; declared fields are resolved as own
+properties so prototype names cannot bypass `additionalProperties: false`. Storage, cache cleanup,
+task history and diagnostics must belong to the requested plugin. Export grants are nonempty
+strings and package collection counts are nonnegative safe integers.
+
+Only replies to `system.save_file`, `system.reveal_artifact` and `views.open` can authorize their
+corresponding host UI actions. The Service validates these envelopes and reuses the generated
+`PluginView` schema, returning an internal discriminated reply to Application. Ordinary plugin
+results and persisted view state remain opaque values even when they contain `hostUi` or `openView`;
+the internal discriminator is never sent over the plugin wire. Application consumes this parsed
+reply and rechecks the active view after a save dialog returns, before requesting an export grant.
+The view owner still checks the plugin identity before opening a view and suppresses late replies
+after revocation.
+
 View detach acknowledges completion and is idempotent for an already-released session. Cross-window or task-session detach is rejected. The page owner waits for that acknowledgement before replacing its lease. Concurrent activations share the Plugin Manager's bounded startup result; only lifecycle mutations remain `plugin_busy`. View quota failures use `plugin_view_limit`, and expired process instances cannot authorize old contexts. Frontend presentation retains the safe code and phase instead of collapsing every failure into a boolean.
 
 Ordinary frontend invocation goes through `src/services/ipc/invokeCommand.ts`, which validates the common error wire. Domain services under `src/services/` own command-specific request/result parsing. Views and presentation modules do not call Tauri `invoke` directly.
 
 Channel adapters parse strict wire DTOs before publishing to application projections. Malformed payloads and sequence gaps belong to each stream's recovery/status contract. Detection, UI visibility, and recovery are separate capabilities; their current coverage is documented by the stream owner, rather than guaranteed by DTO parsing alone.
+
+Execution channel drains stop accepting messages after terminal settlement, malformed input or
+disposal. HMR cleanup captures and removes the current Channel registrations before invoking their
+cleanup callbacks. It releases the entire captured batch before rethrowing the first cleanup failure;
+new Channel instances registered by a callback remain owned by their next lifecycle.
 
 ## Data and security boundary
 

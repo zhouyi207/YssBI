@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
 
@@ -27,6 +27,14 @@ pub enum RunState {
     Failed,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExecutionCancelOutcome {
+    NotFound,
+    AlreadyCancelled,
+    AlreadyTerminal,
+    Requested,
+}
+
 #[derive(Debug, Error)]
 pub enum RunRegistryError {
     #[error("run id is already registered")]
@@ -48,9 +56,14 @@ const TERMINAL_RETENTION: usize = 1024;
 
 #[derive(Default)]
 struct RunRecords {
-    states: BTreeMap<RunId, RunState>,
+    runs: BTreeMap<RunId, RunRecord>,
     /// Completion order, independent of admission/RunId order.
     terminal: VecDeque<RunId>,
+}
+
+struct RunRecord {
+    state: RunState,
+    cancellation: Option<Arc<AtomicBool>>,
 }
 
 impl RunRegistry {
@@ -61,7 +74,10 @@ impl RunRegistry {
         }
     }
 
-    pub(crate) fn admit_next(&self) -> Result<RunId, RunRegistryError> {
+    pub(crate) fn admit_next(
+        &self,
+        cancellation: Option<Arc<AtomicBool>>,
+    ) -> Result<RunId, RunRegistryError> {
         let value = self
             .next_id
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
@@ -69,18 +85,29 @@ impl RunRegistry {
             })
             .map_err(|_| RunRegistryError::Exhausted)?;
         let run = RunId::from_existing(value);
-        self.admit(run)?;
+        self.admit_record(run, cancellation)?;
         Ok(run)
     }
 
     pub fn admit(&self, run: RunId) -> Result<(), RunRegistryError> {
+        self.admit_record(run, None)
+    }
+
+    fn admit_record(
+        &self,
+        run: RunId,
+        cancellation: Option<Arc<AtomicBool>>,
+    ) -> Result<(), RunRegistryError> {
         let mut records = self
             .records
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        match records.states.entry(run) {
+        match records.runs.entry(run) {
             std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(RunState::Admitted);
+                entry.insert(RunRecord {
+                    state: RunState::Admitted,
+                    cancellation,
+                });
                 Ok(())
             }
             std::collections::btree_map::Entry::Occupied(_) => Err(RunRegistryError::Duplicate),
@@ -91,9 +118,41 @@ impl RunRegistry {
         self.records
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .states
+            .runs
             .get(&run)
-            .copied()
+            .map(|record| record.state)
+    }
+
+    pub(crate) fn cancel(&self, run: RunId) -> ExecutionCancelOutcome {
+        let records = self
+            .records
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let Some(record) = records.runs.get(&run) else {
+            return ExecutionCancelOutcome::NotFound;
+        };
+        match record.state {
+            RunState::Cancelled => ExecutionCancelOutcome::AlreadyCancelled,
+            RunState::Succeeded | RunState::Failed => ExecutionCancelOutcome::AlreadyTerminal,
+            RunState::Admitted | RunState::Running | RunState::Finalizing => {
+                if let Some(control) = &record.cancellation {
+                    control.store(true, Ordering::Release);
+                }
+                ExecutionCancelOutcome::Requested
+            }
+        }
+    }
+
+    pub(crate) fn cancel_all(&self) {
+        let records = self
+            .records
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for record in records.runs.values() {
+            if let Some(control) = &record.cancellation {
+                control.store(true, Ordering::Release);
+            }
+        }
     }
 
     pub fn transition(&self, run: RunId, next: RunState) -> Result<(), RunRegistryError> {
@@ -102,11 +161,11 @@ impl RunRegistry {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let current = records
-            .states
+            .runs
             .get_mut(&run)
             .ok_or(RunRegistryError::Missing)?;
         let valid = matches!(
-            (*current, next),
+            (current.state, next),
             (RunState::Admitted, RunState::Running)
                 | (RunState::Admitted, RunState::Cancelled)
                 | (RunState::Admitted, RunState::Failed)
@@ -120,15 +179,16 @@ impl RunRegistry {
         if !valid {
             return Err(RunRegistryError::InvalidTransition);
         }
-        *current = next;
+        current.state = next;
         if matches!(
             next,
             RunState::Succeeded | RunState::Cancelled | RunState::Failed
         ) {
+            current.cancellation = None;
             records.terminal.push_back(run);
             while records.terminal.len() > TERMINAL_RETENTION {
                 if let Some(expired) = records.terminal.pop_front() {
-                    records.states.remove(&expired);
+                    records.runs.remove(&expired);
                 }
             }
         }
@@ -149,22 +209,22 @@ mod tests {
     #[test]
     fn retention_uses_completion_order_and_preserves_active_and_finalizing_runs() {
         let registry = RunRegistry::new();
-        let admitted = registry.admit_next().unwrap();
-        let running = registry.admit_next().unwrap();
+        let admitted = registry.admit_next(None).unwrap();
+        let running = registry.admit_next(None).unwrap();
         registry.transition(running, RunState::Running).unwrap();
-        let finalizing = registry.admit_next().unwrap();
+        let finalizing = registry.admit_next(None).unwrap();
         registry.transition(finalizing, RunState::Running).unwrap();
         registry
             .transition(finalizing, RunState::Finalizing)
             .unwrap();
-        let older_id = registry.admit_next().unwrap();
-        let first_completed = registry.admit_next().unwrap();
+        let older_id = registry.admit_next(None).unwrap();
+        let first_completed = registry.admit_next(None).unwrap();
         registry
             .transition(first_completed, RunState::Cancelled)
             .unwrap();
         registry.transition(older_id, RunState::Failed).unwrap();
         for _ in 0..TERMINAL_RETENTION - 1 {
-            let run = registry.admit_next().unwrap();
+            let run = registry.admit_next(None).unwrap();
             registry.transition(run, RunState::Running).unwrap();
             registry.transition(run, RunState::Finalizing).unwrap();
             registry.transition(run, RunState::Succeeded).unwrap();
@@ -175,7 +235,7 @@ mod tests {
         assert_eq!(registry.state(running), Some(RunState::Running));
         assert_eq!(registry.state(finalizing), Some(RunState::Finalizing));
         assert_eq!(
-            registry.records.lock().unwrap().states.len(),
+            registry.records.lock().unwrap().runs.len(),
             TERMINAL_RETENTION + 3
         );
     }
@@ -184,7 +244,9 @@ mod tests {
     fn duplicate_admission_preserves_the_active_run_state() {
         let registry = RunRegistry::new();
 
-        let run_id = registry.admit_next().expect("the first run is admitted");
+        let run_id = registry
+            .admit_next(None)
+            .expect("the first run is admitted");
 
         assert!(run_id.get() > 0);
         assert_eq!(registry.state(run_id), Some(RunState::Admitted));

@@ -350,10 +350,18 @@ pub fn lossless_cast(
             if array.is_null(row) || (force && converted.is_null(row)) {
                 continue;
             }
-            if converted.is_null(row)
-                || calendar_identity(crate::timezone_free_text(original.value(row))?)?
-                    != calendar_identity(converted_text.value(row))?
+            if converted.is_null(row) {
+                return Err(TabularArrowError::InvalidValue);
+            }
+            let original = crate::timezone_free_text(original.value(row))?;
+            // Arrow also accepts integer time ticks in the target unit. Its strict
+            // target parser already checks the exact integer and overflow.
+            if matches!(target, DataType::Time32(_) | DataType::Time64(_))
+                && original.parse::<i64>().is_ok()
             {
+                continue;
+            }
+            if calendar_identity(original)? != calendar_identity(converted_text.value(row))? {
                 return Err(TabularArrowError::InvalidValue);
             }
         }
@@ -374,19 +382,47 @@ pub fn lossless_cast(
     Ok(converted)
 }
 
-fn calendar_identity(value: &str) -> Result<String, TabularArrowError> {
-    for format in ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M:%S%.f"] {
-        if let Ok(value) = chrono::NaiveDateTime::parse_from_str(value, format) {
-            return Ok(value.to_string());
-        }
+fn calendar_identity(value: &str) -> Result<(Option<i64>, i64), TabularArrowError> {
+    use arrow::compute::kernels::cast_utils::{
+        Parser, string_to_datetime, string_to_time_nanoseconds,
+    };
+    use arrow::datatypes::Date32Type;
+
+    let identity = if value
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || matches!(byte, b'-' | b'+'))
+    {
+        // The native date parser also accepts datetimes and discards their clock. Only
+        // pure date spellings may take this path, including signed extended years.
+        (
+            Some(i64::from(
+                Date32Type::parse(value).ok_or(TabularArrowError::InvalidValue)?,
+            )),
+            0,
+        )
+    } else if let Ok(value) = string_to_datetime(&chrono::Utc, value) {
+        (
+            Some(value.timestamp().div_euclid(86_400)),
+            value.timestamp().rem_euclid(86_400) * 1_000_000_000
+                + i64::from(value.timestamp_subsec_nanos()),
+        )
+    } else {
+        (
+            None,
+            string_to_time_nanoseconds(value).map_err(|_| TabularArrowError::InvalidValue)?,
+        )
+    };
+    // Both native parsers truncate beyond nanoseconds; identity must retain every
+    // nonzero fractional digit. After timezone removal and successful calendar parsing,
+    // a decimal point can only introduce the seconds fraction.
+    if value.split_once('.').is_some_and(|(_, fraction)| {
+        fraction
+            .bytes()
+            .take_while(u8::is_ascii_digit)
+            .skip(9)
+            .any(|digit| digit != b'0')
+    }) {
+        return Err(TabularArrowError::InvalidValue);
     }
-    if let Ok(value) = chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-        return value
-            .and_hms_opt(0, 0, 0)
-            .map(|value| value.to_string())
-            .ok_or(TabularArrowError::InvalidValue);
-    }
-    chrono::NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
-        .map(|value| value.to_string())
-        .map_err(|_| TabularArrowError::InvalidValue)
+    Ok(identity)
 }

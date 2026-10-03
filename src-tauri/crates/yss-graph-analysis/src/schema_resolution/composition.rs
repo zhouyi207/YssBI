@@ -1,7 +1,12 @@
-use super::*;
-use yss_data_contract::table::append_column_names;
-use yss_graph_document::DynamicPortBinding;
-use yss_node_protocol::{NodeTypingSpec, SemanticType};
+use super::EditorSchemaResolver;
+use crate::GraphSchemaIssue;
+use crate::parameter_projection::{effective_json_parameter, effective_text_parameter};
+use yss_data_contract::{ValueType, table::append_column_names};
+use yss_graph_document::{DynamicMemberLocator, DynamicPortBinding, NodeId, PortAddress, PortRef};
+use yss_node_protocol::{
+    NodeTypingSpec, ParameterKey, RelationalScalarType, SchemaColumnRef, SchemaField,
+    SchemaFieldLineage, SemanticType, TypeExpr,
+};
 
 fn declared_semantic(value: &TypeExpr) -> Option<SemanticType> {
     match value {
@@ -29,25 +34,34 @@ fn declared_semantic(value: &TypeExpr) -> Option<SemanticType> {
     }
 }
 
-impl EditorSchemaResolver<'_> {
+fn scalar_semantic(value: &ValueType) -> Option<SemanticType> {
+    let element = match value {
+        ValueType::DataSeries(element) => element.as_ref(),
+        _ => value,
+    };
+    match element {
+        ValueType::Scalar(semantic) => Some(*semantic),
+        _ => None,
+    }
+}
+
+impl<'a> EditorSchemaResolver<'a> {
     fn composition_inputs(
         &self,
         node: NodeId,
         template: &str,
-    ) -> Result<Vec<PortAddress>, GraphSchemaIssue> {
-        let mut ports = self.document.port_bindings.iter().filter_map(|(address, binding)| {
-            if address.node_id != node || !matches!(&address.port, PortRef::Instance { template: key, .. } if key.as_str() == template) { return None; }
-            match binding { DynamicPortBinding::UserCreated { order } => Some((order, address)), _ => None }
+    ) -> Result<Vec<&'a PortAddress>, GraphSchemaIssue> {
+        let mut ports = self.index.node_bindings(node).iter().filter_map(|(address, binding)| {
+            if !matches!(&address.port, PortRef::Instance { template: key, .. } if key.as_str() == template) { return None; }
+            match binding { DynamicPortBinding::UserCreated { order } => Some((order, *address)), _ => None }
         }).collect::<Vec<_>>();
         ports.sort_by(|a, b| a.0.cmp(b.0).then(a.1.cmp(b.1)));
         ports
             .into_iter()
-            .map(
-                |(_, input)| match self.input_sources.get(input).map(Vec::as_slice) {
-                    Some([source]) => Ok(source.clone()),
-                    _ => Err(GraphSchemaIssue::UnconnectedInput),
-                },
-            )
+            .map(|(_, input)| match self.index.input_connections(input) {
+                [connection] => Ok(&connection.output),
+                _ => Err(GraphSchemaIssue::UnconnectedInput),
+            })
             .collect()
     }
 
@@ -67,27 +81,37 @@ impl EditorSchemaResolver<'_> {
         &mut self,
         source: &PortAddress,
     ) -> Result<SchemaField, GraphSchemaIssue> {
+        if let Some(field) = self.series_fields.get(source) {
+            return field.clone();
+        }
+        let field = self.resolve_series_field(source);
+        self.series_fields.insert(source.clone(), field.clone());
+        field
+    }
+
+    fn resolve_series_field(
+        &mut self,
+        source: &PortAddress,
+    ) -> Result<SchemaField, GraphSchemaIssue> {
         let node = self
             .document
             .nodes
             .get(&source.node_id)
-            .ok_or(GraphSchemaIssue::MissingResource)?
-            .clone();
+            .ok_or(GraphSchemaIssue::MissingResource)?;
         let protocol = self
             .registry
             .protocol(&node.node_type)
-            .ok_or(GraphSchemaIssue::MissingResource)?
-            .clone();
+            .ok_or(GraphSchemaIssue::MissingResource)?;
         if node.node_type.as_str() == "yssbi.dataframe.decompose" {
             let fields = self.resolve_input(node.id, &"dataframe".parse().unwrap())?;
-            let Some(DynamicPortBinding::Resolved {
-                origin:
-                    DynamicMemberLocator::SchemaField {
-                        source: origin,
-                        field,
-                    },
-                ..
-            }) = self.document.port_bindings.get(source)
+            let Some(DynamicMemberLocator::SchemaField {
+                source: origin,
+                field,
+            }) = self
+                .document
+                .port_bindings
+                .get(source)
+                .and_then(crate::port_projection::binding_origin)
             else {
                 return Err(GraphSchemaIssue::MissingColumn);
             };
@@ -104,10 +128,7 @@ impl EditorSchemaResolver<'_> {
                 .ok_or(GraphSchemaIssue::MissingColumn);
         }
         if let NodeTypingSpec::ColumnOutput { input, column, .. } = &protocol.typing {
-            let selected = node
-                .parameters
-                .get(column)
-                .and_then(serde_json::Value::as_str)
+            let selected = effective_text_parameter(node, column, self.registry)
                 .ok_or(GraphSchemaIssue::InvalidParameter)?;
             return self
                 .resolve_input(node.id, input)?
@@ -119,15 +140,10 @@ impl EditorSchemaResolver<'_> {
             let mut fields = Vec::new();
             for key in ["when_true", "when_false"] {
                 let input = PortAddress::declared(node.id, key.parse().unwrap());
-                let source = self
-                    .input_sources
-                    .get(&input)
-                    .and_then(|s| match s.as_slice() {
-                        [s] => Some(s.clone()),
-                        _ => None,
-                    })
-                    .ok_or(GraphSchemaIssue::UnconnectedInput)?;
-                fields.push(self.composition_series(&source)?);
+                let [connection] = self.index.input_connections(&input) else {
+                    return Err(GraphSchemaIssue::UnconnectedInput);
+                };
+                fields.push(self.composition_series(&connection.output)?);
             }
             if fields[0].scalar_type != fields[1].scalar_type {
                 return Err(GraphSchemaIssue::ConflictingInputs);
@@ -143,20 +159,13 @@ impl EditorSchemaResolver<'_> {
             PortRef::Instance { template, .. } => template.as_str().to_owned(),
         };
         let kind = match &protocol.typing {
-            NodeTypingSpec::ConstantOutput { parameter, .. } => {
-                let constant = super::super::referenced_constant(self.document, &node, parameter)
+            NodeTypingSpec::ConstantOutput { .. } => {
+                let constant = super::super::referenced_constant(self.document, node, protocol)
                     .ok_or(GraphSchemaIssue::MissingResource)?;
                 if !constant.name.trim().is_empty() {
                     name = constant.name.clone();
                 }
-                match &constant.data_type {
-                    ValueType::Scalar(kind) => Some(*kind),
-                    ValueType::DataSeries(element) => match element.as_ref() {
-                        ValueType::Scalar(kind) => Some(*kind),
-                        _ => None,
-                    },
-                    _ => None,
-                }
+                scalar_semantic(&constant.data_type)
             }
             NodeTypingSpec::NumericFold { .. } | NodeTypingSpec::ShapePreservingNumeric { .. } => {
                 Some(SemanticType::Numeric)
@@ -164,21 +173,24 @@ impl EditorSchemaResolver<'_> {
             NodeTypingSpec::BinaryPredicate { .. } => Some(SemanticType::Binary),
             NodeTypingSpec::Identity { input, .. } => {
                 let address = PortAddress::declared(node.id, input.clone());
-                let source = self
-                    .input_sources
-                    .get(&address)
-                    .and_then(|v| match v.as_slice() {
-                        [source] => Some(source.clone()),
-                        _ => None,
-                    })
-                    .ok_or(GraphSchemaIssue::UnconnectedInput)?;
-                return self.composition_series(&source);
+                let [connection] = self.index.input_connections(&address) else {
+                    return Err(GraphSchemaIssue::UnconnectedInput);
+                };
+                return self.composition_series(&connection.output);
             }
-            NodeTypingSpec::ShapePreservingConversion { parameter, .. } => node
-                .parameters
-                .get(parameter)
-                .and_then(serde_json::Value::as_str)
-                .and_then(|id| SemanticType::ALL.into_iter().find(|s| s.type_id() == id)),
+            NodeTypingSpec::ShapePreservingConversion { parameter, .. } => {
+                match effective_text_parameter(node, parameter, self.registry) {
+                    Some("auto") => self
+                        .automatic_outputs
+                        .get(source)
+                        .and_then(|state| state.exact())
+                        .and_then(yss_graph_type_mapping::data_type_from_resolved_type)
+                        .as_ref()
+                        .and_then(scalar_semantic),
+                    target => target
+                        .and_then(|id| SemanticType::ALL.into_iter().find(|s| s.type_id() == id)),
+                }
+            }
             _ => {
                 let output = protocol
                     .interface
@@ -198,9 +210,8 @@ impl EditorSchemaResolver<'_> {
                             && port.value_type == output.value_type
                     }) {
                         let input = PortAddress::declared(node.id, input.key.clone());
-                        if let Some([source]) = self.input_sources.get(&input).map(Vec::as_slice) {
-                            let source = source.clone();
-                            return self.composition_series(&source);
+                        if let [connection] = self.index.input_connections(&input) {
+                            return self.composition_series(&connection.output);
                         }
                     }
                 }
@@ -222,9 +233,14 @@ impl EditorSchemaResolver<'_> {
             .document
             .nodes
             .get(&node_id)
-            .ok_or(GraphSchemaIssue::MissingResource)?
-            .clone();
-        let parameter = |key: &str| node.parameters.get(&key.parse::<ParameterKey>().unwrap());
+            .ok_or(GraphSchemaIssue::MissingResource)?;
+        let registry = self.registry;
+        let parameter = |key: &str| {
+            effective_json_parameter(node, &key.parse::<ParameterKey>().unwrap(), registry)
+        };
+        let text = |key: &str| {
+            effective_text_parameter(node, &key.parse::<ParameterKey>().unwrap(), registry)
+        };
         let mut fields = match node.node_type.as_str() {
             "yssbi.dataframe.combine" => {
                 let sources = self.composition_inputs(node_id, "series")?;
@@ -233,7 +249,7 @@ impl EditorSchemaResolver<'_> {
                 }
                 let mut fields: Vec<SchemaField> = Vec::new();
                 for source in sources {
-                    let mut field = self.composition_series(&source)?;
+                    let mut field = self.composition_series(source)?;
                     let names = fields
                         .iter()
                         .map(|f| f.name.0.to_string())
@@ -250,10 +266,8 @@ impl EditorSchemaResolver<'_> {
                 if sources.len() < 2 {
                     return Err(GraphSchemaIssue::UnconnectedInput);
                 }
-                let mut fields = self.composition_fields(&sources[0])?;
-                let mode = parameter("column_match")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("by_name");
+                let mut fields = self.composition_fields(sources[0])?;
+                let mode = text("column_match");
                 for (index, source) in sources.iter().skip(1).enumerate() {
                     let next = self.composition_fields(source)?;
                     if node.node_type.as_str().ends_with("columns") {
@@ -272,7 +286,7 @@ impl EditorSchemaResolver<'_> {
                             field.name.0 = name.into();
                             field
                         }));
-                    } else if mode == "by_position" {
+                    } else if mode == Some("by_position") {
                         if fields.len() != next.len()
                             || fields
                                 .iter()
@@ -281,7 +295,7 @@ impl EditorSchemaResolver<'_> {
                         {
                             return Err(GraphSchemaIssue::ConflictingInputs);
                         }
-                    } else if mode == "by_name" {
+                    } else if mode == Some("by_name") {
                         for field in next {
                             if let Some(existing) = fields.iter().find(|f| f.name == field.name) {
                                 if existing.scalar_type != field.scalar_type {
@@ -303,7 +317,7 @@ impl EditorSchemaResolver<'_> {
                 let keys = |name| {
                     parameter(name)
                         .and_then(|v| {
-                            yss_node_protocol::dataframe::prepare_project_columns_json(v).ok()
+                            yss_node_protocol::dataframe::prepare_project_columns_json(&v).ok()
                         })
                         .ok_or(GraphSchemaIssue::InvalidParameter)
                 };
@@ -325,9 +339,7 @@ impl EditorSchemaResolver<'_> {
                         return Err(GraphSchemaIssue::ConflictingInputs);
                     }
                 }
-                let suffix = parameter("right_suffix")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("_right");
+                let suffix = text("right_suffix").ok_or(GraphSchemaIssue::InvalidParameter)?;
                 if suffix.is_empty() {
                     return Err(GraphSchemaIssue::InvalidParameter);
                 }
@@ -342,10 +354,7 @@ impl EditorSchemaResolver<'_> {
                         .collect::<Vec<_>>(),
                     suffix,
                 );
-                if !matches!(
-                    parameter("join_type").and_then(serde_json::Value::as_str),
-                    Some("semi" | "anti")
-                ) {
+                if !matches!(text("join_type"), Some("semi" | "anti")) {
                     left.extend(right.into_iter().zip(names).map(|(mut field, name)| {
                         field.name.0 = name.into();
                         field

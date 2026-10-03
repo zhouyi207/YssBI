@@ -93,12 +93,7 @@ pub(in crate::automation) fn inspect_resource(
             ResourceContent::Chart {
                 settings: ChartSettings {
                     database_id: document.database_id,
-                    chart_type: match document.chart_type.as_str() {
-                        "histogram" => ChartType::Histogram,
-                        "scatter" => ChartType::Scatter,
-                        "line" => ChartType::Line,
-                        _ => return Err(invalid("chartType")),
-                    },
+                    chart_type: document.chart_type,
                     x: document.encodings.x,
                     y: document.encodings.y,
                 },
@@ -160,7 +155,12 @@ pub(in crate::automation) fn inspect_resource(
             }
         }
         ProjectResourceKind::Database => {
-            let (content, modified) = database::inspect_database(application, session, &request)?;
+            let (content, modified) = database::inspect_database(
+                application,
+                session,
+                &request,
+                ResourceRevision::new(version.revision),
+            )?;
             dirty = modified;
             content
         }
@@ -212,12 +212,7 @@ pub(in crate::automation) fn edit_resource(
     let mutation = match request.edit {
         ResourceEdit::Chart { settings } => {
             let mut document = yss_chart_document::ChartDocument::new(settings.database_id);
-            document.chart_type = match settings.chart_type {
-                ChartType::Histogram => "histogram",
-                ChartType::Scatter => "scatter",
-                ChartType::Line => "line",
-            }
-            .into();
+            document.chart_type = settings.chart_type;
             document.encodings = yss_chart_document::ChartEncodings {
                 x: settings.x,
                 y: settings.y,

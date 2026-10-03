@@ -1,10 +1,12 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AcfPacfResponseDto {
     pub acf: Vec<f64>,
     pub pacf: Vec<f64>,
     pub n: usize,
+    pub ci_half_width: f64,
 }
 
 #[derive(Debug, Serialize)]

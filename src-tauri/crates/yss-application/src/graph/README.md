@@ -49,6 +49,8 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 `yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
 IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。
+资源成员是否为 orphan 由当前语义快照决定；持久化端口绑定中的 Resolved/Orphan 标记不覆盖资源丢失或恢复后的解析结果。投影仍核对节点、端点地址、绑定来源及连接数量，不改写文档。
+迁移连线检查起点与终点，插入转接点检查原连线两端；这些地址统一经过 Graph Runtime 现有语义准入。已恢复成员的绑定调整随可逆编辑补丁提交，当前仍失效的成员继续拒绝操作，不在查询时改写文档。
 
 `graph_connection_candidates` 为一个起点和 connect / moveConnections 意图查询当前图的全部端口决策。
 Application 捕获当前编辑版本与资源事实、解析一次语义，在查询结束时重验资源、应用会话和图版本。
@@ -59,6 +61,17 @@ Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码�
 响应携带语义输入 hash，前端按编辑版本、语义和资源发布身份接纳，并在下一次身份变化时丢弃。
 投影按当前起点提供 O(端口数) 的载荷，避免发布整图所有端口对；同一查询共享解析快照。
 预检只说明该快照下的连接决策，实际提交仍验证最新文档与资源。
+
+创建目录、编辑校验与剪贴板导出共用 `ProjectCatalogResources` 中已验证的项目声明。
+编辑目录将资源 revision 与已有 `FunctionSignature` 绑定，不再另建字符串函数签名或在连接时重新解析
+类型名。剪贴板导出只捕获声明，不读取数据库 Schema。目录查询与创建并连接共用声明端口及函数动态
+成员的候选构造，保留成员身份、顺序、类型和回退标签。既有端口优先消费语义快照；同一原子补丁中新建
+的端口及无快照的纯 Editor 调用，仍由协议、文档常量和捕获资源进行校验。
+无快照常量连接预检复用 Analysis 的 `referenced_constant`，按当前有效的显式值、默认值和条件读取，
+不因默认选择而退回未约束类型，也不以隐藏的历史引用收窄当前端口。
+初始用户端口按所属成员分组的最小数量筛选，未分组模板使用自身最小数量；函数动态候选按 resolver 和
+方向选择，模板 key 只作为身份。无快照连接与剪贴板导入共用函数成员类型查找，同时核对 resolver、
+方向和成员 ID，不能仅凭类型相同接受归属错误的绑定。
 
 `yss-graph-runtime` 负责编辑解析；`yss-graph-execution::graph_preparation` 消费只读的 `GraphAnalysis`，
 直接构建已有 `ExecutionPlan`、`PlanParameterBundle` 和输出契约。计划缓存归执行会话，资源授权依据
@@ -83,6 +96,7 @@ Application 的 GUI 创建目录和兼容节点目录保留完整定义，按会
 
 Harness Worker 的执行请求可带资源授权上限。Application 在准备时核对实际资源需求、
 解析后的函数/数据库依赖以及捕获的资源版本；超出范围的图不能取得公开 run ID 或开始计算。
+资源需求直接从本次请求携带的图文档读取，不为此复制整份 ProjectData；Project 的执行授权仍在原准入入口核对。
 GUI 请求继续使用原有项目授权；角色策略本身由 Harness Core 拥有。
 
 ## 当前图文档与投影生命周期
@@ -118,7 +132,11 @@ GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操�
 两端基线均限制为 32 条、32 MiB 序列化预算，单条超过 16 MiB 时只读而不缓存。交付中的 `snapshotBytes` 由 Rust 在编码时计算，前端据此计量，避免主线程为了缓存预算重新编码完整图。增量最多 512 个操作；字节预算与条目限制不代替真实桌面的安装耗时、长任务及帧率验收。
 
 公共运行路径在提交执行状态后统一发布图活动，GUI、Harness 与内部调用遵循同一规则；调用者的专属 sink 不负责公共发布。GUI 仍保留 RunEvent Channel 和终态排空。
+Application 的 `RunIdentity` 包含执行会话、图路径、RunId 与本次准入已验证的 semantic input hash；所有通知、执行回执和恢复快照保留这份身份。IPC 只编码该 hash，前端不能用通知到达时的当前图替换它。加载图的运行与失败展示按该依据筛选，已保留结果的查看仍按完整结果引用处理。
+取消请求携带开始事件的 executionSessionId 与 RunId，Application 核对捕获的执行会话后才取消其中的运行，拒绝旧会话对后继同编号运行的请求。前端运行状态保存完整 run 身份，终态同时匹配会话与 RunId；取消不依赖输出绑定，因此 outputs 为空的运行同样可取消。
+`RunApplicationEvent` 另携带产生事件时从 ResultStore 捕获的 `result_revision`：开始通知在输出失效后捕获，成功终态在结果发布后捕获。失败和取消也读取已提交的结果顺序；版本不属于整次运行不变的身份。公共通知、专属 Channel 和恢复保存同一事件值。前端按摘要是否覆盖这一版本派生输出等待状态，不在查询完成时另写确认标记。
 `run_graph_with_sink` 成功时返回 `RunGraphReceipt`，包含运行身份和本次 handoff 实际发布的结果引用、输出与类别。回执在交付结果查看意图和终态之前捕获，不通过随后可能已变化的当前结果索引重建，也不复制结果 payload。Harness 对这些引用执行响应条目预算并明确报告总数和完整性；只需要 RunId 的内部调用继续使用 `run_graph`。
+Application 按结果 ID 与完整 requester 身份检查观察请求重复；多个 View 节点可以查看同一结果，同一 requester 对同一结果的重复请求仍被拒绝。
 Application 保存运行事实的恢复投影：每个活动运行的开始身份与输出，以及每张图最新运行的终态和失败详情；不保存操作事件历史。`get_execution_snapshot` 按项目会话返回这些当前投影，初始订阅和 Resync 不再依赖前端曾收到的 RunId。
 通知与命令回执在既有 Graph FIFO 中协调。前端恢复期间有界暂存后续事件，先安装快照再处理通知；公共订阅、专属 Channel 和恢复共享按执行会话、RunId 与终态去重的安装规则。结果打开意图只由公共观察路径处理，不在恢复时重放。
 执行提交中、后端运行状态与同步中断分别处理。只有 RunErrored 或权威恢复中的失败事实才写入 Output；Command 拒绝不等于计算失败。Channel 失败先查询当前执行投影，无法确认时保留“运行状态未知”，不自动重跑。成功结果始终先提交再通知。
@@ -128,9 +146,24 @@ Application 保存运行事实的恢复投影：每个活动运行的开始身�
 
 关闭最后一个 Graph 标签页前先经过该图 FIFO 屏障，再读取 dirty 和编辑版本决定保存/丢弃。普通缓存释放也进入同一队列，Rust 在提交边界拒绝释放 dirty 文档；明确丢弃携带用户确认时的 GraphEditVersion，版本变化则拒绝丢弃。卸载返回是否允许释放（已经不驻留也视为成功），只有后端确认且 lifecycle 仍有效时才清除前端文档、投影和资源状态；保留或失败时恢复缓存可用标记。清理后的迟到回执不能覆盖重新打开的会话。
 
+Graph Service 在 IPC 边界仅接纳布尔卸载确认；函数签名修改的回复复用资源回执 parser，
+Application 继续核对请求关联、签名版本和项目发布身份，组件不重复解析这些已验证回复。
+
 Project watcher 保留未保存的当前文档。资源重命名和函数签名事务只持久化其负责的变更，不顺带保存图正文；重命名同步更新历史中的资源引用及保存指纹。节点目录和资源索引仍由现有 Project publication owner 安装。
 
-Graph 重命名在文件系统 lease 内枚举持久化图及驻留图，对当前文档、磁盘正文和可逆历史分别重写引用，再通过同一文件事务与版本校验提交；未加载的调用图保持未加载。Project 的 `graph_references` 共用实现只改写函数 call 的 target、entry/return 的 function 参数及动态端口 FunctionParameter 来源，保留普通文本、字面量和端口实例身份。复制复用此引用规则，但仍单独重新分配节点、连接与动态端口实例身份。
+Graph 重命名在文件系统 lease 内枚举持久化图及驻留图，对当前文档、磁盘正文和可逆历史分别重写引用，再通过同一文件事务与版本校验提交；未加载的调用图保持未加载。Application 将捕获会话的冻结 Registry 借给 Project；`graph_references` 通过注册角色选择 call 的 target、entry/return 的 function 参数，并重写动态端口 FunctionParameter 来源，保留普通文本、字面量和端口实例身份。当前适用的默认引用会成为新路径的显式覆盖，不修改全局节点声明。复制复用此引用规则，但仍单独重新分配节点、连接与动态端口实例身份。
+
+常量复制引用由 Document Edit 按注册协议的 `GraphConstant` 参数声明统一识别；Registry 校验保证
+`ConstantOutput` 指向此类参数。整图复制和剪贴板共用该读取及重映射，不依赖内置节点 ID 或固定参数名。
+常量编辑请求携带明确的类型和值；Rust Document 负责规范化及校验，类型变更所用初值由调用方在同一请求中提供。
+显式引用即使隐藏也保留，缺少显式值时只读取当前适用的默认值；非法显式值不回退，普通文本不参与重写。
+剪贴板将源默认引用写入副本参数并携带去重后的常量，源文档不变；导入按原有身份/内容及名称冲突策略复用或复制常量，
+引用与常量作为同一可逆补丁提交。整图复制为常量分配新身份，保持对副本常量的引用；条件在重映射前按源参数求值。
+
+函数签名回执包含当前驻留图及其调用可达函数中的直接签名消费者，并沿正文调用边传播到外层调用图。
+中间函数未驻留时，Project 在事务准备期间临时读取正文；Application 按回执使受影响图的结果失效，
+只向仍驻留的图发布 `GraphActivity::Changed`，不自动打开中间函数。仅读取外层签名的叶节点不消费其正文依赖。
+当前结果查询仍独立重验依赖版本；明确指定的历史结果和已有结果租约遵循原有读取生命周期。
 
 从 Pin 查询兼容节点时读取匹配版本的当前文档，使用同一次 Resolve 的端口类型、Schema 和约束。查询不 claim 端口，真正连接时才原子登记。Canvas、Details、Problems 和运行准入共享同一语义投影，没有面板自有的图事实源。
 
@@ -155,6 +188,10 @@ Graph 重命名在文件系统 lease 内枚举持久化图及驻留图，对当�
 执行能力检查新增阻断诊断时，同步将完整解析的 snapshot 标为 Incomplete，投影为 `analysisBlocked`；`success` 不得同时携带阻断诊断。已有 InternalFailure 保留原故障信息。
 
 `semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。manifest 记录所用函数签名/正文、变量类型、数据库 Schema 以及 absent lookup；basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
+
+函数正文捕获与 Analysis 调用图校验共同使用 `yss_graph_analysis::direct_function_dependencies`
+及同一会话的冻结 Registry 识别直接调用目标，包括扩展角色和适用的默认引用；Application 继续遍历传递依赖、从捕获的 Project 会话读取正文并重验身份。
+该遍历入口不持有资源状态，不读取文件，也不替代 Analysis 的函数 ABI 和循环诊断。
 
 保存状态与计划准备分开。内部计划缓存按图路径与语义输入匹配；移动节点、修改显示标签可以复用计划。请求通过编辑版本和语义身份判定 currentness，前端只消费相应投影，不保存独立的计划身份或准备状态。
 

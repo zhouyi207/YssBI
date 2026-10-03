@@ -174,8 +174,15 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
     logs.submit_frontend(vec![frontend("Cannot commit")])
         .unwrap();
     let failure = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
-    assert_eq!(failure.failure.as_deref(), Some("storage_unavailable"));
+    assert_eq!(
+        serde_json::to_value(failure.failure).unwrap(),
+        "storage_unavailable"
+    );
     assert!(failure.entries.is_empty());
+    assert!(matches!(
+        receiver.recv_timeout(Duration::from_secs(1)),
+        Err(mpsc::RecvTimeoutError::Disconnected)
+    ));
     assert!(logs.query(LogQuery::default()).is_err());
     assert!(logs.subscribe_batches(|_| true).is_err());
     assert!(

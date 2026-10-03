@@ -7,6 +7,21 @@
 
 ## Execute
 
+`state.rs` 持有会话的计划、结果和运行 registry。内部 `state/admission` 管理工作租约、
+关闭与排空；`state/control` 管理单次运行的取消、deadline 和预算；`state/dispatch` 编排
+准备资源、执行及生成结果候选；`state/scheduler` 和 `selection` 负责数据 DAG 和 demand。
+`error` 拥有执行错误及 RunFailure 映射，原 `state` 公开类型路径继续可用。
+
+运行记录与取消对象统一由 `RunRegistry` 持有，取消请求与终态转换使用同一把锁。
+取消对象覆盖 Admitted、Running、Finalizing，在 Succeeded、Failed 或 Cancelled 时释放；
+运行通知或执行过程 unwind 时，`state/run_lifecycle` 的守卫将未交付的运行转为 Failed。
+守卫只持有必须完成状态转换的责任，不复制运行状态。
+
+关闭准入和登记运行通过同一准入锁协调，锁顺序为 admission → run registry；
+锁内只做登记、取消标记或状态转换，不准备资源、不调用 kernel，也不交付事件。
+`cancel_and_drain` 关闭准入并请求取消已登记运行，再等待工作租约释放。
+`close_admission` 仅关闭准入。排空在每次唤醒后重验工作数，所有工作释放后返回 Drained。
+
 `execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。Application 先校验文档并向 Project 准备资源授权，再捕获、解析及重验依赖，确认语义身份和可运行性；随后捕获结果发布依据、调用 Execution 准备计划及资源绑定。运行不隐式保存，也不回退磁盘旧文档。草稿或依赖变化返回 `graph_draft_changed`，阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
 
 Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。计划中的 input slots 继续携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
@@ -23,7 +38,13 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
+View 的观察意图引用已连接输出的结果，保留各个请求节点身份；多个 View 可观察同一输出。
+其禁止内联值和默认值的输入策略由 Catalog 声明，Analysis 在计划准备前阻断非法输入，Execution 不为 View 另造结果值。
+
 协议默认参数在 semantic snapshot 中保留 typed literal。计划参数只区分已准备的 `Literal(Arc<RuntimeValue>)` 与待授权 `Resource`；标量、列表和记录在准备时构造一次，调用时借用。`DecimalLiteral` 在求值边界检查并转换为 `Float64`；已求值的数列算术直接传递 `TabularScalar`，不经过数字文本往返。过滤请求共用 Data Contract 的 `FilterLiteral` 保留精确十进制输入。
+
+常量参数直接消费节点语义事实，按常量 ID 对应的计划参数句柄只物化一次；多个引用节点绑定同一 payload，
+不重复展开相同常量的表格单元。该复用属于当前计划参数集合，不另建运行时常量缓存。
 
 执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
 
@@ -31,7 +52,7 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。实际函数子计划 lowering/execution 尚未接入，缺少实现时编辑解析明确阻断。Execution 不携带始终为空的函数包、另一套 FunctionPlanAbi 或未使用的 recursion_limit；通用执行包只持有实际计划、参数与来源依据。
 
-加、减、乘、除按已解析 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算，
+加、减、乘、除按已解析 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算。
 
 ## ResultStore and cache validity
 
@@ -39,13 +60,21 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 ResultStore 在准入时校验复用结果的 ID 与当前缓存一致，并记录实际消费的源结果。发布时再次检查这些输入仍有效且 ID 未变；另一次运行替换输入、图编辑或资源失效后，旧补算不能发布。复用没有单独的结果存储，也不改变常规运行的随机节点行为。
 
 `ResultStore` 是 session-scoped result authority，分别维护当前 output address 索引和不可变结果记录。
+`result_store.rs` 拥有唯一的 registry 与锁；内部 `cache` 管理输入依据及依赖有效性，
+`publication` 管理运行准入和结果批次发布，`retention` 管理租约、窗口交接与回收，
+`projection` 只读取当前结果及有效性摘要。这些模块共用同一状态，不建立独立缓存或同步流程。
+发布先校验完整批次，再在同一写锁内安装结果和实际消费记录。
 
 图输入更新与对应结果有效性摘要在同一写锁内完成。摘要携带执行会话内单调递增的 `revision`，运行准入、结果发布和依赖重验都推进这一顺序；它独立于图编辑 revision，用于拒绝迟到的旧结果投影。读取摘要不复制结果 payload，既有图缓存有效性与租约规则继续由 ResultStore 执行。
+`ExecutionRuntimeState::result_revision` 在同一 registry 读锁内读取该顺序，不构造逐输出摘要。Application 在运行事件产生时捕获它；相同会话中达到该版本的摘要已包含事件前的结果变更。恢复交付保留事件原有版本，不用重放时的当前值替换。
 结果以 `{ executionSessionId, resultId }` 标识，保留 type/presentation、payload 与生成时的 provenance。
 `StoredResult` 保存 `RuntimeValue`、输出类别和生成时的 `PlanOutputContract`，让已保留结果的类型与 Schema 不依赖当前图或重新推断数据。
 `StoredResultSnapshot` 表示共享结果的一致性读取视图；这一机制称为结果缓存与持有租约，不提供历次运行归档。
 当前输出和显式报告租约是结果的持有者；输出不再指向结果且最后一个租约释放后，移除结果索引。
+写入事务在锁内收集已移除的结果，释放 registry 锁后再释放这些值及其关系句柄；unwind 也遵守该释放顺序。
 计算中的查询通过临时 `Arc` 保证内存安全，最后一个共享引用释放后回收实际数据；不依赖周期性 GC 或前端计数。
+会话不提供重置整个 ResultStore 的入口；图失效、租约释放和会话结束负责各自的清理，
+同一会话内的摘要 revision 与已关闭 owner 记录不会被清空重置。
 
 每个现存输出最多持有一份结果缓存。缓存持有与有效性分开：语义编辑保留旧值，但只让依据仍匹配的输出参与当前查询。
 Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；Application 映射资源版本，Execution 记录实际消费的上游结果身份。

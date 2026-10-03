@@ -928,12 +928,14 @@ fn graph_edit_receipts_detect_changes_to_omitted_constant_values() {
 
 #[test]
 fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
     let mut f = Fixture::new();
     f.inspect();
     let created = f.edit(vec![
         node("yssbi.numeric.multiply", "product"),
         node("yssbi.debug.view", "view"),
+        node("yssbi.debug.view", "view2"),
         GraphEditOperation::SetLiteral {
             address: port("$product", "left"),
             literal: Some(serde_json::json!(2)),
@@ -943,6 +945,7 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
             literal: Some(serde_json::json!(3)),
         },
         connect(port("$product", "result"), port("$view", "data")),
+        connect(port("$product", "result"), port("$view2", "data")),
     ]);
     let application = f.application.as_ref().unwrap().clone();
     let captured = application.capture_session().unwrap();
@@ -950,20 +953,23 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
     let path = GraphResourcePath::new(&f.path).unwrap();
     let product = parse_node_id(&created.created_nodes["product"]).unwrap();
     let edited = Arc::new(AtomicBool::new(false));
-    let observed_result = Arc::new(AtomicU64::new(0));
+    let observed_requests = Arc::new(Mutex::new(Vec::new()));
     let _subscription = application
         .subscribe_graph_activity(&project, {
             let application = application.clone();
             let project = project.clone();
             let edited = Arc::clone(&edited);
-            let observed_result = Arc::clone(&observed_result);
+            let observed_requests = Arc::clone(&observed_requests);
             Arc::new(move |activity| {
                 let GraphActivity::Execution(event) = activity else {
                     return;
                 };
                 match event.kind() {
-                    RunApplicationEventKind::ResultInspectionRequested { result_id, .. } => {
-                        observed_result.store(result_id.get(), Ordering::SeqCst);
+                    RunApplicationEventKind::ResultInspectionRequested { result_id, source } => {
+                        observed_requests
+                            .lock()
+                            .unwrap()
+                            .push((result_id.get(), source.clone()));
                     }
                     RunApplicationEventKind::RunCompleted
                         if !edited.swap(true, Ordering::SeqCst) =>
@@ -1009,13 +1015,25 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
     else {
         panic!("execution receipt");
     };
+    assert_eq!(run.status, "succeeded", "{:?}", run.failure_code);
     assert!(edited.load(Ordering::SeqCst));
-    assert_eq!(run.status, "succeeded");
     assert!(run.results_complete);
     assert_eq!(run.result_count, Some(run.results.len()));
-    assert!(run.results.iter().any(|result| result.result_id
-        == observed_result.load(Ordering::SeqCst)
-        && Some(result.run_id) == run.run_id));
+    let requests = observed_requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].0, requests[1].0);
+    for view in ["view", "view2"] {
+        assert!(requests.iter().any(|(_, source)| {
+            source
+                .node()
+                .is_some_and(|node| node.as_str() == created.created_nodes[view])
+        }));
+    }
+    assert!(
+        run.results
+            .iter()
+            .any(|result| result.result_id == requests[0].0 && Some(result.run_id) == run.run_id)
+    );
     assert_ne!(run.graph_hash, graph_hash(&f.document).unwrap());
 }
 

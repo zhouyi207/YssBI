@@ -56,6 +56,7 @@ pub(super) fn function_mutation_error(
 impl ProjectState {
     pub fn update_function_signature(
         &self,
+        registry: &yss_node_registry::NodeRegistry,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
@@ -109,6 +110,9 @@ impl ProjectState {
         );
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)
             .map_err(function_mutation_error)?;
+        let expected_graph_paths =
+            super::graph_references::capture_function_dependents(&snapshot, graph_path, registry)
+                .map_err(function_mutation_error)?;
         let mut candidate = snapshot.data.graphs[graph_path].clone();
         if self.is_graph_modified(graph_path) {
             candidate.document = crate::project_io::load_project_graph_document_from_file(
@@ -137,7 +141,7 @@ impl ProjectState {
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)
             .map_err(function_mutation_error)?;
         let committed = prepared.commit().map_err(function_mutation_error)?;
-        match self.commit_function_signature(expected_project_instance_id, graph_path, request) {
+        match self.commit_function_signature(&snapshot, graph_path, request, expected_graph_paths) {
             Ok(result) => {
                 committed.finalize();
                 reservation.complete();
@@ -152,31 +156,20 @@ impl ProjectState {
 
     fn commit_function_signature(
         &self,
-        expected_project_instance_id: &ProjectInstanceId,
+        snapshot: &crate::project_writers::WriterSnapshot,
         graph_path: &GraphResourcePath,
         request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
+        expected_graph_paths: Vec<String>,
     ) -> Result<CommittedResourceMutation, ProjectResourceMutationError> {
         self.ensure_mutation_operational()?;
-        let function_key = yss_project_history::FunctionResourceKey(graph_path.as_str().into());
-        let expected_resource = ResourceKey::Function(function_key.clone());
-        let session = self
-            .capture_project_session()
-            .map_err(function_mutation_error)?;
-        let expected_session = self.current_projection_environment_expectation();
-        let authority = self
-            .capture_project_authority_for_session(&session)
-            .map_err(function_mutation_error)?;
+        let expected_resource = ResourceKey::Function(yss_project_history::FunctionResourceKey(
+            graph_path.as_str().into(),
+        ));
+        let authority = super::authority::ProjectAuthoritySnapshot {
+            project_instance_id: snapshot.session.instance_id.clone(),
+            authority_generation: snapshot.authority_generation,
+        };
         let mut publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != expected_project_instance_id.as_str() {
-            return Err(ProjectResourceMutationError::StaleProjectLifecycle(
-                "caller project changed before signature authority commit".into(),
-            ));
-        }
-        if publication.project_instance_id != expected_session.project_instance_id.as_str() {
-            return Err(ProjectResourceMutationError::StaleProjectLifecycle(
-                "project changed before signature authority commit".into(),
-            ));
-        }
         if !authority.matches_publication(&publication) {
             return Err(ProjectResourceMutationError::StaleProjectLifecycle(
                 "projection environment changed before signature authority commit".into(),
@@ -193,20 +186,10 @@ impl ProjectState {
         let to_revision = from_revision
             .checked_next()
             .map_err(|error| ProjectResourceMutationError::Mutation(error.to_string().into()))?;
-        let mut next_data = data.clone();
-        next_data
-            .graphs
-            .get_mut(graph_path)
-            .ok_or_else(|| {
-                ProjectResourceMutationError::Mutation(
-                    format!("Function owner graph '{graph_path}' is not loaded").into(),
-                )
-            })?
-            .function = Some(yss_project_history::FunctionDocument {
+        let function = yss_project_history::FunctionDocument {
             revision: to_revision,
             signature: request.payload.after.clone(),
-        });
-        let mut next_graph_resource_revisions = graph_resource_revisions.clone();
+        };
         let graph_revision = super::checked_resource_revision(
             graph_path.as_str(),
             graph_resource_revisions
@@ -215,7 +198,6 @@ impl ProjectState {
                 .unwrap_or(ResourceRevision::INITIAL),
         )
         .map_err(function_mutation_error)?;
-        next_graph_resource_revisions.insert(graph_path.clone(), graph_revision);
         let deltas = vec![yss_project_history::ResourceDeltaEvent {
             resource: expected_resource,
             from_revision,
@@ -223,9 +205,14 @@ impl ProjectState {
             caused_by: Some(request.operation_id),
             payload: yss_project_history::ResourceDocumentPatch::Function(request.payload),
         }];
-        let expected_graph_paths = affected_projection_paths(&deltas, &next_data);
-        *data = next_data;
-        *graph_resource_revisions = next_graph_resource_revisions;
+        let graph = data.graphs.get_mut(graph_path).ok_or_else(|| {
+            ProjectResourceMutationError::Mutation(
+                format!("Function owner graph '{graph_path}' is not loaded").into(),
+            )
+        })?;
+        // All fallible checks precede these writes under the publication lock.
+        graph.function = Some(function);
+        graph_resource_revisions.insert(graph_path.clone(), graph_revision);
         let publication_revision = publication.commit_prepared(publication_advance);
         Ok(CommittedResourceMutation {
             operation_id: request.operation_id,
@@ -259,6 +246,9 @@ mod tests {
 
     #[test]
     fn signature_commit_preserves_revision_and_patch_admission() {
+        let registry = yss_node_catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let (fixture, path) = function_project(ResourceRevision::INITIAL);
         let state = fixture.state();
         let project = ProjectInstanceId::from_existing(state.project_instance_id());
@@ -275,7 +265,7 @@ mod tests {
             FunctionDocumentPatch::new(FunctionSignature::default(), after.clone()),
         );
         let receipt = state
-            .update_function_signature(&project, &path, request.clone())
+            .update_function_signature(&registry, &project, &path, request.clone())
             .unwrap()
             .into_parts();
         let next_revision = ResourceRevision::INITIAL.checked_next().unwrap();
@@ -327,7 +317,7 @@ mod tests {
             ..request.clone()
         };
         assert!(matches!(
-            state.update_function_signature(&project, &path, stale),
+            state.update_function_signature(&registry, &project, &path, stale),
             Err(ProjectResourceMutationError::StaleRevision { .. })
         ));
         let mismatched_patch = MutationRequest {
@@ -336,14 +326,90 @@ mod tests {
             ..request
         };
         assert!(matches!(
-            state.update_function_signature(&project, &path, mismatched_patch),
+            state.update_function_signature(&registry, &project, &path, mismatched_patch),
             Err(ProjectResourceMutationError::Mutation(_))
         ));
         assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
     }
 
     #[test]
+    fn signature_publication_rejects_authority_changed_since_dependency_capture() {
+        use yss_graph_document::{
+            DocumentNode, GraphDocumentOperation, GraphDocumentPatch, NodeId, NodePosition,
+        };
+        let (fixture, path) = function_project(ResourceRevision::INITIAL);
+        let state = fixture.state();
+        let project = state.capture_project_session().unwrap().instance_id;
+        let editing = state.read_graph_editing(&project, &path).unwrap();
+        let snapshot = state.capture_writer_snapshot(&project).unwrap();
+        let mut document = (*editing.document).clone();
+        let id = NodeId::new();
+        let node = DocumentNode {
+            id,
+            node_type: "yssbi.project.function.entry".parse().unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: [(
+                "function".parse().unwrap(),
+                serde_json::json!(path.as_str()),
+            )]
+            .into(),
+            user_label: None,
+        };
+        document.nodes.insert(id, node.clone());
+        let capture = state
+            .capture_graph_edit(
+                &project,
+                &path,
+                editing.state.version,
+                OperationId::new(),
+                [0; 32],
+            )
+            .unwrap();
+        state
+            .commit_graph_edit(
+                capture,
+                Arc::new(document.clone()),
+                GraphHistoryAction::Edit(GraphDocumentPatch::new(vec![
+                    GraphDocumentOperation::InsertNode { node },
+                ])),
+            )
+            .unwrap();
+        let publication = state.mutation_publication.lock().unwrap().resource_revision;
+        let request = MutationRequest::new(
+            ResourceKey::Function(yss_project_history::FunctionResourceKey(
+                path.as_str().into(),
+            )),
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            FunctionDocumentPatch::new(
+                FunctionSignature::default(),
+                FunctionSignature {
+                    return_type: Some("Numeric".into()),
+                    ..FunctionSignature::default()
+                },
+            ),
+        );
+        assert!(matches!(
+            state.commit_function_signature(&snapshot, &path, request, vec![path.as_str().into()]),
+            Err(ProjectResourceMutationError::StaleProjectLifecycle(_))
+        ));
+        let current = state.get_data().unwrap();
+        assert_eq!(current.graphs[&path].document, document);
+        assert_eq!(
+            current.graphs[&path].function.as_ref().unwrap().signature,
+            FunctionSignature::default()
+        );
+        assert_eq!(
+            state.mutation_publication.lock().unwrap().resource_revision,
+            publication
+        );
+    }
+
+    #[test]
     fn exhausted_signature_revision_preserves_project_publication_and_data() {
+        let registry = yss_node_catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let revision = ResourceRevision::new(u64::MAX);
         let (fixture, path) = function_project(revision);
         let state = fixture.state();
@@ -366,7 +432,7 @@ mod tests {
             ),
         );
         assert!(matches!(
-            state.update_function_signature(&session.instance_id, &path, request),
+            state.update_function_signature(&registry, &session.instance_id, &path, request),
             Err(ProjectResourceMutationError::Mutation(_))
         ));
         assert_eq!(state.get_data().unwrap().graphs[&path].function, before);

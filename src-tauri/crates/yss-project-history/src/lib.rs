@@ -1,18 +1,7 @@
 use serde::{Deserialize, Serialize};
-use yss_chart_document::ChartEncodings;
+use yss_chart_document::{ChartEncodings, ChartType};
 use yss_graph_document::{FunctionParameterId, GraphResourcePath};
 use yss_project_identity::{OperationId, ResourceRevision};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceKind {
-    Graph,
-    Function,
-    Database,
-    Chart,
-    Mind,
-    Doc,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "key", rename_all = "snake_case")]
@@ -23,19 +12,6 @@ pub enum ResourceKey {
     Chart(ChartResourceKey),
     Mind(MindResourceKey),
     Doc(DocResourceKey),
-}
-
-impl ResourceKey {
-    pub const fn kind(&self) -> ResourceKind {
-        match self {
-            Self::Graph(_) => ResourceKind::Graph,
-            Self::Function(_) => ResourceKind::Function,
-            Self::Chart(_) => ResourceKind::Chart,
-            Self::Mind(_) => ResourceKind::Mind,
-            Self::Doc(_) => ResourceKind::Doc,
-            Self::Database(_) => ResourceKind::Database,
-        }
-    }
 }
 
 /// Project-owned mutation envelope. Application and Command adapters may
@@ -118,10 +94,6 @@ impl FunctionDocumentPatch {
     pub fn new(before: FunctionSignature, after: FunctionSignature) -> Self {
         Self { before, after }
     }
-
-    pub fn inverse(&self) -> Self {
-        Self::new(self.after.clone(), self.before.clone())
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,35 +120,17 @@ pub struct ResourceLifecyclePatch {
     pub after: Option<ResourceLifecycleState>,
 }
 
-impl ResourceLifecyclePatch {
-    pub fn inverse(&self) -> Self {
-        Self {
-            before: self.after.clone(),
-            after: self.before.clone(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourcePathMovePatch {
     pub from: Box<str>,
     pub to: Box<str>,
 }
 
-impl ResourcePathMovePatch {
-    pub fn inverse(&self) -> Self {
-        Self {
-            from: self.to.clone(),
-            to: self.from.clone(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartDocumentState {
     pub database_id: String,
-    pub chart_type: String,
+    pub chart_type: ChartType,
     pub encodings: ChartEncodings,
 }
 
@@ -186,28 +140,10 @@ pub struct ChartDocumentPatch {
     pub after: ChartDocumentState,
 }
 
-impl ChartDocumentPatch {
-    pub fn inverse(&self) -> Self {
-        Self {
-            before: self.after.clone(),
-            after: self.before.clone(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseDocumentPatch {
     pub before: Option<yss_database_contract::DatabaseDecl>,
     pub after: Option<yss_database_contract::DatabaseDecl>,
-}
-
-impl DatabaseDocumentPatch {
-    pub fn inverse(&self) -> Self {
-        Self {
-            before: self.after.clone(),
-            after: self.before.clone(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -218,27 +154,6 @@ pub enum ResourceDocumentPatch {
     ResourceLifecycle(ResourceLifecyclePatch),
     ResourceMove(ResourcePathMovePatch),
     Database(DatabaseDocumentPatch),
-}
-
-impl ResourceDocumentPatch {
-    pub const fn kind(&self) -> ResourceKind {
-        match self {
-            Self::ResourceLifecycle(_) | Self::ResourceMove(_) => ResourceKind::Graph,
-            Self::Function(_) => ResourceKind::Function,
-            Self::Chart(_) => ResourceKind::Chart,
-            Self::Database(_) => ResourceKind::Database,
-        }
-    }
-
-    pub fn inverse(&self) -> Self {
-        match self {
-            Self::Function(patch) => Self::Function(patch.inverse()),
-            Self::Chart(patch) => Self::Chart(patch.inverse()),
-            Self::ResourceLifecycle(patch) => Self::ResourceLifecycle(patch.inverse()),
-            Self::ResourceMove(patch) => Self::ResourceMove(patch.inverse()),
-            Self::Database(patch) => Self::Database(patch.inverse()),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

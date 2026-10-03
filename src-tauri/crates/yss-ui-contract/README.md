@@ -104,8 +104,10 @@ GUI 与 Harness 交错提交遵循相同的修订比较。流式生成按完整�
 
 后端 Channel 使用 128 条有界广播缓冲；慢消费产生 resync，前端重读当前快照，不补发无界历史。
 每个 WebView、每个项目通过 presentationService 共用一条会话级订阅，按监听者分发到页面与工作台意图。页面卸载只释放自己的监听者，最后一个监听者离开才关闭 Channel；工作台监听者加入或退出时重新绑定订阅权限并恢复快照。页面仍统一通过 installUiUpdate 接纳 Command 和 Channel 更新。
-Application 只发布中立 observer 通知，Tokio 缓冲与任务归 IPC；取消订阅释放 observer，Application 用例不依赖异步传输运行时。
+Application 只发布中立 observer 通知，Tokio 缓冲与任务归 IPC，Application 用例不依赖异步传输运行时。
+取消订阅在注册表锁内移除 observer，锁外释放回调及其捕获资源，允许资源析构重入订阅管理。页面和意图的同步通知继续按提交顺序发布。
 关闭窗口或卸载取消订阅；Application session 替换后旧流发出 sessionChanged 并结束，前端重新订阅。旧结果引用仍由 Results 拒绝，不重绑定到新运行。
+前端取得订阅清理入口后即交回生命周期，不等待首个页面快照；卸载时仍可立即释放监听者，迟到快照由原绑定身份拒绝。
 独立报告窗口通过已有项目初始化入口建立上下文，使用相同的 Spec 和同步协议。
 
 ## 意图与回执
@@ -123,6 +125,9 @@ GUI 页面按钮和 Harness `request_ui_intent` 共用 Application。`openResour
 
 未认领或未确认的请求超过 30 秒转为 expired；它表示没有及时得到完成证据，不能宣称已执行或撤销。没有活动工作台时请求直接失败。
 重连恢复只投递 pending 意图，不重新执行 claimed 意图。Harness 可通过 `inspect_ui` 的 intent 查询回执，pending 不是成功证据。
+前端 `uiIntentDelivery` 拥有当前工作台绑定的临时认领队列与恢复请求，React hook 只负责订阅及生命周期。
+pending 读取期间再次收到缺口会合并为一次后续读取；旧请求成功或失败后均重新查询，项目或绑定失效则丢弃后续恢复和旧回执。
+前端交付队列满载时记录一次恢复需求，原队列排空后重新读取 pending；后台已过期并淘汰的旧回执不能让新意图永久漏投递。恢复不扩张队列，也不重放已经认领的操作。
 项目替换后不执行旧队列，结果打开仍经既有租约取得与失败释放流程。
 
 ## 保存与技术选择

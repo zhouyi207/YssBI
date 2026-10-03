@@ -1,7 +1,7 @@
 //! Product runtime composition. Concrete adapters are selected here, outside use cases.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use thiserror::Error;
 use yss_filesystem::watcher::WatcherState;
@@ -27,7 +27,7 @@ struct ApplicationServices {
     samples: SampleCatalog,
     harness: HarnessServices,
     projects: ProjectManagement,
-    watcher: WatcherState,
+    watcher: Mutex<WatcherState>,
     plugins: PluginManager,
 }
 
@@ -72,7 +72,7 @@ impl ApplicationServices {
             samples,
             harness,
             projects,
-            watcher,
+            watcher: Mutex::new(watcher),
             plugins,
         })
     }

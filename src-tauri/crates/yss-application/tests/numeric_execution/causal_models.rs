@@ -45,7 +45,7 @@ fn field<'a>(value: &'a RuntimeValue, key: &str) -> &'a RuntimeValue {
 }
 
 #[test]
-fn causal_category_all_thirteen_nodes_execute_catalog_defaults_and_typed_effect_connections() {
+fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections() {
     yss_application::session::NodeComponents::builtins().unwrap();
     let f: serde_json::Value = serde_json::from_str(include_str!(
         "../../../yss-sci/tests/fixtures/causal_category_reference.json"
@@ -66,6 +66,9 @@ fn causal_category_all_thirteen_nodes_execute_catalog_defaults_and_typed_effect_
         "causal.ate",
         "causal.att",
         "causal.synthetic_control",
+        "panel.did.twfe",
+        "iv.2sls.fit",
+        "iv.liml.fit",
     ] {
         let id = format!("yssbi.statistics.{method}");
         for locale in ["en-US", "zh-CN"] {
@@ -85,6 +88,49 @@ fn causal_category_all_thirteen_nodes_execute_catalog_defaults_and_typed_effect_
         let mut inputs = vec![];
         let projection = matches!(method, "causal.ate" | "causal.att");
         match method {
+            "iv.2sls.fit" | "iv.liml.fit" => {
+                let signal = |row: usize, bit: usize| {
+                    if row & (1 << bit) == 0 { -1.0 } else { 1.0 }
+                };
+                let x = (0..64).map(|i| signal(i, 0)).collect::<Vec<_>>();
+                let z1 = (0..64).map(|i| signal(i, 1)).collect::<Vec<_>>();
+                let z2 = (0..64).map(|i| signal(i, 2)).collect::<Vec<_>>();
+                let endogenous = (0..64)
+                    .map(|i| 2. * z1[i] + 0.5 * z2[i] + 0.3 * x[i] + signal(i, 3))
+                    .collect::<Vec<_>>();
+                let response = (0..64)
+                    .map(|i| {
+                        1. + 0.7 * x[i]
+                            + 2. * endogenous[i]
+                            + 0.8 * signal(i, 3)
+                            + 0.5 * signal(i, 4)
+                            + signal(i, 5)
+                    })
+                    .collect::<Vec<_>>();
+                inputs.extend([
+                    ("response", serde_json::json!(response), false),
+                    ("predictors", serde_json::json!(x), true),
+                    ("endogenous", serde_json::json!(endogenous), true),
+                    ("instruments", serde_json::json!(z1), true),
+                    ("instruments", serde_json::json!(z2), true),
+                ]);
+            }
+            "panel.did.twfe" => {
+                let entity = (0..48).map(|i| f64::from(i / 6)).collect::<Vec<_>>();
+                let time = (0..48).map(|i| f64::from(i % 6)).collect::<Vec<_>>();
+                let treatment = (0..48)
+                    .map(|i| f64::from(entity[i] < 3. && time[i] >= 3.))
+                    .collect::<Vec<_>>();
+                let response = (0..48)
+                    .map(|i| entity[i] * 0.4 + time[i] * 0.3 + 1.75 * treatment[i])
+                    .collect::<Vec<_>>();
+                inputs.extend([
+                    ("response", serde_json::json!(response), false),
+                    ("entity", serde_json::json!(entity), false),
+                    ("time", serde_json::json!(time), false),
+                    ("treatment", serde_json::json!(treatment), false),
+                ]);
+            }
             "econometrics.sur" => {
                 repeated(&mut inputs, "responses", &f["sur"]["responses"]);
                 repeated(&mut inputs, "predictors", &f["sur"]["predictors"]);
@@ -211,7 +257,81 @@ fn causal_category_all_thirteen_nodes_execute_catalog_defaults_and_typed_effect_
                 PortAddress::declared(target, "effects".parse().unwrap()),
             );
         }
+        if matches!(method, "iv.2sls.fit" | "iv.liml.fit") {
+            let summary_id = id.replace(".fit", ".summary");
+            let summary = node(
+                &mut document,
+                &summary_id,
+                serde_json::json!({"first_stage":true}),
+            );
+            connect(
+                &mut document,
+                model,
+                "model",
+                PortAddress::declared(summary, "model".parse().unwrap()),
+            );
+            let report =
+                execute(&document, &summary_id).unwrap_or_else(|e| panic!("{method}: {e:?}"));
+            assert_eq!(
+                field(&report, "responseName"),
+                &RuntimeValue::Scalar(TabularScalar::String("column0".into()))
+            );
+            assert_eq!(
+                field(field(&report, "coefficients"), "labels"),
+                &RuntimeValue::List(
+                    ["_cons", "column1", "column2"]
+                        .into_iter()
+                        .map(|name| RuntimeValue::Scalar(TabularScalar::String(name.into())))
+                        .collect(),
+                )
+            );
+            let RuntimeValue::List(equations) = field(field(&report, "firstStage"), "equations")
+            else {
+                panic!("first-stage equations")
+            };
+            assert_eq!(equations.len(), 1);
+            assert_eq!(
+                field(&equations[0], "endog_name"),
+                &RuntimeValue::Scalar(TabularScalar::String("column2".into()))
+            );
+            assert_eq!(
+                field(&equations[0], "var_names"),
+                &RuntimeValue::List(
+                    ["_cons", "column1", "column3", "column4"]
+                        .into_iter()
+                        .map(|name| RuntimeValue::Scalar(TabularScalar::String(name.into())))
+                        .collect(),
+                )
+            );
+            field(&report, "report_display");
+            continue;
+        }
         let r = execute(&document, &id).unwrap_or_else(|e| panic!("{method}: {e:?}"));
+        if method == "panel.did.twfe" {
+            let model = field(&r, "model");
+            assert_eq!(
+                field(model, "family"),
+                &RuntimeValue::Scalar(TabularScalar::String("panel_did_twfe".into()))
+            );
+            let RuntimeValue::List(names) = field(model, "parameterNames") else {
+                panic!("parameter names")
+            };
+            let treatment_index = names
+                .iter()
+                .position(|name| name == &RuntimeValue::Scalar(TabularScalar::String("ATT".into())))
+                .unwrap();
+            let RuntimeValue::List(coefficients) = field(model, "coefficients") else {
+                panic!("coefficients")
+            };
+            assert!(matches!(
+                &coefficients[treatment_index],
+                RuntimeValue::Scalar(TabularScalar::Float64(value))
+                    if (value.as_f64() - 1.75).abs() < 1e-10
+            ));
+            field(&r, "summary");
+            field(&r, "report_display");
+            continue;
+        }
         let key = match method {
             "causal.ate" | "causal.att" => "effect",
             "causal.psm" | "causal.ipw" | "causal.regression_adjustment" | "causal.aipw" => "ate",

@@ -146,6 +146,7 @@ pub(super) fn inspect_database(
     application: &ApplicationState,
     session: &ApplicationSession,
     request: &InspectResourceRequest,
+    expected_revision: ResourceRevision,
 ) -> Result<(ResourceContent, bool)> {
     let id = request.resource.id.clone();
     let database = DatabaseId::from_existing(id.clone().into_boxed_str());
@@ -161,18 +162,19 @@ pub(super) fn inspect_database(
     )?;
     let project = session.project_instance_id().clone();
     let metadata = application
-        .query_database_meta_for_application(project.clone(), id.clone())
+        .query_database_meta_for_application(project.clone(), id.clone(), expected_revision)
         .map_err(database_error)?;
     let page = application
         .query_database_rows_for_application(
             project.clone(),
             id.clone(),
+            expected_revision,
             request.offset,
             request.limit,
         )
         .map_err(database_error)?;
     let state = application
-        .query_database_edit_state_for_application(project, id)
+        .query_database_edit_state_for_application(project, id, expected_revision)
         .map_err(database_error)?;
     let rows = (0..page.rows.row_count())
         .map(|row| {

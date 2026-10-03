@@ -9,6 +9,10 @@ Version 0.2 of the shared contract implements wire protocol major 2. The package
 budgets, task states, diagnostics and operation identity validation; it has no host implementation
 dependency. Rust schemas generate host transport types, while the Web SDK carries the same protocol.
 
+Manifest validation rejects duplicate IDs within each view, command and task-type collection.
+A task ID therefore selects one artifact-production rule before the host applies project and
+result-write admission checks; declaration order cannot select between conflicting rules.
+
 `scripts/generate-plugin-contract.mjs` owns frontend type/schema generation beside this crate.
 Run `pnpm generate:plugins` or `pnpm generate:plugins:check` from the repository root.
 

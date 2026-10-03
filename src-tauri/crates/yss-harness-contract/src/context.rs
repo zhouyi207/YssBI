@@ -2,16 +2,18 @@
 
 use crate::{AgentInvocationScope, ApprovalGrantId};
 use schemars::JsonSchema;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 macro_rules! string_identity {
     ($name:ident, $label:literal) => {
         impl $name {
-            pub fn try_new(value: impl Into<String>) -> Result<Self, AutomationIdentityError> {
+            pub fn try_new(
+                value: impl Into<String>,
+            ) -> Result<Self, $crate::AutomationIdentityError> {
                 let value = value.into();
                 if value.trim().is_empty() || value.len() > 128 {
-                    return Err(AutomationIdentityError::Invalid($label));
+                    return Err($crate::AutomationIdentityError::Invalid($label));
                 }
                 Ok(Self(value))
             }
@@ -21,12 +23,12 @@ macro_rules! string_identity {
             }
         }
 
-        impl<'de> Deserialize<'de> for $name {
+        impl<'de> serde::Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: Deserializer<'de>,
+                D: serde::Deserializer<'de>,
             {
-                let value = String::deserialize(deserializer)?;
+                let value = <String as serde::Deserialize>::deserialize(deserializer)?;
                 Self::try_new(value).map_err(serde::de::Error::custom)
             }
         }
@@ -38,6 +40,8 @@ macro_rules! string_identity {
         }
     };
 }
+
+pub(crate) use string_identity;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, JsonSchema)]
 #[serde(transparent)]

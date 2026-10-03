@@ -32,7 +32,7 @@ use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicPortBinding, InputState, NodeId, NodePosition,
     OrderKey, ParameterValues, PortInstanceId,
 };
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_catalog::build_builtin_node_system;
 use yss_node_protocol::{PortKey, TypeState};
 use yss_node_registry::NodeRegistryBuilder;
@@ -48,11 +48,7 @@ fn semantics(
     yss_graph_analysis::resolve_graph_semantics(
         document,
         registry,
-        &ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
-        ),
+        &ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new()),
     )
 }
 
@@ -179,11 +175,7 @@ fn connections_consume_the_exact_multi_output_port_value() {
         );
     }
     document.nodes.remove(&source);
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let semantics =
         yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &resources);
     assert!(semantics.ready().is_some(), "{:?}", semantics.diagnostics());
@@ -451,6 +443,78 @@ fn normalized_add_literals_resolve_and_prepare_as_typed_scalars() {
         value,
         PlanParameterValue::Literal(value) if matches!(value.as_ref(), RuntimeValue::Scalar(TabularScalar::Float64(number)) if number.as_f64() == 2.5)
     )));
+}
+
+#[test]
+fn view_requires_an_output_binding_before_plan_preparation() {
+    let builtin = build_builtin_node_system().unwrap();
+    let view = NodeId::new();
+    let input = PortAddress::declared(view, PortKey::new("data").unwrap());
+    let mut document = GraphDocument::default();
+    document.nodes.insert(
+        view,
+        DocumentNode {
+            id: view,
+            node_type: "yssbi.debug.view".parse().unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    document.input_states.insert(
+        input.clone(),
+        InputState {
+            literal_override: Some(yss_node_protocol::TypedValue {
+                value_type: yss_node_protocol::TypeExpr::Concrete("core.numeric".parse().unwrap()),
+                value: yss_data_contract::DataValue::Integer(42),
+            }),
+        },
+    );
+    let literal = semantics(&document, &builtin.registry);
+    assert!(
+        literal.ready().is_none(),
+        "View cannot inspect an inline literal without an upstream result"
+    );
+    assert!(literal.diagnostics().iter().any(|diagnostic| {
+        diagnostic.blocking && diagnostic.code.as_str() == "graph.input.literal_forbidden"
+    }));
+    assert!(matches!(
+        build_template(&graph_path(), PlanId::from_existing(13), &literal),
+        Err(GraphPlanError::NotReady)
+    ));
+
+    document.input_states.remove(&input);
+    let source = NodeId::new();
+    let mut source_node = document.nodes[&view].clone();
+    source_node.id = source;
+    document.nodes.insert(source, source_node);
+    set_constant(
+        &mut document,
+        source,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+        yss_data_contract::DataValue::Integer(42),
+    );
+    let id = yss_graph_document::ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(source, PortKey::new("value").unwrap()),
+            input,
+            order: None,
+        },
+    );
+    let connected = semantics(&document, &builtin.registry);
+    let template = build_template(&graph_path(), PlanId::from_existing(14), &connected)
+        .expect("View continues to inspect a connected scalar output");
+    assert!(template.plan.operations().iter().any(|operation| {
+        matches!(
+            operation.observation_intents(),
+            [PlanObservationIntent::InspectInput {
+                source: PlanInputSource::Value(_)
+            }]
+        )
+    }));
 }
 
 #[test]

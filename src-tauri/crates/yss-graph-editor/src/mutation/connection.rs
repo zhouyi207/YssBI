@@ -179,24 +179,10 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
             else {
                 unreachable!("authoritative resource kind was checked before destructuring");
             };
-            let resolver_id = resolver.as_str();
-            let type_name = if resolver_id == yss_node_catalog::FUNCTION_CALL_ARGUMENTS_RESOLVER
-                && spec.direction == PortDirection::Input
-            {
-                signature
-                    .parameters
-                    .iter()
-                    .find(|candidate| candidate.id == *parameter)
-                    .map(|parameter| parameter.type_name.as_str())
-            } else if resolver_id == yss_node_catalog::FUNCTION_CALL_RESULTS_RESOLVER
-                && spec.direction == PortDirection::Output
-                && parameter.as_str() == "return"
-            {
-                signature.return_type.as_deref()
-            } else {
-                None
-            };
-            let type_name = type_name.ok_or_else(|| {
+            let data_type = crate::compatibility::function_member_data_type(
+                signature, spec, parameter,
+            )
+            .ok_or_else(|| {
                 invalid_editor_mutation(format!(
                     "function member '{}:{}' is not authoritative for template '{}' on '{}'",
                     function.as_str(),
@@ -205,12 +191,11 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                     protocol.type_id
                 ))
             })?;
-            crate::compatibility::function_type_expr(type_name).map_err(|error| {
+            crate::compatibility::editor_type_expr(data_type).map_err(|error| {
                 invalid_editor_mutation(format!(
-                    "function member '{}:{}' has invalid authoritative type '{}': {error}",
+                    "function member '{}:{}' has invalid authoritative type '{data_type:?}': {error}",
                     function.as_str(),
                     parameter.as_str(),
-                    type_name
                 ))
             })
         }

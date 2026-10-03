@@ -71,7 +71,7 @@ pub(super) fn map_application_project_lifecycle_error(
 fn start_project_watcher(
     app: &AppHandle,
     application: &ApplicationState,
-    watcher: &WatcherState,
+    watcher: &Mutex<WatcherState>,
     path: &str,
     project_instance_id: &ProjectInstanceId,
 ) {
@@ -81,7 +81,8 @@ fn start_project_watcher(
         project_instance_id: project_instance_id.clone(),
         version: Mutex::new(0),
     });
-    if let Err(error) = watcher.watch(yss_project::project_root_from_path(path), sink) {
+    if let Err(error) = application.watch_project_changes(watcher, path, project_instance_id, sink)
+    {
         tracing::warn!(
             target: "yssbi::project::watcher",
             log_domain = "system",
@@ -188,7 +189,7 @@ fn next_watcher_version(version: &Mutex<u64>) -> Option<u64> {
 pub fn load_project(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<WatcherState>,
+    watcher: State<Mutex<WatcherState>>,
     path: String,
 ) -> Result<ProjectActivationResultDto, CommandError> {
     tracing::info!(
@@ -229,7 +230,7 @@ pub fn load_project(
 pub async fn save_project_as(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<'_, WatcherState>,
+    watcher: State<'_, Mutex<WatcherState>>,
     projects: State<'_, ProjectManagement>,
     path: String,
     project_instance_id: ProjectInstanceId,
@@ -318,7 +319,7 @@ pub(crate) fn publish_lifecycle_result(app: &AppHandle, result: &LifecycleMutati
 pub async fn close_project(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<'_, WatcherState>,
+    watcher: State<'_, Mutex<WatcherState>>,
     project_instance_id: ProjectInstanceId,
 ) -> Result<(), CommandError> {
     tracing::info!(
@@ -331,7 +332,7 @@ pub async fn close_project(
     application
         .clear_project_for_application(&project_instance_id)
         .map_err(map_application_project_lifecycle_error)?;
-    watcher.stop();
+    application.stop_project_watcher(&watcher);
     emit_project_event(
         &app,
         Event::Project(Box::new(EventProject::ProjectCleared {

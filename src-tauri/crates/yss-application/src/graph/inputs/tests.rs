@@ -58,12 +58,7 @@ fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {
     let mut databases = BTreeMap::new();
     databases.insert(database.id.clone(), database);
 
-    let project = ProjectGraphResourceSnapshot::new(
-        yss_project_identity::ProjectInstanceId::from_existing("project".into()),
-        7,
-        functions,
-        databases,
-    );
+    let project = ProjectGraphResourceSnapshot::new(functions, databases);
     let catalog = build_resource_catalog(&project, &schema).unwrap();
     assert!(catalog.function_signature(&function_path).is_some());
     assert!(

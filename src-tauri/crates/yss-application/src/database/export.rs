@@ -1,4 +1,17 @@
-use super::*;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use uuid::Uuid;
+use yss_database_contract::DatabaseExportFormat;
+use yss_database_runtime::session_api;
+use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+
+use super::error::map_database_runtime_error;
+use super::mutation::check_database_revision;
+use super::{
+    DatabaseApplicationOperation, DatabaseOperationError, DatabaseUseCaseError, database_id,
+};
+use crate::session::{ApplicationSession, ApplicationState};
 
 pub(super) fn export_database_in_captured_session(
     state: &ApplicationState,
@@ -9,7 +22,12 @@ pub(super) fn export_database_in_captured_session(
     expected_revision: Option<ResourceRevision>,
 ) -> Result<(), DatabaseUseCaseError> {
     if let Some(revision) = expected_revision {
-        check_database_revision(captured, id, revision)?;
+        check_database_revision(
+            captured,
+            id,
+            revision,
+            DatabaseApplicationOperation::ExportRead,
+        )?;
     }
     let export_format = format.parse::<DatabaseExportFormat>().map_err(|_| {
         DatabaseOperationError::ExportUnsupported {
@@ -23,6 +41,16 @@ pub(super) fn export_database_in_captured_session(
         .map_err(|error| {
             map_database_runtime_error(error, DatabaseApplicationOperation::ExportRead, id)
         })?;
+    if let Some(expected_revision) = expected_revision
+        && basis.declaration_revision().get() != expected_revision.get()
+    {
+        return Err(DatabaseUseCaseError::Database(
+            DatabaseOperationError::StaleRevision {
+                database_id: id.to_owned(),
+                expected_revision,
+            },
+        ));
+    }
     let destination = Path::new(path);
     let temporary = reserve_export_temporary_file(destination)?;
     let result: Result<(), DatabaseUseCaseError> = (|| {
@@ -47,7 +75,12 @@ pub(super) fn export_database_in_captured_session(
             .revalidate_captured_session(captured)
             .map_err(DatabaseUseCaseError::SessionChanged)?;
         if let Some(revision) = expected_revision {
-            check_database_revision(captured, id, revision)?;
+            check_database_revision(
+                captured,
+                id,
+                revision,
+                DatabaseApplicationOperation::ExportRead,
+            )?;
         }
         // Unix can fail syncing the directory after rename committed. Never infer
         // rollback from this error, retry publication, or clean up the destination.
@@ -138,6 +171,29 @@ fn cleanup_after_export_error(
             );
             primary
         }
+    }
+}
+
+impl ApplicationState {
+    pub fn export_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        path: String,
+        format: String,
+        expected_revision: Option<ResourceRevision>,
+    ) -> Result<(), DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        export_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            &path,
+            &format,
+            expected_revision,
+        )?;
+        self.revalidate_captured_session(&captured)
+            .map_err(DatabaseUseCaseError::SessionChanged)
     }
 }
 

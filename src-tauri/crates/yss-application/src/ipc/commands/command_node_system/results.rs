@@ -172,6 +172,7 @@ pub fn get_graph_result_state(
     state
         .query_graph_result_state(graph, hash)
         .map_err(result_query_command_error)?
+        .as_ref()
         .map(crate::ipc::schema::result::graph_result_state_to_dto)
         .transpose()
 }

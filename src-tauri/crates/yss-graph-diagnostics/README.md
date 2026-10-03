@@ -7,6 +7,8 @@
 
 [src/lib.rs](src/lib.rs) 定义稳定的图诊断词汇与本地化模板；运行期诊断值由 `yss-graph-analysis-contract` 拥有。
 
+`define_graph_diagnostics!` 是唯一声明源，同时生成运行期 `GraphDiagnosticKind`、代码与定义查询，以及本地化模板表；不另维护枚举到代码的映射或无生产者的模板。前端仍为未知代码或缺失参数显示通用诊断文本。
+
 ## 修改与生成
 
 修改 Rust 中的诊断词汇、模板键或参数后，从仓库根目录运行：

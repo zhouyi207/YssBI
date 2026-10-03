@@ -29,7 +29,7 @@ impl std::error::Error for InvalidSemanticId {}
 
 macro_rules! semantic_id {
     ($name:ident, $kind:literal, $validate:expr) => {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
         #[serde(transparent)]
         pub struct $name(Box<str>);
 
@@ -48,6 +48,15 @@ macro_rules! semantic_id {
         impl AsRef<str> for $name {
             fn as_ref(&self) -> &str {
                 self.as_str()
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                Self::new(Box::<str>::deserialize(deserializer)?).map_err(serde::de::Error::custom)
             }
         }
 
@@ -197,5 +206,16 @@ mod tests {
         assert!(ParameterKey::new("Display Name").is_err());
         assert!(TypeId::new("Float64").is_err());
         assert!(I18nKey::new("title").is_err());
+
+        for invalid in ["", " yssbi.value.int64", "Value:Constants:Int64", "value"] {
+            assert!(serde_json::from_value::<NodeTypeId>(serde_json::json!(invalid)).is_err());
+        }
+        for invalid in ["", "value ", "Result Value"] {
+            assert!(serde_json::from_value::<PortKey>(serde_json::json!(invalid)).is_err());
+        }
+        assert!(
+            serde_json::from_value::<crate::ParameterValues>(serde_json::json!({"bad key": 1}))
+                .is_err()
+        );
     }
 }

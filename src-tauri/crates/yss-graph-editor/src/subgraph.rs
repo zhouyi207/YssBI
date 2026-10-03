@@ -115,22 +115,27 @@ pub fn export_subgraph(
     let mut constants = BTreeMap::new();
     for node_id in node_ids {
         let node = &document.nodes[&node_id];
-        if node.node_type.as_str() == "yssbi.constant.get"
-            && let Some(constant) = node
-                .parameters
-                .get(&ParameterKey::new("constant").unwrap())
-                .and_then(|value| value.as_str())
-                .and_then(|id| id.parse::<ConstantId>().ok())
-                .and_then(|id| document.constants.get(&id))
-        {
-            constants.insert(constant.id, constant.clone());
+        let mut parameters = node.parameters.clone();
+        if let Some(protocol) = registry.protocol(&node.node_type) {
+            for (key, id) in yss_graph_document_edit::constant_references_for_copy(
+                &protocol.parameters,
+                &node.parameters,
+            ) {
+                if let Some(constant) = document.constants.get(&id) {
+                    constants.entry(id).or_insert_with(|| constant.clone());
+                }
+                // Capture source defaults in the portable copy, leaving the document unchanged.
+                parameters
+                    .entry(key.clone())
+                    .or_insert_with(|| id.to_string().into());
+            }
         }
-        validate_parameter_values(&node.parameters, &mut parameter_bytes)?;
+        validate_parameter_values(&parameters, &mut parameter_bytes)?;
         let creation = authoritative_creation(node, registry, catalog)?;
         nodes.push(ClipboardNode {
             local_id: local_nodes[&node_id].clone(),
             creation,
-            parameters: node.parameters.clone(),
+            parameters,
             user_label: node.user_label.clone(),
             relative_position: NodePosition {
                 x: node.position.x - min_x,

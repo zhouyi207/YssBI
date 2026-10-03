@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use yss_graph_diagnostics::GraphDiagnosticKind;
-use yss_graph_document::{GraphDocument, NodeId, PortAddress};
+use yss_graph_document::{GraphDocument, PortAddress};
 use yss_node_protocol::{PortDirection, TypeExpr, validate_typed_value};
 use yss_node_registry::NodeRegistry;
 
@@ -109,19 +109,14 @@ pub(crate) fn validate(
         }
     }
     for node in nodes {
-        let Some(document_node) = document.nodes.get(&node.node_id) else {
-            continue;
-        };
-        let Some(protocol) = registry.protocol(&document_node.node_type) else {
-            continue;
-        };
-        for parameter in protocol.parameters.iter() {
+        for parameter in &node.parameters {
             let Some(schema) =
                 super::parameter_projection::parameter_schema(&node.ports, parameter.key.as_str())
             else {
                 continue;
             };
-            let Some(value) = document_node.parameters.get(&parameter.key) else {
+            let Some(value) = super::parameter_projection::parameter_literal_value(parameter)
+            else {
                 continue;
             };
             if super::parameter_projection::aggregate_parameter_accepts(
@@ -131,7 +126,7 @@ pub(crate) fn validate(
             )
             .is_some()
             {
-                let valid = super::schema_resolution::aggregate_column_names(Some(value))
+                let valid = super::schema_resolution::aggregate_column_names(Some(&value))
                     .is_ok_and(|columns| {
                         columns.iter().all(|name| {
                             schema.fields.iter().any(|field| {
@@ -165,7 +160,7 @@ pub(crate) fn validate(
             };
             let valid = match type_id.as_str() {
                 PROJECT_COLUMNS_TYPE_ID => {
-                    prepare_project_columns_json(value).is_ok_and(|columns| {
+                    prepare_project_columns_json(&value).is_ok_and(|columns| {
                         columns
                             .as_slice()
                             .iter()
@@ -173,7 +168,7 @@ pub(crate) fn validate(
                     })
                 }
                 FILTER_PREDICATE_TYPE_ID => {
-                    prepare_filter_predicate_json(value).is_ok_and(|predicate| {
+                    prepare_filter_predicate_json(&value).is_ok_and(|predicate| {
                         schema
                             .fields
                             .iter()
@@ -222,52 +217,6 @@ fn port_problem(kind: GraphDiagnosticKind, address: &PortAddress) -> GraphDiagno
     )
 }
 
-pub fn contains_value_dependency_cycle(document: &GraphDocument) -> bool {
-    let mut remaining = document
-        .nodes
-        .keys()
-        .map(|node_id| (*node_id, 0_usize))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let mut dependents = std::collections::BTreeMap::<NodeId, Vec<NodeId>>::new();
-    for connection in document.connections.values() {
-        let Some(input) = remaining.get_mut(&connection.input.node_id) else {
-            continue;
-        };
-        let Some(next) = input.checked_add(1) else {
-            return true;
-        };
-        *input = next;
-        dependents
-            .entry(connection.output.node_id)
-            .or_default()
-            .push(connection.input.node_id);
-    }
-    let mut ready = remaining
-        .iter()
-        .filter_map(|(node_id, count)| (*count == 0).then_some(*node_id))
-        .collect::<std::collections::VecDeque<_>>();
-    let mut visited = 0_usize;
-    while let Some(node_id) = ready.pop_front() {
-        let Some(next_visited) = visited.checked_add(1) else {
-            return true;
-        };
-        visited = next_visited;
-        for dependent in dependents.get(&node_id).into_iter().flatten() {
-            let Some(count) = remaining.get_mut(dependent) else {
-                continue;
-            };
-            let Some(next) = count.checked_sub(1) else {
-                return true;
-            };
-            *count = next;
-            if *count == 0 {
-                ready.push_back(*dependent);
-            }
-        }
-    }
-    visited != document.nodes.len()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,8 +226,7 @@ mod tests {
         ParameterValues,
     };
     use yss_graph_resource_contract::{
-        ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint,
-        ResourceCatalogSnapshot,
+        ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogSnapshot,
     };
     use yss_node_protocol::{PortKey, TypeId, TypedValue};
 
@@ -327,8 +275,261 @@ mod tests {
                 GraphResourceId::new("databases/sales"),
                 DataSchema { columns },
             )]),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
         )
+    }
+
+    #[test]
+    fn effective_parameter_defaults_follow_input_schema_and_visibility() {
+        use yss_node_protocol::{Parameter, ParameterCondition, normalize_json_literal};
+        let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+        let mut protocol = builtin
+            .registry
+            .protocol(&"yssbi.dataframe.filter.rows".parse().unwrap())
+            .unwrap()
+            .clone();
+        let mut predicate = protocol.parameters.iter().next().unwrap().clone();
+        let default = serde_json::json!({"column":"amount", "operator":"greaterThan", "value":{"type":"integer", "value":"1"}});
+        predicate.default_value = Some(
+            normalize_json_literal(&default, &predicate.value_type, builtin.registry.as_ref())
+                .unwrap(),
+        );
+        let mut enabled = Parameter::number("enabled").int().default(1);
+        enabled.title_key = predicate.title_key.clone();
+        predicate.visible_when = Some(ParameterCondition {
+            key: enabled.key.clone(),
+            values: Box::new([DataValue::Integer(1)]),
+        });
+        protocol.parameters.groups[0].parameters = Box::new([predicate, enabled]);
+        protocol.type_id = "tests.graph.parameters".parse().unwrap();
+        let registry = crate::tests::registry_with_protocols([protocol]);
+        let mut document = GraphDocument::default();
+        let source = node(&mut document, "yssbi.dataframe.source.get");
+        let consumer = node(&mut document, "tests.graph.parameters");
+        document.nodes.get_mut(&source).unwrap().parameters.insert(
+            "dataframe".parse().unwrap(),
+            serde_json::json!("databases/sales"),
+        );
+        connect(
+            &mut document,
+            port(source, "dataframe"),
+            port(consumer, "source"),
+            None,
+        );
+        let columns = |name: &str| {
+            resources(vec![ColumnSchema {
+                name: name.into(),
+                data_type: yss_data_contract::ValueType::Scalar(
+                    yss_data_contract::SemanticType::Numeric,
+                ),
+                semantic: None,
+                physical_type: None,
+            }])
+        };
+        let mut cache = crate::GraphSemanticCache::default();
+        let initial = crate::resolve_graph_semantics_with_cache(
+            &document,
+            &registry,
+            &columns("amount"),
+            &mut cache,
+        );
+        assert!(initial.ready().is_some(), "{:?}", initial.diagnostics());
+        let changed = columns("replacement");
+        let blocked =
+            crate::resolve_graph_semantics_with_cache(&document, &registry, &changed, &mut cache);
+        assert!(
+            blocked.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code.as_str() == GraphDiagnosticKind::SchemaParameterInvalid.code()
+                    && diagnostic.primary
+                        == GraphDiagnosticLocation::Parameter {
+                            node_id: consumer,
+                            key: "predicate".parse().unwrap(),
+                        }
+            }),
+            "{:?}",
+            blocked.diagnostics()
+        );
+        assert!(blocked.ready().is_none());
+        assert_eq!(
+            blocked,
+            crate::resolve_graph_semantics(&document, &registry, &changed)
+        );
+        assert!(document.nodes[&consumer].parameters.is_empty());
+
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .insert(
+                "predicate".parse().unwrap(),
+                serde_json::json!({"column":"replacement", "operator":"isNull"}),
+            );
+        assert!(
+            crate::resolve_graph_semantics_with_cache(&document, &registry, &changed, &mut cache)
+                .ready()
+                .is_some()
+        );
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .remove(&"predicate".parse().unwrap());
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .insert("enabled".parse().unwrap(), serde_json::json!(0));
+        let hidden =
+            crate::resolve_graph_semantics_with_cache(&document, &registry, &changed, &mut cache);
+        assert!(hidden.ready().is_some(), "{:?}", hidden.diagnostics());
+        assert!(
+            hidden
+                .node(consumer)
+                .unwrap()
+                .parameters
+                .iter()
+                .all(|parameter| parameter.key.as_str() != "predicate")
+        );
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .insert("predicate".parse().unwrap(), default);
+        let stale = crate::resolve_graph_semantics(&document, &registry, &changed);
+        assert!(
+            stale
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code.as_str()
+                    == GraphDiagnosticKind::ParameterInvalid.code())
+        );
+        assert!(
+            stale
+                .diagnostics()
+                .iter()
+                .all(|diagnostic| diagnostic.code.as_str()
+                    != GraphDiagnosticKind::SchemaParameterInvalid.code())
+        );
+    }
+
+    #[test]
+    fn effective_parameter_resources_record_defaults_and_ignore_inactive_values() {
+        use yss_node_protocol::{NodeInstanceDisplaySpec, Parameter, ParameterCondition};
+        let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+        let mut protocol = builtin
+            .registry
+            .protocol(&"yssbi.dataframe.source.get".parse().unwrap())
+            .unwrap()
+            .clone();
+        protocol.interface.ports = Box::new([]);
+        protocol.instance_display = NodeInstanceDisplaySpec::Static;
+        let mut resource = protocol.parameters.iter().next().unwrap().clone();
+        resource.default_value = Some(TypedValue {
+            value_type: resource.value_type.clone(),
+            value: DataValue::String("databases/sales".into()),
+        });
+        let mut enabled = Parameter::number("enabled").int().default(1);
+        enabled.title_key = resource.title_key.clone();
+        resource.visible_when = Some(ParameterCondition {
+            key: enabled.key.clone(),
+            values: Box::new([DataValue::Integer(1)]),
+        });
+        protocol.parameters.groups[0].parameters = Box::new([resource, enabled]);
+        protocol.type_id = "tests.graph.parameters".parse().unwrap();
+        let registry = crate::tests::registry_with_protocols([protocol]);
+        let mut document = GraphDocument::default();
+        let consumer = node(&mut document, "tests.graph.parameters");
+        let missing = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
+        let observed = missing.tracked();
+        let mut cache = crate::GraphSemanticCache::default();
+        let blocked =
+            crate::resolve_graph_semantics_with_cache(&document, &registry, &observed, &mut cache);
+        assert!(
+            blocked.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code.as_str() == GraphDiagnosticKind::ResourceResolutionFailed.code()
+                    && diagnostic.primary
+                        == GraphDiagnosticLocation::Resource("databases/sales".into())
+            }),
+            "{:?}",
+            blocked.diagnostics()
+        );
+        assert!(blocked.ready().is_none());
+        let available = resources(vec![]);
+        assert!(!available.matches_dependencies(&observed.dependencies()));
+        let recovered =
+            crate::resolve_graph_semantics_with_cache(&document, &registry, &available, &mut cache);
+        assert!(recovered.ready().is_some(), "{:?}", recovered.diagnostics());
+        assert_eq!(
+            recovered,
+            crate::resolve_graph_semantics(&document, &registry, &available)
+        );
+        assert!(document.nodes[&consumer].parameters.is_empty());
+
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .insert(
+                "dataframe".parse().unwrap(),
+                serde_json::json!("databases/other"),
+            );
+        let overridden = crate::resolve_graph_semantics(&document, &registry, &available);
+        assert!(
+            overridden
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.primary
+                    == GraphDiagnosticLocation::Resource("databases/other".into()))
+        );
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .remove(&"dataframe".parse().unwrap());
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .insert("enabled".parse().unwrap(), serde_json::json!(0));
+        let hidden_resources = missing.tracked();
+        let hidden = crate::resolve_graph_semantics_with_cache(
+            &document,
+            &registry,
+            &hidden_resources,
+            &mut cache,
+        );
+        assert!(hidden.ready().is_some(), "{:?}", hidden.diagnostics());
+        assert!(available.matches_dependencies(&hidden_resources.dependencies()));
+        document
+            .nodes
+            .get_mut(&consumer)
+            .unwrap()
+            .parameters
+            .insert(
+                "dataframe".parse().unwrap(),
+                serde_json::json!("databases/other"),
+            );
+        let stale = crate::resolve_graph_semantics(&document, &registry, &available);
+        assert!(
+            stale
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code.as_str()
+                    == GraphDiagnosticKind::ParameterInvalid.code())
+        );
+        assert!(
+            stale
+                .diagnostics()
+                .iter()
+                .all(|diagnostic| diagnostic.code.as_str()
+                    != GraphDiagnosticKind::ResourceResolutionFailed.code())
+        );
     }
 
     #[test]

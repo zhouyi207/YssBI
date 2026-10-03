@@ -3,14 +3,13 @@ use yss_graph_document::{
     PortAddress, PortInstanceId,
 };
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
-use yss_node_protocol::{ResolvedSchemaFact, TypeExpr};
+use yss_node_protocol::{NodeProtocol, ResolvedSchemaFact, TypeExpr};
+use yss_node_registry::{
+    FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
+    FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER, StructuralNodeRole,
+};
 
 use crate::schema_resolution::{DerivedSchemaPortMember, derived_schema_port_members};
-
-const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
-const FUNCTION_CALL_RESULTS_RESOLVER: &str = "yssbi.project.function.call.results";
-const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str = "yssbi.project.function.entry.parameters";
-const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
 
 pub(crate) fn supports_resolver(resolver: &str) -> bool {
     matches!(
@@ -45,6 +44,7 @@ impl From<DerivedSchemaPortMember> for DerivedPortMember {
 pub(crate) fn derived_port_members(
     document: &GraphDocument,
     node_id: NodeId,
+    protocol: &NodeProtocol,
     resolver: &str,
     schemas: &crate::schema_resolution::SchemaResolution,
     resources: &ResourceCatalogSnapshot,
@@ -53,27 +53,23 @@ pub(crate) fn derived_port_members(
     if !schema_members.is_empty() {
         return schema_members.into_iter().map(Into::into).collect();
     }
-    function_port_members(document, node_id, resolver, resources).unwrap_or_default()
+    document
+        .nodes
+        .get(&node_id)
+        .and_then(|node| function_port_members(&node.parameters, protocol, resolver, resources))
+        .unwrap_or_default()
 }
 
 fn function_port_members(
-    document: &GraphDocument,
-    node_id: NodeId,
+    values: &yss_node_protocol::ParameterValues,
+    protocol: &NodeProtocol,
     resolver: &str,
     resources: &ResourceCatalogSnapshot,
 ) -> Option<Vec<DerivedPortMember>> {
-    let parameter_key = match resolver {
-        FUNCTION_CALL_ARGUMENTS_RESOLVER | FUNCTION_CALL_RESULTS_RESOLVER => "target",
-        FUNCTION_ENTRY_PARAMETERS_RESOLVER | FUNCTION_RETURN_RESULTS_RESOLVER => "function",
-        _ => return None,
-    };
-    let node = document.nodes.get(&node_id)?;
-    let function = node
-        .parameters
-        .iter()
-        .find_map(|(key, value)| (key.as_str() == parameter_key).then_some(value))?
-        .as_str()
-        .and_then(|value| GraphResourcePath::new(value).ok())?;
+    let role = StructuralNodeRole::for_interface_resolver(resolver)?;
+    let parameter = role.reference_parameter(protocol)?;
+    let function =
+        GraphResourcePath::new(protocol.parameters.effective_text(&parameter.key, values)?).ok()?;
     let signature = resources.function_signature(&function)?;
 
     if matches!(
@@ -133,15 +129,4 @@ pub(crate) fn derived_port_address(
         }
     }
     unreachable!("u32 derived port identity salt space is inexhaustible")
-}
-
-pub(crate) fn port_is_referenced(document: &GraphDocument, address: &PortAddress) -> bool {
-    document
-        .input_states
-        .get(address)
-        .is_some_and(|state| state.literal_override.is_some())
-        || document
-            .connections
-            .values()
-            .any(|connection| connection.output == *address || connection.input == *address)
 }

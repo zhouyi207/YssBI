@@ -11,7 +11,7 @@ use yss_graph_document::{
 };
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_node_catalog::{authoritative_static_descriptor, build_builtin_node_system};
-use yss_node_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
+use yss_node_protocol::{NodeTypeId, PortKey, TypeExpr};
 use yss_node_registry::NodeRegistry;
 
 fn graph_path() -> GraphResourcePath {
@@ -175,7 +175,12 @@ fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone(
 
 #[test]
 fn connect_rejects_a_known_type_outside_the_input_class() {
-    let registry = build_builtin_node_system()
+    use std::sync::Arc;
+    use yss_node_protocol::{NodeTypingSpec, ParameterCondition, ParameterEditorSpec, TypedValue};
+    use yss_node_registry::{
+        LeafImplementation, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
+    };
+    let builtin = build_builtin_node_system()
         .expect("built-in registry must assemble")
         .registry;
     let mut document = GraphDocument::default();
@@ -186,21 +191,85 @@ fn connect_rejects_a_known_type_outside_the_input_class() {
         ValueType::Scalar(yss_data_contract::SemanticType::Text),
         yss_data_contract::DataValue::String("".into()),
     );
+    let constant_id = *document.constants.keys().next().unwrap();
+    let mut protocol = builtin
+        .protocol(&"yssbi.constant.get".parse().unwrap())
+        .unwrap()
+        .clone();
+    protocol.type_id = "tests.constant.default".parse().unwrap();
+    let mut reference = protocol.parameters.groups[0].parameters[0].clone();
+    reference.key = "selection".parse().unwrap();
+    reference.default_value = Some(TypedValue {
+        value_type: reference.value_type.clone(),
+        value: yss_data_contract::DataValue::String(constant_id.to_string().into()),
+    });
+    reference.visible_when = Some(ParameterCondition {
+        key: "mode".parse().unwrap(),
+        values: [yss_data_contract::DataValue::String("active".into())].into(),
+    });
+    let mut mode = reference.clone();
+    mode.key = "mode".parse().unwrap();
+    mode.editor = ParameterEditorSpec::Text { multiline: false };
+    mode.visible_when = None;
+    mode.default_value.as_mut().unwrap().value =
+        yss_data_contract::DataValue::String("active".into());
+    protocol.parameters.groups[0].parameters = [reference, mode].into();
+    protocol.typing = NodeTypingSpec::ConstantOutput {
+        parameter: "selection".parse().unwrap(),
+        output: "value".parse().unwrap(),
+    };
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests.constants".parse().unwrap());
+    provider.nodes = [RegisteredNode::leaf(
+        Arc::new(protocol),
+        LeafImplementation::new("tests.constant"),
+    )]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let registry = builder.freeze().unwrap();
     let target = insert_node(
         &mut document,
         document_node("yssbi.numeric.subtract", 100.0),
     );
 
-    let error = EditorGraphMutation::Connect {
+    let connect = || EditorGraphMutation::Connect {
         output: declared(source, "value"),
         input: declared(target, "left"),
         order: None,
-    }
-    .into_patch(&graph_path(), &document, registry.as_ref())
-    .expect_err("a known text value cannot connect to a numeric input");
+    };
+    let assert_mismatch = |document: &GraphDocument| {
+        let error = connect()
+            .into_patch(&graph_path(), document, &registry)
+            .expect_err("a known text value cannot connect to a numeric input");
+        assert!(matches!(error, crate::MutationConflict::Editor(error)
+            if error.code == EditorMutationErrorCode::GraphConnectionTypeMismatch));
+    };
+    assert_mismatch(&document);
 
-    assert!(matches!(error, crate::MutationConflict::Editor(error)
-        if error.code == EditorMutationErrorCode::GraphConnectionTypeMismatch));
+    let source_node = document.nodes.get_mut(&source).unwrap();
+    source_node.node_type = "tests.constant.default".parse().unwrap();
+    source_node.parameters.clear();
+    assert_mismatch(&document);
+    assert!(document.nodes[&source].parameters.is_empty());
+    let source_node = document.nodes.get_mut(&source).unwrap();
+    source_node.parameters.insert(
+        "selection".parse().unwrap(),
+        serde_json::json!(constant_id.to_string()),
+    );
+    source_node
+        .parameters
+        .insert("mode".parse().unwrap(), serde_json::json!("inactive"));
+    connect()
+        .into_patch(&graph_path(), &document, &registry)
+        .expect("an inactive stored reference must not narrow generic preflight");
+    document
+        .nodes
+        .get_mut(&source)
+        .unwrap()
+        .parameters
+        .remove(&"mode".parse().unwrap());
+    assert_mismatch(&document);
     assert!(document.connections.is_empty());
 }
 
@@ -277,6 +346,212 @@ fn move_connections_uses_current_document_authority() {
         .expect("moved connection must exist");
     assert_eq!(moved.output, output);
     assert_eq!(moved.input, right);
+}
+
+#[test]
+fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
+    use std::sync::Arc;
+    use yss_data_contract::{DataValue, SemanticType};
+    use yss_graph_resource_contract::ResourceCatalogSnapshot;
+    use yss_node_protocol::{NodeTypingSpec, PortCardinality, PortDirection, PortMemberGroupSpec};
+    use yss_node_registry::{
+        LeafImplementation, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
+    };
+
+    let builtin = build_builtin_node_system().unwrap();
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests".parse().unwrap());
+    provider.nodes = [("tests.group.required", 2), ("tests.group.optional", 0)]
+        .into_iter()
+        .map(|(id, min)| {
+            let mut protocol = builtin
+                .registry
+                .protocol(&"yssbi.numeric.subtract".parse().unwrap())
+                .unwrap()
+                .clone();
+            protocol.type_id = id.parse().unwrap();
+            protocol.typing = NodeTypingSpec::Fixed;
+            for port in &mut protocol.interface.ports {
+                port.value_type = TypeExpr::Concrete("core.numeric".parse().unwrap());
+                if port.direction == PortDirection::Input {
+                    port.cardinality = PortCardinality::UserCreated { min: 0, max: None };
+                }
+            }
+            protocol.interface = protocol
+                .interface
+                .with_member_groups(vec![PortMemberGroupSpec {
+                    templates: ["left".parse().unwrap(), "right".parse().unwrap()].into(),
+                    min,
+                    max: None,
+                }])
+                .unwrap();
+            RegisteredNode::leaf(Arc::new(protocol), LeafImplementation::new(id))
+        })
+        .collect();
+    builder.register_provider(provider).unwrap();
+    let registry = builder.freeze().unwrap();
+    let mut document = GraphDocument::default();
+    let source = insert_node(&mut document, document_node("yssbi.constant.get", 0.0));
+    set_constant(
+        &mut document,
+        source,
+        ValueType::Scalar(SemanticType::Numeric),
+        DataValue::Integer(1),
+    );
+    let before = document.clone();
+    let source_port = crate::SourcePort {
+        address: declared(source, "value"),
+        direction: PortDirection::Output,
+        value_type: TypeExpr::Concrete("core.numeric".parse().unwrap()),
+    };
+    let catalog = crate::filter_compatible_catalog(
+        &graph_path(),
+        &registry,
+        &source_port,
+        &ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new()),
+        &[],
+        builtin.catalog.localize(&registry, "en-US"),
+    );
+    let item = catalog
+        .items
+        .iter()
+        .find(|item| item.node_type_id.as_ref() == "tests.group.required")
+        .expect(
+            "required group members exist immediately and must be connectable from the catalog",
+        );
+    assert!(
+        !catalog
+            .items
+            .iter()
+            .any(|item| item.node_type_id.as_ref() == "tests.group.optional")
+    );
+    let authority = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::new(),
+    };
+    let patch = EditorGraphMutation::CreateNode {
+        descriptor: item.creation.clone(),
+        position: NodePosition { x: 100.0, y: 0.0 },
+        user_label: None,
+        connect_from: Some(source_port.address.clone()),
+    }
+    .into_patch_with_context(
+        &graph_path(),
+        &document,
+        &registry,
+        EditorMutationContext {
+            catalog: Some(&authority),
+            semantics: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(document, before);
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(document.nodes.len(), 2);
+    assert_eq!(document.connections.len(), 1);
+    assert_eq!(document.port_bindings.len(), 4);
+    let connection = document.connections.values().next().unwrap();
+    assert_eq!(connection.output, source_port.address);
+    assert!(document.port_bindings.contains_key(&connection.input));
+    let protocol = registry
+        .protocol(&document.nodes[&connection.input.node_id].node_type)
+        .unwrap();
+    let members = yss_graph_document_edit::port_member_group_state(
+        connection.input.node_id,
+        &protocol.interface.member_groups[0],
+        &document.port_bindings,
+    );
+    assert_eq!(members.complete_count(), 2);
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, before);
+}
+
+#[test]
+fn function_connection_fallback_checks_the_member_resolver_before_its_type() {
+    use yss_data_contract::{DataValue, SemanticType};
+    use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature};
+    use yss_node_catalog::CatalogResourcePath;
+
+    let registry = build_builtin_node_system().unwrap().registry;
+    let function = GraphResourcePath::new("functions/Measure.yssbi-function").unwrap();
+    let numeric = ValueType::Scalar(SemanticType::Numeric);
+    let catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::from([(
+            CatalogResourcePath::new(function.as_str()),
+            crate::CatalogMutationResource::Function {
+                revision: 1,
+                signature: FunctionSignature::new(
+                    vec![FunctionParameterContract::new(
+                        FunctionParameterId::new("amount"),
+                        "Amount",
+                        numeric.clone(),
+                    )],
+                    Some(numeric.clone()),
+                ),
+            },
+        )]),
+    };
+    let mut original = GraphDocument::default();
+    let source = insert_node(&mut original, document_node("yssbi.constant.get", 0.0));
+    set_constant(&mut original, source, numeric, DataValue::Integer(1));
+    let target = insert_node(
+        &mut original,
+        document_node("yssbi.numeric.subtract", 200.0),
+    );
+    let mut call = document_node("yssbi.project.function.call", 100.0);
+    call.parameters.insert(
+        "target".parse().unwrap(),
+        serde_json::json!(function.as_str()),
+    );
+    let call = insert_node(&mut original, call);
+    for (template, wrong, correct) in [
+        ("arguments", "return", "amount"),
+        ("results", "amount", "return"),
+    ] {
+        let mut document = original.clone();
+        let member = PortAddress::instance(call, template.parse().unwrap(), PortInstanceId::new());
+        let binding = |parameter| DynamicPortBinding::Resolved {
+            origin: DynamicMemberLocator::FunctionParameter {
+                function: function.clone(),
+                parameter: FunctionParameterId::new(parameter),
+            },
+            order: OrderKey::new("00000"),
+            last_known: LastKnownPortMetadata::default(),
+        };
+        document
+            .port_bindings
+            .insert(member.clone(), binding(wrong));
+        let (output, input) = if template == "arguments" {
+            (declared(source, "value"), member.clone())
+        } else {
+            (member.clone(), declared(target, "left"))
+        };
+        let connect = EditorGraphMutation::Connect {
+            output,
+            input,
+            order: None,
+        };
+        let context = EditorMutationContext {
+            catalog: Some(&catalog),
+            semantics: None,
+        };
+        let error = connect
+            .clone()
+            .into_patch_with_context(&graph_path(), &document, &registry, context)
+            .expect_err("matching numeric types cannot authorize a member from the wrong resolver");
+        assert!(matches!(error, crate::MutationConflict::Editor(error)
+            if error.code == EditorMutationErrorCode::GraphConnectionTypeUnavailable));
+        assert!(document.connections.is_empty());
+        document.port_bindings.insert(member, binding(correct));
+        let before = document.clone();
+        let patch = connect
+            .into_patch_with_context(&graph_path(), &document, &registry, context)
+            .unwrap();
+        apply_graph_document_patch(&mut document, &patch).unwrap();
+        assert_eq!(document.connections.len(), 1);
+        apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+        assert_eq!(document, before);
+    }
 }
 
 #[test]
@@ -502,7 +777,12 @@ fn set_constant(
 
 #[test]
 fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() {
-    let registry = build_builtin_node_system().unwrap().registry;
+    use std::sync::Arc;
+    use yss_node_protocol::{NodeTypingSpec, ParameterEditorSpec, TypedValue};
+    use yss_node_registry::{
+        LeafImplementation, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
+    };
+    let builtin = build_builtin_node_system().unwrap();
     let catalog = CatalogMutationValidationSnapshot {
         resources: BTreeMap::new(),
     };
@@ -514,7 +794,68 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
         ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Integer(42),
     );
-    let snapshot = crate::export_subgraph(&source, &registry, &catalog, vec![node]).unwrap();
+    let constant_id = *source.constants.keys().next().unwrap();
+    let mut protocol = builtin
+        .registry
+        .protocol(&"yssbi.constant.get".parse().unwrap())
+        .unwrap()
+        .clone();
+    protocol.type_id = "tests.constant.reference".parse().unwrap();
+    let mut reference = protocol.parameters.groups[0].parameters[0].clone();
+    reference.key = "selection".parse().unwrap();
+    reference.default_value = Some(TypedValue {
+        value_type: reference.value_type.clone(),
+        value: yss_data_contract::DataValue::String(constant_id.to_string().into()),
+    });
+    let mut note = reference.clone();
+    note.key = "note".parse().unwrap();
+    note.editor = ParameterEditorSpec::Text { multiline: false };
+    note.default_value = None;
+    note.constraints.clear();
+    protocol.parameters.groups[0].parameters = [reference, note].into();
+    protocol.typing = NodeTypingSpec::ConstantOutput {
+        parameter: "selection".parse().unwrap(),
+        output: "value".parse().unwrap(),
+    };
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests.constants".parse().unwrap());
+    provider.nodes = [RegisteredNode::leaf(
+        Arc::new(protocol),
+        LeafImplementation::new("tests.constant"),
+    )]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let registry = builder.freeze().unwrap();
+    let mut selected = vec![node];
+    for explicit in [true, false] {
+        let mut custom = document_node("tests.constant.reference", 0.0);
+        custom.parameters.insert(
+            "note".parse().unwrap(),
+            serde_json::json!(constant_id.to_string()),
+        );
+        if explicit {
+            custom.parameters.insert(
+                "selection".parse().unwrap(),
+                serde_json::json!(constant_id.to_string()),
+            );
+        }
+        let custom = insert_node(&mut source, custom);
+        let exported = crate::export_subgraph(&source, &registry, &catalog, vec![custom]).unwrap();
+        assert_eq!(exported.constants.len(), 1);
+        assert_eq!(
+            exported.nodes[0].parameters[&"selection".parse().unwrap()],
+            serde_json::json!(constant_id.to_string())
+        );
+        assert_eq!(
+            source.nodes[&custom]
+                .parameters
+                .contains_key(&"selection".parse().unwrap()),
+            explicit
+        );
+        selected.push(custom);
+    }
+    let snapshot = crate::export_subgraph(&source, &registry, &catalog, selected.clone()).unwrap();
     let bytes = serde_json::to_vec(&snapshot).unwrap();
     let snapshot = crate::deserialize_clipboard_subgraph(&bytes).unwrap();
     assert_eq!(snapshot.constants.len(), 1);
@@ -541,26 +882,38 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
     let pasted = target
         .nodes
         .values()
-        .find(|candidate| candidate.id != node)
-        .unwrap();
-    let id: yss_graph_document::ConstantId = pasted.parameters
-        [&ParameterKey::new("constant").unwrap()]
-        .as_str()
-        .unwrap()
-        .parse()
-        .unwrap();
-    assert_eq!(
-        target.constants[&id].data_value,
-        yss_data_contract::DataValue::Integer(42)
-    );
-    assert_ne!(
-        target.constants[&id].name,
-        source.constants.values().next().unwrap().name
-    );
+        .filter(|candidate| !source.nodes.contains_key(&candidate.id))
+        .collect::<Vec<_>>();
+    assert_eq!(pasted.len(), selected.len());
+    for pasted in pasted {
+        let protocol = registry.protocol(&pasted.node_type).unwrap();
+        let NodeTypingSpec::ConstantOutput { parameter, .. } = &protocol.typing else {
+            panic!("constant protocol")
+        };
+        let id: yss_graph_document::ConstantId = pasted.parameters[parameter]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            target.constants[&id].data_value,
+            yss_data_contract::DataValue::Integer(42)
+        );
+        assert_ne!(
+            target.constants[&id].name,
+            source.constants[&constant_id].name
+        );
+        if pasted.node_type.as_str() == "tests.constant.reference" {
+            assert_eq!(
+                pasted.parameters[&"note".parse().unwrap()],
+                serde_json::json!(constant_id.to_string())
+            );
+        }
+    }
     apply_graph_document_patch(&mut target, &patch.inverse()).unwrap();
     assert_eq!(target, before);
     let patch = EditorGraphMutation::DuplicateSubgraph {
-        node_ids: vec![node],
+        node_ids: selected,
         offset: NodePosition { x: 200.0, y: 0.0 },
     }
     .into_patch_with_context(

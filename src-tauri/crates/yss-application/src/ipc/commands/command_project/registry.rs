@@ -11,11 +11,20 @@ use yss_ipc_contract::project::LifecycleMutationResultDto;
 use yss_ipc_contract::project_progress::ProjectProgressDto;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
-use yss_project_registry::{CleanupInvalidProjectsResult, ScanProjectsResult};
+use yss_project_registry::{
+    CleanupInvalidProjectsResult, ProjectRegistryError, ScanProjectsResult,
+};
 use yss_project_registry_contract::ProjectRecord;
 
 fn project_progress_adapter_spawn_error(error: ProjectProgressAdapterSpawnError) -> CommandError {
     CommandError::diagnosed("project_progress_worker_spawn_failed", error)
+}
+
+fn project_picker_error(error: ProjectRegistryError) -> CommandError {
+    match error {
+        ProjectRegistryError::Cancelled => CommandError::expected("picker_task_cancelled"),
+        error => CommandError::internal(error),
+    }
 }
 
 #[tauri::command]
@@ -55,7 +64,7 @@ pub async fn scan_projects_in_directory(
             );
         }
     }
-    result.map_err(CommandError::internal)
+    result.map_err(project_picker_error)
 }
 
 #[tauri::command]
@@ -87,7 +96,7 @@ pub async fn cleanup_invalid_registered_projects(
             );
         }
     }
-    result.map_err(CommandError::internal)
+    result.map_err(project_picker_error)
 }
 
 #[tauri::command]
@@ -154,12 +163,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn progress_worker_spawn_failure_maps_to_stable_diagnosed_error() {
+    fn picker_failures_preserve_delivery_incidents_and_expected_cancellation() {
         let error = ProjectProgressAdapterSpawnError::from(io::Error::other("injected failure"));
 
         let command_error = project_progress_adapter_spawn_error(error);
 
         assert_eq!(command_error.code(), "project_progress_worker_spawn_failed");
         assert!(command_error.incident_id().is_some());
+        assert_eq!(
+            serde_json::to_value(project_picker_error(ProjectRegistryError::Cancelled)).unwrap(),
+            serde_json::json!({
+                "code": "picker_task_cancelled",
+                "details": null,
+                "incidentId": null,
+            })
+        );
+        let scan_error = project_picker_error(ProjectRegistryError::ScanFailed);
+        assert_eq!(scan_error.code(), "internal_error");
+        assert!(scan_error.incident_id().is_some());
     }
 }

@@ -23,7 +23,7 @@ pub(crate) fn instantiate_subgraph(
         (&left.output, &left.input, &left.order).cmp(&(&right.output, &right.input, &right.order))
     });
 
-    let constant_operations = import_constants(document, &mut snapshot)?;
+    let constant_operations = import_constants(document, registry, &mut snapshot)?;
     let node_types = validate_insert_nodes(graph_path, registry, catalog, &snapshot, anchor)?;
     let instance_keys = validate_portable_references(registry, catalog, &snapshot, &node_types)?;
 
@@ -62,6 +62,7 @@ pub(crate) fn instantiate_subgraph(
 
 fn import_constants(
     document: &GraphDocument,
+    registry: &NodeRegistry,
     snapshot: &mut ClipboardSubgraph,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     enforce_insert_limit("constants", snapshot.constants.len(), MAX_CLIPBOARD_NODES)?;
@@ -75,17 +76,20 @@ fn import_constants(
     };
     yss_graph_document_edit::validate_graph_document(&source)
         .map_err(|error| invalid_clipboard(format!("invalid clipboard constants: {error}")))?;
-    let key = ParameterKey::new("constant").unwrap();
     let referenced = snapshot
         .nodes
         .iter()
-        .filter(|node| creation_node_type(&node.creation).as_str() == "yssbi.constant.get")
         .filter_map(|node| {
-            node.parameters
-                .get(&key)?
-                .as_str()?
-                .parse::<ConstantId>()
-                .ok()
+            registry
+                .protocol(creation_node_type(&node.creation))
+                .map(|protocol| (node, protocol))
+        })
+        .flat_map(|(node, protocol)| {
+            yss_graph_document_edit::constant_references_for_copy(
+                &protocol.parameters,
+                &node.parameters,
+            )
+            .map(|(_, id)| id)
         })
         .collect::<BTreeSet<_>>();
     let mut imported = BTreeSet::new();
@@ -124,16 +128,12 @@ fn import_constants(
         });
     }
     for node in &mut snapshot.nodes {
-        if creation_node_type(&node.creation).as_str() == "yssbi.constant.get"
-            && let Some(id) = node
-                .parameters
-                .get(&key)
-                .and_then(|value| value.as_str())
-                .and_then(|id| id.parse::<ConstantId>().ok())
-                .and_then(|id| remapped.get(&id))
-        {
-            node.parameters
-                .insert(key.clone(), serde_json::Value::String(id.to_string()));
+        if let Some(protocol) = registry.protocol(creation_node_type(&node.creation)) {
+            yss_graph_document_edit::remap_copied_constant_references(
+                &protocol.parameters,
+                &mut node.parameters,
+                &remapped,
+            );
         }
     }
     Ok(operations)

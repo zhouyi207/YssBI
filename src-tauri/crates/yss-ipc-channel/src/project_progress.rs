@@ -72,31 +72,24 @@ impl From<io::Error> for ProjectProgressAdapterSpawnError {
     }
 }
 
-struct ProjectProgressPublisherState {
-    closed: bool,
-    sender: Option<SyncSender<ProjectProgress>>,
-}
-
 pub struct ProjectProgressPublisher {
-    state: Mutex<ProjectProgressPublisherState>,
+    sender: Mutex<Option<SyncSender<ProjectProgress>>>,
 }
 
 impl ProjectProgressPublisher {
     pub fn close(&self) {
         let sender = {
-            let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-            state.closed = true;
-            state.sender.take()
+            self.sender
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take()
         };
         drop(sender);
     }
 
     pub fn enqueue(&self, progress: ProjectProgress) -> ProgressEnqueueOutcome {
-        let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        if state.closed {
-            return ProgressEnqueueOutcome::ReceiverClosed;
-        }
-        let Some(sender) = state.sender.as_ref() else {
+        let sender = self.sender.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(sender) = sender.as_ref() else {
             return ProgressEnqueueOutcome::ReceiverClosed;
         };
         match sender.try_send(progress) {
@@ -197,10 +190,7 @@ fn bounded_project_progress_adapter_with(
 {
     let (sender, receiver) = mpsc::sync_channel(PROJECT_PROGRESS_QUEUE_CAPACITY);
     let publisher = Arc::new(ProjectProgressPublisher {
-        state: Mutex::new(ProjectProgressPublisherState {
-            closed: false,
-            sender: Some(sender),
-        }),
+        sender: Mutex::new(Some(sender)),
     });
     let (completion_sender, completion) = mpsc::sync_channel(1);
     let task: ProjectProgressWorkerTask = Box::new(move || {
@@ -251,10 +241,7 @@ mod tests {
     fn publisher_drops_newest_when_capacity_is_full_and_closes_all_clones() {
         let (sender, receiver) = mpsc::sync_channel(PROJECT_PROGRESS_QUEUE_CAPACITY);
         let publisher = Arc::new(ProjectProgressPublisher {
-            state: Mutex::new(ProjectProgressPublisherState {
-                closed: false,
-                sender: Some(sender),
-            }),
+            sender: Mutex::new(Some(sender)),
         });
         for _ in 0..PROJECT_PROGRESS_QUEUE_CAPACITY {
             assert_eq!(

@@ -4,6 +4,11 @@ use crate::ProjectSession;
 use yss_database_contract::DatabaseDecl;
 use yss_project_identity::ProjectInstanceId;
 
+mod read;
+pub use read::ProjectDatabaseSnapshot;
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectDatabaseError {
     #[error(transparent)]
@@ -331,13 +336,13 @@ impl ProjectState {
         if current_revision != expected_revision.get() {
             return Err(ProjectDatabaseError::StaleDatabaseRevision);
         }
+        let publication_advance = publication.prepare_resource_revision()?;
+        let from_revision = yss_project_identity::ResourceRevision::new(current_revision);
+        let to_revision = Self::next_database_revision(id, from_revision)?;
         let before = data
             .databases
             .remove(id)
             .ok_or(ProjectDatabaseError::DatabaseNotFound)?;
-        let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision = yss_project_identity::ResourceRevision::new(current_revision);
-        let to_revision = Self::next_database_revision(id, from_revision)?;
         Ok(self.publish_database_delta(
             &mut publication,
             &mut revisions,

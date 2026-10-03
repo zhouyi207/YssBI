@@ -46,11 +46,7 @@ fn visualization_nodes_resolve_execute_and_keep_plot_output_categories() {
                 order: None,
             },
         );
-        let resources = ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
-        );
+        let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
         let analysis = analyze_document(
             &document,
             &GraphResourcePath::new("events/New Event.yssbi-event").unwrap(),

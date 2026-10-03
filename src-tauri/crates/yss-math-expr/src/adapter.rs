@@ -16,14 +16,16 @@ pub(super) fn parse_expression(
     options: ParseOptions<'_>,
 ) -> Result<MathExpr, MathError> {
     let mut budget = ParseBudget::new(input)?;
-    parse_expression_with_budget(input, options, &mut budget)
+    parse_expression_with_budget(input, options, 1, &mut budget)
 }
 
 fn parse_expression_with_budget(
     input: &str,
     options: ParseOptions<'_>,
+    depth: usize,
     budget: &mut ParseBudget,
 ) -> Result<MathExpr, MathError> {
+    ensure_depth(depth)?;
     let input = input.trim();
     if input.is_empty() {
         return Err(MathError::new(
@@ -36,7 +38,7 @@ fn parse_expression_with_budget(
             budget.add_node()?;
             return Ok(MathExpr::Symbol(identifier.to_string()));
         }
-        if let Some(call) = parse_latex_operator_call(input, options, budget)? {
+        if let Some(call) = parse_latex_operator_call(input, options, depth, budget)? {
             return Ok(call);
         }
     }
@@ -60,7 +62,7 @@ fn parse_expression_with_budget(
     .map_err(|error| {
         MathError::new(MathErrorKind::Parse, format!("数学表达式解析失败: {error}"))
     })?;
-    let mut converted = convert(&parsed, options, 1, budget)?;
+    let mut converted = convert(&parsed, options, depth, budget)?;
     if options.format == MathInputFormat::Latex {
         restore_protected_symbols(&mut converted, &protected_symbols.names);
     }
@@ -87,11 +89,17 @@ pub(super) fn parse_relations(
         budget.add_relations(parts.operators.len())?;
         for (index, op) in parts.operators.into_iter().enumerate() {
             relations.push(MathRelation {
-                left: parse_expression_with_budget(parts.expressions[index], options, &mut budget)?,
+                left: parse_expression_with_budget(
+                    parts.expressions[index],
+                    options,
+                    1,
+                    &mut budget,
+                )?,
                 op,
                 right: parse_expression_with_budget(
                     parts.expressions[index + 1],
                     options,
+                    1,
                     &mut budget,
                 )?,
             });
@@ -146,18 +154,23 @@ pub(super) fn ensure_relation_count(count: usize) -> Result<(), MathError> {
     Ok(())
 }
 
-fn convert(
-    expression: &Expression,
-    options: ParseOptions<'_>,
-    depth: usize,
-    budget: &mut ParseBudget,
-) -> Result<MathExpr, MathError> {
+fn ensure_depth(depth: usize) -> Result<(), MathError> {
     if depth > MAX_DEPTH {
         return Err(MathError::new(
             MathErrorKind::DepthLimit,
             "数学表达式深度不能超过 32",
         ));
     }
+    Ok(())
+}
+
+fn convert(
+    expression: &Expression,
+    options: ParseOptions<'_>,
+    depth: usize,
+    budget: &mut ParseBudget,
+) -> Result<MathExpr, MathError> {
+    ensure_depth(depth)?;
     budget.add_node()?;
 
     match &expression.kind {
@@ -190,25 +203,7 @@ fn convert(
                 right: Box::new(convert(right, options, depth + 1, budget)?),
             })
         }
-        ExprKind::Function { name, args }
-            if name.starts_with("q_9")
-                || matches!(
-                    name.as_str(),
-                    "exp"
-                        | "ln"
-                        | "sqrt"
-                        | "abs"
-                        | "sin"
-                        | "cos"
-                        | "min"
-                        | "max"
-                        | "Normal"
-                        | "Bernoulli"
-                        | "BernoulliLogit"
-                        | "Poisson"
-                        | "PoissonLog"
-                ) =>
-        {
+        ExprKind::Function { name, args } if name.starts_with("q_9") || is_allowed_call(name) => {
             Ok(MathExpr::Call {
                 name: name.clone(),
                 args: args
@@ -228,6 +223,7 @@ fn convert(
 fn parse_latex_operator_call(
     input: &str,
     options: ParseOptions<'_>,
+    depth: usize,
     budget: &mut ParseBudget,
 ) -> Result<Option<MathExpr>, MathError> {
     let Some(rest) = input.strip_prefix("\\operatorname{") else {
@@ -270,7 +266,7 @@ fn parse_latex_operator_call(
     } else {
         split_top_level(arguments, ',')?
             .into_iter()
-            .map(|argument| parse_expression_with_budget(argument, options, budget))
+            .map(|argument| parse_expression_with_budget(argument, options, depth + 1, budget))
             .collect::<Result<Vec<_>, _>>()?
     };
     budget.add_node()?;
@@ -515,12 +511,7 @@ fn resolve_symbol(
             let first = expressions.next().expect("segmentation is non-empty");
             expressions.try_fold(first, |left, right| {
                 budget.add_node()?;
-                if depth + 1 > MAX_DEPTH {
-                    return Err(MathError::new(
-                        MathErrorKind::DepthLimit,
-                        "数学表达式深度不能超过 32",
-                    ));
-                }
+                ensure_depth(depth + 1)?;
                 Ok(MathExpr::Binary {
                     op: BinaryOp::Mul,
                     left: Box::new(left),
@@ -814,6 +805,30 @@ mod tests {
         let input = "x".repeat(MAX_INPUT_BYTES + 1);
         let error = parse_relations(&input, ParseOptions::plain(&[])).unwrap_err();
         assert_eq!(error.kind, MathErrorKind::InputLimit);
+    }
+
+    #[test]
+    fn latex_operator_calls_share_the_expression_depth_limit() {
+        let known = symbols(&["y", "x"]);
+        for (leaf, leaf_depth) in [("x", 1), ("exp(x)", 2)] {
+            let nested = |calls: usize| {
+                format!(
+                    "y = {}{leaf}{}",
+                    r"\operatorname{exp}(".repeat(calls),
+                    ")".repeat(calls)
+                )
+            };
+            let at_limit = nested(MAX_DEPTH - leaf_depth);
+            assert_eq!(
+                parse_relations(&at_limit, ParseOptions::latex(&known))
+                    .unwrap()
+                    .len(),
+                1
+            );
+            let too_deep = nested(MAX_DEPTH + 1 - leaf_depth);
+            let error = parse_relations(&too_deep, ParseOptions::latex(&known)).unwrap_err();
+            assert_eq!(error.kind, MathErrorKind::DepthLimit);
+        }
     }
 
     #[test]

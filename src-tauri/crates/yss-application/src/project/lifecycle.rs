@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::path::Path;
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -10,8 +11,8 @@ use crate::events::{
 };
 use crate::project::query::ProjectActivation;
 use crate::session::{
-    ApplicationSessionRefreshError, ApplicationState, ProjectReplacement, SessionCaptureError,
-    SessionRevalidationError,
+    ApplicationSession, ApplicationSessionRefreshError, ApplicationState, ProjectReplacement,
+    SessionCaptureError, SessionRevalidationError,
 };
 use yss_project::ProjectOperationError;
 use yss_project::ProjectState;
@@ -75,7 +76,7 @@ impl ApplicationState {
             .map_err(ProjectLifecycleError::LoadFailed)?;
         self.revalidate_captured_session(&captured)
             .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
-        let replacement = begin_replacement(self)?;
+        let replacement = begin_replacement(self, &captured)?;
         let result = replacement
             .project()
             .activate_prepared_project(prepared)
@@ -101,7 +102,7 @@ impl ApplicationState {
                 SessionRevalidationError::Changed,
             ));
         }
-        let replacement = begin_replacement(self)?;
+        let replacement = begin_replacement(self, &captured)?;
         if replacement.project().project_instance_id() != expected_instance_id.as_str() {
             finish_replacement(self, replacement)?;
             return Err(ApplicationProjectLifecycleError::SessionChanged(
@@ -130,7 +131,7 @@ impl ApplicationState {
         )
         .await?;
         if result.outcome == ProjectLifecycleOutcome::Committed {
-            self.rebuild_application_session()
+            self.rebuild_application_session(&captured)
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         } else {
             self.revalidate_captured_session(&captured)
@@ -156,7 +157,7 @@ impl ApplicationState {
         )
         .await?;
         if result.invalidation.project {
-            self.rebuild_application_session()
+            self.rebuild_application_session(&captured)
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         }
         Ok(result)
@@ -173,7 +174,7 @@ impl ApplicationState {
         let replacement = expected_active_instance_id
             .as_ref()
             .filter(|expected| *expected == captured.project_instance_id())
-            .map(|_| begin_replacement(self))
+            .map(|_| begin_replacement(self, &captured))
             .transpose()?;
         let project = replacement
             .as_ref()
@@ -189,7 +190,7 @@ impl ApplicationState {
         if let Some(replacement) = replacement {
             finish_replacement(self, replacement)?;
         } else if result.invalidation.project {
-            self.rebuild_application_session()
+            self.rebuild_application_session(&captured)
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
         } else {
             self.revalidate_captured_session(&captured)
@@ -201,12 +202,15 @@ impl ApplicationState {
 
 fn begin_replacement(
     application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
 ) -> Result<ProjectReplacement, ApplicationProjectLifecycleError> {
-    application.begin_project_replacement().map_err(|_error| {
-        ApplicationProjectLifecycleError::SessionRefresh(
-            ApplicationSessionRefreshError::Replacement,
-        )
-    })
+    application
+        .begin_project_replacement(captured)
+        .map_err(|_error| {
+            ApplicationProjectLifecycleError::SessionRefresh(
+                ApplicationSessionRefreshError::Replacement,
+            )
+        })
 }
 
 fn finish_replacement(

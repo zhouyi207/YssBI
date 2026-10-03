@@ -600,6 +600,23 @@ fn edited_values_reject_overflow_and_decimal_truncation() {
         (DataType::Decimal128(5, 2), json!("1.234")),
         (DataType::Decimal128(5, -2), json!("123")),
         (DataType::Decimal128(5, 2), json!("1000.00")),
+        (
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            json!("2026-09-16T12:00:00.000000001+08:00"),
+        ),
+        (DataType::Date32, json!("2026-09-16T12:00:00+08:00")),
+        (
+            DataType::Time64(TimeUnit::Microsecond),
+            json!("02:10:00.000000001"),
+        ),
+        (
+            DataType::Time64(TimeUnit::Nanosecond),
+            json!("02:10:00.0000000001"),
+        ),
+        (
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            json!("2026-09-16T120000.0000000001"),
+        ),
     ] {
         assert!(json_to_array(&Field::new("value", dtype, true), &[value]).is_err());
     }
@@ -632,10 +649,58 @@ fn edited_values_reject_overflow_and_decimal_truncation() {
             json!("12.30"),
         ),
         (DataType::Decimal128(5, -2), "12300".into(), json!("12300")),
+        (DataType::Date32, "2026-09-16".into(), json!("2026-09-16")),
+        (DataType::Date32, "2026-9-6".into(), json!("2026-09-06")),
+        (
+            DataType::Date64,
+            "20260916".into(),
+            json!("2026-09-16T00:00:00"),
+        ),
+        (DataType::Date32, "-0012-05-06".into(), json!("-0012-05-06")),
+        (
+            DataType::Time32(TimeUnit::Second),
+            "02:10".into(),
+            json!("02:10:00"),
+        ),
+        (
+            DataType::Time64(TimeUnit::Microsecond),
+            "2:10 PM".into(),
+            json!("14:10:00"),
+        ),
+        (
+            DataType::Time32(TimeUnit::Second),
+            "7800".into(),
+            json!("02:10:00"),
+        ),
+        (
+            DataType::Time64(TimeUnit::Nanosecond),
+            "02:10:00.1234567890".into(),
+            json!("02:10:00.123456789"),
+        ),
+        (
+            DataType::Timestamp(TimeUnit::Second, None),
+            "2026-09-16t12:00:00".into(),
+            json!("2026-09-16T12:00:00"),
+        ),
+        (
+            DataType::Timestamp(TimeUnit::Second, None),
+            "2026-09-16T120000".into(),
+            json!("2026-09-16T12:00:00"),
+        ),
+        (
+            DataType::Date32,
+            "2026-09-16T00:00:00+08:00".into(),
+            json!("2026-09-16"),
+        ),
         (
             DataType::Timestamp(TimeUnit::Nanosecond, None),
             "1969-12-31T23:59:59.999999999".into(),
             json!("1969-12-31T23:59:59.999999999"),
+        ),
+        (
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            "2026-09-16T12:00:00.123456+08:00".into(),
+            json!("2026-09-16T12:00:00.123456"),
         ),
     ] {
         let array = json_to_array(

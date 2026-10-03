@@ -130,7 +130,11 @@ fn database_rows_to_transport(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(DatabaseRowsResultDto {
         rows,
-        row_ids: result.row_ids,
+        row_ids: result
+            .row_ids
+            .into_iter()
+            .map(|id| id.to_string())
+            .collect(),
     })
 }
 
@@ -207,7 +211,37 @@ fn map_sample_error(error: SampleError) -> CommandError {
 }
 
 #[cfg(test)]
-mod sample_tests {
+mod tests {
+    #[test]
+    fn database_page_wire_preserves_wide_row_identities() {
+        use yss_data_contract::{TabularColumn, TabularScalar, TabularSnapshot};
+
+        let result = super::DatabaseRowsResult {
+            rows: TabularSnapshot::try_from_columns(
+                vec![TabularColumn::new(
+                    "value".try_into().unwrap(),
+                    vec![
+                        TabularScalar::String("9007199254740993".into()),
+                        TabularScalar::Null,
+                    ]
+                    .into_boxed_slice(),
+                )]
+                .into_boxed_slice(),
+            )
+            .unwrap(),
+            row_ids: vec![(1_i64 << 53) + 1, i64::MAX],
+        };
+        let wire =
+            serde_json::to_value(super::database_rows_to_transport(result).unwrap()).unwrap();
+        assert_eq!(
+            wire,
+            serde_json::json!({
+                "rows": [["9007199254740993"], [null]],
+                "rowIds": ["9007199254740993", "9223372036854775807"],
+            })
+        );
+    }
+
     #[test]
     fn sample_rejections_use_the_common_error_wire() {
         for (error, code) in [
@@ -300,9 +334,10 @@ pub fn get_database_meta(
     application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
+    expected_revision: ResourceRevision,
 ) -> Result<serde_json::Value, CommandError> {
     let result = application
-        .query_database_meta_for_application(project_instance_id, id)
+        .query_database_meta_for_application(project_instance_id, id, expected_revision)
         .map_err(map_application_database_error)?;
     serialize_application_database_value(database_meta_to_transport(result))
 }
@@ -362,11 +397,18 @@ pub fn get_database_rows(
     application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
+    expected_revision: ResourceRevision,
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, CommandError> {
     let result = application
-        .query_database_rows_for_application(project_instance_id, id, offset, limit)
+        .query_database_rows_for_application(
+            project_instance_id,
+            id,
+            expected_revision,
+            offset,
+            limit,
+        )
         .map_err(map_application_database_error)?;
     serialize_application_database_value(database_rows_to_transport(result)?)
 }
@@ -376,11 +418,12 @@ pub async fn get_column_distribution(
     application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
+    expected_revision: ResourceRevision,
 ) -> Result<serde_json::Value, CommandError> {
     let application = application.inner().clone();
     run_on_blocking_pool(move || {
         let result = application
-            .query_column_distributions_for_application(project_instance_id, id)
+            .query_column_distributions_for_application(project_instance_id, id, expected_revision)
             .map_err(map_application_database_error)?;
         serialize_application_database_value(result)
     })

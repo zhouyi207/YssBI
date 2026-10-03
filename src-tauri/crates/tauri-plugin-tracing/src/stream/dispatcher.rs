@@ -12,7 +12,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::dto::{
-    LogBatchDto, LogDomain, LogFields, LogLevel, LogOrigin, LogRecordDto, LogSubscriptionDto,
+    LogBatchDto, LogDomain, LogFields, LogLevel, LogOrigin, LogRecordDto, LogStreamFailure,
+    LogSubscriptionDto,
 };
 use super::rust_projection::project_log_record;
 use super::worker::{BoundedWorker, EnqueueResult};
@@ -519,10 +520,10 @@ impl DispatcherState {
             let failure = Arc::new(LogBatchDto {
                 stream_id: self.stream_id.clone(),
                 entries: Vec::new(),
-                failure: Some("storage_unavailable".into()),
+                failure: Some(LogStreamFailure::StorageUnavailable),
             });
-            for subscription in self.subscriptions.values() {
-                let _ = subscription.try_enqueue(failure.clone());
+            for subscription in std::mem::take(&mut self.subscriptions).into_values() {
+                subscription.finish(failure.clone());
             }
             return false;
         }
@@ -539,7 +540,18 @@ impl DispatcherState {
             failure: None,
         });
         self.subscriptions.retain(|_, subscription| {
-            subscription.try_enqueue(batch.clone()) == EnqueueResult::Enqueued
+            match subscription.try_enqueue(batch.clone()) {
+                EnqueueResult::Enqueued => true,
+                EnqueueResult::Full => {
+                    subscription.finish(Arc::new(LogBatchDto {
+                        stream_id: self.stream_id.clone(),
+                        entries: Vec::new(),
+                        failure: Some(LogStreamFailure::SubscriberLagged),
+                    }));
+                    false
+                }
+                EnqueueResult::Closed => false,
+            }
         });
         true
     }

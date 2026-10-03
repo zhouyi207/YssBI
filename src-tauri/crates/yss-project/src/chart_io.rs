@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use yss_chart_document::{ChartDocument, ChartResourcePath};
+use yss_chart_document::{ChartDocument, ChartResourcePath, ChartType};
 #[cfg(test)]
 use yss_project_layout::CHART_EXTENSION;
 use yss_project_layout::CHARTS_DIR;
@@ -15,7 +15,7 @@ pub struct ProjectChartIndexEntry {
     pub chart_path: ChartResourcePath,
     pub name: String,
     pub database_id: String,
-    pub chart_type: String,
+    pub chart_type: ChartType,
     pub revision: yss_project_identity::ResourceRevision,
 }
 
@@ -158,14 +158,7 @@ fn walk_chart_directory(
 }
 
 fn reject_redirect(path: &Path, metadata: &std::fs::Metadata) -> Result<(), ProjectError> {
-    let mut is_redirect = metadata.file_type().is_symlink();
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        is_redirect |= metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0;
-    }
-    if is_redirect {
+    if yss_filesystem::metadata_is_redirect(metadata) {
         return Err(invalid_layout(
             path,
             "chart redirects/reparse points are forbidden",
@@ -327,7 +320,7 @@ mod tests {
         assert_eq!(entries[0].chart_path, path);
         assert_eq!(entries[0].name, "销售分析 2");
         assert_eq!(entries[0].database_id, "db-1");
-        assert_eq!(entries[0].chart_type, "histogram");
+        assert_eq!(entries[0].chart_type, ChartType::Histogram);
         assert_eq!(entries[0].revision.get(), 0);
 
         let _ = std::fs::remove_dir_all(root);

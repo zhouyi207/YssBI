@@ -13,7 +13,6 @@ use tauri::{Manager, State, WebviewWindow};
 use yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto;
 use yss_ipc_contract::project::ProjectActivationResultDto;
 use yss_project::ProjectIndex;
-use yss_project_registry::normalize_existing_path;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,10 +20,12 @@ struct RecoveryRequiredDetails {
     recovery_required: bool,
 }
 
-/// 分阶段加载第一步：获取 databases（含 schema）
+/// 按已捕获的项目索引版本读取 databases（含 schema）。
 #[tauri::command]
 pub fn get_project_databases(
     application: State<ApplicationState>,
+    project_instance_id: yss_project_identity::ProjectInstanceId,
+    expected_publication_revision: u64,
 ) -> Result<ProjectDatabasesDTO, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
@@ -34,7 +35,7 @@ pub fn get_project_databases(
     );
 
     application
-        .query_project_databases()
+        .query_project_databases(project_instance_id, expected_publication_revision)
         .map_err(map_project_query_error)
         .and_then(project_databases_to_transport)
 }
@@ -81,9 +82,10 @@ fn project_activation_to_transport(
 #[tauri::command]
 pub fn get_project_path(
     application: State<ApplicationState>,
+    project_instance_id: yss_project_identity::ProjectInstanceId,
 ) -> Result<Option<String>, CommandError> {
     let path = application
-        .query_project_path()
+        .query_project_path(project_instance_id)
         .map_err(map_project_query_error)?;
 
     tracing::info!(
@@ -94,7 +96,7 @@ pub fn get_project_path(
         "Read project path"
     );
 
-    Ok(path.map(|path| normalize_existing_path(&path).unwrap_or(path)))
+    Ok(path)
 }
 
 #[derive(Serialize)]

@@ -1,5 +1,19 @@
-use super::*;
+use crate::{
+    GraphColumnFact, GraphDiagnosticFact, GraphDiagnosticLocation, GraphFilterColumnFact,
+    GraphFilterLiteralType, GraphNodeSemanticFact, GraphParameterConfigurationFact,
+    GraphParameterFact, GraphParameterGroupFact, GraphPortSemanticFact,
+    GraphResolvedParameterValue, GraphSchemaState, graph_problem,
+};
+use std::borrow::Cow;
 use yss_data_contract::FilterLiteral;
+use yss_graph_diagnostics::GraphDiagnosticKind;
+use yss_graph_document::{DocumentNode, GraphDocument, GraphResourcePath, PortRef};
+use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_protocol::{
+    NodeProtocol, ParameterEditorSpec, ParameterIssueKind, PortDirection, RelationalScalarType,
+    ResolvedSchemaFact, ResourceDisplayKind, TypeExpr, validate_parameter_values,
+};
+use yss_node_registry::NodeRegistry;
 
 pub(super) fn aggregate_parameter_accepts(
     node: &str,
@@ -59,13 +73,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
         let unavailable_reason = schema
             .is_none()
             .then(|| "editors.dataframe.connect_source".into());
-        let value = match &parameter.effective_value {
-            Some(GraphResolvedParameterValue::Literal(value)) => Some(value.clone()),
-            Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
-                Some(yss_node_protocol::protocol_value_to_json(value))
-            }
-            _ => None,
-        };
+        let value = parameter_literal_value(parameter);
         if (parameter.key.as_str() == "subset"
             && matches!(
                 node.node_type.as_str(),
@@ -208,7 +216,9 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                                 .collect(),
                         })
                         .collect(),
-                    value: value.filter(|value| prepare_filter_predicate_json(value).is_ok()),
+                    value: value
+                        .filter(|value| prepare_filter_predicate_json(value).is_ok())
+                        .map(Cow::into_owned),
                 });
             }
             "core.text"
@@ -232,7 +242,19 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
     }
 }
 
-pub(super) fn parameter_fact(
+pub(super) fn parameter_literal_value(
+    parameter: &GraphParameterFact,
+) -> Option<Cow<'_, serde_json::Value>> {
+    match &parameter.effective_value {
+        Some(GraphResolvedParameterValue::Literal(value)) => Some(Cow::Borrowed(value)),
+        Some(GraphResolvedParameterValue::DefaultLiteral(value)) => Some(Cow::Owned(
+            yss_node_protocol::parameter_value_to_json(value, &parameter.value_type),
+        )),
+        _ => None,
+    }
+}
+
+fn parameter_fact(
     group_key: &yss_node_protocol::ParameterGroupKey,
     parameter: &yss_node_protocol::Parameter,
     effective_value: Option<GraphResolvedParameterValue>,
@@ -272,12 +294,180 @@ pub(super) fn parameter_fact(
     }
 }
 
-pub(crate) fn effective_parameter_value(
-    node: &yss_graph_document::DocumentNode,
+pub(crate) fn effective_parameter_value<'a>(
+    node: &'a DocumentNode,
     parameter: &yss_node_protocol::Parameter,
-) -> Option<serde_json::Value> {
+) -> Option<Cow<'a, serde_json::Value>> {
     node.parameters
         .get(&parameter.key)
-        .cloned()
-        .or_else(|| parameter.default_json())
+        .map(Cow::Borrowed)
+        .or_else(|| parameter.default_json().map(Cow::Owned))
+}
+
+pub(crate) fn effective_json_parameter<'a>(
+    node: &'a DocumentNode,
+    key: &yss_node_protocol::ParameterKey,
+    registry: &NodeRegistry,
+) -> Option<Cow<'a, serde_json::Value>> {
+    effective_parameter_value(node, applicable_parameter(node, key, registry)?)
+}
+
+pub(crate) fn effective_text_parameter<'a>(
+    node: &'a DocumentNode,
+    key: &yss_node_protocol::ParameterKey,
+    registry: &'a NodeRegistry,
+) -> Option<&'a str> {
+    registry
+        .protocol(&node.node_type)?
+        .parameters
+        .effective_text(key, &node.parameters)
+}
+
+fn applicable_parameter<'a>(
+    node: &DocumentNode,
+    key: &yss_node_protocol::ParameterKey,
+    registry: &'a NodeRegistry,
+) -> Option<&'a yss_node_protocol::Parameter> {
+    let parameters = &registry.protocol(&node.node_type)?.parameters;
+    parameters
+        .get(key)
+        .filter(|parameter| parameters.is_visible(parameter, &node.parameters))
+}
+
+/// Borrow the constant selected by the node's applicable ConstantOutput parameter.
+/// Uses protocol defaults without writing them into the document.
+pub fn referenced_constant<'a>(
+    document: &'a GraphDocument,
+    node: &DocumentNode,
+    protocol: &NodeProtocol,
+) -> Option<&'a yss_graph_document::GraphConstant> {
+    let yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } = &protocol.typing
+    else {
+        return None;
+    };
+    let id = protocol
+        .parameters
+        .effective_text(parameter, &node.parameters)?
+        .parse()
+        .ok()?;
+    document.constants.get(&id)
+}
+
+pub(super) fn validate_node_parameters(
+    node: &DocumentNode,
+    protocol: &NodeProtocol,
+    parameters: &[GraphParameterFact],
+    registry: &NodeRegistry,
+    resources: &ResourceCatalogSnapshot,
+    diagnostics: &mut Vec<GraphDiagnosticFact>,
+) {
+    for issue in validate_parameter_values(protocol, &node.parameters, registry) {
+        let kind = match issue.kind {
+            ParameterIssueKind::Unknown => GraphDiagnosticKind::ParameterUnknown,
+            ParameterIssueKind::Required => GraphDiagnosticKind::ParameterRequired,
+            ParameterIssueKind::InvalidType
+            | ParameterIssueKind::Constraint
+            | ParameterIssueKind::InvalidNominal(_)
+            | ParameterIssueKind::InvalidResourceId => GraphDiagnosticKind::ParameterInvalid,
+        };
+        diagnostics.push(graph_problem(
+            kind,
+            GraphDiagnosticLocation::Parameter {
+                node_id: node.id,
+                key: issue.key.clone(),
+            },
+            [("parameter_key", issue.key.as_str().into())],
+        ));
+    }
+    for parameter in parameters {
+        let (
+            ParameterEditorSpec::Resource { kind },
+            Some(GraphResolvedParameterValue::Resource(identity)),
+        ) = (&parameter.editor, &parameter.effective_value)
+        else {
+            continue;
+        };
+        let identity = identity.as_str();
+        if resource_exists(resources, *kind, identity) {
+            continue;
+        }
+        diagnostics.push(graph_problem(
+            GraphDiagnosticKind::ResourceResolutionFailed,
+            GraphDiagnosticLocation::Resource(identity.into()),
+            [("resource_key", identity.into())],
+        ));
+    }
+}
+
+fn resource_exists(
+    resources: &ResourceCatalogSnapshot,
+    kind: ResourceDisplayKind,
+    identity: &str,
+) -> bool {
+    match kind {
+        ResourceDisplayKind::Function => GraphResourcePath::new(identity)
+            .ok()
+            .is_some_and(|path| resources.function_signature(&path).is_some()),
+        ResourceDisplayKind::Database => resources
+            .database_schema(&GraphResourceId::new(identity))
+            .is_some(),
+    }
+}
+
+pub(super) fn project_parameter_groups(protocol: &NodeProtocol) -> Box<[GraphParameterGroupFact]> {
+    protocol
+        .parameters
+        .groups
+        .iter()
+        .map(|group| GraphParameterGroupFact {
+            key: group.key.clone(),
+            title: group.title_key.as_str().into(),
+            description: group
+                .description_key
+                .as_ref()
+                .map(|key| key.as_str().into()),
+        })
+        .collect()
+}
+
+pub(super) fn project_node_parameters(
+    node: &DocumentNode,
+    protocol: &NodeProtocol,
+) -> Box<[GraphParameterFact]> {
+    protocol
+        .parameters
+        .groups
+        .iter()
+        .flat_map(|group| {
+            group
+                .parameters
+                .iter()
+                .map(move |parameter| (group, parameter))
+        })
+        .filter(|(_, parameter)| protocol.parameters.is_visible(parameter, &node.parameters))
+        .map(|(group, parameter)| {
+            parameter_fact(
+                &group.key,
+                parameter,
+                effective_parameter_value(node, parameter).map(|value| {
+                    match (&parameter.editor, value.as_str()) {
+                        (ParameterEditorSpec::Resource { .. }, Some(identity)) => {
+                            GraphResolvedParameterValue::Resource(GraphResourceId::new(identity))
+                        }
+                        _ if !node.parameters.contains_key(&parameter.key) => {
+                            GraphResolvedParameterValue::DefaultLiteral(
+                                parameter
+                                    .default_value
+                                    .as_ref()
+                                    .expect("effective default exists")
+                                    .value
+                                    .clone(),
+                            )
+                        }
+                        _ => GraphResolvedParameterValue::Literal(value.into_owned()),
+                    }
+                }),
+            )
+        })
+        .collect()
 }

@@ -51,13 +51,20 @@ pub struct LogRecordDto {
     pub fields: LogFields,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogStreamFailure {
+    StorageUnavailable,
+    SubscriberLagged,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogBatchDto {
     pub stream_id: String,
     pub entries: Vec<LogRecordDto>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub failure: Option<String>,
+    pub failure: Option<LogStreamFailure>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use yss_node_protocol::{I18nKey, ParameterKey};
+use yss_node_protocol::ParameterKey;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -33,14 +33,4 @@ pub enum DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity>
     Connection(ConnectionId),
     Parameter { node_id: NodeId, key: ParameterKey },
     Resource(ResourceIdentity),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NodeDiagnostic<NodeId, PortAddress, ConnectionId, ResourceIdentity> {
-    pub code: DiagnosticCode,
-    pub message_key: I18nKey,
-    pub arguments: DiagnosticArguments,
-    pub severity: DiagnosticSeverity,
-    pub primary: DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity>,
-    pub related: Box<[DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity>]>,
 }

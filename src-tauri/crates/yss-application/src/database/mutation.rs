@@ -1,3 +1,6 @@
+mod project;
+pub(super) use project::{apply_database_mutation_in_session, check_database_revision};
+
 use std::fmt;
 use std::sync::Arc;
 

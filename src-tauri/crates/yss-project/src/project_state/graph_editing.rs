@@ -296,19 +296,20 @@ pub(crate) fn document_hash(document: &GraphDocument) -> Result<[u8; 32], String
 impl ProjectState {
     pub(crate) fn prepare_graph_editing_remap(
         &self,
+        registry: &yss_node_registry::NodeRegistry,
         source: &GraphResourcePath,
-        target: &GraphResourcePath,
         remap: (&GraphResourcePath, &GraphResourcePath),
         current: &GraphDocument,
         saved: &GraphDocument,
         documents_changed: bool,
     ) -> Result<Option<PreparedGraphEditingUpdate>, ProjectOperationError> {
+        let target = if source == remap.0 { remap.1 } else { source };
         let Some(mut metadata) = self.graph_editing.lock().unwrap().get(source).cloned() else {
             return Ok(None);
         };
         let mut history_changed = false;
         for entry in metadata.undo.iter_mut().chain(metadata.redo.iter_mut()) {
-            if !super::graph_references::remap_patch(&mut entry.patch, remap.0, remap.1) {
+            if !super::graph_references::remap_patch(&mut entry.patch, remap.0, remap.1, registry) {
                 continue;
             }
             history_changed = true;
@@ -978,18 +979,24 @@ mod tests {
 
     #[test]
     fn renaming_keeps_unsaved_content_and_its_history_out_of_the_file() {
+        let registry = yss_node_catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let (fixture, path, node) = fixture();
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
         let edited = move_node(state, &session.instance_id, &path, node);
         state
             .rename_graph_resource(
+                &registry,
                 &session.instance_id,
-                &path,
-                edited.to_revision,
-                "Renamed",
-                1000,
-                OperationId::new(),
+                crate::GraphResourceRenameRequest {
+                    graph_path: &path,
+                    expected_revision: edited.to_revision,
+                    new_name: "Renamed",
+                    lifecycle_token: 1000,
+                    operation_id: OperationId::new(),
+                },
             )
             .unwrap();
         let target = GraphResourcePath::new("events/Renamed.yssbi-event").unwrap();

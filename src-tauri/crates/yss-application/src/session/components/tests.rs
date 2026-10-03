@@ -18,7 +18,7 @@ use yss_graph_execution::plan::{
 };
 use yss_graph_execution::resource_preparation::RunResourceBindings;
 use yss_graph_execution::state::{ExecutePreparedError, RunExecutionControl};
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_catalog::{BuiltinCatalog, register_builtin_nodes};
 use yss_node_kernel::KernelError;
 use yss_node_kernel::RuntimeValue;
@@ -111,7 +111,7 @@ fn definition() -> NodeProtocol {
     }
 }
 
-fn definitions() -> (Arc<NodeRegistry>, Arc<BuiltinCatalog>) {
+fn definitions(protocol: NodeProtocol) -> (Arc<NodeRegistry>, Arc<BuiltinCatalog>) {
     let mut builder = NodeRegistryBuilder::new();
     let catalog = register_builtin_nodes(&mut builder).unwrap();
     let mut provider = ProviderRegistration::new("example.numeric".parse().unwrap());
@@ -119,7 +119,7 @@ fn definitions() -> (Arc<NodeRegistry>, Arc<BuiltinCatalog>) {
         ["example.increment.title", "example.increment.step.title"].map(|key| key.parse().unwrap()),
     );
     provider.nodes = vec![RegisteredNode::leaf(
-        Arc::new(definition()),
+        Arc::new(protocol),
         LeafImplementation::new(ID),
     )]
     .into_boxed_slice();
@@ -162,7 +162,7 @@ fn kernels(revision: Option<u32>) -> KernelRegistryBuilder {
 }
 
 fn application(revision: Option<u32>) -> ApplicationState {
-    let (registry, catalog) = definitions();
+    let (registry, catalog) = definitions(definition());
     ApplicationState::initialize_with_nodes(
         NodeComponents::new(registry, catalog, kernels(revision)).unwrap(),
     )
@@ -198,11 +198,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             user_label: None,
         },
     );
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let basis = GraphAnalysisBasis {
         registry_fingerprint: RegistryFingerprint::from_bytes(
             session.graph().registry_fingerprint(),
@@ -387,10 +383,63 @@ fn conflicting_registrations_and_node_kernel_contracts_are_rejected() {
                 increment,
             )
             .unwrap();
-        let (registry, catalog) = definitions();
+        let (registry, catalog) = definitions(definition());
         assert!(matches!(
             NodeComponents::new(registry, catalog, builder),
             Err(NodeCompositionError::Binding { .. })
         ));
     }
+}
+
+#[test]
+fn grouped_port_bounds_control_kernel_input_and_output_binding() {
+    let mut protocol = definition();
+    protocol.parameters = Parameters::default();
+    for port in &mut protocol.interface.ports {
+        port.cardinality = PortCardinality::UserCreated { min: 0, max: None };
+    }
+    protocol.interface = protocol
+        .interface
+        .with_member_groups(vec![PortMemberGroupSpec {
+            templates: ["input".parse().unwrap(), "result".parse().unwrap()].into(),
+            min: 2,
+            max: Some(3),
+        }])
+        .unwrap();
+    let (registry, catalog) = definitions(protocol);
+    let compose = |inputs, outputs| {
+        let mut builder = kernels(None);
+        builder
+            .register(
+                KernelId::new(ID.into()).unwrap(),
+                NonZeroU32::new(1).unwrap(),
+                KernelContract::new(
+                    [yss_node_kernel::KernelInputSpec::repeated("input", inputs)],
+                    [],
+                    outputs,
+                )
+                .unwrap(),
+                |invocation| Ok(invocation.inputs.to_vec()),
+            )
+            .unwrap();
+        NodeComponents::new(Arc::clone(&registry), Arc::clone(&catalog), builder)
+    };
+    assert!(
+        compose(2..=3, 2..=3).is_ok(),
+        "a bounded member group must bind to the matching kernel"
+    );
+    assert!(matches!(
+        compose(3..=3, 2..=3),
+        Err(NodeCompositionError::Binding {
+            source: yss_node_kernel::KernelBindingError::Inputs,
+            ..
+        })
+    ));
+    assert!(matches!(
+        compose(2..=3, 2..=2),
+        Err(NodeCompositionError::Binding {
+            source: yss_node_kernel::KernelBindingError::Outputs,
+            ..
+        })
+    ));
 }

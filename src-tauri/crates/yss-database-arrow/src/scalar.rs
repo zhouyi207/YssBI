@@ -163,11 +163,11 @@ pub fn json_to_array(field: &Field, values: &[Value]) -> Result<ArrayRef, Tabula
                 .iter()
                 .map(|value| match value {
                     Value::Null => Ok(None),
-                    Value::String(value) => Ok(Some(crate::timezone_free_text(value)?)),
+                    Value::String(value) => Ok(Some(value.as_str())),
                     _ => Err(invalid()),
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            strict_cast(&StringArray::from(strings), dtype)?
+            crate::lossless_cast(&StringArray::from(strings), dtype, false)?
         }
         _ => return Err(TabularArrowError::UnsupportedType),
     };

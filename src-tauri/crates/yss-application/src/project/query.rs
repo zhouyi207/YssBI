@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use thiserror::Error;
 
@@ -67,32 +67,73 @@ impl ProjectDatabasesSnapshot {
 impl ApplicationState {
     pub fn query_project_databases(
         &self,
+        project_instance_id: ProjectInstanceId,
+        expected_publication_revision: u64,
     ) -> Result<ProjectDatabasesSnapshot, ProjectQueryApplicationError> {
-        let captured = self.capture_session()?;
-        let data = captured.project().get_data()?;
+        let captured = self.capture_project_session(&project_instance_id)?;
+        self.query_project_databases_in_session(&captured, Some(expected_publication_revision))
+    }
+
+    pub(crate) fn query_project_databases_in_session(
+        &self,
+        captured: &Arc<ApplicationSession>,
+        expected_publication_revision: Option<u64>,
+    ) -> Result<ProjectDatabasesSnapshot, ProjectQueryApplicationError> {
+        self.revalidate_captured_session(captured)
+            .map_err(ProjectQueryApplicationError::SessionChanged)?;
+        let declarations = captured.project().read_database_snapshot()?;
+        if declarations.project_instance_id() != captured.project_instance_id()
+            || declarations.project_session_id() != captured.project_session_id()
+        {
+            return Err(ProjectQueryApplicationError::ProjectIdentityMismatch {
+                requested: captured.project_instance_id().clone(),
+            });
+        }
+        let revalidate_project = || match expected_publication_revision {
+            Some(revision) => captured.project().validate_project_index_version(
+                captured.project_instance_id(),
+                revision,
+                declarations.authority_generation(),
+            ),
+            None => captured
+                .project()
+                .revalidate_database_snapshot(&declarations),
+        };
+        revalidate_project()?;
         let catalog = yss_database_runtime::session_api::catalog_snapshot(captured.database())?;
-        let databases = data
-            .databases
+        yss_database_runtime::session_api::revalidate_declaration_observations(
+            captured.database(),
+            declarations.observations(),
+        )?;
+        let schemas = catalog
+            .schemas()
             .iter()
-            .map(|(id, declaration)| {
-                let schema = catalog
-                    .schemas()
-                    .iter()
-                    .find(|schema| schema.database().as_str() == id)
+            .map(|schema| (schema.database(), schema))
+            .collect::<HashMap<_, _>>();
+        let databases = declarations
+            .declarations()
+            .iter()
+            .map(|declaration| {
+                let schema = schemas
+                    .get(&declaration.id)
+                    .copied()
                     .cloned()
-                    .unwrap_or_else(|| DatabaseSchemaFact::empty(declaration.id.clone(), 0, 0));
-                ProjectDatabaseQueryFact {
+                    .ok_or_else(|| ProjectOperationError::CatalogResourceStale {
+                        message: "database declaration is missing its runtime schema".into(),
+                    })?;
+                Ok(ProjectDatabaseQueryFact {
                     declaration: declaration.clone(),
                     schema,
-                }
+                })
             })
-            .collect::<Vec<_>>()
+            .collect::<Result<Vec<_>, ProjectOperationError>>()?
             .into_boxed_slice();
         yss_database_runtime::session_api::revalidate_catalog_snapshot(
             captured.database(),
             &catalog,
         )?;
-        self.revalidate_captured_session(&captured)
+        revalidate_project()?;
+        self.revalidate_captured_session(captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
         Ok(ProjectDatabasesSnapshot { databases })
     }
@@ -120,8 +161,11 @@ impl ApplicationState {
         })
     }
 
-    pub fn query_project_path(&self) -> Result<Option<String>, ProjectQueryApplicationError> {
-        let captured = self.capture_session()?;
+    pub fn query_project_path(
+        &self,
+        project_instance_id: ProjectInstanceId,
+    ) -> Result<Option<String>, ProjectQueryApplicationError> {
+        let captured = self.capture_project_session(&project_instance_id)?;
         let path = captured.project().get_path();
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;

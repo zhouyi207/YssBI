@@ -1,6 +1,10 @@
 //! Static transformation schemas are derived from declared fields and parameters only.
-use super::*;
-use yss_data_contract::SemanticType;
+use super::{EditorSchemaResolver, aggregation};
+use crate::GraphSchemaIssue;
+use std::collections::{BTreeMap, BTreeSet};
+use yss_data_contract::{SemanticType, TabularColumnName};
+use yss_graph_document::{NodeId, PortAddress};
+use yss_node_protocol::{RelationalScalarType, SchemaColumnRef, SchemaField, SchemaFieldLineage};
 
 fn field(name: &str, kind: SemanticType) -> SchemaField {
     SchemaField {
@@ -18,26 +22,25 @@ impl EditorSchemaResolver<'_> {
             .document
             .nodes
             .get(&node_id)
-            .ok_or(GraphSchemaIssue::MissingResource)?
-            .clone();
+            .ok_or(GraphSchemaIssue::MissingResource)?;
         let protocol = self
             .registry
             .protocol(&node.node_type)
-            .ok_or(GraphSchemaIssue::MissingResource)?
-            .clone();
+            .ok_or(GraphSchemaIssue::MissingResource)?;
         let parameters = protocol
             .parameters
             .iter()
+            .filter(|p| protocol.parameters.is_visible(p, &node.parameters))
             .filter_map(|p| {
-                crate::parameter_projection::effective_parameter_value(&node, p)
-                    .map(|v| (p.key.as_str().to_owned(), v))
+                crate::parameter_projection::effective_parameter_value(node, p)
+                    .map(|v| (p.key.as_str(), v))
             })
             .collect::<BTreeMap<_, _>>();
-        let parameter = |key: &str| parameters.get(key);
-        let text = |key: &str| {
+        let parameter = |key: &str| parameters.get(key).map(|value| value.as_ref());
+        let column_name = |key: &str| {
             parameter(key)
                 .and_then(serde_json::Value::as_str)
-                .filter(|s| !s.trim().is_empty() && s.trim() == *s)
+                .filter(|s| TabularColumnName::is_valid(s))
                 .map(str::to_owned)
                 .ok_or(GraphSchemaIssue::InvalidParameter)
         };
@@ -70,7 +73,7 @@ impl EditorSchemaResolver<'_> {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false)
             {
-                Some(text("reference")?)
+                Some(column_name("reference")?)
             } else {
                 None
             };
@@ -119,17 +122,12 @@ impl EditorSchemaResolver<'_> {
                 }
                 "yssbi.dataframe.filter.mask" => input,
                 "yssbi.dataframe.set_column" => {
-                    let name = text("name")?;
+                    let name = column_name("name")?;
                     let address = PortAddress::declared(node_id, "series".parse().unwrap());
-                    let source = self
-                        .input_sources
-                        .get(&address)
-                        .and_then(|s| match s.as_slice() {
-                            [s] => Some(s.clone()),
-                            _ => None,
-                        })
-                        .ok_or(GraphSchemaIssue::UnconnectedInput)?;
-                    let mut added = self.composition_series(&source)?;
+                    let [connection] = self.index.input_connections(&address) else {
+                        return Err(GraphSchemaIssue::UnconnectedInput);
+                    };
+                    let mut added = self.composition_series(&connection.output)?;
                     added.name = SchemaColumnRef(name.clone().into());
                     added.lineage = Some(SchemaFieldLineage {
                         source: format!("graph:{node_id}:transform").into(),
@@ -156,8 +154,8 @@ impl EditorSchemaResolver<'_> {
                     {
                         return Err(GraphSchemaIssue::ConflictingInputs);
                     }
-                    let variable = text("variable_name")?;
-                    let value = text("value_name")?;
+                    let variable = column_name("variable_name")?;
+                    let value = column_name("value_name")?;
                     let mut output = select(&keys)?;
                     output.push(field(&variable, SemanticType::Text));
                     output.push(SchemaField {
@@ -169,8 +167,8 @@ impl EditorSchemaResolver<'_> {
                 }
                 "yssbi.dataframe.pivot" => {
                     let keys = names("keys")?;
-                    let category = text("category_column")?;
-                    let value = text("value_column")?;
+                    let category = column_name("category_column")?;
+                    let value = column_name("value_column")?;
                     select(&[category.into()])?;
                     let source = select(&[value.into()])?.remove(0);
                     if parameter("aggregate").and_then(serde_json::Value::as_str) != Some("count")
@@ -201,7 +199,7 @@ impl EditorSchemaResolver<'_> {
                     output
                 }
                 "yssbi.dataframe.resample" => {
-                    let time = text("time_column")?;
+                    let time = column_name("time_column")?;
                     let mut output = select(&[time.clone().into()])?;
                     if output[0].scalar_type != RelationalScalarType::Known(SemanticType::Datetime)
                     {
@@ -216,7 +214,10 @@ impl EditorSchemaResolver<'_> {
                     if columns.is_empty() {
                         return Err(GraphSchemaIssue::InvalidParameter);
                     }
-                    let operation = text("aggregate")?;
+                    let operation = parameter("aggregate")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|value| !value.is_empty() && value.trim() == *value)
+                        .ok_or(GraphSchemaIssue::InvalidParameter)?;
                     for source in select(&columns)? {
                         if operation != "count"
                             && source.scalar_type

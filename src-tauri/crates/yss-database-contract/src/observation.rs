@@ -51,7 +51,7 @@ impl DatabaseDeclarationObservationSet {
         self.0.iter()
     }
 
-    pub(crate) fn get(&self, id: &DatabaseId) -> Option<&DatabaseDeclarationObservation> {
+    pub fn get(&self, id: &DatabaseId) -> Option<&DatabaseDeclarationObservation> {
         self.0.get(id)
     }
 }

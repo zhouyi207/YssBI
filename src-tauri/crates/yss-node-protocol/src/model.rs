@@ -95,6 +95,18 @@ impl NodeInterfaceProtocol {
             .iter()
             .find(|group| group.templates.contains(template))
     }
+
+    /// Count bounds for a port template belonging to this interface.
+    /// Grouped templates share their group's member count; derived counts remain open.
+    pub fn port_instance_bounds(&self, port: &PortSpec) -> (u16, Option<u16>) {
+        match port.cardinality {
+            PortCardinality::Declared => (1, Some(1)),
+            PortCardinality::UserCreated { min, max } => self
+                .member_group_for_template(&port.key)
+                .map_or((min, max), |group| (group.min, group.max)),
+            PortCardinality::Derived { .. } => (0, None),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

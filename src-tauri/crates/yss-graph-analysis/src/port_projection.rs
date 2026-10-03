@@ -1,5 +1,20 @@
-use super::*;
 use crate::document_index::DocumentIndex;
+use crate::{
+    GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact, GraphPortBacking,
+    GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceAdditionFact,
+    GraphPortSemanticFact, GraphResultCategory, GraphSchemaState, derived_ports, graph_problem,
+    result_category,
+};
+use std::collections::{BTreeMap, BTreeSet};
+use yss_graph_diagnostics::GraphDiagnosticKind;
+use yss_graph_document::{
+    DynamicMemberLocator, DynamicPortBinding, GraphDocument, NodeId, OrderKey, PortAddress, PortRef,
+};
+use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
+use yss_node_protocol::{
+    ConnectionsPerPort, PortCardinality, PortDirection, PortEditorSpec, ResolvedSchemaFact,
+    TypeExpr, TypeState, TypeUnknownReason,
+};
 
 pub(super) fn include_referenced_orphan_ports(
     document: &GraphDocument,
@@ -11,7 +26,10 @@ pub(super) fn include_referenced_orphan_ports(
         .iter()
         .enumerate()
         .map(|(index, node)| (node.node_id, index))
-        .collect::<std::collections::BTreeMap<_, _>>();
+        .collect::<BTreeMap<_, _>>();
+    let mut additional_addresses = BTreeSet::new();
+    let mut additional_ports = BTreeMap::<usize, Vec<GraphPortSemanticFact>>::new();
+    let mut diagnosed_ports = None::<BTreeSet<PortAddress>>;
     let addresses = document
         .connections
         .values()
@@ -31,15 +49,17 @@ pub(super) fn include_referenced_orphan_ports(
         let Some(node_index) = node_indices.get(&address.node_id) else {
             continue;
         };
-        let node = &mut nodes[*node_index];
-        if node.ports.iter().any(|port| &port.address == address) {
+        let node = &nodes[*node_index];
+        if node.ports.iter().any(|port| &port.address == address)
+            || !additional_addresses.insert(address)
+        {
             continue;
         }
         let key = match &address.port {
             PortRef::Declared { key } => key,
             PortRef::Instance { template, .. } => template,
         };
-        let mut ports = node.ports.to_vec();
+        let ports = additional_ports.entry(*node_index).or_default();
         ports.push(GraphPortSemanticFact {
             address: address.clone(),
             label: key.as_str().into(),
@@ -67,17 +87,28 @@ pub(super) fn include_referenced_orphan_ports(
             schema: None,
             schema_state: GraphSchemaState::NotApplicable,
         });
-        node.ports = ports.into_boxed_slice();
-        if !diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.primary == GraphDiagnosticLocation::Port(address.clone()))
-        {
+        let diagnosed = diagnosed_ports.get_or_insert_with(|| {
+            diagnostics
+                .iter()
+                .filter_map(|diagnostic| match &diagnostic.primary {
+                    GraphDiagnosticLocation::Port(address) => Some(address.clone()),
+                    _ => None,
+                })
+                .collect()
+        });
+        if diagnosed.insert(address.clone()) {
             diagnostics.push(graph_problem(
                 GraphDiagnosticKind::PortUnknown,
                 GraphDiagnosticLocation::Port(address.clone()),
                 [("port", address.to_string().into())],
             ));
         }
+    }
+    // Preserve first-reference order and move existing facts once per affected node.
+    for (node_index, additions) in additional_ports {
+        let mut ports = std::mem::take(&mut nodes[node_index].ports).into_vec();
+        ports.extend(additions);
+        nodes[node_index].ports = ports.into_boxed_slice();
     }
 }
 
@@ -86,21 +117,6 @@ pub(super) fn binding_order(binding: &DynamicPortBinding) -> &OrderKey {
         DynamicPortBinding::UserCreated { order }
         | DynamicPortBinding::Resolved { order, .. }
         | DynamicPortBinding::Orphan { order, .. } => order,
-    }
-}
-
-pub(super) fn resource_exists(
-    resources: &ResourceCatalogSnapshot,
-    kind: ResourceDisplayKind,
-    identity: &str,
-) -> bool {
-    match kind {
-        ResourceDisplayKind::Function => GraphResourcePath::new(identity)
-            .ok()
-            .is_some_and(|path| resources.function_signature(&path).is_some()),
-        ResourceDisplayKind::Database => resources
-            .database_schema(&GraphResourceId::new(identity))
-            .is_some(),
     }
 }
 

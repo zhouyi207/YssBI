@@ -51,13 +51,31 @@ an independent display label, exact Physical label and the field's Semantic conf
 none reconstructs the stored Arrow schema. The seven Semantic types and conversion constraints
 are owned by the [dataset metadata contract](../yss-database-store/README.md#field-meaning-and-physical-conversion).
 
+`DatabasePageSnapshot::into_parts` transfers the owned table and stable row IDs to a consumer
+without cloning the page. Borrowed access remains available for callers that retain the snapshot.
+Application revalidates the captured query basis and application session after building its result.
+`DatabaseQueryBasis` captures the existing declaration observation together with runtime/schema
+revisions. Revalidation checks all three facts. Its declaration revision lets Application compare
+the runtime read to a caller's Project resource revision without adding a counter or a separate
+observation index. Numeric column-pair reads require an expected declaration revision and check
+it against the captured basis before materializing Arrow columns.
+When both plot axes name the same column, the plot adapter projects and converts that column
+once and shares its immutable numeric values between the axes, preserving null positions and
+axis metadata. Distinct columns are read together from the same relation.
+
+`DatabaseDeclarationObservationSet::get` exposes borrowed lookup through the contract's existing
+database ID index. Runtime preparation, commit and compensation, and Application mutation setup use
+that lookup directly; they do not duplicate linear-search helpers or maintain another observation map.
+Revision and fingerprint comparisons remain with the existing session and mutation owners.
+
 Profile queries aggregate the fixed effective snapshot in DataFusion. Numeric summaries ignore
 non-finite values while reporting nulls separately; category ties sort deterministically and
 empty tables return empty summaries. Plot preparation reads Arrow directly and keeps the existing
 day/microsecond coordinate convention. Plugin snapshots use exact Arrow IPC batches.
 
 Harness profile inspection calls `session_api::dataset_overview_with_control` with the caller's
-cancellation and query budget. The desktop uses `session_api::column_distributions` for Details.
+cancellation and query budget. Chart histograms use `session_api::column_distributions` through
+the Application revision-checked read boundary.
 
 A relation captures the actual dataset snapshot and the Project grant revision. Graph source,
 projection, filter, and series kernels retain that handle. Native optimizer rewrites can drop
@@ -72,6 +90,14 @@ compose native plans. Series transformations retain their row domain and express
 nested windows are lowered into successive native Window operators and restore source
 order. Repeated differences use a bounded DataFusion window evaluator, preserving repeated
 subtraction and null propagation without collecting columns in node kernels.
+Numeric reductions and arithmetic windows, including sum, difference and percent change,
+require Numeric field meaning as well as numeric Arrow storage. Integer Identifier fields
+are rejected; integer Numeric sums retain the exact Decimal128 aggregation path.
+
+Single imputation uses native mean, exact median, mode windows or a constant over
+the full input row domain. Numeric modes break ties by smallest value. Nonempty
+all-null inputs require a constant; invalid or non-finite results fail when read.
+The transformed series preserves row identity and order and uses Float64 storage.
 
 Literal series are imported once as immutable Arrow arrays and exposed through expressions
 over explicit position coordinates; generated integer ranges use the same coordinates.
@@ -79,6 +105,8 @@ Equal-length literal/range series in one engine can align by those coordinates. 
 dataset or table relations never acquire alignment from matching lengths. Row-changing
 operations establish a new domain. Scalar reductions consume only native aggregate results;
 data-dependent column dropping consumes one aggregate row and retains its deferred schema.
+Concurrent consumers of the same deferred relation reuse the successful cached plan, including
+its row domain. Cancellation and failed resolution do not populate that cache.
 
 ## Editing and publication
 
@@ -138,6 +166,14 @@ channel supplies backpressure, cancellation/deadline checks cover the worker, an
 end marker prevents a worker failure from looking like a successful partial import. Unsupported
 SQL types fail explicitly. CSV/Parquet use the shared Arrow readers; Excel decoding retains its
 existing calamine owner.
+Excel calendar serials use Calamine's 1900/1904 conversion to timezone-free ISO text with
+millisecond precision before CSV inference. Date-only and time-only cells retain the calendar
+and clock components Calamine exposes; the adapter does not infer a separate time-only type.
+When millisecond rounding reaches midnight, the existing workspace Chrono date operation
+advances the ordinary calendar day; Calamine retains ownership of the special 1900 calendar.
+Elapsed durations remain numeric serial days, and ISO date/duration cells retain their text.
+Excel's fictitious 1900-02-29 also retains its calendar text under the existing CSV inference
+and validation rules. Serials outside Excel's calendar range retain their numeric representation.
 
 Exports stream a fixed relation into CSV or Parquet. Application retains its sibling temporary
 file, currentness check, atomic destination replacement, and failure cleanup workflow. Project

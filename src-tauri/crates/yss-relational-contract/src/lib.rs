@@ -675,7 +675,9 @@ impl RelationHandle {
     ) -> Result<Self, RelationError> {
         if series.is_empty()
             || series.len() != names.len()
-            || names.iter().any(|n| n.is_empty())
+            || names
+                .iter()
+                .any(|name| !yss_data_contract::TabularColumnName::is_valid(name))
             || names
                 .iter()
                 .collect::<std::collections::BTreeSet<_>>()

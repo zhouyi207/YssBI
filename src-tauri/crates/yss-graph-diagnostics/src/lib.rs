@@ -24,92 +24,6 @@ pub struct GraphDiagnosticDefinition {
     pub templates: &'static [DiagnosticTemplate],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GraphDiagnosticKind {
-    ConnectionInputDirection,
-    ConnectionLimit,
-    ConnectionOrderForbidden,
-    ConnectionOrderRequired,
-    ConnectionOutputDirection,
-    DependencyValueCycle,
-    FunctionAbiMismatch,
-    FunctionBlocked,
-    FunctionBodyUnavailable,
-    FunctionDependencyCycle,
-    InputConflictingBindings,
-    InputLiteralForbidden,
-    InputLiteralInvalid,
-    InputNotInput,
-    InputUnbound,
-    InputUnknownPort,
-    InterfaceSchemaDependencyUnresolved,
-    NodeUnknown,
-    NodeKernelUnavailable,
-    ParameterInvalid,
-    ParameterRequired,
-    ParameterUnknown,
-    PortBindingKindMismatch,
-    PortOrphan,
-    PortUnknown,
-    ResourceResolutionFailed,
-    SchemaParameterInvalid,
-    SemanticInvalid,
-    TypeConnectionMismatch,
-    TypeGenericConflict,
-    TypeInputNotAccepted,
-    TypeResolutionIncomplete,
-}
-
-impl GraphDiagnosticKind {
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::ConnectionInputDirection => "graph.connection.input_direction",
-            Self::ConnectionLimit => "graph.connection.limit",
-            Self::ConnectionOrderForbidden => "graph.connection.order_forbidden",
-            Self::ConnectionOrderRequired => "graph.connection.order_required",
-            Self::ConnectionOutputDirection => "graph.connection.output_direction",
-            Self::DependencyValueCycle => "graph.dependency.value_cycle",
-            Self::FunctionAbiMismatch => "graph.function.abi_mismatch",
-            Self::FunctionBlocked => "graph.function.blocked",
-            Self::FunctionBodyUnavailable => "graph.function.body_unavailable",
-            Self::FunctionDependencyCycle => "graph.function.dependency_cycle",
-            Self::InputConflictingBindings => "graph.input.conflicting_bindings",
-            Self::InputLiteralForbidden => "graph.input.literal_forbidden",
-            Self::InputLiteralInvalid => "graph.input.literal_invalid",
-            Self::InputNotInput => "graph.input.not_input",
-            Self::InputUnbound => "graph.input.unbound",
-            Self::InputUnknownPort => "graph.input.unknown_port",
-            Self::InterfaceSchemaDependencyUnresolved => {
-                "graph.interface.schema_dependency_unresolved"
-            }
-            Self::NodeUnknown => "graph.node.unknown",
-            Self::NodeKernelUnavailable => "graph.node.kernel_unavailable",
-            Self::ParameterInvalid => "graph.parameter.invalid",
-            Self::ParameterRequired => "graph.parameter.required",
-            Self::ParameterUnknown => "graph.parameter.unknown",
-            Self::PortBindingKindMismatch => "graph.port.binding_kind_mismatch",
-            Self::PortOrphan => "graph.port.orphan",
-            Self::PortUnknown => "graph.port.unknown",
-            Self::ResourceResolutionFailed => "graph.resource.resolution_failed",
-            Self::SchemaParameterInvalid => "graph.schema.parameter_invalid",
-            Self::SemanticInvalid => "graph.semantic.invalid",
-            Self::TypeConnectionMismatch => "graph.type.connection_mismatch",
-            Self::TypeGenericConflict => "graph.type.generic_conflict",
-            Self::TypeInputNotAccepted => "graph.type.input_not_accepted",
-            Self::TypeResolutionIncomplete => "graph.type.resolution_incomplete",
-        }
-    }
-    pub fn definition(self) -> &'static GraphDiagnosticDefinition {
-        GRAPH_DIAGNOSTIC_DEFINITIONS
-            .iter()
-            .find(|definition| definition.code == self.code())
-            .expect("every graph diagnostic kind has a definition")
-    }
-    pub fn default_severity(self) -> DiagnosticSeverity {
-        self.definition().default_severity
-    }
-}
-
 macro_rules! define_graph_diagnostics {
     (
         $(
@@ -123,6 +37,28 @@ macro_rules! define_graph_diagnostics {
             }
         ),* $(,)?
     ) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum GraphDiagnosticKind {
+            $($name,)*
+        }
+
+        impl GraphDiagnosticKind {
+            pub const fn code(self) -> &'static str {
+                self.definition().code
+            }
+
+            pub const fn definition(self) -> &'static GraphDiagnosticDefinition {
+                &GRAPH_DIAGNOSTIC_DEFINITIONS[self as usize]
+            }
+
+            pub fn default_severity(self) -> DiagnosticSeverity {
+                self.definition().default_severity
+            }
+        }
+
+        #[cfg(test)]
+        const GRAPH_DIAGNOSTIC_KINDS: &[GraphDiagnosticKind] = &[$(GraphDiagnosticKind::$name,)*];
+
         pub const GRAPH_DIAGNOSTIC_DEFINITIONS: &[GraphDiagnosticDefinition] = &[
             $(
                 GraphDiagnosticDefinition {
@@ -142,14 +78,6 @@ macro_rules! define_graph_diagnostics {
 }
 
 define_graph_diagnostics! {
-    DataframeFieldTypeUnsupported { column, schema_type, reason } => {
-        code: "graph.dataframe.field_type_unsupported",
-        message_key: "diagnostics.graph.dataframe.field_type_unsupported",
-        severity: Warning,
-        blocking: false,
-        en: "Column {column} uses unsupported schema type {schema_type}: {reason}.",
-        zh: "列 {column} 使用了不支持的 Schema 类型 {schema_type}：{reason}。",
-    },
     ConnectionInputDirection { port } => {
         code: "graph.connection.input_direction",
         message_key: "diagnostics.graph.connection.input_direction",
@@ -198,87 +126,7 @@ define_graph_diagnostics! {
         en: "Value dependencies contain a cycle.",
         zh: "值依赖包含循环。",
     },
-    DocumentConnectionIdMismatch { expected_id, actual_id } => {
-        code: "graph.document.connection_id_mismatch",
-        message_key: "diagnostics.graph.document.connection_id_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Connection ID {actual_id} does not match {expected_id}.",
-        zh: "连接 ID {actual_id} 与 {expected_id} 不匹配。",
-    },
-    DocumentNodeIdMismatch { expected_id, actual_id } => {
-        code: "graph.document.node_id_mismatch",
-        message_key: "diagnostics.graph.document.node_id_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Node ID {actual_id} does not match {expected_id}.",
-        zh: "节点 ID {actual_id} 与 {expected_id} 不匹配。",
-    },
-    FunctionAbiEndpointInvalid { port } => {
-        code: "graph.function.abi.endpoint_invalid",
-        message_key: "diagnostics.graph.function.abi.endpoint_invalid",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI endpoint {port} is invalid.",
-        zh: "函数 ABI 端点 {port} 无效。",
-    },
-    FunctionAbiLocatorInvalid { port } => {
-        code: "graph.function.abi.locator_invalid",
-        message_key: "diagnostics.graph.function.abi.locator_invalid",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI locator for {port} is invalid.",
-        zh: "端口 {port} 的函数 ABI 定位器无效。",
-    },
-    FunctionAbiLocatorTargetMismatch { function_path } => {
-        code: "graph.function.abi.locator_target_mismatch",
-        message_key: "diagnostics.graph.function.abi.locator_target_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI locator does not target {function_path}.",
-        zh: "函数 ABI 定位器未指向 {function_path}。",
-    },
-    FunctionAbiManagedRoleInvalid { expected_role, actual_count } => {
-        code: "graph.function.abi.managed_role_invalid",
-        message_key: "diagnostics.graph.function.abi.managed_role_invalid",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI requires one {expected_role} node but found {actual_count}.",
-        zh: "函数 ABI 需要一个 {expected_role} 节点，但找到 {actual_count} 个。",
-    },
-    FunctionAbiMemberDuplicate { field_name } => {
-        code: "graph.function.abi.member_duplicate",
-        message_key: "diagnostics.graph.function.abi.member_duplicate",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI member {field_name} is duplicated.",
-        zh: "函数 ABI 成员 {field_name} 重复。",
-    },
-    FunctionAbiMemberMissing { field_name } => {
-        code: "graph.function.abi.member_missing",
-        message_key: "diagnostics.graph.function.abi.member_missing",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI member {field_name} is missing.",
-        zh: "缺少函数 ABI 成员 {field_name}。",
-    },
-    FunctionAbiMemberUnexpected { field_name } => {
-        code: "graph.function.abi.member_unexpected",
-        message_key: "diagnostics.graph.function.abi.member_unexpected",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI member {field_name} is unexpected.",
-        zh: "函数 ABI 成员 {field_name} 不符合预期。",
-    },
 
-    ResourceDisplayNameUnavailable { resource_key, reason } => {
-        code: "graph.resource.display_name_unavailable",
-        message_key: "diagnostics.graph.resource.display_name_unavailable",
-        severity: Warning,
-        blocking: false,
-        en: "Resource {resource_key} uses the default node title: {reason}.",
-        zh: "资源 {resource_key} 使用默认节点标题：{reason}。",
-    },
     ResourceResolutionFailed { resource_key } => {
         code: "graph.resource.resolution_failed",
         message_key: "diagnostics.graph.resource.resolution_failed",
@@ -286,14 +134,6 @@ define_graph_diagnostics! {
         blocking: true,
         en: "Resource {resource_key} could not be resolved.",
         zh: "无法解析资源 {resource_key}。",
-    },
-    FunctionAbiTargetMismatch { function_path } => {
-        code: "graph.function.abi_target_mismatch",
-        message_key: "diagnostics.graph.function.abi_target_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Function ABI target does not match {function_path}.",
-        zh: "函数 ABI 目标与 {function_path} 不匹配。",
     },
     InputConflictingBindings { port } => {
         code: "graph.input.conflicting_bindings",
@@ -343,38 +183,6 @@ define_graph_diagnostics! {
         en: "Input port {port} is unknown.",
         zh: "输入端口 {port} 未知。",
     },
-    InterfaceBasisMismatch { expected_basis, actual_basis } => {
-        code: "graph.interface.basis_mismatch",
-        message_key: "diagnostics.graph.interface.basis_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Interface basis {actual_basis} does not match {expected_basis}.",
-        zh: "接口基准 {actual_basis} 与 {expected_basis} 不匹配。",
-    },
-    InterfaceDuplicateLocator { port_key, locator } => {
-        code: "graph.interface.duplicate_locator",
-        message_key: "diagnostics.graph.interface.duplicate_locator",
-        severity: Error,
-        blocking: true,
-        en: "Interface locator {locator} for port {port_key} is duplicated.",
-        zh: "端口 {port_key} 的接口定位器 {locator} 重复。",
-    },
-    InterfaceIdentityNoneConnection { port } => {
-        code: "graph.interface.identity_none_connection",
-        message_key: "diagnostics.graph.interface.identity_none_connection",
-        severity: Error,
-        blocking: true,
-        en: "Identity-free interface port {port} cannot have a connection.",
-        zh: "无标识接口端口 {port} 不能有连接。",
-    },
-    InterfaceIdentityNoneOverride { port } => {
-        code: "graph.interface.identity_none_override",
-        message_key: "diagnostics.graph.interface.identity_none_override",
-        severity: Error,
-        blocking: true,
-        en: "Identity-free interface port {port} cannot have an override.",
-        zh: "无标识接口端口 {port} 不能有覆盖。",
-    },
     InterfaceSchemaDependencyUnresolved {} => {
         code: "graph.interface.schema_dependency_unresolved",
         message_key: "diagnostics.graph.interface.schema_dependency_unresolved",
@@ -383,47 +191,7 @@ define_graph_diagnostics! {
         en: "Schema-dependent interface requirements could not be resolved.",
         zh: "无法解析依赖架构的接口要求。",
     },
-    InterfaceResolverFailed { resolver_id } => {
-        code: "graph.interface.resolver_failed",
-        message_key: "diagnostics.graph.interface.resolver_failed",
-        severity: Error,
-        blocking: true,
-        en: "Interface resolver {resolver_id} failed.",
-        zh: "接口解析器 {resolver_id} 失败。",
-    },
-    InterfaceResolverMissing { resolver_id } => {
-        code: "graph.interface.resolver_missing",
-        message_key: "diagnostics.graph.interface.resolver_missing",
-        severity: Error,
-        blocking: true,
-        en: "Interface resolver {resolver_id} is missing.",
-        zh: "缺少接口解析器 {resolver_id}。",
-    },
 
-    NodeDisappeared { node_type } => {
-        code: "graph.node.disappeared",
-        message_key: "diagnostics.graph.node.disappeared",
-        severity: Error,
-        blocking: true,
-        en: "Node type {node_type} disappeared during graph resolution.",
-        zh: "节点类型 {node_type} 在图解析期间消失。",
-    },
-    NodeManagedSingleton { managed_role } => {
-        code: "graph.node.managed_singleton",
-        message_key: "diagnostics.graph.node.managed_singleton",
-        severity: Error,
-        blocking: true,
-        en: "Managed role {managed_role} must identify exactly one node.",
-        zh: "托管角色 {managed_role} 必须只标识一个节点。",
-    },
-    NodeScopeMismatch { expected_scope, actual_scope } => {
-        code: "graph.node.scope_mismatch",
-        message_key: "diagnostics.graph.node.scope_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Node scope {actual_scope} does not match {expected_scope}.",
-        zh: "节点作用域 {actual_scope} 与 {expected_scope} 不匹配。",
-    },
     NodeUnknown { node_type } => {
         code: "graph.node.unknown",
         message_key: "diagnostics.graph.node.unknown",
@@ -464,30 +232,6 @@ define_graph_diagnostics! {
         en: "Parameter {parameter_key} is unknown.",
         zh: "参数 {parameter_key} 未知。",
     },
-    PlanInvalid {} => {
-        code: "graph.plan.invalid",
-        message_key: "diagnostics.graph.plan.invalid",
-        severity: Error,
-        blocking: true,
-        en: "Execution plan is invalid.",
-        zh: "执行计划无效。",
-    },
-    PlanValueConsumerMissing { port } => {
-        code: "graph.plan.value_consumer_missing",
-        message_key: "diagnostics.graph.plan.value_consumer_missing",
-        severity: Error,
-        blocking: true,
-        en: "Value consumer for {port} is missing.",
-        zh: "缺少端口 {port} 的值消费者。",
-    },
-    PlanValueProducerMissing { port } => {
-        code: "graph.plan.value_producer_missing",
-        message_key: "diagnostics.graph.plan.value_producer_missing",
-        severity: Error,
-        blocking: true,
-        en: "Value producer for {port} is missing.",
-        zh: "缺少端口 {port} 的值生产者。",
-    },
     PortBindingKindMismatch { expected_kind, actual_kind } => {
         code: "graph.port.binding_kind_mismatch",
         message_key: "diagnostics.graph.port.binding_kind_mismatch",
@@ -495,22 +239,6 @@ define_graph_diagnostics! {
         blocking: true,
         en: "Port binding kind {actual_kind} does not match {expected_kind}.",
         zh: "端口绑定类型 {actual_kind} 与 {expected_kind} 不匹配。",
-    },
-    PortBindingNotInstance { port } => {
-        code: "graph.port.binding_not_instance",
-        message_key: "diagnostics.graph.port.binding_not_instance",
-        severity: Error,
-        blocking: true,
-        en: "Port binding {port} does not identify an instance.",
-        zh: "端口绑定 {port} 未标识实例。",
-    },
-    PortInstanceNotAllowed { port } => {
-        code: "graph.port.instance_not_allowed",
-        message_key: "diagnostics.graph.port.instance_not_allowed",
-        severity: Error,
-        blocking: true,
-        en: "Port instance {port} is not allowed.",
-        zh: "不允许端口实例 {port}。",
     },
     PortOrphan { port } => {
         code: "graph.port.orphan",
@@ -528,62 +256,6 @@ define_graph_diagnostics! {
         en: "Port {port} is unknown.",
         zh: "端口 {port} 未知。",
     },
-    RegistryTypeMismatch { expected_type, actual_type } => {
-        code: "graph.registry.type_mismatch",
-        message_key: "diagnostics.graph.registry.type_mismatch",
-        severity: Error,
-        blocking: true,
-        en: "Registry type {actual_type} does not match {expected_type}.",
-        zh: "注册表类型 {actual_type} 与 {expected_type} 不匹配。",
-    },
-    RelationalFilterColumnMissing { field_name } => {
-        code: "graph.relational.filter_column_missing",
-        message_key: "diagnostics.graph.relational.filter_column_missing",
-        severity: Error,
-        blocking: true,
-        en: "Filter column {field_name} is missing.",
-        zh: "缺少筛选列 {field_name}。",
-    },
-    RelationalFilterLiteralForbidden { field_name } => {
-        code: "graph.relational.filter_literal_forbidden",
-        message_key: "diagnostics.graph.relational.filter_literal_forbidden",
-        severity: Error,
-        blocking: true,
-        en: "Filter field {field_name} forbids a literal.",
-        zh: "筛选字段 {field_name} 不允许字面量。",
-    },
-    RelationalFilterLiteralMissing { field_name } => {
-        code: "graph.relational.filter_literal_missing",
-        message_key: "diagnostics.graph.relational.filter_literal_missing",
-        severity: Error,
-        blocking: true,
-        en: "Filter field {field_name} requires a literal.",
-        zh: "筛选字段 {field_name} 需要字面量。",
-    },
-    RelationalFilterLiteralType { field_name } => {
-        code: "graph.relational.filter_literal_type",
-        message_key: "diagnostics.graph.relational.filter_literal_type",
-        severity: Error,
-        blocking: true,
-        en: "Filter literal type is invalid for {field_name}.",
-        zh: "筛选字段 {field_name} 的字面量类型无效。",
-    },
-    RelationalFilterOperatorInvalid { field_name } => {
-        code: "graph.relational.filter_operator_invalid",
-        message_key: "diagnostics.graph.relational.filter_operator_invalid",
-        severity: Error,
-        blocking: true,
-        en: "Filter operator is invalid for {field_name}.",
-        zh: "筛选字段 {field_name} 的操作符无效。",
-    },
-    RelationalInputBindingMissing { port } => {
-        code: "graph.relational.input_binding_missing",
-        message_key: "diagnostics.graph.relational.input_binding_missing",
-        severity: Error,
-        blocking: true,
-        en: "Relational input binding for {port} is missing.",
-        zh: "缺少端口 {port} 的关系输入绑定。",
-    },
     SchemaParameterInvalid { parameter_key } => {
         code: "graph.schema.parameter_invalid",
         message_key: "diagnostics.graph.schema.parameter_invalid",
@@ -591,70 +263,6 @@ define_graph_diagnostics! {
         blocking: true,
         en: "Schema parameter {parameter_key} is invalid.",
         zh: "架构参数 {parameter_key} 无效。",
-    },
-    SchemaProjectEmpty {} => {
-        code: "graph.schema.project_empty",
-        message_key: "diagnostics.graph.schema.project_empty",
-        severity: Error,
-        blocking: true,
-        en: "Schema projection cannot be empty.",
-        zh: "架构投影不能为空。",
-    },
-    SchemaProjectFieldDuplicate { field_name } => {
-        code: "graph.schema.project_field_duplicate",
-        message_key: "diagnostics.graph.schema.project_field_duplicate",
-        severity: Error,
-        blocking: true,
-        en: "Projected field {field_name} is duplicated.",
-        zh: "投影字段 {field_name} 重复。",
-    },
-    SchemaProjectFieldMissing { field_name } => {
-        code: "graph.schema.project_field_missing",
-        message_key: "diagnostics.graph.schema.project_field_missing",
-        severity: Error,
-        blocking: true,
-        en: "Projected field {field_name} is missing.",
-        zh: "缺少投影字段 {field_name}。",
-    },
-    SchemaRenameFieldMissing { source_name } => {
-        code: "graph.schema.rename_field_missing",
-        message_key: "diagnostics.graph.schema.rename_field_missing",
-        severity: Error,
-        blocking: true,
-        en: "Rename source field {source_name} is missing.",
-        zh: "缺少重命名源字段 {source_name}。",
-    },
-    SchemaRenameSourceDuplicate { source_name } => {
-        code: "graph.schema.rename_source_duplicate",
-        message_key: "diagnostics.graph.schema.rename_source_duplicate",
-        severity: Error,
-        blocking: true,
-        en: "Rename source {source_name} is duplicated.",
-        zh: "重命名源 {source_name} 重复。",
-    },
-    SchemaRenameTargetConflict { source_name, target_name } => {
-        code: "graph.schema.rename_target_conflict",
-        message_key: "diagnostics.graph.schema.rename_target_conflict",
-        severity: Error,
-        blocking: true,
-        en: "Renaming {source_name} to {target_name} conflicts with another field.",
-        zh: "将 {source_name} 重命名为 {target_name} 时与其他字段冲突。",
-    },
-    SchemaResolverFailed { resolver_id } => {
-        code: "graph.schema.resolver_failed",
-        message_key: "diagnostics.graph.schema.resolver_failed",
-        severity: Error,
-        blocking: true,
-        en: "Schema resolver {resolver_id} failed.",
-        zh: "架构解析器 {resolver_id} 失败。",
-    },
-    SchemaResolverMissing { resolver_id } => {
-        code: "graph.schema.resolver_missing",
-        message_key: "diagnostics.graph.schema.resolver_missing",
-        severity: Error,
-        blocking: true,
-        en: "Schema resolver {resolver_id} is missing.",
-        zh: "缺少架构解析器 {resolver_id}。",
     },
     SemanticInvalid {} => {
         code: "graph.semantic.invalid",
@@ -695,14 +303,6 @@ define_graph_diagnostics! {
         blocking: true,
         en: "Port {port} does not have one exact resolved type.",
         zh: "端口 {port} 尚未求解为唯一确定类型。",
-    },
-    TypeIncompatible { expected_type, actual_type } => {
-        code: "graph.type.incompatible",
-        message_key: "diagnostics.graph.type.incompatible",
-        severity: Error,
-        blocking: true,
-        en: "Type {actual_type} is incompatible with {expected_type}.",
-        zh: "类型 {actual_type} 与 {expected_type} 不兼容。",
     },
     FunctionBodyUnavailable { function } => {
         code: "graph.function.body_unavailable",
@@ -961,30 +561,17 @@ mod tests {
                 .iter()
                 .any(|template| template.locale == "en-US")
         }));
-        for kind in [
-            GraphDiagnosticKind::DependencyValueCycle,
-            GraphDiagnosticKind::InputUnbound,
-            GraphDiagnosticKind::InterfaceSchemaDependencyUnresolved,
-            GraphDiagnosticKind::NodeUnknown,
-            GraphDiagnosticKind::NodeKernelUnavailable,
-            GraphDiagnosticKind::ParameterInvalid,
-            GraphDiagnosticKind::ParameterRequired,
-            GraphDiagnosticKind::ParameterUnknown,
-            GraphDiagnosticKind::PortBindingKindMismatch,
-            GraphDiagnosticKind::PortOrphan,
-            GraphDiagnosticKind::PortUnknown,
-            GraphDiagnosticKind::ResourceResolutionFailed,
-            GraphDiagnosticKind::SemanticInvalid,
-            GraphDiagnosticKind::TypeConnectionMismatch,
-            GraphDiagnosticKind::TypeGenericConflict,
-            GraphDiagnosticKind::TypeInputNotAccepted,
-            GraphDiagnosticKind::TypeResolutionIncomplete,
-        ] {
-            let definition = GRAPH_DIAGNOSTIC_DEFINITIONS
-                .iter()
-                .find(|definition| definition.code == kind.code())
-                .expect("projection diagnostic kind has one authoritative definition");
-            assert_eq!(definition.default_severity, kind.default_severity());
+        assert_eq!(
+            GRAPH_DIAGNOSTIC_KINDS.len(),
+            GRAPH_DIAGNOSTIC_DEFINITIONS.len()
+        );
+        for (kind, definition) in GRAPH_DIAGNOSTIC_KINDS
+            .iter()
+            .zip(GRAPH_DIAGNOSTIC_DEFINITIONS)
+        {
+            assert_eq!(kind.code(), definition.code);
+            assert_eq!(kind.definition(), definition);
+            assert_eq!(kind.default_severity(), definition.default_severity);
         }
     }
 

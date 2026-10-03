@@ -4,21 +4,15 @@
 #![deny(unused_must_use)]
 
 use thiserror::Error;
-use yss_data_contract::{ValueType, ValueTypeParseError};
+use yss_data_contract::ValueType;
 use yss_node_protocol::{
     InvalidSemanticId, RelationalScalarType, ResolvedType, TypeConstructorId, TypeExpr, TypeId,
 };
 
 #[derive(Debug, Error)]
 pub enum GraphTypeMappingError {
-    #[error("data type name is invalid: {0}")]
-    InvalidDataTypeName(#[from] ValueTypeParseError),
     #[error("graph type identifier is invalid: {0}")]
     InvalidGraphTypeIdentifier(#[from] InvalidSemanticId),
-}
-
-pub fn type_expr_from_data_type_name(type_name: &str) -> Result<TypeExpr, GraphTypeMappingError> {
-    type_expr_from_data_type(&type_name.parse::<ValueType>()?)
 }
 
 pub fn type_expr_from_data_type(data_type: &ValueType) -> Result<TypeExpr, GraphTypeMappingError> {
@@ -93,7 +87,6 @@ fn applied_type(constructor: &str, element: &ValueType) -> Result<TypeExpr, Grap
 mod tests {
     use super::{
         GraphTypeMappingError, relational_scalar_type_from_data_type, type_expr_from_data_type,
-        type_expr_from_data_type_name,
     };
     use yss_data_contract::ValueType;
     use yss_node_protocol::TypeExpr;
@@ -181,24 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_names_and_reports_typed_failures() {
-        assert_eq!(
-            type_expr_from_data_type_name("DataSeries<Numeric>").unwrap(),
-            TypeExpr::Applied {
-                constructor: "core.data_series".parse().unwrap(),
-                arguments: vec![TypeExpr::Concrete("core.numeric".parse().unwrap())],
-            }
-        );
-        assert!(matches!(
-            type_expr_from_data_type_name("not-a-data-type"),
-            Err(GraphTypeMappingError::InvalidDataTypeName(_))
-        ));
-        assert_eq!(
-            type_expr_from_data_type_name("not-a-data-type")
-                .unwrap_err()
-                .to_string(),
-            "data type name is invalid: unknown data type"
-        );
+    fn reports_invalid_graph_type_identifiers() {
         assert!(matches!(
             type_expr_from_data_type(&ValueType::Struct("Invalid Type".into())),
             Err(GraphTypeMappingError::InvalidGraphTypeIdentifier(_))

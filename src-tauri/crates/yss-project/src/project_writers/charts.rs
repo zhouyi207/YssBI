@@ -332,6 +332,110 @@ impl ProjectState {
 mod tests {
     use super::*;
     use crate::fixtures;
+    use yss_chart_document::ChartType;
+
+    #[test]
+    fn chart_rename_preserves_target_tombstone_and_rejects_stale_save() {
+        let fixture = fixtures::TempProject::activate("chart-rename-tombstone", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let target_name = ResourceName::parse("Previous").unwrap();
+        let target = ChartResourcePath::from_name(&target_name);
+        state
+            .create_chart_resource(&session.instance_id, &target_name, None, OperationId::new())
+            .unwrap();
+        let mut old_draft = ChartDocument::new("old-database");
+        old_draft.chart_type = ChartType::Scatter;
+        let saved = state
+            .save_chart_document(
+                &session.instance_id,
+                &target,
+                OperationId::new(),
+                old_draft.clone(),
+                None,
+            )
+            .unwrap()
+            .into_parts();
+        let old_revision = saved.deltas[0].to_revision;
+        let removed = state
+            .remove_chart_resource(
+                &session.instance_id,
+                &target,
+                old_revision,
+                OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        let tombstone = removed.deltas[0].to_revision;
+
+        let source_name = ResourceName::parse("Current").unwrap();
+        let source = ChartResourcePath::from_name(&source_name);
+        let created = state
+            .create_chart_resource(
+                &session.instance_id,
+                &source_name,
+                Some("current-database".into()),
+                OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        let source_revision = created.deltas[0].to_revision;
+        let source_document = state
+            .load_chart_document(&session.instance_id, &source, None)
+            .unwrap();
+        let moved = state
+            .rename_chart_resource(
+                &session.instance_id,
+                &source,
+                source_revision,
+                &target_name,
+                1,
+                OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        let stale_save = state.save_chart_document(
+            &session.instance_id,
+            &target,
+            OperationId::new(),
+            old_draft,
+            Some(old_revision),
+        );
+        assert!(
+            matches!(
+                stale_save,
+                Err(ProjectOperationError::ResourceRevisionConflict { .. })
+            ),
+            "renaming into a deleted path must not authorize its old draft: {stale_save:?}"
+        );
+        assert_eq!(moved.deltas[0].from_revision, source_revision);
+        assert!(moved.deltas[0].to_revision > tombstone);
+        assert_eq!(
+            state.chart_revisions.read().unwrap()[&target],
+            moved.deltas[0].to_revision
+        );
+        assert_eq!(
+            state.chart_revisions.read().unwrap()[&source],
+            source_revision.checked_next().unwrap()
+        );
+        assert!(!session.root.as_path().join(source.relative_path()).exists());
+        let on_disk: ChartDocument = serde_json::from_slice(
+            &std::fs::read(session.root.as_path().join(target.relative_path())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(on_disk, source_document);
+        assert_eq!(state.get_data().unwrap().charts[&target], source_document);
+        assert!(matches!(
+            state.save_chart_document(
+                &session.instance_id,
+                &source,
+                OperationId::new(),
+                source_document,
+                Some(source_revision),
+            ),
+            Err(ProjectOperationError::ChartNotFound { .. })
+        ));
+    }
 
     #[test]
     fn chart_save_overwrites_an_older_draft_using_the_current_resource_revision() {
@@ -347,12 +451,12 @@ mod tests {
             .load_chart_document(&session.instance_id, &path, None)
             .unwrap();
         let mut other = draft.clone();
-        other.chart_type = "scatter".into();
+        other.chart_type = ChartType::Scatter;
         let first = state
             .save_chart_document(&session.instance_id, &path, OperationId::new(), other, None)
             .unwrap()
             .into_parts();
-        draft.chart_type = "line".into();
+        draft.chart_type = ChartType::Line;
         draft.encodings.x = Some("month".into());
         draft.encodings.y = Some("sales".into());
         let operation_id = OperationId::new();

@@ -9,7 +9,7 @@
 
 桌面入口在 Application setup 前注册 `.plugin(tauri_plugin_tracing::init())`，Webview capability 启用 `tracing:default`。任意 Rust crate 使用普通 `tracing::info!` 等宏，无需依赖插件；插件内部的 [collector](src/collector/mod.rs) 负责全局 subscriber、脱敏、console 和日志记录采集，原 yss-tracing crate 已并入这里。业务模块通过 tracing 报告运行观测，由插件统一采集。
 
-前端通过 [LogService](../../../src/services/log/logService.ts) 使用 `plugin:tracing|submit_frontend_logs`、`subscribe_logs`、`unsubscribe_logs`、`query_logs` 和 `log_statistics`。前后端日志共用存储、stream identity 和 sequence；结构化记录使用 domain、event 和 fields 表达业务阶段与安全上下文。
+前端 [LogService](../../../src/services/log/logService.ts) 封装 `plugin:tracing|submit_frontend_logs` 及 `subscribe_logs` / `unsubscribe_logs` 的 recent/live 订阅。插件另提供 `query_logs` 和 `log_statistics`，当前前端 Service 未封装历史查询与统计。前后端日志共用存储、stream identity 和 sequence；结构化记录使用 domain、event 和 fields 表达业务阶段与安全上下文。
 
 插件 setup 成功后持有完整状态；最终 Exit 事件直接取得该状态并排空日志，普通对象销毁则由 Drop 完成相同清理。控制台线程按消息唤醒，订阅 worker 在被移除时统一停止。`LogStore` 是插件内部的 SQLite 适配器，外部查询使用插件 IPC 或独立 SQLx 只读连接。
 
@@ -53,9 +53,21 @@ Rust 调用线程只记录发生时的本机钟面时间、捕获有界字段并
 
 日志文件为 `app_log_dir()/logs.sqlite`。日志 dispatcher 的专用线程使用 SQLx 写入 SQLite WAL；数据库自身关闭 statement logging，避免记录自己的 INSERT 形成反馈循环。表结构由 [store.rs](src/store.rs) 唯一维护：`logs` 包含 sequence、stream_id、timestamp、level、origin、domain、target、event、message、source 和 JSON 编码的 fields；`tracing_meta` 保留该库的 stream identity。
 
-近期快照按容量多读取一条记录来判断截断；完整记录数量由显式统计查询提供。控制台线程空闲时阻塞等待消息，由关闭消息唤醒；满队列或已关闭的订阅移除后，由 worker 的析构统一停用。
+近期快照按容量多读取一条记录来判断截断；完整记录数量由显式统计查询提供。控制台线程空闲时阻塞等待消息，由关闭消息唤醒；显式取消和已关闭的订阅移除后，由 worker 的析构统一停用。
 
 同一批记录先完成 SQLite transaction，再更新 recent snapshot 并发送 Channel。退出时同步排空已接收记录；重启从同一数据库恢复 identity、sequence 和 recent snapshot。数据库预期由一个应用进程写入，其他 SQLx 连接可以只读查询。写入失败发送 `storage_unavailable` 终止信号，后续查询/订阅失败，不将未提交记录显示成持久历史；console 输出仍可继续。
+
+慢订阅的普通队列满时，dispatcher 移除订阅并发送 `subscriber_lagged`。两种失败由
+`LogStreamFailure` 定义，均通过空 `entries` 的 `LogBatchDto.failure` 交付。原订阅 worker
+在普通队列外保留一个终止位置：当前回调成功返回后丢弃尚未处理的批次，交付一次终止通知并释放 sink；
+空闲 worker 由非阻塞唤醒消息退出。终止通知不与普通批次争抢容量，dispatcher 不等待慢消费者。
+sink 已关闭、拒收或永久阻塞时无法承诺通知送达。前端沿既有 receiver 清理旧 Channel 并有界重订阅，
+从已提交的 recent snapshot 恢复；存储仍不可用时订阅失败并进入错误状态。
+
+前端 record receiver 通过同一个有界 pending 队列交付激活前后的批次。消费回调同步重入时，
+新批次排在已接纳批次之后；dispose 或断流立即停止剩余交付。默认容量为 64 个尚未交付批次，
+激活前溢出报告 preactivation-overflow，激活后的重入积压溢出沿 subscriber-lagged 恢复。
+序列水位在 prepare 和入队时检查，排空队列不会重复推进或回退水位。
 
 插件 IPC 使用 `plugin:tracing|` 前缀：
 

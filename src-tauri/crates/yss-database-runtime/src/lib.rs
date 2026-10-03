@@ -16,22 +16,9 @@ pub mod session_api;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
-use yss_database_contract::{
-    DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
-};
-
 pub use database_instance::{DatabaseInstance, MAX_GET_DATAFRAME_ROWS};
 pub(crate) use database_state::{DatabaseState, DatasetEdit};
 pub use project_storage::{bind_dataset_instance, dataset_query_engine};
-
-fn declaration_observation_for<'a>(
-    observations: &'a DatabaseDeclarationObservationSet,
-    database: &DatabaseId,
-) -> Option<&'a DatabaseDeclarationObservation> {
-    observations
-        .iter()
-        .find_map(|(id, observation)| (id == database).then_some(observation))
-}
 
 #[cfg(test)]
 mod foundation_tests;

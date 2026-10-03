@@ -253,10 +253,7 @@ fn project_port(
         input,
         accepted_type: type_display(&port.accepted_type).into(),
         type_state: project_type_state(&port.type_state),
-        resolved_schema: port
-            .schema_state
-            .exact()
-            .map(|fact| project_schema_summary(&fact.expression, Some(fact))),
+        resolved_schema: port.schema_state.exact().map(project_schema_summary),
         status: if port.orphan {
             EditorPortStatus::Orphan
         } else {
@@ -271,11 +268,13 @@ fn port_fact_has_concrete_address(port: &GraphPortSemanticFact, document: &Graph
         (GraphPortBacking::DocumentInstance, PortRef::Instance { .. }) => {
             match document.port_bindings.get(&port.address) {
                 Some(yss_graph_document::DynamicPortBinding::UserCreated { .. }) => !port.orphan,
-                Some(yss_graph_document::DynamicPortBinding::Resolved { .. }) => {
-                    !port.orphan && !port.can_remove
-                }
-                Some(yss_graph_document::DynamicPortBinding::Orphan { .. }) => {
-                    port.orphan && port.can_remove
+                Some(
+                    yss_graph_document::DynamicPortBinding::Resolved { .. }
+                    | yss_graph_document::DynamicPortBinding::Orphan { .. },
+                ) => {
+                    // Current resource membership, not the persisted binding tag,
+                    // determines whether Analysis exposes an orphaned member.
+                    port.orphan == port.can_remove
                 }
                 None => false,
             }
@@ -452,21 +451,19 @@ fn resolved_type_display(value: &ResolvedType) -> String {
     }
 }
 
-fn project_schema_summary(
-    expression: &yss_node_protocol::SchemaExpr,
-    resolved: Option<&yss_node_protocol::ResolvedSchemaFact>,
-) -> EditorSchemaSummary {
-    let kind = match expression {
+fn project_schema_summary(fact: &yss_node_protocol::ResolvedSchemaFact) -> EditorSchemaSummary {
+    let kind = match &fact.expression {
         yss_node_protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
+        yss_node_protocol::SchemaExpr::Fixed { .. } => EditorSchemaSummaryKind::Fixed,
         yss_node_protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
         yss_node_protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
         yss_node_protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
         yss_node_protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
         yss_node_protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
     };
-    let fields = resolved
-        .into_iter()
-        .flat_map(|fact| fact.fields.iter())
+    let fields = fact
+        .fields
+        .iter()
         .map(|field| EditorSchemaField {
             name: field.name.0.clone(),
             scalar_type: field.scalar_type,

@@ -208,7 +208,7 @@ mod port_address_map {
         S: Serializer,
         V: Serialize,
     {
-        values.iter().collect::<Vec<_>>().serialize(serializer)
+        serializer.collect_seq(values.iter())
     }
 
     pub fn deserialize<'de, D, V>(deserializer: D) -> Result<BTreeMap<PortAddress, V>, D::Error>

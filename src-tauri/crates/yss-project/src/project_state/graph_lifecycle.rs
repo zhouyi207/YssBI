@@ -8,12 +8,21 @@ use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation};
 use yss_graph_document::{
     ConnectionId, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortInstanceId, PortRef,
 };
+use yss_node_registry::NodeRegistry;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::{GraphResourceDocument, ProjectDataPatch};
 use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 use crate::project_writers::{ProjectResourceMutationFacts, context};
+
+pub struct GraphResourceRenameRequest<'a> {
+    pub graph_path: &'a GraphResourcePath,
+    pub expected_revision: ResourceRevision,
+    pub new_name: &'a str,
+    pub lifecycle_token: u64,
+    pub operation_id: yss_project_identity::OperationId,
+}
 
 impl ProjectState {
     pub fn read_graph_resource_snapshot(
@@ -117,6 +126,7 @@ impl ProjectState {
 
     pub fn duplicate_graph_resource(
         &self,
+        registry: &NodeRegistry,
         expected_project_instance_id: &ProjectInstanceId,
         source_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
@@ -166,7 +176,8 @@ impl ProjectState {
             .unwrap_or(ResourceRevision::INITIAL);
         let mut duplicate = source;
         duplicate.name = name;
-        duplicate.document = duplicate_document(&duplicate.document, source_path, &target);
+        duplicate.document =
+            duplicate_document(&duplicate.document, source_path, &target, registry);
         if let Some(function) = duplicate.function.as_mut() {
             function.revision = revision;
         }
@@ -580,13 +591,17 @@ impl ProjectState {
 
     pub fn rename_graph_resource(
         &self,
+        registry: &NodeRegistry,
         expected_project_instance_id: &ProjectInstanceId,
-        graph_path: &GraphResourcePath,
-        expected_revision: ResourceRevision,
-        new_name: &str,
-        lifecycle_token: u64,
-        operation_id: yss_project_identity::OperationId,
+        request: GraphResourceRenameRequest<'_>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
+        let GraphResourceRenameRequest {
+            graph_path,
+            expected_revision,
+            new_name,
+            lifecycle_token,
+            operation_id,
+        } = request;
         self.ensure_project_operational()?;
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let session = snapshot.session.clone();
@@ -657,14 +672,14 @@ impl ProjectState {
         let mut editing_updates = Vec::new();
         for resource in [&mut source, &mut persisted_source] {
             resource.name = requested.as_str().to_owned();
-            remap_document(&mut resource.document, graph_path, &target);
+            remap_document(&mut resource.document, graph_path, &target, registry);
             if let Some(function) = resource.function.as_mut() {
                 function.revision = next_revision;
             }
         }
         if let Some(update) = self.prepare_graph_editing_remap(
+            registry,
             graph_path,
-            &target,
             (graph_path, &target),
             &source.document,
             &persisted_source.document,
@@ -703,10 +718,12 @@ impl ProjectState {
                 message: error.to_string(),
             })?;
             let mut changed = current_data.graphs.get(&path).unwrap_or(&persisted).clone();
-            let current_changed = remap_document(&mut changed.document, graph_path, &target);
-            let saved_changed = remap_document(&mut persisted.document, graph_path, &target);
+            let current_changed =
+                remap_document(&mut changed.document, graph_path, &target, registry);
+            let saved_changed =
+                remap_document(&mut persisted.document, graph_path, &target, registry);
             let editing_update = self.prepare_graph_editing_remap(
-                &path,
+                registry,
                 &path,
                 (graph_path, &target),
                 &changed.document,
@@ -839,6 +856,7 @@ fn duplicate_document(
     document: &GraphDocument,
     source: &GraphResourcePath,
     target: &GraphResourcePath,
+    registry: &NodeRegistry,
 ) -> GraphDocument {
     let node_ids = document
         .nodes
@@ -885,19 +903,11 @@ fn duplicate_document(
         .map(|node| {
             let mut node = node.clone();
             node.id = node_ids.get(&node.id).copied().unwrap_or(node.id);
-            if node.node_type.as_str() == "yssbi.constant.get"
-                && let Some(id) = node
-                    .parameters
-                    .iter()
-                    .find(|(key, _)| key.as_str() == "constant")
-                    .map(|(_, value)| value)
-                    .and_then(|value| value.as_str())
-                    .and_then(|id| id.parse::<yss_graph_document::ConstantId>().ok())
-                    .and_then(|id| constant_ids.get(&id))
-            {
-                node.parameters.insert(
-                    "constant".parse().expect("constant parameter key"),
-                    serde_json::Value::String(id.to_string()),
+            if let Some(protocol) = registry.protocol(&node.node_type) {
+                yss_graph_document_edit::remap_copied_constant_references(
+                    &protocol.parameters,
+                    &mut node.parameters,
+                    &constant_ids,
                 );
             }
             (node.id, node)
@@ -934,7 +944,7 @@ fn duplicate_document(
             )
         })
         .collect::<BTreeMap<_, _>>();
-    remap_document(&mut duplicate, source, target);
+    remap_document(&mut duplicate, source, target, registry);
     duplicate
 }
 
@@ -978,6 +988,9 @@ mod tests {
 
     #[test]
     fn graph_writers_reject_changed_revision_and_occupied_or_missing_paths() {
+        let registry = yss_node_catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let fixture =
             fixtures::TempProject::activate("graph-writer-preconditions", ProjectData::new());
         let state = fixture.state();
@@ -1012,6 +1025,7 @@ mod tests {
         ));
         assert!(matches!(
             state.duplicate_graph_resource(
+                &registry,
                 &session.instance_id,
                 &path,
                 wrong_revision,
@@ -1046,6 +1060,9 @@ mod tests {
 
     #[test]
     fn graph_crud_publishes_ordered_deltas_before_any_chart_exists() {
+        let registry = yss_node_catalog::build_builtin_node_system()
+            .unwrap()
+            .registry;
         let fixture =
             fixtures::TempProject::activate("graph-crud-publications", ProjectData::new());
         let state = fixture.state();
@@ -1076,6 +1093,7 @@ mod tests {
         }
         let duplicated = state
             .duplicate_graph_resource(
+                &registry,
                 &project,
                 &event,
                 ResourceRevision::INITIAL,
@@ -1102,12 +1120,15 @@ mod tests {
             ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.is_some() && patch.after.is_none()));
         let renamed = state
             .rename_graph_resource(
+                &registry,
                 &project,
-                &function,
-                ResourceRevision::INITIAL,
-                "Renamed",
-                1,
-                yss_project_identity::OperationId::new(),
+                GraphResourceRenameRequest {
+                    graph_path: &function,
+                    expected_revision: ResourceRevision::INITIAL,
+                    new_name: "Renamed",
+                    lifecycle_token: 1,
+                    operation_id: yss_project_identity::OperationId::new(),
+                },
             )
             .unwrap()
             .into_parts();

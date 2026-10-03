@@ -5,7 +5,7 @@ use yss_graph_editor::NodePositionMutation;
 use yss_graph_editor::projection::{EditorProjectionInput, build_editor_projection};
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionParameterContract, FunctionSignature,
-    GraphResourceId, ResourceCatalogFingerprint,
+    GraphResourceId,
 };
 
 fn runtime() -> GraphRuntimeState {
@@ -55,11 +55,23 @@ fn inventory_entries_remain_visible_but_unavailable_without_kernels() {
         placeholders > 0,
         "the catalog still contains explicitly unavailable methods"
     );
-    for (id, category) in [
-        ("yssbi.dataframe.labels", "dataframe.series"),
-        ("yssbi.dataframe.impute.single", "statistics.imputation"),
-        ("yssbi.dataframe.impute.multiple", "statistics.imputation"),
-        ("yssbi.dataframe.impute.mice", "statistics.imputation"),
+    for (id, category, has_interface) in [
+        ("yssbi.dataframe.labels", "dataframe.series", true),
+        (
+            "yssbi.dataframe.impute.single",
+            "statistics.imputation",
+            true,
+        ),
+        (
+            "yssbi.dataframe.impute.multiple",
+            "statistics.imputation",
+            false,
+        ),
+        (
+            "yssbi.dataframe.impute.mice",
+            "statistics.imputation",
+            false,
+        ),
     ] {
         let item = catalog
             .items
@@ -68,7 +80,7 @@ fn inventory_entries_remain_visible_but_unavailable_without_kernels() {
             .unwrap();
         assert_eq!(item.category_id.as_ref(), category);
         assert!(!item.available);
-        assert!(item.ports.is_empty());
+        assert_eq!(!item.ports.is_empty(), has_interface, "{id}");
         assert!(item.documentation.is_some());
     }
     let encoding = catalog
@@ -88,11 +100,114 @@ fn graph() -> GraphResourcePath {
 }
 
 fn resources() -> ResourceCatalogSnapshot {
-    ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new())
+}
+
+#[test]
+fn resource_titles_use_the_declared_resolved_parameter() {
+    use yss_node_catalog::{
+        CatalogResourcePath, ResourceBoundCreateArgs, build_builtin_node_system,
+    };
+    use yss_node_protocol::{ParameterEditorSpec, TypedValue};
+    use yss_node_registry::{
+        LeafImplementation, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
+    };
+
+    let builtin = build_builtin_node_system().unwrap();
+    let mut protocol = builtin
+        .registry
+        .protocol(&"yssbi.dataframe.source.get".parse().unwrap())
+        .unwrap()
+        .clone();
+    protocol.type_id = "tests.display.source".parse().unwrap();
+    let mut parameters = protocol.parameters.groups[0].parameters.to_vec();
+    let resource = parameters
+        .iter_mut()
+        .find(|parameter| parameter.key.as_str() == "dataframe")
+        .unwrap();
+    resource.default_value = Some(TypedValue {
+        value_type: resource.value_type.clone(),
+        value: DataValue::String("databases/selected".into()),
+    });
+    let mut note = resource.clone();
+    note.key = "note".parse().unwrap();
+    note.editor = ParameterEditorSpec::Text { multiline: false };
+    note.default_value = None;
+    note.constraints.clear();
+    parameters.push(note);
+    protocol.parameters.groups[0].parameters = parameters.into();
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests".parse().unwrap());
+    provider.nodes = vec![RegisteredNode::leaf(
+        Arc::new(protocol),
+        LeafImplementation::new("tests.display.source"),
+    )]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let runtime = GraphRuntimeState::from_components(
+        GraphRuntimeEpoch::from_existing(1),
+        GraphRuntimeComponents {
+            registry: Arc::new(builder.freeze().unwrap()),
+            catalog: builtin.catalog,
+        },
     )
+    .unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::from([(
+            GraphResourceId::new("databases/selected"),
+            DataSchema { columns: vec![] },
+        )]),
+    );
+    let entries = [("selected", "Selected data"), ("other", "Unrelated data")].map(|(id, name)| {
+        CatalogResourceEntry {
+            name: name.into(),
+            node_type_id: "tests.display.source".parse().unwrap(),
+            resource_path: CatalogResourcePath::new(format!("databases/{id}")),
+            resource_revision: 1,
+            create_args: ResourceBoundCreateArgs::Database,
+            technical_terms: vec![],
+        }
+    });
+    let mut document = GraphDocument::default();
+    let id = node(&mut document, "tests.display.source", &[]);
+    document.nodes.get_mut(&id).unwrap().user_label = Some("My source".into());
+    for note in [None, Some("databases/other")] {
+        if let Some(note) = note {
+            document
+                .nodes
+                .get_mut(&id)
+                .unwrap()
+                .parameters
+                .insert("note".parse().unwrap(), serde_json::json!(note));
+        }
+        let analysis = runtime.resolve_graph_document(
+            &graph(),
+            &document,
+            &super::tests::basis(&runtime),
+            &resources,
+            &entries,
+            "en-US",
+        );
+        let projection = build_editor_projection(EditorProjectionInput {
+            graph_path: &graph(),
+            document: &document,
+            analysis: &analysis,
+            registry_fingerprint: runtime.registry_fingerprint(),
+        })
+        .unwrap();
+        assert_eq!(projection.nodes[0].display.title.as_ref(), "Selected data");
+        assert_eq!(
+            projection.nodes[0].display.user_label.as_deref(),
+            Some("My source")
+        );
+        assert!(
+            !document.nodes[&id]
+                .parameters
+                .contains_key(&"dataframe".parse().unwrap())
+        );
+    }
 }
 
 fn node(
@@ -400,6 +515,299 @@ fn connection_candidates_for_moves_exclude_moved_links_from_replacement_preview(
 }
 
 #[test]
+fn function_catalog_creation_preserves_authoritative_member_metadata() {
+    use yss_data_contract::SemanticType;
+    use yss_graph_document::{DynamicMemberLocator, FunctionParameterId};
+    use yss_node_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
+    use yss_node_registry::{
+        NodeRegistryBuilder, ProviderRegistration, RegisteredNode, StructuralNodeRole,
+    };
+
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let mut custom = builtin
+        .registry
+        .protocol(&"yssbi.project.function.call".parse().unwrap())
+        .unwrap()
+        .clone();
+    custom.type_id = "tests.function.renamed".parse().unwrap();
+    for port in &mut custom.interface.ports {
+        port.key = match port.direction {
+            PortDirection::Input => "input_members",
+            PortDirection::Output => "output_members",
+        }
+        .parse()
+        .unwrap();
+    }
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests".parse().unwrap());
+    provider.nodes = vec![RegisteredNode::structural(
+        Arc::new(custom),
+        StructuralNodeRole::Call,
+    )]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let runtime = GraphRuntimeState::from_components(
+        GraphRuntimeEpoch::from_existing(1),
+        GraphRuntimeComponents {
+            registry: Arc::new(builder.freeze().unwrap()),
+            catalog: builtin.catalog,
+        },
+    )
+    .unwrap();
+    let function = GraphResourcePath::new("functions/Measure.yssbi-function").unwrap();
+    let resource_path = CatalogResourcePath::new(function.as_str());
+    let parameters = [
+        ("flag", "Flag", SemanticType::Binary),
+        ("amount", "Amount", SemanticType::Numeric),
+    ];
+    let catalog = ResourceCatalogSnapshot::new(
+        BTreeMap::from([(
+            function.clone(),
+            FunctionCatalogEntry::new(FunctionSignature::new(
+                parameters
+                    .iter()
+                    .map(|(id, name, semantic)| {
+                        FunctionParameterContract::new(
+                            FunctionParameterId::new(*id),
+                            *name,
+                            ValueType::Scalar(*semantic),
+                        )
+                    })
+                    .collect(),
+                Some(ValueType::Scalar(SemanticType::Numeric)),
+            )),
+        )]),
+        BTreeMap::new(),
+    );
+    let entries = ["yssbi.project.function.call", "tests.function.renamed"].map(|node_type| {
+        CatalogResourceEntry {
+            name: "Measure".into(),
+            node_type_id: node_type.parse().unwrap(),
+            resource_path: resource_path.clone(),
+            resource_revision: 7,
+            create_args: ResourceBoundCreateArgs::FunctionGraph,
+            technical_terms: vec![],
+        }
+    });
+    let mutation_catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::from([(
+            resource_path.clone(),
+            yss_graph_editor::CatalogMutationResource::Function {
+                revision: entries[0].resource_revision,
+                signature: catalog.function_signature(&function).unwrap().clone(),
+            },
+        )]),
+    };
+    let (mut document, constant, _) = constant_document();
+    let subtract = node(&mut document, "yssbi.numeric.subtract", &[]);
+    let before = document.clone();
+    for (source, member, label, order) in [
+        (
+            PortAddress::declared(constant, "value".parse().unwrap()),
+            "amount",
+            "Amount",
+            "00001",
+        ),
+        (
+            PortAddress::declared(subtract, "left".parse().unwrap()),
+            "return",
+            "Result",
+            "00000",
+        ),
+    ] {
+        let compatible = runtime
+            .compatible_catalog_with_resources(
+                &graph(),
+                &document,
+                &source,
+                &catalog,
+                &entries,
+                "en-US",
+            )
+            .unwrap();
+        for entry in &entries {
+            let descriptor = compatible
+            .items
+            .iter()
+            .find(|item| item.resource_path.as_ref() == Some(&resource_path)
+                && item.node_type_id.as_ref() == entry.node_type_id.as_str())
+            .expect("function candidates must follow the declared resolver, including renamed templates")
+            .creation
+            .clone();
+            let create = |descriptor| EditorGraphMutation::CreateNode {
+                descriptor,
+                position: NodePosition { x: 100.0, y: 0.0 },
+                user_label: None,
+                connect_from: Some(source.clone()),
+            };
+            let mut stale = descriptor.clone();
+            let NodeCreation::ResourceBound {
+                resource_revision, ..
+            } = &mut stale
+            else {
+                panic!("function descriptor must be resource-bound")
+            };
+            *resource_revision -= 1;
+            assert!(matches!(
+                runtime.plan_editor_mutation(
+                    &graph(),
+                    &document,
+                    create(stale),
+                    &mutation_catalog,
+                    || resolve(&runtime, &document, &catalog),
+                ),
+                Err(MutationConflict::CatalogResourceStale(_))
+            ));
+            let patch = runtime
+                .plan_editor_mutation(
+                    &graph(),
+                    &document,
+                    create(descriptor),
+                    &mutation_catalog,
+                    || resolve(&runtime, &document, &catalog),
+                )
+                .unwrap();
+            assert_eq!(document, before);
+            let mut created = document.clone();
+            apply_graph_document_patch(&mut created, &patch).unwrap();
+            assert_eq!(created.connections.len(), 1);
+            assert_eq!(created.port_bindings.len(), 1);
+            let (
+                address,
+                DynamicPortBinding::Resolved {
+                    origin,
+                    order: actual_order,
+                    last_known,
+                },
+            ) = created.port_bindings.iter().next().unwrap()
+            else {
+                panic!("created function member must be resolved")
+            };
+            assert_eq!(
+                origin,
+                &DynamicMemberLocator::FunctionParameter {
+                    function: function.clone(),
+                    parameter: FunctionParameterId::new(member),
+                }
+            );
+            assert_eq!(actual_order, &OrderKey::new(order));
+            assert_eq!(last_known.label, label);
+            let analysis = resolve(&runtime, &created, &catalog);
+            let port = analysis
+                .semantic_snapshot()
+                .concrete_interface()
+                .port(address)
+                .unwrap();
+            assert!(!port.orphan);
+            assert_eq!(last_known.label, port.label.as_ref());
+            assert_eq!(last_known.value_type.as_ref(), Some(&port.accepted_type));
+
+            let mut persisted_orphan = created.clone();
+            persisted_orphan.port_bindings.insert(
+                address.clone(),
+                DynamicPortBinding::Orphan {
+                    origin: origin.clone(),
+                    order: actual_order.clone(),
+                    last_known: last_known.clone(),
+                },
+            );
+            let missing_resources = resources();
+            let scenarios = [
+                (&created, &missing_resources, true),
+                (&persisted_orphan, &catalog, false),
+            ];
+            let projections = scenarios.map(|(document, resources, _)| {
+                let before = document.clone();
+                let analysis = resolve(&runtime, document, resources);
+                let projection = build_editor_projection(EditorProjectionInput {
+                    graph_path: &graph(),
+                    document,
+                    analysis: &analysis,
+                    registry_fingerprint: runtime.registry_fingerprint(),
+                });
+                assert_eq!(document, &before);
+                projection
+            });
+            assert!(
+                projections.iter().all(Result::is_ok),
+                "missing/restored function members must project without rewriting bindings: {projections:?}"
+            );
+            for (projection, (_, _, orphan)) in projections.into_iter().zip(scenarios) {
+                let projection = projection.unwrap();
+                let port = projection
+                    .nodes
+                    .iter()
+                    .flat_map(|node| node.ports.iter())
+                    .find(|port| &port.address == address)
+                    .unwrap();
+                assert_eq!(port.orphan, orphan);
+                assert_eq!(port.can_remove, orphan);
+                assert_eq!(port.display.label.as_ref(), label);
+                assert_eq!(projection.connections.len(), created.connections.len());
+            }
+
+            let mutations = [
+                EditorGraphMutation::MoveConnections {
+                    source: address.clone(),
+                    target: match port.direction {
+                        PortDirection::Input => {
+                            PortAddress::declared(subtract, "left".parse().unwrap())
+                        }
+                        PortDirection::Output => {
+                            PortAddress::declared(constant, "value".parse().unwrap())
+                        }
+                    },
+                },
+                EditorGraphMutation::InsertReroute {
+                    connection_id: *created.connections.keys().next().unwrap(),
+                    position: NodePosition { x: 50.0, y: 0.0 },
+                },
+            ];
+            let restored_patches = mutations.clone().map(|mutation| {
+                runtime.plan_editor_mutation(
+                    &graph(),
+                    &persisted_orphan,
+                    mutation,
+                    &mutation_catalog,
+                    || resolve(&runtime, &persisted_orphan, &catalog),
+                )
+            });
+            assert!(
+                restored_patches.iter().all(Result::is_ok),
+                "moves/reroutes must accept members restored by current resources: {restored_patches:?}"
+            );
+            for (index, restored_patch) in restored_patches.into_iter().enumerate() {
+                let restored_patch = restored_patch.unwrap();
+                let mut edited = persisted_orphan.clone();
+                apply_graph_document_patch(&mut edited, &restored_patch).unwrap();
+                assert_eq!(edited.connections.len(), index + 1);
+                assert_eq!(edited.nodes.len(), persisted_orphan.nodes.len() + index);
+                apply_graph_document_patch(&mut edited, &restored_patch.inverse()).unwrap();
+                assert_eq!(edited, persisted_orphan);
+            }
+            for mutation in mutations {
+                assert_eq!(
+                    runtime
+                        .plan_editor_mutation(
+                            &graph(),
+                            &created,
+                            mutation,
+                            &mutation_catalog,
+                            || resolve(&runtime, &created, &missing_resources),
+                        )
+                        .unwrap_err()
+                        .code(),
+                    "graph_port_orphan"
+                );
+            }
+            apply_graph_document_patch(&mut created, &patch.inverse()).unwrap();
+            assert_eq!(created, before);
+        }
+    }
+}
+
+#[test]
 fn layout_reuses_semantics_and_projects_current_display_but_constant_metadata_refreshes() {
     let runtime = runtime();
     let (mut document, node, id) = constant_document();
@@ -467,7 +875,6 @@ fn snapshot_rechecks_used_and_absent_resources_without_invalidating_unread_catal
                     )
                 })
                 .collect(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
         )
     };
     let missing = resolve(&runtime, &document, &catalog(&[]));
@@ -526,7 +933,6 @@ fn function_labels_and_bodies_refresh_even_when_execution_identity_is_unchanged(
                 )),
             )]),
             BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
         )
     };
     let initial = resolve(&runtime, &document, &catalog("Before"));
@@ -664,7 +1070,6 @@ fn snapshot_rechecks_transitive_function_bodies() {
             })
             .collect(),
         BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
     )
     .with_function_document(&a, a_body);
     let missing = resolve(&runtime, &document, &catalog);
@@ -754,7 +1159,6 @@ fn benchmark_repeated_resolution_and_projection() {
                     .collect(),
             },
         )]),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
     for (count, shape) in [100, 1000, 5000]
         .into_iter()

@@ -1,4 +1,4 @@
-use crate::session::ApplicationState;
+use crate::session::{ApplicationSession, ApplicationState};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -37,6 +37,14 @@ fn fail(code: &str) -> PluginFailure {
     PluginFailure::new(code)
 }
 
+fn project_context(session: &ApplicationSession) -> Option<ProjectContext> {
+    session.project().get_path()?;
+    Some(ProjectContext {
+        project_instance_id: session.project_instance_id().as_str().into(),
+        project_session_id: session.project_session_id().as_str().into(),
+    })
+}
+
 impl HostServices for PluginHostServices {
     fn release_context(&self, context_id: &str) {
         if let Ok(mut sources) = self.sources.lock() {
@@ -60,16 +68,12 @@ impl HostServices for PluginHostServices {
         }
     }
     fn current_project(&self) -> Result<Option<ProjectContext>, PluginFailure> {
-        let Ok(session) = self.application.capture_session() else {
-            return Ok(None);
-        };
-        if session.project().get_path().is_none() {
-            return Ok(None);
-        }
-        Ok(Some(ProjectContext {
-            project_instance_id: session.project_instance_id().as_str().into(),
-            project_session_id: session.project_session_id().as_str().into(),
-        }))
+        Ok(self
+            .application
+            .capture_session()
+            .ok()
+            .as_deref()
+            .and_then(project_context))
     }
     fn invoke(
         &self,
@@ -80,22 +84,20 @@ impl HostServices for PluginHostServices {
     ) -> Result<Value, PluginFailure> {
         context.granted_budget.validate()?;
         let snapshot_limit = context.granted_budget.snapshot_bytes;
-        if context.project != self.current_project()? {
+        let captured = self.application.capture_session().ok();
+        if context.project != captured.as_deref().and_then(project_context) {
             return Err(fail("plugin_stale_context"));
         }
         let project = context
             .project
             .as_ref()
             .ok_or_else(|| fail("plugin_project_required"))?;
-        let captured = self
-            .application
-            .capture_session()
-            .map_err(|_| fail("plugin_stale_context"))?;
+        let captured = captured.ok_or_else(|| fail("plugin_stale_context"))?;
         match method {
             "data.list" => {
                 let data = self
                     .application
-                    .query_project_databases()
+                    .query_project_databases_in_session(&captured, None)
                     .map_err(|_| fail("plugin_dataset_unavailable"))?;
                 Ok(
                     json!({"datasets":data.databases().iter().map(|dataset|json!({"id":dataset.declaration.id.as_str(),"name":dataset.declaration.name,"columns":dataset.schema.columns().iter().map(|column|json!({"name":column.name().as_str(),"type":column.display_type(),"nullable":column.nullable()})).collect::<Vec<_>>()})).collect::<Vec<_>>()}),
@@ -118,15 +120,15 @@ impl HostServices for PluginHostServices {
                         .map_err(|_| fail("plugin_dataset_invalid"))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                if !captured
+                captured
                     .project()
-                    .get_data()
-                    .map_err(|_| fail("plugin_stale_context"))?
-                    .databases
-                    .contains_key(dataset)
-                {
-                    return Err(fail("plugin_dataset_invalid"));
-                }
+                    .read_database_declaration(captured.project_instance_id(), dataset)
+                    .map_err(|error| match error {
+                        yss_project::ProjectDatabaseError::DatabaseNotFound => {
+                            fail("plugin_dataset_invalid")
+                        }
+                        _ => fail("plugin_stale_context"),
+                    })?;
                 let max_rows = ((snapshot_limit as usize) / (columns.len() * 64)).min(1_000_000);
                 let selected_columns = columns
                     .iter()

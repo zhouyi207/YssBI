@@ -291,7 +291,21 @@ fn table_composition_preserves_order_alignment_and_combined_sources() {
         )
         .unwrap();
     assert_eq!(assembled.schema().field(0).name(), "name");
-    assert_eq!(assembled.page(0, 10, &control()).unwrap().row_count, 3);
+    let assembled_page = assembled.page(0, 10, &control()).unwrap();
+    assert_eq!(assembled_page.row_count, 3);
+    let series = [a.select_series("label").unwrap()];
+    assert_eq!(
+        a.assemble_series(&series, &[" \t\n".into()]),
+        Err(RelationError::InvalidInput)
+    );
+    let named = a.assemble_series(&series, &[" name\t".into()]).unwrap();
+    assert_eq!(named.schema().field(0).name(), " name\t");
+    let named_page = named.page(0, 10, &control()).unwrap();
+    assert_eq!(named_page.data.columns()[0].name().as_str(), " name\t");
+    assert_eq!(
+        named_page.data.columns()[0].values(),
+        assembled_page.data.columns()[0].values()
+    );
     for (kind, count) in [
         (Join::Inner, 2),
         (Join::Left, 4),
@@ -319,6 +333,24 @@ fn table_composition_preserves_order_alignment_and_combined_sources() {
             assert!(joined.schema().fields().iter().all(|f| f.is_nullable()));
         }
     }
+    let padded_left = left.rename("id.key", " id.key ").unwrap();
+    let padded_right = right.rename("id.key", " id.key ").unwrap();
+    let spec = TableJoin {
+        kind: Join::Inner,
+        left_keys: vec![" id.key ".into()],
+        right_keys: vec![" id.key ".into()],
+        right_suffix: "_right".into(),
+    };
+    let padded = padded_left.join(&padded_right, &spec).unwrap();
+    assert_eq!(padded.schema().field(0).name(), " id.key ");
+    assert_eq!(padded.schema().field(2).name(), " id.key _right");
+    let page = padded.page(0, 10, &control()).unwrap();
+    assert_eq!(page.row_count, 2);
+    assert_eq!(
+        page.data.columns()[0].values(),
+        &[V::Unsigned(1), V::Unsigned(1)]
+    );
+
     let missing = right
         .project(&["label".into()])
         .unwrap()
@@ -1709,6 +1741,83 @@ fn drop_na_rows_and_columns_preserve_values_and_resolve_before_paging() {
         .cancellation
         .store(true, std::sync::atomic::Ordering::Release);
     assert_eq!(any.page(0, 1, &cancelled), Err(RelationError::Cancelled));
+}
+
+#[test]
+fn deferred_resolution_race_uses_one_row_domain() {
+    use yss_relational_contract::DropNaMode::{All, Any};
+    let engine = DataFusionRuntime::new(64 * 1024 * 1024, 1).unwrap();
+    let schema = Arc::new(
+        yss_database_arrow::with_row_columns(
+            Schema::new(vec![
+                Field::new("value", DataType::Int64, true),
+                Field::new("row_id", DataType::Int64, false),
+                Field::new("order", DataType::Utf8, false),
+            ]),
+            "row_id",
+            "order",
+        )
+        .unwrap(),
+    );
+    let path = std::env::temp_dir().join(format!(
+        "yss-deferred-resolution-{}-{}.parquet",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let lease = Arc::new(RemoveFile(path.clone()));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int64Array::from(vec![Some(1), None, Some(3)])),
+            Arc::new(Int64Array::from(vec![0, 1, 2])),
+            Arc::new(StringArray::from(vec!["0", "1", "2"])),
+        ],
+    )
+    .unwrap();
+    yss_database_io::write_parquet_batches(&path, schema.clone(), [Ok(batch)]).unwrap();
+    let source = engine
+        .parquet_relation(binding(), schema, std::slice::from_ref(&path), lease)
+        .unwrap();
+    let deferred = source
+        .drop_na_columns(&[], All)
+        .unwrap()
+        .drop_na_rows(&[], Any)
+        .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let (left, right, cached) = runtime.block_on(async {
+        let left = deferred.resolve(control());
+        let right = deferred.resolve(control());
+        futures_util::pin_mut!(left, right);
+        // Both resolutions enter before this thread drives the asynchronous Parquet scan.
+        assert!(futures_util::poll!(left.as_mut()).is_pending());
+        assert!(futures_util::poll!(right.as_mut()).is_pending());
+        let (left, right) = futures_util::future::join(left, right).await;
+        (
+            left.unwrap(),
+            right.unwrap(),
+            deferred.resolve(control()).await.unwrap(),
+        )
+    });
+    assert!(left.shares_row_domain(&right));
+    assert!(left.shares_row_domain(&cached));
+    let combined = left
+        .project_series(&[
+            left.select_series("value").unwrap(),
+            right.select_series("value").unwrap(),
+        ])
+        .unwrap();
+    let page = combined.page(0, 10, &control()).unwrap();
+    assert_eq!(page.row_count, 2);
+    assert_eq!(
+        page.data.columns()[0].values(),
+        page.data.columns()[1].values()
+    );
 }
 
 #[test]

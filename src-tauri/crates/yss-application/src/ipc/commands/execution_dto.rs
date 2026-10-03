@@ -377,7 +377,7 @@ mod tests {
         use yss_graph_execution::resource_preparation::RunResourceBindings;
         use yss_graph_execution::result::ResultReference;
         use yss_graph_execution::state::RunExecutionControl;
-        use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+        use yss_graph_resource_contract::ResourceCatalogSnapshot;
         let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(
             crate::session::NodeComponents::builtins().unwrap(),
         )));
@@ -449,11 +449,7 @@ mod tests {
                 },
             );
         }
-        let catalog = ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
-        );
+        let catalog = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
         let analysis = captured.graph().resolve_graph_document(
             &graph,
             &document,

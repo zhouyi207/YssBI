@@ -29,9 +29,6 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         ExecutionApplicationError::ProjectPreparation(error) => {
             CommandError::expected(project_preparation_command_code(&error))
         }
-        ExecutionApplicationError::ProjectSnapshot(error) => {
-            crate::ipc::commands::project_failure::application_project_command_error(error)
-        }
         ExecutionApplicationError::ResourceBindings(error) => {
             CommandError::diagnosed("execution_resource_binding_failed", error)
         }
@@ -172,11 +169,17 @@ fn prepared_execution_command_code(
 #[tauri::command]
 pub fn cancel_graph_run(
     state: State<'_, crate::session::ApplicationState>,
+    execution_session_id: String,
     run_id: String,
 ) -> Result<bool, CommandError> {
+    let execution_session_id = uuid::Uuid::parse_str(&execution_session_id).map_err(|_| {
+        CommandError::expected("invalid_opaque_id")
+            .with_details(serde_json::json!({ "field": "executionSessionId" }))
+    })?;
     let run_id = parse_opaque_u64("runId", &run_id)?;
     let outcome = crate::graph::run::cancel_run(
         state.inner(),
+        yss_graph_execution::identity::ExecutionSessionId::new(execution_session_id),
         yss_graph_execution::run_registry::RunId::from_existing(run_id),
     )
     .map_err(map_application_execution_error)?;

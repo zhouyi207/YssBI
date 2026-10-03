@@ -24,6 +24,7 @@ yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-node-protocol = { path = "../yss-node-protocol" }
+yss-node-registry = { path = "../yss-node-registry" }
 yss-filesystem = { path = "../yss-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
@@ -35,5 +36,6 @@ yss-resource-naming = { path = "../yss-resource-naming" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+yss-node-catalog = { path = "../yss-node-catalog" }
 yss-filesystem = { path = "../yss-filesystem", features = ["test-support"] }
 yss-project-identity = { path = "../yss-project-identity", features = ["test-support"] }

@@ -6,8 +6,10 @@ mod validation;
 
 pub use fingerprint::{ProtocolFingerprint, RegistryFingerprint};
 pub use model::{
-    CatalogManifest, CategoryRegistration, CategoryRegistry, I18nManifest, LeafImplementation,
-    NodeRegistry, ProviderRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
+    CatalogManifest, CategoryRegistration, CategoryRegistry, FUNCTION_CALL_ARGUMENTS_RESOLVER,
+    FUNCTION_CALL_RESULTS_RESOLVER, FUNCTION_ENTRY_PARAMETERS_RESOLVER,
+    FUNCTION_RETURN_RESULTS_RESOLVER, I18nManifest, LeafImplementation, NodeRegistry,
+    ProviderRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
     TypeConstructorRegistration, TypeRegistration, TypeRegistry,
 };
 pub use validation::RegistryValidationError;
@@ -15,7 +17,7 @@ pub use validation::RegistryValidationError;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use yss_canonical_hash::CanonicalEncodingError;
-use yss_node_protocol::{NodeProtocol, NodeTypeId, ProtocolError, TypeClassId, TypeId};
+use yss_node_protocol::{NodeProtocol, NodeTypeId, TypeClassId, TypeId};
 
 type NominalValidatorFn = dyn Fn(&serde_json::Value) -> Result<(), String> + Send + Sync;
 
@@ -164,14 +166,8 @@ impl NodeRegistryBuilder {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeRegistrationError {
-    InvalidProtocol(ProtocolError),
     InvalidRegistry(RegistryValidationError),
     CanonicalEncoding(CanonicalEncodingError),
-}
-impl From<ProtocolError> for NodeRegistrationError {
-    fn from(value: ProtocolError) -> Self {
-        Self::InvalidProtocol(value)
-    }
 }
 impl From<RegistryValidationError> for NodeRegistrationError {
     fn from(value: RegistryValidationError) -> Self {
@@ -186,7 +182,6 @@ impl From<CanonicalEncodingError> for NodeRegistrationError {
 impl std::fmt::Display for NodeRegistrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidProtocol(e) => e.fmt(f),
             Self::InvalidRegistry(e) => e.fmt(f),
             Self::CanonicalEncoding(e) => e.fmt(f),
         }
@@ -195,7 +190,6 @@ impl std::fmt::Display for NodeRegistrationError {
 impl std::error::Error for NodeRegistrationError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::InvalidProtocol(error) => Some(error),
             Self::InvalidRegistry(error) => Some(error),
             Self::CanonicalEncoding(error) => Some(error),
         }

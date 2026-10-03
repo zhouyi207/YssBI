@@ -1,6 +1,10 @@
 use crate::{PluginFailure, PluginManager, PluginStorageUsage, fail};
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+use yss_plugin_protocol::valid_relative_path;
 
 fn redirected(metadata: &std::fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
@@ -181,4 +185,48 @@ impl PluginManager {
         }
         Ok(removed)
     }
+}
+
+pub fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, PluginFailure> {
+    use std::io::Read;
+    let file = fs::File::open(path).map_err(|_| fail("plugin_file_unavailable"))?;
+    if file
+        .metadata()
+        .map_err(|_| fail("plugin_file_unavailable"))?
+        .len()
+        > limit
+    {
+        return Err(fail("plugin_payload_too_large"));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| fail("plugin_file_unavailable"))?;
+    if bytes.len() as u64 > limit {
+        return Err(fail("plugin_payload_too_large"));
+    }
+    Ok(bytes)
+}
+pub fn resolve_data_file(root: &Path, relative: &str) -> Result<PathBuf, PluginFailure> {
+    if !valid_relative_path(relative) {
+        return Err(fail("plugin_path_invalid"));
+    }
+    let meta = fs::symlink_metadata(root).map_err(|_| fail("plugin_path_invalid"))?;
+    if redirected(&meta) {
+        return Err(fail("plugin_path_invalid"));
+    }
+    let root = fs::canonicalize(root).map_err(|_| fail("plugin_path_invalid"))?;
+    let mut candidate = root.clone();
+    for component in relative.split('/') {
+        candidate.push(component);
+        let meta = fs::symlink_metadata(&candidate).map_err(|_| fail("plugin_path_invalid"))?;
+        if redirected(&meta) {
+            return Err(fail("plugin_path_invalid"));
+        }
+    }
+    let path = fs::canonicalize(candidate).map_err(|_| fail("plugin_path_invalid"))?;
+    if !path.starts_with(root) || !path.is_file() {
+        return Err(fail("plugin_path_invalid"));
+    }
+    Ok(path)
 }

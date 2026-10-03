@@ -30,7 +30,25 @@ Graph 索引头读取复用 `GraphResourceIndex` 已扫描的路径，不再次�
 
 Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEditingMetadata 管理。普通编辑只提交内存数据，显式 Save 才写入图正文；前端不持有独立图草稿或历史。数据库编辑历史由 Database runtime 管理。Project 提交发布资源版本和 delta，不维护项目级撤销栈。`yss-project-history` 保留共享的资源身份、变更请求、函数文档、delta、错误及图驻留状态契约；文件事务回滚与失败恢复继续由 Project 和 filesystem owner 负责。
 
+发布 delta 的资源身份由 `ResourceKey` 表达，文件生命周期种类由 `ResourceLifecycleKind` 表达；
+delta 不提供另一套资源分类或逆补丁接口。Graph 撤销仍使用文档 owner 的 `GraphDocumentPatch`。
+
 Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑身份提交并更新 saved-content identity；Chart 使用自己的文档保存用例。工作台保存全部逐资源调用这些入口，Project 不再提供绕过编辑会话回执的整项目 flush 或独立 graph writer。
+
+Save As 以捕获的当前 ProjectData 覆盖目标副本中的 Graph、Chart、Mind 和 Doc 正文；Mind/Doc 复用各自 `FileContent::encode`，包含未保存编辑。复制不保存或修改源项目，仍在目标 publication 前重验源项目身份及 authority generation。
+
+Graph 复制、重命名及函数签名修改接收调用方当前会话的冻结 `NodeRegistry` 借用。Project 通过注册角色
+识别函数引用，覆盖当前文档、磁盘正文和可逆历史，不按内置节点 ID 维护另一份角色表。
+Project 不保存节点注册配置，也不依赖 Catalog、Analysis 或 Graph Runtime。重命名保留显式引用，当前适用的
+默认引用会写成新路径的显式覆盖；未适用的默认声明不属于当前引用。普通文本和输入字面量不参与重写。
+重命名的数据由 `GraphResourceRenameRequest` 绑定路径、预期版本、新名称、生命周期令牌和操作 ID；
+Project 身份与冻结 Registry 作为调用上下文传入，请求不新增 wire 或持久状态。
+
+函数签名事务从 WriterSnapshot 的当前驻留文档捕获消费者，并在 filesystem lease 内读取其调用可达的
+未驻留函数正文。首次需要磁盘正文时扫描一次路径索引，后续读取复用它；正文不安装为驻留状态。
+注册角色、函数 interface resolver 和函数资源参数确定直接签名消费者，只有 Call 角色形成正文调用边。
+回执包含已修改函数、直接签名消费者及沿正文调用边反向可达的调用图；循环和重复调用按路径去重。
+仅消费外层函数签名的节点不因外层正文所调用的内层函数签名变化而失效。这些依赖关系仅在本次准备期间存在。
 
 驻留查询通过 `ProjectState::has_resident_graph` 和 `read_resident_graph` 读取存在性或单个资源，避免图编辑和运行准备为此复制整份 `ProjectData`。这些查询保留操作准入检查，不从磁盘加载未驻留图；需要读取已声明资源的用例仍使用 `read_graph_resource_snapshot`，提交与返回前的身份/版本重验仍由对应操作完成。
 
@@ -46,7 +64,7 @@ Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑�
 
 项目尚未发布，只支持当前格式。打开其他格式版本的项目会在 manifest 校验时失败，不执行旧变量资源或节点的兼容转换，也不改写原文件。新建和保存项目继续写入当前 `schemaVersion`。
 
-常量增删改使用当前图编辑、Save 与后端图历史，项目查询不再发布独立变量集合。复制图时常量及 Get 引用同时生成新身份。格式、类型和执行语义由 [Graph 与 Execution](../yss-application/src/graph/README.md) 维护。
+常量增删改使用当前图编辑、Save 与后端图历史，项目查询不再发布独立变量集合。复制图时为常量分配新身份，并通过 Document Edit 共享规则重写注册的 `GraphConstant` 参数引用。格式、复制、类型和执行语义由 [Graph 与 Execution](../yss-application/src/graph/README.md) 维护。
 
 `graph_resource_revisions` 是 Project-owned `GraphResourcePath → ResourceRevision` 索引，不是 editor projection 的请求计数器。它仍有生产读写方：
 
@@ -65,6 +83,23 @@ Graph 编辑、Save 和 Execute 的当前流程见 [Graph 与 Execution](../yss-
 
 ## Resource publication and external files
 
+数据库声明读取由 [database_authority/read.rs](src/database_authority/read.rs) 拥有。
+`read_database_snapshot` 在现有 publication 锁内捕获项目实例、会话、根目录、authority generation、
+声明及其 revision/fingerprint observations；只复制数据库声明，不读取其他资源正文或扫描完整文件索引。
+快照是带读取依据的不可变结果，不持有另一份可写项目状态。缺失 revision 或冲突的声明身份会被拒绝，
+不补造零版本。Application 的会话工厂和数据库列表共用此入口，并通过 `revalidate_database_snapshot`
+检查构造或查询期间的 Project 变化；物理数据与 schema 仍归 Database Runtime。
+快照暴露捕获的 authority generation；Application 需要把数据库列表关联到既有项目索引时，复用
+`validate_project_index_version` 同时校验调用方 publication revision，无须再构造或扫描完整索引。
+
+单库编辑使用 `read_database_declaration(project_instance_id, id)`：在同一 publication 锁内
+核对项目身份并按既有 ID 索引复制一份声明，不复制其他数据库或 Graph/Chart/Mind/Doc 正文。
+重命名需要检查同项目的名称集合，继续使用数据库声明快照。读取声明不能替代修改准备与提交时的
+Project revision 校验；同一个数据库 ID 在另一项目出现时，旧项目身份不能读取它。
+
+数据库删除先准备 Project publication 和数据库资源的下一版本，再移除声明并发布同一回执。
+版本耗尽等前置失败保留声明及现有版本，不能留下“删除失败但声明已移除”的部分提交。
+
 Event Graph/Function Graph 创建、复制、删除、重命名复用标准 ProjectDataPatch 的提交与 lifecycle/move delta；资源操作推进
 publication revision，而不仅是 authority generation。纯生命周期增删不伪造缺失的图投影，
 重命名回执保留真实 move delta、递增发布版本及受影响图的恢复声明。
@@ -72,7 +107,9 @@ publication revision，而不仅是 authority generation。纯生命周期增删
 Graph 与 Chart writers 共用 WriterSnapshot 和 transaction context。取得文件系统 lease 后与暂存完成后，
 均检查捕获的 authority generation、受影响资源版本以及源/目标路径存在性；重命名复用相同的 ownership lease
 和 patch 发布入口。函数签名的 before-state、函数版本与所属 Graph 版本也在事务内校验，文件落盘成功后才发布，
-发布失败则回滚文件。Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删除与移动后的旧路径保留 tombstone。
+发布失败则回滚文件。签名最终发布在锁内重验原 WriterSnapshot 的 authority generation，确保准备的依赖集合仍有效；
+全部可失败检查完成后直接更新目标函数及其 revision，不另复制整份 ProjectData 或 revision 表。
+Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删除与移动后的旧路径保留 tombstone。
 
 Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后同步驻留 graph/chart，
 预先校验全部版本推进，再发布变更。无内容变化的重复 rescan 不再次推进版本。
@@ -82,10 +119,19 @@ ProjectIndex 的文件成员来自磁盘扫描，内存只提供适用的权威�
 Chart 文档和文件不包含资源 revision；`chart_revisions` 是其唯一版本 authority，在项目激活时从初始版本开始，
 与 Graph 的资源版本生命周期一致。Chart 的创建、保存、复制、移动和删除复用资源 patch 的标准回执，
 writer 不再重复构造 delta。刷新文档时可绑定 Project publication revision，在同一次一致读取中验证。
+Chart 重命名的目标版本高于源版本及目标路径保留的删除版本，原路径保留递增后的 tombstone；回执与状态安装复用同一计算，旧目标路径的保存基线不能重新匹配新资源。
 图表文件采用 `yss-chart-document::CURRENT_CHART_SCHEMA_VERSION` 定义的严格格式，不读取含旧文档版本字段的格式，也不自动迁移。
+图表类型由同一 crate 的 `ChartType` 枚举拥有，只允许 histogram、scatter、line；文档、索引和资源变更状态
+直接持有该类型，未知类型在反序列化入口拒绝，不能作为任意字符串进入已提交状态。
 Chart writer 支持调用者提供读取时的预期 revision；Harness 设置编辑使用它，GUI 的独立 Save
 继续按 Rust 当前基线覆盖。Graph/Chart 重命名接受内部生命周期请求，由既有 lifecycle owner
 分配令牌，不占用客户端令牌水位，也不由 Harness 维护另一套计数器。
+
+`yss-resource-lifecycle` 独占资源生命周期登记、令牌准入和守卫回退链；Project 负责项目身份、
+文件事务与发布。项目激活移出旧登记后，其守卫可能仍在释放中，因此登记 ID 在同一个 registry
+的整个生命周期内不重用；新项目只重置资源 owner 与令牌水位，旧守卫不能影响新登记。
+`yss-project-operation` 单独拥有操作准入及重放账本。Graph 已原子保存有界命令回执后，
+通过 `complete_in_owner` 释放准入，避免再维护一份无界的已完成 Graph 命令索引。
 
 ## 当前文档编辑
 

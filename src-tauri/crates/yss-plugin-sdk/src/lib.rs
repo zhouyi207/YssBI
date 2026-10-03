@@ -4,7 +4,7 @@ use std::{
     io::{Read, Write},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         mpsc,
     },
     time::Duration,
@@ -17,9 +17,8 @@ type Pending = BTreeMap<String, mpsc::SyncSender<Result<Value, PluginFailure>>>;
 pub struct Peer {
     outgoing: mpsc::SyncSender<Vec<u8>>,
     outgoing_bytes: Arc<AtomicUsize>,
-    pending: Mutex<Pending>,
+    pending: Mutex<Option<Pending>>,
     expired: Mutex<VecDeque<String>>,
-    alive: AtomicBool,
     next: AtomicU64,
     prefix: String,
     budget: Mutex<ResourceBudget>,
@@ -37,9 +36,8 @@ impl Peer {
         let peer = Arc::new(Self {
             outgoing,
             outgoing_bytes: outgoing_bytes.clone(),
-            pending: Mutex::new(BTreeMap::new()),
+            pending: Mutex::new(Some(BTreeMap::new())),
             expired: Mutex::new(VecDeque::new()),
-            alive: AtomicBool::new(true),
             next: AtomicU64::new(1),
             prefix: uuid::Uuid::new_v4().to_string(),
             budget: Mutex::new(budget),
@@ -155,7 +153,7 @@ impl Peer {
                         .pending
                         .lock()
                         .ok()
-                        .and_then(|mut pending| pending.remove(&response.id));
+                        .and_then(|mut pending| pending.as_mut()?.remove(&response.id));
                     if let Some(pending) = pending {
                         let _ = pending.send(match response.error {
                             Some(error) => Err(error.data),
@@ -183,9 +181,6 @@ impl Peer {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, PluginFailure> {
-        if !self.is_alive() {
-            return Err(PluginFailure::new("plugin_process_exited"));
-        }
         let id = format!(
             "{}:{}",
             self.prefix,
@@ -197,6 +192,9 @@ impl Peer {
                 .pending
                 .lock()
                 .map_err(|_| PluginFailure::new("plugin_state_unavailable"))?;
+            let pending = pending
+                .as_mut()
+                .ok_or_else(|| PluginFailure::new("plugin_process_exited"))?;
             if pending.len() >= self.budget().pending_requests as usize {
                 return Err(PluginFailure::new("plugin_resource_exhausted"));
             }
@@ -222,7 +220,9 @@ impl Peer {
                         expired.pop_front();
                     }
                 }
-                if let Ok(mut pending) = self.pending.lock() {
+                if let Ok(mut pending) = self.pending.lock()
+                    && let Some(pending) = pending.as_mut()
+                {
                     pending.remove(&id);
                 }
                 self.close();
@@ -252,7 +252,7 @@ impl Peer {
         Ok(())
     }
     pub fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::Acquire)
+        self.pending.lock().is_ok_and(|pending| pending.is_some())
     }
     pub fn budget(&self) -> ResourceBudget {
         self.budget
@@ -280,14 +280,18 @@ impl Peer {
         Ok(())
     }
     pub fn pending_count(&self) -> usize {
-        self.pending
-            .lock()
-            .map_or(usize::MAX, |pending| pending.len())
+        self.pending.lock().map_or(usize::MAX, |pending| {
+            pending.as_ref().map_or(0, BTreeMap::len)
+        })
     }
     pub fn close(&self) {
-        self.alive.store(false, Ordering::Release);
-        if let Ok(mut pending) = self.pending.lock() {
-            for (_, sender) in std::mem::take(&mut *pending) {
+        let pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        if let Some(pending) = pending {
+            for (_, sender) in pending {
                 let _ = sender.send(Err(PluginFailure::new("plugin_process_exited")));
             }
         }
@@ -296,5 +300,49 @@ impl Peer {
 impl Drop for Peer {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn close_retires_admitted_requests_and_rejects_later_calls() {
+        let (outgoing, frames) = mpsc::sync_channel(32);
+        let peer = Arc::new(Peer {
+            outgoing,
+            outgoing_bytes: Arc::new(AtomicUsize::new(0)),
+            pending: Mutex::new(Some(BTreeMap::new())),
+            expired: Mutex::new(VecDeque::new()),
+            next: AtomicU64::new(1),
+            prefix: "test".into(),
+            budget: Mutex::new(ResourceBudget::default()),
+        });
+        let caller = peer.clone();
+        let request = std::thread::spawn(move || {
+            caller.call("tasks.get", Value::Null, Duration::from_secs(5))
+        });
+        let frame = frames.recv_timeout(Duration::from_secs(5)).unwrap();
+        let sent: RpcRequest = serde_json::from_slice(&frame).unwrap();
+        assert_eq!(sent.method, "tasks.get");
+        assert_eq!(peer.pending_count(), 1);
+
+        peer.close();
+        assert!(!peer.is_alive());
+        assert_eq!(peer.pending_count(), 0);
+        assert_eq!(
+            request.join().unwrap().unwrap_err().code,
+            "plugin_process_exited"
+        );
+        assert_eq!(
+            peer.call("tasks.get", Value::Null, Duration::ZERO)
+                .unwrap_err()
+                .code,
+            "plugin_process_exited"
+        );
+        assert!(matches!(frames.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        peer.close();
+        assert_eq!(peer.pending_count(), 0);
     }
 }

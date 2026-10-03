@@ -220,3 +220,169 @@ fn watcher_shutdown_timeout_retains_handle_and_retry_joins_worker() {
     joined_rx.recv().unwrap();
     assert_eq!(join_count.load(Ordering::Acquire), 1);
 }
+
+struct DrainFactory {
+    drain: Mutex<Option<Box<dyn FileWatcherDrain>>>,
+    starts: AtomicUsize,
+}
+
+impl FileWatcherFactory for DrainFactory {
+    fn start(
+        &self,
+        _: &Path,
+        _: WatcherEpoch,
+        _: Arc<dyn ChangeSink>,
+    ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError> {
+        self.starts.fetch_add(1, Ordering::AcqRel);
+        Ok(match self.drain.lock().unwrap().take() {
+            Some(drain) => Box::new(DrainSession(drain)),
+            None => Box::new(FakeSession),
+        })
+    }
+}
+
+struct DrainSession(Box<dyn FileWatcherDrain>);
+
+impl FileWatcherSession for DrainSession {
+    fn close_admission(self: Box<Self>) -> Box<dyn FileWatcherDrain> {
+        self.0
+    }
+}
+
+struct GatedDrain {
+    entered: Sender<()>,
+    release: Receiver<()>,
+    panic: bool,
+}
+
+impl FileWatcherDrain for GatedDrain {
+    fn finish(self: Box<Self>, control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
+        if control.is_expired() {
+            return FileWatcherDrainOutcome::TimedOut(self);
+        }
+        self.entered.send(()).unwrap();
+        self.release.recv().unwrap();
+        assert!(!self.panic, "injected watcher drain panic");
+        FileWatcherDrainOutcome::WorkerPanicked
+    }
+}
+
+#[test]
+fn concurrent_drain_retry_does_not_start_a_watcher_before_the_worker_finishes() {
+    let (entered, waiting) = mpsc::channel();
+    let (release, resumed) = mpsc::channel();
+    let factory = Arc::new(DrainFactory {
+        drain: Mutex::new(Some(Box::new(GatedDrain {
+            entered,
+            release: resumed,
+            panic: true,
+        }))),
+        starts: AtomicUsize::new(0),
+    });
+    let mut state = WatcherState::for_test(factory.clone());
+    state.shutdown_timeout = Duration::ZERO;
+    state.watch("first", RecordingSink::new()).unwrap();
+    let Err(WatcherError::TimedOut(drain)) = state.watch("next", RecordingSink::new()) else {
+        panic!("the active worker must keep its drain handle");
+    };
+    let worker =
+        thread::spawn(move || drain.finish(WatcherShutdownControl::after(Duration::from_secs(5))));
+    waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+
+    state.shutdown_timeout = Duration::from_millis(10);
+    let competing = state.watch("competing", RecordingSink::new());
+    let starts_while_draining = factory.starts.load(Ordering::Acquire);
+    release.send(()).unwrap();
+    assert!(matches!(
+        worker.join().unwrap(),
+        FileWatcherDrainOutcome::WorkerPanicked
+    ));
+
+    let Err(WatcherError::TimedOut(retry)) = competing else {
+        panic!("another caller finishing the drain is not a terminal worker failure");
+    };
+    assert_eq!(starts_while_draining, 1);
+    assert!(matches!(
+        retry.finish(WatcherShutdownControl::new(Instant::now())),
+        FileWatcherDrainOutcome::WorkerPanicked
+    ));
+    state.watch("replacement", RecordingSink::new()).unwrap();
+    assert_eq!(factory.starts.load(Ordering::Acquire), 2);
+}
+
+#[test]
+fn completed_drain_retries_preserve_the_worker_failure() {
+    let (entered, waiting) = mpsc::channel();
+    let (release, resumed) = mpsc::channel();
+    let factory = Arc::new(DrainFactory {
+        drain: Mutex::new(Some(Box::new(GatedDrain {
+            entered,
+            release: resumed,
+            panic: false,
+        }))),
+        starts: AtomicUsize::new(0),
+    });
+    let mut state = WatcherState::for_test(factory);
+    state.shutdown_timeout = Duration::ZERO;
+    state.watch("first", RecordingSink::new()).unwrap();
+    let Err(WatcherError::TimedOut(first)) = state.watch("next", RecordingSink::new()) else {
+        panic!("the worker is still pending");
+    };
+    let Err(WatcherError::TimedOut(second)) = state.watch("next", RecordingSink::new()) else {
+        panic!("the second caller must retain the same worker");
+    };
+    release.send(()).unwrap();
+    assert!(matches!(
+        first.finish(WatcherShutdownControl::after(Duration::from_secs(5))),
+        FileWatcherDrainOutcome::WorkerPanicked
+    ));
+    waiting.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(matches!(
+        second.finish(WatcherShutdownControl::new(Instant::now())),
+        FileWatcherDrainOutcome::WorkerPanicked
+    ));
+}
+
+#[test]
+fn failed_start_revokes_its_sink_and_allows_a_later_watch() {
+    struct FailedStartFactory {
+        captured: FakeFactory,
+        fail_once: AtomicBool,
+        panic: bool,
+    }
+    impl FileWatcherFactory for FailedStartFactory {
+        fn start(
+            &self,
+            root: &Path,
+            epoch: WatcherEpoch,
+            sink: Arc<dyn ChangeSink>,
+        ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError> {
+            let session = self.captured.start(root, epoch, sink)?;
+            if self.fail_once.swap(false, Ordering::AcqRel) {
+                assert!(!self.panic, "injected watcher start panic");
+                return Err(FileWatcherStartError::StartFailed);
+            }
+            Ok(session)
+        }
+    }
+
+    for panic in [false, true] {
+        let factory = Arc::new(FailedStartFactory {
+            captured: FakeFactory::default(),
+            fail_once: AtomicBool::new(true),
+            panic,
+        });
+        let state = WatcherState::for_test(factory.clone());
+        let sink = RecordingSink::new();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            state.watch("failed", sink.clone())
+        }));
+        assert!(matches!(result, Err(_) | Ok(Err(WatcherError::Start(_)))));
+        factory.captured.emit(0, relevant_change());
+        assert!(sink.changes.lock().unwrap().is_empty());
+
+        state.watch("replacement", sink.clone()).unwrap();
+        factory.captured.emit(1, relevant_change());
+        assert_eq!(sink.changes.lock().unwrap().len(), 1);
+    }
+}

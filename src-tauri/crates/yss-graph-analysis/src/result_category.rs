@@ -41,8 +41,18 @@ pub(crate) fn result_category_for_output(
     node_type_id: &str,
     port_key: &str,
 ) -> GraphResultCategory {
+    if node_type_id == "yssbi.statistics.plot.statistical.family" {
+        return match port_key {
+            "result" => GraphResultCategory::PlotData(GraphPlotDataKind::Histogram),
+            "ecdf" => GraphResultCategory::PlotData(GraphPlotDataKind::Ecdf),
+            "boxplot" => GraphResultCategory::PlotData(GraphPlotDataKind::Boxplot),
+            _ => GraphResultCategory::Value,
+        };
+    }
     if port_key == "result" && node_type_id == "yssbi.statistics.linear.summary" {
         GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::LinearRegressionSummary)
+    } else if node_type_id == "yssbi.statistics.plot.control_chart" && port_key == "summary" {
+        GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::Structured)
     } else if matches!(
         node_type_id,
         "yssbi.statistics.plot.time_series"
@@ -50,6 +60,9 @@ pub(crate) fn result_category_for_output(
             | "yssbi.statistics.plot.nomogram"
             | "yssbi.statistics.plot.calibration"
             | "yssbi.statistics.plot.decision_curve"
+            | "yssbi.statistics.plot.forest"
+            | "yssbi.statistics.plot.funnel"
+            | "yssbi.statistics.plot.control_chart"
     ) {
         plot_category_for_output(node_type_id, port_key)
     } else if port_key == "result" && node_type_id.starts_with("yssbi.statistics.") {
@@ -64,8 +77,10 @@ fn plot_category_for_output(node_type_id: &str, port_key: &str) -> GraphResultCa
         return GraphResultCategory::Value;
     }
     let plot = match node_type_id {
-        "yssbi.plot.scatter.view" => GraphPlotDataKind::Scatter,
-        "yssbi.plot.line.view" | "yssbi.statistics.plot.time_series" => GraphPlotDataKind::Line,
+        "yssbi.plot.scatter.view" | "yssbi.statistics.plot.funnel" => GraphPlotDataKind::Scatter,
+        "yssbi.plot.line.view"
+        | "yssbi.statistics.plot.time_series"
+        | "yssbi.statistics.plot.control_chart" => GraphPlotDataKind::Line,
         "yssbi.plot.ecdf.view" => GraphPlotDataKind::Ecdf,
         "yssbi.plot.kde.view" => GraphPlotDataKind::Kde,
         "yssbi.plot.boxplot.view" => GraphPlotDataKind::Boxplot,
@@ -79,7 +94,9 @@ fn plot_category_for_output(node_type_id: &str, port_key: &str) -> GraphResultCa
         "yssbi.plot.bubble.view" => GraphPlotDataKind::Bubble,
         "yssbi.plot.violin.view" => GraphPlotDataKind::Violin,
         "yssbi.plot.heatmap.view" => GraphPlotDataKind::Heatmap,
-        "yssbi.plot.coefficient.view" => GraphPlotDataKind::Coefficient,
+        "yssbi.plot.coefficient.view" | "yssbi.statistics.plot.forest" => {
+            GraphPlotDataKind::Coefficient
+        }
         "yssbi.statistics.plot.nomogram" => GraphPlotDataKind::Nomogram,
         "yssbi.statistics.plot.calibration" | "yssbi.statistics.plot.decision_curve" => {
             GraphPlotDataKind::Line
@@ -131,6 +148,11 @@ mod tests {
         }
         for (node, kind) in [
             ("yssbi.plot.scatter.view", GraphPlotDataKind::Scatter),
+            ("yssbi.statistics.plot.funnel", GraphPlotDataKind::Scatter),
+            (
+                "yssbi.statistics.plot.forest",
+                GraphPlotDataKind::Coefficient,
+            ),
             (
                 "yssbi.statistics.plot.nomogram",
                 GraphPlotDataKind::Nomogram,
@@ -141,6 +163,14 @@ mod tests {
                 GraphPlotDataKind::Line,
             ),
             ("yssbi.plot.line.view", GraphPlotDataKind::Line),
+            (
+                "yssbi.statistics.plot.statistical.family",
+                GraphPlotDataKind::Histogram,
+            ),
+            (
+                "yssbi.statistics.plot.control_chart",
+                GraphPlotDataKind::Line,
+            ),
             ("yssbi.plot.ecdf.view", GraphPlotDataKind::Ecdf),
             ("yssbi.plot.kde.view", GraphPlotDataKind::Kde),
             ("yssbi.plot.boxplot.view", GraphPlotDataKind::Boxplot),
@@ -182,6 +212,23 @@ mod tests {
                 GraphResultCategory::Value
             );
         }
+        for (port, kind) in [
+            ("ecdf", GraphPlotDataKind::Ecdf),
+            ("boxplot", GraphPlotDataKind::Boxplot),
+        ] {
+            assert_eq!(
+                result_category_for_output("yssbi.statistics.plot.statistical.family", port),
+                GraphResultCategory::PlotData(kind)
+            );
+        }
+        assert_eq!(
+            result_category_for_output("yssbi.statistics.plot.control_chart", "summary"),
+            GraphResultCategory::StatisticalReport(GraphStatisticalReportKind::Structured)
+        );
+        assert_eq!(
+            result_category_for_output("yssbi.statistics.plot.control_chart", "observations"),
+            GraphResultCategory::Value
+        );
         assert_eq!(
             result_category_for_output("yssbi.plot.scatter.view", "other"),
             GraphResultCategory::Value

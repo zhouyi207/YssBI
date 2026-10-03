@@ -153,8 +153,8 @@ impl DeferredRelation {
         };
         control.check()?;
         // Cache only a successful plan over the immutable snapshot, never batches or failures.
-        let _ = self.resolved.set(resolved.clone());
-        Ok(resolved)
+        // Concurrent resolutions must return the winning plan's row domain too.
+        Ok(self.resolved.get_or_init(|| resolved).clone())
     }
 }
 

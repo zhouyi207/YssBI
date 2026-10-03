@@ -295,7 +295,7 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
         .application
         .load_chart_resource(instance.clone(), path.clone(), None)
         .unwrap();
-    document.chart_type = "scatter".into();
+    document.chart_type = yss_chart_document::ChartType::Scatter;
     active
         .application
         .save_chart_resource(
@@ -312,7 +312,7 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
             .load_chart_resource(instance, path, None)
             .unwrap()
             .chart_type,
-        "scatter"
+        yss_chart_document::ChartType::Scatter
     );
     assert!(Arc::ptr_eq(
         &active.session,

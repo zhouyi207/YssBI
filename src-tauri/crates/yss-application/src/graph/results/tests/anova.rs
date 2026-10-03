@@ -11,7 +11,7 @@ use yss_graph_execution::plan::{
 };
 use yss_graph_execution::resource_preparation::RunResourceBindings;
 use yss_graph_execution::state::RunExecutionControl;
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_kernel::RuntimeValue;
 
 #[test]
@@ -174,11 +174,7 @@ fn anova_nodes_execute_graph_defaults_with_mixed_factor_labels_and_interactions(
     let captured = app.capture_session().unwrap();
     let runtime = captured.execution();
     let graph = GraphResourcePath::new("events/variance.yssbi-event").unwrap();
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = captured.graph().resolve_graph_document(
         &graph,
         &document,

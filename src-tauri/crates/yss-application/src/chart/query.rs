@@ -1,5 +1,5 @@
 use yss_data_contract::TabularColumnName;
-use yss_database_contract::DatabaseId;
+use yss_database_contract::{DatabaseDeclarationRevision, DatabaseId};
 use yss_database_runtime::plot_query::{
     self, DatabasePlotQueryError, NumericColumnKind, NumericColumnPair,
 };
@@ -15,6 +15,7 @@ use super::projection::{ChartPlotInput, ChartPlotResult, PlotAxisFormat, project
 pub struct ChartPlotQuery {
     pub project_instance_id: ProjectInstanceId,
     pub database_id: DatabaseId,
+    pub expected_revision: ResourceRevision,
     pub x_column: TabularColumnName,
     pub y_column: TabularColumnName,
     pub max_points: Option<usize>,
@@ -34,13 +35,6 @@ pub enum ChartPlotApplicationError {
     Database(#[from] DatabasePlotQueryError),
     #[error("chart plot has no finite points")]
     PlotDataEmpty,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct ProjectPlotAuthorityFacts {
-    project_instance_id: ProjectInstanceId,
-    publication_revision: u64,
-    database_revision: ResourceRevision,
 }
 
 impl<'a> From<&'a NumericColumnPair> for ChartPlotInput<'a> {
@@ -79,69 +73,36 @@ fn query_chart_plot_in_session(
         });
     }
 
-    let project_facts = capture_project_authority_facts(session, &query.database_id)?;
+    check_project_database_revision(session, &query)?;
     let pair = plot_query::read_numeric_column_pair(
         session.database(),
         &query.database_id,
+        DatabaseDeclarationRevision::from_existing(query.expected_revision.get()),
         &query.x_column,
         &query.y_column,
     )?;
     let result = project_chart_plot(ChartPlotInput::from(&pair), query.max_points)
         .ok_or(ChartPlotApplicationError::PlotDataEmpty)?;
-    revalidate_project_authority_facts(session, &project_facts, &query.database_id)?;
+    check_project_database_revision(session, &query)?;
     plot_query::revalidate_numeric_column_pair(session.database(), &pair)?;
     Ok(result)
 }
 
-fn capture_project_authority_facts(
+fn check_project_database_revision(
     session: &ApplicationSession,
-    database: &DatabaseId,
-) -> Result<ProjectPlotAuthorityFacts, ChartPlotApplicationError> {
-    let index = session
-        .project()
-        .read_project_index(session.project_instance_id())
-        .map_err(|_| ChartPlotApplicationError::ProjectAuthorityChanged {
-            database: database.clone(),
-        })?;
-    if index.project_instance_id != session.project_instance_id().as_str() {
-        return Err(ChartPlotApplicationError::ProjectIdentityMismatch {
-            requested: session.project_instance_id().clone(),
-        });
-    }
-    let database_revision = index
-        .databases
-        .iter()
-        .find(|entry| entry.id == database.as_str())
-        .map(|entry| entry.revision)
-        .ok_or_else(|| ChartPlotApplicationError::ProjectAuthorityChanged {
-            database: database.clone(),
-        })?;
-    Ok(ProjectPlotAuthorityFacts {
-        project_instance_id: session.project_instance_id().clone(),
-        publication_revision: index.publication_revision,
-        database_revision,
-    })
-}
-
-fn revalidate_project_authority_facts(
-    session: &ApplicationSession,
-    expected: &ProjectPlotAuthorityFacts,
-    database: &DatabaseId,
+    query: &ChartPlotQuery,
 ) -> Result<(), ChartPlotApplicationError> {
-    let current = capture_project_authority_facts(session, database)?;
-    if current.project_instance_id != expected.project_instance_id {
-        return Err(ChartPlotApplicationError::ProjectIdentityMismatch {
-            requested: expected.project_instance_id.clone(),
-        });
-    }
-    if current.publication_revision != expected.publication_revision
-        || current.database_revision != expected.database_revision
-    {
-        return Err(ChartPlotApplicationError::ProjectAuthorityChanged {
-            database: database.clone(),
-        });
-    }
-    Ok(())
+    session
+        .project()
+        .prepare_database_mutation_authority(
+            session.project_instance_id(),
+            query.database_id.as_str(),
+            query.expected_revision,
+        )
+        .map(|_| ())
+        .map_err(|_| ChartPlotApplicationError::ProjectAuthorityChanged {
+            database: query.database_id.clone(),
+        })
 }
 
 fn map_session_revalidation_error(error: SessionRevalidationError) -> ChartPlotApplicationError {

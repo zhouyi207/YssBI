@@ -7,12 +7,47 @@ use yss_graph_document::{
 use yss_project_identity::OperationId;
 use yss_project_model::ProjectData;
 
+fn function_registry() -> yss_node_registry::NodeRegistry {
+    use std::sync::Arc;
+    use yss_node_registry::{
+        NodeRegistryBuilder, ProviderRegistration, RegisteredNode, StructuralNodeRole,
+    };
+    let builtins = yss_node_catalog::build_builtin_node_system().unwrap();
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests.functions".parse().unwrap());
+    provider.nodes = ["tests.function.call", "tests.function.default"]
+        .map(|id| {
+            let mut protocol = builtins
+                .registry
+                .protocol(&"yssbi.project.function.call".parse().unwrap())
+                .unwrap()
+                .clone();
+            protocol.type_id = id.parse().unwrap();
+            if id == "tests.function.default" {
+                let parameter = &mut protocol.parameters.groups[0].parameters[0];
+                parameter.default_value = Some(yss_node_protocol::TypedValue {
+                    value_type: parameter.value_type.clone(),
+                    value: yss_data_contract::DataValue::String(
+                        "functions/F.yssbi-function".into(),
+                    ),
+                });
+            }
+            RegisteredNode::structural(Arc::new(protocol), StructuralNodeRole::Call)
+        })
+        .into();
+    builder.register_provider(provider).unwrap();
+    builder.freeze().unwrap()
+}
+
 fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
     let mut graph = GraphResourceDocument::new("Caller", GraphResourceKind::EventGraph);
     let call = NodeId::new();
     let text = NodeId::new();
     for (id, kind, key) in [
         (call, "yssbi.project.function.call", "target"),
+        (NodeId::new(), "tests.function.call", "target"),
+        (NodeId::new(), "tests.function.default", "target"),
         (text, "yssbi.dataframe.rename", "to"),
     ] {
         graph.document.nodes.insert(
@@ -21,7 +56,11 @@ fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
                 id,
                 node_type: kind.parse().unwrap(),
                 position: NodePosition { x: 0., y: 0. },
-                parameters: [(key.parse().unwrap(), serde_json::json!(function.as_str()))].into(),
+                parameters: if kind == "tests.function.default" {
+                    Default::default()
+                } else {
+                    [(key.parse().unwrap(), serde_json::json!(function.as_str()))].into()
+                },
                 user_label: None,
             },
         );
@@ -74,7 +113,7 @@ fn assert_references(
     text: &GraphResourcePath,
 ) {
     for node in document.nodes.values() {
-        let (key, expected) = if node.node_type.as_str() == "yssbi.project.function.call" {
+        let (key, expected) = if node.node_type.as_str() != "yssbi.dataframe.rename" {
             ("target", target)
         } else {
             ("to", text)
@@ -97,7 +136,151 @@ fn assert_references(
 }
 
 #[test]
+fn duplicate_preserves_registered_constant_references_on_disk() {
+    use std::sync::Arc;
+    use yss_data_contract::{DataValue, ValueType};
+    use yss_graph_document::{ConstantId, GraphConstant};
+    use yss_node_protocol::{NodeTypingSpec, ParameterCondition, ParameterEditorSpec, TypedValue};
+    use yss_node_registry::{
+        LeafImplementation, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
+    };
+    let id = ConstantId::new();
+    let missing = ConstantId::new();
+    let builtins = yss_node_catalog::build_builtin_node_system().unwrap();
+    let mut protocol = builtins
+        .registry
+        .protocol(&"yssbi.constant.get".parse().unwrap())
+        .unwrap()
+        .clone();
+    protocol.type_id = "tests.constant.reference".parse().unwrap();
+    let mut reference = protocol.parameters.groups[0].parameters[0].clone();
+    reference.key = "selection".parse().unwrap();
+    reference.default_value = Some(TypedValue {
+        value_type: reference.value_type.clone(),
+        value: DataValue::String(id.to_string().into()),
+    });
+    reference.visible_when = Some(ParameterCondition {
+        key: "mode".parse().unwrap(),
+        values: [DataValue::String("use".into())].into(),
+    });
+    let mut mode = reference.clone();
+    mode.key = "mode".parse().unwrap();
+    mode.editor = ParameterEditorSpec::Text { multiline: false };
+    mode.visible_when = None;
+    mode.default_value.as_mut().unwrap().value = DataValue::String("use".into());
+    let mut note = mode.clone();
+    note.key = "note".parse().unwrap();
+    note.default_value = None;
+    protocol.parameters.groups[0].parameters = [reference, mode, note].into();
+    protocol.typing = NodeTypingSpec::ConstantOutput {
+        parameter: "selection".parse().unwrap(),
+        output: "value".parse().unwrap(),
+    };
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests.constants".parse().unwrap());
+    provider.nodes = [RegisteredNode::leaf(
+        Arc::new(protocol),
+        LeafImplementation::new("tests.constant"),
+    )]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let registry = builder.freeze().unwrap();
+
+    let source = GraphResourcePath::new("events/Constants.yssbi-event").unwrap();
+    let mut graph = GraphResourceDocument::new("Constants", GraphResourceKind::EventGraph);
+    graph.document.constants.insert(
+        id,
+        GraphConstant {
+            id,
+            name: "Count".into(),
+            data_type: ValueType::number(),
+            data_value: DataValue::Integer(42),
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        },
+    );
+    for (label, value, mode) in [
+        ("explicit", Some(serde_json::json!(id.to_string())), "use"),
+        ("default", None, "use"),
+        (
+            "stored hidden",
+            Some(serde_json::json!(id.to_string())),
+            "skip",
+        ),
+        ("hidden default", None, "skip"),
+        ("invalid", Some(serde_json::json!(false)), "use"),
+        (
+            "missing",
+            Some(serde_json::json!(missing.to_string())),
+            "use",
+        ),
+    ] {
+        let node_id = NodeId::new();
+        let mut parameters = [
+            ("mode".parse().unwrap(), serde_json::json!(mode)),
+            ("note".parse().unwrap(), serde_json::json!(id.to_string())),
+        ]
+        .into_iter()
+        .collect::<yss_node_protocol::ParameterValues>();
+        if let Some(value) = value {
+            parameters.insert("selection".parse().unwrap(), value);
+        }
+        graph.document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: "tests.constant.reference".parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters,
+                user_label: Some(label.into()),
+            },
+        );
+    }
+    let mut data = ProjectData::new();
+    data.graphs.insert(source.clone(), graph.clone());
+    let fixture = crate::fixtures::TempProject::activate("duplicate-constant-reference", data);
+    let state = fixture.state();
+    let session = state.capture_project_session().unwrap();
+    state
+        .duplicate_graph_resource(
+            &registry,
+            &session.instance_id,
+            &source,
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+        )
+        .unwrap();
+    let target = GraphResourcePath::new("events/Constants Copy.yssbi-event").unwrap();
+    let copied = crate::project_io::load_project_graph_from_file(
+        session.root.as_path().to_str().unwrap(),
+        &target,
+    )
+    .unwrap();
+    let constant = copied.document.constants.values().next().unwrap();
+    assert_ne!(constant.id, id);
+    assert_eq!(constant.data_value, DataValue::Integer(42));
+    for node in copied.document.nodes.values() {
+        assert!(!graph.document.nodes.contains_key(&node.id));
+        assert_eq!(
+            node.parameters[&"note".parse().unwrap()],
+            serde_json::json!(id.to_string())
+        );
+        let selection = node.parameters.get(&"selection".parse().unwrap());
+        match node.user_label.as_deref().unwrap() {
+            "hidden default" => assert!(selection.is_none()),
+            "invalid" => assert_eq!(selection, Some(&serde_json::json!(false))),
+            "missing" => assert_eq!(selection, Some(&serde_json::json!(missing.to_string()))),
+            _ => assert_eq!(selection, Some(&serde_json::json!(constant.id.to_string()))),
+        }
+    }
+    assert_eq!(state.read_resident_graph(&source).unwrap().unwrap(), graph);
+}
+
+#[test]
 fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identity_rules() {
+    let registry = function_registry();
     let source = GraphResourcePath::new("functions/F.yssbi-function").unwrap();
     let target = GraphResourcePath::new("functions/G.yssbi-function").unwrap();
     let path = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
@@ -114,12 +297,15 @@ fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identit
     state.unload_graph_resource(&path).unwrap();
     state
         .rename_graph_resource(
+            &registry,
             &session.instance_id,
-            &source,
-            ResourceRevision::INITIAL,
-            "G",
-            100,
-            OperationId::new(),
+            GraphResourceRenameRequest {
+                graph_path: &source,
+                expected_revision: ResourceRevision::INITIAL,
+                new_name: "G",
+                lifecycle_token: 100,
+                operation_id: OperationId::new(),
+            },
         )
         .unwrap();
     assert!(state.read_resident_graph(&path).unwrap().is_none());
@@ -136,7 +322,7 @@ fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identit
         original.document.port_bindings.keys().collect::<Vec<_>>()
     );
     assert!(!session.root.as_path().join(source.as_str()).exists());
-    let duplicate = duplicate_document(&original.document, &source, &target);
+    let duplicate = duplicate_document(&original.document, &source, &target, &registry);
     assert_references(&duplicate, &target, &source);
     assert!(
         duplicate
@@ -158,6 +344,7 @@ fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identit
 
 #[test]
 fn rename_remaps_saved_only_references_and_reversible_history() {
+    let registry = function_registry();
     use crate::GraphHistoryAction;
     use std::sync::Arc;
     use yss_graph_document_edit::apply_graph_document_patch;
@@ -214,7 +401,12 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
             .document
             .nodes
             .values()
-            .filter(|node| node.node_type.as_str() == "yssbi.project.function.call")
+            .filter(|node| {
+                registry.get(&node.node_type).is_some_and(|registered| {
+                    registered.structural_role()
+                        == Some(yss_node_registry::StructuralNodeRole::Call)
+                })
+            })
             .cloned()
             .map(|node| GraphDocumentOperation::RemoveNode { node }),
     );
@@ -239,12 +431,15 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
         .unwrap();
     state
         .rename_graph_resource(
+            &registry,
             &session.instance_id,
-            &source,
-            ResourceRevision::INITIAL,
-            "G",
-            100,
-            OperationId::new(),
+            GraphResourceRenameRequest {
+                graph_path: &source,
+                expected_revision: ResourceRevision::INITIAL,
+                new_name: "G",
+                lifecycle_token: 100,
+                operation_id: OperationId::new(),
+            },
         )
         .unwrap();
     let current = state
@@ -280,12 +475,15 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
     let third = GraphResourcePath::new("functions/H.yssbi-function").unwrap();
     state
         .rename_graph_resource(
+            &registry,
             &session.instance_id,
-            &target,
-            ResourceRevision::INITIAL.checked_next().unwrap(),
-            "H",
-            200,
-            OperationId::new(),
+            GraphResourceRenameRequest {
+                graph_path: &target,
+                expected_revision: ResourceRevision::INITIAL.checked_next().unwrap(),
+                new_name: "H",
+                lifecycle_token: 200,
+                operation_id: OperationId::new(),
+            },
         )
         .unwrap();
     let current = state

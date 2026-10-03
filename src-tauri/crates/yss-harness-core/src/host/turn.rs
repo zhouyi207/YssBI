@@ -8,8 +8,8 @@ use yss_harness_contract::{
     AgentDriverFailureCode, AgentEvent, AgentTurnResult, AutomationIdKind, CancellationReason,
     CancellationToken, CapabilityFailureCode, HarnessEvent, HarnessSessionId, HarnessSessionState,
     HarnessTurnId, HarnessTurnRecord, HarnessTurnState, MemoryAuthor, MemoryConfidence,
-    MemoryProposal, MemoryScope, MemorySourceRef, RetentionPolicy, SensitivityClass,
-    StructuredMemoryValue,
+    MemoryProposal, MemoryScope, MemorySourceRef, ProjectSessionBinding, RetentionPolicy,
+    SensitivityClass, StructuredMemoryValue,
 };
 
 const MAX_USER_MESSAGE_BYTES: usize = 64 * 1024;
@@ -19,17 +19,19 @@ impl HarnessHost {
     pub async fn submit_turn(
         &self,
         session_id: &HarnessSessionId,
+        expected_project: &ProjectSessionBinding,
         user_message: String,
         active_graph_path: Option<String>,
     ) -> Result<AgentTurnResult, HarnessError> {
         validate_user_message(&user_message)?;
+        let access = self.session_access().await;
         let mut session = self
             .ports
             .sessions
             .load_session(session_id)
             .await?
             .ok_or(HarnessError::SessionNotFound)?;
-        if session.state != HarnessSessionState::Active {
+        if session.state != HarnessSessionState::Active || &session.project != expected_project {
             return Err(HarnessError::SessionNotActive);
         }
         let (cancellation, _admission) = self.admit_turn(session_id)?;
@@ -46,6 +48,8 @@ impl HarnessHost {
             session.updated_at = self.ports.clock.now();
             self.ports.sessions.update_session(&session).await?;
         }
+        // Session writes share the selection gate; executing a turn must not hold it.
+        drop(access);
         let turn_id =
             HarnessTurnId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessTurn)?)?;
         let started_at = self.ports.clock.now();
@@ -223,11 +227,7 @@ impl HarnessHost {
     }
 
     pub fn cancel_turn(&self, session_id: &HarnessSessionId) -> bool {
-        self.active_turns
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .get(session_id)
-            .is_some_and(|token| token.cancel(CancellationReason::User))
+        self.cancel_active_turn(session_id, CancellationReason::User)
     }
 
     /// Startup-only recovery. Read-only invocations from the previous process cannot still run.
@@ -340,11 +340,14 @@ impl HarnessHost {
         session_id: &HarnessSessionId,
         reason: CancellationReason,
     ) -> bool {
-        self.active_turns
+        let token = self
+            .active_turns
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .get(session_id)
-            .is_some_and(|token| token.cancel(reason))
+            .cloned();
+        // Waking a waiter can synchronously reenter the Host.
+        token.is_some_and(|token| token.cancel(reason))
     }
 }
 

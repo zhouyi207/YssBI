@@ -195,7 +195,8 @@ impl GraphRuntimeState {
         self.epoch
     }
 
-    fn registry(&self) -> &NodeRegistry {
+    /// The frozen declarations shared with resource capture and project transactions.
+    pub fn registry(&self) -> &NodeRegistry {
         self.components.registry.as_ref()
     }
 
@@ -207,7 +208,7 @@ impl GraphRuntimeState {
         catalog: &CatalogMutationValidationSnapshot,
         resolve: impl FnOnce() -> GraphAnalysis,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
-        let analysis = (!mutation.referenced_ports().is_empty()).then(resolve);
+        let analysis = (!mutation.referenced_ports(document).is_empty()).then(resolve);
         self.plan_editor_mutation_with_analysis(
             graph_path,
             document,
@@ -227,7 +228,7 @@ impl GraphRuntimeState {
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let mut candidate = document.clone();
         let mut operations = Vec::new();
-        let referenced_ports = mutation.referenced_ports();
+        let referenced_ports = mutation.referenced_ports(document);
         for address in referenced_ports {
             let semantics = analysis
                 .expect("referenced ports require analysis")
@@ -350,7 +351,7 @@ impl GraphRuntimeState {
         locale: &str,
     ) -> GraphAnalysis {
         let analysis = self.analyze_neutral(graph_path, document, basis, resource_catalog);
-        self.localize_analysis(document, analysis, resources, locale)
+        self.localize_analysis(analysis, resources, locale)
     }
 
     fn analyze_neutral(
@@ -443,14 +444,12 @@ impl GraphRuntimeState {
 
     pub fn localize_analysis(
         &self,
-        document: &GraphDocument,
         analysis: GraphAnalysis,
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> GraphAnalysis {
         analysis.map_semantic_snapshot(|snapshot| {
             localize_semantic_snapshot(
-                document,
                 self.components.registry.as_ref(),
                 resources,
                 self.components.catalog.as_ref(),
@@ -593,7 +592,6 @@ fn graph_semantic_input_hash(
 }
 
 fn localize_semantic_snapshot(
-    document: &GraphDocument,
     registry: &NodeRegistry,
     resources: &[CatalogResourceEntry],
     catalog: &BuiltinCatalog,
@@ -614,19 +612,24 @@ fn localize_semantic_snapshot(
             return node_facts;
         };
         node_facts.title = catalog.text(locale, &protocol.catalog.title_key);
-        node_facts.instance_title = document
-            .nodes
-            .get(&node_facts.node_id)
-            .and_then(|node| {
-                node.parameters
-                    .values()
-                    .filter_map(|value| value.as_str())
-                    .find_map(|resource_path| {
-                        resource_names
-                            .get(&(node.node_type.as_str(), resource_path))
-                            .map(|name| Box::<str>::from(*name))
+        let resource = match &protocol.instance_display {
+            yss_node_protocol::NodeInstanceDisplaySpec::ResourceParameter { parameter, .. } => {
+                node_facts
+                    .parameters
+                    .iter()
+                    .find(|fact| &fact.key == parameter)
+                    .and_then(|fact| match &fact.effective_value {
+                        Some(yss_graph_analysis::GraphResolvedParameterValue::Resource(id)) => {
+                            Some(id.as_str())
+                        }
+                        _ => None,
                     })
-            })
+            }
+            yss_node_protocol::NodeInstanceDisplaySpec::Static => None,
+        };
+        node_facts.instance_title = resource
+            .and_then(|resource| resource_names.get(&(node_facts.node_type.as_str(), resource)))
+            .map(|name| Box::<str>::from(*name))
             .or(node_facts.instance_title);
 
         for parameter in &mut node_facts.parameters {
@@ -746,7 +749,6 @@ mod tests {
         use yss_data_contract::ValueType;
         use yss_graph_resource_contract::{
             FunctionCatalogEntry, FunctionParameterContract, FunctionSignature,
-            ResourceCatalogFingerprint,
         };
 
         let runtime =
@@ -795,7 +797,6 @@ mod tests {
                 )),
             )]),
             BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([8; 32]),
         );
 
         let graph = GraphResourcePath::new("events/Call.yssbi-event").unwrap();

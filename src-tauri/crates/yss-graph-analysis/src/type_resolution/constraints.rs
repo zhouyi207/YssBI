@@ -2,7 +2,20 @@
 //! temporary solver facts; final types, diagnostics and specialization stay in the
 //! normal forward resolution pass.
 
-use super::*;
+use super::domains::{
+    bind_pattern_generics, exact_type_expr, expand_pattern, state_from_candidates,
+    state_from_pattern,
+};
+use super::node_rules::{apply_node_rule, binary_predicate_result, declared_port};
+use crate::GraphNodeSemanticFact;
+use crate::parameter_projection::effective_text_parameter;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use yss_graph_document::{GraphDocument, NodeId, PortAddress};
+use yss_node_protocol::{
+    NodeTypingSpec, PortDirection, ResolvedType, TypeConflict, TypeExpr, TypeParameterId,
+    TypeState, TypeUnknownReason,
+};
+use yss_node_registry::NodeRegistry;
 
 type Domain = Option<BTreeSet<ResolvedType>>;
 
@@ -70,12 +83,16 @@ fn shape(value: &ResolvedType) -> u8 {
     }
 }
 
-pub(super) fn automatic_output_constraints(
+pub(crate) fn automatic_output_constraints(
     document: &GraphDocument,
     index: &super::super::document_index::DocumentIndex<'_>,
     registry: &NodeRegistry,
     nodes: &[GraphNodeSemanticFact],
+    previous: &BTreeMap<PortAddress, TypeState>,
 ) -> BTreeMap<PortAddress, TypeState> {
+    if index.topological_order().is_none() {
+        return BTreeMap::new();
+    }
     let automatic = document
         .nodes
         .values()
@@ -86,7 +103,7 @@ pub(super) fn automatic_output_constraints(
             else {
                 return None;
             };
-            (conversion_target(node, parameter, registry) == Some("auto"))
+            (effective_text_parameter(node, parameter, registry) == Some("auto"))
                 .then(|| PortAddress::declared(node.id, output.clone()))
         })
         .collect::<BTreeSet<_>>();
@@ -147,6 +164,11 @@ pub(super) fn automatic_output_constraints(
             }
             domains.insert(port.address.clone(), initial);
         }
+    }
+    // Schema refinement can reveal further type requirements. Keep every constraint
+    // already proven within this resolution so the joint pass only narrows domains.
+    for (address, value) in previous {
+        narrow(&mut domains, address, &domain(value));
     }
     let mut edges = BTreeMap::<PortAddress, Vec<PortAddress>>::new();
     for connection in document.connections.values() {
@@ -216,7 +238,7 @@ pub(super) fn automatic_output_constraints(
             &node.ports,
             &mut states,
             registry,
-            document,
+            node.constant.as_ref().map(|constant| &constant.data_type),
             &mut Vec::new(),
         );
         for port in node
@@ -349,12 +371,13 @@ pub(super) fn automatic_output_constraints(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::GraphSemanticCache;
     use yss_data_contract::{DataValue, SemanticType, ValueType};
     use yss_graph_document::{
         ConnectionId, ConstantId, DocumentConnection, DocumentNode, GraphConstant, NodePosition,
         ParameterValues,
     };
-    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+    use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
     fn node(document: &mut GraphDocument, kind: &str) -> NodeId {
         let id = NodeId::new();
@@ -422,11 +445,7 @@ mod tests {
         cache: &mut GraphSemanticCache,
     ) -> TypeState {
         let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
-        let resources = ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
-        );
+        let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
         let incremental = crate::resolve_graph_semantics_with_cache(
             document,
             &builtin.registry,

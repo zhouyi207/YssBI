@@ -49,11 +49,11 @@ pub fn hash_canonical<T: Serialize + ?Sized>(
     value: &T,
 ) -> Result<[u8; 32], CanonicalEncodingError> {
     let encoded = serde_json::to_vec(value).map_err(CanonicalEncodingError::from_serde)?;
-    let mut bytes = Vec::with_capacity(domain.len() + encoded.len() + size_of::<u64>());
-    bytes.extend_from_slice(&(domain.len() as u64).to_be_bytes());
-    bytes.extend_from_slice(domain.as_bytes());
-    bytes.extend_from_slice(&encoded);
-    Ok(Sha256::digest(&bytes).into())
+    let mut digest = Sha256::new();
+    digest.update((domain.len() as u64).to_be_bytes());
+    digest.update(domain.as_bytes());
+    digest.update(&encoded);
+    Ok(digest.finalize().into())
 }
 
 /// SHA-256 of an artifact's exact bytes, independent of JSON/domain encoding.

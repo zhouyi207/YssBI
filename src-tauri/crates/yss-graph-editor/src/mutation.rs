@@ -221,10 +221,15 @@ pub struct NodePositionMutation {
 }
 
 impl EditorGraphMutation {
-    pub fn referenced_ports(&self) -> Vec<&PortAddress> {
+    pub fn referenced_ports<'a>(&'a self, document: &'a GraphDocument) -> Vec<&'a PortAddress> {
         match self {
             Self::Connect { output, input, .. } => vec![output, input],
-            Self::MoveConnections { target, .. } => vec![target],
+            Self::MoveConnections { source, target } => vec![source, target],
+            Self::InsertReroute { connection_id, .. } => document
+                .connections
+                .get(connection_id)
+                .map(|connection| vec![&connection.output, &connection.input])
+                .unwrap_or_default(),
             Self::SetLiteral {
                 address,
                 literal: Some(_),

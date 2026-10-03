@@ -164,6 +164,7 @@ impl ApplicationState {
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured.project().duplicate_graph_resource(
+            captured.graph().registry(),
             &project_instance_id,
             &graph_path,
             expected_revision,
@@ -207,12 +208,15 @@ impl ApplicationState {
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured.project().rename_graph_resource(
+            captured.graph().registry(),
             &project_instance_id,
-            &graph_path,
-            expected_revision,
-            &new_name,
-            lifecycle_token,
-            operation_id,
+            yss_project::GraphResourceRenameRequest {
+                graph_path: &graph_path,
+                expected_revision,
+                new_name: &new_name,
+                lifecycle_token,
+                operation_id,
+            },
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
@@ -255,7 +259,12 @@ impl ApplicationState {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured
             .project()
-            .update_function_signature(&project_instance_id, &function_path, request)
+            .update_function_signature(
+                captured.graph().registry(),
+                &project_instance_id,
+                &function_path,
+                request,
+            )
             .map_err(ResourceMutationApplicationError::Resource)?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;

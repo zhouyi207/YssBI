@@ -635,6 +635,92 @@ mod tests {
     }
 
     #[test]
+    fn save_as_copies_current_authored_documents_without_saving_the_source() {
+        let fixture =
+            crate::fixtures::TempProject::activate("authored-save-as", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let project = &session.instance_id;
+        let created_doc = apply(
+            state,
+            project,
+            FileCommand::<DocDocument>::Create {
+                name: "Report".into(),
+            },
+        );
+        let doc = apply(
+            state,
+            project,
+            FileCommand::Edit {
+                path: created_doc.path,
+                version: created_doc.version,
+                edits: vec![DocEdit::SetMarkdown {
+                    markdown: "# Current draft\n\n未保存正文".into(),
+                }],
+            },
+        );
+        let created_mind = apply(
+            state,
+            project,
+            FileCommand::<MindDocument>::Create {
+                name: "Plan".into(),
+            },
+        );
+        let mind = apply(
+            state,
+            project,
+            FileCommand::Edit {
+                path: created_mind.path,
+                version: created_mind.version,
+                edits: vec![MindEdit::SetContent {
+                    node_id: created_mind.content.root_id,
+                    content: "Current unsaved plan".into(),
+                }],
+            },
+        );
+        assert!(doc.dirty && mind.dirty);
+        let source_doc_path = session.root.as_path().join(doc.path.as_str());
+        let source_mind_path = session.root.as_path().join(mind.path.as_str());
+        let source_doc_bytes = std::fs::read(&source_doc_path).unwrap();
+        let source_mind_bytes = std::fs::read(&source_mind_path).unwrap();
+        let destination = session.root.as_path().with_extension("copy");
+        let prepared = state
+            .save_project_as_transaction(project, &destination, OperationId::new())
+            .unwrap();
+        let source_doc = state.read_doc(project, &doc.path).unwrap();
+        let source_mind = state.read_mind(project, &mind.path).unwrap();
+        let unchanged_source_files = source_doc_bytes == std::fs::read(&source_doc_path).unwrap()
+            && source_mind_bytes == std::fs::read(&source_mind_path).unwrap();
+        let target_doc =
+            DocDocument::decode(&std::fs::read(destination.join(doc.path.as_str())).unwrap())
+                .unwrap();
+        let target_mind =
+            MindDocument::decode(&std::fs::read(destination.join(mind.path.as_str())).unwrap())
+                .unwrap();
+        let activated = state
+            .activate_prepared_project(prepared.prepared_activation)
+            .unwrap();
+        let reopened_doc = state.read_doc(&activated.instance_id, &doc.path).unwrap();
+        let reopened_mind = state.read_mind(&activated.instance_id, &mind.path).unwrap();
+        drop(fixture);
+        std::fs::remove_dir_all(destination).unwrap();
+
+        assert!(unchanged_source_files);
+        assert_eq!(source_doc.version, doc.version);
+        assert_eq!(source_mind.version, mind.version);
+        assert!(source_doc.dirty && source_mind.dirty);
+        assert_eq!(source_doc.content, doc.content);
+        assert_eq!(source_mind.content, mind.content);
+        assert!(
+            target_doc == doc.content && target_mind == mind.content,
+            "Save As must copy both current bodies: target doc={target_doc:?}, target mind={target_mind:?}"
+        );
+        assert_eq!(reopened_doc.content, doc.content);
+        assert_eq!(reopened_mind.content, mind.content);
+        assert!(!reopened_doc.dirty && !reopened_mind.dirty);
+    }
+
+    #[test]
     fn authored_document_lifecycle_preserves_unsaved_content_and_rejects_stale_edits() {
         let fixture =
             crate::fixtures::TempProject::activate("authored-lifecycle", ProjectData::new());

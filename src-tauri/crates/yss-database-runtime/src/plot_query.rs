@@ -9,7 +9,7 @@ use crate::runtime::DatabaseRuntimeSession;
 use crate::session_api::{self, DatabaseQueryBasis};
 use yss_data_contract::SemanticType;
 use yss_data_contract::TabularColumnName;
-use yss_database_contract::DatabaseId;
+use yss_database_contract::{DatabaseDeclarationRevision, DatabaseId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {
@@ -96,12 +96,21 @@ impl DatabasePlotQueryError {
 pub fn read_numeric_column_pair(
     session: &DatabaseRuntimeSession,
     database: &DatabaseId,
+    expected_revision: DatabaseDeclarationRevision,
     x_column: &TabularColumnName,
     y_column: &TabularColumnName,
 ) -> Result<NumericColumnPair, DatabasePlotQueryError> {
     let basis = session
         .capture_query_basis(database)
         .map_err(|error| map_database_error(error, database, None, ErrorContext::Capture))?;
+    if basis.declaration_revision() != expected_revision {
+        return Err(map_database_error(
+            DatabaseError::conflict(DatabaseOperation::Query, Some(database.clone())),
+            database,
+            None,
+            ErrorContext::Capture,
+        ));
+    }
     let _admission = session
         .admit_operation(DatabaseOperation::Query)
         .map_err(|error| map_database_error(error, database, None, ErrorContext::Read))?;
@@ -134,11 +143,13 @@ pub fn read_numeric_column_pair(
                 )
             })
     };
+    let same_column = x_column == y_column;
     let x_kind = kind(x_column)?;
-    let y_kind = kind(y_column)?;
+    let y_kind = if same_column { x_kind } else { kind(y_column)? };
+    let columns = [x_column.as_str(), y_column.as_str()];
     let batches = instance
         .read_arrow_columns(
-            &[x_column.as_str(), y_column.as_str()],
+            &columns[..if same_column { 1 } else { 2 }],
             0,
             usize::MAX,
             &crate::database_instance::query_control(128 * 1024 * 1024),
@@ -153,8 +164,7 @@ pub fn read_numeric_column_pair(
     let mut x = Vec::new();
     let mut y = Vec::new();
     for batch in batches {
-        for (index, output) in [(0, &mut x), (1, &mut y)] {
-            let column = batch.column(index);
+        for (column, output) in batch.columns().iter().zip([&mut x, &mut y]) {
             let physical = match column.data_type() {
                 ArrowDataType::Timestamp(..) => {
                     yss_database_arrow::timezone_free_array(column.as_ref())
@@ -213,13 +223,19 @@ pub fn read_numeric_column_pair(
     }
     session_api::revalidate_query_basis(session, &basis)
         .map_err(|error| map_database_error(error, database, None, ErrorContext::Revalidate))?;
+    let x: Arc<[Option<f64>]> = x.into();
+    let y = if same_column {
+        Arc::clone(&x)
+    } else {
+        y.into()
+    };
     Ok(NumericColumnPair {
         basis: PlotQueryBasis {
             query: basis,
             database: database.clone(),
         },
-        x: x.into(),
-        y: y.into(),
+        x,
+        y,
         x_label: Some(x_column.as_str().into()),
         y_label: Some(y_column.as_str().into()),
         x_kind,
@@ -323,8 +339,12 @@ mod tests {
         let batch = RecordBatch::try_new(
             schema,
             vec![
-                Arc::new(Date32Array::from(vec![1, 2])),
-                Arc::new(TimestampMicrosecondArray::from(vec![1000, 2000])),
+                Arc::new(Date32Array::from(vec![Some(1), None, Some(2)])),
+                Arc::new(TimestampMicrosecondArray::from(vec![
+                    Some(1000),
+                    Some(2000),
+                    None,
+                ])),
             ],
         )
         .unwrap();
@@ -360,13 +380,41 @@ mod tests {
             TabularColumnName::try_from("observed_date").expect("test column name is valid");
         let datetime_column =
             TabularColumnName::try_from("observed_at").expect("test column name is valid");
-        let pair = read_numeric_column_pair(&session, &database, &date_column, &datetime_column)
-            .expect("Arrow temporal columns materialize");
+        let pair = read_numeric_column_pair(
+            &session,
+            &database,
+            DatabaseDeclarationRevision::from_existing(1),
+            &date_column,
+            &datetime_column,
+        )
+        .expect("Arrow temporal columns materialize");
         assert_eq!(pair.x_label(), Some("observed_date"));
         assert_eq!(pair.y_label(), Some("observed_at"));
         assert_eq!(pair.x_kind(), NumericColumnKind::Date);
         assert_eq!(pair.y_kind(), NumericColumnKind::Datetime);
-        assert_eq!(pair.x(), &[Some(1.0), Some(2.0)]);
-        assert_eq!(pair.y(), &[Some(1_000.0), Some(2_000.0)]);
+        assert_eq!(pair.x(), &[Some(1.0), None, Some(2.0)]);
+        assert_eq!(pair.y(), &[Some(1_000.0), Some(2_000.0), None]);
+    }
+
+    #[test]
+    fn same_column_axes_preserve_temporal_values_and_null_positions() {
+        let (_fixture, session) = session_with_temporal_data("same-column-plot-session");
+        let column = TabularColumnName::try_from("observed_at").unwrap();
+        let pair = read_numeric_column_pair(
+            &session,
+            &DatabaseId::from_existing(SALES_ID.into()),
+            DatabaseDeclarationRevision::from_existing(1),
+            &column,
+            &column,
+        )
+        .expect("one column can supply both plot axes");
+
+        assert_eq!(pair.x(), &[Some(1_000.0), Some(2_000.0), None]);
+        assert_eq!(pair.y(), pair.x());
+        assert_eq!(pair.x_label(), Some("observed_at"));
+        assert_eq!(pair.y_label(), pair.x_label());
+        assert_eq!(pair.x_kind(), NumericColumnKind::Datetime);
+        assert_eq!(pair.y_kind(), pair.x_kind());
+        revalidate_numeric_column_pair(&session, &pair).unwrap();
     }
 }

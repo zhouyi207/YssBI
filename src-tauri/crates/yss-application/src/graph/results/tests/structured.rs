@@ -17,7 +17,7 @@ use yss_graph_execution::{
     result::ResultReference,
     state::{ExecutionResultRequest, RunExecutionControl},
 };
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
     let app = ApplicationState::initialize().unwrap();
@@ -116,11 +116,7 @@ fn poisson(rows: usize) -> (ApplicationState, ResultReference) {
     let captured = app.capture_session().unwrap();
     let runtime = captured.execution();
     let graph = GraphResourcePath::new("events/poisson.yssbi-event").unwrap();
-    let resources = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = captured.graph().resolve_graph_document(
         &graph,
         &document,

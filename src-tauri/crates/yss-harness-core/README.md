@@ -82,6 +82,8 @@ Manager 为 ReportAgent 提供 Doc 创建或编辑/保存授权、完整资源�
 同一 turn 内的后续提交改变已有任务输入时，Core 标记该任务及其依赖链为 stale，并把
 `invalidatedRuns` 返回 Manager。依赖未完成或已过期的任务不能启动；输入版本变化在模型
 启动前形成 blocked 结果。Manager 应重新安排受影响的分析、图表和报告。
+等待执行门后重新核对依赖，过期则形成 blocked 结果；原读写门保持到失效标记、终态事件和
+任务结果登记完成，后继任务不会读取已经释放执行门但尚未结算的依赖状态。
 
 取消向所有已准入 Worker 传播并等待业务操作收尾。启动恢复将未结束的 runs 记为
 interrupted，保留已经提交的工具证据，不自动重做可能已提交的操作。前端从相同事件流恢复
@@ -128,6 +130,8 @@ Harness 只保存业务资源的 opaque references、project/session binding、c
 ## 3. Stable contracts and ports
 
 `yss-harness-contract` 是 Pure Leaf，拥有 Harness、Application Gateway、Rig 和 MCP adapter 共享的 stable typed contracts：identities、project binding、capability request/result、tool descriptor、workflow records、approval、memory、knowledge citation、event、cancellation/deadline 和 structured failure。
+
+Contract 的不透明字符串身份共用 `context.rs` 的内部构造与反序列化规则：去除空白后不能为空，UTF-8 编码不超过 128 字节；保留原始字符串，不在读取时归一化。各身份仍为独立类型。
 
 Harness 只通过 constructor-injected ports 使用外部能力：
 
@@ -192,6 +196,8 @@ Model-facing schema 来自 typed capability contract；Harness 内部不以任�
 `inspect_resource` 返回 `ResourceVersion`，保留文档编辑会话和资源 revision。写入拒绝过期版本；
 函数签名另有自己的 revision，回执用 `revisionKind` 区分，不能拿签名版本代替图资源版本。
 图表基于读取版本的修改在 Project writer 内重验，GUI 独立 Save 保留原来的覆盖语义。
+Harness 的 `ChartSettings` 复用 `yss-chart-document::ChartType`；工具 schema 和文档序列化共享
+同一个 histogram/scatter/line 枚举，资源适配器直接传递该类型，不另设图表类型定义或字符串映射。
 
 Mind 添加主题由宿主分配真实 ID，批次内可用 `$clientId` 引用；非法树操作整批不提交。
 Markdown 的分页和范围修改按 Unicode 字符计数，允许修改已读片段并保留未读取正文。
@@ -247,13 +253,15 @@ Application 复用打开图时的基线和编辑流程的最终解析投影，�
 
 GraphPortInspection 的 declared/instance 字段统一使用 camelCase，序列化、会话持久化读取与 capability schema 使用同一契约，不接受 snake_case 别名。
 
-SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护迁移版本字段。空数据库在事务中创建全部当前表；已有数据库的 DDL 必须与 adapter 拥有的 schema 一致，JSON 列由 `json_valid` 约束保护，读取再使用当前类型校验。不兼容结构返回 `InvalidRecord`，保留原表与记录，不自动重建。桌面启动错误保留 Harness 初始化阶段和持久化错误码，便于区分结构不兼容与数据库不可用。需要重新初始化时，应先备份并移走应用数据目录下的 `db/statistical-harness.sqlite` 及其 SQLite sidecar 文件，再启动应用；此操作不由初始化代码自动执行。当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
+SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护迁移版本字段。数据库文件通过 SQLx 的原生路径入口打开，目录名中的 `%20` 等字面字符不做 URL 解码，也不经有损字符串转换。空数据库在事务中创建全部当前表；已有数据库的 DDL 必须与 adapter 拥有的 schema 一致，JSON 列由 `json_valid` 约束保护，读取再使用当前类型校验。不兼容结构返回 `InvalidRecord`，保留原表与记录，不自动重建。桌面启动错误保留 Harness 初始化阶段和持久化错误码，便于区分结构不兼容与数据库不可用。需要重新初始化时，应先备份并移走应用数据目录下的 `db/statistical-harness.sqlite` 及其 SQLite sidecar 文件，再启动应用；此操作不由初始化代码自动执行。当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
 
 节点搜索对 node ID、标题、别名、技术词及资源名分词排序，完整匹配优先，混合语言短语允许部分词命中。profile 的 null 指标表示未计算；复杂常量只暴露类型和 metadata，不复制 tabular 数据。已有图的校验和运行不要求重新设计统计方案。
 
 ## 5. Session, turn, and events
 
 一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；底层 workflow/session 调用可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel 和 project/session currentness 由 Rust 控制。Session 状态为 `Active` 或 `Stale`：项目绑定失效时标记 `Stale`、取消正在运行的 turn 并使 Session Memory 失效；重新打开对话时验证归属并恢复为 `Active`。Session store 的 `load_active_sessions` 只返回当前有效的绑定。
+
+Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 写入；Application 持门重验其捕获的项目，门本身不保存当前绑定。普通 session 创建和首次消息的标题写回也使用同一门；submit 在门内读取 session 并核对调用方捕获的项目绑定，失效则返回既有 `SessionNotActive`。会话读取、turn 准入和标题写入后释放门，再创建 turn 和执行模型，因此项目切换仍可取消正在执行的 turn。
 
 对话及其完整事件/工具账本继续保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。界面按当前用户和项目查询对话列表，优先恢复最近打开的一项；可新建和切换多个对话。切换后从 sequence 0 重放目标对话，旧订阅和迟到回调不能混入新对话；未发送草稿只在当前挂载界面内按对话分开保存。生成回答期间先停止或等待结束再切换。
 
@@ -283,7 +291,9 @@ Host 只发布成功提交的 envelope，不维护第二份序号计数器；本
 
 terminal event 和 persisted terminal state 都由 Harness 产生。取消会封锁或忽略 late model/tool output；frontend stop action 不能把已经完成的业务 commit 改写为“取消成功”。
 
-模型取消或超时后，Rig 停止模型请求并等待已准入工具完成 ledger/终态事件收尾，然后 Harness 结束 turn。共享 cancellation token 支持多个等待者。启动恢复结束遗留 running invocation/turn；中断的 mutation 使用 `outcome_unknown`，不推断已经回滚。已持久化的真实 receipt 保留；内存编辑回执随 Project 编辑会话释放，进程崩溃后不能从当前图内容猜测旧工具是否提交。完整跨进程 commit reconciliation 仍属于 roadmap。
+Host 在 active-turn 锁内捕获当前 turn 的 cancellation token，释放锁后执行取消并唤醒等待者，允许同步 wake 回调再次进入 Host。取消只作用于捕获的 token，不影响同一 session 后续准入的 turn。返回值表示本次请求是否首次取消该 token，不表示业务已经停止；首个原因由 token 的 CAS 决定，并发请求不承诺按取得 active-turn 锁的顺序获胜。
+
+模型取消或超时后，Rig 停止模型请求并等待已准入工具完成 ledger/终态事件收尾，然后 Harness 结束 turn。共享 cancellation token 支持多个等待者；future 注册前后检查取消原因，waker 的克隆、释放与唤醒均在 waiters 锁外进行。启动恢复结束遗留 running invocation/turn；中断的 mutation 使用 `outcome_unknown`，不推断已经回滚。已持久化的真实 receipt 保留；内存编辑回执随 Project 编辑会话释放，进程崩溃后不能从当前图内容猜测旧工具是否提交。完整跨进程 commit reconciliation 仍属于 roadmap。
 
 ## 6. Workflow and statistical plan
 
@@ -349,9 +359,22 @@ Provider 连接时限由 adapter 管理；模型调用次数、输出上限和�
 
 `yss-application::ipc` 当前暴露 Harness provider configuration、按项目列举、新建及重新打开 session、event subscribe/unsubscribe、turn submit/cancel 和 memory list/delete。Provider 配置回执返回当前配置状态。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准，不在本文复制。
 
-有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。`src/features/application/assistant/assistantHarnessRuntime.ts` 维护可重建的 projection、last sequence 和 reconnect；assistant-ui ExternalStore 只渲染 messages、plan、tool cards、memory 和 composer actions。
+有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。
+前端 `src/features/application/assistant/assistantHarnessSession.ts` 协调会话、配置请求与重连，并通过内部
+Zustand store 一次发布被接纳的事件。`assistantHarnessProjection.ts` 归约消息、工具、引用、计划和记忆；
+消息内容是呈现事实的唯一来源，不另外保留按 turn 索引的可写工具、引用或计划副本。
+`assistantHarnessRuntime.ts` 只负责 React 生命周期与 assistant-ui ExternalStore 适配。
+自有 Context 传稳定的只读订阅接口和动作；工具栏选择状态、会话、记忆及消息是否为空，
+不因正文的每个 text delta 更新。工具分组通过 assistant-ui 的选择订阅只读取自身范围的调用数、
+运行数、异常数和首个活动工具名，浅比较复用未变摘要，不订阅整段消息内容。正文继续由 assistant-ui 的消息订阅呈现。
 
 Provider 初始化和设置变更统一由 Assistant 的 300ms 防抖 effect 配置，事件订阅建立前不开放发送。每次设置变化立即使旧配置回执失效；成功和失败回执都必须匹配当前 projection generation 和配置请求序号，迟到回执不能覆盖较新状态。
+
+会话初始化先读取并安装记忆快照，再从序号 0 重放持久事件，避免较早的快照回复覆盖已收到的删除/更新或重连状态。
+两步都核对原会话 generation。替换订阅必须保持连续；重放期间再次缺号或解析失败使该订阅失效并进入错误状态，
+不把尚有缺口的投影标成就绪，也不无限启动重连。发送准入同时要求当前订阅仍被会话 owner 持有；显式重载继续使用原初始化入口。
+Service 清理后忽略迟到的 Channel 回调；订阅应答前若已被 HMR 释放，收到远端 ID 后完成退订并拒绝该应答，
+不向 Application 返回已关闭的句柄。HMR 与显式释放共用同一个退订入口，最多提交一次远端释放。
 
 当前请求的具体错误始终在 Assistant 状态区显示，即使会话仍可继续发送；不能因消息已经标记为中断而隐藏 provider 拒绝、认证、限流等原因。消息内的中断提示用于说明已完成操作仍然有效。
 
@@ -373,6 +396,10 @@ Assistant 面板使用 assistant-ui 的 Thread Viewport 管理流式滚动和回
 Assistant Markdown 与文档预览共用 `src/shared/ui/markdownRendering.tsx` 的 GFM、公式布局、表格容器和延迟加载的 Shiki，使用 Typography 的紧凑字号层级及工作台主题变量。表格按内容自适应并居中，宽表格、代码和独立公式在内容区内横向滚动。`$...$` 保持行内，`$$...$$` 无论同一行或分行书写均独立居中，含公式的段落与单元格保留合适行高。Assistant 继续使用 `normalizeMathDelimiters` 处理模型的 LaTeX 替代分隔符，并保留 smooth/defer 流式显示、代码复制和外链打开处理。
 
 桌面排版验收覆盖窄面板中的表格与长公式、行内分式、流式代码块完成前后及未知代码语言；切换浅色、深色和 OLED 主题检查正文与代码颜色，并确认代码复制和外链打开行为。
+
+链接复用共享 `MarkdownLink` 的地址解析、片段定位和点击/中键处理，Assistant 通过现有
+`MarkdownLinkContext` 提供稳定的系统浏览器打开动作及原失败弹窗。该上下文只传链接动作，
+不承载消息；Workbench 的文档参考页打开策略仍由其自身组合入口提供。
 
 事件 `type` 使用 snake_case，envelope 和 payload 的字段使用 camelCase。Rust 序列化和 TypeScript 解析共用代表性事件夹具，避免两端各自使用不同的手工样本。
 Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片从携带真实 invocation ID 的 `ToolInvocationStarted` 创建，并按同一 ID 更新完成、失败、取消、超时或中断状态；不生成待替换的工具占位身份。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载使旧回调失效并释放订阅；已创建的对话继续持久化，供重新打开。

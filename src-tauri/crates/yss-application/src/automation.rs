@@ -279,16 +279,13 @@ fn inspect_dataset_schema(
     captured: &ApplicationSession,
     request: InspectDatasetSchemaRequest,
 ) -> Result<DatasetSchemaInspection, CapabilityFailure> {
-    let project = captured.project().get_data().map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
-            .with_detail("databaseId", &request.database_id)
-    })?;
-    if !project.databases.contains_key(request.database_id.as_str()) {
-        return Err(
+    captured
+        .project()
+        .read_database_declaration(captured.project_instance_id(), &request.database_id)
+        .map_err(|_| {
             CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
-                .with_detail("databaseId", &request.database_id),
-        );
-    }
+                .with_detail("databaseId", &request.database_id)
+        })?;
 
     let catalog = catalog_snapshot(captured.database()).map_err(|_| {
         CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
@@ -331,16 +328,13 @@ fn inspect_dataset_profile(
     request: InspectDatasetProfileRequest,
     control: &CapabilityControl,
 ) -> Result<DatasetProfileInspection, CapabilityFailure> {
-    let project = captured.project().get_data().map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
-            .with_detail("databaseId", &request.database_id)
-    })?;
-    if !project.databases.contains_key(request.database_id.as_str()) {
-        return Err(
+    captured
+        .project()
+        .read_database_declaration(captured.project_instance_id(), &request.database_id)
+        .map_err(|_| {
             CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
-                .with_detail("databaseId", &request.database_id),
-        );
-    }
+                .with_detail("databaseId", &request.database_id)
+        })?;
     let catalog = catalog_snapshot(captured.database()).map_err(|_| {
         CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
             .with_detail("databaseId", &request.database_id)
@@ -362,10 +356,7 @@ fn inspect_dataset_profile(
             max_input_bytes: 16 * 1024 * 1024,
         },
     )
-    .map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
-            .with_detail("databaseId", &request.database_id)
-    })?;
+    .map_err(|error| map_dataset_profile_error(error, &request.database_id))?;
     control.check()?;
     let inspection = DatasetProfileInspection {
         database_id: request.database_id.clone(),
@@ -390,6 +381,20 @@ fn inspect_dataset_profile(
             .with_detail("databaseId", &request.database_id)
     })?;
     Ok(inspection)
+}
+
+fn map_dataset_profile_error(
+    error: yss_database_runtime::error::DatabaseError,
+    database_id: &str,
+) -> CapabilityFailure {
+    use yss_database_runtime::error::DatabaseErrorCode;
+
+    let code = match error.code() {
+        DatabaseErrorCode::Cancelled => CapabilityFailureCode::Cancelled,
+        DatabaseErrorCode::Deadline => CapabilityFailureCode::DeadlineElapsed,
+        _ => CapabilityFailureCode::DatabaseUnavailable,
+    };
+    CapabilityFailure::new(code).with_detail("databaseId", database_id)
 }
 
 fn inspect_result(
@@ -446,7 +451,7 @@ fn inspect_result(
                         max_input_bytes: 1024 * 1024,
                     },
                 )
-                .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
+                .map_err(map_result_query_error)?
                 .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
         )
     } else {
@@ -485,6 +490,23 @@ fn inspect_result(
         result_id: request.result_id,
         category: inspect_result_category(result.value().category()),
         value,
+    })
+}
+
+fn map_result_query_error(
+    error: crate::graph::results::ResultQueryApplicationError,
+) -> CapabilityFailure {
+    use crate::graph::results::ResultQueryApplicationError;
+    use yss_relational_contract::RelationError;
+
+    CapabilityFailure::new(match error {
+        ResultQueryApplicationError::Relation(RelationError::Cancelled) => {
+            CapabilityFailureCode::Cancelled
+        }
+        ResultQueryApplicationError::Relation(RelationError::DeadlineExceeded) => {
+            CapabilityFailureCode::DeadlineElapsed
+        }
+        _ => CapabilityFailureCode::ResultUnavailable,
     })
 }
 
@@ -663,6 +685,40 @@ mod tests {
     }
 
     #[test]
+    fn dataset_profile_preserves_typed_query_interruptions() {
+        use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
+        use yss_database_store::DatasetStoreError;
+        use yss_relational_contract::RelationError;
+
+        for (source, expected) in [
+            (RelationError::Cancelled, CapabilityFailureCode::Cancelled),
+            (
+                RelationError::DeadlineExceeded,
+                CapabilityFailureCode::DeadlineElapsed,
+            ),
+            (
+                RelationError::QueryFailed,
+                CapabilityFailureCode::DatabaseUnavailable,
+            ),
+        ] {
+            let error = DatabaseError::dataset(
+                DatabaseOperation::Query,
+                Some(DatabaseId::from_existing("database-1".into())),
+                DatasetStoreError::Query(source),
+            );
+            let failure = map_dataset_profile_error(error, "database-1");
+            assert_eq!(failure.code, expected);
+            assert_eq!(failure.details["databaseId"], "database-1");
+            let wire = serde_json::to_value(&failure).unwrap();
+            assert_eq!(wire["code"], serde_json::to_value(expected).unwrap());
+            assert_eq!(
+                wire["details"],
+                serde_json::json!({"databaseId": "database-1"})
+            );
+        }
+    }
+
+    #[test]
     fn result_json_preserves_long_text_deep_objects_and_complete_arrays() {
         let text = "x".repeat(2_000_000);
         let mut value = RuntimeValue::Record(std::sync::Arc::new(
@@ -828,6 +884,38 @@ mod tests {
             AutomationCapabilityResult::ResultInspection(page)
                 .validate_budget(1)
                 .is_err()
+        );
+        let cancelled = CapabilityControl::new(
+            yss_harness_contract::CancellationToken::default(),
+            std::time::Duration::from_secs(10),
+        );
+        cancelled.cancel_query();
+        let expired = CapabilityControl::new(
+            yss_harness_contract::CancellationToken::default(),
+            std::time::Duration::ZERO,
+        );
+        let failures = [cancelled, expired].map(|control| {
+            inspect_result(
+                &application,
+                &captured,
+                InspectResultRequest {
+                    execution_session_id: reference.execution_session_id.as_uuid().to_string(),
+                    result_id: series.provenance().result_id().get(),
+                    part: None,
+                    offset: 5,
+                    limit: 7,
+                },
+                &control,
+            )
+            .unwrap_err()
+            .code
+        });
+        assert_eq!(
+            failures,
+            [
+                CapabilityFailureCode::Cancelled,
+                CapabilityFailureCode::DeadlineElapsed,
+            ]
         );
     }
 

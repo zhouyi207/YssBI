@@ -17,6 +17,7 @@ use schema::SCHEMA;
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use std::path::{Path, PathBuf};
+#[cfg(any(test, feature = "test-support"))]
 use std::str::FromStr;
 use yss_harness_contract::PersistenceFailure;
 
@@ -31,9 +32,8 @@ impl SqliteHarnessStore {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|_| unavailable())?;
         }
-        let url = sqlite_url(&path);
-        let options = SqliteConnectOptions::from_str(&url)
-            .map_err(|_| unavailable())?
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
             .create_if_missing(true)
             .foreign_keys(true)
             .journal_mode(SqliteJournalMode::Wal)
@@ -96,9 +96,6 @@ impl SqliteHarnessStore {
     }
 }
 
-fn sqlite_url(path: &Path) -> String {
-    format!("sqlite://{}", path.to_string_lossy().replace('\\', "/"))
-}
 #[cfg(test)]
 mod concurrency_tests;
 #[cfg(test)]

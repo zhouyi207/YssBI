@@ -1,6 +1,6 @@
 //! Build execution plans from the editor's resolved graph facts.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use yss_data_contract::DataValue;
@@ -153,13 +153,12 @@ fn build_template(
         let mut handles = BTreeMap::new();
         if let Some(constant) = &node.constant {
             let handle = parameter_handle(format!("constant/{}", constant.id));
-            parameters.insert(
-                handle.clone(),
-                PlanParameterPayload::new(
+            if let Entry::Vacant(entry) = parameters.entry(handle.clone()) {
+                entry.insert(PlanParameterPayload::new(
                     parameter_schema("graph.constant".into()),
                     PlanParameterValue::Literal(Arc::new(constant_runtime_value(constant)?)),
-                ),
-            );
+                ));
+            }
             handles.insert(KernelParameterKey::from_existing("value".into()), handle);
         } else {
             for parameter in &node.parameters {

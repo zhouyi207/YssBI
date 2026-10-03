@@ -166,6 +166,7 @@ impl From<ResultAnalysisProjection> for ResultAnalysisResponseDto {
                 acf: value.acf,
                 pacf: value.pacf,
                 n: value.n,
+                ci_half_width: value.ci_half_width,
             }),
             ResultAnalysisProjection::SerialTests(value) => {
                 Self::SerialTests(SerialTestsResponseDto {
@@ -188,7 +189,7 @@ impl From<ResultAnalysisProjection> for ResultAnalysisResponseDto {
 }
 
 pub fn graph_result_state_to_dto(
-    projection: crate::graph::results::GraphResultState,
+    projection: &crate::graph::results::GraphResultState,
 ) -> Result<yss_ipc_contract::execution::GraphResultStateDto, CommandError> {
     use crate::ipc::channel::execution::{output_dto, port_address_dto};
     use yss_graph_execution::result::{ConnectionCacheState, ResultCacheState};
@@ -257,6 +258,25 @@ pub fn graph_result_state_to_dto(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn acf_pacf_wire_preserves_the_computed_confidence_band() {
+        let response = ResultAnalysisResponseDto::from(ResultAnalysisProjection::AcfPacf(
+            yss_sci_contract::time_series::acf_pacf::AcfPacfResult {
+                acf: vec![1.0, 0.5],
+                pacf: vec![0.5],
+                n: 16,
+                ci_half_width: 0.123,
+            },
+        ));
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            serde_json::json!({
+                "kind": "acfPacf",
+                "value": { "acf": [1.0, 0.5], "pacf": [0.5], "n": 16, "ciHalfWidth": 0.123 },
+            }),
+        );
+    }
 
     #[test]
     fn summary_analysis_requests_only_select_a_computed_result() {
@@ -342,7 +362,7 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(
-            serde_json::to_value(graph_result_state_to_dto(state).unwrap()).unwrap(),
+            serde_json::to_value(graph_result_state_to_dto(&state).unwrap()).unwrap(),
             fixture["graphResultState"]
         );
     }

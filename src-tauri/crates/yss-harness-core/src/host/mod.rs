@@ -15,12 +15,14 @@ mod session;
 mod turn;
 mod workflow;
 
+pub use session::HarnessSessionAccess;
 use workflow::WorkflowControl;
 
 pub struct HarnessHost {
     ports: HarnessPorts,
     report_writing_skill: SkillPackage,
     active_turns: Arc<Mutex<BTreeMap<HarnessSessionId, CancellationToken>>>,
+    session_access: tokio::sync::Mutex<()>,
     event_publication: Arc<tokio::sync::Mutex<()>>,
     workflow_controls: Mutex<BTreeMap<WorkflowRunId, Weak<WorkflowControl>>>,
     agent_access: Arc<tokio::sync::RwLock<()>>,
@@ -42,6 +44,7 @@ impl HarnessHost {
             ports,
             report_writing_skill,
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
+            session_access: tokio::sync::Mutex::new(()),
             event_publication: Arc::new(tokio::sync::Mutex::new(())),
             workflow_controls: Mutex::new(BTreeMap::new()),
             agent_access: Arc::new(tokio::sync::RwLock::new(())),

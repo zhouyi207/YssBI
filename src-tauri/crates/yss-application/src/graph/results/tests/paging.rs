@@ -15,7 +15,7 @@ use yss_graph_execution::plan::{
 use yss_graph_execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
 use yss_graph_execution::state::RunExecutionControl;
 use yss_graph_resource_contract::{
-    ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot,
+    ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogSnapshot,
 };
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{
@@ -211,7 +211,6 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
                     }],
                 },
             )]),
-            ResourceCatalogFingerprint::from_bytes([0; 32]),
         );
         let analysis = captured.graph().resolve_graph_document(
             &graph,

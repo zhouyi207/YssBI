@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use yss_application::database::{DatabaseMutation, DatabaseRowsResult};
 use yss_application::session::{ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState};
+use yss_data_contract::{ColumnSemantic, SemanticType};
 use yss_database_contract::DatabaseImportSource;
 
 use yss_project::ProjectState;
@@ -105,6 +106,7 @@ impl Project {
                     .project_instance_id()
                     .clone(),
                 id.into(),
+                self.revision(id),
                 offset,
                 limit,
             )
@@ -228,7 +230,8 @@ fn invalid_edit_targets_and_integer_overflow_leave_data_and_history_unchanged() 
                     .unwrap()
                     .project_instance_id()
                     .clone(),
-                id
+                id.clone(),
+                project.revision(&id),
             )
             .unwrap()
             .can_undo
@@ -320,6 +323,28 @@ fn literal_names_and_force_cast_have_reversible_values() {
         serde_json::json!("O'Reilly\\path")
     );
     project.edit(&id, DatabaseMutation::Undo).unwrap();
+    // Force handles invalid values, but cannot turn a Text semantic into an integer.
+    assert!(
+        project
+            .edit(
+                &id,
+                DatabaseMutation::CastColumn {
+                    column: column.into(),
+                    dtype: "Int64".into(),
+                    force: true,
+                }
+            )
+            .is_err()
+    );
+    project
+        .edit(
+            &id,
+            DatabaseMutation::SetColumnSemantic {
+                column: column.into(),
+                semantic: ColumnSemantic::new(SemanticType::Identifier),
+            },
+        )
+        .unwrap();
     assert!(
         project
             .edit(
@@ -418,18 +443,16 @@ fn row_history_save_and_multiple_dataset_reopen_keep_names_and_contents() {
         .read_project_index(capture.project_instance_id())
         .unwrap();
     assert_eq!(index.databases.len(), 2);
-    assert_eq!(
-        index
-            .databases
-            .iter()
-            .find(|entry| entry.id == id)
-            .unwrap()
-            .name
-            .as_deref(),
-        Some("Renamed")
-    );
+    let reopened_database = index.databases.iter().find(|entry| entry.id == id).unwrap();
+    assert_eq!(reopened_database.name.as_deref(), Some("Renamed"));
     let rows = app
-        .query_database_rows_for_application(capture.project_instance_id().clone(), id, 0, 10)
+        .query_database_rows_for_application(
+            capture.project_instance_id().clone(),
+            id,
+            reopened_database.revision,
+            0,
+            10,
+        )
         .unwrap();
     assert_eq!(rows.row_ids, vec![1, 3]);
     assert_eq!(value(&rows, 0, 0), serde_json::json!(2));

@@ -196,11 +196,12 @@ impl PluginManifest {
                 return Err(invalid());
             }
         }
+        ids.clear();
         if self
             .contributes
             .task_types
             .iter()
-            .any(|task| !valid_id(&task.id))
+            .any(|task| !valid_id(&task.id) || !ids.insert(&task.id))
             || self
                 .permissions
                 .iter()
@@ -210,5 +211,54 @@ impl PluginManifest {
             return Err(invalid());
         }
         self.resource_budget.validate()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn task_type_identity_cannot_select_conflicting_artifact_rules_by_order() {
+        let mut manifest: PluginManifest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "id": "example.statistics",
+            "name": "Statistics",
+            "description": "",
+            "publisher": "example",
+            "version": "1.0.0",
+            "hostApi": "^1",
+            "protocol": {
+                "major": PROTOCOL_MAJOR,
+                "minMinor": 0,
+                "maxMinor": PROTOCOL_MINOR,
+                "requiredFeatures": []
+            },
+            "target": "x86_64-pc-windows-msvc",
+            "executable": "bin/plugin.exe",
+            "execution": "trustedNative",
+            "contributes": {
+                "views": [],
+                "commands": [],
+                "taskTypes": [
+                    { "id": "statistics.run", "producesArtifacts": false },
+                    { "id": "statistics.export", "producesArtifacts": true }
+                ]
+            },
+            "permissions": ["results.write"],
+            "uiMethods": ["tasks.start"],
+            "resourceBudget": ResourceBudget::default()
+        }))
+        .unwrap();
+        assert!(manifest.validate().is_ok());
+
+        manifest.contributes.task_types[1].id = "statistics.run".into();
+        for _ in 0..2 {
+            assert_eq!(
+                manifest.validate().unwrap_err().code,
+                "plugin_manifest_invalid"
+            );
+            manifest.contributes.task_types.reverse();
+        }
     }
 }

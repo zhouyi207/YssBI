@@ -234,7 +234,7 @@ pub(super) fn chart_document_state(
 ) -> yss_project_history::ChartDocumentState {
     yss_project_history::ChartDocumentState {
         database_id: document.database_id.clone(),
-        chart_type: document.chart_type.clone(),
+        chart_type: document.chart_type,
         encodings: document.encodings.clone(),
     }
 }
@@ -249,6 +249,17 @@ pub(super) fn chart_lifecycle_state(
         kind: yss_project_history::ResourceLifecycleKind::Chart,
         name: path.display_name().as_str().to_string(),
     }
+}
+
+pub(super) fn chart_move_revision(
+    target: &ChartResourcePath,
+    source_revision: ResourceRevision,
+    retained_target_revision: Option<ResourceRevision>,
+) -> Result<ResourceRevision, ProjectOperationError> {
+    checked_resource_revision(
+        target.as_str(),
+        source_revision.max(retained_target_revision.unwrap_or(ResourceRevision::INITIAL)),
+    )
 }
 
 pub(super) fn chart_publication_deltas(
@@ -327,7 +338,7 @@ pub(super) fn chart_publication_deltas(
             Ok(vec![yss_project_history::ResourceDeltaEvent {
                 resource: chart_key(to),
                 from_revision,
-                to_revision: checked_resource_revision(from.as_str(), from_revision)?,
+                to_revision: chart_move_revision(to, from_revision, revisions.get(to).copied())?,
                 caused_by: Some(operation_id),
                 payload: yss_project_history::ResourceDocumentPatch::ResourceMove(
                     yss_project_history::ResourcePathMovePatch {
@@ -508,47 +519,6 @@ pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectDat
         | ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
-    }
-    paths.into_iter().collect()
-}
-
-pub(super) fn affected_projection_paths(
-    deltas: &[yss_project_history::ResourceDeltaEvent],
-    data: &ProjectData,
-) -> Vec<String> {
-    let changed_functions = deltas
-        .iter()
-        .filter_map(|delta| match &delta.resource {
-            yss_project_history::ResourceKey::Function(path) => Some(path.0.to_string()),
-            _ => None,
-        })
-        .collect::<std::collections::BTreeSet<_>>();
-    let mut paths = deltas
-        .iter()
-        .filter_map(|delta| match &delta.resource {
-            yss_project_history::ResourceKey::Graph(path) => Some(path.as_str().to_owned()),
-            yss_project_history::ResourceKey::Function(path) => Some(path.0.to_string()),
-            yss_project_history::ResourceKey::Database(_)
-            | yss_project_history::ResourceKey::Chart(_)
-            | yss_project_history::ResourceKey::Mind(_)
-            | yss_project_history::ResourceKey::Doc(_) => None,
-        })
-        .collect::<std::collections::BTreeSet<_>>();
-    if !changed_functions.is_empty() {
-        for (graph_path, graph) in &data.graphs {
-            let calls_changed_function = graph.document.nodes.values().any(|node| {
-                node.node_type.as_str() == "yssbi.project.function.call"
-                    && node.parameters.iter().any(|(key, value)| {
-                        key.as_str() == "target"
-                            && value
-                                .as_str()
-                                .is_some_and(|target| changed_functions.contains(target))
-                    })
-            });
-            if calls_changed_function {
-                paths.insert(graph_path.as_str().to_string());
-            }
-        }
     }
     paths.into_iter().collect()
 }

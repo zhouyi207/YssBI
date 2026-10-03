@@ -14,6 +14,7 @@ use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_project_layout::{
     CHART_EXTENSION, CHARTS_DIR, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE,
 };
+use yss_project_model::file::FileContent;
 use yss_project_model::{ProjectData, normalize_project_name};
 
 pub struct PreparedProjectCopy {
@@ -233,7 +234,7 @@ impl ProjectState {
         validate_deletion_root(&normalized)?;
         let _active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
         lifecycle.release_initial_and_drain();
-        lifecycle.acquire_final()?;
+        lifecycle.acquire_final();
         root_binding.revalidate()?;
         validate_deletion_root(&normalized)?;
         let active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
@@ -414,6 +415,16 @@ fn copy_mutations(
         let (path, contents) = crate::serialize_chart(chart_path, chart).map_err(prepare_error)?;
         files.insert(path.clone(), write_mutation(path, contents));
     }
+    for (mind_path, mind) in &authority.minds {
+        let path = PathBuf::from(mind_path.as_str());
+        let contents = mind.document.encode().map_err(prepare_error)?;
+        files.insert(path.clone(), write_mutation(path, contents));
+    }
+    for (doc_path, doc) in &authority.docs {
+        let path = PathBuf::from(doc_path.as_str());
+        let contents = doc.document.encode().map_err(prepare_error)?;
+        files.insert(path.clone(), write_mutation(path, contents));
+    }
     let mut mutations = directories
         .into_iter()
         .map(|relative_path| StagedFilesystemMutation::CreateDirectory { relative_path })
@@ -445,7 +456,6 @@ fn validate_project_copy_staged_file(relative: &Path, staged: &Path) -> Result<(
 }
 
 fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {
-    use yss_project_model::file::FileContent;
     if path == Path::new(PROJECT_METADATA_FILE) {
         return serde_json::from_slice::<ProjectManifest>(contents)
             .map(|_| ())

@@ -4,6 +4,7 @@ use crate::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+pub use yss_chart_document::ChartType;
 pub use yss_project_identity::{ProjectResourceKind, ProjectResourceRef};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -175,14 +176,6 @@ pub struct ChartSettings {
     pub x: Option<String>,
     pub y: Option<String>,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ChartType {
-    Histogram,
-    Scatter,
-    Line,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "kind",

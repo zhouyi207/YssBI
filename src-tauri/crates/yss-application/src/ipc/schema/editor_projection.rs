@@ -218,6 +218,7 @@ fn map_schema_summary(summary: &EditorSchemaSummary) -> SchemaSummaryDto {
     SchemaSummaryDto {
         kind: match summary.kind {
             EditorSchemaSummaryKind::Input => SchemaSummaryKindDto::Input,
+            EditorSchemaSummaryKind::Fixed => SchemaSummaryKindDto::Fixed,
             EditorSchemaSummaryKind::Project => SchemaSummaryKindDto::Project,
             EditorSchemaSummaryKind::Append => SchemaSummaryKindDto::Append,
             EditorSchemaSummaryKind::Rename => SchemaSummaryKindDto::Rename,
@@ -395,6 +396,19 @@ mod tests {
 
     #[test]
     fn editor_projection_serializes_canonical_camel_case_wire_and_safe_diagnostics() {
+        let fixed = map_schema_summary(&EditorSchemaSummary {
+            kind: EditorSchemaSummaryKind::Fixed,
+            fields: vec![EditorSchemaField {
+                name: "effect".into(),
+                scalar_type: RelationalScalarType::Known(yss_data_contract::SemanticType::Numeric),
+            }]
+            .into(),
+        });
+        assert_eq!(
+            serde_json::to_value(fixed.kind).unwrap(),
+            serde_json::json!("fixed")
+        );
+        assert_eq!(fixed.fields[0].name.as_ref(), "effect");
         let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
         let graph_path = GraphResourcePath::new("events/contract.yssbi-event")
             .expect("test graph path is valid");

@@ -37,7 +37,7 @@ pub(crate) fn graph_editor_session_to_transport(
         editing: graph_editing_state_to_transport(editing),
         document: document.clone(),
         projection: crate::ipc::schema::editor_projection::map_editor_projection(projection),
-        result_state: super::result::graph_result_state_to_dto(result_state.clone())?,
+        result_state: super::result::graph_result_state_to_dto(result_state)?,
     })
 }
 

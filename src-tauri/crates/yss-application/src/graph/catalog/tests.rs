@@ -164,6 +164,246 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
 }
 
 #[test]
+fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers() {
+    use crate::session::{NodeComponents, build_current_project_candidate};
+    use std::collections::BTreeSet;
+    use yss_graph_resource_contract::{
+        FunctionCatalogEntry, FunctionSignature, ResourceCatalogSnapshot,
+    };
+    use yss_node_registry::{
+        NodeRegistryBuilder, ProviderRegistration, RegisteredNode, StructuralNodeRole,
+    };
+    use yss_project_history::{
+        FunctionDocumentPatch, FunctionResourceKey, MutationRequest, ResourceKey,
+    };
+    use yss_project_identity::OperationId;
+
+    let function = GraphResourcePath::new("functions/Custom.yssbi-function").unwrap();
+    let nested = GraphResourcePath::new("functions/Nested.yssbi-function").unwrap();
+    let caller = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
+    let signature_reader = GraphResourcePath::new("events/Signature.yssbi-event").unwrap();
+    let outer_signature_reader =
+        GraphResourcePath::new("events/Outer Signature.yssbi-event").unwrap();
+    let unused = GraphResourcePath::new("functions/Unused.yssbi-function").unwrap();
+    let builtin = build_builtin_node_system().unwrap();
+    let mut protocol = builtin
+        .registry
+        .protocol(&"yssbi.project.function.call".parse().unwrap())
+        .unwrap()
+        .clone();
+    protocol.type_id = "tests.function.call".parse().unwrap();
+    let reference = &mut protocol.parameters.groups[0].parameters[0];
+    reference.default_value = Some(yss_node_protocol::TypedValue {
+        value_type: reference.value_type.clone(),
+        value: yss_data_contract::DataValue::String(function.as_str().into()),
+    });
+    let mut signature_protocol = protocol.clone();
+    signature_protocol.type_id = "tests.function.signature".parse().unwrap();
+    signature_protocol.instance_display = yss_node_protocol::NodeInstanceDisplaySpec::Static;
+    signature_protocol.parameters.groups[0].parameters[0].editor =
+        yss_node_protocol::ParameterEditorSpec::Text { multiline: false };
+    let mut builder = NodeRegistryBuilder::new();
+    let catalog = yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests.functions".parse().unwrap());
+    provider.nodes = vec![
+        RegisteredNode::structural(Arc::new(protocol), StructuralNodeRole::Call),
+        RegisteredNode::leaf(
+            Arc::new(signature_protocol),
+            yss_node_registry::LeafImplementation::new("tests.signature"),
+        ),
+    ]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let components = NodeComponents::new(
+        Arc::new(builder.freeze().unwrap()),
+        Arc::new(catalog),
+        yss_node_kernel::KernelRegistryBuilder::new(),
+    )
+    .unwrap();
+
+    let mut data = ProjectData::new();
+    for path in [&function, &nested, &unused] {
+        let mut resource =
+            GraphResourceDocument::new(path.display_name(), GraphResourceKind::FunctionGraph);
+        let id = NodeId::new();
+        resource.document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: "yssbi.project.function.entry".parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: [(
+                    "function".parse().unwrap(),
+                    serde_json::json!(path.as_str()),
+                )]
+                .into(),
+                user_label: None,
+            },
+        );
+        data.graphs.insert(path.clone(), resource);
+    }
+    for path in [&caller, &signature_reader, &outer_signature_reader] {
+        data.graphs.insert(
+            path.clone(),
+            GraphResourceDocument::new(path.display_name(), GraphResourceKind::EventGraph),
+        );
+    }
+    for (owner, target, kind) in [
+        (&caller, None, "tests.function.call"),
+        (&function, Some(&nested), "tests.function.call"),
+        (&nested, Some(&function), "tests.function.call"),
+        (&signature_reader, Some(&nested), "tests.function.signature"),
+        (&outer_signature_reader, None, "tests.function.signature"),
+    ] {
+        let id = NodeId::new();
+        data.graphs.get_mut(owner).unwrap().document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: target
+                    .map(|target| {
+                        [(
+                            "target".parse().unwrap(),
+                            serde_json::json!(target.as_str()),
+                        )]
+                        .into()
+                    })
+                    .unwrap_or_default(),
+                user_label: None,
+            },
+        );
+    }
+    let root_document = data.graphs[&caller].document.clone();
+    let project = TestProject::active("registered-function-capture", data);
+    let candidate = build_current_project_candidate(
+        ApplicationSessionEpoch::INITIAL,
+        Arc::clone(&project.state),
+        std::iter::empty(),
+        &components,
+    )
+    .unwrap();
+    let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(components)));
+    application.install_candidate(candidate).unwrap();
+    let session = application.capture_session().unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        [&function, &nested]
+            .into_iter()
+            .map(|path| {
+                (
+                    path.clone(),
+                    FunctionCatalogEntry::new(FunctionSignature::new(vec![], None)),
+                )
+            })
+            .collect(),
+        BTreeMap::new(),
+    );
+    let captured =
+        crate::graph::inputs::capture_function_dependencies(&session, &root_document, resources)
+            .unwrap();
+    assert!(captured.function_document(&function).is_some());
+    assert!(captured.function_document(&nested).is_some());
+    session.project().unload_graph_resource(&function).unwrap();
+    assert!(
+        session
+            .project()
+            .read_resident_graph(&function)
+            .unwrap()
+            .is_none()
+    );
+    session.project().unload_graph_resource(&unused).unwrap();
+    // An unrelated, unloaded body is outside the dependency capture's read set.
+    std::fs::write(
+        project.root.join(unused.as_str()),
+        b"unreadable function body",
+    )
+    .unwrap();
+    let activities = Arc::new(std::sync::Mutex::new(BTreeSet::new()));
+    let observed = Arc::clone(&activities);
+    let _subscription = application
+        .subscribe_graph_activity(
+            session.project_instance_id(),
+            Arc::new(move |activity| {
+                if let crate::graph::editing::GraphActivity::Changed { graph_path, .. } = activity {
+                    observed.lock().unwrap().insert(graph_path);
+                }
+            }),
+        )
+        .unwrap();
+
+    let before = session
+        .project()
+        .read_graph_resource_snapshot(session.project_instance_id(), &nested)
+        .unwrap()
+        .function
+        .unwrap();
+    let mut after = before.signature.clone();
+    after
+        .parameters
+        .push(yss_project_history::FunctionParameter {
+            id: yss_graph_document::FunctionParameterId::new("value"),
+            name: "Value".into(),
+            type_name: "Numeric".into(),
+        });
+    let committed = application
+        .update_function_signature(
+            session.project_instance_id().clone(),
+            nested.clone(),
+            MutationRequest::new(
+                ResourceKey::Function(FunctionResourceKey(nested.as_str().into())),
+                before.revision,
+                OperationId::new(),
+                FunctionDocumentPatch::new(before.signature, after),
+            ),
+        )
+        .unwrap();
+    assert!(
+        committed
+            .projection_status
+            .affected_graph_paths()
+            .contains(&caller)
+    );
+    assert!(
+        committed
+            .projection_status
+            .affected_graph_paths()
+            .contains(&function)
+    );
+    assert_eq!(
+        committed
+            .projection_status
+            .affected_graph_paths()
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        [
+            nested.clone(),
+            function.clone(),
+            caller.clone(),
+            signature_reader.clone()
+        ]
+        .into()
+    );
+    assert_eq!(
+        *activities.lock().unwrap(),
+        [
+            nested.as_str().into(),
+            caller.as_str().into(),
+            signature_reader.as_str().into()
+        ]
+        .into()
+    );
+    assert!(
+        session
+            .project()
+            .read_resident_graph(&function)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
 fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
     use yss_graph_editor::projection::{ConnectionDecision, ConnectionIntent};
     use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
@@ -488,10 +728,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         ("yssbi.statistics.linear.fit", true),
         ("yssbi.statistics.logit.fit", true),
         ("yssbi.statistics.inequality.gini", true),
-        (
-            "yssbi.statistics.postestimation.adjusted_predictions",
-            false,
-        ),
+        ("yssbi.statistics.postestimation.adjusted_predictions", true),
     ] {
         assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
             &row.content,
@@ -524,10 +761,10 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
 }
 
 #[test]
-fn implemented_diagnostic_causal_and_panel_categories_are_available_in_both_catalog_projections() {
+fn all_non_deferred_builtin_nodes_are_available_in_catalog_and_sidebar() {
     let session = staged_session(
         ProjectData::new(),
-        "implemented-causal-panel-availability",
+        "all-builtin-nodes-availability",
         GraphRuntimeTestControl::default(),
     );
     let project_instance_id = session.session.project_instance_id().clone();
@@ -542,11 +779,50 @@ fn implemented_diagnostic_causal_and_panel_categories_are_available_in_both_cata
         .application
         .query_project_index(project_instance_id, "zh-CN", true)
         .unwrap();
-    for category in [
-        "statistics.diagnostics",
-        "statistics.causal",
-        "statistics.panel",
-    ] {
+    // Scope exceptions are reviewed in the catalog owner's document, not inferred
+    // from missing kernels. Implementing an exception must also remove its record.
+    let deferred = include_str!("../../../../yss-node-catalog/DEFERRED_NODES.md")
+        .lines()
+        .filter(|line| line.starts_with("| yssbi."))
+        .map(|line| line.split('|').nth(1).unwrap().trim())
+        .collect::<std::collections::BTreeSet<_>>();
+    for id in &deferred {
+        let item = catalog
+            .catalog
+            .items
+            .iter()
+            .find(|item| item.node_type_id.as_ref() == *id)
+            .unwrap_or_else(|| panic!("unknown deferred node {id}"));
+        assert!(
+            !item.available,
+            "remove implemented {id} from the deferred document"
+        );
+    }
+    let unavailable = catalog
+        .catalog
+        .items
+        .iter()
+        .filter(|item| !item.available && !deferred.contains(item.node_type_id.as_ref()))
+        .map(|item| {
+            format!(
+                "{} | {} | {}",
+                item.category_id, item.node_type_id, item.title
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        unavailable.is_empty(),
+        "{} non-deferred unavailable nodes:\n{}",
+        unavailable.len(),
+        unavailable.join("\n")
+    );
+    let categories = catalog
+        .catalog
+        .items
+        .iter()
+        .map(|item| item.category_id.as_ref())
+        .collect::<std::collections::BTreeSet<_>>();
+    for category in categories {
         let items = catalog
             .catalog
             .items
@@ -555,17 +831,26 @@ fn implemented_diagnostic_causal_and_panel_categories_are_available_in_both_cata
             .collect::<Vec<_>>();
         assert!(!items.is_empty(), "missing category {category}");
         for item in &items {
-            assert!(item.available, "{} ({})", item.title, item.node_type_id);
+            let expected_available = !deferred.contains(item.node_type_id.as_ref());
+            assert_eq!(
+                item.available, expected_available,
+                "{} ({})",
+                item.title, item.node_type_id
+            );
             assert!(snapshot.activity_panels.iter().flat_map(|panel| &panel.rows).any(
                 |row| matches!(
                     &row.content,
                     crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Node {
-                        creation: yss_node_catalog::NodeCreation::Static { node_type_id }, available: true, ..
-                    }) if node_type_id.as_str() == item.node_type_id.as_ref()
+                        creation, available, ..
+                    }) if creation == &item.creation && *available == expected_available
                 )
-            ), "sidebar must expose {} as available", item.node_type_id);
+            ), "sidebar availability must match catalog for {}", item.node_type_id);
         }
-        println!("{category}: {} available, 0 unavailable", items.len());
+        println!(
+            "{category}: {} available, {} deferred",
+            items.iter().filter(|item| item.available).count(),
+            items.iter().filter(|item| !item.available).count()
+        );
     }
 }
 
@@ -1281,6 +1566,78 @@ fn replacement_after_catalog_compute_returns_stale_and_publishes_nothing() {
         Err(CatalogQueryApplicationError::SessionChanged)
     ));
     assert_eq!(control.events(), [GraphRuntimeTestEvent::CatalogComputed]);
+}
+
+#[test]
+fn clipboard_export_uses_project_declarations_without_database_schema_capture() {
+    let graph = GraphResourcePath::new("events/Clipboard.yssbi-event").unwrap();
+    let function = GraphResourcePath::new("functions/Measure.yssbi-function").unwrap();
+    let mut project = compatible_project(&graph);
+    let mut definition = GraphResourceDocument::new("Measure", GraphResourceKind::FunctionGraph);
+    definition.function.as_mut().unwrap().signature.return_type = Some("Numeric".into());
+    project.graphs.insert(function.clone(), definition);
+    project.databases.insert(
+        "sales".into(),
+        DatabaseDecl {
+            id: DatabaseId::from_existing("sales".into()),
+            engine: yss_database_contract::DatabaseEngine::Dataset {},
+            schema_version: 1,
+            required: true,
+            name: "Sales".into(),
+        },
+    );
+    let mut document = GraphDocument::default();
+    for (node_type, parameter, path) in [
+        ("yssbi.project.function.call", "target", function.as_str()),
+        ("yssbi.dataframe.source.get", "dataframe", "databases/sales"),
+    ] {
+        let id = NodeId::new();
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: node_type.parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: [(parameter.parse().unwrap(), serde_json::json!(path))].into(),
+                user_label: None,
+            },
+        );
+    }
+    project.graphs.get_mut(&graph).unwrap().document = document.clone();
+    let staged = staged_session(
+        project,
+        "clipboard-declarations",
+        GraphRuntimeTestControl::default(),
+    );
+    let instance = staged.session.project_instance_id().clone();
+    // This session has no database runtime declaration or schema for Sales.
+    assert!(matches!(
+        staged.application.localized_node_catalog(LocalizedCatalogRequest::new(instance.clone(), "en-US")),
+        Err(CatalogQueryApplicationError::Database(error))
+            if error.code() == yss_database_runtime::error::DatabaseErrorCode::Conflict
+    ));
+    let exported = staged
+        .application
+        .export_graph_subgraph(
+            instance,
+            graph,
+            document.clone(),
+            document.nodes.keys().copied().collect(),
+        )
+        .unwrap();
+    let paths = exported
+        .nodes
+        .iter()
+        .map(|node| {
+            let yss_graph_editor::ClipboardNodeCreation::ResourceBound { resource_path, .. } =
+                &node.creation
+            else {
+                panic!("resource nodes must keep authoritative creation descriptors")
+            };
+            resource_path.as_str()
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(paths, [function.as_str(), "databases/sales"].into());
 }
 
 #[test]

@@ -238,9 +238,46 @@ impl TurnOrchestrator {
         })
         .await?;
         let evidence = Arc::new(Mutex::new(Evidence::for_task(&task)));
-        let result = self
-            .run_worker(&run_id, &task, dependencies, evidence.clone())
-            .await;
+        let deadline = tokio::time::Instant::now()
+            + std::time::Duration::from_millis(
+                crate::agent_definition(task.worker)
+                    .limits()
+                    .maximum_duration_ms,
+            );
+        let admission = async {
+            let slot = tokio::select! {
+                permit = self.slots.acquire() => permit.map_err(|_| driver_failure())?,
+                _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
+                _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
+            };
+            // Keep task settlement inside the same gate as its business operations.
+            // A queued reader must observe committed invalidations before starting.
+            let (read, write) = if task.scope.is_read_only() {
+                let guard = tokio::select! {
+                    guard = self.access.read() => guard,
+                    _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
+                    _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
+                };
+                (Some(guard), None)
+            } else {
+                let guard = tokio::select! {
+                    guard = self.access.write() => guard,
+                    _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
+                    _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
+                };
+                (None, Some(guard))
+            };
+            Ok((slot, read, write))
+        }
+        .await;
+        let (result, _admission) = match admission {
+            Ok(admission) => (
+                self.run_worker(&run_id, &task, dependencies, evidence.clone(), deadline)
+                    .await,
+                Some(admission),
+            ),
+            Err(error) => (Err(error), None),
+        };
         let mut outcome = finish_outcome(run_id, task.worker, &result, &evidence);
         outcome.invalidated_runs = self.invalidate_dependents(&outcome);
         for run_id in &outcome.invalidated_runs {
@@ -309,35 +346,33 @@ impl TurnOrchestrator {
         task: &AgentTask,
         dependencies: Vec<AgentTaskOutcome>,
         evidence: Arc<Mutex<Evidence>>,
+        deadline: tokio::time::Instant,
     ) -> Result<AgentTurnResult, AgentDriverFailure> {
-        let deadline = tokio::time::Instant::now()
-            + std::time::Duration::from_millis(
-                crate::agent_definition(task.worker)
-                    .limits()
-                    .maximum_duration_ms,
-            );
-        let _slot = tokio::select! {
-            permit = self.slots.acquire() => permit.map_err(|_| driver_failure())?,
-            _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
-            _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
+        let dependencies_current = {
+            let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
+            dependencies.iter().all(|dependency| {
+                tasks.values().any(|entry| {
+                    entry.run_id == dependency.run_id
+                        && entry
+                            .outcome
+                            .as_ref()
+                            .is_some_and(|outcome| outcome.state == AgentRunState::Completed)
+                })
+            })
         };
-        // A conservative shared gate permits concurrent readers and serializes all writers.
-        // Business owners still validate revisions against concurrent GUI operations.
-        let (_read, _write) = if task.scope.is_read_only() {
-            let guard = tokio::select! {
-                guard = self.access.read() => guard,
-                _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
-                _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
-            };
-            (Some(guard), None)
-        } else {
-            let guard = tokio::select! {
-                guard = self.access.write() => guard,
-                _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
-                _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
-            };
-            (None, Some(guard))
-        };
+        if !dependencies_current {
+            return Ok(AgentTurnResult {
+                final_text: serde_json::to_string(&WorkerReport {
+                    summary: "A task dependency changed before execution.".into(),
+                    warnings: vec![],
+                    blocked_reason: Some("dependency_not_completed".into()),
+                    next_steps: vec![
+                        "Refresh stale dependencies before delegating a new task.".into(),
+                    ],
+                })
+                .map_err(|_| driver_failure())?,
+            });
+        }
         let cancellation = CancellationToken::default();
         let scope = Arc::new(Mutex::new(AgentInvocationScope {
             run_id: run_id.clone(),

@@ -72,11 +72,13 @@ pub(crate) struct UiSubscription {
 
 impl Drop for UiSubscription {
     fn drop(&mut self) {
-        self.source
+        let observer = self
+            .source
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .observers
             .remove(&self.id);
+        drop(observer);
     }
 }
 
@@ -551,6 +553,49 @@ fn validate_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subscription_releases_observer_outside_registry_lock() {
+        use std::sync::{Weak, atomic::AtomicBool};
+
+        struct ReentrantDrop {
+            session: Weak<PresentationSession>,
+            lock_available: Arc<AtomicBool>,
+            reentered: Arc<AtomicBool>,
+        }
+
+        impl Drop for ReentrantDrop {
+            fn drop(&mut self) {
+                let session = self.session.upgrade().unwrap();
+                let lock_available = session.events.try_lock().is_ok();
+                self.lock_available.store(lock_available, Ordering::SeqCst);
+                if lock_available {
+                    let subscription = session.subscribe(Arc::new(|_| {})).unwrap();
+                    drop(subscription);
+                    self.reentered.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+
+        let session = Arc::new(PresentationSession::default());
+        let lock_available = Arc::new(AtomicBool::new(false));
+        let reentered = Arc::new(AtomicBool::new(false));
+        let cleanup = ReentrantDrop {
+            session: Arc::downgrade(&session),
+            lock_available: lock_available.clone(),
+            reentered: reentered.clone(),
+        };
+        let subscription = session
+            .subscribe(Arc::new(move |_| {
+                let _ = &cleanup;
+            }))
+            .unwrap();
+
+        drop(subscription);
+        assert!(lock_available.load(Ordering::SeqCst));
+        assert!(reentered.load(Ordering::SeqCst));
+        assert!(session.events.lock().unwrap().observers.is_empty());
+    }
 
     #[test]
     fn pages_follow_result_retention_and_defaults_do_not_consume_capacity() {

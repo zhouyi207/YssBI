@@ -33,7 +33,8 @@ impl TableJoin {
             && self.left_keys.len() == self.right_keys.len()
             && !self.right_suffix.is_empty()
             && [&self.left_keys, &self.right_keys].into_iter().all(|keys| {
-                keys.iter().all(|key| !key.is_empty() && key.trim() == key)
+                keys.iter()
+                    .all(|key| crate::TabularColumnName::is_valid(key))
                     && keys.iter().collect::<BTreeSet<_>>().len() == keys.len()
             })
     }

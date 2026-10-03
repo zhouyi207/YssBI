@@ -133,6 +133,104 @@ async fn seed_stale_registration(registry: &ProjectRegistry, destination: &Path)
 }
 
 #[test]
+fn late_watcher_lifecycle_tails_preserve_the_current_project_source() {
+    use yss_filesystem::watcher::{
+        ChangeSink, FileWatcherDrain, FileWatcherDrainOutcome, FileWatcherFactory,
+        FileWatcherSession, FileWatcherStartError, ObservedChange, WatcherEpoch,
+        WatcherShutdownControl, WatcherState,
+    };
+
+    #[derive(Default)]
+    struct RecordingFactory(Arc<Mutex<Option<PathBuf>>>);
+
+    struct RecordingSession(Arc<Mutex<Option<PathBuf>>>);
+
+    impl FileWatcherFactory for RecordingFactory {
+        fn start(
+            &self,
+            root: &Path,
+            _epoch: WatcherEpoch,
+            _sink: Arc<dyn ChangeSink>,
+        ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError> {
+            *self.0.lock().unwrap() = Some(root.to_path_buf());
+            Ok(Box::new(RecordingSession(self.0.clone())))
+        }
+    }
+
+    impl FileWatcherSession for RecordingSession {
+        fn close_admission(self: Box<Self>) -> Box<dyn FileWatcherDrain> {
+            *self.0.lock().unwrap() = None;
+            self
+        }
+    }
+
+    impl FileWatcherDrain for RecordingSession {
+        fn finish(self: Box<Self>, _control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
+            FileWatcherDrainOutcome::Drained
+        }
+    }
+
+    struct NoopSink;
+
+    impl ChangeSink for NoopSink {
+        fn publish(&self, _change: ObservedChange) {}
+    }
+
+    let directory = TestDirectory::new("watcher-lifecycle-tails");
+    let first_root = directory.child("first");
+    let second_root = directory.child("second");
+    write_named_project(&first_root, "First");
+    write_named_project(&second_root, "Second");
+    let application = ApplicationState::initialize().unwrap();
+    let factory = Arc::new(RecordingFactory::default());
+    let watcher = Mutex::new(WatcherState::new(factory.clone()));
+    let watch = |activation: &ProjectActivation| {
+        application
+            .watch_project_changes(
+                &watcher,
+                &activation.path,
+                &activation.project_instance_id,
+                Arc::new(NoopSink),
+            )
+            .unwrap();
+    };
+
+    let first = application
+        .load_project_for_application(first_root.to_str().unwrap())
+        .unwrap();
+    watch(&first);
+    let second = application
+        .load_project_for_application(second_root.to_str().unwrap())
+        .unwrap();
+    watch(&second);
+    watch(&first);
+    let late_start_preserved = factory.0.lock().unwrap().as_ref()
+        == Some(&yss_project::project_root_from_path(&second.path));
+
+    application
+        .clear_project_for_application(&second.project_instance_id)
+        .unwrap();
+    let reopened = application
+        .load_project_for_application(first_root.to_str().unwrap())
+        .unwrap();
+    watch(&reopened);
+    application.stop_project_watcher(&watcher);
+    let late_stop_preserved = factory.0.lock().unwrap().as_ref()
+        == Some(&yss_project::project_root_from_path(&reopened.path));
+
+    application
+        .clear_project_for_application(&reopened.project_instance_id)
+        .unwrap();
+    application.stop_project_watcher(&watcher);
+    assert!(factory.0.lock().unwrap().is_none());
+    assert_eq!(
+        (late_start_preserved, late_stop_preserved),
+        (true, true),
+        "late activation and close tails must leave the successor watcher intact"
+    );
+}
+
+#[test]
 fn closing_project_releases_session_before_registered_deletion() {
     let _serial = DELETE_TEST_LOCK
         .lock()

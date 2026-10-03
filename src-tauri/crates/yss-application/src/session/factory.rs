@@ -4,12 +4,8 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use super::slot::{
+use super::{
     ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState,
-};
-use yss_database_contract::{
-    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
 };
 use yss_database_runtime::runtime::DatabaseRuntimeSession;
 use yss_database_runtime::{DatabaseInstance, bind_dataset_instance};
@@ -151,8 +147,6 @@ pub enum ProjectSessionCandidateError {
     QueryEngine(#[source] yss_database_store::DatasetStoreError),
     #[error("project snapshot could not be captured for the application session")]
     ProjectSnapshot(#[source] ProjectOperationError),
-    #[error("project database declaration observations could not be captured")]
-    DatabaseObservations(#[source] yss_database_contract::DatabaseDeclarationObservationSetError),
     #[error("database session could not be opened for the application session")]
     DatabaseSession(#[source] DatabaseSessionCandidateError),
     #[error("application session generation is exhausted")]
@@ -247,11 +241,11 @@ pub fn build_current_project_candidate(
         .checked_add(1)
         .and_then(NonZeroU64::new)
         .ok_or(ProjectSessionCandidateError::GenerationExhausted)?;
-    let data = project
-        .get_data()
+    let project_snapshot = project
+        .read_database_snapshot()
         .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
-    let project_instance_id = ProjectInstanceId::from_existing(project.project_instance_id());
-    let project_session_id = project.project_session_id();
+    let project_instance_id = project_snapshot.project_instance_id().clone();
+    let project_session_id = project_snapshot.project_session_id().clone();
     let graph = Arc::new(
         GraphRuntimeState::from_components(
             GraphRuntimeEpoch::from_existing(epoch.get()),
@@ -259,33 +253,16 @@ pub fn build_current_project_candidate(
         )
         .map_err(ProjectSessionCandidateError::GraphDiagnosticDefinitions)?,
     );
-    let (root, database_revisions) = match project.get_path() {
-        Some(_) => {
-            let session = project
-                .capture_project_session()
-                .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
-            let index = project
-                .read_project_index(&session.instance_id)
-                .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
-            let revisions = index
-                .databases
-                .into_iter()
-                .map(|entry| (entry.id, entry.revision.get()))
-                .collect::<BTreeMap<_, _>>();
-            (Some(session.root), revisions)
-        }
-        None => (None, BTreeMap::new()),
-    };
     let reusable_instances = reusable_instances
         .into_iter()
         .map(|instance| (instance.decl.id.clone(), instance))
         .collect::<BTreeMap<_, _>>();
-    let dataset_store = root
-        .as_ref()
+    let dataset_store = project_snapshot
+        .root()
         .map(|root| yss_database_store::DatasetStore::open(root.as_path()));
-    let database_instances = data
-        .databases
-        .values()
+    let database_instances = project_snapshot
+        .declarations()
+        .iter()
         .map(|declaration| {
             reusable_instances
                 .get(&declaration.id)
@@ -297,37 +274,14 @@ pub fn build_current_project_candidate(
                 })
         })
         .collect::<Vec<_>>();
-    let declarations = data
-        .databases
-        .values()
-        .cloned()
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let observations = DatabaseDeclarationObservationSet::try_from_iter(
-        data.databases.values().map(|declaration| {
-            (
-                declaration.id.clone(),
-                DatabaseDeclarationObservation::new(
-                    DatabaseDeclarationRevision::from_existing(
-                        database_revisions
-                            .get(declaration.id.as_str())
-                            .copied()
-                            .unwrap_or(0),
-                    ),
-                    DatabaseDeclarationFingerprint::from_decl(declaration),
-                ),
-            )
-        }),
-    )
-    .map_err(ProjectSessionCandidateError::DatabaseObservations)?;
     let database_facts = super::database::ProjectDatabaseSessionFacts::new(
         project_session_id.clone(),
         generation,
-        declarations.into(),
-        observations,
+        project_snapshot.declarations().into(),
+        project_snapshot.observations().clone(),
     );
     let database = super::database::prepare_database_session_with_instances(
-        &database_facts,
+        database_facts,
         database_instances,
     )
     .map_err(|source| ProjectSessionCandidateError::DatabaseSession(source.into()))?;
@@ -342,6 +296,9 @@ pub fn build_current_project_candidate(
     ));
     let bound_project_session =
         PlanProjectSessionId::from_existing(project_session_id.as_str().into());
+    project
+        .revalidate_database_snapshot(&project_snapshot)
+        .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
     build_replacement_candidate(ReplacementCandidateInput::new(
         epoch,
         project_instance_id,

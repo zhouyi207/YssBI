@@ -17,7 +17,7 @@ use yss_graph_execution::plan::{
 };
 use yss_graph_execution::resource_preparation::RunResourceBindings;
 use yss_graph_execution::state::RunExecutionControl;
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 pub(crate) fn fixture(
     n: usize,
@@ -247,11 +247,7 @@ pub(crate) fn fixture_with_options(
             },
         );
     }
-    let catalog = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([0; 32]),
-    );
+    let catalog = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = captured.graph().resolve_graph_document(
         &graph,
         &document,

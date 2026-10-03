@@ -1,15 +1,15 @@
 use super::catalog::capture_localized_project_facts;
 use crate::session::ApplicationSession;
 use std::collections::{BTreeMap, BTreeSet};
-use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
 use yss_database_runtime::session_api::{DatabaseCatalogSnapshot, catalog_snapshot};
+use yss_graph_analysis::direct_function_dependencies;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_execution::plan::{PlanGraphId, PlanNodeId, PlanOutputRef, PlanPortAddress};
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionSignature, GraphResourceId,
-    ResourceCatalogFingerprint, ResourceCatalogSnapshot,
+    ResourceCatalogSnapshot,
 };
 
 #[derive(Debug, Error)]
@@ -24,25 +24,26 @@ pub enum GraphInputError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectGraphResourceSnapshot {
-    project_instance_id: yss_project_identity::ProjectInstanceId,
-    authority_generation: u64,
     functions: BTreeMap<GraphResourcePath, FunctionSignature>,
     databases: BTreeMap<DatabaseId, DatabaseDecl>,
 }
 
 impl ProjectGraphResourceSnapshot {
     pub fn new(
-        project_instance_id: yss_project_identity::ProjectInstanceId,
-        authority_generation: u64,
         functions: BTreeMap<GraphResourcePath, FunctionSignature>,
         databases: BTreeMap<DatabaseId, DatabaseDecl>,
     ) -> Self {
         Self {
-            project_instance_id,
-            authority_generation,
             functions,
             databases,
         }
+    }
+
+    pub(super) fn function_signature(
+        &self,
+        path: &GraphResourcePath,
+    ) -> Option<&FunctionSignature> {
+        self.functions.get(path)
     }
 }
 
@@ -65,28 +66,15 @@ pub(crate) fn capture_function_dependencies(
     document: &yss_graph_document::GraphDocument,
     mut catalog: ResourceCatalogSnapshot,
 ) -> Result<ResourceCatalogSnapshot, GraphContractMappingError> {
-    fn callees(document: &yss_graph_document::GraphDocument) -> Vec<GraphResourcePath> {
-        document
-            .nodes
-            .values()
-            .filter(|node| node.node_type.as_str() == "yssbi.project.function.call")
-            .filter_map(|node| {
-                node.parameters
-                    .iter()
-                    .find(|(key, _)| key.as_str() == "target")
-                    .and_then(|(_, value)| value.as_str())
-                    .and_then(|path| GraphResourcePath::new(path).ok())
-            })
-            .collect()
-    }
-    let mut pending = callees(document);
+    let registry = captured.graph().registry();
+    let mut pending = direct_function_dependencies(document, registry).collect::<Vec<_>>();
     let mut seen = BTreeSet::new();
     while let Some(path) = pending.pop() {
         if !seen.insert(path.clone()) || catalog.function_signature(&path).is_none() {
             continue;
         }
         if let Some(body) = catalog.function_document(&path) {
-            pending.extend(callees(body));
+            pending.extend(direct_function_dependencies(body, registry));
             continue;
         }
         let resource = captured
@@ -96,7 +84,7 @@ pub(crate) fn capture_function_dependencies(
                 graph: path.clone(),
                 source,
             })?;
-        pending.extend(callees(&resource.document));
+        pending.extend(direct_function_dependencies(&resource.document, registry));
         catalog = catalog.with_function_document(&path, resource.document);
     }
     Ok(catalog)
@@ -142,16 +130,7 @@ pub fn build_resource_catalog(
         }
     }
 
-    // The catalog fingerprint is a Graph analysis fact. It is deliberately
-    // computed from the already captured declarations/contracts and does not
-    // expose Project/Database storage or a mutable map to Graph.
-    let fingerprint =
-        ResourceCatalogFingerprint::from_bytes(catalog_fingerprint(project, databases));
-    Ok(ResourceCatalogSnapshot::new(
-        functions,
-        database_catalog,
-        fingerprint,
-    ))
+    Ok(ResourceCatalogSnapshot::new(functions, database_catalog))
 }
 
 pub(crate) fn graph_result_inputs(
@@ -362,37 +341,6 @@ pub(crate) fn result_resource_versions(
         versions.insert(key.clone(), version);
     }
     Ok(versions)
-}
-
-fn catalog_fingerprint(
-    project: &ProjectGraphResourceSnapshot,
-    databases: &DatabaseCatalogSnapshot,
-) -> [u8; 32] {
-    let mut fingerprint = [0; 32];
-    for lane in 0..4u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        lane.hash(&mut hasher);
-        project.project_instance_id.as_str().hash(&mut hasher);
-        project.authority_generation.hash(&mut hasher);
-        for (path, signature) in &project.functions {
-            path.as_str().hash(&mut hasher);
-            signature.parameters().hash(&mut hasher);
-            signature.result().hash(&mut hasher);
-        }
-        for schema in databases.schemas() {
-            schema.database().as_str().hash(&mut hasher);
-            schema.runtime_revision().get().hash(&mut hasher);
-            schema.schema_revision().get().hash(&mut hasher);
-            for column in schema.columns() {
-                column.name().as_str().hash(&mut hasher);
-                column.data_type().hash(&mut hasher);
-                column.nullable().hash(&mut hasher);
-            }
-        }
-        fingerprint[(lane as usize) * 8..(lane as usize + 1) * 8]
-            .copy_from_slice(&hasher.finish().to_le_bytes());
-    }
-    fingerprint
 }
 
 pub(crate) struct GraphResolutionContext {

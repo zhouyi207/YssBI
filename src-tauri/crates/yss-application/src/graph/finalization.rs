@@ -96,14 +96,19 @@ fn validate_handoff(handoff: &ExecutionFinalizationHandoff) -> Result<(), Finali
         }
     }
 
-    let mut observed_results = BTreeSet::new();
+    let mut observations = BTreeSet::new();
     for intent in handoff.observation_intents() {
         if !committed_results.contains(&intent.result_id) {
             return Err(FinalizationInvariant::ObservationResultMissing {
                 result_id: intent.result_id,
             });
         }
-        if !observed_results.insert(intent.result_id) {
+        if !observations.insert((
+            intent.result_id,
+            intent.requester.graph(),
+            intent.requester.node(),
+            intent.requester.port(),
+        )) {
             return Err(FinalizationInvariant::DuplicateObservation {
                 result_id: intent.result_id,
             });

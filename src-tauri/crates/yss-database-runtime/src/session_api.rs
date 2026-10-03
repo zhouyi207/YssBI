@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroU64;
 
-use crate::declaration_observation_for;
 use crate::error::{DatabaseError, DatabaseOperation};
 use crate::runtime::{
     DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeCommittedChange,
@@ -77,6 +76,10 @@ impl DatabasePageSnapshot {
     pub fn row_ids(&self) -> &[i64] {
         &self.row_ids
     }
+
+    pub fn into_parts(self) -> (TabularSnapshot, Vec<i64>) {
+        (self.rows, self.row_ids)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -105,6 +108,13 @@ pub struct DatabaseQueryBasis {
     database: DatabaseId,
     runtime_revision: DatabaseRuntimeRevision,
     schema_revision: DatabaseSchemaRevision,
+    declaration: DatabaseDeclarationObservation,
+}
+
+impl DatabaseQueryBasis {
+    pub fn declaration_revision(&self) -> yss_database_contract::DatabaseDeclarationRevision {
+        self.declaration.revision()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -537,13 +547,12 @@ pub fn prepare_database_runtime_change(
     physical: &crate::runtime::PreparedDatabasePhysicalMutation,
 ) -> Result<PreparedDatabaseRuntimeChange, DatabaseError> {
     let current_observations = session.observations();
-    let current = declaration_observation_for(&current_observations, &request.database)
-        .ok_or_else(|| {
-            DatabaseError::not_found(
-                DatabaseOperation::PrepareMutation,
-                Some(request.database.clone()),
-            )
-        })?;
+    let current = current_observations.get(&request.database).ok_or_else(|| {
+        DatabaseError::not_found(
+            DatabaseOperation::PrepareMutation,
+            Some(request.database.clone()),
+        )
+    })?;
     let revisions = session.revisions(&request.database).ok_or_else(|| {
         DatabaseError::not_found(
             DatabaseOperation::PrepareMutation,
@@ -627,7 +636,9 @@ pub fn revalidate_query_basis(
             Some(basis.database.clone()),
         ));
     };
-    if current.runtime != basis.runtime_revision.get() {
+    if current.runtime != basis.runtime_revision.get()
+        || runtime_snapshot.observations.get(&basis.database) != Some(&basis.declaration)
+    {
         return Err(DatabaseError::conflict(
             DatabaseOperation::Query,
             Some(basis.database.clone()),
@@ -693,12 +704,20 @@ impl DatabaseRuntimeSession {
             .ok_or_else(|| {
                 DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
             })?;
+        let declaration = runtime_snapshot
+            .observations
+            .get(database)
+            .cloned()
+            .ok_or_else(|| {
+                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+            })?;
         Ok(DatabaseQueryBasis {
             session: self.identity().clone(),
             generation: self.generation(),
             database: database.clone(),
             runtime_revision: DatabaseRuntimeRevision::from_existing(revisions.runtime),
             schema_revision: DatabaseSchemaRevision::from_existing(revisions.schema),
+            declaration,
         })
     }
 }
@@ -795,9 +814,7 @@ mod tests {
         crate::runtime::PreparedDatabasePhysicalMutation,
     ) {
         let database = DatabaseId::from_existing(SALES_ID.into());
-        let observation = declaration_observation_for(&session.observations(), &database)
-            .unwrap()
-            .clone();
+        let observation = session.observations().get(&database).unwrap().clone();
         let physical = session
             .prepare_physical_mutation(&database, &operation, operation_id)
             .unwrap();

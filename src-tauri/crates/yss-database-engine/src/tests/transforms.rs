@@ -55,6 +55,157 @@ fn text_values(relation: &RelationHandle, column: usize) -> Vec<Option<String>> 
 }
 
 #[test]
+fn numeric_series_operations_require_semantic_admission_for_integer_storage() {
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let source = table(
+        &runtime,
+        [
+            ("measure", SemanticType::Numeric),
+            ("id", SemanticType::Identifier),
+        ]
+        .into_iter()
+        .map(|(name, kind)| {
+            yss_database_arrow::with_column_semantic(
+                Field::new(name, DataType::Int64, false),
+                &yss_data_contract::ColumnSemantic::new(kind),
+            )
+            .unwrap()
+        })
+        .collect(),
+        vec![
+            Arc::new(Int64Array::from(vec![2, 4, 8])),
+            Arc::new(Int64Array::from(vec![2, 4, 8])),
+        ],
+    );
+    let difference = SeriesTransform::Difference {
+        order: 1,
+        window: SeriesWindow::default(),
+    };
+    let percent_change = SeriesTransform::PercentChange {
+        periods: 1,
+        window: SeriesWindow::default(),
+    };
+    let measure = source.select_series("measure").unwrap();
+    let sum = source
+        .reduce_series(&measure, SeriesReduction::Sum)
+        .unwrap();
+    assert_eq!(
+        sum.schema().field(0).data_type(),
+        &DataType::Decimal128(38, 0)
+    );
+    let mut totals = Vec::new();
+    sum.visit_batches(&control(), &mut |batch| {
+        let values = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<arrow::array::Decimal128Array>()
+            .unwrap();
+        totals.extend(values.iter());
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(totals, [Some(14)]);
+    assert_eq!(
+        series_numbers(&source.transform_series(&measure, &difference).unwrap()),
+        [None, Some(2.), Some(4.)],
+    );
+    assert_eq!(
+        series_numbers(&source.transform_series(&measure, &percent_change).unwrap()),
+        [None, Some(1.), Some(1.)],
+    );
+
+    let identifier = source.select_series("id").unwrap();
+    assert_eq!(
+        [
+            matches!(
+                source.reduce_series(&identifier, SeriesReduction::Sum),
+                Err(RelationError::InvalidInput)
+            ),
+            matches!(
+                source.transform_series(&identifier, &difference),
+                Err(RelationError::InvalidInput)
+            ),
+            matches!(
+                source.transform_series(&identifier, &percent_change),
+                Err(RelationError::InvalidInput)
+            ),
+        ],
+        [true; 3],
+        "Identifier storage must not admit Sum, Difference or PercentChange",
+    );
+}
+
+#[test]
+fn single_imputation_uses_full_domain_native_statistics_and_explicit_empty_rules() {
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let source = table(
+        &runtime,
+        vec![Field::new("x", DataType::Int64, true)],
+        vec![Arc::new(Int64Array::from(
+            (0..1024)
+                .map(|i| [None, Some(1), Some(2), Some(4)][i % 4])
+                .collect::<Vec<_>>(),
+        ))],
+    );
+    let series = source.select_series("x").unwrap();
+    for (method, expected) in [
+        (ImputationMethod::Mean, 7. / 3.),
+        (ImputationMethod::Median, 2.),
+        (ImputationMethod::Mode, 1.),
+        (ImputationMethod::Constant(7.), 7.),
+    ] {
+        let output = source
+            .transform_series(&series, &SeriesTransform::Impute { method })
+            .unwrap();
+        let page = numbers(&output.as_relation().unwrap(), 0, 1020, 10);
+        assert_eq!(page.len(), 4);
+        assert!((page[0].unwrap() - expected).abs() < 1e-12);
+        assert_eq!(page[1..], [Some(1.), Some(2.), Some(4.)]);
+        let combined = source.project_series(&[series.clone(), output]).unwrap();
+        assert_eq!(
+            numbers(&combined, 0, 1020, 4),
+            vec![None, Some(1.), Some(2.), Some(4.)]
+        );
+    }
+    for rows in [0, 3] {
+        let source = table(
+            &runtime,
+            vec![Field::new("x", DataType::Float64, true)],
+            vec![Arc::new(Float64Array::from(vec![None; rows]))],
+        );
+        let x = source.select_series("x").unwrap();
+        for method in [
+            ImputationMethod::Mean,
+            ImputationMethod::Median,
+            ImputationMethod::Mode,
+        ] {
+            let output = source
+                .transform_series(&x, &SeriesTransform::Impute { method })
+                .unwrap()
+                .as_relation()
+                .unwrap();
+            if rows > 0 {
+                assert!(output.page(0, 10, &control()).is_err());
+            } else {
+                assert!(numbers(&output, 0, 0, 10).is_empty());
+            }
+        }
+        let output = source
+            .transform_series(
+                &x,
+                &SeriesTransform::Impute {
+                    method: ImputationMethod::Constant(8.),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            numbers(&output.as_relation().unwrap(), 0, 0, 10),
+            vec![Some(8.); rows]
+        );
+    }
+}
+
+#[test]
 fn native_series_windows_remain_lazy_aligned_and_page_consistently() {
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let source = table(

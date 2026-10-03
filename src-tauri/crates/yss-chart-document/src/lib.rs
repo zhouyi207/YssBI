@@ -1,11 +1,20 @@
 use std::path::Path;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use yss_project_layout::{CHART_EXTENSION, CHARTS_DIR};
 use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
 pub const CURRENT_CHART_SCHEMA_VERSION: u32 = 4;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ChartType {
+    Histogram,
+    Scatter,
+    Line,
+}
 
 fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
@@ -35,7 +44,7 @@ pub struct ChartDocument {
     #[serde(deserialize_with = "deserialize_current_schema_version")]
     schema_version: u32,
     pub database_id: String,
-    pub chart_type: String,
+    pub chart_type: ChartType,
     pub encodings: ChartEncodings,
 }
 
@@ -44,7 +53,7 @@ impl ChartDocument {
         Self {
             schema_version: CURRENT_CHART_SCHEMA_VERSION,
             database_id: database_id.into(),
-            chart_type: "histogram".to_owned(),
+            chart_type: ChartType::Histogram,
             encodings: ChartEncodings { x: None, y: None },
         }
     }
@@ -136,6 +145,7 @@ mod tests {
 
     use super::{
         CURRENT_CHART_SCHEMA_VERSION, ChartDocument, ChartResourcePath, ChartResourcePathError,
+        ChartType,
     };
 
     #[test]
@@ -194,7 +204,28 @@ mod tests {
             })
         );
 
+        for (chart_type, wire) in [
+            (ChartType::Histogram, "histogram"),
+            (ChartType::Scatter, "scatter"),
+            (ChartType::Line, "line"),
+        ] {
+            let mut document = document.clone();
+            document.chart_type = chart_type;
+            let value = serde_json::to_value(&document).unwrap();
+            assert_eq!(value["chartType"], wire);
+            assert_eq!(
+                serde_json::from_value::<ChartDocument>(value).unwrap(),
+                document
+            );
+        }
+
         for invalid in [
+            json!({
+                "schemaVersion": CURRENT_CHART_SCHEMA_VERSION,
+                "databaseId": "db-1",
+                "chartType": "unsupported",
+                "encodings": {}
+            }),
             json!({
                 "schemaVersion": CURRENT_CHART_SCHEMA_VERSION + 1,
                 "databaseId": "db-1",

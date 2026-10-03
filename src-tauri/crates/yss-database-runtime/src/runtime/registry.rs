@@ -1,5 +1,4 @@
 use super::{DatabaseDrainOutcome, DatabaseOperationLease, DatabaseOutstandingWork};
-use crate::declaration_observation_for;
 use crate::error::{DatabaseError, DatabaseOperation};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -311,8 +310,7 @@ impl DatabaseSessionRuntime {
                 Some(database),
             ));
         };
-        let Some(current_observation) = declaration_observation_for(&state.observations, &database)
-        else {
+        let Some(current_observation) = state.observations.get(&database) else {
             return Err(DatabaseError::not_found(
                 DatabaseOperation::CommitMutation,
                 Some(database),
@@ -557,9 +555,7 @@ impl DatabaseSessionRuntime {
         let Some(current_revisions) = state.revisions.get(&record.database).copied() else {
             return Err(DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision);
         };
-        let Some(current_observation) =
-            declaration_observation_for(&state.observations, &record.database)
-        else {
+        let Some(current_observation) = state.observations.get(&record.database) else {
             return Err(DatabaseRuntimeCompensationFailureCode::StaleRuntimeRevision);
         };
         if current_revisions != record.after || current_observation != &record.next_observation {
