@@ -24,6 +24,7 @@
     "test:ts": "vitest run",
     "bench:graph": "vitest bench --run src/tests/benchmarks/graphEditorSync.bench.ts",
     "bench:graph:publication": "vitest bench --run src/tests/benchmarks/graphPublication.bench.ts",
+    "bench:project:publication": "vitest bench --run src/tests/benchmarks/projectSnapshot.bench.ts",
     "test:rs": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
     "format": "pnpm format:ts && pnpm format:rs",
     "format:ts": "oxfmt",

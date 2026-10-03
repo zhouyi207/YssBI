@@ -1,0 +1,321 @@
+Graph constants boundary: restricted Immer reference
+Date: 2026-10-02, Asia/Shanghai
+Command (workspace G:\006RustProject\YssBI):
+pnpm bench:graph --testNamePattern='^500 constants:'
+
+Result: process session 22871 exited 0. Vitest benchmark-file elapsed: 16,577 ms.
+The wrapper/startup elapsed was not separately instrumented. The file elapsed is not
+a desktop frame measurement or the sum of timed samples. All six tasks took exactly
+30 measured samples. The repeated result table below is Vitest's original output,
+not a second run. No selected or matched task failed.
+
+Scope and comparison:
+- 500 constants, each with a serialized Object containing two 16-item Lists (32
+  Integer leaves), a nested metadata Object with label/boolean, description and tags.
+  Across the map there are 16,000 numeric leaves. Constants have legal UUID keys.
+- Cases: fresh equal content; one constant name changed; one nested Integer changed.
+- Manual = existing core/state/readProjection.ts shareProjection.
+- Immer reference = benchmark-only graphConstantSharingReference.ts. It performs one
+  produce with next as the base and recursively restores equal previous branches.
+  It does not use per-node produce scopes or a root-replacement/assign shortcut.
+- Both timed functions reconcile and call the same freezePublishedValue(result).
+  Immer's normal auto-freeze remains enabled; no production/library switch was changed.
+- beforeEach materializes fresh JSON, deep-freezes it and runs parseGraphDocumentDto.
+  setup/afterEach check contents, fresh input, published proofs, old/new root behavior,
+  changed leaf identity, unchanged siblings and the unaffected constant.
+  Preparation, parsing and these assertions are outside the timer.
+- Fixed frozen previous map; each sample has fresh next objects. Equal returns previous.
+  The output is retained for assertions; no result is silently discarded.
+- Registration order is equal manual/reference, name-only manual/reference,
+  nested-change manual/reference within one process. This is not a randomized ABBA
+  run. Sequential heat/JIT/GC effects remain possible, including delayed GC.
+- time=0, iterations=30, warmupTime=100 ms; actual stdout confirms N=30 per group.
+- Existing node fixtures are constructed by this same benchmark module but their
+  tasks are filtered out. Their retained memory is part of the shared process context.
+- This isolates constant reconciliation/publication, not complete graph adoption,
+  sync decoding, Rust work, IPC, UI rendering, or typical real-project constant sizes.
+
+Semantic limitation and decision:
+The reference DOES NOT cover all legal JSON. Rust DataValue::Object is a BTreeMap
+with unrestricted string keys (yss-data-contract/src/data_value.rs), and the
+frontend literal validator permits own "__proto__" keys. Tabular column names
+likewise have no such exclusion. Current Immer 11.1.18 proxy.set checks a prototype
+setter before handling an own property, so restoring an equal object-valued
+"__proto__" branch throws Object.setPrototypeOf. This was observed in the real
+temporary candidate and reproduced with a minimal public-API command.
+
+The candidate was removed from production. graphProjection.ts constants uses the
+original shareProjection again. The candidate body moved to test/benchmark support,
+with an explicitly restricted reference name. There is no production selector,
+fallback, alternate owner, new input restriction, or retained unused production
+module. The production legal-key regression is green; no test was added merely
+to assert framework failure.
+
+The measured ordinary-key fixtures satisfy the asserted equality/reference
+behavior for both implementations, but this does not prove full-domain equivalence.
+These timings therefore do not approve this candidate, do not grant a constants
+rule exception, and do not exempt the remaining generic projection reconciliation.
+They also do not prove that every possible future Immer design is impossible.
+
+Environment and pre-run source hashes:
+{
+    "utc":  "2026-10-02T10:18:49.8387717Z",
+    "node":  "v24.19.0",
+    "os":  "Microsoft Windows 11 专业版",
+    "osVersion":  "10.0.26200",
+    "cpu":  "13th Gen Intel(R) Core(TM) i9-13900K",
+    "cores":  24,
+    "logical":  32,
+    "head":  "7c7d843e5409f36100dd8297b7da8e4508eb6f4a",
+    "dirtyEntries":  1038,
+    "hashes":  [
+                   {
+                       "Path":  "G:\\006RustProject\\YssBI\\src\\features\\core\\state\\readProjection.ts",
+                       "Hash":  "69F684A76AA3A8EF71B97412725947E33C658E599B6EC305A8562F9D90046887"
+                   },
+                   {
+                       "Path":  "G:\\006RustProject\\YssBI\\src\\features\\core\\dataStore\\graphProjection.ts",
+                       "Hash":  "07CAFB1482D37062F04435113B7A7136DB6F09EA23B158EEA76F762ECE1659DA"
+                   },
+                   {
+                       "Path":  "G:\\006RustProject\\YssBI\\src\\tests\\benchmarks\\graphConstantSharingReference.ts",
+                       "Hash":  "E6046F4E9B54446551F385A9A068A50EFC194EB5343C8BB521C14CFB008DE14C"
+                   },
+                   {
+                       "Path":  "G:\\006RustProject\\YssBI\\src\\tests\\benchmarks\\graphEditorSync.bench.ts",
+                       "Hash":  "4E7743148611D69127F741F96546BFA85008992F110FCC8B20CC2365C71ECB30"
+                   },
+                   {
+                       "Path":  "G:\\006RustProject\\YssBI\\src\\tests\\helpers\\editorProjectionFixtures.ts",
+                       "Hash":  "4D88BC547F90EBA2C963EA3C8F2A522F1E0405B2DD5717DC9AEB92EB8DE5986D"
+                   },
+                   {
+                       "Path":  "G:\\006RustProject\\YssBI\\src\\shared\\types\\deepReadonly.ts",
+                       "Hash":  "A8454CCC799D75804840EB41176F7F81FDC4B64C6B1548512612865DA1EF3A46"
+                   }
+               ]
+}
+
+
+Dirty-tree limitation:
+The workspace had 1038 git status entries. HEAD alone does not identify the measured
+implementation. The root and the other agents paused tests/compilation during the
+measurement; no CPU-isolated hardware or OS background-process control was used.
+All six pre/post measured-source SHA256 hashes match:
+[
+    {
+        "Path":  "G:\\006RustProject\\YssBI\\src\\features\\core\\state\\readProjection.ts",
+        "Hash":  "69F684A76AA3A8EF71B97412725947E33C658E599B6EC305A8562F9D90046887"
+    },
+    {
+        "Path":  "G:\\006RustProject\\YssBI\\src\\features\\core\\dataStore\\graphProjection.ts",
+        "Hash":  "07CAFB1482D37062F04435113B7A7136DB6F09EA23B158EEA76F762ECE1659DA"
+    },
+    {
+        "Path":  "G:\\006RustProject\\YssBI\\src\\tests\\benchmarks\\graphConstantSharingReference.ts",
+        "Hash":  "E6046F4E9B54446551F385A9A068A50EFC194EB5343C8BB521C14CFB008DE14C"
+    },
+    {
+        "Path":  "G:\\006RustProject\\YssBI\\src\\tests\\benchmarks\\graphEditorSync.bench.ts",
+        "Hash":  "4E7743148611D69127F741F96546BFA85008992F110FCC8B20CC2365C71ECB30"
+    },
+    {
+        "Path":  "G:\\006RustProject\\YssBI\\src\\tests\\helpers\\editorProjectionFixtures.ts",
+        "Hash":  "4D88BC547F90EBA2C963EA3C8F2A522F1E0405B2DD5717DC9AEB92EB8DE5986D"
+    },
+    {
+        "Path":  "G:\\006RustProject\\YssBI\\src\\shared\\types\\deepReadonly.ts",
+        "Hash":  "A8454CCC799D75804840EB41176F7F81FDC4B64C6B1548512612865DA1EF3A46"
+    }
+]
+
+
+Actual candidate failure evidence:
+Command: pnpm test:ts src/features/core/dataStore/graphProjection.test.ts
+At this point the candidate was temporarily in production; the source path shown
+below no longer exists after moving the reference to benchmark support.
+Captured diagnostic/result lines (decorative separator lines omitted):
+$ vitest run "src/features/core/dataStore/graphProjection.test.ts"
+
+ RUN  v4.1.10 G:/006RustProject/YssBI
+
+ ❯ src/features/core/dataStore/graphProjection.test.ts (10 tests | 1 failed) 22ms
+   × keeps constants content and branch identities equivalent across complete snapshots and shared deltas 6ms
+
+ FAIL  src/features/core/dataStore/graphProjection.test.ts > keeps constants content and branch identities equivalent across complete snapshots and shared deltas
+Error: [Immer] Object.setPrototypeOf() cannot be used on an Immer draft
+ ❯ die node_modules/.pnpm/immer@11.1.18/node_modules/immer/src/utils/errors.ts:45:8
+ ❯ Object.setPrototypeOf node_modules/.pnpm/immer@11.1.18/node_modules/immer/src/core/proxy.ts:252:2
+ ❯ Object.set node_modules/.pnpm/immer@11.1.18/node_modules/immer/src/core/proxy.ts:178:12
+ ❯ restoreEqualBranches src/features/core/dataStore/graphConstantProjection.ts:42:44
+     40|     if (!Object.prototype.hasOwnProperty.call(before, key) || !shared)…
+     41|     if (shared && !Object.is(before[key], after[key]))
+     42|       (draft() as Record<string, unknown>)[key] = before[key];
+       |                                            ^
+     43|   }
+     44|   return equal;
+ ❯ restoreEqualBranches src/features/core/dataStore/graphConstantProjection.ts:35:20
+ ❯ restoreEqualBranches src/features/core/dataStore/graphConstantProjection.ts:35:20
+ ❯ restoreEqualBranches src/features/core/dataStore/graphConstantProjection.ts:35:20
+ ❯ src/features/core/dataStore/graphConstantProjection.ts:55:13
+ ❯ Immer2.produce node_modules/.pnpm/immer@11.1.18/node_modules/immer/src/core/immerClass.ts:110:13
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  18:16:41
+   Duration  294ms (transform 108ms, setup 0ms, import 153ms, tests 22ms, environment 0ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+Minimal public-API reproduction, actually executed with Node v24.19.0 / Immer 11.1.18:
+@'
+import { produce } from "immer";
+const previous = JSON.parse('{"__proto__":{"Integer":"1"}}');
+const next = JSON.parse('{"__proto__":{"Integer":"1"},"sibling":{"Integer":"2"}}');
+try {
+  const result = produce(next, draft => { draft["__proto__"] = previous["__proto__"]; });
+  console.log({ result, own: Object.hasOwn(result, "__proto__") });
+} catch (error) { console.log(error.message); process.exitCode = 1; }
+'@ | node --input-type=module
+Observed stdout:
+[Immer] Object.setPrototypeOf() cannot be used on an Immer draft
+Observed process exit: 1.
+
+Final behavior checks:
+pnpm test:ts src/features/core/dataStore/graphProjection.test.ts src/features/domain/editorProjection/editorProjection.test.ts src/shared/types/dto/editorMutationWireParser.test.ts src/services/nodeSystem/graphEditorSync.test.ts src/features/application/graphEditing/graphConstantActions.test.ts src/features/application/editor/canvasDrop/dropGraphConstant.test.ts src/features/core/state/readonlySnapshot.test.ts
+18:17:57: 7 files, 63 tests passed; Vitest duration 543 ms.
+This includes the existing complete candidate/identity/atomicity tests and one new
+non-UI constants boundary case, including a real Store installation with legal
+own "__proto__". The original same-version constants case also asserts dataValue
+identity across a name-only change. These counts do not add earlier repeated runs.
+The immediate typecheck found test-only index signature / delete / ES-lib typing
+errors; those were corrected, and pnpm check:ts then passed. Production behavior
+and measured fixture/algorithm did not change in those typing corrections.
+
+Complete benchmark stdout:
+$ vitest bench --run src/tests/benchmarks/graphEditorSync.bench.ts "--testNamePattern=^500 constants:"
+Benchmarking is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+
+ RUN  v4.1.10 G:/006RustProject/YssBI
+
+
+ ✓ src/tests/benchmarks/graphEditorSync.bench.ts 16577ms
+     name                                               hz      min      max     mean      p75      p99     p995     p999     rme  samples
+   ↓ 100 nodes: snapshot parse and adoption [skipped]
+   ↓ 100 nodes: snapshot parse [skipped]
+   ↓ 100 nodes: snapshot adoption [skipped]
+   ↓ 100 nodes: delta parse and adoption [skipped]
+   ↓ 100 nodes: delta parse [skipped]
+   ↓ 100 nodes: delta adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 100 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse [skipped]
+   ↓ 1000 nodes: snapshot adoption [skipped]
+   ↓ 1000 nodes: delta parse and adoption [skipped]
+   ↓ 1000 nodes: delta parse [skipped]
+   ↓ 1000 nodes: delta adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse [skipped]
+   ↓ 5000 nodes: snapshot adoption [skipped]
+   ↓ 5000 nodes: delta parse and adoption [skipped]
+   ↓ 5000 nodes: delta parse [skipped]
+   ↓ 5000 nodes: delta adoption [skipped]
+   ↓ 5000 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 5000 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 5000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   · 500 constants: equal manual                    304.96   3.0660   4.6111   3.2791   3.2457   4.6111   4.6111   4.6111  ±4.00%       30
+   · 500 constants: equal immer reference          31.4961  30.4322  34.9679  31.7500  32.4274  34.9679  34.9679  34.9679  ±1.32%       30
+   · 500 constants: name-only manual                276.54   3.2299   5.0125   3.6161   3.6761   5.0125   5.0125   5.0125  ±4.66%       30
+   · 500 constants: name-only immer reference      30.3094  30.4530  41.8814  32.9931  33.9094  41.8814  41.8814  41.8814  ±2.68%       30
+   · 500 constants: nested change manual            252.83   3.2789   5.6399   3.9552   4.5903   5.6399   5.6399   5.6399  ±6.61%       30
+   · 500 constants: nested change immer reference  31.1551  30.7871  35.3763  32.0975  32.6549  35.3763  35.3763  35.3763  ±1.19%       30
+
+ ✓ src/tests/benchmarks/graphEditorSync.bench.ts 16577ms
+     name                                               hz      min      max     mean      p75      p99     p995     p999     rme  samples
+   ↓ 100 nodes: snapshot parse and adoption [skipped]
+   ↓ 100 nodes: snapshot parse [skipped]
+   ↓ 100 nodes: snapshot adoption [skipped]
+   ↓ 100 nodes: delta parse and adoption [skipped]
+   ↓ 100 nodes: delta parse [skipped]
+   ↓ 100 nodes: delta adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 100 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse [skipped]
+   ↓ 1000 nodes: snapshot adoption [skipped]
+   ↓ 1000 nodes: delta parse and adoption [skipped]
+   ↓ 1000 nodes: delta parse [skipped]
+   ↓ 1000 nodes: delta adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse [skipped]
+   ↓ 5000 nodes: snapshot adoption [skipped]
+   ↓ 5000 nodes: delta parse and adoption [skipped]
+   ↓ 5000 nodes: delta parse [skipped]
+   ↓ 5000 nodes: delta adoption [skipped]
+   ↓ 5000 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 5000 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 5000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   · 500 constants: equal manual                    304.96   3.0660   4.6111   3.2791   3.2457   4.6111   4.6111   4.6111  ±4.00%       30
+   · 500 constants: equal immer reference          31.4961  30.4322  34.9679  31.7500  32.4274  34.9679  34.9679  34.9679  ±1.32%       30
+   · 500 constants: name-only manual                276.54   3.2299   5.0125   3.6161   3.6761   5.0125   5.0125   5.0125  ±4.66%       30
+   · 500 constants: name-only immer reference      30.3094  30.4530  41.8814  32.9931  33.9094  41.8814  41.8814  41.8814  ±2.68%       30
+   · 500 constants: nested change manual            252.83   3.2789   5.6399   3.9552   4.5903   5.6399   5.6399   5.6399  ±6.61%       30
+   · 500 constants: nested change immer reference  31.1551  30.7871  35.3763  32.0975  32.6549  35.3763  35.3763  35.3763  ±1.19%       30
+
+ BENCH  Summary
+
+  500 constants: equal manual - src/tests/benchmarks/graphEditorSync.bench.ts
+    1.10x faster than 500 constants: name-only manual
+    1.21x faster than 500 constants: nested change manual
+    9.68x faster than 500 constants: equal immer reference
+    9.79x faster than 500 constants: nested change immer reference
+    10.06x faster than 500 constants: name-only immer reference
+
+
+

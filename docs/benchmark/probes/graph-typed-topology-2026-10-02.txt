@@ -1,0 +1,324 @@
+Graph typed topology: current implementation adoption costs
+Date: 2026-10-02, Asia/Shanghai
+Workspace: G:\006RustProject\YssBI
+Command:
+pnpm bench:graph --testNamePattern='^5000 nodes: (delta adoption|existing graph .* snapshot adoption)$'
+
+Result: process session 91964 exited 0. All four selected tasks and their assertions
+passed. Vitest benchmark-file elapsed: 40,970 ms. Actual sample counts are retained
+below; delta took 181 samples, each full-snapshot scenario took 30.
+Command dispatch timestamp: 2026-10-02T10:46:09.660Z
+Exit-result observation timestamp: 2026-10-02T10:47:05.247Z
+These tool timestamps span 55.587 seconds, including startup, tool scheduling and
+polling delay; they are not an independently instrumented process elapsed time.
+The repeated table is original Vitest stdout, not another run. Complete stdout
+is included below without omitted chunks.
+
+Current implementation:
+- graphProjection.ts uses one produce(next) for the graph root, node/port arrays,
+  parameter-group/parameter arrays and their fixed DTO shells. Read-only old/next
+  inputs drive comparisons; lazy draft access only writes fixed fields and array
+  positions. Nodes match nodeId, ports match complete address, groups/parameters
+  match key. A whole equal graph returns previous; a delta requiring no reference
+  substitutions retains the incoming next root and its validation/freeze proofs.
+- Simple position/display/capability/address/connection-capability/outcome records
+  use shallow comparison. There is no full node/root generic recursive sharing or
+  second node pass to repair positional port sharing.
+- Truly opaque parameter value, literalOverride and protocolDefault are still
+  shared outside draft traversal. Legal JSON keys do not become draft write paths.
+- The existing helper ALSO remains for complex typed read leaves: basis,
+  connections, diagnostics, portInstanceAdditions, typeState, resolvedSchema,
+  parameter editor spec/valueType, plus the existing constant typed-shell's
+  dataType/dataValue/tabular boundaries. This step does not claim these remaining
+  recursive boundaries are eliminated or approved exceptions.
+- The original candidate-level identity, duplicate node/port, graph-path,
+  membership and endpoint checks remain. No protocol, sync baseline, revision
+  trust shortcut, validation bypass, new owner or alternate production strategy
+  was added.
+
+Measurement scope:
+- Exactly four 5000-node adoption groups were selected; sync parsing, initial-load
+  and constants comparison tasks were filtered out.
+- Delta uses the original ONE output port per node and continuously alternates
+  one node's x coordinate via the existing Rust-owned set-path delta format.
+  Input patch application, freezing and validation are in beforeEach, outside the
+  measured installGraphSession call. beforeEach also captures prior state.
+  afterEach now checks exact incoming projection identity, publication proof,
+  changed-node position identity, an unaffected node, pins and graph-node order.
+- Full-snapshot scenarios use TWO output ports per node so complete node/port
+  reversal actually changes both orders. They are fresh equal content, one-node
+  move, and reversal of all node/port arrays. Each sample restores the same
+  installed base, receives a fresh frozen/validated snapshot outside the timer,
+  then times installGraphSession only. Existing setup/afterEach verify content,
+  old/new identities, no publication on equality, unchanged indexes and reorder.
+- Both fixtures derive from editor-projection.json: one parameter group with one
+  graphConstant editor, scalar Text valueType and a string UUID value; ports have
+  null input and schema, exact scalar Binary typeState; connections, diagnostics,
+  additions and resource-observation maps are empty. Constants are absent.
+  This does not sample large opaque values, schemas, diagnostic dictionaries,
+  graph connectivity or real project distributions.
+- time=500 ms, iterations=30 minimum, warmupTime=100 ms were unchanged. Thus the
+  fast delta case legitimately measured 181 iterations to meet its time budget.
+- Registration order is delta, equal snapshot, move snapshot, reorder snapshot,
+  all in one process. Fixtures and timed bodies were unchanged; only delta's
+  outside-timer assertions/captured previous state were strengthened this batch.
+  Hooks can still affect retained memory or later GC even though they are not timed.
+- Root coordinated an exclusive CPU window: no other agent tests, builds,
+  typechecks or lint ran concurrently. OS/background activity was not instrumented.
+  All module-level fixtures remain part of this process's memory context.
+
+Observed current costs (milliseconds):
+delta adoption: mean 2.7672, RME +/-1.17%, N=181,
+  min 2.3940, max 3.6757, p75 2.8917, p99 3.4634.
+equal snapshot adoption: mean 88.8806, RME +/-2.57%, N=30,
+  min 82.9093, max 110.30, p75 91.0014.
+one-node move snapshot adoption: mean 100.23, RME +/-25.65%, N=30,
+  min 84.2675, max 464.52, p75 88.4853.
+node and port reorder snapshot adoption: mean 154.57, RME +/-0.64%, N=30,
+  min 150.49, max 160.70, p75 156.76.
+
+Limitations and interpretation:
+The move sample has a large observed tail and high RME; its mean is not a precise
+stable-cost estimate. The 464.52 ms observation is retained, not discarded, and
+its cause was not instrumented. No rerun was performed to hide variability.
+Delta and snapshots have different port counts, input forms and preparation; the
+automatic Vitest relative summary below is not an equivalent-work speedup claim.
+This is one current implementation, not a controlled former-strategy comparison.
+Historical raw has different source hashes and/or filtering/process histories.
+It cannot be used to attribute speedups or regressions to this step. The numbers
+do not establish desktop frame rate, Rust/IPC cost, full synchronization latency,
+a library-wide advantage, or a rule exception for remaining recursive boundaries.
+
+Behavior/check evidence:
+L1:
+pnpm test:ts src/features/core/dataStore/graphProjection.test.ts src/features/domain/editorProjection/editorProjection.test.ts src/shared/types/dto/editorMutationWireParser.test.ts src/services/nodeSystem/graphEditorSync.test.ts
+  Four files, 58 tests passed at 18:42:22.
+L2:
+pnpm test:ts src/features/core/dataStore/graphProjection.test.ts src/features/domain/editorProjection/editorProjection.test.ts src/shared/types/dto/editorMutationWireParser.test.ts src/services/nodeSystem/graphEditorSync.test.ts src/features/application/graphEditing/graphConstantActions.test.ts src/features/application/editor/canvasDrop/dropGraphConstant.test.ts src/features/core/state/readonlySnapshot.test.ts src/features/core/dataStore/nodeView.test.ts src/features/application/editor/setNodeParameters.test.ts src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.test.tsx src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.test.tsx
+  Eleven files, 89 tests passed at 18:43:48 (1.07 s reported duration).
+The existing non-UI Core identity test was expanded for parameter/input values with
+own __proto__, unchanged reserved-key branches, original delta roots, fresh changed
+leaf references, equal same-version replies and old-source isolation. The existing
+UI consumer tests were run without adding or modifying UI tests.
+pnpm check:ts passed after production and again after final benchmark assertions.
+pnpm lint:ts src/features/core/dataStore/graphProjection.ts src/features/core/dataStore/graphProjection.test.ts
+  Root script includes ".", so it scans the tree. Only the three known warnings
+  in useChartContainerSize.test.tsx, projectEventStream.ts and
+  useLogPanelVirtualList.test.tsx remained.
+Changed TypeScript files were formatted; git diff --check passed before measurement
+with existing CRLF normalization warnings. Documentation changed afterward only.
+All seven measured source hashes below matched before and after the run.
+This is a shared dirty tree, not an isolated clean checkout. Other simultaneous
+goal changes outside the measured path are not attributed to this benchmark.
+
+Pre-run environment and SHA256:
+{
+    "utc":  "2026-10-02T10:46:09.4928198Z",
+    "node":  "v24.19.0",
+    "os":  {
+               "Caption":  "Microsoft Windows 11 专业版",
+               "Version":  "10.0.26200"
+           },
+    "cpu":  {
+                "Name":  "13th Gen Intel(R) Core(TM) i9-13900K",
+                "NumberOfCores":  24,
+                "NumberOfLogicalProcessors":  32
+            },
+    "head":  "7c7d843e5409f36100dd8297b7da8e4508eb6f4a",
+    "dirtyEntries":  1060,
+    "hashes":  [
+                   {
+                       "path":  "src/features/core/dataStore/graphProjection.ts",
+                       "sha256":  "1C075D0C64FD61634FD1DE8F0C8DF0CB3C9C342035AD828A5D318E46E3EEF444"
+                   },
+                   {
+                       "path":  "src/features/core/dataStore/graphConstantProjection.ts",
+                       "sha256":  "78E2F8BEC8C155A3439272552B8A644B94510BA1D99AB6EA4949AEA374E48F70"
+                   },
+                   {
+                       "path":  "src/features/core/state/readProjection.ts",
+                       "sha256":  "69F684A76AA3A8EF71B97412725947E33C658E599B6EC305A8562F9D90046887"
+                   },
+                   {
+                       "path":  "src/tests/benchmarks/graphEditorSync.bench.ts",
+                       "sha256":  "25553A820FE59DE5317530A1B8C4E52020347C2B85B0B668213F2D19DBAB26AD"
+                   },
+                   {
+                       "path":  "src/shared/types/deepReadonly.ts",
+                       "sha256":  "A8454CCC799D75804840EB41176F7F81FDC4B64C6B1548512612865DA1EF3A46"
+                   },
+                   {
+                       "path":  "src/shared/types/domain/editorProjectionParser.ts",
+                       "sha256":  "2B97F048630F307F7DF892DF06B550CE7EF7272F2800594667C27A54C2830169"
+                   },
+                   {
+                       "path":  "src/features/core/dataStore/graphResultProjection.ts",
+                       "sha256":  "66871A8DF168268F6ECD0BC0FF56EC42472E0820CC4BB087B70E0CE0C9B8BF7A"
+                   }
+               ]
+}
+
+Post-run SHA256 (all seven match = true):
+[
+    {
+        "path":  "src/features/core/dataStore/graphProjection.ts",
+        "sha256":  "1C075D0C64FD61634FD1DE8F0C8DF0CB3C9C342035AD828A5D318E46E3EEF444"
+    },
+    {
+        "path":  "src/features/core/dataStore/graphConstantProjection.ts",
+        "sha256":  "78E2F8BEC8C155A3439272552B8A644B94510BA1D99AB6EA4949AEA374E48F70"
+    },
+    {
+        "path":  "src/features/core/state/readProjection.ts",
+        "sha256":  "69F684A76AA3A8EF71B97412725947E33C658E599B6EC305A8562F9D90046887"
+    },
+    {
+        "path":  "src/tests/benchmarks/graphEditorSync.bench.ts",
+        "sha256":  "25553A820FE59DE5317530A1B8C4E52020347C2B85B0B668213F2D19DBAB26AD"
+    },
+    {
+        "path":  "src/shared/types/deepReadonly.ts",
+        "sha256":  "A8454CCC799D75804840EB41176F7F81FDC4B64C6B1548512612865DA1EF3A46"
+    },
+    {
+        "path":  "src/shared/types/domain/editorProjectionParser.ts",
+        "sha256":  "2B97F048630F307F7DF892DF06B550CE7EF7272F2800594667C27A54C2830169"
+    },
+    {
+        "path":  "src/features/core/dataStore/graphResultProjection.ts",
+        "sha256":  "66871A8DF168268F6ECD0BC0FF56EC42472E0820CC4BB087B70E0CE0C9B8BF7A"
+    }
+]
+
+
+----- Complete benchmark stdout -----
+$ vitest bench --run src/tests/benchmarks/graphEditorSync.bench.ts "--testNamePattern=^5000 nodes: (delta adoption|existing graph .* snapshot adoption)$"
+Benchmarking is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+
+ RUN  v4.1.10 G:/006RustProject/YssBI
+
+
+ ✓ src/tests/benchmarks/graphEditorSync.bench.ts 40970ms
+     name                                                                     hz      min     max     mean      p75     p99    p995    p999      rme  samples
+   ↓ 100 nodes: snapshot parse and adoption [skipped]
+   ↓ 100 nodes: snapshot parse [skipped]
+   ↓ 100 nodes: snapshot adoption [skipped]
+   ↓ 100 nodes: delta parse and adoption [skipped]
+   ↓ 100 nodes: delta parse [skipped]
+   ↓ 100 nodes: delta adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 100 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse [skipped]
+   ↓ 1000 nodes: snapshot adoption [skipped]
+   ↓ 1000 nodes: delta parse and adoption [skipped]
+   ↓ 1000 nodes: delta parse [skipped]
+   ↓ 1000 nodes: delta adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse [skipped]
+   ↓ 5000 nodes: snapshot adoption [skipped]
+   ↓ 5000 nodes: delta parse and adoption [skipped]
+   ↓ 5000 nodes: delta parse [skipped]
+   · 5000 nodes: delta adoption                                           361.38   2.3940  3.6757   2.7672   2.8917  3.4634  3.6757  3.6757   ±1.17%      181
+   ↓ 5000 nodes: existing graph equal snapshot sync [skipped]
+   · 5000 nodes: existing graph equal snapshot adoption                  11.2510  82.9093  110.30  88.8806  91.0014  110.30  110.30  110.30   ±2.57%       30
+   ↓ 5000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot sync [skipped]
+   · 5000 nodes: existing graph one-node move snapshot adoption           9.9773  84.2675  464.52   100.23  88.4853  464.52  464.52  464.52  ±25.65%       30
+   ↓ 5000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   · 5000 nodes: existing graph node and port reorder snapshot adoption   6.4695   150.49  160.70   154.57   156.76  160.70  160.70  160.70   ±0.64%       30
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 500 constants: equal manual [skipped]
+   ↓ 500 constants: equal immer reference [skipped]
+   ↓ 500 constants: equal typed immer [skipped]
+   ↓ 500 constants: name-only manual [skipped]
+   ↓ 500 constants: name-only immer reference [skipped]
+   ↓ 500 constants: name-only typed immer [skipped]
+   ↓ 500 constants: nested change manual [skipped]
+   ↓ 500 constants: nested change immer reference [skipped]
+   ↓ 500 constants: nested change typed immer [skipped]
+
+ ✓ src/tests/benchmarks/graphEditorSync.bench.ts 40970ms
+     name                                                                     hz      min     max     mean      p75     p99    p995    p999      rme  samples
+   ↓ 100 nodes: snapshot parse and adoption [skipped]
+   ↓ 100 nodes: snapshot parse [skipped]
+   ↓ 100 nodes: snapshot adoption [skipped]
+   ↓ 100 nodes: delta parse and adoption [skipped]
+   ↓ 100 nodes: delta parse [skipped]
+   ↓ 100 nodes: delta adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 100 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 100 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse and adoption [skipped]
+   ↓ 1000 nodes: snapshot parse [skipped]
+   ↓ 1000 nodes: snapshot adoption [skipped]
+   ↓ 1000 nodes: delta parse and adoption [skipped]
+   ↓ 1000 nodes: delta parse [skipped]
+   ↓ 1000 nodes: delta adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot adoption [skipped]
+   ↓ 1000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse and adoption [skipped]
+   ↓ 5000 nodes: snapshot parse [skipped]
+   ↓ 5000 nodes: snapshot adoption [skipped]
+   ↓ 5000 nodes: delta parse and adoption [skipped]
+   ↓ 5000 nodes: delta parse [skipped]
+   · 5000 nodes: delta adoption                                           361.38   2.3940  3.6757   2.7672   2.8917  3.4634  3.6757  3.6757   ±1.17%      181
+   ↓ 5000 nodes: existing graph equal snapshot sync [skipped]
+   · 5000 nodes: existing graph equal snapshot adoption                  11.2510  82.9093  110.30  88.8806  91.0014  110.30  110.30  110.30   ±2.57%       30
+   ↓ 5000 nodes: existing graph equal snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph one-node move snapshot sync [skipped]
+   · 5000 nodes: existing graph one-node move snapshot adoption           9.9773  84.2675  464.52   100.23  88.4853  464.52  464.52  464.52  ±25.65%       30
+   ↓ 5000 nodes: existing graph one-node move snapshot sync and adoption [skipped]
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync [skipped]
+   · 5000 nodes: existing graph node and port reorder snapshot adoption   6.4695   150.49  160.70   154.57   156.76  160.70  160.70  160.70   ±0.64%       30
+   ↓ 5000 nodes: existing graph node and port reorder snapshot sync and adoption [skipped]
+   ↓ 500 constants: equal manual [skipped]
+   ↓ 500 constants: equal immer reference [skipped]
+   ↓ 500 constants: equal typed immer [skipped]
+   ↓ 500 constants: name-only manual [skipped]
+   ↓ 500 constants: name-only immer reference [skipped]
+   ↓ 500 constants: name-only typed immer [skipped]
+   ↓ 500 constants: nested change manual [skipped]
+   ↓ 500 constants: nested change immer reference [skipped]
+   ↓ 500 constants: nested change typed immer [skipped]
+
+ BENCH  Summary
+
+  5000 nodes: delta adoption - src/tests/benchmarks/graphEditorSync.bench.ts
+    32.12x faster than 5000 nodes: existing graph equal snapshot adoption
+    36.22x faster than 5000 nodes: existing graph one-node move snapshot adoption
+    55.86x faster than 5000 nodes: existing graph node and port reorder snapshot adoption
+
+
+
