@@ -54,11 +54,11 @@ export function DetailColumnList({
           )}
           <TableBody>
             {columns.map((column) => (
-              <TableRow key={column.name} className="border-border/50">
-                <TableCell className="px-3 py-2 font-medium text-foreground">
+              <TableRow key={column.name} className="h-7 border-border/50">
+                <TableCell className="px-3 py-1 font-medium text-foreground">
                   {column.name}
                 </TableCell>
-                <TableCell className={`px-3 py-2 ${detailAccentMonoTextClass}`}>
+                <TableCell className={`px-3 py-1 ${detailAccentMonoTextClass}`}>
                   {column.type}
                 </TableCell>
               </TableRow>

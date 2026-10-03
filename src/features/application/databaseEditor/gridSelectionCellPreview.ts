@@ -1,54 +1,49 @@
 import type { DatabaseGridSelection } from "@/features/domain/databaseEditor/gridSelection";
+import type { ColumnInfo } from "@/shared/types/domain/database";
 
-function formatCellForPreview(value: unknown): string {
-  if (value === null) return "null";
+function formatCellForPreview(value: unknown): string | null {
+  if (value === null) return null;
   if (value === undefined) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
-function getCellText(
-  row: number,
-  column: number,
-  columnCount: number,
-  rowCount: number,
+export function getGridSelectionPrimaryCellPreview(
+  selection: DatabaseGridSelection | null,
+  columns: readonly Pick<ColumnInfo, "name">[],
   loadedRows: readonly (readonly unknown[])[],
-): string {
+  pageStartIndex: number,
+): { rowNumber: number; columnName: string; text: string | null } | null {
+  if (!selection) return null;
+
+  const row =
+    selection.type === "cells"
+      ? selection.activeCell.row
+      : selection.type === "rows"
+        ? selection.rows[0]
+        : 0;
+  const column =
+    selection.type === "cells"
+      ? selection.activeCell.column
+      : selection.type === "columns"
+        ? selection.columns[0]
+        : 0;
   if (
     !Number.isInteger(row) ||
     !Number.isInteger(column) ||
     row < 0 ||
-    row >= rowCount ||
+    row >= loadedRows.length ||
     column < 0 ||
-    column >= columnCount
+    column >= columns.length
   ) {
-    return "";
+    return null;
   }
   const rowData = loadedRows[row];
-  if (!rowData) return "";
-  return formatCellForPreview(rowData[column]);
-}
-
-export function getGridSelectionPrimaryCellText(
-  selection: DatabaseGridSelection | null,
-  columnCount: number,
-  rowCount: number,
-  loadedRows: readonly (readonly unknown[])[],
-): string {
-  if (!selection) return "";
-
-  if (selection.type === "cells") {
-    return getCellText(
-      selection.activeCell.row,
-      selection.activeCell.column,
-      columnCount,
-      rowCount,
-      loadedRows,
-    );
-  }
-  if (selection.type === "rows") {
-    return getCellText(selection.rows[0], 0, columnCount, rowCount, loadedRows);
-  }
-  return getCellText(0, selection.columns[0], columnCount, rowCount, loadedRows);
+  if (!rowData) return null;
+  return {
+    rowNumber: pageStartIndex + row + 1,
+    columnName: columns[column].name,
+    text: formatCellForPreview(rowData[column]),
+  };
 }

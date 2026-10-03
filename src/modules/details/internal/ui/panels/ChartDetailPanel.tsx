@@ -84,22 +84,20 @@ function ChartDetailForm({ chartPath, name, document }: ChartDetailPanelProps) {
     chartUi.updateDraft(chartPath, changes);
   };
 
-  const encodingLabelClass = "align-top pt-2";
-
   return (
     <DetailPanelShell>
       <DetailForm>
         <DetailReadonlyField label={t("detail.fields.name")} tone="body">
           {name}
         </DetailReadonlyField>
-        <DetailFieldRow label={t("chartsSidebar.dataset")} labelClassName={encodingLabelClass}>
+        <DetailFieldRow label={t("chartsSidebar.dataset")}>
           <Select
             value={document.databaseId}
             options={databaseOptions}
             onChange={(val) => patch({ databaseId: val, encodings: {} })}
           />
         </DetailFieldRow>
-        <DetailFieldRow label={t("chartsSidebar.chartType")} labelClassName={encodingLabelClass}>
+        <DetailFieldRow label={t("chartsSidebar.chartType")}>
           <Select
             value={document.chartType}
             options={CHART_TYPES.map((type) => ({
@@ -110,7 +108,7 @@ function ChartDetailForm({ chartPath, name, document }: ChartDetailPanelProps) {
           />
         </DetailFieldRow>
         {document.chartType === "histogram" ? (
-          <DetailFieldRow label={t("chartsSidebar.encodingY")} labelClassName={encodingLabelClass}>
+          <DetailFieldRow label={t("chartsSidebar.encodingY")}>
             <Select
               value={document.encodings.y ?? ""}
               options={allColumnOptions}
@@ -119,20 +117,14 @@ function ChartDetailForm({ chartPath, name, document }: ChartDetailPanelProps) {
           </DetailFieldRow>
         ) : (
           <>
-            <DetailFieldRow
-              label={t("chartsSidebar.encodingX")}
-              labelClassName={encodingLabelClass}
-            >
+            <DetailFieldRow label={t("chartsSidebar.encodingX")}>
               <Select
                 value={document.encodings.x ?? ""}
                 options={numericColumnOptions}
                 onChange={(val) => patch({ encodings: { ...document.encodings, x: val } })}
               />
             </DetailFieldRow>
-            <DetailFieldRow
-              label={t("chartsSidebar.encodingY")}
-              labelClassName={encodingLabelClass}
-            >
+            <DetailFieldRow label={t("chartsSidebar.encodingY")}>
               <Select
                 value={document.encodings.y ?? ""}
                 options={numericColumnOptions}

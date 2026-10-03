@@ -124,7 +124,7 @@ function MindNodeDetailForm({
       }}
     >
       <DetailForm>
-        <DetailFieldRow label={t("documents.nodeText")} htmlFor={textId}>
+        <DetailFieldRow label={t("documents.nodeText")} htmlFor={textId} layout="stacked">
           <DetailTextarea
             id={textId}
             value={input.value}

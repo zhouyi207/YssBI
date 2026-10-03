@@ -27,7 +27,7 @@ export function DetailForm({ children, className }: DetailFormProps) {
         className,
       )}
     >
-      <CardContent className="flex flex-col gap-1 px-3 py-2">{children}</CardContent>
+      <CardContent className="flex flex-col gap-1 px-3 py-1">{children}</CardContent>
     </Card>
   );
 }
@@ -47,7 +47,7 @@ export function DetailTextarea({ className, ...props }: ComponentProps<"textarea
     <textarea
       {...props}
       className={cn(
-        "min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-left text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
+        "block min-h-20 w-full resize-y rounded-md border border-border bg-input/30 px-3 py-2 text-left text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
     />
@@ -125,7 +125,7 @@ export function DetailReadonlyField({
         as="div"
         tone={tone}
         className={cn(
-          "flex min-h-8 min-w-0 items-center justify-end truncate px-2 py-1 text-right",
+          "flex min-h-7 min-w-0 items-center justify-end truncate px-2 py-0.5 text-right",
           className,
         )}
       >

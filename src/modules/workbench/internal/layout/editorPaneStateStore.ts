@@ -11,7 +11,9 @@ export interface EditorPaneSelection {
 
 export interface DatabasePaneView {
   databaseId: string;
-  selectedCellText: string;
+  selectedRowNumber: number | null;
+  selectedColumnName: string | null;
+  selectedCellText: string | null;
 }
 
 export const EMPTY_EDITOR_PANE_SELECTION: EditorPaneSelection = {

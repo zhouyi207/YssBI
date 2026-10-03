@@ -2,6 +2,9 @@
 
 export const detailTableClass = "text-sm text-foreground";
 
+export const detailControlSizeClass =
+  "[&_[data-slot=input]]:h-7 [&_[data-slot=select-trigger][data-size]]:h-7";
+
 export const detailLabelCellClass = "text-xs font-medium text-muted-foreground";
 
 export const detailBodyTextClass = "text-sm leading-relaxed text-foreground";
@@ -19,7 +22,7 @@ export const detailSectionTitleClass = "text-xs font-semibold text-foreground";
 export const detailSubsectionTitleClass = "text-xs font-semibold text-foreground";
 
 export const detailPinRowClass =
-  "group flex min-h-10 items-center gap-2 border-b border-border/20 py-1 last:border-b-0 transition-colors hover:bg-muted/30";
+  "group flex min-h-7 items-center gap-2 border-b border-border/20 last:border-b-0 transition-colors hover:bg-muted/30";
 
 export const detailBadgeClass = "border-border bg-secondary text-secondary-foreground";
 
@@ -27,11 +30,11 @@ export const detailEmptyHintClass =
   "border border-dashed border-border/20 bg-background px-3 py-2 text-center text-xs italic text-muted-foreground";
 
 export const detailListItemClass =
-  "flex min-h-8 items-center justify-between border-b border-border/20 px-1 py-1.5 text-sm text-foreground last:border-b-0 transition-colors hover:bg-muted/30";
+  "flex min-h-7 items-center justify-between border-b border-border/20 px-1 py-0.5 text-sm text-foreground last:border-b-0 transition-colors hover:bg-muted/30";
 
-export const detailInlineInputClass = "h-8 w-full bg-background text-left text-sm font-medium";
+export const detailInlineInputClass = "h-7 w-full bg-background text-left text-sm font-medium";
 
-export const detailInlineInputSmallClass = "h-8 flex-1 bg-background text-xs shadow-none";
+export const detailInlineInputSmallClass = "h-7 flex-1 bg-background text-xs shadow-none";
 
 export const detailNestedScrollClass = "max-h-44 border border-border/20 bg-background";
 

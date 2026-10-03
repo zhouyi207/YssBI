@@ -8,8 +8,8 @@ interface DetailFieldRowProps {
   children: ReactNode;
   labelClassName?: string;
   valueClassName?: string;
-  rowClassName?: string;
   htmlFor?: string;
+  layout?: "inline" | "stacked";
 }
 
 export function DetailFieldRow({
@@ -17,14 +17,16 @@ export function DetailFieldRow({
   children,
   labelClassName,
   valueClassName,
-  rowClassName,
   htmlFor,
+  layout = "inline",
 }: DetailFieldRowProps) {
   return (
     <div
       className={cn(
-        "grid min-h-10 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-2",
-        rowClassName,
+        "grid min-h-7 gap-x-2",
+        layout === "stacked"
+          ? "grid-cols-1 items-start gap-y-2"
+          : "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-y-1",
       )}
     >
       <Label

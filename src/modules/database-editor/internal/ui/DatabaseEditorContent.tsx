@@ -8,7 +8,7 @@ import {
   useDataLoader,
   useSelection,
   useDatabaseEditorKeyboard,
-  getGridSelectionPrimaryCellText,
+  getGridSelectionPrimaryCellPreview,
   useDatabaseExport,
 } from "@/features/application/databaseEditor";
 import { useEditorPaneStateStore } from "@/modules/workbench/public";
@@ -53,30 +53,34 @@ export function DatabaseEditorContent({ databaseId, panelInstanceId }: DatabaseE
     void loadInitialRows(databaseId).catch((error) =>
       reportViewIssue("app", error, "DatabaseEditor"),
     );
-    clearSelection();
-  }, [databaseId, revision, loadInitialRows, clearSelection]);
+  }, [databaseId, revision, loadInitialRows]);
 
   useEffect(() => {
     clearSelection();
-  }, [dataLoader.pageIndex, columns.length, clearSelection]);
+  }, [databaseId, dataLoader.pageIndex, dataLoader.loadedRows, columns.length, clearSelection]);
 
-  const selectedCellText = useMemo(
+  const selectedCell = useMemo(
     () =>
-      getGridSelectionPrimaryCellText(
+      getGridSelectionPrimaryCellPreview(
         selection.selection,
-        columns.length,
-        dataLoader.loadedRows.length,
+        columns,
         dataLoader.loadedRows,
+        dataLoader.pageStartIndex,
       ),
-    [selection.selection, columns.length, dataLoader.loadedRows],
+    [selection.selection, columns, dataLoader.loadedRows, dataLoader.pageStartIndex],
   );
+  const selectedRowNumber = selectedCell?.rowNumber ?? null;
+  const selectedColumnName = selectedCell?.columnName ?? null;
+  const selectedCellText = selectedCell?.text ?? null;
 
   useEffect(() => {
     useEditorPaneStateStore.getState().setDatabaseView(panelInstanceId, {
       databaseId,
+      selectedRowNumber,
+      selectedColumnName,
       selectedCellText,
     });
-  }, [panelInstanceId, databaseId, selectedCellText]);
+  }, [panelInstanceId, databaseId, selectedRowNumber, selectedColumnName, selectedCellText]);
 
   useEffect(
     () => () => useEditorPaneStateStore.getState().setDatabaseView(panelInstanceId, undefined),

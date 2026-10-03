@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/shared/ui";
 import type { ColumnSemantic } from "@/shared/types/domain/database";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
+import { detailControlSizeClass } from "../shared/detailStyles";
 
 export function DataColumnSemanticFields({
   value: semantic,
@@ -42,7 +43,7 @@ export function DataColumnSemanticFields({
   };
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-3">
+    <fieldset disabled={disabled} className={`min-w-0 space-y-3 ${detailControlSizeClass}`}>
       {domain && (
         <>
           <p className="text-xs text-muted-foreground">{t("detail.data.initialMappingHint")}</p>

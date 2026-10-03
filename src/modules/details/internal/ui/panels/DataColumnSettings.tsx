@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VscEdit } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/shared/ui";
-import { SEMANTIC_TYPES, type ColumnInfo, type SemanticType } from "@/shared/types/domain/database";
+import type { ColumnInfo, SemanticType } from "@/shared/types/domain/database";
 import { changeColumnPhysical } from "@/features/application/dataManagement/databaseMutation";
 import {
   captureDatabaseRead,
@@ -47,6 +48,7 @@ export function DataColumnSettings({
   const { t } = useTranslation();
   const id = useId();
   const currentPhysical = column.physical ?? column.type;
+  const semanticTypes = column.supportedSemanticTypes ?? [];
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const active = useRef(true);
@@ -92,7 +94,7 @@ export function DataColumnSettings({
     }
   };
   const openSemantic = (kind: SemanticType) => {
-    if (pending.current || semanticDialog) return;
+    if (pending.current || semanticDialog || !semanticTypes.includes(kind)) return;
     try {
       const read = captureDatabaseRead(captureProjectIdentity(), databaseId, () => active.current);
       if (read.isCurrent()) {
@@ -106,12 +108,17 @@ export function DataColumnSettings({
   };
   const kind = column.semantic?.kind;
   const configurable =
-    kind === "Numeric" || kind === "Categorical" || kind === "Ordinal" || kind === "Binary";
+    kind !== undefined &&
+    semanticTypes.includes(kind) &&
+    (kind === "Numeric" || kind === "Categorical" || kind === "Ordinal" || kind === "Binary");
+  const editLabel = t(
+    kind === "Numeric" ? "detail.data.editConstraints" : "detail.data.editMapping",
+  );
 
   return (
     <>
       <DetailForm>
-        <fieldset disabled={busy} className="min-w-0 space-y-2">
+        <fieldset disabled={busy} className="min-w-0 space-y-1">
           <DetailFieldRow label={<label htmlFor={id + "-physical"}>Physical</label>}>
             <Select
               id={id + "-physical"}
@@ -124,20 +131,31 @@ export function DataColumnSettings({
               }))}
             />
           </DetailFieldRow>
-          <DetailFieldRow label={<label htmlFor={id + "-semantic"}>Semantic</label>}>
+          <DetailFieldRow
+            label={<label htmlFor={id + "-semantic"}>Semantic</label>}
+            valueClassName="flex items-center gap-1"
+          >
             <Select
               id={id + "-semantic"}
-              disabled={busy}
+              className="min-w-0 flex-1 [&_[data-slot=select-value]]:truncate"
+              disabled={busy || semanticTypes.length === 0}
               value={kind ?? ""}
-              options={[...SEMANTIC_TYPES]}
+              options={[...semanticTypes]}
               onChange={(value) => openSemantic(value as SemanticType)}
             />
+            {configurable && (
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                aria-label={editLabel}
+                title={editLabel}
+                onClick={() => openSemantic(kind)}
+              >
+                <VscEdit aria-hidden />
+              </Button>
+            )}
           </DetailFieldRow>
-          {configurable && (
-            <Button size="sm" variant="outline" onClick={() => openSemantic(kind)}>
-              {t(kind === "Numeric" ? "detail.data.editConstraints" : "detail.data.editMapping")}
-            </Button>
-          )}
         </fieldset>
         {error && (
           <p role="alert" className="text-xs text-destructive">

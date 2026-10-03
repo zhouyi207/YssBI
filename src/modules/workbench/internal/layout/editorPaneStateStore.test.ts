@@ -57,7 +57,12 @@ describe("editor pane selection snapshots", () => {
   it("isolates database previews without changing other selections", () => {
     const store = useEditorPaneStateStore;
     const actions = store.getState();
-    const view = { databaseId: "sales", selectedCellText: "1" };
+    const view = {
+      databaseId: "sales",
+      selectedRowNumber: 1,
+      selectedColumnName: "amount",
+      selectedCellText: "1",
+    };
     actions.setDatabaseView("data-a", view);
     actions.setDatabaseView("data-b", { ...view, selectedCellText: "2" });
     actions.setSelectedNodeIds("graph-a", ["node-a"]);
@@ -70,6 +75,16 @@ describe("editor pane selection snapshots", () => {
     expect(updated.databaseViews["data-a"].selectedCellText).toBe("3");
     expect(updated.databaseViews["data-b"]).toBe(initial.databaseViews["data-b"]);
     expect(updated.selections).toBe(initial.selections);
+
+    const movedView = {
+      ...updated.databaseViews["data-a"],
+      selectedRowNumber: 2,
+      selectedColumnName: "total",
+    };
+    actions.setDatabaseView("data-a", movedView);
+    expect(store.getState().databaseViews["data-a"]).toEqual(movedView);
+    expect(store.getState().databaseViews["data-b"]).toBe(initial.databaseViews["data-b"]);
+    expect(store.getState().selections).toBe(initial.selections);
   });
 
   it("releases database previews on unmount, panel close and project reset", () => {
@@ -77,6 +92,8 @@ describe("editor pane selection snapshots", () => {
     const actions = store.getState();
     const view = {
       databaseId: "sales",
+      selectedRowNumber: 1,
+      selectedColumnName: "amount",
       selectedCellText: "1",
     };
     actions.setDatabaseView("data-a", view);

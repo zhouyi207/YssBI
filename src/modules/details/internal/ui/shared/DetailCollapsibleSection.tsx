@@ -37,7 +37,7 @@ export function DetailCollapsibleSection({
           {title}
         </DetailText>
       </CollapsibleTrigger>
-      <CollapsibleContent className={cn("min-w-0 bg-background px-2 py-1.5", contentClassName)}>
+      <CollapsibleContent className={cn("min-w-0 bg-background py-1.5 pl-2", contentClassName)}>
         {children}
       </CollapsibleContent>
     </Collapsible>
