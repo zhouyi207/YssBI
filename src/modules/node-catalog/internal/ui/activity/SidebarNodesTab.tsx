@@ -1,5 +1,6 @@
 import { VscSymbolMethod, VscSymbolProperty } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
+import { revealDetails } from "@/features/application/editor/rightSidebarActions";
 import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
 import {
   ActivityPanelDocumentView,
@@ -27,6 +28,9 @@ export function SidebarNodesTab() {
           <SidebarListItem
             id={`node-${item.key}`}
             indentDepth={depth}
+            onClick={() => {
+              void revealDetails({ kind: "nodeDefinition", nodeType: item.creation.nodeTypeId });
+            }}
             icon={
               <Icon
                 size={SIDEBAR_ROW_ICON_SIZE}

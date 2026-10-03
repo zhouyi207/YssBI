@@ -1833,23 +1833,6 @@ export const enUS = {
       noMatches: "No matches found",
     },
   },
-  nodeDocumentationModal: {
-    title: "Node Documentation",
-    description:
-      "Search current-language node titles and aliases; click the active node again to close the preview.",
-    searchPlaceholder: "Search node titles and aliases...",
-    noMatches: "No matching node documentation",
-    noDocumentation: "This node has no detailed documentation yet.",
-    selectNode: "Select a node to view its documentation.",
-    nodeId: "Node ID",
-    ports: "Ports",
-    noPorts: "No ports",
-    parameters: "Parameters",
-    noParameters: "No parameters",
-    resourcePath: "Resource path",
-    resourceRevision: "Resource revision",
-    close: "Close node documentation",
-  },
   editorDropPreview: {
     openResource: "Open {{name}}",
     mergeIntoGroup: "Move to this group",

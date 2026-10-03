@@ -22,8 +22,6 @@ export {
   type WorkbenchTabTarget,
 } from "./internal/layout/RootPanelTabRenderer";
 export { WorkbenchWindow } from "./internal/ui/WorkbenchWindowEntry";
-export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
-export { useWorkbenchUiStore } from "./internal/state/workbenchUiStore";
 export {
   clearEditorGroupGraphSelection,
   getEditorGroupGraphSelection,

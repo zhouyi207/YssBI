@@ -16,14 +16,13 @@ Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与�
 ```text
 WorkbenchWindow
 ├─ WorkbenchMenuBar
-├─ RootLayoutHost：一个 FlexLayout Layout + Model
-│  ├─ left border：Project、Nodes、Commands、Plugins 和插件 sidebar
-│  ├─ central column
-│  │  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
-│  │  └─ bottom content：Problems、Output、Logs 的内容面板
-│  ├─ right border：Details、Assistant 和 Result 的默认位置
-│  └─ bottom bar：贯穿窗口，最左侧设置、对齐中央区左边的原生 tab、对齐右边的状态信息
-└─ WorkbenchOverlayHost
+└─ RootLayoutHost：一个 FlexLayout Layout + Model
+   ├─ left border：Project、Nodes、Commands、Plugins 和插件 sidebar
+   ├─ central column
+   │  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
+   │  └─ bottom content：Problems、Output、Logs 的内容面板
+   ├─ right border：Details、Assistant 和 Result 的默认位置
+   └─ bottom bar：贯穿窗口，最左侧设置、对齐中央区左边的原生 tab、对齐右边的状态信息
 ```
 
 Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动、分屏和窗口内 float。设置与导入由应用 Dialog 栈承载；浏览器 popout 和标签分组禁用。
@@ -128,6 +127,9 @@ Workbench 模板只接收文档、展开状态、格式化错误与有限操作�
 状态直接从数据库投影读取。空分组的右键事件统一由文档模板处理。资源行只提供单击
 打开入口，双击不再绑定额外打开操作。Nodes/Commands 直接贡献现有面板组件。
 画布 NodePalette 保留自己的搜索目录和选择行；Activity 拖拽行由文档条目独立渲染。
+Nodes 条目单击通过 `revealDetails` 设置 `nodeDefinition` 查看目标并展开 Details，
+由已有节点定义详情面板读取本地化目录中的对应文档。暂不可用的节点也可查看文档，
+可用性仅限制创建与拖拽。
 资源行的选中/悬停样式与拖拽描述就绪状态分开：描述未就绪时只禁用拖拽，仍可点击打开，
 不降低整行透明度或将整行标记为 aria-disabled。目录加载完成、取消选中或关闭标签
 不会通过拖拽状态改变普通行的亮度。

@@ -121,7 +121,6 @@ vi.mock("@/modules/workbench/public", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/modules/workbench/public")>()),
   clearEditorGroupGraphSelection: mocks.clearSelection,
   getEditorGroupGraphSelection: () => mocks.selection,
-  useWorkbenchUiStore: { getState: () => ({ setNodeDocumentationOpen: vi.fn() }) },
 }));
 vi.mock("@/features/core/graphInteraction/graphInteractionStore", () => ({
   getCanvasInteraction: () => mocks.interaction,

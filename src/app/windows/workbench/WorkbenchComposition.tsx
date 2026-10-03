@@ -5,8 +5,7 @@ import { useEditorKeyboard, useWorkbenchWindowCloseGuard } from "@/features/appl
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 import { useAppInitialization, useProjectSync } from "@/features/application/initialization";
 import { WatermarkView } from "@/modules/graph-editor/public";
-import { NodeDocumentationModal } from "@/modules/node-catalog/public";
-import { WorkbenchWindow, type WorkbenchOverlayRegistry } from "@/modules/workbench/public";
+import { WorkbenchWindow } from "@/modules/workbench/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
 import { LoadStatus } from "@/shared/types/ui";
 import { resolveYssbiLayoutTheme } from "@/shared/theme/layoutTheme";
@@ -23,21 +22,6 @@ import { useResultPanelLeases } from "@/features/application/results/useResultPa
 import { useUiIntents } from "@/features/application/presentation/useUiIntents";
 import { openReferenceLink } from "@/features/application/editor/openReferenceLink";
 import { MarkdownLinkContext } from "@/shared/ui/MarkdownLink";
-
-const ReferenceDocumentationOverlay: WorkbenchOverlayRegistry["nodeDocumentation"] = (props) => (
-  <MarkdownLinkContext
-    value={async (url, title) => {
-      await openReferenceLink(url, title);
-      props.onOpenChange(false);
-    }}
-  >
-    <NodeDocumentationModal {...props} />
-  </MarkdownLinkContext>
-);
-
-const overlayRegistry = {
-  nodeDocumentation: ReferenceDocumentationOverlay,
-} satisfies WorkbenchOverlayRegistry;
 
 const dragOverlay = <ActivityEditorDndOverlay />;
 const statusBar = <WorkbenchStatusBarContribution />;
@@ -70,7 +54,6 @@ function WorkbenchReadyComposition() {
           menuBar={<WorkbenchMenuContribution commands={commands} />}
           statusBar={statusBar}
           dragOverlay={dragOverlay}
-          overlays={overlayRegistry}
         />
       </PluginProvider>
     </MarkdownLinkContext>

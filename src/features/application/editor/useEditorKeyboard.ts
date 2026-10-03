@@ -6,7 +6,6 @@ import {
 } from "@/modules/workbench/public";
 import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { resolveCanvasShortcut } from "@/features/core/keyboard/canvasShortcut";
-import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { isGraphSaving } from "@/features/core/graph/read";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
@@ -122,12 +121,6 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === ",") {
         event.preventDefault();
         ui.showSettings();
-        return;
-      }
-
-      if (event.key === "F1") {
-        event.preventDefault();
-        useWorkbenchUiStore.getState().setNodeDocumentationOpen(true);
         return;
       }
 

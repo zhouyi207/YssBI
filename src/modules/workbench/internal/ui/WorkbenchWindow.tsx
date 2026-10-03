@@ -2,8 +2,6 @@ import type { FunctionComponent, ReactNode } from "react";
 
 import { RootLayoutHost, type RootLayoutHostProps } from "../layout/RootLayoutHost";
 import type { RootPanelRegistry, RootPanelTabComponent } from "../layout/panelContribution";
-import { WorkbenchOverlayHost } from "./overlay/WorkbenchOverlayHost";
-import type { WorkbenchOverlayRegistry } from "./overlay/overlayContribution";
 
 export interface WorkbenchWindowProps {
   readonly panelRegistry: RootPanelRegistry;
@@ -16,7 +14,6 @@ export interface WorkbenchWindowProps {
   readonly menuBar: ReactNode;
   readonly statusBar: ReactNode;
   readonly dragOverlay?: ReactNode;
-  readonly overlays: WorkbenchOverlayRegistry;
 }
 
 export function WorkbenchWindow({
@@ -30,7 +27,6 @@ export function WorkbenchWindow({
   menuBar,
   statusBar,
   dragOverlay,
-  overlays,
 }: WorkbenchWindowProps) {
   return (
     <div
@@ -51,7 +47,6 @@ export function WorkbenchWindow({
           dragOverlay={dragOverlay}
         />
       </div>
-      <WorkbenchOverlayHost overlays={overlays} />
     </div>
   );
 }
