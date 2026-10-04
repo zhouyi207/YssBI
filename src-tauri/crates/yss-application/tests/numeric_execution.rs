@@ -424,7 +424,7 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
     const DAGUM: &str = "yssbi.statistics.inequality.dagum_gini";
     yss_application::session::NodeComponents::builtins().unwrap();
     let mut document = GraphDocument::default();
-    let [source, values, groups, gini, dagum] = std::array::from_fn(|_| NodeId::new());
+    let [source, values, groups, classify, gini, dagum] = std::array::from_fn(|_| NodeId::new());
     for (id, kind, config) in [
         (source, "yssbi.constant.get", serde_json::json!({})),
         (
@@ -436,6 +436,11 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
             groups,
             "yssbi.dataframe.series.select",
             serde_json::json!({"column":"groups"}),
+        ),
+        (
+            classify,
+            "yssbi.value.to_categorical",
+            serde_json::json!({}),
         ),
         (gini, GINI, serde_json::json!({})),
         (dagum, DAGUM, serde_json::json!({})),
@@ -466,7 +471,8 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
         (source, "value", groups, "dataframe"),
         (values, "series", gini, "series"),
         (values, "series", dagum, "series"),
-        (groups, "series", dagum, "groups"),
+        (groups, "series", classify, "input"),
+        (classify, "output", dagum, "groups"),
     ] {
         let id = ConnectionId::new();
         document.connections.insert(
@@ -479,6 +485,37 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
             },
         );
     }
+    for conversion in ["yssbi.value.to_text", "yssbi.value.to_identifier"] {
+        let mut unsupported = document.clone();
+        let node = unsupported.nodes.get_mut(&classify).unwrap();
+        node.node_type = conversion.parse().unwrap();
+        node.parameters.clear();
+        let analysis = analyze_document(
+            &unsupported,
+            &GraphResourcePath::new("events/Dagum.yssbi-event").unwrap(),
+            &ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new()),
+        );
+        let snapshot = analysis.semantic_snapshot();
+        let group_port = snapshot
+            .node(dagum)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|port| port.address == PortAddress::declared(dagum, "groups".parse().unwrap()))
+            .unwrap();
+        assert!(
+            matches!(
+                group_port.type_state,
+                yss_node_protocol::TypeState::Conflict(
+                    yss_node_protocol::TypeConflict::InputNotAccepted
+                )
+            ),
+            "{conversion}: {:?}",
+            group_port.type_state
+        );
+        assert!(snapshot.ready().is_none(), "{conversion}");
+    }
+
     let number = |value: &RuntimeValue| match value {
         RuntimeValue::Scalar(TabularScalar::Float64(value)) => value.as_f64(),
         _ => panic!("expected a numeric statistic"),

@@ -1,6 +1,6 @@
 # Dagum Gini decomposition
 
-Connect individual **Values** and observation-level **Group labels**. The columns must have equal lengths and aligned rows. Database and in-memory series may be mixed; they must have equal lengths and pair by current position. Labels may be Text, Identifier, Numeric, Categorical, Ordinal, or Binary and retain their original values. Missing labels fail.
+Connect individual **Values** and observation-level **Group labels**. The columns must have equal lengths and aligned rows. Database and in-memory series may be mixed; they must have equal lengths and pair by current position. Labels accept Numeric, Categorical, Ordinal, or Binary semantics and retain their original values. Missing labels fail. Convert Text or Identifier columns with To Categorical before connecting them; categorical labels can still be stored as strings.
 
 Equal-weight empirical Gini, without a small-sample correction, decomposes as
 

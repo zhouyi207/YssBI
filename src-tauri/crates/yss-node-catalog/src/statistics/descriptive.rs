@@ -36,8 +36,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "core.categorical",
                 "core.ordinal",
                 "core.binary",
-                "core.text",
-                "core.identifier",
             ]
             .into_iter()
             .map(|id| concrete(id).map(data_series_type))

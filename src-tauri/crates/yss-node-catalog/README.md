@@ -222,7 +222,7 @@ Meta 分析的 20 个既有入口由 `statistics/meta/` 提供端口与参数，
 
 泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。
 
-Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistics.inequality.dagum_gini`，均已注册执行内核，使用个体等权、未经小样本修正的经验 Gini。Gini 输入 `series`；Dagum 另需等长且按当前位置对应的 `groups` 标签列，支持数值、文本、标识符及分类语义。唯一结构化 `result` 可通过既有 Inspect 查看数值或报告；Dagum 返回组内、组间净差异、超变密度、贡献占比及分组/组对明细。全零子组的未定义 Gini 和零总体差异下的贡献占比保留为 null，非正总体均值拒绝计算。输入与解释见各节点中英文帮助。
+Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistics.inequality.dagum_gini`，均已注册执行内核，使用个体等权、未经小样本修正的经验 Gini。Gini 输入 `series`；Dagum 另需等长且按当前位置对应的 `groups` 标签列，仅接受 Numeric、Categorical、Ordinal 和 Binary 语义。Text、Identifier 必须显式转换为分类后接入，端口候选与执行前检查共用 Graph 类型约束；分类标签仍可保留字符串原值。唯一结构化 `result` 可通过既有 Inspect 查看数值或报告；Dagum 返回组内、组间净差异、超变密度、贡献占比及分组/组对明细。全零子组的未定义 Gini 和零总体差异下的贡献占比保留为 null，非正总体均值拒绝计算。输入与解释见各节点中英文帮助。
 
 `statistics/association.rs` 完善原“相关与一致性”目录的 10 个 ID：Pearson、偏相关、Spearman、Kendall tau-b、Kappa、ICC、Bland–Altman、Kendall W、Ridit、rwg。全部只有结构化 `result`，复用 Inspect。配对和评定者列必须对齐，Ridit 的样本/参考总体允许独立读取。Spearman/Kendall/W 支持显式 Ordinal 顺序；Kappa 支持 Cohen（含线性/二次加权）和 Fleiss，ICC 显式选择六种常用模型/测量定义，rwg 显式选择均匀或指定方差的零假设。秩检验自动在不超过 9 个观测时使用精确位置置换，否则采用渐近方法；Bland–Altman 统计量用完整样本，展示点最多 2000 个。方法定义、样本要求与推断限制由 20 篇中英文节点帮助维护，不另建专用报告页面。
 工作流模板、模型预设、结果指标、统计专用绘图和原理说明也按本轮要求登记入口；该登记不表示模板执行、参数预设或绘图能力已经实现。普通数据处理、缺失数据处理、通用绘图和 AI 模块未纳入本轮统计入口。
