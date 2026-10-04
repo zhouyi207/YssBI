@@ -64,4 +64,6 @@
 
 跨领域开放工作见 [TODO](../TODO.md)，计划与待验收见[组件重构](roadmap/COMPONENT_REFACTOR.md)和 [motion](roadmap/motion.md)。已完成事项简记在 [v0.3](roadmap/v0_3.md)，详细历史由 Git 保留；尚未完成的验收保持开放。
 
+节点配置与执行机制的实施顺序、接口改动及验收见[节点独立配置与分步执行计划](roadmap/NODE_AUTHORING_AND_EXECUTION.md)。
+
 移动文档时更新引用和章节链接，删除旧正文；新增细节先由现有模块 owner 承接。生成索引通过原生成器更新。
