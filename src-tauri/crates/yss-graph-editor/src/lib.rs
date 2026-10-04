@@ -17,7 +17,7 @@ pub use compatibility::{
 };
 pub use mutation::{
     EditorGraphMutation, EditorMutationError, EditorMutationErrorCode, MutationConflict,
-    NodePositionMutation, PortPlacement,
+    NodePositionMutation, PortPlacement, merge_parameters_with_registry,
 };
 pub use subgraph::{
     ClipboardConnection, ClipboardDynamicMemberOrigin, ClipboardDynamicPortBinding,

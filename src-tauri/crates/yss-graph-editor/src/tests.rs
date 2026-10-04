@@ -46,8 +46,101 @@ fn static_descriptor(registry: &NodeRegistry, node_type: &str) -> yss_node_catal
     let protocol = registry
         .protocol(&node_type)
         .expect("fixture protocol must exist");
-    authoritative_static_descriptor(registry, protocol)
+    authoritative_static_descriptor(protocol)
         .expect("fixture protocol must have a catalog creation descriptor")
+}
+
+#[test]
+fn creation_and_partial_edits_share_parameter_rules_without_requiring_complete_values() {
+    let registry = build_builtin_node_system().unwrap().registry;
+    let mut document = GraphDocument::default();
+    let create = |values| EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        descriptor: static_descriptor(&registry, "yssbi.dataframe.groupby"),
+        position: NodePosition { x: 0.0, y: 0.0 },
+        parameters: serde_json::from_value(values).unwrap(),
+        user_label: None,
+        connect_from: None,
+    };
+    let values = serde_json::json!({"mean": [" sales "]});
+    let patch = create(values.clone())
+        .into_patch(&graph_path(), &document, &registry)
+        .unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    let node = document.nodes.values().next().unwrap();
+    let node_id = node.id;
+    assert_eq!(serde_json::to_value(&node.parameters).unwrap(), values);
+    let protocol = registry.protocol(&node.node_type).unwrap();
+    let issues = yss_node_protocol::validate_parameter_values(
+        protocol,
+        &node.parameters,
+        &|id: &yss_node_protocol::TypeId, value: &serde_json::Value| {
+            registry.validate_nominal_parameter(id, value)
+        },
+    );
+    assert!(issues.iter().any(|issue| issue.key.as_str() == "keys"
+        && matches!(issue.kind, yss_node_protocol::ParameterIssueKind::Required)));
+
+    let edit = |values| EditorGraphMutation::SetParameters {
+        node_id,
+        parameters: serde_json::from_value(values).unwrap(),
+    };
+    let key_patch = edit(serde_json::json!({"keys": ["industry"]}))
+        .into_patch(&graph_path(), &document, &registry)
+        .unwrap();
+    apply_graph_document_patch(&mut document, &key_patch).unwrap();
+    assert_eq!(
+        serde_json::to_value(&document.nodes[&node_id].parameters).unwrap(),
+        serde_json::json!({"keys": ["industry"], "mean": [" sales "]})
+    );
+    let before = document.clone();
+    for invalid in [
+        serde_json::json!({"keys": [42]}),
+        serde_json::json!({"mean": [42]}),
+        serde_json::json!({"mean": [""]}),
+        serde_json::json!({"mean": ["sales", "sales"]}),
+        serde_json::json!({"unknown": true}),
+    ] {
+        assert!(
+            create(invalid.clone())
+                .into_patch(&graph_path(), &document, &registry)
+                .is_err()
+        );
+        assert!(
+            edit(invalid)
+                .into_patch(&graph_path(), &document, &registry)
+                .is_err()
+        );
+        assert_eq!(document, before);
+    }
+    let clear = edit(serde_json::json!({"keys": null}))
+        .into_patch(&graph_path(), &document, &registry)
+        .unwrap();
+    apply_graph_document_patch(&mut document, &clear).unwrap();
+    assert_eq!(
+        serde_json::to_value(&document.nodes[&node_id].parameters).unwrap(),
+        values
+    );
+    apply_graph_document_patch(&mut document, &clear.inverse()).unwrap();
+    assert_eq!(document, before);
+    apply_graph_document_patch(&mut document, &key_patch.inverse()).unwrap();
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, GraphDocument::default());
+    let rename = EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        descriptor: static_descriptor(&registry, "yssbi.dataframe.rename"),
+        position: NodePosition { x: 0.0, y: 0.0 },
+        parameters: serde_json::from_value(serde_json::json!({"from": "amount"})).unwrap(),
+        user_label: None,
+        connect_from: None,
+    }
+    .into_patch(&graph_path(), &document, &registry)
+    .unwrap();
+    apply_graph_document_patch(&mut document, &rename).unwrap();
+    assert_eq!(
+        serde_json::to_value(&document.nodes.values().next().unwrap().parameters).unwrap(),
+        serde_json::json!({"from": "amount"})
+    );
 }
 
 #[test]
@@ -383,7 +476,7 @@ fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
                 .with_member_groups(vec![PortMemberGroupSpec {
                     templates: ["left".parse().unwrap(), "right".parse().unwrap()].into(),
                     min,
-                    max: None,
+                    max: Some(4),
                 }])
                 .unwrap();
             RegisteredNode::leaf(Arc::new(protocol), LeafImplementation::new(id))
@@ -430,6 +523,8 @@ fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
         resources: BTreeMap::new(),
     };
     let patch = EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        parameters: Default::default(),
         descriptor: item.creation.clone(),
         position: NodePosition { x: 100.0, y: 0.0 },
         user_label: None,
@@ -464,6 +559,81 @@ fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
     assert_eq!(members.complete_count(), 2);
     apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
     assert_eq!(document, before);
+
+    for (kind, count) in [
+        ("tests.group.required", 3),
+        ("tests.group.optional", 3),
+        ("tests.group.optional", 0),
+    ] {
+        let patch = EditorGraphMutation::CreateNode {
+            descriptor: static_descriptor(&registry, kind),
+            position: NodePosition { x: 0., y: 0. },
+            parameters: Default::default(),
+            port_counts: [("left".parse().unwrap(), count)].into(),
+            user_label: None,
+            connect_from: (count > 0).then(|| source_port.address.clone()),
+        }
+        .into_patch_with_context(
+            &graph_path(),
+            &document,
+            &registry,
+            EditorMutationContext {
+                catalog: Some(&authority),
+                semantics: None,
+            },
+        )
+        .unwrap();
+        apply_graph_document_patch(&mut document, &patch).unwrap();
+        assert_eq!(document.port_bindings.len(), usize::from(count) * 2);
+        assert_eq!(document.connections.len(), usize::from(count > 0));
+        apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+        assert_eq!(document, before);
+    }
+    for counts in [
+        vec![("left", 1)],
+        vec![("left", 5)],
+        vec![("result", 2)],
+        vec![("missing", 1)],
+        vec![("left", 2), ("right", 3)],
+    ] {
+        assert!(
+            EditorGraphMutation::CreateNode {
+                descriptor: item.creation.clone(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: Default::default(),
+                port_counts: counts
+                    .into_iter()
+                    .map(|(key, count)| (key.parse().unwrap(), count))
+                    .collect(),
+                user_label: None,
+                connect_from: None,
+            }
+            .into_patch(&graph_path(), &document, &registry)
+            .is_err()
+        );
+        assert_eq!(document, before);
+    }
+    let decompose = registry
+        .protocol(&"yssbi.dataframe.decompose".parse().unwrap())
+        .unwrap();
+    let derived = decompose
+        .interface
+        .ports
+        .iter()
+        .find(|port| matches!(port.cardinality, PortCardinality::Derived { .. }))
+        .unwrap();
+    assert!(
+        EditorGraphMutation::CreateNode {
+            descriptor: static_descriptor(&registry, decompose.type_id.as_str()),
+            position: NodePosition { x: 0., y: 0. },
+            parameters: Default::default(),
+            port_counts: [(derived.key.clone(), 4)].into(),
+            user_label: None,
+            connect_from: None,
+        }
+        .into_patch(&graph_path(), &document, &registry)
+        .is_err()
+    );
 }
 
 #[test]
@@ -573,6 +743,8 @@ fn create_and_connect_plans_one_atomic_patch() {
     };
 
     let patch = EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        parameters: Default::default(),
         descriptor: static_descriptor(registry.as_ref(), "yssbi.numeric.add"),
         position: NodePosition { x: 100.0, y: 0.0 },
         user_label: Some("sum".into()),
@@ -601,6 +773,38 @@ fn create_and_connect_plans_one_atomic_patch() {
     let created = &document.nodes[&connection.input.node_id];
     assert_eq!(created.node_type.as_str(), "yssbi.numeric.add");
     assert_eq!(created.user_label.as_deref(), Some("sum"));
+    let input = connection.input.clone();
+    let before = document.clone();
+    let parameters = document.nodes[&source].parameters.clone();
+    let configured = EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        descriptor: static_descriptor(registry.as_ref(), "yssbi.constant.get"),
+        position: NodePosition { x: 50.0, y: 0.0 },
+        parameters: parameters.clone(),
+        user_label: None,
+        connect_from: Some(input),
+    }
+    .into_patch_with_context(
+        &graph_path(),
+        &document,
+        &registry,
+        EditorMutationContext {
+            catalog: Some(&catalog),
+            semantics: None,
+        },
+    )
+    .unwrap();
+    apply_graph_document_patch(&mut document, &configured).unwrap();
+    let connection = document.connections.values().next().unwrap();
+    assert_ne!(connection.output.node_id, source);
+    assert_eq!(
+        document.nodes[&connection.output.node_id].parameters,
+        parameters
+    );
+    assert_eq!(document.nodes.len(), 3);
+    assert_eq!(document.connections.len(), 1);
+    apply_graph_document_patch(&mut document, &configured.inverse()).unwrap();
+    assert_eq!(document, before);
 }
 
 #[test]

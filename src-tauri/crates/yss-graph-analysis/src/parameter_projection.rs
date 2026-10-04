@@ -56,6 +56,13 @@ pub(super) fn parameter_schema<'a>(
     ports: &'a [GraphPortSemanticFact],
     key: &str,
 ) -> Option<&'a ResolvedSchemaFact> {
+    parameter_schema_state(ports, key).and_then(GraphSchemaState::exact)
+}
+
+fn parameter_schema_state<'a>(
+    ports: &'a [GraphPortSemanticFact],
+    key: &str,
+) -> Option<&'a GraphSchemaState> {
     let source = match key {
         "left_keys" => Some("left"),
         "right_keys" => Some("right"),
@@ -71,29 +78,53 @@ pub(super) fn parameter_schema<'a>(
                 PortRef::Instance { template, .. } => template.as_str() == source,
             })
         })
-        .find_map(|port| port.schema_state.exact())
+        .map(|port| &port.schema_state)
+        .find(|state| !matches!(state, GraphSchemaState::NotApplicable))
 }
 
 pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact) {
+    project_parameter_context(node.node_type.as_str(), &node.ports, &mut node.parameters);
+}
+
+fn project_parameter_context(
+    node_type: &str,
+    ports: &[GraphPortSemanticFact],
+    parameters: &mut [GraphParameterFact],
+) {
     use yss_node_protocol::dataframe::{
         FILTER_PREDICATE_TYPE_ID, FilterOperator, PROJECT_COLUMNS_TYPE_ID,
         filter_comparison_is_compatible, prepare_filter_predicate_json,
         prepare_project_columns_json,
     };
-    for parameter in &mut node.parameters {
-        let schema = parameter_schema(&node.ports, parameter.key.as_str());
+    for parameter in parameters {
+        let schema = parameter_schema(ports, parameter.key.as_str());
         let fields = schema.map_or(&[][..], |schema| schema.fields.as_slice());
-        let unavailable_reason = schema
-            .is_none()
-            .then(|| "editors.dataframe.connect_source".into());
+        let context_hint: Option<Box<str>> =
+            match parameter_schema_state(ports, parameter.key.as_str()) {
+                Some(GraphSchemaState::Exact(_) | GraphSchemaState::Observed { .. }) => None,
+                Some(GraphSchemaState::Deferred) => {
+                    Some("editors.dataframe.deferred_columns".into())
+                }
+                Some(
+                    GraphSchemaState::Unavailable(_)
+                    | GraphSchemaState::Conflict(_)
+                    | GraphSchemaState::InternalFailure(_),
+                ) => Some("editors.dataframe.schema_error".into()),
+                Some(GraphSchemaState::Pending(issue))
+                    if *issue != crate::GraphSchemaIssue::UnconnectedInput =>
+                {
+                    Some("editors.dataframe.pending_columns".into())
+                }
+                _ => Some("editors.dataframe.connect_source".into()),
+            };
         let value = parameter_literal_value(parameter);
         if (parameter.key.as_str() == "subset"
             && matches!(
-                node.node_type.as_str(),
+                node_type,
                 "yssbi.dataframe.dropna.rows" | "yssbi.dataframe.dropna.columns"
             ))
             || aggregate_parameter_accepts(
-                node.node_type.as_str(),
+                node_type,
                 parameter.key.as_str(),
                 RelationalScalarType::Unknown,
             )
@@ -101,22 +132,13 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
         {
             parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
                 allow_empty: true,
-                available: schema.is_some(),
-                unavailable_reason: if node
-                    .ports
-                    .iter()
-                    .filter(|port| port.direction == PortDirection::Input)
-                    .any(|port| matches!(port.schema_state, GraphSchemaState::Deferred))
-                {
-                    Some("editors.dataframe.deferred_columns".into())
-                } else {
-                    unavailable_reason.clone()
-                },
+                schema_known: schema.is_some(),
+                context_hint: context_hint.clone(),
                 options: fields
                     .iter()
                     .filter(|field| {
                         aggregate_parameter_accepts(
-                            node.node_type.as_str(),
+                            node_type,
                             parameter.key.as_str(),
                             field.scalar_type,
                         )
@@ -147,8 +169,8 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
             PROJECT_COLUMNS_TYPE_ID => {
                 parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
                     allow_empty: false,
-                    available: schema.is_some(),
-                    unavailable_reason: unavailable_reason.clone(),
+                    schema_known: schema.is_some(),
+                    context_hint: context_hint.clone(),
                     options: fields
                         .iter()
                         .map(|field| GraphColumnFact {
@@ -192,8 +214,8 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                     FilterOperator::IsNotNull,
                 ];
                 parameter.configuration = Some(GraphParameterConfigurationFact::FilterPredicate {
-                    available: schema.is_some(),
-                    unavailable_reason: unavailable_reason.clone(),
+                    schema_known: schema.is_some(),
+                    context_hint: context_hint.clone(),
                     columns: fields
                         .iter()
                         .map(|field| GraphFilterColumnFact {
@@ -239,6 +261,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                     && matches!(
                         parameter.key.as_str(),
                         "column"
+                            | "from"
                             | "entity_column"
                             | "time_column"
                             | "category_column"
@@ -447,6 +470,23 @@ pub(super) fn project_node_parameters(
     node: &DocumentNode,
     protocol: &NodeProtocol,
 ) -> Box<[GraphParameterFact]> {
+    project_parameter_values(protocol, &node.parameters)
+}
+
+/// Project a definition and explicit form values without a document or invented input schema.
+pub fn project_parameter_form(
+    protocol: &NodeProtocol,
+    values: &yss_node_protocol::ParameterValues,
+) -> (Box<[GraphParameterGroupFact]>, Box<[GraphParameterFact]>) {
+    let mut parameters = project_parameter_values(protocol, values);
+    project_parameter_context(protocol.type_id.as_str(), &[], &mut parameters);
+    (project_parameter_groups(protocol), parameters)
+}
+
+fn project_parameter_values(
+    protocol: &NodeProtocol,
+    values: &yss_node_protocol::ParameterValues,
+) -> Box<[GraphParameterFact]> {
     protocol
         .parameters
         .groups
@@ -457,17 +497,20 @@ pub(super) fn project_node_parameters(
                 .iter()
                 .map(move |parameter| (group, parameter))
         })
-        .filter(|(_, parameter)| protocol.parameters.is_visible(parameter, &node.parameters))
+        .filter(|(_, parameter)| protocol.parameters.is_visible(parameter, values))
         .map(|(group, parameter)| {
             parameter_fact(
                 &group.key,
                 parameter,
-                effective_parameter_value(node, parameter).map(|value| {
-                    match (&parameter.editor, value.as_str()) {
+                values
+                    .get(&parameter.key)
+                    .map(Cow::Borrowed)
+                    .or_else(|| parameter.default_json().map(Cow::Owned))
+                    .map(|value| match (&parameter.editor, value.as_str()) {
                         (ParameterEditorSpec::Resource { .. }, Some(identity)) => {
                             GraphResolvedParameterValue::Resource(GraphResourceId::new(identity))
                         }
-                        _ if !node.parameters.contains_key(&parameter.key) => {
+                        _ if !values.contains_key(&parameter.key) => {
                             GraphResolvedParameterValue::DefaultLiteral(
                                 parameter
                                     .default_value
@@ -478,8 +521,7 @@ pub(super) fn project_node_parameters(
                             )
                         }
                         _ => GraphResolvedParameterValue::Literal(value.into_owned()),
-                    }
-                }),
+                    }),
             )
         })
         .collect()

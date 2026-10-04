@@ -287,7 +287,7 @@ fn validate_node_creation(
                 protocol.instance_display,
                 NodeInstanceDisplaySpec::ResourceParameter { .. }
             ) || !matches!(
-                authoritative_static_descriptor(registry, protocol),
+                authoritative_static_descriptor(protocol),
                 Some(NodeCreation::Static { .. }) | Some(NodeCreation::ParameterizedStatic { .. })
             ) {
                 return Err(invalid_clipboard(format!(

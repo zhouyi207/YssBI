@@ -138,26 +138,7 @@ fn project_node(
     diagnostics: &[&GraphDiagnosticFact],
     document: &GraphDocument,
 ) -> Result<EditorNodeModel, EditorProjectionError> {
-    let parameter_groups = facts
-        .parameter_groups
-        .iter()
-        .filter_map(|group| {
-            let parameters: Box<[_]> = facts
-                .parameters
-                .iter()
-                .filter(|parameter| parameter.group_key == group.key)
-                .filter_map(project_parameter)
-                .collect();
-            (!parameters.is_empty()).then(|| EditorParameterGroupModel {
-                key: group.key.clone(),
-                display: EditorParameterDisplay {
-                    title: group.title.clone(),
-                    description: group.description.clone(),
-                },
-                parameters,
-            })
-        })
-        .collect();
+    let parameter_groups = project_parameter_groups(&facts.parameter_groups, &facts.parameters);
     let ports = facts
         .ports
         .iter()
@@ -195,6 +176,30 @@ fn project_node(
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     })
+}
+
+pub fn project_parameter_groups(
+    groups: &[yss_graph_analysis::GraphParameterGroupFact],
+    parameters: &[GraphParameterFact],
+) -> Box<[EditorParameterGroupModel]> {
+    groups
+        .iter()
+        .filter_map(|group| {
+            let parameters: Box<[_]> = parameters
+                .iter()
+                .filter(|parameter| parameter.group_key == group.key)
+                .filter_map(project_parameter)
+                .collect();
+            (!parameters.is_empty()).then(|| EditorParameterGroupModel {
+                key: group.key.clone(),
+                display: EditorParameterDisplay {
+                    title: group.title.clone(),
+                    description: group.description.clone(),
+                },
+                parameters,
+            })
+        })
+        .collect()
 }
 
 fn project_port(
@@ -341,14 +346,14 @@ fn project_configuration(fact: &GraphParameterConfigurationFact) -> EditorParame
         }
         GraphParameterConfigurationFact::ProjectColumns {
             allow_empty,
-            available,
-            unavailable_reason,
+            schema_known,
+            context_hint,
             options,
             value,
         } => EditorParameterConfiguration::ProjectColumns {
             allow_empty: *allow_empty,
-            available: *available,
-            unavailable_reason: unavailable_reason.clone(),
+            schema_known: *schema_known,
+            context_hint: context_hint.clone(),
             options: options
                 .iter()
                 .map(|option| EditorColumnOption {
@@ -360,13 +365,13 @@ fn project_configuration(fact: &GraphParameterConfigurationFact) -> EditorParame
             value: value.clone(),
         },
         GraphParameterConfigurationFact::FilterPredicate {
-            available,
-            unavailable_reason,
+            schema_known,
+            context_hint,
             columns,
             value,
         } => EditorParameterConfiguration::FilterPredicate {
-            available: *available,
-            unavailable_reason: unavailable_reason.clone(),
+            schema_known: *schema_known,
+            context_hint: context_hint.clone(),
             columns: columns
                 .iter()
                 .map(|column| EditorFilterColumnOption {

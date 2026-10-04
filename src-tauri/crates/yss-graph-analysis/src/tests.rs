@@ -948,10 +948,46 @@ fn editor_projection_reports_a_graph_level_value_cycle() {
         );
     }
 
-    let facts = resolve_graph_semantics(&document, &builtin.registry, &empty_resources());
+    let independent = NodeId::new();
+    document.nodes.insert(
+        independent,
+        DocumentNode {
+            id: independent,
+            node_type: "yssbi.constant.pi".parse().unwrap(),
+            position: NodePosition { x: 0.0, y: 300.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    let mut cache = crate::GraphSemanticCache::default();
+    let facts = crate::resolve_graph_semantics_with_cache(
+        &document,
+        &builtin.registry,
+        &empty_resources(),
+        &mut cache,
+    );
 
     assert!(facts.diagnostics().iter().any(|diagnostic| {
         diagnostic.code.as_str() == GraphDiagnosticKind::DependencyValueCycle.code()
             && diagnostic.primary == GraphDiagnosticLocation::Graph
     }));
+    assert!(facts.ready().is_none());
+    assert!(facts.nodes_ready(&std::collections::BTreeSet::from([independent])));
+    assert!(!facts.nodes_ready(&std::collections::BTreeSet::from([left])));
+    assert_eq!(
+        facts,
+        resolve_graph_semantics(&document, &builtin.registry, &empty_resources())
+    );
+    let removed = *document.connections.keys().next().unwrap();
+    document.connections.remove(&removed);
+    let repaired = crate::resolve_graph_semantics_with_cache(
+        &document,
+        &builtin.registry,
+        &empty_resources(),
+        &mut cache,
+    );
+    assert_eq!(
+        repaired,
+        resolve_graph_semantics(&document, &builtin.registry, &empty_resources())
+    );
 }

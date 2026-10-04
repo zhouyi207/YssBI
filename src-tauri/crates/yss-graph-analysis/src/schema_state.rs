@@ -1,6 +1,16 @@
 use serde::Serialize;
 use yss_node_protocol::ResolvedSchemaFact;
 
+/// Captured output observations, scoped to the graph and execution session by the caller.
+pub type GraphSchemaObservations =
+    std::collections::BTreeMap<yss_graph_document::PortAddress, GraphSchemaObservation>;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct GraphSchemaObservation {
+    pub version: u64,
+    pub fields: Vec<yss_node_protocol::SchemaField>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum GraphSchemaIssue {
     DataDependent,
@@ -20,6 +30,11 @@ pub enum GraphSchemaState {
     /// Column membership is resolved only when the relation is consumed.
     Deferred,
     Exact(ResolvedSchemaFact),
+    /// An evaluated output refines a deferred declaration; it is not a producer input.
+    Observed {
+        version: u64,
+        schema: ResolvedSchemaFact,
+    },
     Pending(GraphSchemaIssue),
     Unavailable(GraphSchemaIssue),
     Conflict(GraphSchemaIssue),
@@ -29,7 +44,7 @@ pub enum GraphSchemaState {
 impl GraphSchemaState {
     pub fn exact(&self) -> Option<&ResolvedSchemaFact> {
         match self {
-            Self::Exact(fact) => Some(fact),
+            Self::Exact(fact) | Self::Observed { schema: fact, .. } => Some(fact),
             _ => None,
         }
     }

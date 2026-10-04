@@ -5,7 +5,7 @@ mod model;
 pub use connections::{
     ConnectionCandidate, ConnectionCandidates, ConnectionDecision, ConnectionIntent,
 };
-pub use mapper::build_editor_projection;
+pub use mapper::{build_editor_projection, project_parameter_groups};
 pub use model::{
     EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel, EditorDiagnosticSeverity,
     EditorEffectiveInputBinding, EditorFilterColumnOption, EditorFilterLiteralType,

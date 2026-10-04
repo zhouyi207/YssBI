@@ -196,16 +196,6 @@ pub(crate) fn validate(
             }
         }
     }
-    for diagnostic in &mut diagnostics {
-        if let GraphDiagnosticLocation::Connection(id) = diagnostic.primary
-            && let Some(connection) = document.connections.get(&id)
-        {
-            diagnostic.related = Box::new([
-                GraphDiagnosticLocation::Port(connection.output.clone()),
-                GraphDiagnosticLocation::Port(connection.input.clone()),
-            ]);
-        }
-    }
     diagnostics
 }
 
@@ -669,22 +659,22 @@ mod tests {
                 .unwrap()
             {
                 GraphParameterConfigurationFact::ProjectColumns {
-                    available,
+                    schema_known,
                     options,
                     value,
                     ..
                 } => {
-                    assert!(*available);
+                    assert!(*schema_known);
                     assert_eq!(options[0].name.as_ref(), "amount");
                     assert_eq!(value.as_ref(), &[Box::<str>::from("amount")]);
                 }
                 GraphParameterConfigurationFact::FilterPredicate {
-                    available,
+                    schema_known,
                     columns,
                     value,
                     ..
                 } => {
-                    assert!(*available);
+                    assert!(*schema_known);
                     assert_eq!(columns[0].name.as_ref(), "amount");
                     assert_eq!(
                         columns[0].literal_types.as_ref(),
@@ -757,15 +747,19 @@ mod tests {
                 .unwrap()
             {
                 GraphParameterConfigurationFact::ProjectColumns {
-                    available, options, ..
+                    schema_known,
+                    options,
+                    ..
                 } => {
-                    assert!(!available);
+                    assert!(!schema_known);
                     assert!(options.is_empty());
                 }
                 GraphParameterConfigurationFact::FilterPredicate {
-                    available, columns, ..
+                    schema_known,
+                    columns,
+                    ..
                 } => {
-                    assert!(!available);
+                    assert!(!schema_known);
                     assert!(columns.is_empty());
                 }
                 other => panic!("missing disconnected editor: {other:?}"),

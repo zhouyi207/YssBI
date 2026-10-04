@@ -26,7 +26,7 @@ impl GraphPortSemanticFact {
     }
 }
 
-fn resolved_type_expr(value: &ResolvedType) -> TypeExpr {
+pub(crate) fn resolved_type_expr(value: &ResolvedType) -> TypeExpr {
     match value {
         ResolvedType::Nominal(id) => TypeExpr::Concrete(id.clone()),
         ResolvedType::Applied {

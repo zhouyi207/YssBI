@@ -841,6 +841,8 @@ fn function_catalog_creation_preserves_authoritative_member_metadata() {
             .creation
             .clone();
             let create = |descriptor| EditorGraphMutation::CreateNode {
+                port_counts: Default::default(),
+                parameters: Default::default(),
                 descriptor,
                 position: NodePosition { x: 100.0, y: 0.0 },
                 user_label: None,
@@ -854,6 +856,24 @@ fn function_catalog_creation_preserves_authoritative_member_metadata() {
                 panic!("function descriptor must be resource-bound")
             };
             *resource_revision -= 1;
+            let mut conflicting = create(descriptor.clone());
+            let EditorGraphMutation::CreateNode { parameters, .. } = &mut conflicting else {
+                unreachable!()
+            };
+            parameters.insert(
+                "target".parse().unwrap(),
+                serde_json::json!("functions/Other.yssbi-function"),
+            );
+            assert!(matches!(
+                runtime.plan_editor_mutation(
+                    &graph(),
+                    &document,
+                    conflicting,
+                    &mutation_catalog,
+                    || resolve(&runtime, &document, &catalog),
+                ),
+                Err(MutationConflict::CatalogDescriptorInvalid(_))
+            ));
             assert!(matches!(
                 runtime.plan_editor_mutation(
                     &graph(),

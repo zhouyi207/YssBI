@@ -297,7 +297,7 @@ fn authoritative_creation(
             node.id
         )));
     }
-    match authoritative_static_descriptor(registry, protocol) {
+    match authoritative_static_descriptor(protocol) {
         Some(NodeCreation::Static { .. }) | Some(NodeCreation::ParameterizedStatic { .. }) => {
             Ok(ClipboardNodeCreation::Static {
                 node_type_id: node.node_type.clone(),

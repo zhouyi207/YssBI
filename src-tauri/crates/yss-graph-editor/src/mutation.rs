@@ -153,6 +153,8 @@ pub enum EditorGraphMutation {
     CreateNode {
         descriptor: NodeCreation,
         position: NodePosition,
+        parameters: ParameterValues,
+        port_counts: yss_node_protocol::InitialPortCounts,
         user_label: Option<String>,
         connect_from: Option<PortAddress>,
     },
@@ -315,80 +317,80 @@ impl EditorGraphMutation {
             Self::CreateNode {
                 descriptor,
                 position,
+                parameters: initial_parameters,
+                port_counts,
                 user_label,
                 connect_from,
             } => {
                 validate_position(position)?;
-                let connection_descriptor = descriptor.clone();
-                let (node_type_id, protocol, parameters, resource_bound, allow_missing_parameters) =
-                    match descriptor {
-                        descriptor @ NodeCreation::Static { .. }
-                        | descriptor @ NodeCreation::ParameterizedStatic { .. } => {
-                            let node_type_id = match &descriptor {
-                                NodeCreation::Static { node_type_id }
-                                | NodeCreation::ParameterizedStatic { node_type_id, .. } => {
-                                    node_type_id.clone()
-                                }
-                                NodeCreation::ResourceBound { .. } => unreachable!(),
-                            };
-                            let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
-                                catalog_descriptor_invalid(format!(
-                                    "unknown node type '{node_type_id}'"
-                                ))
-                            })?;
-                            let authoritative = yss_node_catalog::authoritative_static_descriptor(
-                                registry, protocol,
-                            );
-                            if authoritative.as_ref() != Some(&descriptor) {
-                                return Err(catalog_descriptor_invalid(
-                                    "catalog creation descriptor does not match registry authority",
-                                ));
+                let (node_type_id, protocol, bound_parameters, resource_bound) = match descriptor {
+                    descriptor @ NodeCreation::Static { .. }
+                    | descriptor @ NodeCreation::ParameterizedStatic { .. } => {
+                        let node_type_id = match &descriptor {
+                            NodeCreation::Static { node_type_id }
+                            | NodeCreation::ParameterizedStatic { node_type_id, .. } => {
+                                node_type_id.clone()
                             }
-                            let allow_missing =
-                                matches!(descriptor, NodeCreation::ParameterizedStatic { .. });
-                            (
-                                node_type_id,
-                                protocol,
-                                ParameterValues::new(),
-                                false,
-                                allow_missing,
-                            )
+                            NodeCreation::ResourceBound { .. } => unreachable!(),
+                        };
+                        let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
+                            catalog_descriptor_invalid(format!(
+                                "unknown node type '{node_type_id}'"
+                            ))
+                        })?;
+                        let authoritative =
+                            yss_node_catalog::authoritative_static_descriptor(protocol);
+                        if authoritative.as_ref() != Some(&descriptor) {
+                            return Err(catalog_descriptor_invalid(
+                                "catalog creation descriptor does not match registry authority",
+                            ));
                         }
-                        NodeCreation::ResourceBound {
-                            node_type_id,
-                            resource_path,
+                        (node_type_id, protocol, ParameterValues::new(), false)
+                    }
+                    NodeCreation::ResourceBound {
+                        node_type_id,
+                        resource_path,
+                        resource_revision,
+                        create_args,
+                    } => {
+                        let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
+                            catalog_descriptor_invalid(format!(
+                                "unknown node type '{node_type_id}'"
+                            ))
+                        })?;
+                        let parameters = materialize_resource_descriptor(
+                            protocol,
+                            &resource_path,
                             resource_revision,
                             create_args,
-                        } => {
-                            let protocol = registry.protocol(&node_type_id).ok_or_else(|| {
-                                catalog_descriptor_invalid(format!(
-                                    "unknown node type '{node_type_id}'"
-                                ))
-                            })?;
-                            let parameters = materialize_resource_descriptor(
-                                protocol,
-                                &resource_path,
-                                resource_revision,
-                                create_args,
-                                catalog_validation.ok_or_else(|| {
-                                    catalog_resource_stale(
-                                        "resource validation snapshot is unavailable",
-                                    )
-                                })?,
-                            )?;
-                            (node_type_id, protocol, parameters, true, false)
-                        }
-                    };
+                            catalog_validation.ok_or_else(|| {
+                                catalog_resource_stale(
+                                    "resource validation snapshot is unavailable",
+                                )
+                            })?,
+                        )?;
+                        (node_type_id, protocol, parameters, true)
+                    }
+                };
                 if resource_bound {
                     validate_node_scope(graph_path, protocol)
                         .map_err(catalog_descriptor_validation_error)?;
-                    validate_parameters_with_registry(registry, protocol, &parameters)
-                        .map_err(catalog_descriptor_validation_error)?;
                 } else {
                     validate_node_scope(graph_path, protocol)?;
-                    if !allow_missing_parameters {
-                        validate_parameters_with_registry(registry, protocol, &parameters)?;
-                    }
+                }
+                let parameters = merge_parameters_with_registry(
+                    registry,
+                    protocol,
+                    &bound_parameters,
+                    initial_parameters,
+                )?;
+                if bound_parameters
+                    .iter()
+                    .any(|(key, value)| parameters.get(key) != Some(value))
+                {
+                    return Err(catalog_descriptor_invalid(
+                        "initial parameters cannot change the catalog resource binding",
+                    ));
                 }
                 let mut operations = create_node_operations(
                     protocol,
@@ -396,25 +398,18 @@ impl EditorGraphMutation {
                     position,
                     parameters,
                     user_label,
+                    protocol
+                        .interface
+                        .initial_port_counts(&port_counts)
+                        .map_err(|error| invalid_editor_mutation(error.to_string()))?,
                 );
                 if let Some(connect_from) = connect_from {
                     let source_address = connect_from;
-                    let resources = catalog_validation.ok_or_else(|| {
-                        invalid_editor_mutation("catalog compatibility snapshot is unavailable")
-                    })?;
                     let source = crate::compatibility::source_port(
                         document,
                         registry,
                         context,
                         source_address,
-                    )
-                    .map_err(MutationConflict::Editor)?;
-                    let candidate = crate::compatibility::connection_candidate(
-                        graph_path,
-                        &connection_descriptor,
-                        registry,
-                        resources,
-                        &source,
                     )
                     .map_err(MutationConflict::Editor)?;
                     append_atomic_connection(
@@ -423,7 +418,6 @@ impl EditorGraphMutation {
                         context,
                         &mut operations,
                         &source,
-                        candidate,
                     )?;
                 }
                 operations
@@ -449,11 +443,12 @@ impl EditorGraphMutation {
                         "managed node parameters cannot be edited",
                     ));
                 }
-                let parameters = protocol
-                    .parameters
-                    .merge_values(&before.parameters, parameters)
-                    .map_err(|key| invalid_editor_mutation(format!("unknown parameter '{key}'")))?;
-                validate_parameters_with_registry(registry, protocol, &parameters)?;
+                let parameters = merge_parameters_with_registry(
+                    registry,
+                    protocol,
+                    &before.parameters,
+                    parameters,
+                )?;
                 let mut after = before.clone();
                 after.parameters = parameters;
                 vec![GraphDocumentOperation::UpdateNode { before, after }]
@@ -880,7 +875,6 @@ fn append_atomic_connection(
     context: EditorMutationContext<'_>,
     operations: &mut Vec<GraphDocumentOperation>,
     source: &crate::compatibility::SourcePort,
-    candidate: crate::compatibility::CandidatePort,
 ) -> Result<(), MutationConflict> {
     let node_id = operations
         .iter()
@@ -889,17 +883,30 @@ fn append_atomic_connection(
             _ => None,
         })
         .expect("create node operations always begin with node insertion");
+    let resources = context
+        .catalog
+        .ok_or_else(|| invalid_editor_mutation("catalog compatibility snapshot is unavailable"))?;
+    let mut staged = document.clone();
+    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
+    let candidate =
+        crate::compatibility::connection_candidate(&staged, node_id, registry, resources, source)
+            .map_err(MutationConflict::Editor)?;
     let candidate_address = if let Some(dynamic) = candidate.dynamic {
         let address =
             PortAddress::instance(node_id, candidate.template.clone(), PortInstanceId::new());
-        operations.push(GraphDocumentOperation::InsertPortBinding {
+        let operation = GraphDocumentOperation::InsertPortBinding {
             address: address.clone(),
             binding: DynamicPortBinding::Resolved {
                 origin: dynamic.origin,
                 order: dynamic.order,
                 last_known: dynamic.last_known,
             },
-        });
+        };
+        apply_graph_document_patch(
+            &mut staged,
+            &GraphDocumentPatch::new(vec![operation.clone()]),
+        )?;
+        operations.push(operation);
         address
     } else if let Some(address) = operations.iter().find_map(|operation| match operation {
         GraphDocumentOperation::InsertPortBinding { address, .. }
@@ -938,20 +945,19 @@ fn append_atomic_connection(
         }
         ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. } => None,
     };
-    let mut staged = document.clone();
-    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
     operations.extend(connect_operations(
         &staged, registry, context, output, input, order,
     )?);
     Ok(())
 }
 
-pub(super) fn create_node_operations(
+fn create_node_operations(
     protocol: &NodeProtocol,
     node_type: NodeTypeId,
     position: NodePosition,
     parameters: ParameterValues,
     user_label: Option<String>,
+    port_counts: yss_node_protocol::InitialPortCounts,
 ) -> Vec<GraphDocumentOperation> {
     let node_id = NodeId::new();
     let mut operations = vec![GraphDocumentOperation::InsertNode {
@@ -964,7 +970,7 @@ pub(super) fn create_node_operations(
         },
     }];
     for group in &protocol.interface.member_groups {
-        for index in 0..group.min {
+        for index in 0..port_counts[&group.templates[0]] {
             let instance_id = PortInstanceId::new();
             let order = OrderKey::new(format!("{index:05}"));
             for template in &group.templates {
@@ -985,10 +991,10 @@ pub(super) fn create_node_operations(
         {
             continue;
         }
-        let PortCardinality::UserCreated { min, .. } = spec.cardinality else {
+        let PortCardinality::UserCreated { .. } = spec.cardinality else {
             continue;
         };
-        for index in 0..min {
+        for index in 0..port_counts[&spec.key] {
             let instance_id = PortInstanceId::new();
             operations.push(GraphDocumentOperation::InsertPortBinding {
                 address: PortAddress::instance(node_id, spec.key.clone(), instance_id),
@@ -1007,6 +1013,20 @@ fn validate_position(position: NodePosition) -> Result<(), MutationConflict> {
     } else {
         Err(invalid_editor_mutation("node position must be finite"))
     }
+}
+
+pub fn merge_parameters_with_registry(
+    registry: &NodeRegistry,
+    protocol: &NodeProtocol,
+    current: &ParameterValues,
+    changes: ParameterValues,
+) -> Result<ParameterValues, MutationConflict> {
+    let parameters = protocol
+        .parameters
+        .merge_values(current, changes)
+        .map_err(|key| invalid_editor_mutation(format!("unknown parameter '{key}'")))?;
+    validate_parameters_with_registry(registry, protocol, &parameters)?;
+    Ok(parameters)
 }
 
 pub(super) fn validate_parameters_with_registry(
@@ -1028,15 +1048,8 @@ fn validate_shared_parameters(
     let Some(issue) = yss_node_protocol::validate_parameter_values(protocol, parameters, nominal)
         .into_iter()
         .find(|issue| {
-            // Constant selection may be incomplete while editing; execution requires it.
-            !(matches!(issue.kind, yss_node_protocol::ParameterIssueKind::Required)
-                && protocol.parameters.iter().any(|spec| {
-                    spec.key == issue.key
-                        && matches!(
-                            spec.editor,
-                            yss_node_protocol::ParameterEditorSpec::GraphConstant
-                        )
-                }))
+            // Editing may be incomplete. Analysis and execution still require all active values.
+            !matches!(issue.kind, yss_node_protocol::ParameterIssueKind::Required)
         })
     else {
         return Ok(());

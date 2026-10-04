@@ -10,6 +10,7 @@ const MAX_CACHED_GRAPHS: usize = 16;
 pub(super) struct CachedGraphAnalysis {
     pub document_fingerprint: [u8; 32],
     pub dependency_fingerprint: [u8; 32],
+    pub observation_fingerprint: [u8; 32],
     pub analysis: GraphAnalysis,
 }
 

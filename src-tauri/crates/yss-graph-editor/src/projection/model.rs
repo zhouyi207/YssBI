@@ -186,14 +186,14 @@ pub enum EditorParameterConfiguration {
     },
     ProjectColumns {
         allow_empty: bool,
-        available: bool,
-        unavailable_reason: Option<Box<str>>,
+        schema_known: bool,
+        context_hint: Option<Box<str>>,
         options: Box<[EditorColumnOption]>,
         value: Box<[Box<str>]>,
     },
     FilterPredicate {
-        available: bool,
-        unavailable_reason: Option<Box<str>>,
+        schema_known: bool,
+        context_hint: Option<Box<str>>,
         columns: Box<[EditorFilterColumnOption]>,
         value: Option<serde_json::Value>,
     },

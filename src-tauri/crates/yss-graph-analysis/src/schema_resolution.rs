@@ -53,6 +53,8 @@ pub(crate) fn resolve_graph_schemas(
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
     cache: &mut SchemaCache,
+    observations: &crate::GraphSchemaObservations,
+    arguments: &crate::function_arguments::BoundFunctionPorts,
 ) -> SchemaResolution {
     #[cfg(test)]
     {
@@ -86,20 +88,13 @@ pub(crate) fn resolve_graph_schemas(
                 })
         })
         .collect::<Vec<_>>();
-    let Some(order) = index.topological_order() else {
-        cache.outputs.clear();
-        return SchemaResolution(
-            output_addresses
-                .into_iter()
-                .map(|address| {
-                    (
-                        address,
-                        GraphSchemaState::Conflict(GraphSchemaIssue::DependencyCycle),
-                    )
-                })
-                .collect(),
-        );
-    };
+    output_addresses.extend(observations.keys().cloned());
+    output_addresses.extend(
+        crate::function_structure::function_output_addresses_with_index(
+            document, index, registry, resources,
+        ),
+    );
+    let order = index.topological_order();
     let ranks = order
         .iter()
         .copied()
@@ -113,13 +108,27 @@ pub(crate) fn resolve_graph_schemas(
         index,
         registry,
         resources: resources.clone(),
+        observations,
         cache,
-        resolved: SchemaResolution::default(),
+        resolved: SchemaResolution(
+            arguments
+                .iter()
+                .map(|(address, argument)| (address.clone(), argument.schema.clone()))
+                .collect(),
+        ),
         series_fields: BTreeMap::new(),
         visiting: BTreeSet::new(),
     };
     for address in output_addresses {
-        let _ = resolver.resolve_output(&address);
+        if ranks.contains_key(&address.node_id) {
+            let _ = resolver.resolve_output(&address);
+        } else {
+            resolver.cache.outputs.remove(&address);
+            resolver.resolved.insert(
+                address,
+                GraphSchemaState::Conflict(GraphSchemaIssue::DependencyCycle),
+            );
+        }
     }
     for (input, connections) in &index.incoming {
         let [connection] = connections.as_slice() else {
@@ -130,7 +139,7 @@ pub(crate) fn resolve_graph_schemas(
             continue;
         };
         let state = resolver.resolve_output(&connection.output);
-        if let GraphSchemaState::Exact(schema) = state {
+        if let Some(schema) = state.exact() {
             let input_key = match &input.port {
                 PortRef::Declared { key } => key.clone(),
                 PortRef::Instance { template, .. } => template.clone(),
@@ -139,7 +148,7 @@ pub(crate) fn resolve_graph_schemas(
                 input.clone(),
                 GraphSchemaState::Exact(ResolvedSchemaFact {
                     expression: SchemaExpr::Input(input_key),
-                    fields: schema.fields,
+                    fields: schema.fields.clone(),
                 }),
             );
         } else {
@@ -229,6 +238,7 @@ struct EditorSchemaResolver<'a> {
     registry: &'a NodeRegistry,
     resources: ResourceCatalogSnapshot,
     cache: &'a mut SchemaCache,
+    observations: &'a crate::GraphSchemaObservations,
     resolved: SchemaResolution,
     series_fields: BTreeMap<PortAddress, Result<SchemaField, GraphSchemaIssue>>,
     visiting: BTreeSet<PortAddress>,
@@ -242,13 +252,53 @@ impl EditorSchemaResolver<'_> {
         if !self.visiting.insert(address.clone()) {
             return GraphSchemaState::Conflict(GraphSchemaIssue::DependencyCycle);
         }
-        let result = self.resolve_schema_output(address);
+        let result = match self.resolve_schema_output(address) {
+            GraphSchemaState::Deferred if self.observations.contains_key(address) => {
+                let observation = &self.observations[address];
+                let mut fields = observation.fields.clone();
+                for field in &mut fields {
+                    // Data-dependent column removal preserves the input field's identity.
+                    // Ambiguous names do not acquire an unrelated source's lineage.
+                    let mut sources = self
+                        .index
+                        .node_input_connections(address.node_id)
+                        .iter()
+                        .filter_map(|connection| self.resolved.get(&connection.output))
+                        .flat_map(|schema| &schema.fields)
+                        .filter(|source| source.name == field.name);
+                    if let Some(source) = sources.next().filter(|_| sources.next().is_none()) {
+                        field.lineage = source.lineage.clone();
+                    }
+                    if field.lineage.is_none() {
+                        field.lineage = Some(SchemaFieldLineage {
+                            source: format!("graph:{address}").into(),
+                            field: field.name.0.clone(),
+                        });
+                    }
+                }
+                GraphSchemaState::Observed {
+                    version: observation.version,
+                    schema: ResolvedSchemaFact {
+                        expression: self.output_schema_expression(address).unwrap_or_else(|| {
+                            SchemaExpr::Fixed {
+                                fields: fields.clone(),
+                            }
+                        }),
+                        fields,
+                    },
+                }
+            }
+            state => state,
+        };
         self.visiting.remove(address);
         self.resolved.insert(address.clone(), result.clone());
         result
     }
 
     fn resolve_schema_output(&mut self, address: &PortAddress) -> GraphSchemaState {
+        if self.function_returns_dataframe(address) {
+            return GraphSchemaState::Deferred;
+        }
         let Some(expression) = self.output_schema_expression(address) else {
             self.cache.outputs.remove(address);
             return GraphSchemaState::NotApplicable;
@@ -332,6 +382,34 @@ impl EditorSchemaResolver<'_> {
             },
         );
         state
+    }
+
+    fn function_returns_dataframe(&self, address: &PortAddress) -> bool {
+        let Some(node) = self.document.nodes.get(&address.node_id) else {
+            return false;
+        };
+        let Some(registered) = self.registry.get(&node.node_type) else {
+            return false;
+        };
+        if !registered
+            .structural_role()
+            .is_some_and(yss_node_registry::StructuralNodeRole::calls_function)
+        {
+            return false;
+        }
+        let key = match &address.port {
+            PortRef::Declared { key } | PortRef::Instance { template: key, .. } => key,
+        };
+        if !registered.protocol().interface.ports.iter().any(|port| {
+            &port.key == key && port.direction == yss_node_protocol::PortDirection::Output
+        }) {
+            return false;
+        }
+        registered
+            .function_reference(&node.parameters)
+            .and_then(|path| yss_graph_document::GraphResourcePath::new(path).ok())
+            .and_then(|path| self.resources.function_signature(&path))
+            .is_some_and(|signature| signature.result() == Some(&ValueType::DataFrame))
     }
 
     fn output_schema_expression(&self, address: &PortAddress) -> Option<SchemaExpr> {

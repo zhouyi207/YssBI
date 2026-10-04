@@ -35,7 +35,31 @@ pub fn resolve_graph_semantics_with_cache(
     resources: &ResourceCatalogSnapshot,
     cache: &mut GraphSemanticCache,
 ) -> GraphSemanticSnapshot {
-    resolve_graph_semantics_inner(document, registry, resources, cache, true)
+    resolve_graph_semantics_with_observations(
+        document,
+        registry,
+        resources,
+        cache,
+        &Default::default(),
+    )
+}
+
+pub fn resolve_graph_semantics_with_observations(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    resources: &ResourceCatalogSnapshot,
+    cache: &mut GraphSemanticCache,
+    observations: &crate::GraphSchemaObservations,
+) -> GraphSemanticSnapshot {
+    resolve_graph_semantics_inner(
+        document,
+        registry,
+        resources,
+        cache,
+        observations,
+        &Default::default(),
+        true,
+    )
 }
 
 pub(crate) fn resolve_graph_semantics_inner(
@@ -43,12 +67,21 @@ pub(crate) fn resolve_graph_semantics_inner(
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
     cache: &mut GraphSemanticCache,
+    observations: &crate::GraphSchemaObservations,
+    arguments: &crate::function_arguments::BoundFunctionPorts,
     validate_functions: bool,
 ) -> GraphSemanticSnapshot {
     let index = DocumentIndex::new(document);
     let mut diagnostics = Vec::new();
-    let resolved_schemas =
-        resolve_graph_schemas(document, &index, registry, resources, &mut cache.schemas);
+    let resolved_schemas = resolve_graph_schemas(
+        document,
+        &index,
+        registry,
+        resources,
+        &mut cache.schemas,
+        observations,
+        arguments,
+    );
     let (mut nodes, internal_interface_node) = project_nodes(
         document,
         &index,
@@ -58,6 +91,15 @@ pub(crate) fn resolve_graph_semantics_inner(
         &mut diagnostics,
     );
     include_referenced_orphan_ports(document, &index, &mut nodes, &mut diagnostics);
+    for node in &mut nodes {
+        for port in &mut node.ports {
+            if let Some(argument) = arguments.get(&port.address) {
+                port.accepted_type =
+                    crate::type_resolution::resolved_type_expr(&argument.value_type);
+                port.schema_state = argument.schema.clone();
+            }
+        }
+    }
     diagnostics.extend(type_resolution::resolve_node_types(
         document, &index, registry, &mut nodes, cache,
     ));
@@ -69,18 +111,45 @@ pub(crate) fn resolve_graph_semantics_inner(
     diagnostics.extend(semantic_validation::validate(
         document, &index, registry, &nodes,
     ));
+    diagnostics.extend(crate::function_structure::validate_group_signatures(
+        document, registry, resources,
+    ));
     let function_resolution = if validate_functions {
         function_validation::resolve(document, registry, resources)
     } else {
         Default::default()
     };
     diagnostics.extend(function_resolution.diagnostics);
-    if index.topological_order().is_none() {
-        diagnostics.push(graph_problem(
+    if index.topological_order().len() != document.nodes.len() {
+        let resolved = index
+            .topological_order()
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut diagnostic = graph_problem(
             GraphDiagnosticKind::DependencyValueCycle,
             GraphDiagnosticLocation::Graph,
             std::iter::empty(),
-        ));
+        );
+        diagnostic.related = document
+            .nodes
+            .keys()
+            .filter(|node| !resolved.contains(node))
+            .copied()
+            .map(GraphDiagnosticLocation::Node)
+            .collect();
+        diagnostics.push(diagnostic);
+    }
+    // Connection diagnostics from every semantic stage must identify their endpoints.
+    for diagnostic in &mut diagnostics {
+        if let GraphDiagnosticLocation::Connection(id) = diagnostic.primary
+            && let Some(connection) = document.connections.get(&id)
+        {
+            diagnostic.related = Box::new([
+                GraphDiagnosticLocation::Port(connection.output.clone()),
+                GraphDiagnosticLocation::Port(connection.input.clone()),
+            ]);
+        }
     }
     let complete = !diagnostics.iter().any(|diagnostic| diagnostic.blocking);
     GraphSemanticSnapshot::new(
@@ -120,9 +189,28 @@ fn validate_node_schema(
         let requires_schema = port.schema.is_some()
             || matches!(port.type_state.exact(), Some(ResolvedType::Nominal(id)) if id.as_str() == "tabular.dataframe");
         if requires_schema && matches!(port.schema_state, GraphSchemaState::NotApplicable) {
-            port.schema_state = GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream);
+            port.schema_state = if port.direction == PortDirection::Output
+                && node.specialization.as_ref().is_some_and(|specialization| {
+                    matches!(
+                        specialization.implementation,
+                        crate::GraphNodeImplementation::FunctionCall { .. }
+                            | crate::GraphNodeImplementation::GroupMap { .. }
+                    )
+                }) {
+                GraphSchemaState::Deferred
+            } else {
+                GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream)
+            };
         }
         let accepts_deferred = port.direction == PortDirection::Output
+            || node.specialization.as_ref().is_some_and(|specialization| {
+                matches!(
+                    specialization.implementation,
+                    crate::GraphNodeImplementation::FunctionCall { .. }
+                        | crate::GraphNodeImplementation::GroupMap { .. }
+                        | crate::GraphNodeImplementation::FunctionReturn
+                )
+            })
             || matches!(
                 document.nodes[&node.node_id].node_type.as_str(),
                 "yssbi.dataframe.dropna.rows"

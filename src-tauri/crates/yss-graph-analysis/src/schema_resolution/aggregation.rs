@@ -2,7 +2,7 @@ use super::EditorSchemaResolver;
 use crate::GraphSchemaIssue;
 use crate::parameter_projection::effective_json_parameter;
 use std::collections::BTreeSet;
-use yss_data_contract::{SemanticType, TabularColumnName, aggregation::AggregateOperation};
+use yss_data_contract::{SemanticType, aggregation::AggregateOperation};
 use yss_graph_document::{NodeId, PortAddress};
 use yss_node_protocol::{
     ParameterKey, RelationalScalarType, SchemaColumnRef, SchemaField, SchemaFieldLineage,
@@ -14,21 +14,8 @@ pub(crate) fn column_names(
     let Some(value) = value else {
         return Ok(vec![]);
     };
-    let values = value.as_array().ok_or(GraphSchemaIssue::InvalidParameter)?;
-    let mut names = BTreeSet::new();
-    values
-        .iter()
-        .map(|value| {
-            let name = value
-                .as_str()
-                .filter(|name| TabularColumnName::is_valid(name))
-                .ok_or(GraphSchemaIssue::InvalidParameter)?;
-            if !names.insert(name) {
-                return Err(GraphSchemaIssue::InvalidParameter);
-            }
-            Ok(name.into())
-        })
-        .collect()
+    yss_node_protocol::dataframe::prepare_column_names_json(value)
+        .map_err(|_| GraphSchemaIssue::InvalidParameter)
 }
 
 fn field(name: &str, kind: SemanticType) -> SchemaField {

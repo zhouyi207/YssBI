@@ -99,7 +99,9 @@ impl FunctionDependencyCapture<'_> {
             {
                 self.affected.insert(caller.clone());
             }
-            if registered.structural_role() == Some(StructuralNodeRole::Call)
+            if registered
+                .structural_role()
+                .is_some_and(StructuralNodeRole::calls_function)
                 && let Some(target) = registered
                     .function_reference(&node.parameters)
                     .and_then(|path| GraphResourcePath::new(path).ok())

@@ -70,7 +70,16 @@ pub(super) fn semantic_fingerprint(
                 &port.address,
                 &port.accepted_type,
                 &port.type_state,
-                &port.schema_state,
+                // Observing this output must not invalidate the value that supplied it.
+                // Consumer input fields remain part of that consumer's fingerprint.
+                match &port.schema_state {
+                    crate::GraphSchemaState::Observed { .. }
+                        if port.direction == yss_node_protocol::PortDirection::Output =>
+                    {
+                        &crate::GraphSchemaState::Deferred
+                    }
+                    state => state,
+                },
             )
         })
         .collect::<Vec<_>>();

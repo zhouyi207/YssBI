@@ -62,6 +62,13 @@ fn protocol_defaults_resolve_resource_projection_and_renames_without_document_va
     mapped.type_id = "tests.defaults.mapping".parse().unwrap();
     let mut mapping = mapped.parameters.iter().next().unwrap().clone();
     mapping.value_type = TypeExpr::Unknown;
+    mapping.constraints.retain(|constraint| {
+        !matches!(
+            constraint,
+            yss_node_protocol::ParameterConstraint::ColumnName
+        )
+    });
+    mapping.editor = yss_node_protocol::ParameterEditorSpec::Auto;
     mapping.default_value = Some(TypedValue {
         value_type: TypeExpr::Unknown,
         value: DataValue::Object(BTreeMap::from([(
@@ -338,6 +345,108 @@ fn multivariate_coordinate_schemas_refresh_from_dimensions_without_reading_data(
         fields(&edited, canonical),
         vec!["x_axis1", "x_axis2", "y_axis1", "y_axis2"]
     );
+}
+
+#[test]
+fn column_parameters_preserve_intent_across_unknown_empty_and_replaced_schemas() {
+    use crate::GraphParameterConfigurationFact::ProjectColumns;
+    use yss_data_contract::SemanticType;
+    let registry = yss_node_catalog::build_builtin_node_system()
+        .unwrap()
+        .registry;
+    let mut document = GraphDocument::default();
+    let source = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("data"))],
+    );
+    let group = node(
+        &mut document,
+        "yssbi.dataframe.groupby",
+        &[
+            ("keys", serde_json::json!(["industry"])),
+            ("mean", serde_json::json!([" sales "])),
+        ],
+    );
+    let values = document.nodes[&group].parameters.clone();
+    let mut cache = GraphSemanticCache::default();
+    let empty = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
+    let configuration = |snapshot: &crate::GraphSemanticSnapshot| {
+        snapshot
+            .node(group)
+            .unwrap()
+            .parameters
+            .iter()
+            .find(|parameter| parameter.key.as_str() == "mean")
+            .unwrap()
+            .configuration
+            .clone()
+            .unwrap()
+    };
+    let disconnected = assert_matches_full(&document, &registry, &empty, &mut cache);
+    assert!(
+        matches!(configuration(&disconnected), ProjectColumns { schema_known: false, options, value, .. }
+        if options.is_empty() && value.as_ref() == [Box::<str>::from(" sales ")])
+    );
+    connect(
+        &mut document,
+        port(source, "dataframe"),
+        port(group, "source"),
+    );
+    let missing = assert_matches_full(&document, &registry, &empty, &mut cache);
+    assert!(
+        matches!(configuration(&missing), ProjectColumns { schema_known: false, context_hint: Some(hint), .. }
+        if hint.as_ref() == "editors.dataframe.schema_error")
+    );
+    for (columns, expected_options) in [
+        (vec![], 0),
+        (
+            vec![
+                ("industry", SemanticType::Text),
+                (" sales ", SemanticType::Numeric),
+            ],
+            1,
+        ),
+        (
+            vec![
+                ("industry", SemanticType::Text),
+                (" sales ", SemanticType::Text),
+            ],
+            0,
+        ),
+    ] {
+        let resources = ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::from([(
+                GraphResourceId::new("data"),
+                DataSchema {
+                    columns: columns
+                        .into_iter()
+                        .map(|(name, semantic)| ColumnSchema {
+                            name: name.into(),
+                            data_type: ValueType::Scalar(semantic),
+                            physical_type: None,
+                            semantic: None,
+                        })
+                        .collect(),
+                },
+            )]),
+        );
+        let resolved = assert_matches_full(&document, &registry, &resources, &mut cache);
+        assert!(
+            matches!(configuration(&resolved), ProjectColumns { schema_known: true, context_hint: None, options, value, .. }
+            if options.len() == expected_options && value.as_ref() == [Box::<str>::from(" sales ")])
+        );
+        assert_eq!(resolved.has_blocking_diagnostics(), expected_options == 0);
+        assert_eq!(document.nodes[&group].parameters, values);
+    }
+    document.connections.clear();
+    let disconnected = assert_matches_full(&document, &registry, &empty, &mut cache);
+    assert!(
+        matches!(configuration(&disconnected), ProjectColumns { schema_known: false, options, value, .. }
+        if options.is_empty() && value.as_ref() == [Box::<str>::from(" sales ")])
+    );
+    assert_eq!(document.nodes[&group].parameters, values);
 }
 
 #[test]
@@ -906,24 +1015,24 @@ fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
             assert!(matches!(
                 &snapshot.node(id).unwrap().parameters[0].configuration,
                 Some(crate::GraphParameterConfigurationFact::ProjectColumns {
-                    allow_empty: true, available: true, options, value, ..
+                    allow_empty: true, schema_known: true, options, value, ..
                 }) if options.len() == if extra { 3 } else { 2 } && value.is_empty()
             ));
         }
         assert!(matches!(
             &snapshot.node(after_na).unwrap().parameters[0].configuration,
             Some(crate::GraphParameterConfigurationFact::ProjectColumns {
-                allow_empty: true, available: false, unavailable_reason: Some(reason), ..
+                allow_empty: true, schema_known: false, context_hint: Some(reason), ..
             }) if reason.as_ref() == "editors.dataframe.deferred_columns"
         ));
         assert!(matches!(
             &snapshot.node(columns).unwrap().parameters[0].configuration,
-            Some(crate::GraphParameterConfigurationFact::ProjectColumns { available: true, options, .. })
+            Some(crate::GraphParameterConfigurationFact::ProjectColumns { schema_known: true, options, .. })
                 if options.len() == if extra { 4 } else { 3 }
         ));
         assert!(matches!(
             &snapshot.node(rows).unwrap().parameters[0].configuration,
-            Some(crate::GraphParameterConfigurationFact::FilterPredicate { available: true, columns, .. })
+            Some(crate::GraphParameterConfigurationFact::FilterPredicate { schema_known: true, columns, .. })
                 if columns.len() == if extra { 3 } else { 2 }
         ));
         let source_fields = snapshot
@@ -983,6 +1092,88 @@ fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
     );
     let blocked = resolve_graph_semantics(&dependent, &builtin.registry, &resource(false));
     assert!(blocked.has_blocking_diagnostics());
+    let observed_field = SchemaField {
+        name: SchemaColumnRef("amount".into()),
+        scalar_type: RelationalScalarType::Known(S::Numeric),
+        lineage: None,
+    };
+    let mut observations = crate::GraphSchemaObservations::from([(
+        port(na_columns, "result"),
+        crate::GraphSchemaObservation {
+            version: 7,
+            fields: vec![observed_field],
+        },
+    )]);
+    let observed = crate::resolve_graph_semantics_with_observations(
+        &dependent,
+        &builtin.registry,
+        &resource(false),
+        &mut cache,
+        &observations,
+    );
+    assert!(
+        !observed.has_blocking_diagnostics(),
+        "{:?}",
+        observed.diagnostics()
+    );
+    assert_eq!(
+        blocked.node(na_columns).unwrap().execution_fingerprint(),
+        observed.node(na_columns).unwrap().execution_fingerprint(),
+        "a producer's own Schema observation is not one of its inputs",
+    );
+    let field = &observed
+        .node(na_columns)
+        .unwrap()
+        .ports
+        .iter()
+        .find(|p| p.address == port(na_columns, "result"))
+        .unwrap()
+        .schema_state
+        .exact()
+        .unwrap()
+        .fields[0];
+    assert!(
+        field.lineage.is_some(),
+        "observed columns preserve source identity"
+    );
+    let full = crate::resolve_graph_semantics_with_observations(
+        &dependent,
+        &builtin.registry,
+        &resource(false),
+        &mut GraphSemanticCache::default(),
+        &observations,
+    );
+    assert_eq!(observed, full);
+    observations
+        .get_mut(&port(na_columns, "result"))
+        .unwrap()
+        .fields
+        .clear();
+    let empty = crate::resolve_graph_semantics_with_observations(
+        &dependent,
+        &builtin.registry,
+        &resource(false),
+        &mut cache,
+        &observations,
+    );
+    assert!(
+        empty.has_blocking_diagnostics(),
+        "known empty Schema cannot supply amount"
+    );
+    assert!(matches!(
+        &empty.node(after_na).unwrap().parameters[0].configuration,
+        Some(crate::GraphParameterConfigurationFact::ProjectColumns { schema_known: true, options, .. }) if options.is_empty()
+    ));
+    let withdrawn = resolve_graph_semantics_with_cache(
+        &dependent,
+        &builtin.registry,
+        &resource(false),
+        &mut cache,
+    );
+    assert_eq!(
+        withdrawn, blocked,
+        "removed observations cannot survive a cache hit"
+    );
     for (selection, issue) in [
         (
             serde_json::json!(["absent"]),
@@ -1851,11 +2042,20 @@ fn schema_cache_tracks_rewiring_cycles_and_deleted_outputs() {
     assert_matches_full(&document, &registry, &resources, &mut cache);
     assert_eq!(cache.schemas.reused_outputs, 5);
     document.connections.get_mut(&edge).unwrap().output = port(a[3], "output");
-    assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(cache.schemas.outputs.is_empty());
+    let cyclic = assert_matches_full(&document, &registry, &resources, &mut cache);
+    assert!(cyclic.nodes_ready(&b.into_iter().collect()));
+    assert!(!cyclic.nodes_ready(&a.into_iter().collect()));
+    assert!(
+        cache
+            .schemas
+            .outputs
+            .keys()
+            .all(|address| !a[1..].contains(&address.node_id))
+    );
+    assert_eq!(cache.schemas.outputs.len(), 5);
     document.connections.get_mut(&edge).unwrap().output = port(a[0], "dataframe");
     assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert_eq!(cache.schemas.reused_outputs, 0);
+    assert_eq!(cache.schemas.reused_outputs, 5);
     document.nodes.remove(&a[3]);
     document
         .connections

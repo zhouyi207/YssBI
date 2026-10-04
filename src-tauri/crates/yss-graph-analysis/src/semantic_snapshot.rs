@@ -27,19 +27,102 @@ pub struct GraphSemanticSnapshot {
 impl GraphSemanticSnapshot {
     pub fn ready(&self) -> Option<ReadyGraphSemanticSnapshot<'_>> {
         (matches!(self.outcome, GraphResolutionOutcome::Complete)
-            && !self.has_blocking_diagnostics()
-            && self.nodes.iter().all(|node| {
-                node.specialization.is_some()
-                    && node
-                        .ports
-                        .iter()
-                        .all(|port| !port.orphan && port.type_state.exact().is_some())
-            })
-            && self
-                .functions
-                .values()
-                .all(|function| function.semantics.ready().is_some()))
+            && self.nodes_ready(&self.nodes.iter().map(|node| node.node_id).collect()))
         .then_some(ReadyGraphSemanticSnapshot { snapshot: self })
+    }
+
+    /// Readiness of selected nodes; execution owns selecting the dependency closure.
+    pub fn nodes_ready(&self, nodes: &std::collections::BTreeSet<NodeId>) -> bool {
+        if matches!(self.outcome, GraphResolutionOutcome::InternalFailure { node_id, .. }
+            if node_id.is_none_or(|node| nodes.contains(&node)))
+        {
+            return false;
+        }
+        let mut found = 0;
+        for node in self
+            .nodes
+            .iter()
+            .filter(|node| nodes.contains(&node.node_id))
+        {
+            found += 1;
+            if node.specialization.is_none()
+                || node
+                    .ports
+                    .iter()
+                    .any(|port| port.orphan || port.type_state.exact().is_none())
+            {
+                return false;
+            }
+        }
+        if found != nodes.len() {
+            return false;
+        }
+        let resources = self.resources_for_nodes(nodes);
+        let local = |location: &GraphDiagnosticLocation| match location {
+            GraphDiagnosticLocation::Node(node)
+            | GraphDiagnosticLocation::Parameter { node_id: node, .. } => nodes.contains(node),
+            GraphDiagnosticLocation::Port(port) => nodes.contains(&port.node_id),
+            GraphDiagnosticLocation::Resource(resource) => resources.contains(resource.as_ref()),
+            GraphDiagnosticLocation::Graph | GraphDiagnosticLocation::Connection(_) => false,
+        };
+        !self.diagnostics.iter().any(|diagnostic| {
+            if matches!(diagnostic.primary, GraphDiagnosticLocation::Connection(_)) {
+                // A bad consumer binding must not prevent evaluating its producer.
+                return diagnostic.blocking && diagnostic.related.get(1).is_none_or(&local);
+            }
+            diagnostic.blocking
+                && (local(&diagnostic.primary)
+                    || diagnostic.related.iter().any(&local)
+                    || (matches!(diagnostic.primary, GraphDiagnosticLocation::Graph)
+                        && diagnostic.related.is_empty()))
+        }) && self
+            .functions
+            .iter()
+            .filter(|(path, _)| resources.contains(path.as_str()))
+            .all(|(_, function)| function.state != GraphFunctionState::Invalid)
+    }
+
+    /// Resource identities used by the selected nodes and their reachable function bodies.
+    pub fn resources_for_nodes(
+        &self,
+        nodes: &std::collections::BTreeSet<NodeId>,
+    ) -> std::collections::BTreeSet<&str> {
+        let mut pending = self
+            .nodes
+            .iter()
+            .filter(|node| nodes.contains(&node.node_id))
+            .flat_map(|node| node.parameters.iter())
+            .filter_map(|parameter| match &parameter.effective_value {
+                Some(GraphResolvedParameterValue::Resource(resource)) => Some(resource.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut resources = std::collections::BTreeSet::new();
+        while let Some(identity) = pending.pop() {
+            if !resources.insert(identity) {
+                continue;
+            }
+            if let Some((_, function)) = self
+                .functions
+                .iter()
+                .find(|(path, _)| path.as_str() == identity)
+            {
+                pending.extend(
+                    function
+                        .semantics
+                        .nodes
+                        .iter()
+                        .flat_map(|node| node.parameters.iter())
+                        .filter_map(|parameter| match &parameter.effective_value {
+                            Some(GraphResolvedParameterValue::Resource(resource)) => {
+                                Some(resource.as_str())
+                            }
+                            _ => None,
+                        }),
+                );
+            }
+        }
+        resources
     }
     pub fn dependencies(&self) -> &yss_graph_resource_contract::GraphDependencyManifest {
         &self.dependencies
@@ -110,11 +193,10 @@ impl GraphSemanticSnapshot {
     pub fn with_execution_kernel_support(mut self, supports: &dyn Fn(&str) -> bool) -> Self {
         let mut diagnostics = self.diagnostics.into_vec();
         for node in &self.nodes {
-            if node
-                .specialization
-                .as_ref()
-                .is_some_and(|kernel| !supports(&kernel.implementation))
-            {
+            if node.specialization.as_ref().is_some_and(|specialization| {
+                matches!(&specialization.implementation,
+                    GraphNodeImplementation::Kernel(kernel) if !supports(kernel))
+            }) {
                 diagnostics.push(graph_problem(
                     GraphDiagnosticKind::NodeKernelUnavailable,
                     GraphDiagnosticLocation::Node(node.node_id),
@@ -122,6 +204,28 @@ impl GraphSemanticSnapshot {
                 ));
             }
         }
+        self.functions = self
+            .functions
+            .into_iter()
+            .map(|(path, mut function)| {
+                function.semantics = function.semantics.with_execution_kernel_support(supports);
+                if !crate::function_arguments::permits_unbound_schema(&function.semantics) {
+                    function.state = GraphFunctionState::Invalid;
+                    if !diagnostics.iter().any(|diagnostic| {
+                        diagnostic.blocking
+                            && diagnostic.primary
+                                == GraphDiagnosticLocation::Resource(path.as_str().into())
+                    }) {
+                        diagnostics.push(graph_problem(
+                            GraphDiagnosticKind::FunctionBlocked,
+                            GraphDiagnosticLocation::Resource(path.as_str().into()),
+                            [("function", path.as_str().into())],
+                        ));
+                    }
+                }
+                (path, function)
+            })
+            .collect();
         self.diagnostics = diagnostics.into_boxed_slice();
         if matches!(self.outcome, GraphResolutionOutcome::Complete)
             && self.has_blocking_diagnostics()
@@ -173,7 +277,7 @@ pub struct GraphNodeSemanticFact {
     pub inputs: Box<[GraphResolvedInputBinding]>,
     pub ports: Box<[GraphPortSemanticFact]>,
     pub port_instance_additions: Box<[GraphPortInstanceAdditionFact]>,
-    pub specialization: Option<GraphKernelSpecialization>,
+    pub specialization: Option<GraphNodeSpecialization>,
     pub semantic_fingerprint: [u8; 32],
 }
 
@@ -232,14 +336,14 @@ pub enum GraphParameterConfigurationFact {
     },
     ProjectColumns {
         allow_empty: bool,
-        available: bool,
-        unavailable_reason: Option<Box<str>>,
+        schema_known: bool,
+        context_hint: Option<Box<str>>,
         options: Box<[GraphColumnFact]>,
         value: Box<[Box<str>]>,
     },
     FilterPredicate {
-        available: bool,
-        unavailable_reason: Option<Box<str>>,
+        schema_known: bool,
+        context_hint: Option<Box<str>>,
         columns: Box<[GraphFilterColumnFact]>,
         value: Option<serde_json::Value>,
     },
@@ -289,11 +393,26 @@ pub struct GraphPortSemanticFact {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
-pub struct GraphKernelSpecialization {
-    pub implementation: Box<str>,
+pub struct GraphNodeSpecialization {
+    pub implementation: GraphNodeImplementation,
     pub input_types: Box<[GraphPortTypeBinding]>,
     pub output_types: Box<[GraphPortTypeBinding]>,
     pub coercions: Box<[GraphInputCoercion]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub enum GraphNodeImplementation {
+    Kernel(Box<str>),
+    GroupMap {
+        target: GraphResourcePath,
+        transform: bool,
+    },
+    FunctionCall {
+        target: GraphResourcePath,
+        arguments: Box<[(FunctionParameterId, PortAddress)]>,
+    },
+    FunctionEntry,
+    FunctionReturn,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
@@ -412,4 +531,13 @@ pub struct GraphFunctionAbi {
 pub struct GraphFunctionSemanticFact {
     pub abi: GraphFunctionAbi,
     pub semantics: GraphSemanticSnapshot,
+    pub state: GraphFunctionState,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GraphFunctionState {
+    Invalid,
+    Unbound,
+    AwaitingSchema,
+    Ready,
 }

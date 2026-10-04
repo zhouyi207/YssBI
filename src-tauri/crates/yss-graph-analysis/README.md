@@ -14,6 +14,13 @@
 
 ## Semantic resolution
 
+`project_parameter_form` 与已创建节点共用参数有效值、默认值、条件显隐和上下文投影，
+创建前以空输入上下文提供基础编辑器；它不生成节点或可执行快照。连接后候选列仍由图解析提供。
+
+`nodes_ready` 对 Execution 选出的节点范围检查已有语义事实；`resources_for_nodes` 沿同一快照中可达函数
+收集实际资源身份。依赖环只使环及其依赖节点保持未解析，独立分支继续解析并复用缓存；图级循环诊断
+通过 related locations 标明受影响节点。连接诊断同时携带端点，输入不匹配阻断消费者，不阻断其生产者的独立执行。
+
 `lib.rs` 汇总公开入口，内部职责如下：
 
 | 模块                                        | 职责                                                                             |
@@ -25,15 +32,22 @@
 | `parameter_projection` / `port_projection`  | 参数有效值、校验与编辑事实；单个端口、可新增实例与 orphan 投影                   |
 | `document_index`                            | 本次解析借用的 binding、输入连线和连接计数索引，以及唯一的节点拓扑顺序           |
 | `schema_resolution` / `function_validation` | Schema 求解与输出缓存；函数 ABI 校验                                             |
+| `function_arguments` / `function_structure` | 调用局部的参数绑定；结构调度事实及函数成员地址，不依赖显示标签                   |
 | `type_resolution`                           | 编排输入解析、缓存复用、输出求解和节点事实安装                                   |
 | `type_resolution/domains` / `node_rules`    | 类型域与泛型规则；节点声明规则、数值形状和 coercion                              |
 | `type_resolution/cache`                     | 可丢弃的类型/coercion 缓存与语义指纹                                             |
 
 完成状态统一从最终阻断诊断推导；内部解析故障仍优先于普通 incomplete。
+GroupApply/GroupTransform 通过 Registry 的函数调用角色参与资源闭包及循环检查。
+Analysis 校验目标签名恰为一个 DataFrame 参数并返回 DataFrame，发布结构化 `GroupMap` 调度事实；
+输出 Schema 在求值前为 Deferred，后续 Observed 列继续属于同一快照，不从第一组提前推断组合结构。
 节点参数先按协议默认值和条件显隐投影当前有效集合，资源引用与 Schema 参数校验共用该集合；
 默认资源的缺失读取也记录为依赖，恢复后重新校验。Schema 编辑配置与校验共用已有有效字面量，
 显式值按借用读取，协议默认值使用 Protocol 的 JSON 转换。原始文档仍独立接受协议校验，
 未知字段和不适用的显式值保留诊断，不因参数未投影而被忽略，也不将默认值写回文档。
+列列表及筛选编辑事实使用 `schema_known` 区分未知候选和已知空集合，`context_hint` 说明未连接、
+上游待定、Deferred 或结构错误；这些提示不代替图诊断。输入来源仍按参数选择，例如左右连接键
+分别读取左右输入。投影保留参数意图，连接或结构变化只更新候选和诊断，不写回或清除文档参数。
 派生端口每个模板只建立一次已绑定 origin 索引，随后检查未使用成员；该索引仅借用本次解析输入，
 不形成持久状态或第二份端口事实。公开 resolve 和 snapshot 类型仍从 crate 根导出。
 判断消失的派生端口是否仍被引用时，复用本次连接计数及文档 literal，不逐端口扫描整张图的连接。
@@ -55,6 +69,15 @@ ABI 的成员匹配以当前已解析的非 orphan 端口为准，按 binding or
 传递依赖遍历、缺失处理及循环诊断仍由各自流程负责，
 函数正文读取和资源身份重验保留在 Application/Project，不进入 Analysis。
 
+函数事实使用 `Unbound / AwaitingSchema / Ready / Invalid` 区分合法但未绑定的定义、已绑定但仍需动态列、
+就绪调用和错误。定义中依赖形参的未知 Schema 可保留；缺少连线、非法参数、已知缺列、缺失资源及循环仍阻断。
+`specialize_function` 按签名 ID 与 ABI 地址绑定实参类型和 Schema，复用原解析器及缓存；
+实参和运行观测只属于这次调用，不改写定义，也不复用其他调用的中间值。
+
+`GraphNodeSpecialization` 明确区分叶内核、FunctionCall、Entry 和 Return。叶内核能力检查覆盖可达函数正文，
+结构节点不使用伪造的 KernelId。Call 的表格输出是 Deferred，实际执行后可成为 Observed；
+`function_output_addresses` 复用派生成员身份，包含已绑定与未 claim 的结果地址，供运行列反馈使用。
+
 ```mermaid
 flowchart LR
   DOC[GraphDocument] --> RESOLVE[resolve_graph_document]
@@ -70,6 +93,11 @@ flowchart LR
 Pin 创建目录和连接提交共用本模块的类型兼容规则：输出读取 snapshot 的已解析类型域，输入读取可接受类型域，候选节点的声明类型通过同一类型类展开与可赋值规则比较。类型域没有交集时拒绝；未解析的泛型仍允许连接，但不会绕过已知的容器形状或类型约束。Editor 在创建并连接、直接连线和迁移连线时重新校验，创建节点及连线属于同一原子补丁。
 
 Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识别。`GraphSchemaState` 区分 NotApplicable、Deferred（消费关系时才确定字段）、Exact（含空字段集合）、Pending、Unavailable、Conflict 和 InternalFailure。Reroute 可传递上游 Schema。Schema 和类型仍是同一次 Resolve 内的阶段，最终组装完整节点事实并发布完整 snapshot。
+
+`resolve_graph_semantics_with_observations` 接受由调用方按图、会话及生成依据核对的结果列观测。
+只有 Deferred 输出可成为 `Observed`；声明已知的 Schema 和结构错误不被运行结果覆盖。
+下游输入消费其精确字段，列身份优先沿用明确的上游 lineage。生产者自身的执行指纹仍使用 Deferred
+声明，避免结果反馈立即使自己失效；消费者继续将输入字段纳入指纹。无观测的解析不会从缓存复活旧列。
 
 每次解析由 `DocumentIndex` 计算一次节点拓扑，Schema、类型和循环诊断共同读取该结果。
 仅两端节点都存在的连接参与节点依赖；缺失节点的连接仍保留在输入索引和语义校验中，产生阻断的

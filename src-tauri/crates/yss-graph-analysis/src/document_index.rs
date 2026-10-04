@@ -10,7 +10,7 @@ pub(crate) struct DocumentIndex<'a> {
     node_inputs: BTreeMap<NodeId, Vec<&'a DocumentConnection>>,
     bindings: BTreeMap<NodeId, Vec<(&'a PortAddress, &'a DynamicPortBinding)>>,
     connection_counts: BTreeMap<&'a PortAddress, u32>,
-    topological_order: Option<Vec<NodeId>>,
+    topological_order: Vec<NodeId>,
 }
 
 impl<'a> DocumentIndex<'a> {
@@ -55,8 +55,9 @@ impl<'a> DocumentIndex<'a> {
         }
     }
 
-    pub fn topological_order(&self) -> Option<&[NodeId]> {
-        self.topological_order.as_deref()
+    /// Acyclic nodes remain resolvable when a separate component contains a cycle.
+    pub fn topological_order(&self) -> &[NodeId] {
+        &self.topological_order
     }
 
     pub fn node_bindings(&self, node: NodeId) -> &[(&'a PortAddress, &'a DynamicPortBinding)] {
@@ -89,7 +90,7 @@ impl<'a> DocumentIndex<'a> {
     }
 }
 
-fn topological_order(document: &GraphDocument) -> Option<Vec<NodeId>> {
+fn topological_order(document: &GraphDocument) -> Vec<NodeId> {
     let mut remaining = document
         .nodes
         .keys()
@@ -105,7 +106,7 @@ fn topological_order(document: &GraphDocument) -> Option<Vec<NodeId>> {
         let Some(count) = remaining.get_mut(&connection.input.node_id) else {
             continue;
         };
-        *count = count.checked_add(1)?;
+        *count += 1;
         dependents
             .entry(connection.output.node_id)
             .or_default()
@@ -119,12 +120,12 @@ fn topological_order(document: &GraphDocument) -> Option<Vec<NodeId>> {
     while let Some(node_id) = ready.pop_front() {
         order.push(node_id);
         for dependent in dependents.get(&node_id).into_iter().flatten() {
-            let count = remaining.get_mut(dependent)?;
-            *count = count.checked_sub(1)?;
+            let count = remaining.get_mut(dependent).expect("indexed dependent");
+            *count -= 1;
             if *count == 0 {
                 ready.push_back(*dependent);
             }
         }
     }
-    (order.len() == document.nodes.len()).then_some(order)
+    order
 }

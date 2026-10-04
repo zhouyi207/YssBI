@@ -322,7 +322,12 @@ fn apply_resolved_schemas(
 ) {
     for port in ports {
         // Derived columns acquire their field schema when their concrete interface resolves.
-        if port.schema_state.exact().is_some() {
+        if port.schema_state.exact().is_some()
+            && !matches!(
+                resolved_schemas.state(&port.address),
+                Some(GraphSchemaState::Observed { .. })
+            )
+        {
             continue;
         }
         port.schema_state = resolved_schemas

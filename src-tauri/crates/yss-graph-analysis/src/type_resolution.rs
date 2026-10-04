@@ -4,14 +4,15 @@ mod domains;
 mod node_rules;
 
 use crate::{
-    GraphDiagnosticFact, GraphDiagnosticLocation, GraphInputCoercion, GraphKernelSpecialization,
-    GraphNodeSemanticFact, GraphPortSemanticFact, GraphPortTypeBinding, graph_problem,
+    GraphDiagnosticFact, GraphDiagnosticLocation, GraphInputCoercion, GraphNodeSemanticFact,
+    GraphNodeSpecialization, GraphPortSemanticFact, GraphPortTypeBinding, graph_problem,
 };
 pub use cache::GraphSemanticCache;
 use cache::{
     CachedNodeResolution, node_input_fingerprint, semantic_fingerprint,
     semantic_fingerprint_without_document,
 };
+pub(crate) use domains::resolved_type_expr;
 pub use domains::type_patterns_can_connect;
 use domains::{
     bind_input_generics, exact_type_expr, expand_pattern, state_from_candidates, state_from_pattern,
@@ -33,10 +34,8 @@ pub(crate) fn resolve_node_types(
     cache: &mut GraphSemanticCache,
 ) -> Vec<GraphDiagnosticFact> {
     cache.reused_nodes = 0;
-    let Some(order) = index.topological_order() else {
-        initialize_unresolved_ports(nodes);
-        return Vec::new();
-    };
+    let order = index.topological_order();
+    initialize_unresolved_ports(nodes);
     let indices = nodes
         .iter()
         .enumerate()
@@ -176,15 +175,15 @@ pub(crate) fn resolve_node_types(
             ));
         }
 
-        nodes[index].specialization = build_specialization(
-            registered
-                .implementation()
-                .map_or(document_node.node_type.as_str(), |implementation| {
-                    implementation.implementation_identity()
-                }),
+        nodes[index].specialization = crate::function_structure::implementation(
+            document,
+            document_node,
+            registered,
             &nodes[index].ports,
-            coercions,
-        );
+        )
+        .and_then(|implementation| {
+            build_specialization(implementation, &nodes[index].ports, coercions)
+        });
         nodes[index].semantic_fingerprint = semantic_fingerprint(document_node, &nodes[index]);
     }
 
@@ -330,10 +329,10 @@ fn restrict_to_pattern(source: &TypeState, accepted: &TypeExpr, types: &TypeRegi
 }
 
 fn build_specialization(
-    implementation: &str,
+    implementation: crate::GraphNodeImplementation,
     ports: &[GraphPortSemanticFact],
     coercions: Vec<GraphInputCoercion>,
-) -> Option<GraphKernelSpecialization> {
+) -> Option<GraphNodeSpecialization> {
     let input_types = ports
         .iter()
         .filter(|port| port.direction == PortDirection::Input && !port.orphan)
@@ -359,8 +358,8 @@ fn build_specialization(
         })
         .collect::<Option<Vec<_>>>()?
         .into_boxed_slice();
-    Some(GraphKernelSpecialization {
-        implementation: implementation.into(),
+    Some(GraphNodeSpecialization {
+        implementation,
         input_types,
         output_types,
         coercions: coercions.into_boxed_slice(),

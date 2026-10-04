@@ -28,7 +28,10 @@ pub fn direct_function_dependencies<'a>(
 ) -> impl Iterator<Item = GraphResourcePath> + 'a {
     document.nodes.values().filter_map(|node| {
         let registered = registry.get(&node.node_type)?;
-        if registered.structural_role() != Some(StructuralNodeRole::Call) {
+        if !registered
+            .structural_role()
+            .is_some_and(StructuralNodeRole::calls_function)
+        {
             return None;
         }
         GraphResourcePath::new(registered.function_reference(&node.parameters)?).ok()
@@ -111,6 +114,8 @@ pub(crate) fn resolve(
             registry,
             resources,
             &mut GraphSemanticCache::default(),
+            &Default::default(),
+            &Default::default(),
             false,
         );
         if matches!(
@@ -123,13 +128,26 @@ pub(crate) fn resolve(
                 code: "graph.function.resolution_failed".into(),
                 node_id: None,
             });
-        } else if semantics.ready().is_none() {
+        } else if !crate::function_arguments::permits_unbound_schema(&semantics) {
             diagnostics.push(problem(GraphDiagnosticKind::FunctionBlocked, &path));
         }
         if let Some(abi) = resolve_abi(&path, body, signature, &semantics, registry) {
-            resolution
-                .functions
-                .insert(path.clone(), GraphFunctionSemanticFact { abi, semantics });
+            resolution.functions.insert(
+                path.clone(),
+                GraphFunctionSemanticFact {
+                    state: if crate::function_arguments::permits_unbound_schema(&semantics)
+                        && entries.len() == 1
+                        && returns.len() <= 1
+                        && !mismatched_owner
+                    {
+                        crate::GraphFunctionState::Unbound
+                    } else {
+                        crate::GraphFunctionState::Invalid
+                    },
+                    abi,
+                    semantics,
+                },
+            );
         } else {
             diagnostics.push(problem(GraphDiagnosticKind::FunctionAbiMismatch, &path));
         }
@@ -349,6 +367,21 @@ mod tests {
         );
         assert!(resolution.internal_failure.is_none());
         assert_eq!(resolution.functions.len(), 3);
+        let selected = root
+            .nodes
+            .values()
+            .find(|node| {
+                node.parameters
+                    .values()
+                    .any(|value| value.as_str() == Some(a.as_str()))
+            })
+            .unwrap()
+            .id;
+        let semantics = crate::resolve_graph_semantics(&root, &registry, &catalog);
+        assert_eq!(
+            semantics.resources_for_nodes(&std::collections::BTreeSet::from([selected])),
+            std::collections::BTreeSet::from([a.as_str(), c.as_str()])
+        );
         let function = &resolution.functions[&a];
         assert!(function.semantics.ready().is_some());
         assert!(function.semantics.functions().is_empty());

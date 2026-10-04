@@ -7,9 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::sync::Barrier;
 
 use thiserror::Error;
-use yss_graph_analysis::{
-    GraphAnalysis, GraphSemanticSnapshot, analyze, resolve_graph_semantics_with_cache,
-};
+use yss_graph_analysis::{GraphAnalysis, GraphSemanticSnapshot, analyze};
 use yss_graph_analysis_contract::{
     GraphAnalysisBasis, ResourceKey, ResourceObservedState, ResourceVersion,
 };
@@ -34,7 +32,9 @@ use yss_node_protocol::PortDirection;
 use yss_node_registry::{NodeRegistry, RegistryFingerprint};
 
 mod connections;
+mod parameters;
 mod semantic_cache;
+pub use parameters::NodeCreationForm;
 use semantic_cache::{CachedGraphAnalysis, GraphResolutionCache, GraphResolutionCaches};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -350,7 +350,30 @@ impl GraphRuntimeState {
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> GraphAnalysis {
-        let analysis = self.analyze_neutral(graph_path, document, basis, resource_catalog);
+        self.resolve_graph_document_with_observations(
+            graph_path,
+            document,
+            basis,
+            resource_catalog,
+            resources,
+            locale,
+            &Default::default(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn resolve_graph_document_with_observations(
+        &self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        basis: &GraphAnalysisBasis,
+        resource_catalog: &ResourceCatalogSnapshot,
+        resources: &[CatalogResourceEntry],
+        locale: &str,
+        observations: &yss_graph_analysis::GraphSchemaObservations,
+    ) -> GraphAnalysis {
+        let analysis =
+            self.analyze_neutral(graph_path, document, basis, resource_catalog, observations);
         self.localize_analysis(analysis, resources, locale)
     }
 
@@ -360,6 +383,7 @@ impl GraphRuntimeState {
         document: &GraphDocument,
         basis: &GraphAnalysisBasis,
         resource_catalog: &ResourceCatalogSnapshot,
+        observations: &yss_graph_analysis::GraphSchemaObservations,
     ) -> GraphAnalysis {
         let mut cache = self
             .semantic_caches
@@ -368,8 +392,14 @@ impl GraphRuntimeState {
             .take(graph_path);
         let document_fingerprint = yss_graph_document::resolution_document_fingerprint(document)
             .expect("validated resolution inputs are serializable");
+        let observation_fingerprint = yss_canonical_hash::hash_canonical(
+            "yssbi.graph-schema-observations.v1",
+            &observations.iter().collect::<Vec<_>>(),
+        )
+        .expect("schema observations are serializable");
         if let Some(cached) = cache.analysis.as_ref().filter(|cached| {
             cached.document_fingerprint == document_fingerprint
+                && cached.observation_fingerprint == observation_fingerprint
                 && cached.analysis.registry_fingerprint() == basis.registry_fingerprint.as_bytes()
                 && cached.analysis.kernel_fingerprint() == &basis.kernel_fingerprint
                 && cached.dependency_fingerprint
@@ -382,11 +412,12 @@ impl GraphRuntimeState {
             return analysis;
         }
         let resources = resource_catalog.tracked();
-        let snapshot = resolve_graph_semantics_with_cache(
+        let snapshot = yss_graph_analysis::resolve_graph_semantics_with_observations(
             document,
             self.components.registry.as_ref(),
             &resources,
             &mut cache.nodes,
+            observations,
         );
         let dependencies = resources.dependencies();
         let mut resolved_basis = basis.clone();
@@ -419,13 +450,35 @@ impl GraphRuntimeState {
             &dependencies.fingerprint(),
         )
         .expect("validated graph semantic input is canonically serializable");
+        let used_observations = snapshot
+            .nodes()
+            .iter()
+            .flat_map(|node| &node.ports)
+            .filter_map(|port| match &port.schema_state {
+                yss_graph_analysis::GraphSchemaState::Observed { version, schema } => {
+                    Some((&port.address, version, schema))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let observed_hash = if used_observations.is_empty() {
+            hash
+        } else {
+            yss_canonical_hash::hash_canonical(
+                "yssbi.graph-observed-semantics.v1",
+                &(hash, used_observations),
+            )
+            .expect("observed graph semantics are serializable")
+        };
         let dependency_fingerprint =
             resource_catalog.resolution_dependency_fingerprint(&dependencies);
         let analysis = analyze(&resolved_basis, snapshot.with_dependencies(dependencies))
-            .with_semantic_input_hash(hash);
+            .with_semantic_input_hash(hash)
+            .with_observed_semantic_input_hash(observed_hash);
         cache.analysis = Some(CachedGraphAnalysis {
             document_fingerprint,
             dependency_fingerprint,
+            observation_fingerprint,
             analysis: analysis.clone(),
         });
         self.retain_semantic_cache(graph_path, cache);
@@ -632,53 +685,69 @@ fn localize_semantic_snapshot(
             .map(|name| Box::<str>::from(*name))
             .or(node_facts.instance_title);
 
-        for parameter in &mut node_facts.parameters {
-            let Some(spec) = protocol
-                .parameters
-                .iter()
-                .find(|spec| spec.key == parameter.key)
-            else {
-                continue;
-            };
-            parameter.title = catalog.text(locale, &spec.title_key);
-            parameter.description = spec
-                .description_key
-                .as_ref()
-                .map(|key| catalog.text(locale, key));
-            if let Some(
-                yss_graph_analysis::GraphParameterConfigurationFact::ProjectColumns {
-                    unavailable_reason,
-                    ..
-                }
-                | yss_graph_analysis::GraphParameterConfigurationFact::FilterPredicate {
-                    unavailable_reason,
-                    ..
-                },
-            ) = &mut parameter.configuration
-                && let Some(key) = unavailable_reason
-                    .as_ref()
-                    .and_then(|key| yss_node_protocol::I18nKey::new(key.clone()).ok())
-            {
-                *unavailable_reason = Some(catalog.text(locale, &key));
-            }
-        }
-        for group in &mut node_facts.parameter_groups {
-            if let Some(spec) = protocol
-                .parameters
-                .groups
-                .iter()
-                .find(|spec| spec.key == group.key)
-            {
-                group.title = catalog.text(locale, &spec.title_key);
-                group.description = spec
-                    .description_key
-                    .as_ref()
-                    .map(|key| catalog.text(locale, key));
-            }
-        }
+        localize_parameter_facts(
+            protocol,
+            catalog,
+            locale,
+            &mut node_facts.parameter_groups,
+            &mut node_facts.parameters,
+        );
 
         node_facts
     })
+}
+
+fn localize_parameter_facts(
+    protocol: &yss_node_protocol::NodeProtocol,
+    catalog: &BuiltinCatalog,
+    locale: &str,
+    groups: &mut [yss_graph_analysis::GraphParameterGroupFact],
+    parameters: &mut [yss_graph_analysis::GraphParameterFact],
+) {
+    for parameter in parameters {
+        let Some(spec) = protocol
+            .parameters
+            .iter()
+            .find(|spec| spec.key == parameter.key)
+        else {
+            continue;
+        };
+        parameter.title = catalog.text(locale, &spec.title_key);
+        parameter.description = spec
+            .description_key
+            .as_ref()
+            .map(|key| catalog.text(locale, key));
+        if let Some(
+            yss_graph_analysis::GraphParameterConfigurationFact::ProjectColumns {
+                context_hint,
+                ..
+            }
+            | yss_graph_analysis::GraphParameterConfigurationFact::FilterPredicate {
+                context_hint,
+                ..
+            },
+        ) = &mut parameter.configuration
+            && let Some(key) = context_hint
+                .as_ref()
+                .and_then(|key| yss_node_protocol::I18nKey::new(key.clone()).ok())
+        {
+            *context_hint = Some(catalog.text(locale, &key));
+        }
+    }
+    for group in groups {
+        if let Some(spec) = protocol
+            .parameters
+            .groups
+            .iter()
+            .find(|spec| spec.key == group.key)
+        {
+            group.title = catalog.text(locale, &spec.title_key);
+            group.description = spec
+                .description_key
+                .as_ref()
+                .map(|key| catalog.text(locale, key));
+        }
+    }
 }
 
 #[derive(Debug, Error)]

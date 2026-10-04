@@ -4,12 +4,12 @@ use yss_data_contract::ValueType;
 use yss_graph_analysis::GraphSemanticSnapshot;
 use yss_graph_document::{
     DocumentNode, DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
-    GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
+    GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, NodeId, OrderKey, PortAddress,
+    PortRef,
 };
 use yss_graph_resource_contract::{FunctionSignature, GraphResourceId, ResourceCatalogSnapshot};
 use yss_node_catalog::{
-    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, NodeCreation,
-    ResourceBoundCreateArgs,
+    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
 use yss_node_protocol::{
     ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortCardinality,
@@ -512,7 +512,9 @@ fn catalog_query_candidate_ports(
 ) -> Option<Vec<CandidatePort>> {
     let protocol = registry.protocol(node_type)?;
     validate_scope(graph_path, protocol).ok()?;
-    let mut candidates = initial_candidate_ports(protocol);
+    let mut candidates = initial_candidate_ports(protocol, |port| {
+        protocol.interface.port_instance_bounds(port).0 > 0
+    });
 
     let Some(resource) = resource else {
         return Some(candidates);
@@ -537,15 +539,17 @@ fn catalog_query_candidate_ports(
     Some(candidates)
 }
 
-fn initial_candidate_ports(protocol: &NodeProtocol) -> Vec<CandidatePort> {
+fn initial_candidate_ports(
+    protocol: &NodeProtocol,
+    has_instances: impl Fn(&PortSpec) -> bool,
+) -> Vec<CandidatePort> {
     protocol
         .interface
         .ports
         .iter()
         .filter(|port| match port.cardinality {
-            PortCardinality::Declared | PortCardinality::UserCreated { .. } => {
-                protocol.interface.port_instance_bounds(port).0 > 0
-            }
+            PortCardinality::Declared => true,
+            PortCardinality::UserCreated { .. } => has_instances(port),
             PortCardinality::Derived { .. } => false,
         })
         .map(|port| CandidatePort {
@@ -634,19 +638,13 @@ fn override_data_candidate_types(candidates: &mut [CandidatePort], value_type: T
 }
 
 pub(crate) fn connection_candidate(
-    graph_path: &GraphResourcePath,
-    descriptor: &NodeCreation,
+    document: &GraphDocument,
+    node_id: NodeId,
     registry: &NodeRegistry,
     resources: &CatalogMutationValidationSnapshot,
     source: &SourcePort,
 ) -> Result<CandidatePort, EditorMutationError> {
-    candidate_ports(graph_path, descriptor, registry, resources)
-        .map_err(|detail| {
-            mutation_validation_error(
-                EditorMutationErrorCode::GraphConnectionTypeUnavailable,
-                detail,
-            )
-        })?
+    candidate_ports(document, node_id, registry, resources)?
         .into_iter()
         .find(|candidate| ports_are_compatible(source, candidate, registry))
         .ok_or_else(|| {
@@ -658,70 +656,49 @@ pub(crate) fn connection_candidate(
 }
 
 fn candidate_ports(
-    graph_path: &GraphResourcePath,
-    descriptor: &NodeCreation,
+    document: &GraphDocument,
+    node_id: NodeId,
     registry: &NodeRegistry,
     resources: &CatalogMutationValidationSnapshot,
-) -> Result<Vec<CandidatePort>, String> {
-    let node_type = descriptor_node_type(descriptor);
-    let protocol = registry
-        .protocol(node_type)
-        .ok_or_else(|| format!("unknown node type '{node_type}'"))?;
-    validate_scope(graph_path, protocol)?;
-    let resource = descriptor_resource(descriptor, protocol, resources)?;
-    let mut ports = initial_candidate_ports(protocol);
-    match resource {
-        Some(CatalogMutationResource::Database { .. }) => {
-            override_data_candidate_types(&mut ports, editor_type_expr(&ValueType::DataFrame)?);
+) -> Result<Vec<CandidatePort>, EditorMutationError> {
+    let node = document
+        .nodes
+        .get(&node_id)
+        .ok_or_else(|| connection_type_unavailable("created node is unavailable"))?;
+    let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
+        connection_type_unavailable(format!("unknown node type '{}'", node.node_type))
+    })?;
+    let mut ports = initial_candidate_ports(protocol, |port| {
+        yss_graph_document_edit::user_created_port_instance_count(
+            node_id,
+            &port.key,
+            document.port_bindings.iter(),
+        ) > 0
+    });
+    for port in &mut ports {
+        refine_constant_type(
+            &mut port.value_type,
+            &PortAddress::declared(node_id, port.template.clone()),
+            document,
+            protocol,
+        );
+    }
+    match bound_catalog_resource(node, protocol, resources)? {
+        Some((_, CatalogMutationResource::Database { .. })) => {
+            override_data_candidate_types(
+                &mut ports,
+                editor_type_expr(&ValueType::DataFrame).map_err(connection_type_unavailable)?,
+            );
         }
-        Some(CatalogMutationResource::Function { signature, .. }) => {
-            let function = match descriptor {
-                NodeCreation::ResourceBound { resource_path, .. } => {
-                    GraphResourcePath::new(resource_path.as_str())
-                        .map_err(|_| "function resource path is invalid".to_owned())?
-                }
-                _ => unreachable!(),
-            };
-            append_function_candidate_ports(&mut ports, protocol, &function, signature)?;
+        Some((resource_path, CatalogMutationResource::Function { signature, .. })) => {
+            let function = GraphResourcePath::new(resource_path.as_str())
+                .map_err(|_| connection_type_unavailable("function resource path is invalid"))?;
+            append_function_candidate_ports(&mut ports, protocol, &function, signature)
+                .map_err(connection_type_unavailable)?;
         }
         None => {}
     }
     Ok(ports)
-}
-
-fn descriptor_node_type(descriptor: &NodeCreation) -> &yss_node_protocol::NodeTypeId {
-    match descriptor {
-        NodeCreation::Static { node_type_id }
-        | NodeCreation::ParameterizedStatic { node_type_id, .. }
-        | NodeCreation::ResourceBound { node_type_id, .. } => node_type_id,
-    }
-}
-
-fn descriptor_resource<'a>(
-    descriptor: &NodeCreation,
-    protocol: &NodeProtocol,
-    resources: &'a CatalogMutationValidationSnapshot,
-) -> Result<Option<&'a CatalogMutationResource>, String> {
-    let NodeCreation::ResourceBound {
-        resource_path,
-        resource_revision,
-        create_args,
-        ..
-    } = descriptor
-    else {
-        return Ok(None);
-    };
-    let resource = resources.resources.get(resource_path).ok_or_else(|| {
-        format!(
-            "catalog resource '{}' is unavailable",
-            resource_path.as_str()
-        )
-    })?;
-    resource_parameter(protocol, *create_args)?;
-    let valid = resource.create_args() == *create_args && resource.revision() == *resource_revision;
-    valid
-        .then_some(Some(resource))
-        .ok_or_else(|| "catalog resource descriptor is stale or invalid".into())
 }
 
 pub(crate) fn editor_type_expr(data_type: &ValueType) -> Result<TypeExpr, String> {
