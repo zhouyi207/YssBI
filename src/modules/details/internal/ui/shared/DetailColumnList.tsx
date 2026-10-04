@@ -42,8 +42,8 @@ export function DetailColumnList({
 
   if (variant === "table") {
     return (
-      <ScrollArea className={detailNestedScrollClass} orientation="vertical">
-        <Table className={detailNestedTableClass}>
+      <ScrollArea className={`min-w-0 max-w-full ${detailNestedScrollClass}`} orientation="both">
+        <Table className={`w-max min-w-full whitespace-nowrap ${detailNestedTableClass}`}>
           {(columnLabel || typeLabel) && (
             <TableHeader>
               <TableRow className="text-muted-foreground">

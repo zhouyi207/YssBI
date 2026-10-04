@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ClientSideRowModelModule, type ColDef } from "ag-grid-community";
+import { CellStyleModule, ClientSideRowModelModule, type ColDef } from "ag-grid-community";
 import { AgGridReact, type CustomCellRendererProps, type CustomHeaderProps } from "ag-grid-react";
 import { buildAgGridTheme } from "@/components/data-grid/agGridTheme";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
@@ -22,6 +22,7 @@ interface ReadOnlyDataGridProps {
   loading?: boolean;
   height?: number | string;
   fillHeight?: boolean;
+  variant?: "default" | "compact";
 }
 
 type GridRow = readonly unknown[];
@@ -29,9 +30,12 @@ type ColumnDataKind = "number" | "boolean" | "string";
 
 type ReadOnlyHeaderProps = CustomHeaderProps<GridRow> & {
   columnType?: string;
+  compact: boolean;
 };
 
-const GRID_MODULES = [ClientSideRowModelModule];
+const GRID_MODULES = [ClientSideRowModelModule, CellStyleModule];
+const COMPACT_ROW_HEIGHT = 28;
+const COMPACT_HEADER_HEIGHT = 28;
 
 const DEFAULT_COLUMN_DEF: ColDef<GridRow> = {
   cellDataType: false,
@@ -65,7 +69,7 @@ function formatCell(value: unknown): string {
   return String(value);
 }
 
-function ReadOnlyColumnHeader({ displayName, columnType }: ReadOnlyHeaderProps) {
+function ReadOnlyColumnHeader({ displayName, columnType, compact }: ReadOnlyHeaderProps) {
   const kind = dtypeToKind(columnType);
   const typeLabel = columnType || kind;
   const typeMarker = kind === "number" ? "123" : kind === "boolean" ? "✓" : "ABC";
@@ -73,15 +77,17 @@ function ReadOnlyColumnHeader({ displayName, columnType }: ReadOnlyHeaderProps) 
   return (
     <div
       className="flex h-full min-w-0 items-center gap-1.5"
-      title={`${displayName} (${typeLabel})`}
-      aria-label={`${displayName}, ${typeLabel}`}
+      title={compact ? displayName : `${displayName} (${typeLabel})`}
+      aria-label={compact ? displayName : `${displayName}, ${typeLabel}`}
     >
-      <span
-        aria-hidden="true"
-        className="flex h-4 min-w-5 shrink-0 items-center justify-center rounded-sm border border-border px-1 text-[8px] font-semibold leading-none text-muted-foreground"
-      >
-        {typeMarker}
-      </span>
+      {!compact && (
+        <span
+          aria-hidden="true"
+          className="flex h-4 min-w-5 shrink-0 items-center justify-center rounded-sm border border-border px-1 text-[8px] font-semibold leading-none text-muted-foreground"
+        >
+          {typeMarker}
+        </span>
+      )}
       <span className="truncate">{displayName}</span>
     </div>
   );
@@ -107,15 +113,17 @@ function ReadOnlyCellRenderer({ value }: CustomCellRendererProps<GridRow, unknow
     );
   }
 
+  const text = formatCell(value);
   return (
     <span
+      title={text}
       className={[
         "block w-full truncate",
         typeof value === "number" ? "text-right tabular-nums" : "",
         value === null || value === undefined ? "text-muted-foreground" : "",
       ].join(" ")}
     >
-      {formatCell(value)}
+      {text}
     </span>
   );
 }
@@ -139,10 +147,18 @@ export function ReadOnlyDataGrid({
   rows,
   pageStartIndex = 0,
   loading = false,
-  height = 480,
+  height,
   fillHeight = false,
+  variant = "default",
 }: ReadOnlyDataGridProps) {
   const appTheme = useSettingsStore((s) => resolveColorThemePreset(s.appearance.colorTheme));
+  const compact = variant === "compact";
+  // Keep a bounded viewport for row virtualisation and reserve room for horizontal scrolling.
+  const gridHeight =
+    height ??
+    (compact
+      ? COMPACT_HEADER_HEIGHT + Math.min(8, Math.max(1, rows.length)) * COMPACT_ROW_HEIGHT + 20
+      : 480);
 
   const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);
   const gridRows = useMemo(() => [...rows], [rows]);
@@ -151,12 +167,16 @@ export function ReadOnlyDataGrid({
     const realColumns = columns.map<ColDef<GridRow>>((column, columnIndex) => ({
       colId: `data_${columnIndex}`,
       headerComponent: ReadOnlyColumnHeader,
-      headerComponentParams: { columnType: column.type },
+      headerComponentParams: { columnType: column.type, compact },
       headerName: column.name,
-      width: Math.max(120, Math.min(280, column.name.length * 8 + 96)),
+      minWidth: compact ? 96 : undefined,
+      width: Math.max(120, Math.min(280, column.name.length * 8 + (compact ? 32 : 96))),
       valueGetter: ({ data }) => data?.[columnIndex],
       cellRenderer: ReadOnlyCellRenderer,
+      cellClass: dtypeToKind(column.type) === "number" ? "text-right tabular-nums" : undefined,
     }));
+
+    if (compact) return realColumns;
 
     const placeholderCount = Math.max(0, DATABASE_EDITOR_MIN_COLUMNS - realColumns.length);
     const placeholderColumns: ColDef<GridRow>[] = Array.from(
@@ -186,27 +206,28 @@ export function ReadOnlyDataGrid({
       ...realColumns,
       ...placeholderColumns,
     ];
-  }, [columns, pageStartIndex]);
+  }, [columns, compact, pageStartIndex]);
 
   return (
     <div
       className={[
-        "relative overflow-hidden rounded-lg border border-border bg-card",
+        "relative min-w-0 w-full max-w-full overflow-hidden border border-border bg-card",
+        compact ? "rounded-none" : "rounded-lg",
         fillHeight ? "h-full min-h-60" : "",
       ].join(" ")}
-      style={fillHeight ? undefined : { height }}
+      style={fillHeight ? undefined : { height: gridHeight }}
     >
       <AgGridReact<GridRow>
         animateRows={false}
         className="h-full w-full"
         columnDefs={gridColumns}
         defaultColDef={DEFAULT_COLUMN_DEF}
-        headerHeight={36}
+        headerHeight={compact ? COMPACT_HEADER_HEIGHT : 36}
         loading={loading}
         loadingOverlayComponent={LoadingOverlay}
         modules={GRID_MODULES}
         rowData={gridRows}
-        rowHeight={DATABASE_EDITOR_ROW_HEIGHT}
+        rowHeight={compact ? COMPACT_ROW_HEIGHT : DATABASE_EDITOR_ROW_HEIGHT}
         suppressNoRowsOverlay
         theme={dataGridTheme}
       />

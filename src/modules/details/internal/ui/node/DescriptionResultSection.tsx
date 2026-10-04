@@ -1,8 +1,9 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useDescriptionResult } from "@/features/application/results/useDescriptionResult";
 import type { DescriptionColumn } from "@/features/application/results/descriptionResult";
 import { ResultReadError } from "@/features/application/results/components/ResultReadError";
+import { ReadOnlyDataGrid } from "@/features/application/results/components/ReadOnlyDataGrid";
 import { formatNum } from "@/shared/stats/formatStat";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
@@ -21,6 +22,43 @@ function displayValue(value: string | number | boolean | null) {
 
 function displayCode(value: string | number | boolean) {
   return value === "" ? '""' : String(value);
+}
+
+function CategoryFrequencies({
+  categories,
+}: {
+  categories: Exclude<DescriptionColumn, { semantic: "Numeric" }>["categories"];
+}) {
+  const { t } = useTranslation();
+  const hasLabels = useMemo(
+    () => categories.some((category) => category.label !== undefined),
+    [categories],
+  );
+  const columns = useMemo(
+    () => [
+      { name: t("detail.description.fields.value") },
+      ...(hasLabels ? [{ name: t("detail.description.fields.label") }] : []),
+      { name: t("detail.description.fields.frequency"), type: "Numeric" },
+      { name: t("detail.description.fields.proportion"), type: "Numeric" },
+    ],
+    [hasLabels, t],
+  );
+  const rows = useMemo(
+    () =>
+      categories.map((category) => [
+        displayCode(category.value),
+        ...(hasLabels ? [category.label === undefined ? null : displayValue(category.label)] : []),
+        category.frequency,
+        displayValue(category.proportion),
+      ]),
+    [categories, hasLabels],
+  );
+
+  return categories.length === 0 ? (
+    <DetailText tone="muted">{t("detail.description.noCategories")}</DetailText>
+  ) : (
+    <ReadOnlyDataGrid columns={columns} rows={rows} variant="compact" />
+  );
 }
 
 function ColumnSummary({ column }: { column: DescriptionColumn }) {
@@ -42,30 +80,7 @@ function ColumnSummary({ column }: { column: DescriptionColumn }) {
       </DetailForm>
       {column.semantic !== "Numeric" && (
         <DetailCollapsibleSection title={t("detail.description.categories")}>
-          {column.categories.length === 0 ? (
-            <DetailText tone="muted">{t("detail.description.noCategories")}</DetailText>
-          ) : (
-            column.categories.map((category) => (
-              <DetailCollapsibleSection key={category.position} title={displayCode(category.value)}>
-                <DetailForm>
-                  <DetailReadonlyField label={t("detail.description.fields.value")}>
-                    {displayCode(category.value)}
-                  </DetailReadonlyField>
-                  {category.label !== undefined && (
-                    <DetailReadonlyField label={t("detail.description.fields.label")}>
-                      {displayValue(category.label)}
-                    </DetailReadonlyField>
-                  )}
-                  <DetailReadonlyField label={t("detail.description.fields.frequency")}>
-                    {displayValue(category.frequency)}
-                  </DetailReadonlyField>
-                  <DetailReadonlyField label={t("detail.description.fields.proportion")}>
-                    {displayValue(category.proportion)}
-                  </DetailReadonlyField>
-                </DetailForm>
-              </DetailCollapsibleSection>
-            ))
-          )}
+          <CategoryFrequencies categories={column.categories} />
         </DetailCollapsibleSection>
       )}
     </DetailCollapsibleSection>
