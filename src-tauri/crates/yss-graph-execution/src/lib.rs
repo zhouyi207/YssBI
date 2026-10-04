@@ -4,6 +4,7 @@
 
 pub mod error;
 pub mod finalization;
+mod function_library;
 pub mod graph_preparation;
 pub mod identity;
 mod kernel_invocation;
@@ -19,6 +20,14 @@ pub mod state;
 fn test_relations() -> std::sync::Arc<dyn yss_relational_contract::RelationFactory> {
     struct UnusedRelations;
     impl yss_relational_contract::RelationFactory for UnusedRelations {
+        fn snapshot(
+            self: std::sync::Arc<Self>,
+            _: &yss_relational_contract::RelationHandle,
+            _: &yss_relational_contract::RelationControl,
+        ) -> Result<yss_relational_contract::RelationHandle, yss_relational_contract::RelationError>
+        {
+            panic!("this unit test must not snapshot a relation")
+        }
         fn materialize(
             self: std::sync::Arc<Self>,
             _: arrow_array::RecordBatch,

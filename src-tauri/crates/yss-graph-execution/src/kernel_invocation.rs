@@ -56,7 +56,7 @@ pub(crate) fn invoke(
         })
         .collect::<Result<BTreeMap<_, _>, KernelError>>()?;
     kernels.execute(
-        operation.kernel_id(),
+        operation.kernel_id().ok_or(KernelError::KernelNotFound)?,
         &KernelInvocation {
             relations,
             inputs,

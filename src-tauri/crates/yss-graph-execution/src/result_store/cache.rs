@@ -35,13 +35,24 @@ impl ResultStoreRegistry {
         {
             return;
         }
+        let definition_changed = self.graph_inputs.get(graph).is_none_or(|current| {
+            current.inputs.definition_input_hash != inputs.definition_input_hash
+        });
         let mut detached = Vec::new();
         self.outputs.retain(|output, cached| {
             if output.graph().as_str() != graph {
                 return true;
             }
-            // The cache may survive an edit; the old run's publication authority never does.
-            cached.run = None;
+            // Authored edits revoke admission. Schema feedback only revokes a run
+            // whose own inputs changed, never the producer of the observed value.
+            if definition_changed
+                || cached
+                    .pending
+                    .as_ref()
+                    .is_some_and(|pending| pending.inputs.as_ref() != inputs.outputs.get(output))
+            {
+                cached.run = None;
+            }
             if inputs.outputs.contains_key(output) {
                 return true;
             }
@@ -68,17 +79,37 @@ impl ResultStoreRegistry {
             .revision
             .checked_add(1)
             .expect("result state revision exhausted");
-        let observed = self.graph_inputs.get(graph);
+        let valid = self.matching_outputs(
+            graph,
+            self.graph_inputs.get(graph).map(|current| &current.inputs),
+            false,
+        );
+        for (output, cached) in &mut self.outputs {
+            if output.graph().as_str() == graph {
+                cached.valid = valid.contains(output);
+            }
+        }
+    }
+
+    pub(super) fn matching_outputs(
+        &self,
+        graph: &str,
+        observed: Option<&GraphResultInputs>,
+        allow_pending: bool,
+    ) -> BTreeSet<PlanOutputRef> {
         let mut pending = Vec::new();
         let mut remaining = BTreeMap::new();
         let mut dependents: BTreeMap<PlanOutputRef, Vec<PlanOutputRef>> = BTreeMap::new();
         for (output, cached) in &self.outputs {
-            if output.graph().as_str() != graph || cached.result.is_none() {
+            if output.graph().as_str() != graph
+                || cached.result.is_none()
+                || (!allow_pending && cached.pending.is_some())
+            {
                 continue;
             }
             match (
                 &cached.inputs,
-                observed.and_then(|current| current.inputs.outputs.get(output)),
+                observed.and_then(|current| current.outputs.get(output)),
             ) {
                 (Some(produced), Some(current)) if current.available && produced == current => {
                     let sources = produced.sources().collect::<BTreeSet<_>>();
@@ -104,17 +135,10 @@ impl ResultStoreRegistry {
                 _ => {}
             }
         }
-        for (output, cached) in &mut self.outputs {
-            if output.graph().as_str() == graph {
-                cached.valid = false;
-            }
-        }
+        let mut valid = BTreeSet::new();
         // One dependency pass also fails closed for cycles and missing upstream outputs.
         while let Some(output) = pending.pop() {
-            self.outputs
-                .get_mut(&output)
-                .expect("indexed cached output")
-                .valid = true;
+            valid.insert(output.clone());
             for dependent in dependents.get(&output).into_iter().flatten() {
                 let count = remaining.get_mut(dependent).expect("indexed dependent");
                 *count -= 1;
@@ -123,6 +147,7 @@ impl ResultStoreRegistry {
                 }
             }
         }
+        valid
     }
 }
 
@@ -149,11 +174,23 @@ impl ResultStore {
         self.update(|registry, retired| {
             if registry.graph_inputs.get(graph).is_some_and(|current| {
                 current.inputs.semantic_input_hash != inputs.semantic_input_hash
+                    && current.inputs.definition_input_hash != inputs.definition_input_hash
             }) || inputs
                 .outputs
                 .keys()
                 .any(|output| output.graph().as_str() != graph)
             {
+                return None;
+            }
+            let matching = registry.matching_outputs(graph, Some(&inputs), true);
+            if inputs.schema_observations.iter().any(|(output, id)| {
+                !matching.contains(output)
+                    || registry
+                        .outputs
+                        .get(output)
+                        .and_then(|cached| cached.result)
+                        != Some(*id)
+            }) {
                 return None;
             }
             registry.observe_graph_inputs(graph, inputs, retired);

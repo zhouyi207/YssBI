@@ -27,6 +27,18 @@ pub(super) fn set_constant(
 }
 
 use super::*;
+fn build_template(
+    graph: &GraphResourcePath,
+    plan_id: PlanId,
+    semantics: &GraphSemanticSnapshot,
+) -> Result<GraphPlanTemplate, GraphPlanError> {
+    super::build_template(
+        graph,
+        plan_id,
+        semantics,
+        &GraphExecutionScope::all(semantics),
+    )
+}
 use yss_graph_document::GraphDocument;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicPortBinding, InputState, NodeId, NodePosition,
@@ -312,7 +324,7 @@ fn execution_uses_the_same_add_type_and_coercion_plan_as_analysis() {
         })
         .expect("Add operation is prepared");
 
-    assert_eq!(operation.kernel_id().as_str(), "yssbi.numeric.add");
+    assert_eq!(operation.kernel_id().unwrap().as_str(), "yssbi.numeric.add");
     assert_eq!(
         operation.node_type().as_str(),
         semantic_node.node_type.as_str()

@@ -9,6 +9,7 @@ pub(in crate::state) struct SelectedObservation {
 }
 
 pub(in crate::state) struct ExecutionSelection {
+    pub(in crate::state) boundaries: std::collections::BTreeSet<crate::plan::ValueRef>,
     pub(in crate::state) required_operations: Vec<bool>,
     pub(in crate::state) observations: Vec<SelectedObservation>,
     pub(in crate::state) cached_values: BTreeMap<usize, StoredResultSnapshot>,
@@ -42,9 +43,28 @@ pub(in crate::state) fn select_execution(
     package: &crate::plan::ExecutionPlanPackage,
     demand: &crate::plan::PlanExecutionDemand,
     producers: &[Option<usize>],
+    retained_boundaries: &std::collections::BTreeSet<crate::plan::PlanOutputRef>,
+    completed: &std::collections::BTreeSet<crate::plan::PlanOutputRef>,
     cached_output: impl Fn(&crate::plan::PlanOutputRef) -> Option<StoredResultSnapshot>,
 ) -> Result<ExecutionSelection, OperationExecutionError> {
     let operations = package.plan().operations();
+    let requested_node = if let crate::plan::PlanExecutionDemand::Node { node, .. } = demand {
+        Some(
+            operations
+                .iter()
+                .position(|operation| operation.source().node() == Some(node))
+                .ok_or(OperationExecutionError::DemandOutputUnavailable)?,
+        )
+    } else {
+        None
+    };
+    let current_inputs_only = matches!(
+        demand,
+        crate::plan::PlanExecutionDemand::Node {
+            mode: crate::plan::NodeExecutionMode::CurrentInputs,
+            ..
+        }
+    );
     let consumed = operations
         .iter()
         .flat_map(|operation| operation.inputs())
@@ -62,6 +82,14 @@ pub(in crate::state) fn select_execution(
             }
         );
     let mut selected = BTreeMap::new();
+    if let Some(index) = requested_node {
+        for output in operations[index].outputs() {
+            selected.insert(
+                output.output().clone(),
+                (output.value(), output.contract().category),
+            );
+        }
+    }
     if include_defaults {
         for operation in operations {
             for output in operation.outputs() {
@@ -88,10 +116,12 @@ pub(in crate::state) fn select_execution(
             selected.insert(requested.clone(), (value, category));
         }
     }
-    let observations = if include_defaults {
+    let observations = {
         operations
             .iter()
-            .flat_map(|operation| {
+            .enumerate()
+            .filter(|(index, _)| include_defaults || requested_node == Some(*index))
+            .flat_map(|(_, operation)| {
                 operation
                     .observation_intents()
                     .iter()
@@ -105,10 +135,11 @@ pub(in crate::state) fn select_execution(
                     })
             })
             .collect::<Vec<_>>()
-    } else {
-        Vec::new()
     };
-    if include_defaults && !operations.is_empty() && selected.is_empty() && observations.is_empty()
+    if (include_defaults || requested_node.is_some())
+        && !operations.is_empty()
+        && selected.is_empty()
+        && observations.is_empty()
     {
         return Err(OperationExecutionError::Failed);
     }
@@ -126,6 +157,17 @@ pub(in crate::state) fn select_execution(
                 }),
         )
         .collect::<Vec<_>>();
+    let boundaries = pending
+        .iter()
+        .copied()
+        .chain(
+            operations
+                .iter()
+                .flat_map(|operation| operation.outputs())
+                .filter(|output| retained_boundaries.contains(output.output()))
+                .map(|output| output.value()),
+        )
+        .collect();
     // Requested producers always run. A consumer of a requested producer must also
     // run even if it still has a valid cache before this run is admitted.
     let mut downstream = vec![Vec::new(); operations.len()];
@@ -139,7 +181,15 @@ pub(in crate::state) fn select_execution(
         }
     }
     let mut forced = vec![false; operations.len()];
-    let mut affected = pending
+    let forced_values = if requested_node.is_some() {
+        selected
+            .values()
+            .map(|(value, _)| *value)
+            .collect::<Vec<_>>()
+    } else {
+        pending.clone()
+    };
+    let mut affected = forced_values
         .iter()
         .filter_map(|value| producers.get(value.index() as usize).copied().flatten())
         .collect::<Vec<_>>();
@@ -161,7 +211,11 @@ pub(in crate::state) fn select_execution(
         if required_operations[producer] || reused[producer] {
             continue;
         }
-        if !forced[producer]
+        if (!forced[producer]
+            || operations[producer]
+                .outputs()
+                .iter()
+                .all(|output| completed.contains(output.output())))
             && let Some(cached) = operations[producer]
                 .outputs()
                 .iter()
@@ -175,6 +229,20 @@ pub(in crate::state) fn select_execution(
             reused[producer] = true;
             continue;
         }
+        if current_inputs_only && !forced[producer] {
+            let output = operations[producer]
+                .outputs()
+                .iter()
+                .find(|output| output.value() == value)
+                .ok_or(OperationExecutionError::Failed)?;
+            return Err(OperationExecutionError::InputResultUnavailable {
+                input: crate::plan::PlanSourceIdentity::new(
+                    output.output().graph().clone(),
+                    operations[producer].source().node().cloned(),
+                    Some(output.output().port().clone()),
+                ),
+            });
+        }
         required_operations[producer] = true;
         pending.extend(operations[producer].inputs().iter().filter_map(|binding| {
             match binding.source() {
@@ -185,6 +253,7 @@ pub(in crate::state) fn select_execution(
     }
 
     Ok(ExecutionSelection {
+        boundaries,
         required_operations,
         observations,
         cached_values,

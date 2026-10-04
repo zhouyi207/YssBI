@@ -10,6 +10,7 @@ default = []
 test-support = []
 
 [dependencies]
+yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-node-kernel = { path = "../yss-node-kernel" }
 serde.workspace = true
 serde_json.workspace = true
@@ -21,13 +22,14 @@ yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 yss-node-protocol = { path = "../yss-node-protocol" }
+yss-node-registry = { path = "../yss-node-registry" }
+yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
+yss-database-arrow = { path = "../yss-database-arrow" }
 
 [dev-dependencies]
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 arrow-array.workspace = true
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
-yss-node-registry = { path = "../yss-node-registry" }
 yss-node-catalog = { path = "../yss-node-catalog" }
-yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 yss-graph-runtime = { path = "../yss-graph-runtime" }

@@ -1,5 +1,8 @@
 //! Build execution plans from the editor's resolved graph facts.
 
+mod scope;
+pub use scope::GraphExecutionScope;
+
 use std::collections::{BTreeMap, btree_map::Entry};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -43,7 +46,7 @@ pub enum GraphPlanError {
 }
 
 #[derive(Debug)]
-struct GraphPlanTemplate {
+pub(crate) struct GraphPlanTemplate {
     graph: PlanGraphId,
     plan_id: PlanId,
     plan: Arc<ExecutionPlan>,
@@ -52,6 +55,7 @@ struct GraphPlanTemplate {
 
 struct CachedGraphPlan {
     semantic_input_hash: [u8; 32],
+    scope: GraphExecutionScope,
     template: Arc<GraphPlanTemplate>,
 }
 
@@ -74,6 +78,7 @@ impl ExecutionRuntimeState {
         graph: &GraphResourcePath,
         analysis: &GraphAnalysis,
         basis: PlanBasis,
+        scope: &GraphExecutionScope,
     ) -> Result<ExecutionPlanPackage, GraphPlanError> {
         if analysis.kernel_fingerprint() != &basis.kernel_fingerprint().as_bytes()
             || basis.kernel_fingerprint() != self.kernels().fingerprint()
@@ -81,7 +86,9 @@ impl ExecutionRuntimeState {
             return Err(GraphPlanError::KernelCapabilitiesMismatch);
         }
         let semantics = analysis.semantic_snapshot();
-        semantics.ready().ok_or(GraphPlanError::NotReady)?;
+        if !semantics.nodes_ready(scope.nodes()) {
+            return Err(GraphPlanError::NotReady);
+        }
         let hash = *analysis.semantic_input_hash();
         let cached = self
             .graph_plans
@@ -89,15 +96,20 @@ impl ExecutionRuntimeState {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .get(graph.as_str())
-            .filter(|cached| cached.semantic_input_hash == hash)
+            .filter(|cached| cached.semantic_input_hash == hash && &cached.scope == scope)
             .map(|cached| Arc::clone(&cached.template));
         let template = if let Some(template) = cached {
             template
         } else {
+            let plan_hash = yss_canonical_hash::hash_canonical(
+                "yssbi.execution-plan-scope.v1",
+                &(hash, scope.nodes()),
+            )
+            .expect("graph execution scope is serializable");
             let plan_id = PlanId::from_existing(u64::from_be_bytes(
-                hash[..8].try_into().expect("SHA-256 prefix"),
+                plan_hash[..8].try_into().expect("SHA-256 prefix"),
             ));
-            let template = Arc::new(build_template(graph, plan_id, semantics)?);
+            let template = Arc::new(build_template(graph, plan_id, semantics, scope)?);
             self.graph_plans
                 .0
                 .lock()
@@ -106,37 +118,48 @@ impl ExecutionRuntimeState {
                     graph.as_str().into(),
                     CachedGraphPlan {
                         semantic_input_hash: hash,
+                        scope: scope.clone(),
                         template: Arc::clone(&template),
                     },
                 );
             template
         };
+        template.package(basis)
+    }
+}
+
+impl GraphPlanTemplate {
+    pub(crate) fn package(&self, basis: PlanBasis) -> Result<ExecutionPlanPackage, GraphPlanError> {
         let mut parameters = PlanParameterBundleBuilder::new(basis.clone());
-        for (handle, payload) in &template.parameters {
+        for (handle, payload) in &self.parameters {
             parameters.insert(handle.clone(), payload.clone())?;
         }
         Ok(ExecutionPlanPackage::new(
-            Arc::clone(&template.plan),
+            Arc::clone(&self.plan),
             Arc::new(parameters.freeze()),
             PlanProvenance::new(
-                PlanSourceIdentity::new(template.graph.clone(), None, None),
+                PlanSourceIdentity::new(self.graph.clone(), None, None),
                 basis,
-                template.plan_id,
+                self.plan_id,
             ),
         ))
     }
 }
 
-fn build_template(
+pub(crate) fn build_template(
     graph: &GraphResourcePath,
     plan_id: PlanId,
     semantics: &GraphSemanticSnapshot,
+    scope: &GraphExecutionScope,
 ) -> Result<GraphPlanTemplate, GraphPlanError> {
-    semantics.ready().ok_or(GraphPlanError::NotReady)?;
+    if !semantics.nodes_ready(scope.nodes()) {
+        return Err(GraphPlanError::NotReady);
+    }
     let graph = PlanGraphId::new(graph.as_str().into())?;
     let outputs = semantics
         .nodes()
         .iter()
+        .filter(|node| scope.nodes().contains(&node.node_id))
         .flat_map(|node| node.ports.iter())
         .filter(|port| port.direction == PortDirection::Output && !port.orphan)
         .enumerate()
@@ -149,7 +172,11 @@ fn build_template(
         .collect::<Result<BTreeMap<_, _>, GraphPlanError>>()?;
     let mut parameters = BTreeMap::new();
     let mut operations = Vec::new();
-    for node in semantics.nodes() {
+    for node in semantics
+        .nodes()
+        .iter()
+        .filter(|node| scope.nodes().contains(&node.node_id))
+    {
         let mut handles = BTreeMap::new();
         if let Some(constant) = &node.constant {
             let handle = parameter_handle(format!("constant/{}", constant.id));
@@ -325,7 +352,15 @@ fn output_contract(
             port.type_state.exact().ok_or(GraphPlanError::NotReady)?,
         )
         .ok_or(GraphPlanError::UnsupportedResolvedType)?,
-        schema: port.schema_state.exact().map(|schema| {
+        // A previous runtime observation describes that result, not the next evaluation.
+        // Consumers are planned again after a data-dependent schema boundary completes.
+        schema: (!matches!(
+            port.schema_state,
+            yss_graph_analysis::GraphSchemaState::Observed { .. }
+        ))
+        .then(|| port.schema_state.exact())
+        .flatten()
+        .map(|schema| {
             schema
                 .fields
                 .iter()
@@ -399,10 +434,31 @@ fn protocol_value(value: &DataValue) -> Result<PlanParameterValue, GraphPlanErro
 }
 
 fn plan_specialization(
-    value: &yss_graph_analysis::GraphKernelSpecialization,
-) -> Result<PlanKernelSpecialization, GraphPlanError> {
-    let implementation =
-        KernelId::new(value.implementation.clone()).map_err(GraphPlanError::KernelIdentity)?;
+    value: &yss_graph_analysis::GraphNodeSpecialization,
+) -> Result<PlanNodeSpecialization, GraphPlanError> {
+    use yss_graph_analysis::GraphNodeImplementation;
+    let implementation = match &value.implementation {
+        GraphNodeImplementation::Kernel(id) => {
+            PlanNodeImplementation::Kernel(KernelId::new(id.clone())?)
+        }
+        GraphNodeImplementation::FunctionEntry => PlanNodeImplementation::FunctionEntry,
+        GraphNodeImplementation::FunctionReturn => PlanNodeImplementation::FunctionReturn,
+        GraphNodeImplementation::GroupMap { target, transform } => {
+            PlanNodeImplementation::GroupMap {
+                target: PlanResourceId::new(target.as_str().into())?,
+                transform: *transform,
+            }
+        }
+        GraphNodeImplementation::FunctionCall { target, arguments } => {
+            PlanNodeImplementation::FunctionCall {
+                target: PlanResourceId::new(target.as_str().into())?,
+                arguments: arguments
+                    .iter()
+                    .map(|(id, port)| (id.as_str().into(), plan_port(port)))
+                    .collect(),
+            }
+        }
+    };
     let bindings = |values: &[yss_graph_analysis::GraphPortTypeBinding]| {
         values
             .iter()
@@ -428,7 +484,7 @@ fn plan_specialization(
         })
         .collect::<Result<Vec<_>, GraphPlanError>>()?
         .into_boxed_slice();
-    Ok(PlanKernelSpecialization::new(
+    Ok(PlanNodeSpecialization::new(
         implementation,
         bindings(&value.input_types)?,
         bindings(&value.output_types)?,

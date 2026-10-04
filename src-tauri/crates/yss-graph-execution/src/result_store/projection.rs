@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{ResultStore, ResultStoreRegistry};
 use crate::plan::PlanOutputRef;
@@ -23,10 +23,20 @@ impl ResultStoreRegistry {
             .keys()
             .map(|output| {
                 let state = match self.outputs.get(output) {
+                    Some(cached)
+                        if cached
+                            .result
+                            .and_then(|id| self.values.get(&id))
+                            .is_some_and(|entry| !entry.snapshot.value().is_evaluated()) =>
+                    {
+                        ResultCacheState::Missing
+                    }
                     Some(cached) if cached.valid => ResultCacheState::Valid {
                         result_id: cached.result.expect("valid result"),
                     },
-                    Some(cached) if cached.result.is_some() => ResultCacheState::Stale,
+                    Some(cached) if cached.result.is_some() => ResultCacheState::Stale {
+                        result_id: cached.result.expect("retained stale result"),
+                    },
                     _ => ResultCacheState::Missing,
                 };
                 (output.clone(), state)
@@ -107,6 +117,58 @@ impl ResultStoreRegistry {
 }
 
 impl ResultStore {
+    pub(crate) fn schema_candidates(&self, graph: &str) -> Vec<StoredResultSnapshot> {
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        registry
+            .outputs
+            .iter()
+            .filter(|(output, _)| output.graph().as_str() == graph)
+            .filter_map(|(_, cached)| cached.result.and_then(|id| registry.values.get(&id)))
+            .filter(|entry| entry.snapshot.value().is_evaluated())
+            .map(|entry| entry.snapshot.clone())
+            .collect()
+    }
+
+    pub(crate) fn matching_schema_results(
+        &self,
+        graph: &str,
+        inputs: &crate::result::GraphResultInputs,
+    ) -> BTreeMap<PlanOutputRef, crate::result::ResultId> {
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        // Last-success Schema remains useful during a same-input rerun, while the
+        // execution cache remains stale. Edits and changed source IDs still invalidate it.
+        registry
+            .matching_outputs(graph, Some(inputs), true)
+            .into_iter()
+            .filter_map(|output| Some((output.clone(), registry.outputs.get(&output)?.result?)))
+            .collect()
+    }
+
+    pub(crate) fn retained_boundaries(&self, graph: &str) -> BTreeSet<PlanOutputRef> {
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        registry
+            .outputs
+            .iter()
+            .filter(|(output, _)| output.graph().as_str() == graph)
+            .filter(|(_, cached)| {
+                cached
+                    .result
+                    .and_then(|id| registry.values.get(&id))
+                    .is_some_and(|entry| entry.snapshot.value().is_evaluated())
+            })
+            .map(|(output, _)| output.clone())
+            .collect()
+    }
+
     pub(crate) fn query_graph_results(
         &self,
         graph: &str,
@@ -123,6 +185,7 @@ impl ResultStore {
             .filter(|(output, _)| output.graph().as_str() == graph)
             .filter(|(_, cached)| cached.valid)
             .filter_map(|(_, cached)| cached.result.and_then(|id| registry.values.get(&id)))
+            .filter(|entry| entry.snapshot.value().is_evaluated())
             .take(limit)
             .map(|entry| entry.snapshot.clone())
             .collect()
@@ -140,6 +203,7 @@ impl ResultStore {
         registry
             .values
             .get(&cached.result?)
+            .filter(|entry| entry.snapshot.value().is_evaluated())
             .map(|entry| entry.snapshot.clone())
     }
 

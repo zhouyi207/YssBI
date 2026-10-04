@@ -130,6 +130,7 @@ impl SealedCandidateGrantSet {
 pub struct ResultObservationIntent {
     pub result_id: ResultId,
     pub requester: PlanSourceIdentity,
+    pub input_basis: Option<crate::result::OutputResultInputs>,
 }
 
 /// Execution's sealed successful candidate.
@@ -217,6 +218,7 @@ pub mod test_support {
         let observation_intents = if explicit_inspection {
             vec![ResultObservationIntent {
                 result_id,
+                input_basis: None,
                 requester: requester.clone(),
             }]
         } else {

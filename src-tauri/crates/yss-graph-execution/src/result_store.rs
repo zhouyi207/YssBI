@@ -28,10 +28,17 @@ struct ResultLease {
 #[derive(Default)]
 struct CachedOutput {
     run: Option<RunId>,
+    pending: Option<PendingOutput>,
     result: Option<ResultId>,
     inputs: Option<OutputResultInputs>,
     source_results: BTreeMap<PlanOutputRef, ResultId>,
     valid: bool,
+}
+
+/// Publication inputs for the current run, separate from the last successful value's basis.
+struct PendingOutput {
+    inputs: Option<OutputResultInputs>,
+    source_results: BTreeMap<PlanOutputRef, ResultId>,
 }
 
 struct ObservedGraphInputs {

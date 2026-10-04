@@ -45,6 +45,8 @@ impl OutputResultInputs {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphResultInputs {
     pub semantic_input_hash: [u8; 32],
+    pub definition_input_hash: [u8; 32],
+    pub schema_observations: BTreeMap<PlanOutputRef, ResultId>,
     pub outputs: BTreeMap<PlanOutputRef, OutputResultInputs>,
     pub observers: BTreeMap<PlanNodeId, OutputResultInputs>,
 }
@@ -60,7 +62,7 @@ pub struct ResultRunBasis {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResultCacheState {
     Missing,
-    Stale,
+    Stale { result_id: ResultId },
     Valid { result_id: ResultId },
 }
 
@@ -100,6 +102,7 @@ pub enum ResultRetentionError {
 #[derive(Clone, Debug, PartialEq)]
 pub struct StoredResult {
     value: RuntimeValue,
+    evaluated: bool,
     category: ResultCategory,
     contract: Option<Arc<crate::plan::PlanOutputContract>>,
 }
@@ -107,6 +110,7 @@ pub struct StoredResult {
 impl StoredResult {
     pub fn new(value: RuntimeValue) -> Self {
         Self {
+            evaluated: value.is_immediate(),
             value,
             category: ResultCategory::Value,
             contract: None,
@@ -120,6 +124,15 @@ impl StoredResult {
 
     pub fn value(&self) -> &RuntimeValue {
         &self.value
+    }
+
+    pub fn is_evaluated(&self) -> bool {
+        self.evaluated
+    }
+
+    pub(crate) fn with_evaluated_boundary(mut self, evaluated: bool) -> Self {
+        self.evaluated |= evaluated;
+        self
     }
 
     pub fn with_output_contract(mut self, contract: crate::plan::PlanOutputContract) -> Self {

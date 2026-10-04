@@ -25,6 +25,8 @@ fn named_output(port: &str) -> PlanOutputRef {
 fn cache_inputs(hash: u8, nodes: &[(&str, u8, &[&str])]) -> GraphResultInputs {
     GraphResultInputs {
         semantic_input_hash: [hash; 32],
+        definition_input_hash: [hash; 32],
+        schema_observations: BTreeMap::new(),
         observers: BTreeMap::new(),
         outputs: nodes
             .iter()
@@ -114,6 +116,7 @@ fn observed_input_branches_require_consumption_and_follow_the_shared_result_life
         .into_iter()
         .map(|name| ResultObservationIntent {
             result_id: ResultId::from_existing(1),
+            input_basis: Some(observed_inputs(name)),
             requester: PlanSourceIdentity::new(output.graph().clone(), Some(node(name)), None),
         })
         .collect::<Vec<_>>();
@@ -125,7 +128,9 @@ fn observed_input_branches_require_consumption_and_follow_the_shared_result_life
         Some(&basis),
         &BTreeMap::new()
     ));
-    assert!(store.publish(&[cached_result(1, run, output.clone())], &observations));
+    assert!(store.publish(&[cached_result(1, run, output.clone())], &observations[..2]));
+    // A later View run may observe an existing current result without recomputing it.
+    assert!(store.publish(&[], &observations[2..]));
     let states = store.query_cache_states(graph, &[1; 32]).unwrap();
     assert_eq!(states.connections.len(), 3);
     assert!(
@@ -162,6 +167,7 @@ fn observed_input_branches_require_consumption_and_follow_the_shared_result_life
     edited.semantic_input_hash = [3; 32];
     edited.observers.get_mut(&node("c")).unwrap().fingerprint = [8; 32];
     store.observe_graph_inputs(graph, edited);
+    assert!(!store.publish(&[], &observations[1..2]));
     let states = store.query_cache_states(graph, &[3; 32]).unwrap();
     assert_eq!(
         states
@@ -199,8 +205,10 @@ fn observed_input_branches_require_consumption_and_follow_the_shared_result_life
         Some(&basis),
         &BTreeMap::new()
     ));
-    assert!(store.get(ResultId::from_existing(1)).is_none());
+    assert!(store.get(ResultId::from_existing(1)).is_some());
+    assert!(!store.publish(&[], &observations));
     assert!(store.publish(&[cached_result(2, run, output.clone())], &[]));
+    assert!(store.get(ResultId::from_existing(1)).is_none());
     assert!(
         store
             .query_cache_states(graph, &[1; 32])
@@ -252,7 +260,13 @@ fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outp
         assert!(store.query_pin_result(&named_output(port)).is_some());
     }
     for port in ["b", "c"] {
-        assert_eq!(states.outputs[&named_output(port)], ResultCacheState::Stale);
+        let ResultCacheState::Stale { result_id } = states.outputs[&named_output(port)] else {
+            panic!("edited output must retain a stale result identity");
+        };
+        assert_eq!(store.get(result_id).unwrap().output(), &named_output(port));
+        if port == "b" {
+            assert_eq!(result_id, b_id);
+        }
         assert!(store.query_pin_result(&named_output(port)).is_none());
     }
     assert_eq!(
@@ -420,6 +434,39 @@ fn rerun_versions_and_edit_epochs_prevent_obsolete_cache_or_run_restoration() {
     resources.observe_graph_inputs(graph, original);
     assert!(resources.query_pin_result(&named_output("b")).is_none());
     assert!(resources.get(ResultId::from_existing(1)).is_some());
+
+    let feedback = ResultStore::new();
+    let initial = cache_inputs(1, &[("a", 1, &[])]);
+    publish_cached_graph(&feedback, &initial);
+    let first = feedback
+        .query_pin_result(&named_output("a"))
+        .unwrap()
+        .provenance()
+        .result_id();
+    let mut observed = initial.clone();
+    observed.semantic_input_hash = [9; 32];
+    observed
+        .schema_observations
+        .insert(named_output("a"), first);
+    let basis = feedback.capture_run_basis(graph, observed.clone()).unwrap();
+    let run = RunId::from_existing(2);
+    assert!(feedback.begin_run(run, &outputs, Some(&basis), &BTreeMap::new()));
+    assert!(feedback.query_pin_result(&named_output("a")).is_none());
+    assert_eq!(
+        feedback
+            .matching_schema_results(graph, &observed)
+            .get(&named_output("a")),
+        Some(&first)
+    );
+    feedback.observe_graph_inputs(graph, initial.clone());
+    assert!(
+        feedback.publish(&[cached_result(20, run, named_output("a"))], &[]),
+        "Schema feedback cannot revoke a producer whose inputs did not change"
+    );
+    assert!(
+        feedback.capture_run_basis(graph, observed).is_none(),
+        "a replaced observation cannot authorize a new run"
+    );
 }
 
 fn result(id: u64, run: RunId) -> ReadyResult {
@@ -575,7 +622,7 @@ fn window_handoffs_and_owner_reconciliation_do_not_leak_or_drop_claimed_results(
 }
 
 #[test]
-fn rerun_releases_previous_value_and_rejects_obsolete_publication() {
+fn rerun_preserves_previous_success_until_replacement_and_rejects_obsolete_publication() {
     let store = ResultStore::new();
     let first = RunId::from_existing(1);
     let second = RunId::from_existing(2);
@@ -583,10 +630,13 @@ fn rerun_releases_previous_value_and_rejects_obsolete_publication() {
     assert!(store.publish(&[result(1, first)], &[]));
     let previous = Arc::downgrade(store.get(ResultId::from_existing(1)).unwrap().value());
     store.begin_run(second, &[output()], None, &BTreeMap::new());
-    assert!(previous.upgrade().is_none());
+    assert!(previous.upgrade().is_some());
+    assert!(store.get(ResultId::from_existing(1)).is_some());
     assert!(store.query_pin_result(&output()).is_none());
     assert!(!store.publish(&[result(2, first)], &[]));
     assert!(store.publish(&[result(3, second)], &[]));
+    assert!(previous.upgrade().is_none());
+    assert!(!store.publish(&[result(3, second)], &[]));
     assert!(store.get(ResultId::from_existing(1)).is_none());
     assert_eq!(
         store

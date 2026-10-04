@@ -1,12 +1,16 @@
 //! Session-scoped ownership of plans, runs, results and work admission.
+mod active_run;
 mod admission;
 mod control;
 mod dispatch;
 mod run_lifecycle;
 mod scheduler;
+#[cfg(feature = "test-support")]
+mod test_support;
 
 pub use crate::error::{ExecutePreparedError, ExecutionAdmissionError, OperationExecutionError};
 pub use crate::run_registry::ExecutionCancelOutcome;
+pub use active_run::ActiveExecutionRun;
 pub use admission::{
     ExecutionDrainControl, ExecutionDrainOutcome, ExecutionOutstandingWork, ExecutionWorkLease,
 };
@@ -90,6 +94,18 @@ impl ExecutionRuntimeState {
         output: &crate::plan::PlanOutputRef,
     ) -> Option<StoredResultSnapshot> {
         self.results.query_pin_result(output)
+    }
+
+    pub fn result_schema_candidates(&self, graph: &str) -> Vec<StoredResultSnapshot> {
+        self.results.schema_candidates(graph)
+    }
+
+    pub fn matching_schema_results(
+        &self,
+        graph: &str,
+        inputs: &GraphResultInputs,
+    ) -> BTreeMap<crate::plan::PlanOutputRef, ResultId> {
+        self.results.matching_schema_results(graph, inputs)
     }
 
     pub fn runs(&self) -> &RunRegistry {

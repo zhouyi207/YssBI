@@ -18,9 +18,10 @@ pub use identity::{
     PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
 };
 pub use model::{
-    ExecutionPlan, PlanExecutionDemand, PlanFieldLineage, PlanInputBinding, PlanInputCoercion,
-    PlanInputCoercionKind, PlanInputContract, PlanInputSource, PlanKernelSpecialization,
-    PlanOperation, PlanOutputBinding, PlanOutputContract, PlanOutputField, PlanTypeBinding,
+    ExecutionPlan, NodeExecutionMode, PlanExecutionDemand, PlanFieldLineage, PlanInputBinding,
+    PlanInputCoercion, PlanInputCoercionKind, PlanInputContract, PlanInputSource,
+    PlanNodeImplementation, PlanNodeSpecialization, PlanOperation, PlanOutputBinding,
+    PlanOutputContract, PlanOutputField, PlanTypeBinding,
 };
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::ExecutionPlanPackage;

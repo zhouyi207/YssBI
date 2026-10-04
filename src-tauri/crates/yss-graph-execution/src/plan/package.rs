@@ -4,11 +4,12 @@ use super::identity::PlanProvenance;
 use super::model::ExecutionPlan;
 use super::parameter::PlanParameterBundle;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ExecutionPlanPackage {
     plan: Arc<ExecutionPlan>,
     parameters: Arc<PlanParameterBundle>,
     provenance: PlanProvenance,
+    pub(crate) functions: Option<Arc<crate::function_library::GraphFunctionLibrary>>,
 }
 
 impl ExecutionPlanPackage {
@@ -21,6 +22,7 @@ impl ExecutionPlanPackage {
             plan,
             parameters,
             provenance,
+            functions: None,
         }
     }
 

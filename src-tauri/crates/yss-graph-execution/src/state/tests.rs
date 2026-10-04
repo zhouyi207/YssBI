@@ -82,7 +82,7 @@ fn prepared_operation_plan(
     let basis = PlanBasis::new(
         PlanProjectSessionId::from_existing("session".into()),
         PlanRegistryFingerprint::from_bytes([4; 32]),
-        yss_node_kernel::KernelRegistry::default().fingerprint(),
+        state.kernels().fingerprint(),
         BTreeMap::new(),
         BTreeMap::new(),
     );
@@ -143,9 +143,9 @@ fn operation_output(node: &str, value: ValueRef) -> PlanOutputBinding {
     )
 }
 
-fn operation_specialization(kind: &str, node: &str) -> crate::plan::PlanKernelSpecialization {
-    crate::plan::PlanKernelSpecialization::new(
-        KernelId::from_existing(kind.into()),
+fn operation_specialization(kind: &str, node: &str) -> crate::plan::PlanNodeSpecialization {
+    crate::plan::PlanNodeSpecialization::new(
+        crate::plan::PlanNodeImplementation::Kernel(KernelId::from_existing(kind.into())),
         Box::new([]),
         Box::new([crate::plan::PlanTypeBinding::new(
             PlanPortAddress::from_existing(format!("{node}:result").into_boxed_str()),
@@ -195,6 +195,58 @@ fn state() -> ExecutionRuntimeState {
 }
 
 #[test]
+fn graph_execution_passes_unlimited_memory_control_to_kernels_and_relations() {
+    let mut kernels = yss_node_kernel::KernelRegistryBuilder::new();
+    let id = "tests.large_workspace";
+    kernels
+        .register(
+            KernelId::from_existing(id.into()),
+            std::num::NonZeroU32::new(1).unwrap(),
+            yss_node_kernel::KernelContract::new([], [], 1..=1).unwrap(),
+            |invocation| {
+                invocation.control.check_bytes(Some(1024 * 1024 * 1024))?;
+                assert_eq!(invocation.relation_control().max_input_bytes, usize::MAX);
+                Ok(vec![TabularScalar::Integer(1).into()])
+            },
+        )
+        .unwrap();
+    let state = ExecutionRuntimeState::new(
+        ExecutionSessionId::new(uuid::Uuid::nil()),
+        RuntimeGeneration::INITIAL,
+        kernels.freeze().into(),
+        crate::test_relations(),
+    );
+    let plan = prepared_operation_plan(
+        &state,
+        [PlanOperation::new(
+            operation_source("large"),
+            crate::plan::PlanNodeTypeId::from_existing(id.into()),
+            BTreeMap::new(),
+            Box::new([]),
+            Box::new([]),
+            Box::new([operation_output("large", ValueRef::new(0))]),
+            operation_specialization(id, "large"),
+        )],
+        [],
+    );
+    let result = state
+        .execute_prepared(
+            &plan,
+            empty_bindings(),
+            &ResourceProviderFactory::new("session".into()),
+            &RunExecutionControl::with_cancellation(
+                Arc::new(AtomicBool::new(false)),
+                Instant::now() + Duration::from_secs(10),
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        result.results()[0].value().value(),
+        &RuntimeValue::from(TabularScalar::Integer(1))
+    );
+}
+
+#[test]
 fn closed_session_drains_an_active_lease_and_rejects_new_work() {
     let state = state();
     let lease = state.admit().expect("test admission must open");
@@ -240,8 +292,10 @@ fn numeric_chain_plan(state: &ExecutionRuntimeState) -> PreparedExecutionPlan {
         )]),
         Box::new([]),
         Box::new([operation_output("consumer", ValueRef::new(0))]),
-        crate::plan::PlanKernelSpecialization::new(
-            KernelId::from_existing("yssbi.numeric.square".into()),
+        crate::plan::PlanNodeSpecialization::new(
+            crate::plan::PlanNodeImplementation::Kernel(KernelId::from_existing(
+                "yssbi.numeric.square".into(),
+            )),
             Box::new([crate::plan::PlanTypeBinding::new(
                 PlanPortAddress::from_existing("consumer:value".into()),
                 yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
@@ -337,10 +391,22 @@ fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
                 &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
             )
             .unwrap();
+        assert!(weak.iter().all(|result| result.upgrade().is_some()));
+        assert!(ids.iter().all(|id| state.query_result(*id).is_some()));
+        assert!(state.publish_committed_results(&candidate.into_finalization_handoff()));
         assert!(weak.iter().all(|result| result.upgrade().is_none()));
         assert!(ids.iter().all(|id| state.query_result(*id).is_none()));
-        assert!(state.publish_committed_results(&candidate.into_finalization_handoff()));
     }
+    let previous_ids = outputs
+        .iter()
+        .map(|output| {
+            state
+                .query_pin_result(output)
+                .unwrap()
+                .provenance()
+                .result_id()
+        })
+        .collect::<Vec<_>>();
     let failed = state.execute_prepared(
         &plan,
         empty_bindings(),
@@ -348,6 +414,11 @@ fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
         &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
     );
     assert!(failed.is_err());
+    assert!(
+        previous_ids
+            .iter()
+            .all(|id| state.query_result(*id).is_some())
+    );
     assert!(
         outputs
             .iter()
@@ -374,6 +445,8 @@ fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
     };
     let inputs = GraphResultInputs {
         semantic_input_hash: [1; 32],
+        definition_input_hash: [1; 32],
+        schema_observations: BTreeMap::new(),
         observers: BTreeMap::new(),
         outputs: BTreeMap::from([
             (source.clone(), source_inputs.clone()),
@@ -393,21 +466,38 @@ fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
         .capture_result_run_basis("events/main", inputs.clone())
         .unwrap();
     let run = |demand: &PlanExecutionDemand, basis: &ResultRunBasis| {
-        state
-            .execute_prepared_handoff(
-                &plan,
-                empty_bindings(),
-                &ResourceProviderFactory::new("session".into()),
-                &RunExecutionControl::new(Instant::now() + Duration::from_secs(10)),
-                ExecutionResultRequest {
-                    demand,
-                    basis: Some(basis),
-                },
-                |_| {},
-            )
-            .unwrap()
+        state.execute_prepared_handoff(
+            &plan,
+            empty_bindings(),
+            &ResourceProviderFactory::new("session".into()),
+            &RunExecutionControl::new(Instant::now() + Duration::from_secs(10)),
+            ExecutionResultRequest {
+                demand,
+                basis: Some(basis),
+            },
+            |_| {},
+        )
     };
-    let initial = run(&PlanExecutionDemand::Default, &basis);
+    let current = PlanExecutionDemand::Node {
+        node: crate::plan::PlanNodeId::from_existing("consumer".into()),
+        mode: crate::plan::NodeExecutionMode::CurrentInputs,
+    };
+    let dependencies = PlanExecutionDemand::Node {
+        node: crate::plan::PlanNodeId::from_existing("consumer".into()),
+        mode: crate::plan::NodeExecutionMode::Dependencies,
+    };
+    let failure = run(&current, &basis)
+        .err()
+        .expect("missing input must not execute")
+        .failure();
+    assert_eq!(
+        failure.code,
+        crate::error::RunFailureCode::InputResultUnavailable
+    );
+    assert_eq!(failure.source.unwrap().port(), Some(source.port()));
+    assert!(state.query_pin_result(&source).is_none());
+    let initial = run(&dependencies, &basis).unwrap();
+    assert_eq!(initial.handoff().results().len(), 2);
     assert!(state.publish_committed_results(initial.handoff()));
     state.finalize_run_success(initial.run_id()).unwrap();
     let source_id = state
@@ -420,7 +510,7 @@ fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
         include_default_results: false,
         reuse_inputs: true,
     };
-    let extension = run(&demand, &basis);
+    let extension = run(&current, &basis).unwrap();
     assert_eq!(extension.handoff().results().len(), 1);
     assert_eq!(extension.handoff().results()[0].output(), &target);
     assert!(state.publish_committed_results(extension.handoff()));
@@ -435,7 +525,7 @@ fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
     );
     assert!(state.query_pin_result(&target).is_some());
 
-    let delayed = run(&demand, &basis);
+    let delayed = run(&demand, &basis).unwrap();
     let replacement = run(
         &PlanExecutionDemand::Outputs {
             outputs: vec![source.clone()].into_boxed_slice(),
@@ -443,7 +533,8 @@ fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
             reuse_inputs: false,
         },
         &basis,
-    );
+    )
+    .unwrap();
     assert!(state.publish_committed_results(replacement.handoff()));
     state.finalize_run_success(replacement.run_id()).unwrap();
     assert!(!state.publish_committed_results(delayed.handoff()));
@@ -456,10 +547,138 @@ fn output_extension_reuses_valid_inputs_and_rejects_replaced_input_results() {
     let basis = state
         .capture_result_run_basis("events/main", changed)
         .unwrap();
-    let recomputed = run(&demand, &basis);
+    assert_eq!(
+        run(&current, &basis).err().unwrap().failure().code,
+        crate::error::RunFailureCode::InputResultUnavailable
+    );
+    let recomputed = run(&dependencies, &basis).unwrap();
     assert_eq!(recomputed.handoff().results().len(), 2);
     assert!(state.publish_committed_results(recomputed.handoff()));
     state.finalize_run_success(recomputed.run_id()).unwrap();
+
+    let control = RunExecutionControl::new(Instant::now() + Duration::from_secs(10));
+    let resources = ResourceProviderFactory::new("session".into());
+    let mut active = state.start_run(&control).unwrap();
+    let source_demand = PlanExecutionDemand::Outputs {
+        outputs: vec![source.clone()].into_boxed_slice(),
+        include_default_results: false,
+        reuse_inputs: false,
+    };
+    let stage = active
+        .execute_stage(
+            &plan,
+            empty_bindings(),
+            &resources,
+            ExecutionResultRequest {
+                demand: &source_demand,
+                basis: Some(&basis),
+            },
+            |_| {},
+        )
+        .unwrap();
+    assert!(state.publish_committed_results(&stage));
+    active.record_published_stage(&stage).unwrap();
+    assert_eq!(state.runs().state(active.run_id()), Some(RunState::Running));
+    let source_id = stage.results()[0].result_id();
+    let continued = active
+        .execute_stage(
+            &plan,
+            empty_bindings(),
+            &resources,
+            ExecutionResultRequest {
+                demand: &PlanExecutionDemand::Default,
+                basis: Some(&basis),
+            },
+            |_| {},
+        )
+        .unwrap();
+    assert_eq!(
+        continued.results().len(),
+        1,
+        "a full continuation reuses this run's completed source"
+    );
+    assert_eq!(continued.results()[0].output(), &target);
+    assert!(state.publish_committed_results(&continued));
+    active.record_published_stage(&continued).unwrap();
+    assert_eq!(
+        state
+            .query_pin_result(&source)
+            .unwrap()
+            .provenance()
+            .result_id(),
+        source_id
+    );
+    assert_eq!(
+        state
+            .query_pin_result(&target)
+            .unwrap()
+            .provenance()
+            .run_id(),
+        active.run_id()
+    );
+    active.begin_finalization().unwrap();
+    state.finalize_run_success(active.run_id()).unwrap();
+
+    let mut interrupted = state.start_run(&control).unwrap();
+    let stage = interrupted
+        .execute_stage(
+            &plan,
+            empty_bindings(),
+            &resources,
+            ExecutionResultRequest {
+                demand: &source_demand,
+                basis: Some(&basis),
+            },
+            |_| {},
+        )
+        .unwrap();
+    assert!(state.publish_committed_results(&stage));
+    interrupted.record_published_stage(&stage).unwrap();
+    let replacement = run(&source_demand, &basis).unwrap();
+    assert!(state.publish_committed_results(replacement.handoff()));
+    state.finalize_run_success(replacement.run_id()).unwrap();
+    assert!(matches!(
+        interrupted.execute_stage(
+            &plan,
+            empty_bindings(),
+            &resources,
+            ExecutionResultRequest {
+                demand: &demand,
+                basis: Some(&basis)
+            },
+            |_| {}
+        ),
+        Err(ExecutePreparedError::Cancelled {
+            phase: RunPhase::Admission
+        })
+    ));
+    assert_eq!(
+        state.runs().state(interrupted.run_id()),
+        Some(RunState::Cancelled)
+    );
+
+    let mut cancelled = state.start_run(&control).unwrap();
+    assert_eq!(
+        state.cancel_run(cancelled.run_id()),
+        ExecutionCancelOutcome::Requested
+    );
+    assert!(matches!(
+        cancelled.execute_stage(
+            &plan,
+            empty_bindings(),
+            &resources,
+            ExecutionResultRequest {
+                demand: &source_demand,
+                basis: Some(&basis)
+            },
+            |_| {}
+        ),
+        Err(ExecutePreparedError::Cancelled { .. })
+    ));
+    assert_eq!(
+        state.runs().state(cancelled.run_id()),
+        Some(RunState::Cancelled)
+    );
 }
 
 #[test]

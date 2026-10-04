@@ -8,29 +8,52 @@
 ## Execute
 
 `state.rs` 持有会话的计划、结果和运行 registry。内部 `state/admission` 管理工作租约、
-关闭与排空；`state/control` 管理单次运行的取消、deadline 和预算；`state/dispatch` 编排
+关闭与排空；`state/control` 管理单次运行的取消和 deadline；`state/dispatch` 编排
 准备资源、执行及生成结果候选；`state/scheduler` 和 `selection` 负责数据 DAG 和 demand。
 `error` 拥有执行错误及 RunFailure 映射，原 `state` 公开类型路径继续可用。
+
+`state/scheduler/groups` 顺序读取中立分组会话，把每组 DataFrame 绑定到同一捕获函数定义的私有帧。
+它复用 `functions` 的 ABI 校验、嵌套调度和动态 Schema 阶段；组内值不进入全局 ResultStore。
+空来源调用一次空表作为输出结构探测，最终组合仍为零行。分组、函数及输出写入共享运行取消、deadline
+及无固定内存上限的执行控制。稳定分组结果只冻结其源表并保留键，不提前调用组函数；后续 CurrentInputs 可复用该值。
+`RunFailure.groups` 按外层到内层保留调用位置、函数路径和一基组编号，None 表示空输入探测；
+主 `source` 保留实际函数内部错误位置。取消和期限失败保持原终态处理，不被组上下文包装改变语义。
 
 运行记录与取消对象统一由 `RunRegistry` 持有，取消请求与终态转换使用同一把锁。
 取消对象覆盖 Admitted、Running、Finalizing，在 Succeeded、Failed 或 Cancelled 时释放；
 运行通知或执行过程 unwind 时，`state/run_lifecycle` 的守卫将未交付的运行转为 Failed。
 守卫只持有必须完成状态转换的责任，不复制运行状态。
 
+`state/active_run` 持有一次运行的工作租约、取消控制和生命周期守卫。单阶段执行与动态 Schema
+连续执行复用同一调度入口；各阶段共用 RunId、开始时间和期限。已发布阶段只记录结果身份，
+下一阶段从 ResultStore 读取并重验这些值。阶段之间的取消、输入替换或编辑不能继续使用旧依据。
+
 关闭准入和登记运行通过同一准入锁协调，锁顺序为 admission → run registry；
 锁内只做登记、取消标记或状态转换，不准备资源、不调用 kernel，也不交付事件。
 `cancel_and_drain` 关闭准入并请求取消已登记运行，再等待工作租约释放。
 `close_admission` 仅关闭准入。排空在每次唤醒后重验工作数，所有工作释放后返回 Drained。
 
-`execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。Application 先校验文档并向 Project 准备资源授权，再捕获、解析及重验依赖，确认语义身份和可运行性；随后捕获结果发布依据、调用 Execution 准备计划及资源绑定。运行不隐式保存，也不回退磁盘旧文档。草稿或依赖变化返回 `graph_draft_changed`，阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
+`execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。
+Application 校验文档、捕获解析与语义身份后，Execution 的 `GraphExecutionScope` 按目标输出选择必要上游；
+范围就绪性由 Analysis 检查，资源授权只消费这些节点及可达函数的语义资源引用，普通路径字符串不作为资源。
+`prepare_graph_package` 只构造选中范围的操作、参数及输出，缓存与计划身份包含该范围。
+Application 重验依赖、捕获结果发布依据并准备资源绑定。运行不隐式保存，也不回退磁盘旧文档。
+草稿或依赖变化返回 `graph_draft_changed`，范围内阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
+
+`GraphExecutionScope::schema_frontier` 从范围内被消费的 Deferred / Observed 输出选择最早可执行的
+结构边界。Application 发布这些稳定结果并重新解析后继续准备计划。“运行至此”可复用有效边界，
+全图重跑先重新求值动态结构；同一次运行已完成的输出即使是后续需求根也不重复计算。
+Observed 只描述上一份结果，新求值的输出契约不强制沿用旧字段；消费者在边界完成后按实际结构准备。
+CurrentInputs 不触发这种补算。结构边界之前已经成功发布的结果在后续阶段失败时仍可查看，
+未成功的下游不发布结果，整个运行只交付一个终态。
 
 Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。计划中的 input slots 继续携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
-Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline、预算及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
+Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline 及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
 
-`RunExecutionControl::with_memory_budget(bytes)` 由执行调用方配置每个节点的输入、工作区及结果编码准入预算，
-默认沿用 Kernel 的 128 MiB。调度器向所有节点转发同一预算；它是规模估算边界，不是整次运行的总内存或进程 RSS 上限。
-取消和 deadline 仍独立生效；此入口不增加前端设置。
+`RunExecutionControl` 只携带取消和 deadline。调度器通过 `KernelControl::new` 为所有节点创建
+无固定内存上限的执行控制，输入读取、工作区、结果编码、函数私有帧、分组调用和快照共享该策略。
+尺寸溢出与实际分配失败继续由原错误入口交付，取消和 deadline 独立生效。
 
 同一运行的 demand selection 和 producer 索引从准入传给调度器，不重复构建。最终结果在持有 ResultStore 写锁前已成为 `Arc<StoredResult>`，发布只增加引用。GraphAnalysis 的语义快照也按引用共享，展示投影修改时才取得独立内容。协议指纹显式排除展示字段，保留配置对象校验、条件和资源解释；不会递归删除用户数据中的同名字段。
 
@@ -50,12 +73,31 @@ View 的观察意图引用已连接输出的结果，保留各个请求节点身
 
 `RunRegistry` 通过 `RunState` 记录运行状态和终态。按完成顺序保留最近 1024 个终态，超过上限时淘汰最早完成者；Admitted、Running 和 Finalizing 不参与淘汰。保留期内取消请求仍区分 AlreadyCancelled / AlreadyTerminal，淘汰后返回 NotFound。该策略只作用于运行元数据，结果仍由 ResultStore 的租约规则管理。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
-函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。实际函数子计划 lowering/execution 尚未接入，缺少实现时编辑解析明确阻断。Execution 不携带始终为空的函数包、另一套 FunctionPlanAbi 或未使用的 recursion_limit；通用执行包只持有实际计划、参数与来源依据。
+函数签名/正文依赖、调用环、Entry/Return 一致性由 Analysis 检查，递归仍被拒绝。
+`PlanNodeSpecialization` 区分内核与结构操作，Call 按 Analysis 提供的参数 ID/端口绑定调用，
+不依赖端口标题或排序猜测形参。Entry/Return 只能在已绑定的私有调用帧内执行，公开计划准入拒绝独立结构入口。
+
+`function_library` 将同一 Analysis 的函数事实、冻结 Registry 和捕获的资源事实附到执行包，校验 Registry 及依赖依据；
+没有函数的计划不携带函数库。正文不是运行值，资源读取仍只使用本次授权的 PreparedRunResources。
+`state/scheduler/functions` 绑定实际值及列结构，`functions/frame` 调用 Analysis 特化并复用原计划构建和
+`scheduler/dag` 求值。每次调用私有地保留参数、中间值及动态 Schema 阶段；不创建执行会话或向全局 ResultStore
+发布函数内部地址。嵌套调用共用取消、deadline 和同一内核执行控制，返回值再按调用节点的结果边界求值与发布。
+调用中的动态列同样先求值再解析下游，实际缺列保留函数路径及内部引用节点，返回 PlanValidation 阶段失败。
+函数定义和资源变化继续通过原捕获重验及结果依赖使旧调用失效。
 
 加、减、乘、除按已解析 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算。
 
 ## ResultStore and cache validity
 
+显式需求输出、View 观察值及已保留的结果边界在运行成功前求值。关系和数列通过 RelationFactory 的
+流式快照写入引擎临时存储；同一节点、同一行域的多列共同保存，实际结构随不可变值保留。
+批量内部关系表达式继续组合优化。ResultStore 保留内部依赖身份，但未求值的表达式不出现在当前结果查询、
+缓存完成摘要或公开运行回执中，也不参与“运行本节点”的输入复用。已保留的边界在后续批量运行中继续求值，
+避免以内部表达式覆盖上次成功值；快照失败或取消走现有失败与旧值保留流程。
+
+`Node` demand 的 `CurrentInputs` 只执行目标节点，必要上游结果缺失或过期时返回带源节点/端口的 `InputResultUnavailable`，不启动隐式补算。
+`Dependencies` 执行目标并补算必要依赖，复用当前有效输入；`Default` 全图按依赖重新执行。
+View 没有输出，节点 demand 只观察它连接的值；读取已有结果也会在最终发布时核对观察者输入依据与结果身份。
 显式 `Outputs` demand 的 `reuse_inputs` 控制是否复用当前有效输入。Report 补选设为 true；普通 Execute 和原有输出运行保持 false。请求的输出生产者始终执行，受它们影响的下游也不能复用；其他依赖仅在同一生产者全部输出有效时被跳过。调度以共享结果填充输入槽，RunStarted 只失效实际重算的输出。
 ResultStore 在准入时校验复用结果的 ID 与当前缓存一致，并记录实际消费的源结果。发布时再次检查这些输入仍有效且 ID 未变；另一次运行替换输入、图编辑或资源失效后，旧补算不能发布。复用没有单独的结果存储，也不改变常规运行的随机节点行为。
 
@@ -64,6 +106,18 @@ ResultStore 在准入时校验复用结果的 ID 与当前缓存一致，并记�
 `publication` 管理运行准入和结果批次发布，`retention` 管理租约、窗口交接与回收，
 `projection` 只读取当前结果及有效性摘要。这些模块共用同一状态，不建立独立缓存或同步流程。
 发布先校验完整批次，再在同一写锁内安装结果和实际消费记录。
+
+重算准入使目标缓存及其依赖失效，但继续持有上一次成功值；当前运行的待发布输入依据与成功值的生成依据分开。
+失败、取消或被替代的运行不发布新值，旧值可通过已持有的完整结果身份读取，不能作为当前有效输入。
+新结果成功发布后才替换缓存持有；旧窗口租约继续有效，最后一个持有者释放时回收。
+有效性摘要的 `Stale` 和 `Valid` 均带各自保留的 `result_id`，`Missing` 不带身份。
+显式查看旧值可以据此取得普通结果租约；当前输出查询及执行复用仍只接纳 `Valid`。
+
+Schema 反馈读取同一 ResultStore 的已求值结果，没有额外可写列目录。候选生成依据和当前图输入通过与缓存
+相同的依赖检查比较；同输入重跑期间可保留上次成功 Schema，但数据仍是过时结果，不能作为当前输入复用。
+运行准入在锁内重验解析采用的结果 ID，拒绝已替换的观测。纯 Schema 反馈只撤销输入变化的在途输出，
+文档与资源定义变化仍撤销旧运行的发布权限。结果有效性和观测匹配共用一次依赖传播实现。
+编辑与资源变化撤销待发布运行的权限，不把未完成的重算恢复为有效旧值。
 
 图输入更新与对应结果有效性摘要在同一写锁内完成。摘要携带执行会话内单调递增的 `revision`，运行准入、结果发布和依赖重验都推进这一顺序；它独立于图编辑 revision，用于拒绝迟到的旧结果投影。读取摘要不复制结果 payload，既有图缓存有效性与租约规则继续由 ResultStore 执行。
 `ExecutionRuntimeState::result_revision` 在同一 registry 读锁内读取该顺序，不构造逐输出摘要。Application 在运行事件产生时捕获它；相同会话中达到该版本的摘要已包含事件前的结果变更。恢复交付保留事件原有版本，不用重放时的当前值替换。
@@ -79,7 +133,7 @@ ResultStore 在准入时校验复用结果的 ID 与当前缓存一致，并记�
 每个现存输出最多持有一份结果缓存。缓存持有与有效性分开：语义编辑保留旧值，但只让依据仍匹配的输出参与当前查询。
 Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；Application 映射资源版本，Execution 记录实际消费的上游结果身份。
 依赖检查沿数据关系传播，不因整图 hash 改变而统一释放结果。撤销重新 Resolve 后仅恢复仍存在且依据匹配的缓存；
-已删除输出、重算准入或显式清理释放的结果不会被撤销重新创建。
+已删除输出或显式清理释放的结果不会被撤销重新创建；重算保留的上次成功值仍遵循上述过时与持有规则。
 
 ## 相关模块
 

@@ -1,4 +1,4 @@
-//! Per-run cancellation, deadline and kernel admission budget.
+//! Per-run cancellation and deadline.
 use crate::error::{ExecutePreparedError, RunPhase};
 use std::sync::{
     Arc,
@@ -10,7 +10,6 @@ use std::time::Instant;
 pub struct RunExecutionControl {
     pub(super) cancellation: Arc<AtomicBool>,
     pub(super) deadline: Instant,
-    pub(super) max_input_bytes: usize,
 }
 
 impl RunExecutionControl {
@@ -19,7 +18,6 @@ impl RunExecutionControl {
         Self {
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline,
-            max_input_bytes: yss_node_kernel::DEFAULT_MAX_INPUT_BYTES,
         }
     }
 
@@ -27,14 +25,7 @@ impl RunExecutionControl {
         Self {
             cancellation,
             deadline,
-            max_input_bytes: yss_node_kernel::DEFAULT_MAX_INPUT_BYTES,
         }
-    }
-
-    /// Per-node input, workspace and result admission budget for this execution.
-    pub fn with_memory_budget(mut self, bytes: usize) -> Self {
-        self.max_input_bytes = bytes;
-        self
     }
 
     pub(super) fn check(&self, phase: RunPhase) -> Result<(), ExecutePreparedError> {

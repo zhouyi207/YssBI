@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use super::{CachedOutput, ResultEntry, ResultId, ResultStore, ResultStoreRegistry};
+use super::{PendingOutput, ResultEntry, ResultId, ResultStore, ResultStoreRegistry};
 use crate::finalization::{ReadyResult, ResultObservationIntent};
 use crate::plan::PlanOutputRef;
 use crate::result::{ResultRunBasis, StoredResultSnapshot};
@@ -15,7 +15,7 @@ impl ResultStore {
         basis: Option<&ResultRunBasis>,
         reused_inputs: &BTreeMap<PlanOutputRef, ResultId>,
     ) -> bool {
-        self.update(|registry, retired| {
+        self.update(|registry, _retired| {
             if reused_inputs.iter().any(|(output, id)| {
                 outputs.contains(output)
                     || !registry
@@ -53,29 +53,19 @@ impl ResultStore {
                 return false;
             }
             for output in outputs {
-                let previous = registry
-                    .outputs
-                    .insert(
-                        output.clone(),
-                        CachedOutput {
-                            run: Some(run),
-                            inputs: basis
-                                .and_then(|basis| basis.inputs.outputs.get(output).cloned()),
-                            source_results: basis
-                                .and_then(|basis| basis.inputs.outputs.get(output))
-                                .into_iter()
-                                .flat_map(|inputs| inputs.sources())
-                                .filter_map(|source| {
-                                    reused_inputs.get(source).map(|id| (source.clone(), *id))
-                                })
-                                .collect(),
-                            ..Default::default()
-                        },
-                    )
-                    .and_then(|cached| cached.result);
-                if let Some(previous) = previous {
-                    registry.detach(previous, retired);
-                }
+                let cached = registry.outputs.entry(output.clone()).or_default();
+                cached.run = Some(run);
+                cached.pending = Some(PendingOutput {
+                    inputs: basis.and_then(|basis| basis.inputs.outputs.get(output).cloned()),
+                    source_results: basis
+                        .and_then(|basis| basis.inputs.outputs.get(output))
+                        .into_iter()
+                        .flat_map(|inputs| inputs.sources())
+                        .filter_map(|source| {
+                            reused_inputs.get(source).map(|id| (source.clone(), *id))
+                        })
+                        .collect(),
+                });
             }
             for graph in outputs
                 .iter()
@@ -98,10 +88,16 @@ impl ResultStore {
             .iter()
             .map(|result| (result.output().clone(), result.result_id()))
             .collect::<BTreeMap<_, _>>();
+        if published.len() != results.len() {
+            return false;
+        }
         self.update(|registry, retired| {
             if results
                 .iter()
                 .any(|result| !registry.accepts_result(result, &published))
+                || observations
+                    .iter()
+                    .any(|observation| !registry.accepts_observation(observation, &published))
             {
                 return false;
             }
@@ -114,6 +110,11 @@ impl ResultStore {
             for graph in results
                 .iter()
                 .map(|result| result.output().graph().as_str())
+                .chain(
+                    observations
+                        .iter()
+                        .map(|observation| observation.requester.graph().as_str()),
+                )
                 .collect::<BTreeSet<_>>()
             {
                 registry.refresh_graph(graph);
@@ -124,6 +125,47 @@ impl ResultStore {
 }
 
 impl ResultStoreRegistry {
+    fn accepts_observation(
+        &self,
+        observation: &ResultObservationIntent,
+        published: &BTreeMap<PlanOutputRef, ResultId>,
+    ) -> bool {
+        let output = published
+            .iter()
+            .find_map(|(output, id)| (*id == observation.result_id).then_some(output))
+            .or_else(|| {
+                self.values
+                    .get(&observation.result_id)
+                    .map(|entry| entry.snapshot.output())
+            });
+        let Some(output) = output else {
+            return false;
+        };
+        if output.graph() != observation.requester.graph() {
+            return false;
+        }
+        let current = if let Some(id) = published.get(output) {
+            *id == observation.result_id
+        } else {
+            self.outputs
+                .get(output)
+                .is_some_and(|cached| cached.valid && cached.result == Some(observation.result_id))
+        };
+        current
+            && match &observation.input_basis {
+                Some(basis) => {
+                    basis.available
+                        && basis.sources().any(|source| source == output)
+                        && observation.requester.node().and_then(|node| {
+                            self.graph_inputs
+                                .get(output.graph().as_str())
+                                .and_then(|graph| graph.inputs.observers.get(node))
+                        }) == Some(basis)
+                }
+                None => published.get(output) == Some(&observation.result_id),
+            }
+    }
+
     fn accepts_result(
         &self,
         result: &ReadyResult,
@@ -132,13 +174,16 @@ impl ResultStoreRegistry {
         let Some(cached) = self.outputs.get(result.output()) else {
             return false;
         };
-        if cached.run != Some(result.pin().provenance().run_id()) || cached.result.is_some() {
+        if cached.run != Some(result.pin().provenance().run_id()) {
             return false;
         }
-        if cached.inputs.as_ref().is_some_and(|inputs| {
+        let Some(pending) = &cached.pending else {
+            return false;
+        };
+        if pending.inputs.as_ref().is_some_and(|inputs| {
             inputs.sources().any(|source| {
                 !published.contains_key(source)
-                    && !cached.source_results.get(source).is_some_and(|expected| {
+                    && !pending.source_results.get(source).is_some_and(|expected| {
                         self.outputs.get(source).is_some_and(|current| {
                             current.valid && current.result == Some(*expected)
                         })
@@ -164,7 +209,11 @@ impl ResultStoreRegistry {
             .outputs
             .get_mut(result.output())
             .expect("admitted output");
-        let source_results = cached
+        let pending = cached
+            .pending
+            .take()
+            .expect("validated pending publication");
+        let source_results = pending
             .inputs
             .as_ref()
             .into_iter()
@@ -172,12 +221,13 @@ impl ResultStoreRegistry {
             .filter_map(|source| {
                 published
                     .get(source)
-                    .or_else(|| cached.source_results.get(source))
+                    .or_else(|| pending.source_results.get(source))
                     .copied()
                     .map(|id| (source.clone(), id))
             })
             .collect();
         let previous = cached.result.replace(id);
+        cached.inputs = pending.inputs;
         cached.source_results = source_results;
         if let Some(previous) = previous.filter(|previous| *previous != id) {
             self.detach(previous, retired);
@@ -220,7 +270,13 @@ impl ResultStoreRegistry {
             return;
         };
         if entry.snapshot.output().graph().as_str() == graph
-            && published.get(entry.snapshot.output()) == Some(&observation.result_id)
+            && (published.get(entry.snapshot.output()) == Some(&observation.result_id)
+                || self
+                    .outputs
+                    .get(entry.snapshot.output())
+                    .is_some_and(|cached| {
+                        cached.valid && cached.result == Some(observation.result_id)
+                    }))
         {
             entry.observations.insert(node.clone(), inputs);
         }

@@ -20,6 +20,8 @@ pub enum RunFailureCode {
     KernelNotFound,
     InvalidNumericInput,
     ShapeMismatch,
+    GroupSchemaMismatch,
+    GroupKeyCollision,
     InvalidParameter,
     UnalignedSeries,
     BudgetExceeded,
@@ -30,6 +32,7 @@ pub enum RunFailureCode {
     NonFiniteResult,
     DeadlineExceeded,
     ResourceUnavailable,
+    InputResultUnavailable,
     FinalizationFailed,
 }
 
@@ -38,6 +41,15 @@ pub struct RunFailure {
     pub code: RunFailureCode,
     pub phase: RunPhase,
     pub source: Option<crate::plan::PlanSourceIdentity>,
+    pub groups: Box<[GroupFailureContext]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupFailureContext {
+    pub caller: crate::plan::PlanSourceIdentity,
+    pub function: crate::plan::PlanResourceId,
+    /// One-based group index; None identifies the empty-input schema probe.
+    pub ordinal: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -69,12 +81,26 @@ pub enum ExecutePreparedError {
 
 #[derive(Debug, Error)]
 pub enum OperationExecutionError {
+    #[error("group function execution failed")]
+    AtGroup {
+        context: GroupFailureContext,
+        #[source]
+        error: Box<OperationExecutionError>,
+    },
     #[error(transparent)]
     Kernel(#[from] KernelError),
     #[error("prepared graph execution contains inconsistent values")]
     Failed,
     #[error("requested graph output is unavailable in the prepared plan")]
     DemandOutputUnavailable,
+    #[error("upstream result is missing or stale")]
+    InputResultUnavailable {
+        input: crate::plan::PlanSourceIdentity,
+    },
+    #[error("bound function is not ready for execution")]
+    FunctionNotReady {
+        location: crate::plan::PlanSourceIdentity,
+    },
     #[error("node execution failed")]
     AtNode {
         source: crate::plan::PlanSourceIdentity,
@@ -87,7 +113,9 @@ impl OperationExecutionError {
     pub(crate) fn at_node(self, source: &crate::plan::PlanSourceIdentity) -> Self {
         match self {
             Self::Kernel(KernelError::Cancelled | KernelError::DeadlineExceeded)
-            | Self::AtNode { .. } => self,
+            | Self::AtNode { .. }
+            | Self::AtGroup { .. }
+            | Self::FunctionNotReady { .. } => self,
             error => Self::AtNode {
                 source: source.clone(),
                 error: Box::new(error),
@@ -95,8 +123,50 @@ impl OperationExecutionError {
         }
     }
 
+    pub(crate) fn at_group(
+        self,
+        caller: &crate::plan::PlanSourceIdentity,
+        function: &crate::plan::PlanResourceId,
+        ordinal: Option<u64>,
+    ) -> Self {
+        match self {
+            Self::Kernel(KernelError::Cancelled | KernelError::DeadlineExceeded) => self,
+            error => Self::AtGroup {
+                context: GroupFailureContext {
+                    caller: caller.clone(),
+                    function: function.clone(),
+                    ordinal,
+                },
+                error: Box::new(error.at_node(caller)),
+            },
+        }
+    }
+
     fn failure(&self) -> RunFailure {
         let code = match self {
+            Self::AtGroup { context, error } => {
+                let mut failure = error.failure();
+                failure.groups = std::iter::once(context.clone())
+                    .chain(failure.groups)
+                    .collect();
+                return failure;
+            }
+            Self::FunctionNotReady { location } => {
+                return RunFailure {
+                    code: RunFailureCode::InvalidParameter,
+                    phase: RunPhase::PlanValidation,
+                    source: Some(location.clone()),
+                    groups: Box::new([]),
+                };
+            }
+            Self::InputResultUnavailable { input } => {
+                return RunFailure {
+                    code: RunFailureCode::InputResultUnavailable,
+                    phase: RunPhase::Admission,
+                    source: Some(input.clone()),
+                    groups: Box::new([]),
+                };
+            }
             Self::AtNode { source, error } => {
                 return RunFailure {
                     source: Some(source.clone()),
@@ -104,6 +174,8 @@ impl OperationExecutionError {
                 };
             }
             Self::Kernel(KernelError::ShapeMismatch) => RunFailureCode::ShapeMismatch,
+            Self::Kernel(KernelError::GroupSchemaMismatch) => RunFailureCode::GroupSchemaMismatch,
+            Self::Kernel(KernelError::GroupKeyCollision) => RunFailureCode::GroupKeyCollision,
             Self::Kernel(KernelError::InvalidParameter) => RunFailureCode::InvalidParameter,
             Self::Kernel(KernelError::UnalignedSeries) => RunFailureCode::UnalignedSeries,
             Self::Kernel(KernelError::BudgetExceeded) => RunFailureCode::BudgetExceeded,
@@ -123,6 +195,7 @@ impl OperationExecutionError {
             code,
             phase: RunPhase::Execution,
             source: None,
+            groups: Box::new([]),
         }
     }
 }
@@ -145,6 +218,7 @@ impl ExecutePreparedError {
             code,
             phase,
             source: None,
+            groups: Box::new([]),
         }
     }
 }

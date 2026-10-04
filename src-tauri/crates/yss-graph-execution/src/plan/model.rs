@@ -1,5 +1,6 @@
 use super::identity::{
-    PlanInputGroupId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
+    PlanInputGroupId, PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress,
+    PlanSourceIdentity,
 };
 use super::observation::{PlanObservationIntent, ValueRef};
 use super::parameter::PlanParameterHandle;
@@ -64,20 +65,35 @@ pub struct PlanOperation {
     inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
     outputs: Box<[PlanOutputBinding]>,
-    specialization: PlanKernelSpecialization,
+    specialization: PlanNodeSpecialization,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanKernelSpecialization {
-    implementation: KernelId,
+pub struct PlanNodeSpecialization {
+    implementation: PlanNodeImplementation,
     input_types: Box<[PlanTypeBinding]>,
     output_types: Box<[PlanTypeBinding]>,
     coercions: Box<[PlanInputCoercion]>,
 }
 
-impl PlanKernelSpecialization {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanNodeImplementation {
+    Kernel(KernelId),
+    GroupMap {
+        target: super::PlanResourceId,
+        transform: bool,
+    },
+    FunctionCall {
+        target: super::PlanResourceId,
+        arguments: Box<[(Box<str>, PlanPortAddress)]>,
+    },
+    FunctionEntry,
+    FunctionReturn,
+}
+
+impl PlanNodeSpecialization {
     pub fn new(
-        implementation: KernelId,
+        implementation: PlanNodeImplementation,
         input_types: Box<[PlanTypeBinding]>,
         output_types: Box<[PlanTypeBinding]>,
         coercions: Box<[PlanInputCoercion]>,
@@ -90,7 +106,7 @@ impl PlanKernelSpecialization {
         }
     }
 
-    pub fn implementation(&self) -> &KernelId {
+    pub fn implementation(&self) -> &PlanNodeImplementation {
         &self.implementation
     }
 
@@ -210,7 +226,7 @@ impl PlanOperation {
         inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
         outputs: Box<[PlanOutputBinding]>,
-        specialization: PlanKernelSpecialization,
+        specialization: PlanNodeSpecialization,
     ) -> Self {
         Self {
             source,
@@ -231,8 +247,11 @@ impl PlanOperation {
         &self.node_type
     }
 
-    pub fn kernel_id(&self) -> &KernelId {
-        self.specialization.implementation()
+    pub fn kernel_id(&self) -> Option<&KernelId> {
+        match self.specialization.implementation() {
+            PlanNodeImplementation::Kernel(id) => Some(id),
+            _ => None,
+        }
     }
 
     pub fn parameters(&self) -> &BTreeMap<KernelParameterKey, PlanParameterHandle> {
@@ -251,14 +270,24 @@ impl PlanOperation {
         &self.outputs
     }
 
-    pub fn specialization(&self) -> &PlanKernelSpecialization {
+    pub fn specialization(&self) -> &PlanNodeSpecialization {
         &self.specialization
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NodeExecutionMode {
+    CurrentInputs,
+    Dependencies,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanExecutionDemand {
     Default,
+    Node {
+        node: PlanNodeId,
+        mode: NodeExecutionMode,
+    },
     Outputs {
         outputs: Box<[PlanOutputRef]>,
         include_default_results: bool,

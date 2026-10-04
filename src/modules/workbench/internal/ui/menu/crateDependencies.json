@@ -920,7 +920,19 @@
     "manifest": "src-tauri/crates/yss-graph-execution/Cargo.toml",
     "dependencies": [
       {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-arrow",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -933,6 +945,12 @@
       },
       {
         "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-resource-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -951,6 +969,12 @@
       },
       {
         "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null

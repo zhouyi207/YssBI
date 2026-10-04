@@ -39,6 +39,10 @@ pub enum PackagePreparationError {
     },
     #[error("root execution plan is invalid")]
     RootPlanInvalid { source: PlanValidationError },
+    #[error("function entry and return require a bound call frame")]
+    FunctionFrameRequired,
+    #[error("prepared function program is unavailable")]
+    FunctionProgramUnavailable { function: PlanResourceId },
     #[error("execution package provenance does not match its {part:?} part")]
     ProvenanceMismatch { part: PackagePart },
     #[error("execution package basis does not match its {part:?} part")]
@@ -97,6 +101,28 @@ impl crate::state::ExecutionRuntimeState {
 }
 
 fn validate_package(package: &ExecutionPlanPackage) -> Result<(), PackagePreparationError> {
+    for operation in package.plan().operations() {
+        use crate::plan::PlanNodeImplementation;
+        match operation.specialization().implementation() {
+            PlanNodeImplementation::FunctionEntry | PlanNodeImplementation::FunctionReturn => {
+                return Err(PackagePreparationError::FunctionFrameRequired);
+            }
+            PlanNodeImplementation::FunctionCall { target, .. }
+            | PlanNodeImplementation::GroupMap { target, .. }
+                if package.functions.as_ref().is_none_or(|library| {
+                    !library
+                        .definitions
+                        .keys()
+                        .any(|path| path.as_str() == target.as_str())
+                }) =>
+            {
+                return Err(PackagePreparationError::FunctionProgramUnavailable {
+                    function: target.clone(),
+                });
+            }
+            _ => {}
+        }
+    }
     let provenance = package.provenance();
     let source_graph = provenance.source().graph();
     if source_graph.as_str().is_empty() {

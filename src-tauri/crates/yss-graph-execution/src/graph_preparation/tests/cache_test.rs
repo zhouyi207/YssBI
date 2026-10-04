@@ -93,7 +93,12 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         };
     let first = resolve(&document, &resources, true);
     let first_package = execution
-        .prepare_graph_package(&graph, &first, plan_basis.clone())
+        .prepare_graph_package(
+            &graph,
+            &first,
+            plan_basis.clone(),
+            &crate::graph_preparation::GraphExecutionScope::all(first.semantic_snapshot()),
+        )
         .unwrap();
     let unsupported = resolve(&document, &resources, false);
     assert_eq!(
@@ -111,7 +116,14 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     );
     assert!(
         execution
-            .prepare_graph_package(&graph, &unsupported, plan_basis.clone())
+            .prepare_graph_package(
+                &graph,
+                &unsupported,
+                plan_basis.clone(),
+                &crate::graph_preparation::GraphExecutionScope::all(
+                    unsupported.semantic_snapshot()
+                )
+            )
             .is_err()
     );
 
@@ -119,7 +131,12 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     document.nodes.get_mut(&node_id).unwrap().user_label = Some("Renamed".into());
     let layout_only = resolve(&document, &resources, true);
     let layout_package = execution
-        .prepare_graph_package(&graph, &layout_only, plan_basis.clone())
+        .prepare_graph_package(
+            &graph,
+            &layout_only,
+            plan_basis.clone(),
+            &crate::graph_preparation::GraphExecutionScope::all(layout_only.semantic_snapshot()),
+        )
         .unwrap();
     assert!(Arc::ptr_eq(first_package.plan(), layout_package.plan()));
     assert_eq!(
@@ -136,13 +153,67 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     );
     let semantic_change = resolve(&document, &resources, true);
     let changed_package = execution
-        .prepare_graph_package(&graph, &semantic_change, plan_basis.clone())
+        .prepare_graph_package(
+            &graph,
+            &semantic_change,
+            plan_basis.clone(),
+            &crate::graph_preparation::GraphExecutionScope::all(
+                semantic_change.semantic_snapshot(),
+            ),
+        )
         .unwrap();
     assert!(!Arc::ptr_eq(changed_package.plan(), first_package.plan()));
     assert_ne!(
         semantic_change.semantic_input_hash(),
         first.semantic_input_hash()
     );
+
+    // A selected output can prepare while an unrelated node is still being authored.
+    let incomplete = NodeId::new();
+    document.nodes.insert(
+        incomplete,
+        DocumentNode {
+            id: incomplete,
+            node_type: "yssbi.numeric.multiply".parse().unwrap(),
+            position: NodePosition { x: 0.0, y: 100.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    let partial = resolve(&document, &resources, true);
+    assert!(partial.semantic_snapshot().ready().is_none());
+    let target = PlanOutputRef::new(
+        PlanGraphId::new(graph.as_str().into()).unwrap(),
+        plan_port(&PortAddress::declared(node_id, "value".parse().unwrap())),
+    );
+    let demand = PlanExecutionDemand::Outputs {
+        outputs: Box::new([target]),
+        include_default_results: false,
+        reuse_inputs: false,
+    };
+    let scope = GraphExecutionScope::select(&graph, partial.semantic_snapshot(), &demand).unwrap();
+    let selected = execution
+        .prepare_graph_package(&graph, &partial, plan_basis.clone(), &scope)
+        .unwrap();
+    assert_eq!(selected.plan().operations().len(), 1);
+    assert!(
+        execution
+            .prepare_graph_package(
+                &graph,
+                &partial,
+                plan_basis.clone(),
+                &GraphExecutionScope::all(partial.semantic_snapshot())
+            )
+            .is_err()
+    );
+    assert!(Arc::ptr_eq(
+        selected.plan(),
+        execution
+            .prepare_graph_package(&graph, &partial, plan_basis.clone(), &scope)
+            .unwrap()
+            .plan()
+    ));
+    document.nodes.remove(&incomplete);
 
     // A signature label change keeps ABI/hash identity but must refresh editor facts.
     let function = GraphResourcePath::new("functions/Labels.yssbi-function").unwrap();
@@ -181,7 +252,12 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         "en-US",
     );
     let original_package = execution
-        .prepare_graph_package(&function, &original, plan_basis.clone())
+        .prepare_graph_package(
+            &function,
+            &original,
+            plan_basis.clone(),
+            &crate::graph_preparation::GraphExecutionScope::all(original.semantic_snapshot()),
+        )
         .unwrap();
     let renamed = runtime.resolve_graph_document(
         &function,
@@ -192,7 +268,12 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         "en-US",
     );
     let renamed_package = execution
-        .prepare_graph_package(&function, &renamed, plan_basis.clone())
+        .prepare_graph_package(
+            &function,
+            &renamed,
+            plan_basis.clone(),
+            &crate::graph_preparation::GraphExecutionScope::all(renamed.semantic_snapshot()),
+        )
         .unwrap();
     assert!(Arc::ptr_eq(original_package.plan(), renamed_package.plan()));
     assert_eq!(

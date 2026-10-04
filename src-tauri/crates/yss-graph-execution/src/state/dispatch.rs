@@ -1,10 +1,9 @@
 //! Coordinate admission, resource preparation, execution and the finalization handoff.
-use super::run_lifecycle::RunLifecycleGuard;
 use super::scheduler::{
     PreparedPlanExecution, PreparedPlanExecutor, SchedulerOutput, execution_producers,
     select_execution,
 };
-use super::{ExecutionRuntimeState, RunExecutionControl};
+use super::{ActiveExecutionRun, ExecutionRuntimeState, RunExecutionControl};
 use crate::error::{ExecutePreparedError, OperationExecutionError, RunPhase};
 use crate::finalization::{
     ExecutionFinalizationHandoff, ReadyPinResult, ReadyResult, ResultObservationIntent,
@@ -15,11 +14,7 @@ use crate::resource_preparation::{
     PreparedRunResources, ResourceProviderFactory, RunResourceBindings, RunResourceRequest,
 };
 use crate::result::{ResultId, ResultProvenance, ResultRunBasis};
-use std::{
-    collections::BTreeMap,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::BTreeMap;
 use yss_node_kernel::KernelError;
 
 pub struct ExecutionResultRequest<'a> {
@@ -138,6 +133,26 @@ impl ExecutionRuntimeState {
         control: &RunExecutionControl,
         dispatch: PreparedExecutionDispatch<'_>,
     ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
+        let mut run = self.start_run(control)?;
+        let candidate = self
+            .execute_stage_inner(plan, bindings, resources, &mut run, dispatch)
+            .map_err(|error| run.lifecycle.terminate(error))?;
+        run.begin_finalization()
+            .map_err(ExecutePreparedError::RunRegistry)?;
+        Ok(ExecutedPreparedCandidate {
+            run_id: run.id,
+            candidate,
+        })
+    }
+
+    fn execute_stage_inner(
+        &self,
+        plan: &PreparedExecutionPlan,
+        bindings: RunResourceBindings,
+        resources: &ResourceProviderFactory,
+        run: &mut ActiveExecutionRun<'_>,
+        dispatch: PreparedExecutionDispatch<'_>,
+    ) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
         let PreparedExecutionDispatch {
             demand,
             result_basis,
@@ -157,15 +172,13 @@ impl ExecutionRuntimeState {
             });
         }
 
-        let created_at_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(ExecutePreparedError::ResultTimestamp)?
-            .as_millis()
-            .try_into()
-            .map_err(|_| ExecutePreparedError::ResultIdentityExhausted)?;
-
-        let _work = self.admit().map_err(ExecutePreparedError::Admission)?;
-        control.check(RunPhase::Admission)?;
+        let control = run.control;
+        run.check_completed()?;
+        if self.runs.state(run.id) != Some(crate::run_registry::RunState::Running) {
+            return Err(ExecutePreparedError::RunRegistry(
+                crate::run_registry::RunRegistryError::InvalidTransition,
+            ));
+        }
 
         let producers =
             execution_producers(plan.package()).map_err(ExecutePreparedError::Kernel)?;
@@ -175,13 +188,24 @@ impl ExecutionRuntimeState {
                 crate::plan::PlanExecutionDemand::Outputs {
                     reuse_inputs: true,
                     ..
-                }
+                } | crate::plan::PlanExecutionDemand::Node { .. }
             );
-        let selection = select_execution(plan.package(), demand, &producers, |output| {
-            reuse_inputs
-                .then(|| self.results.query_pin_result(output))
-                .flatten()
-        })
+        let retained = self
+            .results
+            .retained_boundaries(plan.package().provenance().source().graph().as_str());
+        let completed = run.completed.keys().cloned().collect();
+        let selection = select_execution(
+            plan.package(),
+            demand,
+            &producers,
+            &retained,
+            &completed,
+            |output| {
+                (reuse_inputs || run.completed.contains_key(output))
+                    .then(|| self.results.query_pin_result(output))
+                    .flatten()
+            },
+        )
         .map_err(ExecutePreparedError::Kernel)?;
         let reused_inputs = selection
             .cached_values
@@ -202,12 +226,8 @@ impl ExecutionRuntimeState {
                     .map(|output| output.output().clone())
             })
             .collect::<Box<[_]>>();
-        let run_id = self
-            .admission
-            .register_run(&self.runs, Arc::clone(&control.cancellation))?;
-        let mut lifecycle = RunLifecycleGuard::start(&self.runs, run_id)
-            .map_err(ExecutePreparedError::RunRegistry)?;
-        let candidate = (|| {
+        let run_id = run.id;
+        {
             if !self
                 .results
                 .begin_run(run_id, &outputs, result_basis, &reused_inputs)
@@ -250,15 +270,11 @@ impl ExecutionRuntimeState {
                 output,
                 prepared_resources,
                 reused_inputs,
+                result_basis,
                 run_id,
-                created_at_ms,
+                run.created_at_ms,
             )
-        })();
-        let candidate = candidate.map_err(|error| lifecycle.terminate(error))?;
-        lifecycle
-            .begin_finalization()
-            .map_err(ExecutePreparedError::RunRegistry)?;
-        Ok(ExecutedPreparedCandidate { run_id, candidate })
+        }
     }
 
     fn prepare_result_candidate(
@@ -266,6 +282,7 @@ impl ExecutionRuntimeState {
         output: SchedulerOutput,
         resources: PreparedRunResources,
         mut result_ids_by_output: BTreeMap<crate::plan::PlanOutputRef, ResultId>,
+        result_basis: Option<&crate::result::ResultRunBasis>,
         run_id: crate::run_registry::RunId,
         created_at_ms: u64,
     ) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
@@ -296,6 +313,14 @@ impl ExecutionRuntimeState {
                     ))?;
                 Ok(ResultObservationIntent {
                     result_id,
+                    input_basis: result_basis
+                        .and_then(|basis| {
+                            observation
+                                .requester
+                                .node()
+                                .and_then(|node| basis.inputs.observers.get(node))
+                        })
+                        .cloned(),
                     requester: observation.requester,
                 })
             })
@@ -331,5 +356,32 @@ impl ExecutionRuntimeState {
         self.finalize_run_success(executed.run_id)
             .map_err(ExecutePreparedError::RunRegistry)?;
         Ok(executed.candidate())
+    }
+}
+
+impl ActiveExecutionRun<'_> {
+    pub fn execute_stage(
+        &mut self,
+        plan: &PreparedExecutionPlan,
+        bindings: RunResourceBindings,
+        resources: &ResourceProviderFactory,
+        results: ExecutionResultRequest<'_>,
+        mut on_event: impl FnMut(PreparedExecutionEvent),
+    ) -> Result<ExecutionFinalizationHandoff, ExecutePreparedError> {
+        self.runtime
+            .execute_stage_inner(
+                plan,
+                bindings,
+                resources,
+                self,
+                PreparedExecutionDispatch {
+                    demand: results.demand,
+                    result_basis: results.basis,
+                    executor: &self.runtime.executor,
+                    on_event: Some(&mut on_event),
+                },
+            )
+            .map_err(|error| self.lifecycle.terminate(error))
+            .map(SuccessfulExecutionCandidate::into_finalization_handoff)
     }
 }
