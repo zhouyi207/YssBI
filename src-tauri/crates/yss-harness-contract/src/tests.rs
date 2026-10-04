@@ -66,6 +66,7 @@ fn identities_and_requests_reject_ambiguous_or_unbounded_input() {
     assert!(HarnessSessionId::try_new("session-1").is_ok());
 
     let request = AutomationCapabilityRequest::SearchNodeCatalog(SearchNodeCatalogRequest {
+        include_parameters: true,
         query: "regression".to_owned(),
         locale: "en-US".to_owned(),
         limit: MAX_CATALOG_RESULTS + 1,

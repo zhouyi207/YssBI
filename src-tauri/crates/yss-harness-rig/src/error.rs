@@ -30,16 +30,10 @@ pub(crate) fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
         PromptError::MemoryError(_) => "memory",
         PromptError::MaxTurnsError { .. } => "max_turns",
     };
-    tracing::warn!(
-        domain = "Application",
-        event = "harness_provider_failure",
-        category,
-        http_status = error
-            .provider_response_status()
-            .map(|status| status.as_u16()),
-        "Harness provider turn failed"
-    );
-    if error
+    let http_status = error
+        .provider_response_status()
+        .map(|status| status.as_u16());
+    let context_exceeded = error
         .provider_response_json()
         .ok()
         .flatten()
@@ -47,38 +41,67 @@ pub(crate) fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
             body.pointer("/error/code")
                 .and_then(serde_json::Value::as_str)
                 == Some("context_length_exceeded")
-        })
-    {
-        return AgentDriverFailure::new(ContextWindowExceeded);
-    }
-    let code = match error
-        .provider_response_status()
-        .map(|status| status.as_u16())
-    {
-        Some(401 | 403) => ProviderAuthenticationFailed,
-        Some(429) => ProviderRateLimited,
-        Some(408 | 504) => ProviderTransportFailed,
-        Some(400..=499) => ProviderRequestRejected,
-        Some(500..=599) => ProviderUnavailable,
-        Some(_) => InvalidProviderResponse,
-        None => match error {
-            PromptError::CompletionError(CompletionError::HttpError(_)) => ProviderTransportFailed,
-            PromptError::CompletionError(
-                CompletionError::UrlError(_) | CompletionError::RequestError(_),
-            ) => ProviderRequestRejected,
-            PromptError::CompletionError(
-                CompletionError::JsonError(_)
-                | CompletionError::ResponseError(_)
-                | CompletionError::ProviderResponse(_),
-            )
-            | PromptError::UnknownToolCall { .. } => InvalidProviderResponse,
-            PromptError::CompletionError(CompletionError::ProviderError(_)) => ProviderUnavailable,
-            PromptError::PromptCancelled { .. } => Cancelled,
-            PromptError::MaxTurnsError { .. } => ModelTurnLimitExceeded,
-            PromptError::MemoryError(_) => InternalFailure,
-        },
+        });
+    let code = if context_exceeded {
+        ContextWindowExceeded
+    } else {
+        match http_status {
+            Some(401 | 403) => ProviderAuthenticationFailed,
+            Some(402) => ProviderPaymentRequired,
+            Some(429) => ProviderRateLimited,
+            Some(408 | 504) => ProviderTransportFailed,
+            Some(400..=499) => ProviderRequestRejected,
+            Some(500..=599) => ProviderUnavailable,
+            Some(_) => InvalidProviderResponse,
+            None => match error {
+                PromptError::CompletionError(CompletionError::HttpError(_)) => {
+                    ProviderTransportFailed
+                }
+                PromptError::CompletionError(
+                    CompletionError::UrlError(_) | CompletionError::RequestError(_),
+                ) => ProviderRequestRejected,
+                PromptError::CompletionError(
+                    CompletionError::JsonError(_) | CompletionError::ProviderResponse(_),
+                )
+                | PromptError::UnknownToolCall { .. } => InvalidProviderResponse,
+                PromptError::CompletionError(CompletionError::ResponseError(message)) => {
+                    response_failure(&message)
+                }
+                PromptError::CompletionError(CompletionError::ProviderError(_)) => {
+                    ProviderUnavailable
+                }
+                PromptError::PromptCancelled { .. } => Cancelled,
+                PromptError::MaxTurnsError { .. } => InternalFailure,
+                PromptError::MemoryError(_) => InternalFailure,
+            },
+        }
     };
+    tracing::warn!(
+        domain = "Application", event = "harness_provider_failure",
+        category, http_status, failure_code = %code,
+        "Harness provider turn failed"
+    );
     AgentDriverFailure::new(code)
+}
+
+fn response_failure(message: &str) -> AgentDriverFailureCode {
+    use AgentDriverFailureCode::*;
+    // Rig 0.42 reports these assembly failures as strings. Classify only its
+    // known structural messages; never log the error's arbitrary response text.
+    if message == "provider stream ended without a terminal record; treating the turn as truncated"
+    {
+        ProviderStreamInterrupted
+    } else if message
+        .starts_with("the model produced no answer and stopped with finish_reason=Length;")
+    {
+        ProviderOutputTruncated
+    } else if message
+        .starts_with("the model produced no answer and stopped with finish_reason=ContentFilter;")
+    {
+        ProviderContentFiltered
+    } else {
+        InvalidProviderResponse
+    }
 }
 
 pub(crate) fn cancelled() -> AgentDriverFailure {

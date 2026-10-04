@@ -232,7 +232,7 @@ pub fn invoke_graph_capability(
                 can_redo: saved.graph.editing.can_redo,
             })
         }
-        AutomationCapabilityRequest::ExecuteGraph(_) => {
+        AutomationCapabilityRequest::ExecuteGraph(request) => {
             let mut run_id = None;
             let mut failure_code = None;
             let mut failure_location = None;
@@ -243,6 +243,24 @@ pub fn invoke_graph_capability(
                 document.clone(),
                 projection.basis.semantic_input_hash,
             )
+            .with_demand(match &request.demand {
+                yss_harness_contract::GraphExecutionDemand::Default => {
+                    crate::graph::run::RunDemand::Default
+                }
+                yss_harness_contract::GraphExecutionDemand::Node { node_id, mode } => {
+                    crate::graph::run::RunDemand::Node {
+                        node_id: parse_node_id(node_id)?,
+                        mode: match mode {
+                            yss_harness_contract::NodeExecutionMode::CurrentInputs => {
+                                yss_graph_execution::plan::NodeExecutionMode::CurrentInputs
+                            }
+                            yss_harness_contract::NodeExecutionMode::Dependencies => {
+                                yss_graph_execution::plan::NodeExecutionMode::Dependencies
+                            }
+                        },
+                    }
+                }
+            })
             .with_cancellation(control.cancellation_flag())
             .with_deadline(control.deadline());
             if let Some(agent) = context.agent() {
@@ -313,6 +331,12 @@ pub fn invoke_graph_capability(
                         crate::graph::run::ExecutionApplicationError::DraftChanged => {
                             "resource_version_changed"
                         }
+                        crate::graph::run::ExecutionApplicationError::PreparedExecution(error)
+                            if error.failure().code == yss_graph_execution::error::RunFailureCode::InputResultUnavailable => {
+                                let failure = error.failure();
+                                failure_location = Some(format!("{:?}: {:?}", failure.phase, failure.source));
+                                "input_result_unavailable"
+                            }
                         _ => "graph_execution_failed",
                     }
                     .into(),
@@ -592,6 +616,13 @@ fn transform_graph_edit(
                     .keys()
                     .find(|id| !before_nodes.contains(id))
                     .ok_or_else(|| graph_failure(CapabilityFailureCode::MutationRejected))?;
+                record_created_port_aliases(
+                    editor.document(),
+                    *id,
+                    &alias,
+                    &created_nodes,
+                    &mut created_ports,
+                )?;
                 created_nodes.insert(alias, id.to_string());
             }
         }
@@ -642,16 +673,7 @@ pub(super) fn editor_mutation(
             parameters,
         } => Ok(EditorGraphMutation::SetParameters {
             node_id: parse_node_id(&node_id)?,
-            parameters: parameters
-                .into_iter()
-                .map(|(key, value)| {
-                    Ok((
-                        yss_node_protocol::ParameterKey::new(key)
-                            .map_err(|_| invalid_edit_identity("parameterKey"))?,
-                        value,
-                    ))
-                })
-                .collect::<Result<_, CapabilityFailure>>()?,
+            parameters: parse_edit_parameters(parameters)?,
         }),
         GraphEditOperation::SetLiteral { address, literal } => {
             Ok(EditorGraphMutation::SetLiteral {
@@ -721,6 +743,8 @@ pub(super) fn editor_mutation(
             client_id: _,
             node_type_id,
             resource_path,
+            parameters,
+            port_counts,
             x,
             y,
             user_label,
@@ -740,6 +764,15 @@ pub(super) fn editor_mutation(
             Ok(EditorGraphMutation::CreateNode {
                 descriptor,
                 position: NodePosition { x, y },
+                parameters: parse_edit_parameters(parameters)?,
+                port_counts: port_counts
+                    .into_iter()
+                    .map(|(key, count)| {
+                        PortKey::new(key)
+                            .map(|key| (key, count))
+                            .map_err(|_| invalid_edit_identity("portCounts"))
+                    })
+                    .collect::<Result<_, _>>()?,
                 user_label,
                 connect_from: None,
             })
@@ -786,6 +819,21 @@ pub(super) fn editor_mutation(
             })
         }
     }
+}
+
+fn parse_edit_parameters(
+    parameters: BTreeMap<String, serde_json::Value>,
+) -> Result<yss_graph_document::ParameterValues, CapabilityFailure> {
+    parameters
+        .into_iter()
+        .map(|(key, value)| {
+            Ok((
+                yss_node_protocol::ParameterKey::new(key)
+                    .map_err(|_| invalid_edit_identity("parameterKey"))?,
+                value,
+            ))
+        })
+        .collect()
 }
 
 fn parse_node_id(value: &str) -> Result<NodeId, CapabilityFailure> {
@@ -995,15 +1043,40 @@ fn graph_changes(before: GraphInspection, after: GraphInspection) -> GraphEditCh
 }
 
 fn parameter(value: &EditorParameterModel) -> GraphParameterInspection {
-    let options = match &value.configuration {
-        Some(EditorParameterConfiguration::SelectOptions { options }) => {
-            options.iter().map(ToString::to_string).collect()
-        }
-        Some(EditorParameterConfiguration::ProjectColumns { options, .. }) => options
-            .iter()
-            .map(|column| column.name.to_string())
-            .collect(),
-        _ => Vec::new(),
+    let (options, context_hint) = match &value.configuration {
+        Some(EditorParameterConfiguration::SelectOptions { options }) => (
+            Some(options.iter().map(ToString::to_string).collect()),
+            None,
+        ),
+        Some(EditorParameterConfiguration::ProjectColumns {
+            schema_known,
+            context_hint,
+            options,
+            ..
+        }) => (
+            schema_known.then(|| {
+                options
+                    .iter()
+                    .map(|column| column.name.to_string())
+                    .collect()
+            }),
+            context_hint.as_ref().map(ToString::to_string),
+        ),
+        Some(EditorParameterConfiguration::FilterPredicate {
+            schema_known,
+            context_hint,
+            columns,
+            ..
+        }) => (
+            schema_known.then(|| {
+                columns
+                    .iter()
+                    .map(|column| column.name.to_string())
+                    .collect()
+            }),
+            context_hint.as_ref().map(ToString::to_string),
+        ),
+        _ => (None, None),
     };
     GraphParameterInspection {
         key: value.key.as_str().into(),
@@ -1011,6 +1084,7 @@ fn parameter(value: &EditorParameterModel) -> GraphParameterInspection {
         editor: format!("{:?}", value.editor),
         value: value.value.clone(),
         options,
+        context_hint,
     }
 }
 
@@ -1115,6 +1189,41 @@ fn edit_port(port: &PortAddress) -> GraphEditPortRef {
             instance_id: instance_id.to_string(),
         },
     }
+}
+
+fn record_created_port_aliases(
+    document: &GraphDocument,
+    node_id: NodeId,
+    alias: &str,
+    nodes: &BTreeMap<String, String>,
+    ports: &mut BTreeMap<String, GraphEditPortRef>,
+) -> Result<(), CapabilityFailure> {
+    let mut templates = BTreeMap::<_, Vec<_>>::new();
+    for (address, binding) in &document.port_bindings {
+        if address.node_id != node_id {
+            continue;
+        }
+        if let (
+            PortRef::Instance { template, .. },
+            yss_graph_document::DynamicPortBinding::UserCreated { order },
+        ) = (&address.port, binding)
+        {
+            templates
+                .entry(template)
+                .or_default()
+                .push((order, address));
+        }
+    }
+    for (template, mut members) in templates {
+        members.sort();
+        for (index, (_, address)) in members.into_iter().enumerate() {
+            let key = format!("{alias}.{template}[{index}]");
+            if nodes.contains_key(&key) || ports.insert(key, edit_port(address)).is_some() {
+                return Err(invalid_edit_identity("clientId"));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn resolve_aliases(

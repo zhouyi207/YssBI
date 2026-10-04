@@ -268,7 +268,14 @@ pub(crate) fn fixture_with_options(
         BTreeMap::new(),
     );
     let package = runtime
-        .prepare_graph_package(&graph, &analysis, basis)
+        .prepare_graph_package(
+            &graph,
+            &analysis,
+            basis,
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                analysis.semantic_snapshot(),
+            ),
+        )
         .unwrap();
     let plan = runtime
         .prepare_package(package, runtime.generation())

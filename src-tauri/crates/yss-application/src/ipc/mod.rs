@@ -27,6 +27,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         pending_ui_intents,
         settle_ui_intent,
         get_localized_node_catalog,
+        get_node_creation_form,
         get_compatible_node_catalog,
         get_connection_candidates,
         create_event_graph,

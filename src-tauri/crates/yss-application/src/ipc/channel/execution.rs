@@ -39,13 +39,15 @@ pub fn port_address_dto(value: &PlanPortAddress) -> Result<PortAddressDto, RunEv
     Ok(port)
 }
 
-fn run_failure_to_transport(
+pub(crate) fn run_failure_to_transport(
     failure: &yss_graph_execution::error::RunFailure,
 ) -> RunErrorOutcomeDto {
     use yss_graph_execution::error::{RunFailureCode, RunPhase};
     RunErrorOutcomeDto {
         code: match failure.code {
             RunFailureCode::ShapeMismatch => "shapeMismatch",
+            RunFailureCode::GroupSchemaMismatch => "groupSchemaMismatch",
+            RunFailureCode::GroupKeyCollision => "groupKeyCollision",
             RunFailureCode::InvalidParameter => "invalidParameter",
             RunFailureCode::UnalignedSeries => "unalignedSeries",
             RunFailureCode::BudgetExceeded => "budgetExceeded",
@@ -59,6 +61,7 @@ fn run_failure_to_transport(
             RunFailureCode::NonFiniteResult => "nonFiniteResult",
             RunFailureCode::DeadlineExceeded => "deadlineExceeded",
             RunFailureCode::ResourceUnavailable => "resourceUnavailable",
+            RunFailureCode::InputResultUnavailable => "inputResultUnavailable",
             RunFailureCode::FinalizationFailed => "finalizationFailed",
         },
         phase: match failure.phase {
@@ -76,6 +79,19 @@ fn run_failure_to_transport(
                 node_id: source.node().map(|node| node.as_str().to_owned()),
                 port_address: source.port().map(|port| port.as_str().to_owned()),
             }),
+        groups: failure
+            .groups
+            .iter()
+            .map(|group| GroupFailureContextDto {
+                caller: ResultInspectionSourceDto {
+                    graph_path: group.caller.graph().as_str().into(),
+                    node_id: group.caller.node().map(|node| node.as_str().into()),
+                    port_address: group.caller.port().map(|port| port.as_str().into()),
+                },
+                function: group.function.as_str().into(),
+                ordinal: group.ordinal.map(|value| value.to_string()),
+            })
+            .collect(),
     }
 }
 
@@ -141,6 +157,19 @@ mod tests {
     #[test]
     fn run_failure_wire_preserves_the_cause_phase_and_node() {
         let failure = yss_graph_execution::error::RunFailure {
+            groups: Box::new([yss_graph_execution::error::GroupFailureContext {
+                caller: PlanSourceIdentity::new(
+                    PlanGraphId::from_existing("events/contract.yssbi-event".into()),
+                    Some(PlanNodeId::from_existing(
+                        "00000000-0000-0000-0000-000000000001".into(),
+                    )),
+                    None,
+                ),
+                function: yss_graph_execution::plan::PlanResourceId::from_existing(
+                    "functions/Group.yssbi-function".into(),
+                ),
+                ordinal: Some(9007199254740993),
+            }]),
             code: yss_graph_execution::error::RunFailureCode::DivisionByZero,
             phase: yss_graph_execution::error::RunPhase::Execution,
             source: Some(PlanSourceIdentity::new(
@@ -175,5 +204,16 @@ mod tests {
             .find(|event| event["kind"]["code"] == "divisionByZero")
             .unwrap();
         assert_eq!(actual, *expected);
+        let demand_wire = &fixture["demands"][1];
+        let demand: yss_ipc_contract::execution::ExecutionDemandDto =
+            serde_json::from_value(demand_wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&demand).unwrap(), *demand_wire);
+        assert!(matches!(
+            crate::ipc::commands::execution_dto::execution_demand_to_application(demand),
+            Ok(crate::graph::run::RunDemand::Node {
+                mode: yss_graph_execution::plan::NodeExecutionMode::CurrentInputs,
+                ..
+            })
+        ));
     }
 }

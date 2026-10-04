@@ -3,7 +3,7 @@ use crate::{
     HarnessHost,
     test_support::{FixedClock, InMemoryHarnessStore, SequentialIds},
 };
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 fn document() -> ProjectResourceRef {
@@ -51,6 +51,7 @@ enum Scenario {
     Stale,
     QueuedStale,
     Report(ReportDelivery),
+    Long,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -227,6 +228,22 @@ impl AgentDriverPort for Driver {
                 if let Scenario::Report(delivery) = self.scenario {
                     report_document_operations(capabilities.as_ref(), delivery).await;
                 }
+                if matches!(self.scenario, Scenario::Long) {
+                    for _ in 0..10 {
+                        capabilities
+                            .execute(ModelCapabilityRequest {
+                                request: AutomationCapabilityRequest::InspectResource(
+                                    InspectResourceRequest {
+                                        resource: document(),
+                                        offset: 0,
+                                        limit: 1,
+                                    },
+                                ),
+                            })
+                            .await
+                            .unwrap();
+                    }
+                }
                 output
                     .emit(AgentEvent::TextDelta {
                         delta: "worker-private-progress".into(),
@@ -234,13 +251,8 @@ impl AgentDriverPort for Driver {
                     .await
                     .unwrap();
                 return Ok(AgentTurnResult {
-                    final_text: serde_json::to_string(&WorkerReport {
-                        summary: "Evidence checked".into(),
-                        warnings: vec![],
-                        blocked_reason: None,
-                        next_steps: vec![],
-                    })
-                    .unwrap(),
+                    final_text:
+                        "Evidence checked.\n\nThe original result references were preserved.".into(),
                 });
             }
             // On a follow-up, verify the parent only receives delegated outcomes and its own history.
@@ -250,6 +262,16 @@ impl AgentDriverPort for Driver {
                 return Ok(AgentTurnResult { final_text: "Follow-up answer".into() });
             }
             match self.scenario {
+                Scenario::Long => {
+                    for index in 0..26 {
+                        let mut task =
+                            task(&format!("section-{index}"), AgentRole::Review, 1, false);
+                        task.objective = "Review the authorized report evidence. ".repeat(2200);
+                        let outcome = capabilities.delegate(task).await.unwrap();
+                        assert_eq!(outcome.state, AgentRunState::Completed);
+                        assert_eq!(outcome.evidence.len(), 11);
+                    }
+                }
                 Scenario::Parallel => {
                     let first = task("report", AgentRole::Report, 1, false);
                     let (a, b) = tokio::join!(
@@ -469,6 +491,66 @@ async fn setup(
 }
 
 #[tokio::test]
+async fn long_turns_can_finish_more_than_twenty_four_tasks_and_256_tools() {
+    let driver = Arc::new(Driver::new(Scenario::Long));
+    let (host, _, session) = setup(driver.clone()).await;
+    host.submit_turn(
+        &session.id,
+        &session.project,
+        "Review all sections".into(),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(driver.worker_calls.load(Ordering::Acquire), 26);
+    let outcomes = host
+        .events_after(&session.id, 0)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|event| match event.event {
+            HarnessEvent::AgentRunFinished { outcome } => Some(outcome),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(outcomes.len(), 27);
+    assert!(
+        outcomes
+            .iter()
+            .all(|outcome| outcome.state == AgentRunState::Completed)
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .map(|outcome| outcome.evidence.len())
+            .sum::<usize>(),
+        286
+    );
+}
+
+#[test]
+fn worker_completion_preserves_plain_markdown_and_large_messages_without_json_parsing() {
+    for text in [
+        "## Review\nThe evidence supports the saved report.".to_owned(),
+        "```json\n{\"summary\":\"Review complete\"}\n```".to_owned(),
+        "Verified evidence and limitations.\n".repeat(2000),
+    ] {
+        let result = Ok(AgentTurnResult {
+            final_text: text.clone(),
+        });
+        let outcome = finish_outcome(
+            AgentRunId::try_new("review").unwrap(),
+            AgentRole::Review,
+            &result,
+            &Mutex::new(Evidence::default()),
+        );
+        assert_eq!(outcome.state, AgentRunState::Completed);
+        assert_eq!(outcome.report.unwrap().summary, text);
+        assert!(outcome.failure_code.is_none());
+    }
+}
+
+#[tokio::test]
 async fn report_completion_requires_a_successful_save_after_the_final_document_edit() {
     for delivery in [
         ReportDelivery::TextOnly,
@@ -507,13 +589,18 @@ async fn report_completion_requires_a_successful_save_after_the_final_document_e
             },
             "{delivery:?}"
         );
+        let report = outcome.report.unwrap();
+        assert_eq!(
+            report.summary,
+            "Evidence checked.\n\nThe original result references were preserved."
+        );
         if delivery == ReportDelivery::Saved {
-            assert!(outcome.report.unwrap().blocked_reason.is_none());
+            assert!(report.blocked_reason.is_none());
             assert!(!outcome.artifacts.is_empty());
             assert!(!outcome.evidence.is_empty());
         } else {
             assert_eq!(
-                outcome.report.unwrap().blocked_reason.as_deref(),
+                report.blocked_reason.as_deref(),
                 Some("report_document_not_saved")
             );
         }

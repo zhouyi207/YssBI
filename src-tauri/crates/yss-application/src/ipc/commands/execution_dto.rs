@@ -20,6 +20,19 @@ fn plan_output_ref(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
 pub(crate) fn execution_demand_to_application(demand: ExecutionDemandDto) -> Result<RunDemand, ()> {
     match demand {
         ExecutionDemandDto::Default => Ok(RunDemand::Default),
+        ExecutionDemandDto::Node { node_id, mode } => Ok(RunDemand::Node {
+            node_id: yss_graph_document::NodeId::from_uuid(
+                uuid::Uuid::parse_str(&node_id).map_err(|_| ())?,
+            ),
+            mode: match mode {
+                yss_ipc_contract::execution::NodeExecutionModeDto::CurrentInputs => {
+                    yss_graph_execution::plan::NodeExecutionMode::CurrentInputs
+                }
+                yss_ipc_contract::execution::NodeExecutionModeDto::Dependencies => {
+                    yss_graph_execution::plan::NodeExecutionMode::Dependencies
+                }
+            },
+        }),
         ExecutionDemandDto::Outputs {
             outputs,
             include_default_results,
@@ -475,6 +488,9 @@ mod tests {
                     runtime.kernels().fingerprint(),
                     BTreeMap::new(),
                     BTreeMap::new(),
+                ),
+                &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                    analysis.semantic_snapshot(),
                 ),
             )
             .unwrap();

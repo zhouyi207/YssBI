@@ -194,7 +194,7 @@ pub enum AgentMessage {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentTurnRequest {
     pub role: crate::AgentRole,
-    pub limits: crate::AgentRunLimits,
+    pub tool_concurrency: usize,
     pub control_tools: Vec<crate::AgentControlTool>,
     pub output_mode: crate::AgentOutputMode,
     pub messages: Vec<AgentMessage>,
@@ -259,8 +259,14 @@ pub enum AgentDriverFailureCode {
     ProviderRequestRejected,
     #[error("context_window_exceeded")]
     ContextWindowExceeded,
-    #[error("model_turn_limit_exceeded")]
-    ModelTurnLimitExceeded,
+    #[error("provider_output_truncated")]
+    ProviderOutputTruncated,
+    #[error("provider_stream_interrupted")]
+    ProviderStreamInterrupted,
+    #[error("provider_content_filtered")]
+    ProviderContentFiltered,
+    #[error("provider_payment_required")]
+    ProviderPaymentRequired,
     #[error("provider_transport_failed")]
     ProviderTransportFailed,
     #[error("deadline_elapsed")]

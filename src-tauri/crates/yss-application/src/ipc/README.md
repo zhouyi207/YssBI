@@ -22,6 +22,14 @@ Result JSON encoding is shared by the desktop and Harness adapters in [result_en
 
 ## Public surface
 
+执行 demand 的 `node` 形式包含 `nodeId` 和 `mode: currentInputs | dependencies`。
+缺少当前输入结果属于预期拒绝：`execution_input_result_unavailable`，错误 details 保留
+`executionAccepted: false` 及带源节点/端口的 `failure`；不创建诊断事件编号或伪造成功 run。
+
+执行失败 wire 必含 `groups` 数组；每项包含 `caller`、函数路径 `function`、十进制字符串或 Null 的
+`ordinal`。Null 仅表示空输入结构探测，普通组编号从 1 开始。桌面与 Harness 使用同一失败映射；
+组结构不一致及分组键重名使用 `groupSchemaMismatch`、`groupKeyCollision`，主 `source` 仍定位内部节点。
+
 Frontend project command replies and project events share the existing activation, registry-record and
 lifecycle-result parsers in `services/project/projectWireParser`. Scalar paths and acknowledgements,
 scan/cleanup results and progress are validated at the Service boundary. Scan counts agree with returned
@@ -374,6 +382,9 @@ Execution channels deliver `RunEventDto` directly for lifecycle and result notif
 
 `get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null.
 Descriptor/value/page commands take `{ executionSessionId, resultId }` references and read either current or leased results.
+Graph result-state entries carry a non-null `resultId` for both `valid` and `stale`: stale identifies
+the retained last success for explicit viewing, while `missing` requires null. Current Pin queries
+and execution reuse accept only valid entries; explicit old references use the same lease commands.
 Descriptors carry this identity and immutable provenance; reading a retained descriptor does not change the current output index.
 Run event identity uses `executionSessionId`, `graphPath`, and `runId`. `RunStarted { outputs }` invalidates current output bindings;
 it does not revoke report leases. Failed or cancelled runs never expose an older successful payload as current.

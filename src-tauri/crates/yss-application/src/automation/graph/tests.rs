@@ -201,6 +201,8 @@ impl Fixture {
 }
 fn node(kind: &str, alias: &str) -> GraphEditOperation {
     GraphEditOperation::CreateNode {
+        port_counts: Default::default(),
+        parameters: Default::default(),
         client_id: Some(alias.into()),
         node_type_id: kind.into(),
         resource_path: None,
@@ -337,6 +339,8 @@ fn assistant_autosave_failure_preserves_the_previous_document_history_and_file()
                 operation_id: OperationId::new(),
             },
             EditorGraphMutation::CreateNode {
+                port_counts: Default::default(),
+                parameters: Default::default(),
                 descriptor: yss_node_catalog::NodeCreation::Static {
                     node_type_id: "yssbi.numeric.multiply".parse().unwrap(),
                 },
@@ -413,6 +417,8 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let initial = f.inspect();
     let created = f.edit(vec![
         GraphEditOperation::CreateNode {
+            port_counts: Default::default(),
+            parameters: Default::default(),
             client_id: Some("source".into()),
             node_type_id: "yssbi.dataframe.source.get".into(),
             resource_path: Some(format!("databases/{}", f.dataset)),
@@ -540,6 +546,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
+                demand: yss_harness_contract::GraphExecutionDemand::Default,
                 graph_path: f.path.clone(),
                 graph_hash: validated.graph_hash,
             },
@@ -616,6 +623,110 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     assert!(!saved.dirty && !saved.can_undo && !saved.can_redo);
     let serialized = std::fs::read_to_string(f.directory.join("project").join(&f.path)).unwrap();
     assert!(serialized.contains(&created.created_nodes["product"]));
+    let before_form = f.inspect();
+    let AutomationCapabilityResult::NodeCatalogSearch(definitions) = f
+        .action(AutomationCapabilityRequest::SearchNodeCatalog(
+            SearchNodeCatalogRequest {
+                query: "yssbi.statistics.linear.fit".into(),
+                locale: "en-US".into(),
+                limit: 1,
+                include_parameters: true,
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("node definition");
+    };
+    let definition = &definitions.matches[0];
+    assert!(
+        definition
+            .parameters
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|parameter| parameter.key == "method"
+                && parameter.default_value == Some(serde_json::json!("OLS")))
+    );
+    assert!(
+        definition
+            .ports
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|port| port.key == "x"
+                && matches!(port.count, NodePortCountPolicy::Configurable { .. }))
+    );
+    let application = f.application.as_ref().unwrap();
+    let session = application.capture_session().unwrap();
+    let form = application
+        .node_creation_form(
+            session.project_instance_id(),
+            &definition.node_type_id.parse().unwrap(),
+            [("method".parse().unwrap(), serde_json::json!("OLS"))].into(),
+            [("x".parse().unwrap(), 4)].into(),
+            "en-US",
+        )
+        .unwrap();
+    assert_eq!(f.inspect(), before_form);
+    let mut configured = node(&definition.node_type_id, "configured");
+    if let GraphEditOperation::CreateNode {
+        parameters,
+        port_counts,
+        ..
+    } = &mut configured
+    {
+        *parameters = form
+            .values
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value))
+            .collect();
+        *port_counts = form
+            .port_counts
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value))
+            .collect();
+    }
+    let mut operations = vec![configured, connect(x.clone(), port("$configured", "y"))];
+    operations.extend((0..4).map(|index| {
+        connect(
+            x.clone(),
+            GraphEditPortRef::Instance {
+                node_id: "$configured".into(),
+                template_key: "x".into(),
+                instance_id: format!("$configured.x[{index}]"),
+            },
+        )
+    }));
+    let configured = f.edit(operations);
+    assert_eq!(configured.created_ports.len(), 4);
+    let configured_id = parse_node_id(&configured.created_nodes["configured"]).unwrap();
+    assert_eq!(
+        f.document
+            .port_bindings
+            .keys()
+            .filter(|address| address.node_id == configured_id)
+            .count(),
+        4
+    );
+    assert_eq!(
+        f.document
+            .connections
+            .values()
+            .filter(|connection| connection.input.node_id == configured_id)
+            .count(),
+        5
+    );
+    for index in 0..4 {
+        let address =
+            parse_edit_port(configured.created_ports[&format!("configured.x[{index}]")].clone())
+                .unwrap();
+        assert!(
+            f.document
+                .connections
+                .values()
+                .any(|connection| connection.input == address)
+        );
+    }
     let fit = f.edit(vec![
         node("yssbi.statistics.linear.fit", "fit"),
         GraphEditOperation::AddPortInstance {
@@ -638,7 +749,8 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
             },
         ),
     ]);
-    assert_eq!(fit.created_ports.len(), 2);
+    assert_eq!(fit.created_ports.len(), 3);
+    assert!(fit.created_ports.contains_key("fit.x[0]"));
     let removed_port = f.edit(vec![
         GraphEditOperation::DisconnectPort {
             address: fit.created_ports["first"].clone(),
@@ -683,6 +795,8 @@ fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() 
     fixture.inspect();
     let created = fixture.edit(vec![
         GraphEditOperation::CreateNode {
+            port_counts: Default::default(),
+            parameters: Default::default(),
             client_id: Some("source".into()),
             node_type_id: "yssbi.dataframe.source.get".into(),
             resource_path: Some(format!("databases/{}", fixture.dataset)),
@@ -727,6 +841,7 @@ fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() 
     }
     let context = fixture.context.clone();
     let run = AutomationCapabilityRequest::ExecuteGraph(ExecuteGraphRequest {
+        demand: yss_harness_contract::GraphExecutionDemand::Default,
         graph_path: fixture.path.clone(),
         graph_hash: created.graph_hash,
     });
@@ -759,11 +874,206 @@ fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() 
 }
 
 #[test]
+fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource_grants() {
+    use crate::graph::run::{ExecutionApplicationError, ResourceBindingError, RunDemand};
+    use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+    let mut fixture = Fixture::new();
+    fixture.inspect();
+    let created = fixture.edit(vec![
+        GraphEditOperation::CreateConstant {
+            name: "scale".into(),
+            value: GraphConstantLiteral::Integer(2),
+            x: 0.0,
+            y: 0.0,
+            client_id: Some("scale".into()),
+        },
+        node("yssbi.numeric.multiply", "product"),
+        connect(port("$scale", "value"), port("$product", "left")),
+        GraphEditOperation::SetLiteral {
+            address: port("$product", "right"),
+            literal: Some(serde_json::json!(3)),
+        },
+        node("yssbi.numeric.divide", "unfinished"),
+        node("yssbi.debug.view", "cached_view"),
+        connect(port("$product", "result"), port("$cached_view", "data")),
+        GraphEditOperation::CreateNode {
+            port_counts: Default::default(),
+            parameters: Default::default(),
+            client_id: Some("table".into()),
+            node_type_id: "yssbi.dataframe.source.get".into(),
+            resource_path: Some(format!("databases/{}", fixture.dataset)),
+            x: 0.0,
+            y: 0.0,
+            user_label: None,
+        },
+        node("yssbi.dataframe.project", "project"),
+        GraphEditOperation::SetParameters {
+            node_id: "$project".into(),
+            parameters: BTreeMap::from([("columns".into(), serde_json::json!(["x"]))]),
+        },
+        connect(port("$table", "dataframe"), port("$project", "source")),
+    ]);
+    assert!(!created.changes.ready);
+    let application = fixture.application.as_ref().unwrap();
+    let session = application.capture_session().unwrap();
+    let graph = GraphResourcePath::new(&fixture.path).unwrap();
+    let context =
+        crate::graph::inputs::GraphResolutionContext::capture(&session, &fixture.document).unwrap();
+    let analysis = context.resolve(&session, &graph, &fixture.document, "en-US");
+    let request = |demand| {
+        RunGraphRequest::new(
+            session.project_instance_id().clone(),
+            graph.clone(),
+            fixture.document.clone(),
+            *analysis.semantic_input_hash(),
+        )
+        .with_demand(demand)
+        .with_resource_authorizations(Vec::new())
+    };
+    let output = |alias: &str, key: &str| {
+        PlanOutputRef::new(
+            PlanGraphId::new(graph.as_str().into()).unwrap(),
+            PlanPortAddress::new(
+                PortAddress::declared(
+                    parse_node_id(&created.created_nodes[alias]).unwrap(),
+                    key.parse().unwrap(),
+                )
+                .to_string()
+                .into(),
+            )
+            .unwrap(),
+        )
+    };
+    let demand = |output| RunDemand::Outputs {
+        outputs: Box::new([output]),
+        include_default_results: false,
+        reuse_inputs: false,
+    };
+    assert!(matches!(
+        crate::graph::run::run_graph(application, request(RunDemand::Default)),
+        Err(ExecutionApplicationError::GraphNotReady)
+    ));
+    let target = output("product", "result");
+    let node_demand = |alias: &str, mode| RunDemand::Node {
+        node_id: parse_node_id(&created.created_nodes[alias]).unwrap(),
+        mode,
+    };
+    let missing = crate::graph::run::run_graph(
+        application,
+        request(node_demand(
+            "product",
+            yss_graph_execution::plan::NodeExecutionMode::CurrentInputs,
+        )),
+    );
+    assert!(
+        matches!(missing, Err(ExecutionApplicationError::PreparedExecution(error))
+        if error.failure().code == yss_graph_execution::error::RunFailureCode::InputResultUnavailable)
+    );
+    crate::graph::run::run_graph(application, request(demand(target.clone()))).unwrap();
+    let result = session.execution().query_pin_result(&target).unwrap();
+    assert_eq!(
+        result.value().value(),
+        &yss_node_kernel::RuntimeValue::Scalar(yss_data_contract::TabularScalar::Integer(6))
+    );
+    let result_id = result.provenance().result_id();
+    let mut observed = Vec::new();
+    let receipt = run_graph_with_sink(
+        application,
+        request(node_demand(
+            "cached_view",
+            yss_graph_execution::plan::NodeExecutionMode::CurrentInputs,
+        )),
+        |event| {
+            if let RunApplicationEventKind::ResultInspectionRequested { result_id, .. } =
+                event.kind()
+            {
+                observed.push(*result_id);
+            }
+            true
+        },
+    )
+    .unwrap();
+    assert!(receipt.results.is_empty());
+    assert_eq!(observed, [result_id]);
+    assert!(
+        session
+            .execution()
+            .query_pin_result(&output("scale", "value"))
+            .is_some()
+    );
+    assert!(matches!(
+        crate::graph::run::run_graph(application, request(demand(output("table", "dataframe")))),
+        Err(ExecutionApplicationError::ResourceBindings(
+            ResourceBindingError::ScopeDenied
+        ))
+    ));
+    let AutomationCapabilityResult::GraphExecution(executed) = fixture
+        .action(AutomationCapabilityRequest::ExecuteGraph(
+            ExecuteGraphRequest {
+                graph_path: fixture.path.clone(),
+                graph_hash: created.graph_hash.clone(),
+                demand: yss_harness_contract::GraphExecutionDemand::Node {
+                    node_id: created.created_nodes["product"].clone(),
+                    mode: yss_harness_contract::NodeExecutionMode::CurrentInputs,
+                },
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("execution result");
+    };
+    assert_eq!(executed.status, "succeeded", "{:?}", executed.failure_code);
+    assert_eq!(executed.result_count, Some(1));
+    let mut run_node = |alias: &str, mode| {
+        let AutomationCapabilityResult::GraphExecution(result) = fixture
+            .action(AutomationCapabilityRequest::ExecuteGraph(
+                ExecuteGraphRequest {
+                    graph_path: fixture.path.clone(),
+                    graph_hash: created.graph_hash.clone(),
+                    demand: yss_harness_contract::GraphExecutionDemand::Node {
+                        node_id: created.created_nodes[alias].clone(),
+                        mode,
+                    },
+                },
+            ))
+            .unwrap()
+        else {
+            panic!("execution result");
+        };
+        result
+    };
+    use yss_harness_contract::NodeExecutionMode::{CurrentInputs, Dependencies};
+    let projected = run_node("project", Dependencies);
+    assert_eq!(
+        projected.status, "succeeded",
+        "{:?}",
+        projected.failure_code
+    );
+    assert_eq!(projected.result_count, Some(1));
+    assert!(
+        session
+            .execution()
+            .query_pin_result(&output("table", "dataframe"))
+            .is_none()
+    );
+    let missing = run_node("project", CurrentInputs);
+    assert_eq!(
+        missing.failure_code.as_deref(),
+        Some("input_result_unavailable")
+    );
+    assert!(missing.failure_location.is_some());
+    assert_eq!(run_node("table", CurrentInputs).status, "succeeded");
+    assert_eq!(run_node("project", CurrentInputs).status, "succeeded");
+}
+
+#[test]
 fn graph_edit_receipts_include_downstream_columns_and_only_changed_entities() {
     let mut f = Fixture::new();
     f.inspect();
     let created = f.edit(vec![
         GraphEditOperation::CreateNode {
+            port_counts: Default::default(),
+            parameters: Default::default(),
             client_id: Some("source".into()),
             node_type_id: "yssbi.dataframe.source.get".into(),
             resource_path: Some(format!("databases/{}", f.dataset)),
@@ -1007,6 +1317,7 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
+                demand: yss_harness_contract::GraphExecutionDemand::Default,
                 graph_path: f.path.clone(),
                 graph_hash: created.graph_hash,
             },
@@ -1069,6 +1380,7 @@ fn execute_graph_reports_when_its_result_references_are_bounded() {
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
+                demand: yss_harness_contract::GraphExecutionDemand::Default,
                 graph_path: f.path.clone(),
                 graph_hash: graph_hash(&f.document).unwrap(),
             },
@@ -1124,67 +1436,69 @@ fn oversized_graph_edit_facts_are_rejected_before_committing() {
 #[test]
 fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_failure() {
     let mut f = Fixture::new();
-    let node_id = NodeId::new();
+    f.inspect();
+    let mut create = node("yssbi.dataframe.groupby", "group");
+    let GraphEditOperation::CreateNode { parameters, .. } = &mut create else {
+        unreachable!()
+    };
+    *parameters = [
+        ("keys".into(), serde_json::json!(["label"])),
+        ("mean".into(), serde_json::json!(["x"])),
+    ]
+    .into();
+    let created = f.edit(vec![
+        create.clone(),
+        node("yssbi.debug.view", "view"),
+        connect(port("$group", "result"), port("$view", "data")),
+    ]);
+    let node_id = parse_node_id(&created.created_nodes["group"]).unwrap();
     let id = &node_id.to_string();
-    f.document.nodes.insert(
-        node_id,
-        yss_graph_document::DocumentNode {
-            id: node_id,
-            node_type: "yssbi.dataframe.rename".parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            user_label: None,
-            parameters: [
-                ("from".parse().unwrap(), serde_json::json!("x")),
-                ("to".parse().unwrap(), serde_json::json!("first")),
-            ]
-            .into(),
-        },
-    );
-    {
-        let captured = f.application.as_ref().unwrap().capture_session().unwrap();
-        let path = GraphResourcePath::new(&f.path).unwrap();
-        let operation = captured
-            .project()
-            .capture_graph_overwrite_operation(
-                captured.project_instance_id(),
-                &path,
-                OperationId::new(),
-            )
-            .unwrap();
-        let receipt = captured
-            .project()
-            .commit_graph_candidate(operation.into_authority(), Arc::new(f.document.clone()))
-            .unwrap();
-        f.revision = receipt.to_revision.get();
-    }
+    assert_eq!(f.document.connections.len(), 1);
+    let before_invalid_create = f.document.clone();
+    let GraphEditOperation::CreateNode { parameters, .. } = &mut create else {
+        unreachable!()
+    };
+    parameters.insert("keys".into(), serde_json::json!([42]));
+    let invalid_create = f.edit_request(vec![node("yssbi.debug.view", "discarded"), create]);
+    assert!(f.action(invalid_create).is_err());
+    assert_eq!(f.document, before_invalid_create);
     let configured = f.edit(vec![GraphEditOperation::SetParameters {
         node_id: id.clone(),
-        parameters: [("to".into(), serde_json::json!("second"))].into(),
+        parameters: [("mean".into(), serde_json::json!(["amount"]))].into(),
     }]);
     let parameters = &configured.changes.nodes[0].parameters;
+    let mean = parameters
+        .iter()
+        .find(|parameter| parameter.key == "mean")
+        .unwrap();
+    assert!(
+        mean.options.is_none(),
+        "unconnected choices must not look like a known empty schema"
+    );
+    assert!(mean.context_hint.is_some());
     assert_eq!(
         parameters
             .iter()
-            .find(|parameter| parameter.key == "from")
+            .find(|parameter| parameter.key == "keys")
             .unwrap()
             .value,
-        Some(serde_json::json!("x"))
+        Some(serde_json::json!(["label"]))
     );
     assert_eq!(
         parameters
             .iter()
-            .find(|parameter| parameter.key == "to")
+            .find(|parameter| parameter.key == "mean")
             .unwrap()
             .value,
-        Some(serde_json::json!("second"))
+        Some(serde_json::json!(["amount"]))
     );
     assert_eq!(
-        f.document.nodes[&node_id].parameters[&"from".parse().unwrap()],
-        "x"
+        f.document.nodes[&node_id].parameters[&"keys".parse().unwrap()],
+        serde_json::json!(["label"])
     );
     assert_eq!(
-        f.document.nodes[&node_id].parameters[&"to".parse().unwrap()],
-        "second"
+        f.document.nodes[&node_id].parameters[&"mean".parse().unwrap()],
+        serde_json::json!(["amount"])
     );
     let stale = f.edit_request(vec![GraphEditOperation::DeleteNodes {
         node_ids: vec![id.clone()],
@@ -1237,7 +1551,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
         CapabilityFailureCode::GraphDraftChanged
     );
     f.edit(vec![GraphEditOperation::DeleteNodes {
-        node_ids: vec![id.clone()],
+        node_ids: vec![id.clone(), created.created_nodes["view"].clone()],
     }]);
     assert!(f.document.nodes.is_empty());
     for query in ["multiply 乘法", "decompose 列拆分", "ols 回归"] {
@@ -1248,6 +1562,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             .invoke_automation_capability(
                 f.context.clone(),
                 AutomationCapabilityRequest::SearchNodeCatalog(SearchNodeCatalogRequest {
+                    include_parameters: true,
                     query: query.into(),
                     locale: "zh-CN".into(),
                     limit: 20,
@@ -1304,6 +1619,8 @@ fn gui_and_harness_retries_recover_original_commits_without_overwriting_later_ed
         locale: "en-US".into(),
     };
     let create = EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        parameters: Default::default(),
         descriptor: yss_node_catalog::NodeCreation::Static {
             node_type_id: "yssbi.numeric.multiply".parse().unwrap(),
         },

@@ -1,8 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::{RwLock, Semaphore};
 use yss_harness_contract::*;
@@ -11,9 +8,6 @@ use crate::conversation::agent_messages;
 use crate::events::{EventWriter, PersistingAgentOutput};
 use crate::tools::HarnessToolExecutor;
 use crate::{HarnessPorts, ToolRegistry};
-
-const MAX_TASKS: usize = 24;
-const MAX_TOOL_CALLS: usize = 256;
 
 struct TaskEntry {
     task: AgentTask,
@@ -32,7 +26,6 @@ pub(crate) struct TurnOrchestrator {
     manager_run_id: AgentRunId,
     tasks: Mutex<BTreeMap<String, TaskEntry>>,
     slots: Semaphore,
-    tool_calls: Arc<AtomicUsize>,
 }
 
 impl TurnOrchestrator {
@@ -67,7 +60,6 @@ impl TurnOrchestrator {
             manager_run_id,
             tasks: Mutex::new(BTreeMap::new()),
             slots: Semaphore::new(4),
-            tool_calls: Arc::new(AtomicUsize::new(0)),
         }))
     }
 
@@ -107,7 +99,6 @@ impl TurnOrchestrator {
             scope,
             evidence: evidence.clone(),
             manager: Some(self.clone()),
-            tool_calls: self.tool_calls.clone(),
         });
         let mut result = self
             .ports
@@ -139,7 +130,7 @@ impl TurnOrchestrator {
         let definition = crate::agent_definition(role);
         AgentTurnRequest {
             role,
-            limits: definition.limits(),
+            tool_concurrency: definition.tool_concurrency(),
             control_tools: definition.control_tools(),
             output_mode: definition.output_mode(),
             messages,
@@ -197,9 +188,6 @@ impl TurnOrchestrator {
                     .clone()
                     .ok_or_else(|| rejected("task_still_running"));
             }
-            if tasks.len() >= MAX_TASKS {
-                return Err(rejected("task_budget_exhausted"));
-            }
             let dependencies = task
                 .depends_on
                 .iter()
@@ -238,17 +226,10 @@ impl TurnOrchestrator {
         })
         .await?;
         let evidence = Arc::new(Mutex::new(Evidence::for_task(&task)));
-        let deadline = tokio::time::Instant::now()
-            + std::time::Duration::from_millis(
-                crate::agent_definition(task.worker)
-                    .limits()
-                    .maximum_duration_ms,
-            );
         let admission = async {
             let slot = tokio::select! {
                 permit = self.slots.acquire() => permit.map_err(|_| driver_failure())?,
                 _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
-                _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
             };
             // Keep task settlement inside the same gate as its business operations.
             // A queued reader must observe committed invalidations before starting.
@@ -256,14 +237,12 @@ impl TurnOrchestrator {
                 let guard = tokio::select! {
                     guard = self.access.read() => guard,
                     _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
-                    _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
                 };
                 (Some(guard), None)
             } else {
                 let guard = tokio::select! {
                     guard = self.access.write() => guard,
                     _ = self.cancellation.cancelled() => return Err(cancelled_driver()),
-                    _ = tokio::time::sleep_until(deadline) => return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed)),
                 };
                 (None, Some(guard))
             };
@@ -272,7 +251,7 @@ impl TurnOrchestrator {
         .await;
         let (result, _admission) = match admission {
             Ok(admission) => (
-                self.run_worker(&run_id, &task, dependencies, evidence.clone(), deadline)
+                self.run_worker(&run_id, &task, dependencies, evidence.clone())
                     .await,
                 Some(admission),
             ),
@@ -346,7 +325,6 @@ impl TurnOrchestrator {
         task: &AgentTask,
         dependencies: Vec<AgentTaskOutcome>,
         evidence: Arc<Mutex<Evidence>>,
-        deadline: tokio::time::Instant,
     ) -> Result<AgentTurnResult, AgentDriverFailure> {
         let dependencies_current = {
             let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -361,16 +339,12 @@ impl TurnOrchestrator {
             })
         };
         if !dependencies_current {
+            evidence
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .blocked_reason = Some("dependency_not_completed".into());
             return Ok(AgentTurnResult {
-                final_text: serde_json::to_string(&WorkerReport {
-                    summary: "A task dependency changed before execution.".into(),
-                    warnings: vec![],
-                    blocked_reason: Some("dependency_not_completed".into()),
-                    next_steps: vec![
-                        "Refresh stale dependencies before delegating a new task.".into(),
-                    ],
-                })
-                .map_err(|_| driver_failure())?,
+                final_text: "A task dependency changed before execution. Refresh stale dependencies before delegating a new task.".into(),
             });
         }
         let cancellation = CancellationToken::default();
@@ -399,9 +373,8 @@ impl TurnOrchestrator {
                 cancellation.clone(),
             ),
             scope,
-            evidence,
+            evidence: evidence.clone(),
             manager: None,
-            tool_calls: self.tool_calls.clone(),
         });
         let input = serde_json::to_string(
             &serde_json::json!({ "task": task, "dependencies": dependencies }),
@@ -422,17 +395,34 @@ impl TurnOrchestrator {
                                 },
                             ),
                         })
-                        .await
-                        .map_err(|_| {
-                            AgentDriverFailure::new(AgentDriverFailureCode::InvalidProviderResponse)
-                        })?;
+                        .await;
+                    let outcome = match outcome {
+                        Ok(outcome) => outcome,
+                        Err(failure) => {
+                            if failure.code == CapabilityFailureCode::Cancelled {
+                                return Err(cancelled_driver());
+                            }
+                            evidence
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .blocked_reason = Some("input_inspection_failed".into());
+                            return Ok(AgentTurnResult {
+                                final_text: format!(
+                                    "Input resource inspection failed: {}. Inspect the current resource and correct the task before retrying.",
+                                    failure.code
+                                ),
+                            });
+                        }
+                    };
                     if !matches!(outcome.result, AutomationCapabilityResult::ResourceInspection(ref value) if &value.version == version)
                     {
-                        return Ok(AgentTurnResult { final_text: serde_json::to_string(&WorkerReport {
-                            summary: "Input resource version changed before execution.".into(),
-                            warnings: Vec::new(), blocked_reason: Some("input_revision_changed".into()),
-                            next_steps: vec!["Inspect the current resource and delegate a task using its current version.".into()],
-                        }).map_err(|_| driver_failure())? });
+                        evidence
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .blocked_reason = Some("input_revision_changed".into());
+                        return Ok(AgentTurnResult {
+                            final_text: "Input resource version changed before execution. Inspect the current resource and delegate a task using its current version.".into(),
+                        });
                     }
                 }
             }
@@ -444,11 +434,6 @@ impl TurnOrchestrator {
         tokio::pin!(work);
         tokio::select! {
             result = &mut work => result,
-            _ = tokio::time::sleep_until(deadline) => {
-                cancellation.cancel(CancellationReason::DeadlineElapsed);
-                let _ = work.await;
-                Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed))
-            }
             _ = self.cancellation.cancelled() => {
                 cancellation.cancel(self.cancellation.reason().unwrap_or(CancellationReason::User));
                 // Await accepted business operations so real commit receipts survive cancellation.
@@ -492,7 +477,6 @@ struct RunExecutor {
     scope: Arc<Mutex<AgentInvocationScope>>,
     evidence: Arc<Mutex<Evidence>>,
     manager: Option<Arc<TurnOrchestrator>>,
-    tool_calls: Arc<AtomicUsize>,
 }
 
 impl ModelCapabilityExecutor for RunExecutor {
@@ -501,9 +485,6 @@ impl ModelCapabilityExecutor for RunExecutor {
         request: ModelCapabilityRequest,
     ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
         Box::pin(async move {
-            if self.tool_calls.fetch_add(1, Ordering::AcqRel) >= MAX_TOOL_CALLS {
-                return Err(rejected("tool_budget_exhausted"));
-            }
             let outcome = self.tools.execute(request.clone()).await?;
             let mut evidence = self.evidence.lock().unwrap_or_else(|e| e.into_inner());
             if !evidence.invocations.contains(&outcome.invocation_id) {

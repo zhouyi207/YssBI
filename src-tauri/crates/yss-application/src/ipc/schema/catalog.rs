@@ -1,4 +1,82 @@
 use crate::graph::catalog::CatalogQueryResult;
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeCreationFormDto {
+    pub values: yss_node_protocol::ParameterValues,
+    pub groups: Vec<yss_ipc_contract::editor_projection::ParameterGroupDto>,
+    pub port_counts: yss_node_protocol::InitialPortCounts,
+    pub ports: Vec<NodeCreationPortDto>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeCreationPortDto {
+    pub key: Box<str>,
+    pub title: Box<str>,
+    pub direction: &'static str,
+    pub count: PortCountPolicyDto,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PortCountPolicyDto {
+    Fixed,
+    Configurable {
+        min: u16,
+        max: Option<u16>,
+        member_templates: Box<[Box<str>]>,
+    },
+    Derived,
+}
+
+impl From<yss_node_catalog::NodeCreationPort> for NodeCreationPortDto {
+    fn from(port: yss_node_catalog::NodeCreationPort) -> Self {
+        Self {
+            key: port.key.as_str().into(),
+            title: port.title,
+            direction: match port.direction {
+                yss_node_protocol::PortDirection::Input => "input",
+                yss_node_protocol::PortDirection::Output => "output",
+            },
+            count: match port.count {
+                yss_node_catalog::PortCountPolicy::Fixed => PortCountPolicyDto::Fixed,
+                yss_node_catalog::PortCountPolicy::Derived => PortCountPolicyDto::Derived,
+                yss_node_catalog::PortCountPolicy::Configurable {
+                    min,
+                    max,
+                    member_templates,
+                } => PortCountPolicyDto::Configurable {
+                    min,
+                    max,
+                    member_templates: member_templates
+                        .iter()
+                        .map(|key| key.as_str().into())
+                        .collect(),
+                },
+            },
+        }
+    }
+}
+
+impl From<yss_graph_runtime::NodeCreationForm> for NodeCreationFormDto {
+    fn from(form: yss_graph_runtime::NodeCreationForm) -> Self {
+        Self {
+            values: form.values,
+            groups: form
+                .groups
+                .iter()
+                .map(super::editor_projection::map_parameter_group)
+                .collect(),
+            port_counts: form.port_counts,
+            ports: form.ports.into_vec().into_iter().map(Into::into).collect(),
+        }
+    }
+}
 use serde::Serialize;
 use yss_node_catalog::{
     LocalizedCatalogItem as DomainCatalogItem, LocalizedCategory as DomainCategory,
@@ -479,5 +557,25 @@ mod tests {
             );
         }
         assert!(rows.iter().any(|row| row["kind"] == "category"));
+        let form = application
+            .node_creation_form(
+                &project_id,
+                &"yssbi.statistics.linear.fit".parse().unwrap(),
+                Default::default(),
+                [("x".parse().unwrap(), 4)].into(),
+                "zh-CN",
+            )
+            .unwrap();
+        let wire = serde_json::to_value(NodeCreationFormDto::from(form)).unwrap();
+        assert_eq!(wire["portCounts"]["x"], 4);
+        assert!(wire["groups"].is_array());
+        let x = wire["ports"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|port| port["key"] == "x")
+            .unwrap();
+        assert_eq!(x["count"]["kind"], "configurable");
+        assert_eq!(x["count"]["memberTemplates"], serde_json::json!(["x"]));
     }
 }

@@ -23,8 +23,8 @@ requested scope, and report structure.
   delivery or pasting the full requested report into chat.
 - After successful delivery, Manager opens the returned Doc resource through
   the UI intent tool and gives a brief summary, document location, and material
-  limitations in chat. The WorkerReport JSON is a task receipt summary, not the
-  report body.
+  limitations in chat. The worker's final message summarizes its task and
+  delivery; the report body belongs in the Doc.
 
 ## Evidence and reporting
 

@@ -37,8 +37,6 @@ impl ResultInspectionRequested {
 pub enum FinalizationInvariant {
     #[error("a committed result id is duplicated")]
     DuplicateResult { result_id: ResultId },
-    #[error("a result observation intent has no committed result")]
-    ObservationResultMissing { result_id: ResultId },
     #[error("a result observation intent is duplicated")]
     DuplicateObservation { result_id: ResultId },
 }
@@ -78,7 +76,8 @@ impl CommittedRunOutcome {
     }
 }
 
-/// Validate the exact Execution handoff after Result and Project authority have committed.
+/// Validate the sealed handoff before publishing it. ResultStore validates observed
+/// result identities atomically, including results reused from an earlier run.
 pub(crate) fn finalize_successful_run(
     handoff: ExecutionFinalizationHandoff,
 ) -> Result<CommittedRunOutcome, FinalizationError> {
@@ -98,11 +97,6 @@ fn validate_handoff(handoff: &ExecutionFinalizationHandoff) -> Result<(), Finali
 
     let mut observations = BTreeSet::new();
     for intent in handoff.observation_intents() {
-        if !committed_results.contains(&intent.result_id) {
-            return Err(FinalizationInvariant::ObservationResultMissing {
-                result_id: intent.result_id,
-            });
-        }
         if !observations.insert((
             intent.result_id,
             intent.requester.graph(),

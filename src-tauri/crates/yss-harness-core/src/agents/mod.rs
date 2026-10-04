@@ -1,4 +1,4 @@
-//! Built-in role definitions, execution limits and compiled prompts.
+//! Built-in role definitions, tool concurrency and compiled prompts.
 
 use yss_harness_contract::{AgentRole, CapabilityId as Cap};
 
@@ -12,20 +12,11 @@ pub struct AgentDefinition {
 }
 
 impl AgentDefinition {
-    pub fn limits(&self) -> yss_harness_contract::AgentRunLimits {
-        yss_harness_contract::AgentRunLimits {
-            maximum_model_turns: 32,
-            maximum_output_tokens: 8192,
-            maximum_duration_ms: if self.role == AgentRole::Manager {
-                1_800_000
-            } else {
-                300_000
-            },
-            tool_concurrency: if self.role == AgentRole::Manager {
-                4
-            } else {
-                1
-            },
+    pub fn tool_concurrency(&self) -> usize {
+        if self.role == AgentRole::Manager {
+            4
+        } else {
+            1
         }
     }
 

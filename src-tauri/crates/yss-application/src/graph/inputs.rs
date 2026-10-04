@@ -1,4 +1,5 @@
 use super::catalog::capture_localized_project_facts;
+mod schema_observations;
 use crate::session::ApplicationSession;
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
@@ -139,9 +140,7 @@ pub(crate) fn graph_result_inputs(
     databases: &DatabaseCatalogSnapshot,
     registry_fingerprint: [u8; 32],
 ) -> yss_graph_execution::result::GraphResultInputs {
-    use yss_graph_analysis::{
-        GraphDiagnosticLocation, GraphResolvedInputSource, GraphResolvedParameterValue,
-    };
+    use yss_graph_analysis::{GraphResolvedInputSource, GraphResolvedParameterValue};
     use yss_graph_execution::result::{GraphResultInputs, OutputResultInputs};
     use yss_graph_resource_contract::GraphDependencyKey;
     use yss_node_protocol::PortDirection;
@@ -212,23 +211,7 @@ pub(crate) fn graph_result_inputs(
             &mut BTreeSet::new(),
             &mut versions,
         );
-        let available = node.specialization.is_some()
-            && node
-                .ports
-                .iter()
-                .all(|port| !port.orphan && port.type_state.exact().is_some())
-            && !matches!(
-                semantics.outcome(),
-                yss_graph_analysis::GraphResolutionOutcome::InternalFailure { .. }
-            )
-            && !semantics.diagnostics().iter().any(|diagnostic| {
-                diagnostic.blocking
-                    && match &diagnostic.primary {
-                        GraphDiagnosticLocation::Node(id) => id == &node.node_id,
-                        GraphDiagnosticLocation::Port(port) => port.node_id == node.node_id,
-                        _ => false,
-                    }
-            });
+        let available = semantics.nodes_ready(&BTreeSet::from([node.node_id]));
         let mut bindings: BTreeMap<PlanPortAddress, Vec<PlanOutputRef>> = BTreeMap::new();
         for input in &node.inputs {
             if let GraphResolvedInputSource::Output(source) = &input.source {
@@ -277,6 +260,19 @@ pub(crate) fn graph_result_inputs(
     }
     GraphResultInputs {
         semantic_input_hash: *analysis.semantic_input_hash(),
+        definition_input_hash: *analysis.definition_input_hash(),
+        schema_observations: semantics
+            .nodes()
+            .iter()
+            .flat_map(|node| &node.ports)
+            .filter_map(|port| match &port.schema_state {
+                yss_graph_analysis::GraphSchemaState::Observed { version, .. } => Some((
+                    output_ref(&port.address),
+                    yss_graph_execution::result::ResultId::from_existing(*version),
+                )),
+                _ => None,
+            })
+            .collect(),
         outputs,
         observers,
     }
@@ -432,18 +428,53 @@ impl GraphResolutionContext {
         document: &GraphDocument,
         locale: &str,
     ) -> yss_graph_analysis::GraphAnalysis {
-        let analysis = captured.graph().resolve_graph_document(
-            graph_path,
-            document,
-            &self.basis,
-            &self.graph_catalog,
-            self.project.resources().entries(),
-            locale,
-        );
-        analysis.map_semantic_snapshot(|semantics| {
-            semantics
-                .with_execution_kernel_support(&|id| captured.execution().kernels().supports(id))
-        })
+        let mut observations =
+            schema_observations::capture(captured, graph_path, document, &self.graph_catalog);
+        loop {
+            let analysis = captured
+                .graph()
+                .resolve_graph_document_with_observations(
+                    graph_path,
+                    document,
+                    &self.basis,
+                    &self.graph_catalog,
+                    self.project.resources().entries(),
+                    locale,
+                    &observations,
+                )
+                .map_semantic_snapshot(|semantics| {
+                    semantics.with_execution_kernel_support(&|id| {
+                        captured.execution().kernels().supports(id)
+                    })
+                });
+            if observations.is_empty() {
+                return analysis;
+            }
+            let matching = captured.execution().matching_schema_results(
+                graph_path.as_str(),
+                &graph_result_inputs(
+                    graph_path,
+                    &analysis,
+                    &self.database,
+                    self.registry_fingerprint,
+                ),
+            );
+            let before = observations.len();
+            observations.retain(|address, observation| {
+                let output = PlanOutputRef::new(
+                    PlanGraphId::from_existing(graph_path.as_str().into()),
+                    PlanPortAddress::from_existing(address.to_string().into()),
+                );
+                matching
+                    .get(&output)
+                    .is_some_and(|id| id.get() == observation.version)
+            });
+            if before == observations.len() {
+                return analysis;
+            }
+            // Only removal is permitted: stale facts and their dependents cannot
+            // revive each other. Tentative analyses never update ResultStore.
+        }
     }
 
     pub(crate) fn revalidate(&self, captured: &ApplicationSession) -> Result<(), GraphInputError> {

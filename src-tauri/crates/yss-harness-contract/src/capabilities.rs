@@ -282,7 +282,11 @@ impl AutomationCapabilityRequest {
                 validate_graph_request(&request.graph_path, &request.graph_hash)
             }
             Self::ExecuteGraph(request) => {
-                validate_graph_request(&request.graph_path, &request.graph_hash)
+                validate_graph_request(&request.graph_path, &request.graph_hash)?;
+                if let crate::GraphExecutionDemand::Node { node_id, .. } = &request.demand {
+                    validate_resource_id("nodeId", node_id)?;
+                }
+                Ok(())
             }
             Self::ListGraphResults(request) => {
                 validate_resource_id("graphPath", &request.graph_path)

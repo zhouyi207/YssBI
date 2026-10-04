@@ -1,4 +1,6 @@
 use super::*;
+mod function_calls;
+mod schema_feedback;
 
 use crate::session::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::num::NonZeroU64;
@@ -181,6 +183,8 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
     let function = GraphResourcePath::new("functions/Custom.yssbi-function").unwrap();
     let nested = GraphResourcePath::new("functions/Nested.yssbi-function").unwrap();
     let caller = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
+    let group_apply = GraphResourcePath::new("events/Apply.yssbi-event").unwrap();
+    let group_transform = GraphResourcePath::new("events/Transform.yssbi-event").unwrap();
     let signature_reader = GraphResourcePath::new("events/Signature.yssbi-event").unwrap();
     let outer_signature_reader =
         GraphResourcePath::new("events/Outer Signature.yssbi-event").unwrap();
@@ -242,7 +246,13 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
         );
         data.graphs.insert(path.clone(), resource);
     }
-    for path in [&caller, &signature_reader, &outer_signature_reader] {
+    for path in [
+        &caller,
+        &group_apply,
+        &group_transform,
+        &signature_reader,
+        &outer_signature_reader,
+    ] {
         data.graphs.insert(
             path.clone(),
             GraphResourceDocument::new(path.display_name(), GraphResourceKind::EventGraph),
@@ -250,6 +260,16 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
     }
     for (owner, target, kind) in [
         (&caller, None, "tests.function.call"),
+        (
+            &group_apply,
+            Some(&function),
+            "yssbi.dataframe.groupby.apply",
+        ),
+        (
+            &group_transform,
+            Some(&function),
+            "yssbi.dataframe.groupby.transform",
+        ),
         (&function, Some(&nested), "tests.function.call"),
         (&nested, Some(&function), "tests.function.call"),
         (&signature_reader, Some(&nested), "tests.function.signature"),
@@ -381,6 +401,8 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
             nested.clone(),
             function.clone(),
             caller.clone(),
+            group_apply.clone(),
+            group_transform.clone(),
             signature_reader.clone()
         ]
         .into()
@@ -390,6 +412,8 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
         [
             nested.as_str().into(),
             caller.as_str().into(),
+            group_apply.as_str().into(),
+            group_transform.as_str().into(),
             signature_reader.as_str().into()
         ]
         .into()
@@ -643,6 +667,129 @@ fn localized_catalog_rejects_stale_project_identity() {
         CatalogQueryApplicationError::CatalogProjectStale
     ));
     assert!(session.control.events().is_empty());
+}
+
+#[test]
+fn node_creation_form_is_read_only_and_preserves_protocol_defaults_and_conditions() {
+    let path = GraphResourcePath::new("events/Draft.yssbi-event").unwrap();
+    let mut project = ProjectData::new();
+    project.graphs.insert(
+        path.clone(),
+        GraphResourceDocument::new("Draft", GraphResourceKind::EventGraph),
+    );
+    let session = staged_session(project, "creation-form", GraphRuntimeTestControl::default());
+    let instance = session.session.project_instance_id();
+    session
+        .application
+        .unload_graph_resource(instance.clone(), path.clone(), 100, None)
+        .unwrap();
+    assert!(!session.session.project().has_resident_graph(&path).unwrap());
+    let before = session
+        .session
+        .project()
+        .read_project_index(instance)
+        .unwrap();
+    let file = session._project.root.join(path.as_str());
+    let saved = std::fs::read(&file).unwrap();
+    let curve = "yssbi.statistics.regression.curve".parse().unwrap();
+    let initial = session
+        .application
+        .node_creation_form(
+            instance,
+            &curve,
+            Default::default(),
+            Default::default(),
+            "en-US",
+        )
+        .unwrap();
+    assert!(initial.values.is_empty());
+    assert_eq!(
+        initial
+            .groups
+            .iter()
+            .flat_map(|group| group.parameters.iter())
+            .find(|parameter| parameter.key.as_str() == "degree")
+            .unwrap()
+            .value,
+        Some(serde_json::json!(2))
+    );
+    let conditional = session
+        .application
+        .node_creation_form(
+            instance,
+            &curve,
+            [
+                (
+                    "curve_family".parse().unwrap(),
+                    serde_json::json!("exponential"),
+                ),
+                ("degree".parse().unwrap(), serde_json::json!(4)),
+            ]
+            .into(),
+            Default::default(),
+            "en-US",
+        )
+        .unwrap();
+    assert!(!conditional.values.contains_key(&"degree".parse().unwrap()));
+    assert!(
+        conditional
+            .groups
+            .iter()
+            .flat_map(|group| group.parameters.iter())
+            .all(|parameter| parameter.key.as_str() != "degree")
+    );
+    assert!(
+        session
+            .application
+            .node_creation_form(
+                instance,
+                &curve,
+                [("degree".parse().unwrap(), serde_json::json!(0))].into(),
+                Default::default(),
+                "en-US"
+            )
+            .is_err()
+    );
+    let form = session
+        .application
+        .node_creation_form(
+            instance,
+            &"yssbi.statistics.linear.fit".parse().unwrap(),
+            Default::default(),
+            [("x".parse().unwrap(), 4)].into(),
+            "zh-CN",
+        )
+        .unwrap();
+    assert_eq!(form.port_counts[&"x".parse().unwrap()], 4);
+    assert!(matches!(
+        form.ports
+            .iter()
+            .find(|port| port.key.as_str() == "y")
+            .unwrap()
+            .count,
+        yss_node_catalog::PortCountPolicy::Fixed
+    ));
+    assert!(
+        session
+            .application
+            .node_creation_form(
+                &ProjectInstanceId::from_existing("stale".into()),
+                &curve,
+                Default::default(),
+                Default::default(),
+                "en-US"
+            )
+            .is_err()
+    );
+    let after = session
+        .session
+        .project()
+        .read_project_index(instance)
+        .unwrap();
+    assert_eq!(before.authority_generation(), after.authority_generation());
+    assert_eq!(before.publication_revision, after.publication_revision);
+    assert!(!session.session.project().has_resident_graph(&path).unwrap());
+    assert_eq!(std::fs::read(file).unwrap(), saved);
 }
 
 #[test]
@@ -1008,8 +1155,9 @@ fn connection_mutations_reject_model_results_even_through_resolved_generic_outpu
         },
     );
     let create = |kind: &str, source: PortAddress| EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        parameters: Default::default(),
         descriptor: yss_node_catalog::authoritative_static_descriptor(
-            &builtin.registry,
             builtin.registry.protocol(&kind.parse().unwrap()).unwrap(),
         )
         .unwrap(),
@@ -1233,12 +1381,18 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
             .iter()
             .all(|edge| edge.state == ConnectionCacheState::Valid)
     );
-    assert!(
-        initial
-            .outputs
-            .values()
-            .all(|state| matches!(state, ResultCacheState::Valid { .. }))
-    );
+    let source_output = PortAddress::declared(source, "value".parse().unwrap()).to_string();
+    for (output, state) in &initial.outputs {
+        if output.port().as_str() == source_output {
+            assert_eq!(
+                *state,
+                ResultCacheState::Missing,
+                "internal query plans are not materialized results"
+            );
+        } else {
+            assert!(matches!(state, ResultCacheState::Valid { .. }));
+        }
+    }
 
     let disconnected = app
         .edit_graph(
@@ -1459,6 +1613,8 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
             "en-US".into(),
             document,
             yss_graph_editor::EditorGraphMutation::CreateNode {
+                port_counts: Default::default(),
+                parameters: Default::default(),
                 descriptor: descriptor.clone(),
                 position: NodePosition { x: 400., y: 0. },
                 user_label: None,
@@ -1484,6 +1640,8 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
             "en-US".into(),
             updated.document,
             yss_graph_editor::EditorGraphMutation::CreateNode {
+                port_counts: Default::default(),
+                parameters: Default::default(),
                 descriptor,
                 position: NodePosition { x: 400., y: 200. },
                 user_label: None,

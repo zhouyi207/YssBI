@@ -59,11 +59,22 @@ pub enum ResultCacheStateDto {
 )]
 pub enum ExecutionDemandDto {
     Default,
+    Node {
+        node_id: String,
+        mode: NodeExecutionModeDto,
+    },
     Outputs {
         outputs: Box<[GraphOutputRefDto]>,
         include_default_results: bool,
         reuse_inputs: bool,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NodeExecutionModeDto {
+    CurrentInputs,
+    Dependencies,
 }
 
 #[derive(Debug, Serialize)]
@@ -72,6 +83,15 @@ pub struct RunErrorOutcomeDto {
     pub code: &'static str,
     pub phase: &'static str,
     pub source: Option<ResultInspectionSourceDto>,
+    pub groups: Box<[GroupFailureContextDto]>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupFailureContextDto {
+    pub caller: ResultInspectionSourceDto,
+    pub function: String,
+    pub ordinal: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

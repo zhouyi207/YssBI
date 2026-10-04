@@ -341,14 +341,14 @@ pub enum ParameterEditorSpecDto {
     },
     ProjectColumns {
         allow_empty: bool,
-        available: bool,
-        unavailable_reason: Option<Box<str>>,
+        schema_known: bool,
+        context_hint: Option<Box<str>>,
         options: Vec<DataframeColumnOptionDto>,
         value: Vec<Box<str>>,
     },
     FilterPredicate {
-        available: bool,
-        unavailable_reason: Option<Box<str>>,
+        schema_known: bool,
+        context_hint: Option<Box<str>>,
         columns: Vec<FilterColumnOptionDto>,
         value: Option<serde_json::Value>,
     },

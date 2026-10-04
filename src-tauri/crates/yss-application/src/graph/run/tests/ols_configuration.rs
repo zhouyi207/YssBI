@@ -213,7 +213,14 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             yss_database_runtime::dataset_query_engine().unwrap(),
         );
         let package = execution
-            .prepare_graph_package(&graph, &analysis, execution_basis)
+            .prepare_graph_package(
+                &graph,
+                &analysis,
+                execution_basis,
+                &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                    analysis.semantic_snapshot(),
+                ),
+            )
             .unwrap();
         let plan = execution
             .prepare_package(package, RuntimeGeneration::INITIAL)

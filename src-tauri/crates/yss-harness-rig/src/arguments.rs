@@ -312,8 +312,8 @@ mod tests {
         )
         .unwrap();
         for payload in [
-            serde_json::json!({"nodeTypeId": "secret", "x": "secret", "y": 0}),
-            serde_json::json!({"nodeTypeId": "secret", "y": 0}),
+            serde_json::json!({"nodeTypeId": "secret", "x": "secret", "y": 0, "parameters": {}, "portCounts": {}}),
+            serde_json::json!({"nodeTypeId": "secret", "y": 0, "parameters": {}, "portCounts": {}}),
         ] {
             let failure = decode::<yss_harness_contract::ApplyGraphEditRequest>(serde_json::json!({
                 "graphPath": "secret", "baseRevision": 1, "graphHash": "secret", "clientKey": "secret", "locale": "en-US",

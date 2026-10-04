@@ -7,6 +7,7 @@ pub(super) struct Evidence {
     pub(super) artifacts: Vec<ResourceChange>,
     pub(super) results: Vec<GraphResultReference>,
     pub(super) plan: Option<StatisticalPlan>,
+    pub(super) blocked_reason: Option<String>,
     requires_saved_document: bool,
     document_saves: BTreeMap<ProjectResourceRef, bool>,
 }
@@ -202,11 +203,12 @@ pub(super) fn finish_outcome(
     let evidence = evidence.lock().unwrap_or_else(|e| e.into_inner());
     // The public reply is already owned by the turn transcript; only Workers produce reports.
     let mut report = result.as_ref().ok().and_then(|result| {
-        if role != AgentRole::Manager && result.final_text.len() <= 32 * 1024 {
-            serde_json::from_str::<WorkerReport>(&result.final_text).ok()
-        } else {
-            None
-        }
+        (role != AgentRole::Manager).then(|| WorkerReport {
+            summary: result.final_text.clone(),
+            warnings: vec![],
+            blocked_reason: evidence.blocked_reason.clone(),
+            next_steps: vec![],
+        })
     });
     if evidence.requires_saved_document
         && (evidence.document_saves.is_empty()
@@ -214,14 +216,10 @@ pub(super) fn finish_outcome(
         && let Some(report) = &mut report
         && report.blocked_reason.is_none()
     {
-        report.summary = "Report delivery is incomplete: a successful Doc save receipt is required for every changed document.".into();
         report.blocked_reason = Some("report_document_not_saved".into());
         report.next_steps.push("Delegate a corrected ReportAgent task with Doc creation/edit/save permissions. Write the report with edit_resource and finish with manage_resource save using the current version.".into());
     }
-    let failure_code = result.as_ref().err().map(|error| error.code).or_else(|| {
-        (role != AgentRole::Manager && report.is_none())
-            .then_some(AgentDriverFailureCode::InvalidProviderResponse)
-    });
+    let failure_code = result.as_ref().err().map(|error| error.code);
     let state = match failure_code {
         Some(AgentDriverFailureCode::Cancelled) => AgentRunState::Cancelled,
         Some(_) => AgentRunState::Failed,

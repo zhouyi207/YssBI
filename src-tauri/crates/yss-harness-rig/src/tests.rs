@@ -29,6 +29,7 @@ use yss_harness_contract::{
 struct ScriptedCompletionModel {
     turns: Arc<Mutex<VecDeque<Vec<AssistantContent>>>>,
     requests: Arc<Mutex<Vec<CompletionRequest>>>,
+    finish_reason: Option<rig_core::completion::FinishReason>,
 }
 
 impl ScriptedCompletionModel {
@@ -36,6 +37,7 @@ impl ScriptedCompletionModel {
         Self {
             turns: Arc::new(Mutex::new(turns.into_iter().collect())),
             requests: Arc::new(Mutex::new(Vec::new())),
+            finish_reason: None,
         }
     }
 }
@@ -80,10 +82,9 @@ impl CompletionModel for ScriptedCompletionModel {
                 _ => unreachable!(),
             }
         }
-        items.push(Ok(RawStreamingChoice::FinalResponse(StreamFinal::new(
-            "test",
-            Usage::new(),
-        ))));
+        let mut terminal = StreamFinal::new("test", Usage::new());
+        terminal.finish_reason = self.finish_reason.clone();
+        items.push(Ok(RawStreamingChoice::FinalResponse(terminal)));
         Ok(StreamingCompletionResponse::stream(
             "test",
             Box::pin(futures_util::stream::iter(items)),
@@ -138,12 +139,7 @@ impl AgentEventOutput for CollectingOutput {
 fn request(tools: Vec<ToolDescriptor>) -> AgentTurnRequest {
     AgentTurnRequest {
         role: yss_harness_contract::AgentRole::Stats,
-        limits: yss_harness_contract::AgentRunLimits {
-            maximum_model_turns: 128,
-            maximum_output_tokens: 8192,
-            maximum_duration_ms: 300_000,
-            tool_concurrency: 1,
-        },
+        tool_concurrency: 1,
         control_tools: vec![yss_harness_contract::AgentControlTool::ProposeStatisticalPlan],
         output_mode: yss_harness_contract::AgentOutputMode::FinalResponse,
         messages: vec![
@@ -570,8 +566,8 @@ async fn plan_rejection_reaches_the_next_model_call_with_actionable_feedback() {
 }
 
 #[tokio::test]
-async fn driver_continues_within_the_host_model_and_output_budgets() {
-    let mut turns = (0..20)
+async fn driver_continues_past_previous_model_and_output_limits() {
+    let mut turns = (0..40)
         .map(|index| {
             vec![AssistantContent::ToolCall(ToolCall::from_wire(
                 format!("plan-{index}"),
@@ -579,7 +575,8 @@ async fn driver_continues_within_the_host_model_and_output_budgets() {
             ))]
         })
         .collect::<Vec<_>>();
-    turns.push(vec![AssistantContent::text("Analysis complete.")]);
+    let final_text = "Verified report section.\n".repeat(1500);
+    turns.push(vec![AssistantContent::text(final_text.clone())]);
     let model = ScriptedCompletionModel::new(turns);
     let driver = RigAgentDriver::new(model.clone());
     let result = driver
@@ -591,37 +588,116 @@ async fn driver_continues_within_the_host_model_and_output_budgets() {
         )
         .await
         .unwrap();
-    assert_eq!(result.final_text, "Analysis complete.");
+    assert_eq!(result.final_text, final_text);
     let requests = model.requests.lock().unwrap();
-    assert_eq!(requests.len(), 21);
-    assert!(
-        requests
-            .iter()
-            .all(|request| request.max_tokens == Some(8192))
-    );
+    assert_eq!(requests.len(), 41);
+    assert!(requests.iter().all(|request| request.max_tokens.is_none()));
 }
 
 #[tokio::test]
-async fn model_call_budget_exhaustion_has_a_distinct_failure_code() {
-    let model =
-        ScriptedCompletionModel::new([vec![AssistantContent::ToolCall(ToolCall::from_wire(
-            "plan-call",
-            ToolFunction::new("propose_statistical_plan".into(), sample_plan()),
-        ))]]);
-    let driver = RigAgentDriver::new(model.clone());
-    let mut input = request(Vec::new());
-    input.limits.maximum_model_turns = 1;
-    let error = driver
-        .run_turn(
-            input,
-            Arc::new(StaticExecutor),
-            Arc::new(CollectingOutput::default()),
+async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress() {
+    use rig_core::completion::FinishReason;
+    struct UnusedExecutor;
+    impl ModelCapabilityExecutor for UnusedExecutor {
+        fn execute<'a>(
+            &'a self,
+            _: ModelCapabilityRequest,
+        ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+            Box::pin(async { panic!("a truncated model response must not execute its tool calls") })
+        }
+    }
+    // Exercise the actual Rig loop as well as its public stream surface below.
+    for content in [
+        vec![AssistantContent::text("partial answer")],
+        vec![AssistantContent::ToolCall(ToolCall::from_wire(
+            "cut-short",
+            ToolFunction::new(
+                "inspect_dataset_schema".into(),
+                serde_json::json!({"databaseId":"database-1"}),
+            ),
+        ))],
+        vec![],
+    ] {
+        let mut model = ScriptedCompletionModel::new([content]);
+        model.finish_reason = Some(FinishReason::Length);
+        let result = RigAgentDriver::new(model)
+            .run_turn(
+                request(vec![ToolDescriptor::for_capability(
+                    CapabilityId::InspectDatasetSchema,
+                )]),
+                Arc::new(UnusedExecutor),
+                Arc::new(CollectingOutput::default()),
+                CancellationToken::default(),
+            )
+            .await;
+        assert_eq!(
+            result.unwrap_err().code,
+            AgentDriverFailureCode::ProviderOutputTruncated
+        );
+    }
+    for (reason, expected, sdk_message) in [
+        (
+            Some(FinishReason::Length),
+            AgentDriverFailureCode::ProviderOutputTruncated,
+            "the model produced no answer and stopped with finish_reason=Length; output cap reached",
+        ),
+        (
+            Some(FinishReason::ContentFilter),
+            AgentDriverFailureCode::ProviderContentFiltered,
+            "the model produced no answer and stopped with finish_reason=ContentFilter; response filtered",
+        ),
+        (
+            None,
+            AgentDriverFailureCode::ProviderStreamInterrupted,
+            "provider stream ended without a terminal record; treating the turn as truncated",
+        ),
+    ] {
+        let mut items = vec![Ok(MultiTurnStreamItem::StreamAssistantItem(
+            StreamedAssistantContent::Text(rig_core::message::Text::new("partial progress")),
+        ))];
+        if let Some(reason) = reason {
+            items.push(Ok(MultiTurnStreamItem::CompletionCall(
+                rig_agent::agent::CompletionCall::new(0, Usage::new())
+                    .with_finish_reason(Some(reason)),
+            )));
+            items.push(Ok(MultiTurnStreamItem::final_response(
+                vec![AssistantContent::text("must not become a completed answer")],
+                Usage::new(),
+            )));
+        }
+        let output = Arc::new(CollectingOutput::default());
+        let (_sender, receiver) = tokio::sync::watch::channel(None);
+        let error = consume_text_stream(
+            Box::pin(futures_util::stream::iter(items)),
+            output.clone(),
             CancellationToken::default(),
+            receiver,
+            true,
         )
         .await
         .unwrap_err();
-    assert_eq!(error.code, AgentDriverFailureCode::ModelTurnLimitExceeded);
-    assert_eq!(model.requests.lock().unwrap().len(), 1);
+        assert_eq!(error.code, expected);
+        assert_eq!(
+            output.events.lock().unwrap().as_slice(),
+            &[AgentEvent::TextDelta {
+                delta: "partial progress".into()
+            }]
+        );
+        assert_eq!(
+            map_prompt_failure(PromptError::CompletionError(
+                CompletionError::ResponseError(sdk_message.into()),
+            ))
+            .code,
+            expected
+        );
+    }
+    assert_eq!(
+        map_prompt_failure(PromptError::CompletionError(
+            CompletionError::from_http_response(402u16.try_into().unwrap(), "payment required"),
+        ))
+        .code,
+        AgentDriverFailureCode::ProviderPaymentRequired
+    );
 }
 
 #[tokio::test]
@@ -995,7 +1071,6 @@ async fn text_is_published_while_provider_waits_and_pending_text_survives_cancel
             Box::pin(initial.chain(ending)),
             output.clone(),
             token.clone(),
-            tokio::time::Instant::now() + Duration::from_secs(2),
             failure_receiver,
             false,
         ));
@@ -1051,7 +1126,6 @@ async fn text_is_published_while_provider_waits_and_pending_text_survives_cancel
         Box::pin(stream),
         output.clone(),
         cancellation,
-        tokio::time::Instant::now() + Duration::from_secs(1),
         failure_receiver,
         false,
     )
@@ -1147,7 +1221,7 @@ async fn cancelling_a_model_turn_waits_for_admitted_tool_cleanup() {
 }
 
 #[tokio::test]
-async fn provider_timeout_and_panic_return_terminal_failures() {
+async fn stalled_provider_remains_cancellable_and_panic_is_a_terminal_failure() {
     #[derive(Clone)]
     struct BrokenModel {
         panic: bool,
@@ -1169,24 +1243,30 @@ async fn provider_timeout_and_panic_return_terminal_failures() {
         }
     }
     for (panic, expected) in [
-        (false, AgentDriverFailureCode::DeadlineElapsed),
+        (false, AgentDriverFailureCode::Cancelled),
         (true, AgentDriverFailureCode::InternalFailure),
     ] {
         let driver = RigAgentDriver::new(BrokenModel { panic });
-        let mut input = request(Vec::new());
-        input.limits.maximum_duration_ms = 20;
+        let input = request(Vec::new());
+        let cancellation = CancellationToken::default();
+        let cancel = cancellation.clone();
+        let stop = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            cancel.cancel(CancellationReason::User);
+        });
         let result = tokio::time::timeout(
             Duration::from_secs(2),
             driver.run_turn(
                 input,
                 Arc::new(StaticExecutor),
                 Arc::new(CollectingOutput::default()),
-                CancellationToken::default(),
+                cancellation,
             ),
         )
         .await
         .unwrap();
         assert_eq!(result.unwrap_err().code, expected);
+        stop.await.unwrap();
     }
 }
 

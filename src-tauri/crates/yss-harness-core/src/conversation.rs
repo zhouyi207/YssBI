@@ -235,10 +235,9 @@ pub(crate) fn agent_messages(
         content: crate::agent_definition(role).instructions.to_owned(),
     });
     if role != yss_harness_contract::AgentRole::Manager {
-        messages.push(AgentMessage::System { content: format!(
-            "Return your final task report as a JSON object matching this schema, with no Markdown fences. Tool receipts establish actual effects; set blockedReason when work cannot be completed. Schema: {}",
-            serde_json::to_string(&yss_harness_contract::worker_report_schema()).expect("static report schema"),
-        ) });
+        messages.push(AgentMessage::System {
+            content: "Return a concise final message describing the work completed, evidence, artifacts and any blockers or remaining work. Plain text and Markdown are accepted; no JSON wrapper is required. Tool receipts establish actual effects. The Manager must assess whether your task objective was achieved before relying on the result.".into(),
+        });
     }
     if matches!(
         role,

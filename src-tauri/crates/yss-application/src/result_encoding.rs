@@ -72,6 +72,11 @@ pub(crate) fn runtime_value_to_json(
         RuntimeValue::Scalar(value) => serde_json::to_value(value.display_value())
             .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
         RuntimeValue::Resource(value) => value.as_ref().into(),
+        RuntimeValue::Grouped(groups) => serde_json::json!({
+            "kind": "groupedDataFrame",
+            "keys": groups.keys(),
+            "columns": groups.source().schema().fields().iter().map(|field| field.name()).collect::<Vec<_>>(),
+        }),
         RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::LinearRegression(_) => {
             return Err(ResultQueryApplicationError::UnrepresentableValue);
         }

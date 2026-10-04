@@ -20,15 +20,6 @@ pub enum AgentRole {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentRunLimits {
-    pub maximum_model_turns: usize,
-    pub maximum_output_tokens: u64,
-    pub maximum_duration_ms: u64,
-    pub tool_concurrency: usize,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentControlTool {
     DelegateTask,
@@ -132,14 +123,6 @@ impl AgentTask {
             || self.key.len() > 128
             || self.objective.trim().is_empty()
             || self.completion_criteria.trim().is_empty()
-            || self.objective.len() > 8192
-            || self.constraints.len() > 8192
-            || self.completion_criteria.len() > 4096
-            || self.depends_on.len() > 32
-            || self.scope.resources.len() > 64
-            || self.scope.results.len() > 128
-            || self.scope.creations.len() > 16
-            || self.scope.export_paths.len() > 16
             || (self.worker == AgentRole::Review && !self.scope.is_read_only())
         {
             return Err(CapabilityContractError::InvalidField("task"));
@@ -170,7 +153,7 @@ impl AgentTask {
                 return Err(CapabilityContractError::InvalidField("creation.operations"));
             }
         }
-        crate::graph::validate_graph_json(self)
+        Ok(())
     }
 }
 
@@ -221,8 +204,4 @@ pub struct AgentTaskOutcome {
 
 pub fn agent_task_schema() -> schemars::Schema {
     schemars::schema_for!(AgentTask)
-}
-
-pub fn worker_report_schema() -> schemars::Schema {
-    schemars::schema_for!(WorkerReport)
 }

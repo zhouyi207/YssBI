@@ -210,11 +210,12 @@ pub fn graph_result_state_to_dto(
                 })?,
                 state: match state {
                     ResultCacheState::Missing => ResultCacheStateDto::Missing,
-                    ResultCacheState::Stale => ResultCacheStateDto::Stale,
+                    ResultCacheState::Stale { .. } => ResultCacheStateDto::Stale,
                     ResultCacheState::Valid { .. } => ResultCacheStateDto::Valid,
                 },
                 result_id: match state {
-                    ResultCacheState::Valid { result_id } => Some(result_id.get().to_string()),
+                    ResultCacheState::Valid { result_id }
+                    | ResultCacheState::Stale { result_id } => Some(result_id.get().to_string()),
                     _ => None,
                 },
             })
@@ -321,7 +322,12 @@ mod tests {
                         result_id: ResultId::from_existing(17),
                     },
                 ),
-                ("stale", ResultCacheState::Stale),
+                (
+                    "stale",
+                    ResultCacheState::Stale {
+                        result_id: ResultId::from_existing(18),
+                    },
+                ),
                 ("unavailable", ResultCacheState::Missing),
             ]
             .into_iter()

@@ -57,7 +57,13 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         }
         ExecutionApplicationError::PreparedExecution(error) => {
             let code = prepared_execution_command_code(&error);
-            CommandError::diagnosed(code, error)
+            if error.failure().code
+                == yss_graph_execution::error::RunFailureCode::InputResultUnavailable
+            {
+                CommandError::expected(code)
+            } else {
+                CommandError::diagnosed(code, error)
+            }
         }
         ExecutionApplicationError::ProjectEffectPreparation(error)
         | ExecutionApplicationError::ProjectEffectFinalization(error) => {
@@ -140,6 +146,9 @@ fn prepared_execution_command_code(
         ExecutePreparedError::Cancelled { .. } => "run_cancelled",
         ExecutePreparedError::DeadlineExceeded { .. } => "run_deadline_exceeded",
         ExecutePreparedError::Kernel(_) => match error.failure().code {
+            yss_graph_execution::error::RunFailureCode::InputResultUnavailable => {
+                "execution_input_result_unavailable"
+            }
             yss_graph_execution::error::RunFailureCode::ShapeMismatch => "run_shape_mismatch",
             yss_graph_execution::error::RunFailureCode::InvalidParameter => "run_invalid_parameter",
             yss_graph_execution::error::RunFailureCode::UnalignedSeries => "run_unaligned_series",
@@ -249,10 +258,19 @@ pub async fn execute_graph(
             match execution {
                 Ok(_) => Ok(()),
                 Err(error) => {
+                    let failure = match &error {
+                        ExecutionApplicationError::PreparedExecution(error) => {
+                            Some(crate::ipc::channel::execution::run_failure_to_transport(
+                                &error.failure(),
+                            ))
+                        }
+                        _ => None,
+                    };
                     let error = map_application_execution_error(error);
                     Err(error.with_details(serde_json::json!({
                         "terminalRunEventSent": terminal_run_event_sent,
                         "executionAccepted": execution_accepted,
+                        "failure": failure,
                     })))
                 }
             }

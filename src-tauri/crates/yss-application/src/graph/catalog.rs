@@ -173,6 +173,8 @@ pub enum GraphCatalogQueryError {
 #[derive(Debug, thiserror::Error)]
 pub enum CatalogQueryApplicationError {
     #[error(transparent)]
+    Parameters(#[from] yss_graph_editor::MutationConflict),
+    #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
     #[error("captured catalog-query session changed")]
     SessionChanged,
@@ -490,6 +492,24 @@ pub(crate) fn capture_compatible_project_facts(
 }
 
 impl ApplicationState {
+    pub fn node_creation_form(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        node_type: &yss_node_protocol::NodeTypeId,
+        parameters: yss_node_protocol::ParameterValues,
+        port_counts: yss_node_protocol::InitialPortCounts,
+        locale: &str,
+    ) -> Result<yss_graph_runtime::NodeCreationForm, CatalogQueryApplicationError> {
+        let captured = self.capture_session()?;
+        ensure_requested_project(&captured, project_instance_id)?;
+        let form =
+            captured
+                .graph()
+                .node_creation_form(node_type, parameters, port_counts, locale)?;
+        revalidate_application_session(self, &captured)?;
+        Ok(form)
+    }
+
     pub fn localized_node_catalog(
         &self,
         request: LocalizedCatalogRequest,

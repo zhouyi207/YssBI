@@ -10,6 +10,9 @@ pub struct SearchNodeCatalogRequest {
     pub query: String,
     pub locale: String,
     pub limit: u16,
+    /// Include all parameter declarations before creating a node, including conditional fields.
+    #[serde(default)]
+    pub include_parameters: bool,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -54,6 +57,68 @@ pub struct NodeCatalogMatch {
     pub category_id: String,
     pub style_id: String,
     pub resource_path: Option<String>,
+    pub parameters: Option<Vec<NodeParameterDefinition>>,
+    /// Fixed, configurable and derived pin templates. Included with parameter definitions.
+    pub ports: Option<Vec<NodeCreationPortDefinition>>,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NodeCreationPortDefinition {
+    pub key: String,
+    pub title: String,
+    pub direction: String,
+    pub count: NodePortCountPolicy,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum NodePortCountPolicy {
+    Fixed,
+    Configurable {
+        min: u16,
+        max: Option<u16>,
+        member_templates: Vec<String>,
+    },
+    Derived,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NodeParameterDefinition {
+    pub key: String,
+    pub title: String,
+    pub description: Option<String>,
+    /// Canonical declared type expression; nominal IDs retain their protocol identity.
+    pub value_type: serde_json::Value,
+    pub default_value: Option<serde_json::Value>,
+    pub constraints: Vec<NodeParameterConstraint>,
+    pub visible_when: Option<NodeParameterCondition>,
+    pub resource_bound: bool,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum NodeParameterConstraint {
+    Required,
+    Positive,
+    ColumnName,
+    ColumnNames,
+    OneOf { values: Vec<serde_json::Value> },
+    IntegerRange { min: Option<i64>, max: Option<i64> },
+    Length { min: Option<u32>, max: Option<u32> },
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NodeParameterCondition {
+    pub key: String,
+    pub values: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]

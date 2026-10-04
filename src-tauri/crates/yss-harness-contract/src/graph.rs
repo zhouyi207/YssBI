@@ -28,6 +28,29 @@ pub struct ValidateGraphRequest {
 pub struct ExecuteGraphRequest {
     pub graph_path: String,
     pub graph_hash: String,
+    pub demand: GraphExecutionDemand,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum GraphExecutionDemand {
+    Default,
+    Node {
+        node_id: String,
+        mode: NodeExecutionMode,
+    },
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NodeExecutionMode {
+    CurrentInputs,
+    Dependencies,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -50,7 +73,9 @@ pub struct GraphParameterInspection {
     pub title: String,
     pub editor: String,
     pub value: Option<serde_json::Value>,
-    pub options: Vec<String>,
+    /// None means choices are not known; an empty list is a known empty candidate set.
+    pub options: Option<Vec<String>>,
+    pub context_hint: Option<String>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -235,6 +260,11 @@ pub enum GraphEditOperation {
         client_id: Option<String>,
         node_type_id: String,
         resource_path: Option<String>,
+        parameters: BTreeMap<String, serde_json::Value>,
+        /// Initial totals per user-created pin template. Fixed and derived pins cannot be overridden.
+        /// With clientId, each initial pin is addressable by instanceId "$clientId.template[0]"
+        /// (zero-based creation order) in the same batch; receipts return stable instance IDs.
+        port_counts: BTreeMap<String, u16>,
         x: f64,
         y: f64,
         user_label: Option<String>,
@@ -328,11 +358,18 @@ pub(crate) fn validate_graph_edit_operation(
             client_id: _,
             node_type_id,
             resource_path,
+            parameters,
+            port_counts,
             x,
             y,
             user_label,
         } => {
             validate_resource_id("nodeTypeId", node_type_id)?;
+            validate_graph_json(parameters)?;
+            validate_graph_json(port_counts)?;
+            for key in port_counts.keys() {
+                validate_resource_id("portCounts", key)?;
+            }
             if resource_path
                 .as_ref()
                 .is_some_and(|path| path.trim().is_empty() || path.len() > MAX_RESOURCE_ID_BYTES)

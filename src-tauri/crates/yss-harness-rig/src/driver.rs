@@ -1,4 +1,4 @@
-//! Execute a provider-neutral request with the limits and tools supplied by Core.
+//! Run model/tool turns until completion or cancellation, using Core's tool policy.
 
 use crate::error::{cancelled, invalid_response};
 use crate::messages::prepare_messages;
@@ -7,11 +7,9 @@ use crate::tools::{delegation_tool, dynamic_tool, statistical_plan_tool};
 use rig_agent::agent::AgentBuilder;
 use rig_core::completion::CompletionModel;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEventOutput,
-    AgentTurnRequest, AgentTurnResult, CancellationReason, CancellationToken,
-    ModelCapabilityExecutor,
+    AgentTurnRequest, AgentTurnResult, CancellationToken, ModelCapabilityExecutor,
 };
 
 use rig_agent::streaming::StreamingPrompt;
@@ -38,11 +36,7 @@ where
         if cancellation.is_cancelled() {
             return Err(cancelled());
         }
-        if request.limits.maximum_model_turns == 0
-            || request.limits.maximum_output_tokens == 0
-            || request.limits.maximum_duration_ms == 0
-            || request.limits.tool_concurrency == 0
-        {
+        if request.tool_concurrency == 0 {
             return Err(invalid_response());
         }
         let prepared = prepare_messages(request.messages)?;
@@ -82,16 +76,15 @@ where
         let builder = AgentBuilder::new(self.model.clone())
             .name(request.role.name())
             .preamble(&prepared.preamble)
-            .default_max_turns(request.limits.maximum_model_turns)
+            // Rig otherwise defaults to one model call. The Harness ends on the
+            // model's final response or cancellation, not a product turn quota.
+            .default_max_turns(usize::MAX)
             .record_content_telemetry(false);
-        let builder = builder.max_tokens(request.limits.maximum_output_tokens);
         let agent = builder.dynamic_tools(tools).build();
         let stream_output = Arc::clone(&output);
         let stream_cancellation = cancellation.clone();
-        let duration = Duration::from_millis(request.limits.maximum_duration_ms);
-        let concurrency = request.limits.tool_concurrency;
+        let concurrency = request.tool_concurrency;
         let prompt = tokio::spawn(async move {
-            let deadline = tokio::time::Instant::now() + duration;
             let stream = tokio::select! {
                 stream = agent
                 .stream_prompt(prepared.prompt)
@@ -99,16 +92,11 @@ where
                 .tool_concurrency(concurrency)
                 => stream,
                 _ = stream_cancellation.cancelled() => return Err(cancelled()),
-                _ = tokio::time::sleep_until(deadline) => {
-                    stream_cancellation.cancel(CancellationReason::DeadlineElapsed);
-                    return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
-                }
             };
             consume_text_stream(
                 stream,
                 stream_output,
                 stream_cancellation,
-                deadline,
                 failure_receiver,
                 request.output_mode == yss_harness_contract::AgentOutputMode::FinalResponse,
             )

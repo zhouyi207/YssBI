@@ -4,11 +4,11 @@ use crate::error::{cancelled, invalid_response, map_prompt_failure};
 use rig_agent::agent::{MultiTurnStreamItem, StreamingError, StreamingResult};
 use rig_agent::completion::PromptError;
 use rig_agent::streaming::StreamedAssistantContent;
+use rig_core::completion::FinishReason;
 use std::sync::Arc;
 use std::time::Duration;
 use yss_harness_contract::{
-    AgentDriverFailure, AgentDriverFailureCode, AgentEvent, AgentEventOutput, CancellationReason,
-    CancellationToken,
+    AgentDriverFailure, AgentDriverFailureCode, AgentEvent, AgentEventOutput, CancellationToken,
 };
 
 use futures_util::StreamExt;
@@ -32,7 +32,6 @@ pub(crate) async fn consume_text_stream(
     mut stream: StreamingResult,
     output: Arc<dyn AgentEventOutput>,
     cancellation: CancellationToken,
-    deadline: tokio::time::Instant,
     mut tool_failures: tokio::sync::watch::Receiver<Option<AgentDriverFailure>>,
     final_response_only: bool,
 ) -> Result<String, AgentDriverFailure> {
@@ -47,10 +46,6 @@ pub(crate) async fn consume_text_stream(
         tokio::select! {
             biased;
             _ = cancellation.cancelled() => break Err(cancelled()),
-            _ = tokio::time::sleep_until(deadline) => {
-                cancellation.cancel(CancellationReason::DeadlineElapsed);
-                break Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
-            }
             failure = wait_tool_failure(&mut tool_failures) => break Err(failure),
             _ = timer.tick() => flush_text(output.as_ref(), &mut pending).await?,
             item = stream.next() => {
@@ -61,7 +56,7 @@ pub(crate) async fn consume_text_stream(
                             reason = "missing_final_response", received_text_bytes = transcript.len(),
                             "Harness response stream ended without a final response"
                         );
-                        Err(invalid_response())
+                        Err(AgentDriverFailure::new(AgentDriverFailureCode::ProviderStreamInterrupted))
                     };
                 };
                 let item = match item {
@@ -82,8 +77,30 @@ pub(crate) async fn consume_text_stream(
                         transcript.push_str(&text.text);
                         if first || pending.len() >= 4096 { flush_text(output.as_ref(), &mut pending).await?; }
                     }
-                    MultiTurnStreamItem::CompletionCall(_) => {
+                    MultiTurnStreamItem::CompletionCall(call) => {
                         flush_text(output.as_ref(), &mut pending).await?;
+                        let finish_reason = match &call.finish_reason {
+                            Some(FinishReason::Stop) => "stop",
+                            Some(FinishReason::ToolCalls) => "tool_calls",
+                            Some(FinishReason::Length) => "length",
+                            Some(FinishReason::ContentFilter) => "content_filter",
+                            Some(FinishReason::Other(_)) => "other",
+                            None => "unspecified",
+                        };
+                        tracing::info!(
+                            domain = "Application", event = "harness_model_completion",
+                            model_call = call.call_index + 1, finish_reason,
+                            usage_reported = call.usage.has_values(),
+                            input_tokens = call.usage.input_tokens, output_tokens = call.usage.output_tokens,
+                            reasoning_tokens = call.usage.reasoning_tokens,
+                            "Harness model call completed"
+                        );
+                        let failure = match call.finish_reason {
+                            Some(FinishReason::Length) => Some(AgentDriverFailureCode::ProviderOutputTruncated),
+                            Some(FinishReason::ContentFilter) => Some(AgentDriverFailureCode::ProviderContentFiltered),
+                            _ => None,
+                        };
+                        if let Some(code) = failure { break Err(AgentDriverFailure::new(code)); }
                         separate_turn = true;
                     }
                     MultiTurnStreamItem::FinalResponse(response) => {

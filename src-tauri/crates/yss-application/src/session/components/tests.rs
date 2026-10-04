@@ -236,7 +236,14 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
     };
     let package = session
         .execution()
-        .prepare_graph_package(&graph, &analysis, plan_basis(first_fingerprint))
+        .prepare_graph_package(
+            &graph,
+            &analysis,
+            plan_basis(first_fingerprint),
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                analysis.semantic_snapshot(),
+            ),
+        )
         .unwrap();
     let prepared = session
         .execution()
@@ -270,7 +277,10 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         session.execution().prepare_graph_package(
             &graph,
             &analysis,
-            plan_basis(updated.fingerprint())
+            plan_basis(updated.fingerprint()),
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                analysis.semantic_snapshot()
+            )
         ),
         Err(yss_graph_execution::graph_preparation::GraphPlanError::KernelCapabilitiesMismatch)
     ));
@@ -293,6 +303,9 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             &graph,
             &revised,
             plan_basis(updated_runtime.kernels().fingerprint()),
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                revised.semantic_snapshot(),
+            ),
         )
         .unwrap();
     assert!(!Arc::ptr_eq(package.plan(), revised_package.plan()));
@@ -329,7 +342,10 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         missing_runtime.prepare_graph_package(
             &graph,
             &blocked,
-            plan_basis(missing_runtime.kernels().fingerprint())
+            plan_basis(missing_runtime.kernels().fingerprint()),
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                blocked.semantic_snapshot()
+            )
         ),
         Err(yss_graph_execution::graph_preparation::GraphPlanError::NotReady)
     ));

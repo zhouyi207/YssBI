@@ -185,6 +185,8 @@ fn inspect_port(address: &PortAddress) -> GraphPortInspection {
     }
 }
 
+mod catalog;
+
 fn search_node_catalog(
     application: &ApplicationState,
     captured: &Arc<ApplicationSession>,
@@ -221,6 +223,8 @@ fn search_node_catalog(
                         .resource_path
                         .as_ref()
                         .map(|path| path.as_str().to_owned()),
+                    parameters: None,
+                    ports: None,
                 },
             )
         })
@@ -232,6 +236,25 @@ fn search_node_catalog(
             .then_with(|| left.node_type_id.cmp(&right.node_type_id))
     });
     matches.truncate(usize::from(request.limit));
+    if request.include_parameters {
+        for (_, matched) in &mut matches {
+            let Some(item) = catalog.items.iter().find(|item| {
+                item.node_type_id.as_ref() == matched.node_type_id
+                    && item.resource_path.as_ref().map(|path| path.as_str())
+                        == matched.resource_path.as_deref()
+            }) else {
+                continue;
+            };
+            let node_type = matched
+                .node_type_id
+                .parse()
+                .expect("catalog node type identity");
+            if let Some(protocol) = captured.graph().registry().protocol(&node_type) {
+                matched.parameters = Some(catalog::parameter_definitions(protocol, item));
+                matched.ports = Some(catalog::port_definitions(protocol));
+            }
+        }
+    }
 
     Ok(NodeCatalogSearchResult {
         locale: catalog.locale.into_string(),
@@ -623,7 +646,8 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
         CatalogQueryApplicationError::CatalogProjectStale => {
             CapabilityFailure::new(CapabilityFailureCode::ProjectSessionMismatch)
         }
-        CatalogQueryApplicationError::Project(_)
+        CatalogQueryApplicationError::Parameters(_)
+        | CatalogQueryApplicationError::Project(_)
         | CatalogQueryApplicationError::Database(_)
         | CatalogQueryApplicationError::Contract(_)
         | CatalogQueryApplicationError::Graph(_) => {

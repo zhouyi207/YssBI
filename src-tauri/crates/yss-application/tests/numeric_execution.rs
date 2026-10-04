@@ -1729,7 +1729,14 @@ fn execute(
         BTreeMap::new(),
     );
     let package = state
-        .prepare_graph_package(&graph, &analysis, basis)
+        .prepare_graph_package(
+            &graph,
+            &analysis,
+            basis,
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                analysis.semantic_snapshot(),
+            ),
+        )
         .unwrap_or_else(|error| {
             panic!(
                 "{output_node_type}: {error:?}; {:?}",
@@ -3445,6 +3452,9 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                     resource.clone(),
                     PlanResourceObservedState::Present(version.clone()),
                 )]),
+            ),
+            &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
+                analysis.semantic_snapshot(),
             ),
         )
         .unwrap();

@@ -50,6 +50,8 @@ pub enum EditorGraphMutationDto {
     CreateNode {
         descriptor: crate::ipc::schema::catalog::NodeCreationDescriptorDto,
         position: NodePosition,
+        parameters: ParameterValues,
+        port_counts: yss_node_protocol::InitialPortCounts,
         user_label: Option<String>,
         #[serde(default)]
         connect_from: Option<PortAddressDto>,
@@ -146,6 +148,8 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
             EditorGraphMutationDto::CreateNode {
                 descriptor,
                 position,
+                parameters,
+                port_counts,
                 user_label,
                 connect_from,
             } => yss_graph_editor::EditorGraphMutation::CreateNode {
@@ -153,6 +157,8 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
                     .try_into()
                     .map_err(|_| EditorMutationMappingError::NodeCreation)?,
                 position,
+                parameters,
+                port_counts,
                 user_label,
                 connect_from: connect_from.map(address).transpose()?,
             },

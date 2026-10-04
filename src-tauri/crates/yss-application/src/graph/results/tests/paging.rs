@@ -1,22 +1,10 @@
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, mpsc};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use yss_data_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
-use yss_graph_document::{
-    DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
-};
-use yss_graph_execution::plan::{
-    PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId,
-    PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion, ResourceAccess,
-    ResourceKind,
-};
-use yss_graph_execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
-use yss_graph_execution::state::RunExecutionControl;
-use yss_graph_resource_contract::{
-    ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogSnapshot,
-};
+use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
+use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{
     NumericOperation, NumericType, RelationBatchStream, RelationBinding, RelationColumn,
@@ -177,74 +165,9 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
         )));
         app.install_candidate(candidate).unwrap();
         let captured = app.capture_session().unwrap();
-        let session =
-            PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into());
+        let session = captured.project_session_id();
         let runtime = captured.execution();
         let graph = GraphResourcePath::new("events/paged.yssbi-event").unwrap();
-        let id = NodeId::new();
-        let mut document = GraphDocument::default();
-        document.nodes.insert(
-            id,
-            DocumentNode {
-                id,
-                node_type: "yssbi.dataframe.source.get".parse().unwrap(),
-                position: NodePosition { x: 0., y: 0. },
-                parameters: ParameterValues::from([(
-                    "dataframe".parse().unwrap(),
-                    serde_json::json!("data"),
-                )]),
-                user_label: None,
-            },
-        );
-        let catalog = ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::from([(
-                GraphResourceId::new("data"),
-                DataSchema {
-                    columns: vec![ColumnSchema {
-                        semantic: None,
-                        physical_type: None,
-                        name: "x".into(),
-                        data_type: yss_data_contract::ValueType::Scalar(
-                            yss_data_contract::SemanticType::Numeric,
-                        ),
-                    }],
-                },
-            )]),
-        );
-        let analysis = captured.graph().resolve_graph_document(
-            &graph,
-            &document,
-            &yss_graph_analysis_contract::GraphAnalysisBasis {
-                registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
-                    captured.graph().registry_fingerprint(),
-                ),
-                kernel_fingerprint: runtime.kernels().fingerprint().as_bytes(),
-                resource_versions: BTreeMap::new(),
-                resource_observations: BTreeMap::new(),
-            },
-            &catalog,
-            &[],
-            "en-US",
-        );
-        let resource = PlanResourceId::from_existing("data".into());
-        let version = PlanResourceVersion::from_existing("7".into());
-        let basis = PlanBasis::new(
-            session.clone(),
-            PlanRegistryFingerprint::from_bytes([0; 32]),
-            yss_node_kernel::KernelRegistry::default().fingerprint(),
-            BTreeMap::from([(resource.clone(), version.clone())]),
-            BTreeMap::from([(
-                resource.clone(),
-                PlanResourceObservedState::Present(version.clone()),
-            )]),
-        );
-        let package = runtime
-            .prepare_graph_package(&graph, &analysis, basis)
-            .unwrap();
-        let plan = runtime
-            .prepare_package(package, runtime.generation())
-            .unwrap();
         let (entered_tx, entered_rx) = mpsc::sync_channel(1);
         let (resume_tx, resume_rx) = mpsc::sync_channel(1);
         let reader = Arc::new(DelayedPage {
@@ -259,38 +182,17 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
             fail,
         });
         let relation = RelationHandle::new(reader.clone(), reader);
-        let requirement = PlanResourceRequirement::new(
-            resource,
-            ResourceKind::DataFrame,
-            ResourceAccess::Shared,
-            false,
+        let result_id = runtime.publish_fixture_result(
+            PlanOutputRef::new(
+                PlanGraphId::from_existing(graph.as_str().into()),
+                PlanPortAddress::from_existing(
+                    PortAddress::declared(NodeId::new(), "dataframe".parse().unwrap())
+                        .to_string()
+                        .into(),
+                ),
+            ),
+            yss_graph_execution::result::StoredResult::new(RuntimeValue::Relation(relation)),
         );
-        let execution = runtime
-            .execute_prepared_handoff(
-                &plan,
-                RunResourceBindings::new(
-                    session,
-                    [requirement.clone()],
-                    [RunResourceBinding::new(
-                        requirement,
-                        version,
-                        RuntimeValue::Relation(relation),
-                    )],
-                ),
-                captured.resource_provider_factory(),
-                &RunExecutionControl::with_cancellation(
-                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
-                    Instant::now() + Duration::from_secs(10),
-                ),
-                yss_graph_execution::state::ExecutionResultRequest {
-                    demand: &PlanExecutionDemand::Default,
-                    basis: None,
-                },
-                |_| {},
-            )
-            .unwrap();
-        assert!(runtime.publish_committed_results(execution.handoff()));
-        let result_id = execution.handoff().results()[0].result_id();
         let reference = yss_graph_execution::result::ResultReference {
             execution_session_id: captured.execution_session_id(),
             result_id,

@@ -11,6 +11,7 @@ use yss_project_identity::ProjectInstanceId;
 
 pub(crate) fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandError {
     match error {
+        CatalogQueryApplicationError::Parameters(error) => CommandError::expected(error.code()),
         CatalogQueryApplicationError::SessionCapture(error) => session_capture_command_error(error),
         CatalogQueryApplicationError::SessionChanged => {
             CommandError::expected("stale_project_lifecycle")
@@ -85,6 +86,27 @@ pub fn get_localized_node_catalog(
     state
         .localized_node_catalog(LocalizedCatalogRequest::new(project_instance_id, locale))
         .map(LocalizedCatalogDto::from)
+        .map_err(catalog_query_command_error)
+}
+
+#[tauri::command]
+pub fn get_node_creation_form(
+    state: State<'_, ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+    node_type_id: yss_node_protocol::NodeTypeId,
+    parameters: yss_node_protocol::ParameterValues,
+    port_counts: yss_node_protocol::InitialPortCounts,
+    locale: String,
+) -> Result<crate::ipc::schema::catalog::NodeCreationFormDto, CommandError> {
+    state
+        .node_creation_form(
+            &project_instance_id,
+            &node_type_id,
+            parameters,
+            port_counts,
+            &locale,
+        )
+        .map(Into::into)
         .map_err(catalog_query_command_error)
 }
 

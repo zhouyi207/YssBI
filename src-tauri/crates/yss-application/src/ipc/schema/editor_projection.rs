@@ -81,19 +81,25 @@ fn map_node(
         parameter_groups: node
             .parameter_groups
             .iter()
-            .map(|group| ParameterGroupDto {
-                key: group.key.as_str().into(),
-                display: ParameterDisplayDto {
-                    title: group.display.title.clone(),
-                    description: group.display.description.clone(),
-                },
-                parameters: group.parameters.iter().map(map_parameter).collect(),
-            })
+            .map(map_parameter_group)
             .collect(),
         capabilities: NodeCapabilitiesDto {
             managed: node.capabilities.managed,
         },
         diagnostics: node.diagnostics.iter().map(map_diagnostic).collect(),
+    }
+}
+
+pub fn map_parameter_group(
+    group: &yss_graph_editor::projection::EditorParameterGroupModel,
+) -> ParameterGroupDto {
+    ParameterGroupDto {
+        key: group.key.as_str().into(),
+        display: ParameterDisplayDto {
+            title: group.display.title.clone(),
+            description: group.display.description.clone(),
+        },
+        parameters: group.parameters.iter().map(map_parameter).collect(),
     }
 }
 
@@ -245,14 +251,14 @@ fn map_configured_parameter_editor(
         },
         EditorParameterConfiguration::ProjectColumns {
             allow_empty,
-            available,
-            unavailable_reason,
+            schema_known,
+            context_hint,
             options,
             value,
         } => ParameterEditorSpecDto::ProjectColumns {
             allow_empty: *allow_empty,
-            available: *available,
-            unavailable_reason: unavailable_reason.clone(),
+            schema_known: *schema_known,
+            context_hint: context_hint.clone(),
             options: options
                 .iter()
                 .map(|option| DataframeColumnOptionDto {
@@ -263,13 +269,13 @@ fn map_configured_parameter_editor(
             value: value.to_vec(),
         },
         EditorParameterConfiguration::FilterPredicate {
-            available,
-            unavailable_reason,
+            schema_known,
+            context_hint,
             columns,
             value,
         } => ParameterEditorSpecDto::FilterPredicate {
-            available: *available,
-            unavailable_reason: unavailable_reason.clone(),
+            schema_known: *schema_known,
+            context_hint: context_hint.clone(),
             columns: columns
                 .iter()
                 .map(|column| FilterColumnOptionDto {
@@ -506,8 +512,8 @@ mod tests {
                             value: Some(json!(["sales"])),
                             configuration: Some(EditorParameterConfiguration::ProjectColumns {
                                 allow_empty: false,
-                                available: true,
-                                unavailable_reason: None,
+                                schema_known: true,
+                                context_hint: None,
                                 options: Box::new([EditorColumnOption {
                                     name: "sales".into(),
                                     data_type: RelationalScalarType::Known(
@@ -566,8 +572,8 @@ mod tests {
             json!({
                 "kind": "projectColumns",
                 "allowEmpty": false,
-                "available": true,
-                "unavailableReason": null,
+                "schemaKnown": true,
+                "contextHint": null,
                 "options": [{"name": "sales", "dataType": "Numeric"}],
                 "value": ["sales"],
             })

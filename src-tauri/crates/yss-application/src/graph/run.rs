@@ -1,3 +1,5 @@
+mod stages;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,6 +15,7 @@ use crate::session::{
 use yss_database_runtime::error::DatabaseError;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_execution::error::RunPhase;
+use yss_graph_execution::graph_preparation::GraphExecutionScope;
 use yss_graph_execution::package_preparation::PackagePreparationError;
 use yss_graph_execution::plan::{
     InvalidPlanIdentity, PlanExecutionDemand, PlanOutputRef, PlanProjectSessionId,
@@ -37,6 +40,10 @@ use yss_project_identity::ProjectInstanceId;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RunDemand {
     Default,
+    Node {
+        node_id: yss_graph_document::NodeId,
+        mode: yss_graph_execution::plan::NodeExecutionMode,
+    },
     Outputs {
         outputs: Box<[PlanOutputRef]>,
         include_default_results: bool,
@@ -339,9 +346,47 @@ where
 
     yss_graph_document_edit::validate_graph_document(&request.document)
         .map_err(ExecutionApplicationError::InvalidDocument)?;
+    let context = GraphResolutionContext::capture(&captured, &request.document)?;
+    let analysis = context.resolve(&captured, &request.graph_path, &request.document, "en-US");
+    if analysis.semantic_input_hash() != &request.semantic_input_hash {
+        return Err(ExecutionApplicationError::DraftChanged);
+    }
+    let plan_demand = match &request.demand {
+        RunDemand::Default => PlanExecutionDemand::Default,
+        RunDemand::Node { node_id, mode } => PlanExecutionDemand::Node {
+            node: yss_graph_execution::plan::PlanNodeId::from_existing(node_id.to_string().into()),
+            mode: mode.clone(),
+        },
+        RunDemand::Outputs {
+            outputs,
+            include_default_results,
+            reuse_inputs,
+        } => PlanExecutionDemand::Outputs {
+            outputs: outputs.clone(),
+            include_default_results: *include_default_results,
+            reuse_inputs: *reuse_inputs,
+        },
+    };
+    let semantics = analysis.semantic_snapshot();
+    let scope = GraphExecutionScope::select(&request.graph_path, semantics, &plan_demand)
+        .map_err(ExecutionApplicationError::GraphPlan)?;
+    if let yss_graph_analysis::GraphResolutionOutcome::InternalFailure { code, node_id, .. } =
+        semantics.outcome()
+        && node_id.is_none_or(|node| scope.nodes().contains(&node))
+    {
+        return Err(ExecutionApplicationError::GraphResolutionFailed { code: code.clone() });
+    }
+    stages::select_stage(
+        &request.graph_path,
+        &analysis,
+        &scope,
+        &plan_demand,
+        captured.execution(),
+        None,
+    )?;
     let required_resources = merge_resource_requirements(
         request.required_resources.iter().cloned(),
-        graph_resource_requirements(&request.document)?,
+        graph_resource_requirements(semantics, &scope)?,
     );
     if let Some(allowed) = &request.resource_authorizations {
         for required in &required_resources {
@@ -367,10 +412,7 @@ where
         .prepare_execution(project_request)
         .map_err(ExecutionApplicationError::ProjectPreparation)?;
 
-    let context = GraphResolutionContext::capture(&captured, &request.document)?;
-    let analysis = context.resolve(&captured, &request.graph_path, &request.document, "en-US");
     if let Some(allowed) = &request.resource_authorizations {
-        authorize_semantic_resources(analysis.semantic_snapshot(), allowed)?;
         for grant in prepared_project.resources().grants() {
             let permitted = allowed
                 .iter()
@@ -386,222 +428,46 @@ where
             }
         }
     }
-    if analysis.semantic_input_hash() != &request.semantic_input_hash {
-        return Err(ExecutionApplicationError::DraftChanged);
-    }
-    if let yss_graph_analysis::GraphResolutionOutcome::InternalFailure { code, .. } =
-        analysis.semantic_snapshot().outcome()
+    let deferred_outputs = analysis
+        .semantic_snapshot()
+        .nodes()
+        .iter()
+        .flat_map(|node| &node.ports)
+        .filter(|port| {
+            matches!(
+                port.schema_state,
+                yss_graph_analysis::GraphSchemaState::Deferred
+                    | yss_graph_analysis::GraphSchemaState::Observed { .. }
+            )
+        })
+        .map(|port| port.address.to_string())
+        .collect::<std::collections::BTreeSet<_>>();
+    let result_revision = captured.execution().result_revision();
+    let outcome = stages::execute_stages(
+        state,
+        &captured,
+        &request,
+        stages::PreparedGraphRun {
+            context,
+            analysis,
+            scope,
+            demand: plan_demand,
+            project: prepared_project,
+        },
+        &mut deliver,
+    );
+    if !deferred_outputs.is_empty()
+        && captured.execution().result_revision() != result_revision
+        && let Ok(editing) = captured
+            .project()
+            .read_graph_editing(captured.project_instance_id(), &request.graph_path)
     {
-        return Err(ExecutionApplicationError::GraphResolutionFailed { code: code.clone() });
+        captured.publish_graph_activity(super::editing::GraphActivity::Changed {
+            graph_path: request.graph_path.as_str().into(),
+            editing: editing.state,
+        });
     }
-    if analysis.semantic_snapshot().ready().is_none() {
-        return Err(ExecutionApplicationError::GraphNotReady);
-    }
-    context.revalidate(&captured)?;
-    revalidate_final_session(state, &captured)?;
-    let result_basis = captured
-        .execution()
-        .capture_result_run_basis(
-            request.graph_path.as_str(),
-            crate::graph::inputs::graph_result_inputs(
-                &request.graph_path,
-                &analysis,
-                &context.database,
-                context.registry_fingerprint,
-            ),
-        )
-        .ok_or(ExecutionApplicationError::DraftChanged)?;
-    check_control(&request)?;
-
-    context.revalidate(&captured)?;
-    let basis = plan_basis(&captured, prepared_project.resources().grants())?;
-    let package = captured
-        .execution()
-        .prepare_graph_package(&request.graph_path, &analysis, basis)
-        .map_err(ExecutionApplicationError::GraphPlan)?;
-    let prepared_plan = captured
-        .execution()
-        .prepare_package(package, captured.runtime_generation())
-        .map_err(ExecutionApplicationError::PackagePreparation)?;
-    let bindings = map_project_resource_facts(&captured, prepared_project.resources().grants())
-        .map_err(ExecutionApplicationError::ResourceBindings)?;
-
-    check_control(&request)?;
-    revalidate_final_session(state, &captured)?;
-
-    let control =
-        RunExecutionControl::with_cancellation(Arc::clone(&request.cancellation), request.deadline);
-    let plan_demand = match &request.demand {
-        RunDemand::Default => PlanExecutionDemand::Default,
-        RunDemand::Outputs {
-            outputs,
-            include_default_results,
-            reuse_inputs,
-        } => PlanExecutionDemand::Outputs {
-            outputs: outputs.clone(),
-            include_default_results: *include_default_results,
-            reuse_inputs: *reuse_inputs,
-        },
-    };
-    let mut started_identity = None;
-    let executed = match captured.execution().execute_prepared_handoff(
-        &prepared_plan,
-        bindings,
-        captured.resource_provider_factory(),
-        &control,
-        yss_graph_execution::state::ExecutionResultRequest {
-            demand: &plan_demand,
-            basis: Some(&result_basis),
-        },
-        |event| match event {
-            PreparedExecutionEvent::RunStarted { run_id, outputs } => {
-                let identity = RunIdentity::new(
-                    captured.execution().session_id(),
-                    request.graph_path.clone(),
-                    run_id,
-                    request.semantic_input_hash,
-                );
-                started_identity = Some(identity.clone());
-                let _ = deliver(RunApplicationEvent::new(
-                    captured.execution(),
-                    identity,
-                    RunApplicationEventKind::RunStarted { outputs },
-                ));
-            }
-        },
-    ) {
-        Ok(executed) => executed,
-        Err(error) => {
-            if let Some(identity) = started_identity {
-                let kind = if matches!(&error, ExecutePreparedError::Cancelled { .. }) {
-                    RunApplicationEventKind::RunCancelled
-                } else {
-                    RunApplicationEventKind::RunErrored {
-                        failure: error.failure(),
-                    }
-                };
-                let _ = deliver(RunApplicationEvent::new(
-                    captured.execution(),
-                    identity,
-                    kind,
-                ));
-            }
-            return Err(ExecutionApplicationError::PreparedExecution(error));
-        }
-    };
-    let run_id = executed.run_id();
-    let identity = started_identity.unwrap_or_else(|| {
-        RunIdentity::new(
-            captured.execution().session_id(),
-            request.graph_path.clone(),
-            run_id,
-            request.semantic_input_hash,
-        )
-    });
-
-    let prepared_effects = match captured.project().prepare_execution_effects(
-        prepared_project.authority(),
-        CandidateProjectEffects::new(prepared_project.resources().grants().iter().cloned()),
-    ) {
-        Ok(effects) => effects,
-        Err(error) => {
-            publish_run_failure(
-                captured.execution(),
-                run_id,
-                &identity,
-                &mut deliver,
-                terminal_kind_for_effect_error(&error),
-            );
-            return Err(ExecutionApplicationError::ProjectEffectPreparation(error));
-        }
-    };
-    let committed_effects = match captured.project().finalize_execution_effects(
-        prepared_effects,
-        &ProjectEffectCommitControl::new(Arc::clone(&request.cancellation), request.deadline),
-    ) {
-        Ok(effects) => effects,
-        Err(error) => {
-            publish_run_failure(
-                captured.execution(),
-                run_id,
-                &identity,
-                &mut deliver,
-                terminal_kind_for_effect_error(&error),
-            );
-            return Err(ExecutionApplicationError::ProjectEffectFinalization(error));
-        }
-    };
-    let outcome = match finalize_successful_run(executed.into_handoff()) {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            publish_run_failure(
-                captured.execution(),
-                run_id,
-                &identity,
-                &mut deliver,
-                RunApplicationEventKind::RunErrored {
-                    failure: finalization_failure(),
-                },
-            );
-            return Err(ExecutionApplicationError::Finalization(error));
-        }
-    };
-    if !captured
-        .execution()
-        .publish_committed_results(outcome.handoff())
-    {
-        publish_run_failure(
-            captured.execution(),
-            run_id,
-            &identity,
-            &mut deliver,
-            RunApplicationEventKind::RunCancelled,
-        );
-        return Err(ExecutionApplicationError::Cancelled);
-    }
-    if let Err(error) = captured.execution().finalize_run_success(run_id) {
-        publish_run_failure(
-            captured.execution(),
-            run_id,
-            &identity,
-            &mut deliver,
-            RunApplicationEventKind::RunErrored {
-                failure: finalization_failure(),
-            },
-        );
-        return Err(ExecutionApplicationError::RunFinalization(error));
-    }
-
-    let receipt = RunGraphReceipt {
-        identity: identity.clone(),
-        results: outcome
-            .handoff()
-            .results()
-            .iter()
-            .map(|result| RunResultReference {
-                result_id: result.result_id(),
-                output: result.output().clone(),
-                category: result.category(),
-            })
-            .collect(),
-    };
-    for inspection in outcome.inspection_requests() {
-        let _ = deliver(RunApplicationEvent::new(
-            captured.execution(),
-            identity.clone(),
-            RunApplicationEventKind::ResultInspectionRequested {
-                result_id: inspection.result_id(),
-                source: inspection.requester().clone(),
-            },
-        ));
-    }
-    let _ = deliver(RunApplicationEvent::new(
-        captured.execution(),
-        identity,
-        RunApplicationEventKind::RunCompleted,
-    ));
-    drop(committed_effects);
-    Ok(receipt)
+    outcome
 }
 
 pub fn cancel_run(
@@ -649,6 +515,7 @@ fn finalization_failure() -> yss_graph_execution::error::RunFailure {
         code: yss_graph_execution::error::RunFailureCode::FinalizationFailed,
         phase: RunPhase::Finalization,
         source: None,
+        groups: Box::new([]),
     }
 }
 
@@ -682,26 +549,6 @@ fn revalidate_final_session(
         .map_err(ExecutionApplicationError::StaleSession)
 }
 
-fn authorize_semantic_resources(
-    semantics: &yss_graph_analysis::GraphSemanticSnapshot,
-    allowed: &[RunResourceAuthorization],
-) -> Result<(), ExecutionApplicationError> {
-    for dependency in semantics.dependencies().entries().keys() {
-        if !allowed
-            .iter()
-            .any(|entry| entry.resource.as_str() == dependency.identity())
-        {
-            return Err(ExecutionApplicationError::ResourceBindings(
-                ResourceBindingError::ScopeDenied,
-            ));
-        }
-    }
-    for function in semantics.functions().values() {
-        authorize_semantic_resources(&function.semantics, allowed)?;
-    }
-    Ok(())
-}
-
 fn merge_resource_requirements(
     first: impl IntoIterator<Item = ProjectResourceRequirement>,
     second: impl IntoIterator<Item = ProjectResourceRequirement>,
@@ -714,58 +561,31 @@ fn merge_resource_requirements(
 }
 
 fn graph_resource_requirements(
-    document: &GraphDocument,
+    semantics: &yss_graph_analysis::GraphSemanticSnapshot,
+    scope: &GraphExecutionScope,
 ) -> Result<Vec<ProjectResourceRequirement>, ExecutionApplicationError> {
-    let mut requirements = Vec::new();
-    for value in document
-        .nodes
-        .values()
-        .flat_map(|node| node.parameters.values())
-    {
-        collect_resource_requirements(value, &mut requirements)?;
-    }
-    Ok(requirements)
-}
-
-fn collect_resource_requirements(
-    value: &serde_json::Value,
-    requirements: &mut Vec<ProjectResourceRequirement>,
-) -> Result<(), ExecutionApplicationError> {
-    match value {
-        serde_json::Value::String(value) => {
-            let kind = if value.starts_with("databases/") {
+    semantics
+        .resources_for_nodes(scope.nodes())
+        .into_iter()
+        .map(|identity| {
+            let kind = if identity.starts_with("databases/") {
                 ProjectResourceKind::DataFrame
-            } else if value.starts_with("events/") || value.starts_with("functions/") {
-                ProjectResourceKind::File
             } else {
-                return Ok(());
+                ProjectResourceKind::File
             };
-            let resource =
-                ProjectResourceId::new(value.clone().into_boxed_str()).map_err(|_| {
-                    ExecutionApplicationError::ResourceBindings(ResourceBindingError::Identity(
-                        InvalidPlanIdentity::Empty,
-                    ))
-                })?;
-            requirements.push(ProjectResourceRequirement::new(
+            let resource = ProjectResourceId::new(identity).map_err(|_| {
+                ExecutionApplicationError::ResourceBindings(ResourceBindingError::Identity(
+                    InvalidPlanIdentity::Empty,
+                ))
+            })?;
+            Ok(ProjectResourceRequirement::new(
                 resource,
                 kind,
                 ProjectResourceAccess::Shared,
                 false,
-            ));
-        }
-        serde_json::Value::Array(values) => {
-            for value in values {
-                collect_resource_requirements(value, requirements)?;
-            }
-        }
-        serde_json::Value::Object(values) => {
-            for value in values.values() {
-                collect_resource_requirements(value, requirements)?;
-            }
-        }
-        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
-    }
-    Ok(())
+            ))
+        })
+        .collect()
 }
 
 fn plan_basis(

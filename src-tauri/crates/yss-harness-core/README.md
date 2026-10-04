@@ -59,20 +59,29 @@ Application 的准备入口核对实际资源需求、语义依赖和资源版�
 整个项目的执行权限。项目会话、审批和资源 Owner 的提交校验继续生效。
 
 Worker 使用角色规范、单个任务、必要约束和指定依赖的结构化交付，不复制整个用户会话。
-报告 Skill 只加载到 Manager/Report，统计计划工具只提供给 Stats。Worker 最终报告必须符合
-JSON schema，Core 从真实工具回执归集资源变化、结果引用和证据调用 IDs。模型摘要不替代
-回执；无有效报告、明确阻塞、取消和失败分别形成相应终态。
+报告 Skill 只加载到 Manager/Report，统计计划工具只提供给 Stats。Worker 以最后一条文本或
+Markdown 回复收尾，不要求 JSON 包装，也不限制回复为 32 KiB。Core 将原文放入
+`WorkerReport.summary`，从真实工具回执归集资源变化、结果引用和证据调用 IDs；模型不能
+通过回复伪造这些事实。`Completed` 表示代理正常结束，Manager 仍需结合正文中的限制和
+真实回执判断任务目标是否达成。输入检查、依赖过期和文档未保存由 Core 标记 `Blocked`。
 
 “生成／输出／撰写分析报告”默认交付项目内已保存的 Doc；明确要求只在聊天中回答、不创建文件或简短解释时，由 Manager 直接回答。
 Manager 为 ReportAgent 提供 Doc 创建或编辑/保存授权、完整资源版本和真实证据引用；ReportAgent 通过现有资源工具写入 Markdown，并在最后一次修改后显式保存。
 对于有 Doc 创建、正文编辑或保存授权的 ReportAgent 任务，Core 根据本次任务的成功回执检查文档交付：至少有一份 Doc 保存成功，且所有仍存在的已修改 Doc 都已保存。仅返回任务摘要、只创建或编辑、保存失败、保存后再修改都不能形成 `Completed`，会返回 `Blocked` 和 `report_document_not_saved`。明确的只读检查、重命名或删除任务仍按其操作范围完成。
 报告内容的证据质量仍由 Worker 和独立 Review 负责。Manager 收到完成且含 Doc 回执的结果后请求打开文档，聊天正文只汇总结果、文档位置和限制；失败或受阻不能改为粘贴完整报告并宣称交付。
 
-每个 turn 至多 24 个 Worker tasks、256 次业务工具调用，最多 4 个 Worker 同时准入；每个
-模型 run 至多 32 次模型调用、每次输出最多 8192 tokens。Manager 时限 30 分钟，Worker
-时限 5 分钟；Rig 直接执行 Core 请求中必需的预算，不再维护另一套可选预算。只读 Worker 可以并行，当前版本通过共享
-读写门串行化所有写 Worker（包括跨会话），业务 Owner 仍拒绝 GUI 并发造成的过期版本。
-预算和运行上限由源码拥有，不作为模型可自行扩大的参数。
+Manager/Worker 的模型循环持续到模型完成、用户取消或真实执行错误，不设置固定调用轮数、
+累计 Worker 数、累计业务工具次数或整个 run 的时间配额。请求不强制 `max_tokens`，
+由实际模型服务决定可用输出容量。任务目标、约束、完成条件与授权列表不套用图 JSON 的
+64 KiB 预算或独立条目配额；身份、资源版本、操作和角色权限仍正常校验。
+最多 4 个 Worker 同时准入，Manager 工具并发为 4、Worker 为 1；共享读写门串行化所有
+写 Worker（包括跨会话），业务 Owner 仍拒绝 GUI 并发造成的过期版本。并发限制和单次
+业务工具的查询期限不等同于整个代理任务的运行配额。
+
+这里沿用开源 Codex 的自然完成机制：模型请求工具则继续循环，最终回复交回父代理；
+参照 [turn loop](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/core/src/session/turn.rs)
+和 [agent status](https://github.com/openai/codex/blob/afb436df8b70bb5bc57b86d9a3e829968988cd21/codex-rs/core/src/agent/status.rs)。
+本项目仍由现有 Core/Rig、工具账本和业务 Owner 承担对应职责。
 
 任务状态复用 SQLite-backed Harness 有序事件流：`AgentRunStarted`、`AgentRunOutput`、
 `AgentRunFinished` 和 `AgentRunInvalidated`。工具账本携带 `agent_run_id`，图编辑幂等 key
@@ -216,13 +225,28 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-appl
 
 图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
+`execute_graph` 必须提供 demand：`default` 全图重算；`node` 带 `nodeId` 及 `currentInputs` / `dependencies`
+模式，分别消费当前已求值输入或补算必要依赖。局部执行不要求无关分支就绪。输入缺失或过期返回
+`input_result_unavailable` 与源位置；内部查询计划不计作已发布的可查看结果。
+
 同一次图请求复用打开图时捕获的文档、编辑身份和解析投影，图检查、校验及 Harness 执行准入不重复读取和解析同一图。编辑与保存仍由 Project 在提交时重验捕获版本，执行准备继续重验文档及依赖。快照直接以 graphPath、revision、graphHash 和 semanticInputHash 标识；编辑请求的 graphHash、节点端口与参数、快照事实和编辑回执中的必需字段缺失时拒绝解析，不补成空值或空集合。
 
 `apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（后端图修订）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向后端图历史 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
 Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复针对 `apply_graph_edit`，不提供执行和保存的跨进程重放。
 
+`create_node` 的 `parameters` 和 `portCounts` 均为必需映射，快速创建传空映射；可直接提交列名列表及可变端口总数。
+声明 `clientId` 后，初始用户端口按模板顺序获得 `$clientId.templateKey[0]` 形式的批次内实例别名；
+后续连接使用该别名，回执交付真实端口地址。序号只用于本批别名，不进入文档连接身份。
+参数合并、未完成编辑、资源绑定及端口数量限制与 GUI 共用 Graph Editor 和 Protocol。
+
+目录搜索通过 `includeParameters: true` 按需返回参数 key、类型、默认值、固定约束、条件显隐、资源绑定标记，
+以及端口模板、方向、固定/可变/派生分类、数量范围和联动模板。先排序和限量，再从冻结 Registry 投影详细定义；
+无需先创建节点才能查询。未请求时保留有界目录摘要。工具集成测试与真实模型任务验收分别记录。
+
 `GraphEditReceipt` 保存图修订、graph hash、`clientKey`、创建元素的身份映射及本次提交的 `changes`。节点、端口、参数、连接和常量与 `inspect_graph` 共用事实结构；新增或改变的节点返回完整信息，包含派生列和端口，连接包含实际顺序。删除节点、连接和常量明确返回 ID；未变化实体省略。`ready` 和 `diagnostics` 是提交时的完整状态，替换此前诊断。所有图编辑操作统一比较提交前后解析投影，覆盖下游连带变化，不根据模型请求猜测结果。
+
+参数事实中的 `options: null` 表示候选尚未知或不适用，`options: []` 表示已知空候选集；固定枚举直接返回选项。`contextHint` 提供来自同一语义投影的输入结构提示。配置提交成功不表示可以执行，模型继续读取 `ready` 与诊断。
 
 差分绑定外层 `fromRevision` / `toRevision` 及 `changes.baseSemanticInputHash` / `semanticInputHash`。`inspect_graph` 同时提供语义 hash 和 ready，模型基线匹配且所需事实齐全时直接使用回执继续编辑或执行；基线缺失、语义依赖变化、版本冲突或缺少所需信息时再读取。保存后的 `resourceRevision` 同样可作为下一次编辑的 `baseRevision`。历史重放或幂等重试保留原提交事实，不能覆盖较新的证据。
 
@@ -382,7 +406,7 @@ AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和�
 
 Rig 将历史中重叠执行的业务工具和 Worker 委派合并为同一条 assistant 调用组，随后连续附上与每个调用 ID 对应的结果。组内进度文字在完整结果之后传给模型，不能插入调用与结果之间；持久事件和前端展示顺序保持原样。缺失、重复或不匹配的结果在发给 provider 前明确拒绝，不清空或截断历史来绕过协议错误。
 
-完整结果 JSON 随工具历史传递，DataSeries/DataFrame 仍保持引用或已读取的数据页。Rig 不再为单条历史消息设 1 MiB 准入上限，也不自动裁剪历史；供应商返回结构化 context_length_exceeded 时映射为 assistant_context_window_exceeded，界面提示完整对话超过模型容量，保留会话供用户切换模型或开启新会话。新消息、模型生成和超时准入仍使用各自已有契约。
+完整结果 JSON 随工具历史传递，DataSeries/DataFrame 仍保持引用或已读取的数据页。Rig 不再为单条历史消息设 1 MiB 准入上限，也不自动裁剪历史；供应商返回结构化 context_length_exceeded 时映射为 assistant_context_window_exceeded，界面提示完整对话超过模型容量，保留会话供用户切换模型或开启新会话。用户新消息和单次业务调用仍使用各自的输入及查询契约。
 
 历史不替代当前工具事实。图工具的运行事件进入原有 Execution/Results 消费者；对话只复用持久 Harness 事件与工具 receipt，不新增第二份持久聊天状态。
 
@@ -414,9 +438,9 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - Core、Gateway 和 adapters 使用 typed failures；Tauri seam 再映射为 stable error wire；
 - prompt、transcript、Memory、tool request/result、数据行、SQL、credential 和 model output 不写入 logging/diagnostics；
 - Assistant text 只进入 Harness event stream，不进入 Graph 执行事件或 Output 失败摘要；
-- capability result、knowledge hit 和 model text都有明确 size/depth budget；
+- capability result 和 knowledge hit 保留各自 size/depth 契约，模型最终回复没有额外字节配额；
 - external/provider payload 在 adapter 边界完成 schema、size、time 和 failure validation；
-- Rig 失败日志仅记录错误分类、HTTP 状态、JSON 错误类别与位置，以及缺少最终响应等流状态；不记录原始异常、响应正文或工具参数；
+- Rig 区分供应商输出截断、响应流中断、内容过滤、HTTP 402、认证、限流与协议格式错误。仅记录安全错误码、HTTP 状态、JSON 错误类别与位置；模型调用记录序号、归一化结束原因和供应商报告的 token 用量，不记录原始异常、响应正文、供应商任意 reason 文本或工具参数。截断与缺少终态的流不能成为成功回复；已完成工具的真实回执继续保留；
 - operational ledger 是 durable业务记录，不等同于 lossy diagnostics log。
 
 通用 transport contract 见 [`yss-application::ipc` README](../yss-application/src/ipc/README.md)，技术信号边界见 [Runtime Signals](../../../src/features/application/observability/README.md)。

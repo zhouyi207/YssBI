@@ -466,6 +466,21 @@ fn charge_value(
         RuntimeValue::LinearRegression(_) => {
             return Err(ResultQueryApplicationError::InvalidPageRequest);
         }
+        RuntimeValue::Grouped(groups) => {
+            for name in groups.keys().iter().map(|key| key.as_ref()).chain(
+                groups
+                    .source()
+                    .schema()
+                    .fields()
+                    .iter()
+                    .map(|field| field.name().as_str()),
+            ) {
+                *remaining = remaining
+                    .checked_sub(name.len().saturating_mul(6).saturating_add(4))
+                    .ok_or(ResultQueryApplicationError::PageTooLarge)?;
+            }
+            Some(64)
+        }
         _ => Some(24),
     }
     .ok_or(ResultQueryApplicationError::PageTooLarge)?;
