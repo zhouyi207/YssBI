@@ -46,9 +46,12 @@
     }
 
     & :where(.markdown-table-scroll) {
+      min-width: 0;
+      width: 100%;
       max-width: 100%;
       margin-block: 1.25em;
       overflow-x: auto;
+      overscroll-behavior-x: contain;
 
       &:first-child {
         margin-block-start: 0;
@@ -60,9 +63,15 @@
     }
 
     & :where(.markdown-table-scroll > table) {
-      width: auto;
-      max-width: 100%;
-      margin: 0 auto;
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+      margin: 0;
+    }
+
+    & :where(.markdown-table-scroll th, .markdown-table-scroll td) {
+      max-width: 28rem;
+      overflow-wrap: break-word;
     }
 
     & :where(th, td) {

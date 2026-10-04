@@ -101,7 +101,10 @@ declarations. Keep this version alignment when updating math dependencies.
 Preview uses Tailwind Typography's type scale in a centered column that fills the
 editor pane's available width, with responsive side padding instead of a fixed
 character-width cap. Node documentation uses the same typography with the compact
-scale. Shared prose colors and code-block
+scale. Shared Markdown tables retain their content width and scroll horizontally
+inside the available pane width; long prose cells can still wrap, and formulas,
+links and column alignment keep the normal Markdown rendering.
+Shared prose colors and code-block
 surfaces follow application theme tokens; Shiki token colors switch with the app's
 light/dark mode, including OLED. The highlighter is loaded lazily and shared across
 views, with explicit language imports for common web, scripting and data languages.
