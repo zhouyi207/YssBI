@@ -15,6 +15,7 @@ use yss_relational_contract::{
 };
 
 pub(crate) struct DataFusionRelation {
+    pub(crate) row_identity: yss_relational_contract::RelationRowIdentity,
     pub(crate) frame: DataFrame,
     // Native CASE/projection rewrites do not reliably retain field metadata. Keep the exact
     // Arrow schema derived from the source, validate native types, and attach it at the stream.
@@ -190,7 +191,7 @@ impl DataFusionRelation {
         )
     }
 
-    pub(crate) fn handle(
+    pub(crate) fn new(
         frame: DataFrame,
         schema: SchemaRef,
         bindings: Arc<[RelationBinding]>,
@@ -198,7 +199,7 @@ impl DataFusionRelation {
         executor: Arc<dyn RelationExecutor>,
         ordered_single_file: bool,
         domain_order: Vec<datafusion::logical_expr::expr::Sort>,
-    ) -> Result<RelationHandle, RelationError> {
+    ) -> Result<Self, RelationError> {
         let columns = schema
             .fields()
             .iter()
@@ -210,7 +211,8 @@ impl DataFusionRelation {
             .clone()
             .select(columns.clone())
             .map_err(|_| RelationError::InvalidPlan)?;
-        Self {
+        Ok(Self {
+            row_identity: Default::default(),
             domain,
             domain_order,
             columns,
@@ -221,8 +223,7 @@ impl DataFusionRelation {
             executor,
             ordered_single_file,
             positional_length: None,
-        }
-        .into_handle()
+        })
     }
 
     pub(crate) fn into_handle(self) -> Result<RelationHandle, RelationError> {
@@ -244,6 +245,9 @@ impl DataFusionRelation {
 }
 
 impl RelationPlan for DataFusionRelation {
+    fn row_identity(&self) -> Option<&yss_relational_contract::RelationRowIdentity> {
+        Some(&self.row_identity)
+    }
     fn positional_length(&self) -> Option<usize> {
         self.positional_length
     }

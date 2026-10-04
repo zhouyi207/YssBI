@@ -57,7 +57,7 @@ pub(super) const NODES: &[NodeSpec] = &[
     ),
     spec(
         "yssbi.dataframe.groupby",
-        "Group By",
+        "Grouped Aggregation",
         "分组聚合",
         &["groupby", "aggregate", "group summary"],
         &["分组聚合", "分类汇总"],

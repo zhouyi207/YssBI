@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use yss_data_contract::FilterLiteral;
 use yss_data_contract::TabularScalar;
 
-use yss_relational_contract::{RelationComparison, RelationError, RelationPredicate};
+pub(crate) use crate::kernel_error;
+use yss_relational_contract::{RelationComparison, RelationPredicate};
 
 use crate::KernelError;
 use crate::RuntimeValue;
@@ -408,19 +409,4 @@ fn predicate(fields: &BTreeMap<Box<str>, RuntimeValue>) -> Result<RelationPredic
         comparison,
         value,
     })
-}
-
-pub(crate) fn kernel_error(error: RelationError) -> KernelError {
-    match error {
-        RelationError::Cancelled => KernelError::Cancelled,
-        RelationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        RelationError::DivisionByZero => KernelError::DivisionByZero,
-        RelationError::NonFiniteResult => KernelError::NonFiniteResult,
-        RelationError::InvalidInput => KernelError::InvalidNumericInput,
-        RelationError::UnalignedSeries => KernelError::UnalignedSeries,
-        RelationError::ShapeMismatch => KernelError::ShapeMismatch,
-        RelationError::MemoryLimitExceeded => KernelError::BudgetExceeded,
-        RelationError::InvalidConversion => KernelError::InvalidParameter,
-        _ => KernelError::Failed,
-    }
 }

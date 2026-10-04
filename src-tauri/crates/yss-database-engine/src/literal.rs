@@ -57,6 +57,7 @@ impl DataFusionRuntime {
             .select(vec![expression.clone().alias(field.name())])
             .map_err(plan)?;
         DataFusionRelation {
+            row_identity: Default::default(),
             frame,
             schema: Arc::new(Schema::new(vec![field])),
             bindings: Arc::from([]),

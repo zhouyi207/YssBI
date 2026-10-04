@@ -1,4 +1,22 @@
 use thiserror::Error;
+use yss_relational_contract::RelationError;
+
+pub fn kernel_error(error: RelationError) -> KernelError {
+    match error {
+        RelationError::Cancelled => KernelError::Cancelled,
+        RelationError::DeadlineExceeded => KernelError::DeadlineExceeded,
+        RelationError::DivisionByZero => KernelError::DivisionByZero,
+        RelationError::NonFiniteResult => KernelError::NonFiniteResult,
+        RelationError::InvalidInput => KernelError::InvalidNumericInput,
+        RelationError::UnalignedSeries => KernelError::UnalignedSeries,
+        RelationError::ShapeMismatch => KernelError::ShapeMismatch,
+        RelationError::GroupSchemaMismatch => KernelError::GroupSchemaMismatch,
+        RelationError::GroupKeyCollision => KernelError::GroupKeyCollision,
+        RelationError::MemoryLimitExceeded => KernelError::BudgetExceeded,
+        RelationError::InvalidConversion => KernelError::InvalidParameter,
+        _ => KernelError::Failed,
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum KernelError {
@@ -12,6 +30,10 @@ pub enum KernelError {
     InvalidNumericInput,
     #[error("input shapes do not agree")]
     ShapeMismatch,
+    #[error("group functions returned inconsistent schemas")]
+    GroupSchemaMismatch,
+    #[error("group key output names collide with returned columns")]
+    GroupKeyCollision,
     #[error("kernel parameters are invalid")]
     InvalidParameter,
     #[error("input series are not aligned")]

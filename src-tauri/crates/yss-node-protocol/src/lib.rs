@@ -23,11 +23,11 @@ pub use identity::{
     TypeClassId, TypeConstructorId, TypeId, TypeParameterId,
 };
 pub use model::{
-    CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InputBindingSpec,
-    InputConsumption, LiteralPolicy, ManagedNodeRole, NodeCatalogProtocol, NodeInstanceDisplaySpec,
-    NodeInterfaceProtocol, NodeProtocol, NodeScope, OutputProduction, PortCardinality,
-    PortDirection, PortEditorSpec, PortMemberGroupSpec, PortSpec, ProtocolError,
-    ResourceDisplayKind, validate_execution,
+    CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InitialPortCountError,
+    InitialPortCounts, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
+    NodeCatalogProtocol, NodeInstanceDisplaySpec, NodeInterfaceProtocol, NodeProtocol, NodeScope,
+    OutputProduction, PortCardinality, PortDirection, PortEditorSpec, PortMemberGroupSpec,
+    PortSpec, ProtocolError, ResourceDisplayKind, validate_execution,
 };
 pub use parameter::{
     Parameter, ParameterCondition, ParameterConstraint, ParameterEditorSpec, ParameterGroup,

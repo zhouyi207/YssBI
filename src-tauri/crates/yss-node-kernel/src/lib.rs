@@ -10,11 +10,9 @@ mod linear_summary;
 mod registry;
 mod value;
 
-pub use error::KernelError;
+pub use error::{KernelError, kernel_error};
 pub use identity::{InvalidKernelIdentity, KernelFingerprint, KernelId, KernelParameterKey};
-pub use invocation::{
-    DEFAULT_MAX_INPUT_BYTES, KernelControl, KernelField, KernelInvocation, KernelOutputSpec,
-};
+pub use invocation::{KernelControl, KernelField, KernelInvocation, KernelOutputSpec};
 pub use linear_summary::{
     LinearDiagnosticEntry, LinearDiagnostics, LinearRegressionValue, LinearSummary,
 };

@@ -253,7 +253,7 @@ fn data_port(
     })
 }
 
-fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
+pub(crate) fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
     let kind = match key {
         "target" | "function" => ResourceDisplayKind::Function,
         _ => {

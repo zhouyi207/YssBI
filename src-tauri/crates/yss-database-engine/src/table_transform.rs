@@ -60,7 +60,7 @@ impl DataFusionRelation {
         fields: Vec<Field>,
         order: Vec<Sort>,
     ) -> Result<RelationHandle, RelationError> {
-        Self::handle(
+        Self::new(
             frame,
             Arc::new(Schema::new_with_metadata(
                 fields,
@@ -72,6 +72,7 @@ impl DataFusionRelation {
             false,
             order,
         )
+        .and_then(Self::into_handle)
     }
     pub(crate) fn sorted(&self, columns: &[SortColumn]) -> Result<RelationHandle, RelationError> {
         if columns.is_empty()

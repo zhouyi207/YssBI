@@ -89,13 +89,14 @@ pub(super) fn install(
                     "yssbi.statistics.panel.fit"
                         | "yssbi.statistics.panel.compare"
                         | "yssbi.statistics.iv.liml.summary"
+                        | "yssbi.statistics.logit.summary"
+                        | "yssbi.statistics.probit.summary"
+                        | "yssbi.statistics.var.summary"
                 ) {
                     7
                 } else if matches!(
                     id,
-                    "yssbi.statistics.var.summary"
-                        | "yssbi.statistics.logit.summary"
-                        | "yssbi.statistics.probit.summary"
+                    "yssbi.statistics.diagnostic.breusch_pagan"
                         | "yssbi.statistics.prais.summary"
                         | "yssbi.statistics.prais.fit"
                         | "yssbi.statistics.panel.did.randomization"
@@ -133,7 +134,6 @@ pub(super) fn install(
                     5
                 } else if id.starts_with("yssbi.plot.")
                     || id.ends_with(".granger")
-                    || id.ends_with(".breusch_pagan")
                     || matches!(
                         id,
                         "yssbi.statistics.workflow.moderation"

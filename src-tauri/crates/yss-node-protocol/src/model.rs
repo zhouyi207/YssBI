@@ -4,7 +4,9 @@ use super::{
     TypeParameterId, TypedValue,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+
+pub type InitialPortCounts = BTreeMap<PortKey, u16>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeProtocol {
@@ -57,6 +59,47 @@ pub struct NodeInterfaceProtocol {
 }
 
 impl NodeInterfaceProtocol {
+    /// Resolve explicit initial totals using the same cardinalities and coupled members
+    /// that govern later Add/Remove Pin operations. Fixed and derived ports are not configurable.
+    pub fn initial_port_counts(
+        &self,
+        requested: &InitialPortCounts,
+    ) -> Result<InitialPortCounts, InitialPortCountError> {
+        for (key, count) in requested {
+            let port = self
+                .ports
+                .iter()
+                .find(|port| &port.key == key)
+                .filter(|port| matches!(port.cardinality, PortCardinality::UserCreated { .. }))
+                .ok_or_else(|| InitialPortCountError::NotConfigurable(key.clone()))?;
+            let (min, max) = self.port_instance_bounds(port);
+            if *count < min || max.is_some_and(|max| *count > max) {
+                return Err(InitialPortCountError::OutOfRange(key.clone()));
+            }
+        }
+        let mut counts = requested.clone();
+        for group in &self.member_groups {
+            let mut count = None;
+            for key in &group.templates {
+                if let Some(value) = requested.get(key) {
+                    if count.is_some_and(|count| count != *value) {
+                        return Err(InitialPortCountError::ConflictingGroup(key.clone()));
+                    }
+                    count = Some(*value);
+                }
+            }
+            for key in &group.templates {
+                counts.insert(key.clone(), count.unwrap_or(group.min));
+            }
+        }
+        for port in &self.ports {
+            if let PortCardinality::UserCreated { min, .. } = port.cardinality {
+                counts.entry(port.key.clone()).or_insert(min);
+            }
+        }
+        Ok(counts)
+    }
+
     pub fn new(
         ports: Vec<PortSpec>,
         type_parameters: Vec<TypeParameterId>,
@@ -115,6 +158,32 @@ pub struct PortMemberGroupSpec {
     pub min: u16,
     pub max: Option<u16>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InitialPortCountError {
+    NotConfigurable(PortKey),
+    OutOfRange(PortKey),
+    ConflictingGroup(PortKey),
+}
+
+impl std::fmt::Display for InitialPortCountError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotConfigurable(key) => {
+                write!(formatter, "port '{key}' does not allow an initial count")
+            }
+            Self::OutOfRange(key) => {
+                write!(formatter, "port '{key}' count is outside protocol bounds")
+            }
+            Self::ConflictingGroup(key) => write!(
+                formatter,
+                "port '{key}' count conflicts with its member group"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for InitialPortCountError {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortSpec {

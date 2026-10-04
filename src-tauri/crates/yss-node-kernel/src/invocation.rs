@@ -9,12 +9,11 @@ use yss_data_contract::ValueType;
 
 use crate::{KernelError, KernelParameterKey, RuntimeValue};
 
-/// The existing per-computation numeric input and materialized output budget.
-pub const DEFAULT_MAX_INPUT_BYTES: usize = 128 * 1024 * 1024;
-
 pub struct KernelControl {
     pub cancellation: Arc<AtomicBool>,
     pub deadline: Instant,
+    /// Explicit limits are supported for controlled library consumers. Graph execution
+    /// uses `new`, which imposes no fixed input, workspace or output memory cap.
     pub max_input_bytes: usize,
 }
 
@@ -38,7 +37,7 @@ impl KernelControl {
         Self {
             cancellation,
             deadline,
-            max_input_bytes: DEFAULT_MAX_INPUT_BYTES,
+            max_input_bytes: usize::MAX,
         }
     }
 

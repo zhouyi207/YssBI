@@ -7,12 +7,16 @@ use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod aggregation;
 mod families;
+mod grouping;
 mod inventory;
 mod labels;
 mod transforms;
 pub(crate) use inventory::documentation as inventory_documentation;
 pub(crate) use transforms::documentation as transformation_documentation;
 pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<str>> {
+    if let Some(help) = grouping::documentation(id, locale) {
+        return Some(help);
+    }
     let kind = match id {
         "yssbi.dataframe.series.frequency" => InterfaceKind::Frequency,
         "yssbi.dataframe.groupby" => InterfaceKind::GroupBy,
@@ -66,6 +70,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     inventory::append(&mut fragment)?;
     transforms::append(&mut fragment)?;
     labels::append(&mut fragment)?;
+    grouping::append(&mut fragment)?;
     Ok(fragment)
 }
 
@@ -170,10 +175,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
                     }),
                 )?,
             ],
-            vec![
-                required_text_parameter("from")?,
-                required_text_parameter("to")?,
-            ],
+            vec![column_parameter("from")?, required_column_name("to")?],
         )),
         DropNaRows | DropNaColumns => {
             let subset_type = data_series_type(concrete("core.text")?);
@@ -203,7 +205,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
                             value_type: subset_type,
                             value: DataValue::List(vec![]),
                         }),
-                        vec![],
+                        vec![ParameterConstraint::ColumnNames],
                     )?,
                     choice_parameter(
                         "how",
@@ -721,8 +723,17 @@ fn column_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError
         concrete("core.text")?,
         ParameterEditorSpec::Select,
         None,
-        vec![ParameterConstraint::Required],
+        vec![
+            ParameterConstraint::Required,
+            ParameterConstraint::ColumnName,
+        ],
     )
+}
+
+fn required_column_name(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut parameter = required_text_parameter(key)?;
+    parameter.constraints.push(ParameterConstraint::ColumnName);
+    Ok(parameter)
 }
 
 fn nominal_parameter(
@@ -1007,13 +1018,23 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         ),
         (
             "editors.dataframe.connect_source",
-            "Connect DataFrame input",
-            "连接数据框输入",
+            "Enter column names now; they will be checked when the input schema is known.",
+            "可先填写列名，输入结构确定后会校验这些列。",
         ),
         (
             "editors.dataframe.deferred_columns",
-            "Columns are determined when results are consumed; an empty selection checks all columns.",
-            "列将在读取结果时确定；未选择检查列时检查全部列。",
+            "Column membership depends on execution; the configured names are pending validation.",
+            "列结构取决于执行结果；已配置的列名等待校验。",
+        ),
+        (
+            "editors.dataframe.pending_columns",
+            "The upstream schema is unresolved; you can continue configuring column names.",
+            "上游结构尚未确定，可以继续配置列名。",
+        ),
+        (
+            "editors.dataframe.schema_error",
+            "The input schema has a problem. Keep editing parameters and check the graph diagnostics.",
+            "输入结构存在问题。参数仍可编辑，请查看图诊断。",
         ),
     ] {
         out.push(("en-US", key.to_owned(), Text(en)));

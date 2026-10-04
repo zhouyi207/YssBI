@@ -402,7 +402,7 @@ impl DatasetQuery {
 
     pub fn relation(&self) -> Result<RelationHandle, RelationError> {
         let (frame, schema, order) = ordered_user_frame(self.frame.clone(), &self.schema)?;
-        crate::relation::DataFusionRelation::handle(
+        crate::relation::DataFusionRelation::new(
             frame,
             schema,
             Arc::from([self.binding.clone()]),
@@ -411,6 +411,7 @@ impl DatasetQuery {
             self.ordered_single_file,
             order,
         )
+        .and_then(crate::relation::DataFusionRelation::into_handle)
     }
 
     pub fn page(

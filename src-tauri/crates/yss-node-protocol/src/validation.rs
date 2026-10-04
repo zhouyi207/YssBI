@@ -457,6 +457,13 @@ pub(crate) fn parameter_value_matches_type(value: &serde_json::Value, expected: 
         TypeExpr::Union(options) => options
             .iter()
             .any(|option| parameter_value_matches_type(value, option)),
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } if constructor.as_str() == crate::DATA_SERIES_CONSTRUCTOR_ID => {
+            matches!(arguments.as_slice(), [element] if value.as_array().is_some_and(|values|
+                values.iter().all(|value| parameter_value_matches_type(value, element))))
+        }
         TypeExpr::Class(_)
         | TypeExpr::Generic(_)
         | TypeExpr::Applied { .. }
@@ -470,6 +477,12 @@ pub(crate) fn parameter_constraint_matches(
 ) -> bool {
     match constraint {
         ParameterConstraint::Required => !value.is_null(),
+        ParameterConstraint::ColumnName => value
+            .as_str()
+            .is_some_and(yss_data_contract::TabularColumnName::is_valid),
+        ParameterConstraint::ColumnNames => {
+            crate::dataframe::prepare_column_names_json(value).is_ok()
+        }
         ParameterConstraint::Positive => value
             .as_f64()
             .is_some_and(|value| value.is_finite() && value > 0.0),

@@ -11,7 +11,93 @@ use yss_relational_contract::{RelationComparison, RelationPredicate};
 use super::*;
 mod aggregation;
 mod alignment;
+mod grouping;
 mod transforms;
+
+#[test]
+fn unbounded_runtime_accepts_reservations_above_the_previous_shared_pool_limit() {
+    use datafusion::execution::memory_pool::MemoryConsumer;
+
+    let runtime = DataFusionRuntime::unbounded(8192).unwrap();
+    let reservation = MemoryConsumer::new("large-query").register(&runtime.environment.memory_pool);
+    // Exercise pool admission without allocating a gigabyte in the test process.
+    reservation.try_grow(1024 * 1024 * 1024).unwrap();
+}
+
+#[test]
+fn result_snapshot_preserves_resolved_columns_order_and_storage_lifetime() {
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let source = runtime
+        .batch_relation(
+            binding(),
+            RecordBatch::try_new(
+                Arc::new(Schema::new(vec![
+                    Field::new("x", DataType::Int64, false),
+                    Field::new("empty", DataType::Int64, true),
+                ])),
+                vec![
+                    Arc::new(Int64Array::from(vec![4, 1, 3, 2])),
+                    Arc::new(Int64Array::from(vec![None::<i64>; 4])),
+                ],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let source_lease = Arc::downgrade(
+        &source
+            .plan()
+            .as_any()
+            .downcast_ref::<relation::DataFusionRelation>()
+            .unwrap()
+            .lease,
+    );
+    let deferred = source
+        .drop_na_columns(&[], yss_relational_contract::DropNaMode::All)
+        .unwrap();
+    assert!(deferred.schema_is_deferred());
+    let result = runtime.snapshot_relation(&deferred, &control()).unwrap();
+    assert!(!result.schema_is_deferred());
+    assert_eq!(result.schema().fields().len(), 1);
+    assert_eq!(result.schema().field(0).name(), "x");
+    assert_eq!(
+        result.page(1, 2, &control()).unwrap().data.columns()[0].values(),
+        &[
+            yss_data_contract::TabularScalar::Unsigned(1),
+            yss_data_contract::TabularScalar::Unsigned(3)
+        ]
+    );
+    assert_eq!(result.bindings(), source.bindings());
+    drop(deferred);
+    drop(source);
+    assert!(source_lease.upgrade().is_none());
+    assert_eq!(
+        runtime
+            .environment
+            .disk_manager
+            .spilling_progress()
+            .active_files_count,
+        1
+    );
+    let retained = result.clone();
+    drop(result);
+    assert_eq!(retained.page(0, 10, &control()).unwrap().row_count, 4);
+    let zero_columns = runtime
+        .snapshot_relation(&retained.project(&[]).unwrap(), &control())
+        .unwrap();
+    assert_eq!(zero_columns.schema().fields().len(), 0);
+    assert_eq!(zero_columns.page(0, 10, &control()).unwrap().row_count, 4);
+    drop(zero_columns);
+    drop(retained);
+    assert_eq!(
+        runtime
+            .environment
+            .disk_manager
+            .spilling_progress()
+            .active_files_count,
+        0
+    );
+    assert_eq!(runtime.environment.disk_manager.used_disk_space(), 0);
+}
 
 struct RemoveFile(PathBuf);
 impl Drop for RemoveFile {
@@ -1010,6 +1096,18 @@ fn computed_series_reject_unaligned_inputs_and_propagate_numeric_errors_and_budg
         let computed = source
             .numeric_series(operation, &operands, Type::Float64)
             .unwrap();
+        assert_eq!(
+            runtime.snapshot_relation(&computed.as_relation().unwrap(), &control()),
+            Err(expected)
+        );
+        assert_eq!(
+            runtime
+                .environment
+                .disk_manager
+                .spilling_progress()
+                .active_files_count,
+            0
+        );
         assert_eq!(
             source.numeric_columns(&[computed], &control()),
             Err(expected)

@@ -34,6 +34,8 @@ impl fmt::Debug for LeafImplementation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StructuralNodeRole {
     Call,
+    GroupApply,
+    GroupTransform,
     FunctionEntry,
     FunctionReturn,
 }
@@ -44,6 +46,9 @@ pub const FUNCTION_ENTRY_PARAMETERS_RESOLVER: &str = "yssbi.project.function.ent
 pub const FUNCTION_RETURN_RESULTS_RESOLVER: &str = "yssbi.project.function.return.results";
 
 impl StructuralNodeRole {
+    pub fn calls_function(self) -> bool {
+        matches!(self, Self::Call | Self::GroupApply | Self::GroupTransform)
+    }
     pub fn for_interface_resolver(resolver: &str) -> Option<Self> {
         match resolver {
             FUNCTION_CALL_ARGUMENTS_RESOLVER | FUNCTION_CALL_RESULTS_RESOLVER => Some(Self::Call),
@@ -56,7 +61,7 @@ impl StructuralNodeRole {
     /// Reference field shared by a function role and its interface resolvers.
     pub fn reference_parameter(self, protocol: &NodeProtocol) -> Option<&Parameter> {
         let key = match self {
-            Self::Call => "target",
+            Self::Call | Self::GroupApply | Self::GroupTransform => "target",
             Self::FunctionEntry | Self::FunctionReturn => "function",
         };
         protocol

@@ -13,7 +13,7 @@ fn column(name: &str) -> Expr {
     Expr::Column(Column::from_name(name.to_owned()))
 }
 
-fn meaning(field: &Field) -> Result<yss_data_contract::ColumnSemantic, RelationError> {
+pub(crate) fn meaning(field: &Field) -> Result<yss_data_contract::ColumnSemantic, RelationError> {
     let mut semantic =
         yss_database_arrow::column_semantic(field).map_err(|_| RelationError::InvalidInput)?;
     if semantic.kind == yss_data_contract::SemanticType::Binary {
@@ -39,6 +39,31 @@ fn adapter(handle: &RelationHandle) -> Result<&DataFusionRelation, RelationError
         .as_any()
         .downcast_ref::<DataFusionRelation>()
         .ok_or(RelationError::InvalidInput)
+}
+
+pub(crate) fn merge_bindings(
+    target: &mut Vec<RelationBinding>,
+    bindings: &[RelationBinding],
+) -> Result<(), RelationError> {
+    for binding in bindings {
+        if target
+            .first()
+            .is_some_and(|existing| existing.project_session != binding.project_session)
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        if let Some(previous) = target
+            .iter()
+            .find(|previous| previous.dataset == binding.dataset)
+        {
+            if previous != binding {
+                return Err(RelationError::InvalidInput);
+            }
+        } else {
+            target.push(binding.clone());
+        }
+    }
+    Ok(())
 }
 
 impl DataFusionRelation {
@@ -81,6 +106,7 @@ impl DataFusionRelation {
         )?;
         Self {
             frame,
+            row_identity: self.row_identity.clone(),
             schema: Arc::new(Schema::new_with_metadata(
                 fields,
                 self.schema.metadata().clone(),
@@ -106,30 +132,11 @@ impl DataFusionRelation {
     ) -> Result<RelationHandle, RelationError> {
         let mut bindings: Vec<RelationBinding> = Vec::new();
         let mut leases = Vec::new();
-        let session = std::iter::once(self)
-            .chain(inputs.iter().copied())
-            .flat_map(|input| input.bindings.iter())
-            .next()
-            .map(|binding| binding.project_session.as_ref());
         for input in std::iter::once(self).chain(inputs.iter().copied()) {
             if !Arc::ptr_eq(&self.executor, &input.executor) {
                 return Err(RelationError::InvalidInput);
             }
-            for binding in input.bindings.iter() {
-                if Some(binding.project_session.as_ref()) != session {
-                    return Err(RelationError::InvalidInput);
-                }
-                if let Some(previous) = bindings
-                    .iter()
-                    .find(|previous| previous.dataset == binding.dataset)
-                {
-                    if previous != binding {
-                        return Err(RelationError::InvalidInput);
-                    }
-                } else {
-                    bindings.push(binding.clone());
-                }
-            }
+            merge_bindings(&mut bindings, &input.bindings)?;
             leases.push(input.lease.clone());
         }
         let columns = schema
@@ -145,6 +152,7 @@ impl DataFusionRelation {
             .map_err(|_| RelationError::InvalidPlan)?;
         Self {
             domain,
+            row_identity: Default::default(),
             domain_order,
             columns,
             frame,

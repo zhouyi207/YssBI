@@ -14,6 +14,7 @@ pub enum RuntimeValue {
     Record(Arc<BTreeMap<Box<str>, RuntimeValue>>),
     Resource(Box<str>),
     Relation(yss_relational_contract::RelationHandle),
+    Grouped(Arc<yss_relational_contract::GroupedRelationHandle>),
     Series(yss_relational_contract::SeriesHandle),
     LinearRegression(Arc<crate::LinearRegressionValue>),
 }
@@ -83,6 +84,16 @@ impl TryFrom<&DataValue> for RuntimeValue {
 }
 
 impl RuntimeValue {
+    /// Whether the value contains only computed values, without relational expressions.
+    pub fn is_immediate(&self) -> bool {
+        match self {
+            Self::Relation(_) | Self::Grouped(_) | Self::Series(_) | Self::Resource(_) => false,
+            Self::List(values) => values.iter().all(Self::is_immediate),
+            Self::Record(values) => values.values().all(Self::is_immediate),
+            Self::Annotated(_) | Self::Scalar(_) | Self::LinearRegression(_) => true,
+        }
+    }
+
     pub fn float64(value: f64) -> Result<Self, RuntimeValueError> {
         Ok(Self::Scalar(TabularScalar::Float64(
             value.try_into().map_err(|_| RuntimeValueError::NonFinite)?,
@@ -90,7 +101,7 @@ impl RuntimeValue {
     }
 
     /// Check the carrier; Graph's resolved types and producers own element semantics.
-    pub(crate) fn matches_carrier(&self, expected: &yss_data_contract::ValueType) -> bool {
+    pub fn matches_carrier(&self, expected: &yss_data_contract::ValueType) -> bool {
         use yss_data_contract::{SemanticType, ValueType};
         match expected {
             ValueType::Any => true,
@@ -128,6 +139,9 @@ impl RuntimeValue {
             }
             ValueType::Array(_) => matches!(self.unannotated(), Self::List(_)),
             ValueType::Object => matches!(self, Self::Record(_)),
+            ValueType::Struct(id) if id == yss_data_contract::GROUPED_DATAFRAME_TYPE_ID => {
+                matches!(self, Self::Grouped(_))
+            }
             ValueType::Struct(_) => matches!(
                 self,
                 Self::LinearRegression(_) | Self::Record(_) | Self::Resource(_)

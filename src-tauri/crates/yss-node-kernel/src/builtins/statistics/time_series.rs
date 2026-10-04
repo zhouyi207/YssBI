@@ -237,13 +237,6 @@ fn var_summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
             .ok_or(KernelError::BudgetExceeded)?;
         inv.control
             .check_bytes(dim.checked_mul(dim).and_then(|v| v.checked_mul(8 * 6)))?;
-        if dim
-            .checked_mul(dim)
-            .and_then(|v| v.checked_mul(dim))
-            .is_none_or(|v| v > 100_000_000)
-        {
-            return Err(KernelError::BudgetExceeded);
-        }
     }
     if options.lag_exclusion || options.serial_tests || options.stability {
         check_fit_workspace(

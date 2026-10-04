@@ -17,6 +17,16 @@
 
 ## 调用边界
 
+`kernel_error` 在公共错误模块统一映射关系错误，叶内核与 Execution 的结果物化共用它，
+保留取消、期限、预算及数值失败语义。执行边界和结果存储继续由 Execution 管理。
+
+`RuntimeValue::matches_carrier` 为内核注册表及图函数调用共同校验运行载体；它不推断图类型或改写元素语义。
+图函数的参数绑定、私有帧与嵌套调度属于 Execution，叶内核继续不读取图、函数定义或项目状态。
+
+GroupBy 叶内核只构造 `RuntimeValue::Grouped`，检查源表及分组键，不遍历组或调用函数。
+载体检查只允许该值匹配 `tabular.grouped_dataframe`；普通 Record 不能冒充分组值。
+分组结构不一致和键列重名分别保留 `GroupSchemaMismatch`、`GroupKeyCollision`，关系与图执行共用映射。
+
 统计节点的主因变量和主自变量输入键统一为 `y` 和 `x`，固定或重复输入仍由既有布局声明区分。
 Catalog 与 Kernel 注册、分组读取和 Graph 调用共用同一命名；科学计算记录的领域字段与结果表字段保持各自契约。
 
@@ -104,7 +114,9 @@ GEE/GLMM 按组计算，不计入未使用的全样本平方矩阵。保留 SCI 
 `f64` 计费。分阶段回归按本次配置保留的模型数计费，分组回归的观测结果按各组总行数
 计费；分类概率、样条基列和结构化编码另计。输入常驻内存加上拟合与结果编码两阶段
 的较大估算值用于准入，编码估算复用 `common::value` 的容器计费口径。节点的默认
-128 MiB 预算可由 `KernelControl.max_input_bytes` 配置，查询引擎的独立内存池限制继续生效；估算仍不是进程 RSS 的精确上限。
+所有图节点统一使用 `KernelControl::new`，输入、工作区和结果编码默认没有固定字节上限；
+`max_input_bytes = usize::MAX` 也传给关系读取、函数调用、分组计算和结果快照。
+独立库调用仍可显式提供有限预算；尺寸算术溢出、实际分配失败、取消和期限检查继续生效。
 
 `KernelInvocation` 接收已求值输入、固定端口或重复组的局部键、有序输出类型/字段、已解析参数、`KernelControl` 和中立 `RelationFactory`。参数可以借用现有 literal 和已授权的资源运行值。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`；注册表在调用前检查输入布局，在返回后检查输出数量和外层载体，不重新推导 Graph 的元素语义。
 
@@ -222,7 +234,7 @@ IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、�
 IV 两个 Summary 使用 revision 7；第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
 ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 6。Drift 的 Student-t 约定、辅助回归与临界值保持原契约。
 Panel Fit/Compare 使用 revision 7：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Summary/Predict 沿用已拟合模型。
-系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性 Summary 使用 revision 10，Logit/Probit/Prais Summary 为 6，IV Summary 为 7；实际复用 Summary 检验的 diagnostic.wald 为 4。普通样本均值 t 检验使用另一算法入口。
+系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性、Logit/Probit/Prais、IV Summary 和实际复用 Summary 检验的 diagnostic.wald 同步更新实现 revision。普通样本均值 t 检验使用另一算法入口。
 
 ## 验证
 
@@ -281,6 +293,10 @@ IV Summary 保留 SCI 明确返回的不可用诊断，不用 JSON 将 NaN 转�
 数据帧对齐接收表和列名参数，通过关系契约构造原生窗口、聚合、range/unnest 和连接计划，不收集输入批次、不调用 SCI 对齐。时间序列使用原始时间单位的等距网格；面板使用共享已观测时间序列的位置，在每个实体自己的起止位置内补齐。原列类型、列序和元数据保留，补入的非键值为 Null。重复键、缺失键、网格与输出预算校验保留在计划表达式中，在消费时交付失败。
 
 `LinearRegressionValue` 共享不可变拟合模型；Summary 另持有本次 `LinearSummaryOptions` 和选中检验的不可变结果。ACF/PACF、序列相关和假设检验在 Summary 执行时按选项计算，未选项不调用 SCI。模型拥有有界 memo，每类分析只缓存最近一组参数；补选复用相同模型和参数的结果，参数变化重新计算，新 Fit 使用独立缓存。计算不持有 memo 锁，遵守调用预算并在分析间检查取消；旧 Summary 继续持有原分析快照。
+
+Breusch–Pagan / Koenker 与 VIF 等诊断共用上述执行控制，BP 不再单独绕过预算入口，使用 revision 7。
+Logit/Probit 的边际效应和 VAR 稳定性计算已移除固定计算量门槛，继续使用原 SCI 算法及取消/期限检查；
+三个 Summary 内核使用 revision 8。统计输入和数值合法性检查保持原契约。
 
 Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Summary 的 ACF/PACF、序列检验和假设检验统一由本 crate 的 `linear_summary` 从同一模型构造输入并调用 runtime。Application 只读取选中项的已存结果，保留请求范围、会话与结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 

@@ -25,6 +25,12 @@ and the storage/publication handoff. `yss-database-store` owns committed SQLite 
 immutable Parquet generations; `yss-database-engine` owns native relational execution. Project owns
 its declaration/index publication, and Application coordinates the existing owners.
 
+The shared host query engine uses `DataFusionRuntime::unbounded(8192)`: node queries,
+grouped execution and result snapshots have no fixed shared memory-pool ceiling.
+Batch streaming, cancellation, deadlines and snapshot file leases remain in effect.
+Callers performing bounded page reads retain their explicit `RelationControl` limits;
+`DataFusionRuntime::new` remains available to consumers that explicitly select a finite pool.
+
 ## Storage and activation
 
 Application opens the Dataset Store at the Project root and supplies bound dataset instances.
@@ -126,6 +132,27 @@ operations establish a new domain. Scalar reductions consume only native aggrega
 data-dependent column dropping consumes one aggregate row and retains its deferred schema.
 Concurrent consumers of the same deferred relation reuse the successful cached plan, including
 its row domain. Cancellation and failed resolution do not populate that cache.
+
+Explicit graph result boundaries call `RelationFactory::snapshot`. Engine `snapshot.rs` resolves
+deferred columns, streams the full value into Arrow IPC through the shared RuntimeEnv DiskManager,
+and returns a file-backed relation with the exact fields and an explicit row position. It uses
+bounded batches, the existing disk quota, cancellation and deadline; it does not collect the full
+table in memory. The relation retains the file lease, which is released with its last holder.
+Original dataset bindings remain provenance; reads do not replay the original query or retain
+the source dataset lease. Zero-column results still retain their row count and order.
+
+`GroupedRelationHandle` retains a source and unique, nonempty keys. Engine `grouping` sorts keys
+ascending (null first) and preserves source order within each group. Its sequential `RelationGroupMap`
+session streams one partition at a time through the same `spill` writer used by snapshots, appends
+each callback table to bounded temporary storage, and publishes only the combined relation.
+Dropping a failed or cancelled session releases its files. Graph callbacks remain with Execution.
+Apply prepends prefixed key columns and rejects name collisions. Every group's returned column
+names/order, exact Arrow types and semantic configurations must agree; nullable fields are normalized
+and source column IDs are not copied into combined output identity. Empty input requires a schema
+probe and produces zero rows. Transform requires `RelationRowIdentity`, a lease-free proof of identical
+rows and order, then restores the original global positions. Projection and snapshots retain this
+proof; filtering, sorting, aggregation and independent tables do not acquire it from equal lengths.
+The proof is separate from the native expression domain, so frozen storage never replays a source query.
 
 ## Editing and publication
 

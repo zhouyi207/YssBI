@@ -394,6 +394,12 @@ fn list(key: &'static str, element: &'static str) -> Result<Parameter, BuiltinAs
         vec![],
     )
 }
+fn columns(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
+    let mut parameter = list(key, "core.text")?;
+    parameter.constraints.push(ParameterConstraint::ColumnNames);
+    Ok(parameter)
+}
+
 fn toggle(key: &'static str, value: bool) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
@@ -462,8 +468,8 @@ pub(super) fn window_context() -> Result<PortSpec, BuiltinAssemblyError> {
 }
 pub(super) fn window_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     Ok(vec![
-        list("partition_by", "core.text")?,
-        list("order_by", "core.text")?,
+        columns("partition_by")?,
+        columns("order_by")?,
         toggle("descending", false)?,
         toggle("nulls_first", false)?,
     ])
@@ -601,13 +607,13 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
                     "columns",
                     yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
                 )?,
-                list("descending_columns", "core.text")?,
+                columns("descending_columns")?,
                 toggle("nulls_first", false)?,
             ];
         }
         Deduplicate => {
             parameters = vec![
-                list("keys", "core.text")?,
+                columns("keys")?,
                 choice_parameter("keep", "first", &["first", "last", "none"])?,
             ];
         }
@@ -632,7 +638,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         }
         Unpivot => {
             parameters = vec![
-                list("keys", "core.text")?,
+                columns("keys")?,
                 nominal_parameter(
                     "columns",
                     yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
@@ -644,11 +650,11 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         }
         Pivot => {
             parameters = vec![
-                list("keys", "core.text")?,
+                columns("keys")?,
                 column_parameter("category_column")?,
                 column_parameter("value_column")?,
                 list("levels", "core.text")?,
-                list("names", "core.text")?,
+                columns("names")?,
                 choice_parameter("aggregate", "sum", &["sum", "mean", "min", "max", "count"])?,
             ];
         }
@@ -662,7 +668,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
                         "year", "quarter", "month", "week", "day", "hour", "minute", "second",
                     ],
                 )?,
-                list("keys", "core.text")?,
+                columns("keys")?,
                 nominal_parameter(
                     "columns",
                     yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
@@ -792,7 +798,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         Encode => {
             parameters = vec![
                 list("levels", "core.text")?,
-                list("names", "core.text")?,
+                columns("names")?,
                 toggle("drop_reference", false)?,
                 text_value("reference", "")?,
             ];

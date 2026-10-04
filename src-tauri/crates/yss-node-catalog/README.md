@@ -20,6 +20,10 @@ existing semantic conversion contract. It is separate from column and node displ
 
 Node 由三个 crate 组成：
 
+`node_creation_ports` 从同一协议导出固定、用户可配置和派生端口的创建信息，GUI 与 Harness 共用。
+Protocol 的 `initial_port_counts` 解释创建请求中的最终数量，统一校验上下界和 member group 联动；
+固定及派生端口不能覆盖数量，未指定的可变模板使用协议最小数量。Catalog 不维护第二套端口规则。
+
 | Crate               | 职责                                                           |
 | ------------------- | -------------------------------------------------------------- |
 | `yss-node-protocol` | 节点类型、端口、参数、类型和 Schema 约束、执行语义声明与值校验 |
@@ -34,6 +38,11 @@ Node 由三个 crate 组成：
 GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配后同样保留不可用节点；缺少实现的节点置灰并标注“暂不可用”，禁止点击、键盘选择和拖拽创建。AI 搜索只返回可用项。
 已有图中的缺少实现节点仍由编辑解析返回阻断诊断。
 目录不读取项目文件，不维护图中实例，也不推导连接后的类型、Schema 或血缘。
+
+`authoritative_static_descriptor(protocol)` 从协议生成普通创建描述。带有尚未填写的必填文本、
+数值或结构化参数的节点仍可作为 `parameterizedStatic` 进入目录；参数不必先有实际输入。
+资源绑定节点只通过捕获了资源身份和 revision 的目录描述创建，managed 和 hidden 节点维持专用边界。
+创建请求的实例参数由 Graph Editor 接收，不属于目录描述；参数声明、默认值及约束仍只来自 Protocol。
 
 `View Data` 的输入只接受已连接的输出，不接受内联字面量或默认值；Catalog 声明这一输入策略，
 Analysis 和 Editor 共用协议校验。View 观察已有输出结果，不创建独立的结果值；查看标量时可连接常量输出。
@@ -55,6 +64,12 @@ Registry 的 `StructuralNodeRole` 拥有函数角色的引用字段约定：Call
 显式值或默认值；非法显式值不回退到默认值。这些读取不解释项目路径或访问资源。
 四个函数 interface resolver ID 及其引用角色映射也由 Registry 唯一提供，Catalog、Analysis、Editor 和 Project
 共用这些声明。resolver 复用同一字段约定，也可由只消费函数签名的叶节点使用；使用 resolver 本身不构成函数调用。
+
+GroupApply/GroupTransform 同样以 `target` 引用函数，`calls_function` 统一识别直接调用及按组调用，
+供依赖捕获、递归检查和 Project 引用追踪使用。`dataframe/grouping` 声明独立的 GroupBy 分组值、
+Apply 和 Transform；后两者使用固定分组输入/表格输出，由 Execution 调用一个 DataFrame 参数且
+返回 DataFrame 的图函数。创建时可同时填写函数和 Apply 的 `key_prefix`（默认 `group.`）。
+原有 `yssbi.dataframe.groupby` 保持固定聚合，英文标题为 Grouped Aggregation；不替换其原生查询路径。
 
 `statistics/decision` 声明客观赋权与评分入口，共用指标方向、评分标准化和明确的
 权重方法参数。外部权重使用独立 `criterion_weights` 输入，计算权重由 `weights`
@@ -347,6 +362,11 @@ fn normal_parameters() -> Result<Parameters, ParametersError> {
 参数值始终按参数 key 扁平保存，分组不创建对象值或执行参数。分组名称、顺序和字段归组不进入
 协议执行指纹；参数类型、默认值、约束及条件显隐参与指纹。条件可以引用同节点其他组的无条件参数，
 使用显式值或协议默认值判断。编辑、条件清理及执行投影见 [Graph analysis](../yss-graph-analysis/README.md)。
+
+Protocol 对 DataSeries 参数逐项检查声明的元素类型。Graph Editor 创建和修改允许仍缺少必填字段，
+但拒绝已提供值的类型、固定约束和 nominal codec 错误；Analysis 和执行仍检查完整性。
+单列名及有序列列表分别声明 `ColumnName` / `ColumnNames` 约束；列表名称必须有效且唯一。
+可空列表与必选的 ProjectColumns 共用协议层列名检查，图分析复用同一解析，不依赖实际表判断格式是否合法。
 
 Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. Treatment-effect `heterogeneity` is implemented by `statistics/causal_models.rs`; Kappa and Kendall W are implemented separately under `statistics.association`. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.
 

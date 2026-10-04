@@ -305,6 +305,8 @@ pub type ParameterValues = BTreeMap<ParameterKey, serde_json::Value>;
 pub enum ParameterConstraint {
     Required,
     Positive,
+    ColumnName,
+    ColumnNames,
     OneOf(Vec<DataValue>),
     IntegerRange { min: Option<i64>, max: Option<i64> },
     Length { min: Option<u32>, max: Option<u32> },

@@ -1,7 +1,11 @@
 //! Live, snapshot-bound relation ports. Persisted Graph documents never contain these handles.
 
 mod dataset;
+mod grouping;
 pub use dataset::{DatasetColumnPatch, DatasetOverlay, DatasetRelationInput};
+pub use grouping::{
+    GroupMapMode, GroupedRelationHandle, RelationGroup, RelationGroupMap, RelationRowIdentity,
+};
 mod series;
 mod transform;
 pub use series::{
@@ -63,6 +67,13 @@ pub struct RelationPage {
 /// Literal relations have no dataset bindings and never authorize external resource access.
 /// Materialized Arrow fields carry resolved semantic metadata and physical representations.
 pub trait RelationFactory: Send + Sync {
+    /// Evaluate a relation once at an explicit result boundary. The returned handle
+    /// owns immutable data and its storage lease; it must not replay the source query.
+    fn snapshot(
+        self: Arc<Self>,
+        relation: &RelationHandle,
+        control: &RelationControl,
+    ) -> Result<RelationHandle, RelationError>;
     /// Literal vectors use their explicit zero-based positions, independently of dataset rows.
     fn literal_series(
         self: Arc<Self>,
@@ -112,6 +123,10 @@ pub enum RelationError {
     UnalignedSeries,
     #[error("positional series have different lengths")]
     ShapeMismatch,
+    #[error("group functions returned inconsistent schemas")]
+    GroupSchemaMismatch,
+    #[error("group key output names collide with returned columns")]
+    GroupKeyCollision,
     #[error("relation source is unavailable")]
     SourceUnavailable,
     #[error("relation query failed")]
@@ -156,6 +171,9 @@ pub enum DropNaMode {
 }
 
 pub trait RelationPlan: Send + Sync {
+    fn row_identity(&self) -> Option<&RelationRowIdentity> {
+        None
+    }
     /// Explicit literal/range coordinates only; dataset lengths never prove alignment.
     fn positional_length(&self) -> Option<usize> {
         None
@@ -345,6 +363,14 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    pub fn row_identity(&self) -> Option<&RelationRowIdentity> {
+        self.plan.row_identity()
+    }
+    /// Row count equality is insufficient; the producer must retain an explicit identity.
+    pub fn same_rows_and_order(&self, other: &Self) -> bool {
+        self.row_identity()
+            .is_some_and(|identity| Some(identity) == other.row_identity())
+    }
     pub fn shares_row_domain(&self, other: &Self) -> bool {
         self == other || self.plan.shares_row_domain(other)
     }
@@ -751,6 +777,14 @@ impl fmt::Debug for RelationHandle {
 /// Synchronous callers run on compute workers. The adapter consumes the asynchronous Arrow
 /// stream in one joint projection and enforces the separately supplied statistics memory budget.
 pub trait RelationExecutor: Send + Sync {
+    fn begin_group_map(
+        self: Arc<Self>,
+        _groups: &GroupedRelationHandle,
+        _mode: GroupMapMode,
+        _control: &RelationControl,
+    ) -> Result<Box<dyn RelationGroupMap>, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     fn visit_batches(
         &self,
         _relation: &RelationHandle,

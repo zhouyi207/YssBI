@@ -11,6 +11,8 @@
 [Dataset store](../yss-database-store/README.md#field-meaning-and-physical-conversion) 维护。
 七种基础语义统一由 `yss-data-contract::SemanticType` 定义，`ValueType::Scalar` 引用它。
 DataSeries、DataFrame 及内部结构/专用产物描述保留各自职责，Physical 不进入端口类型层级。
+`GROUPED_DATAFRAME_TYPE_ID` 声明 `tabular.grouped_dataframe`，使用既有 `ValueType::Struct` 表达。
+它表示源表与分组键；运行句柄、分组遍历和行对应证明归 Relational Contract/Engine，不进入持久化值树。
 旧 `DataType` 枚举已删除，Graph 不再将 Int64、Float64、Boolean、String、Date、Time 注册为基础语义。
 分解 DataFrame 或选列得到 `DataSeries<Numeric>`、`DataSeries<Identifier>` 等精确语义；类别、等级、
 二元映射及精确 Physical 保留在数据元数据中，并参与捕获资源的依赖身份。

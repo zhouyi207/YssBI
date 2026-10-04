@@ -16,6 +16,7 @@ enum Operation {
     Frequency,
     Describe,
     GroupBy,
+    Groups,
 }
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
@@ -39,6 +40,12 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             std::iter::once("keys")
                 .chain(AggregateOperation::ALL.map(|op| op.key()))
                 .collect(),
+        ),
+        (
+            "yssbi.dataframe.groupby.groups",
+            Operation::Groups,
+            "source",
+            vec!["keys"],
         ),
     ] {
         builder
@@ -151,6 +158,18 @@ fn execute(
                 _ => series_relation(input, inv)?,
             };
             description::describe(&relation, inv)?
+        }
+        Operation::Groups => {
+            let RuntimeValue::Relation(relation) = input else {
+                return Err(KernelError::InputLayoutMismatch);
+            };
+            RuntimeValue::Grouped(std::sync::Arc::new(
+                yss_relational_contract::GroupedRelationHandle::new(
+                    relation.clone(),
+                    names(inv, "keys")?.into(),
+                )
+                .map_err(kernel_error)?,
+            ))
         }
         Operation::GroupBy => {
             let RuntimeValue::Relation(relation) = input else {

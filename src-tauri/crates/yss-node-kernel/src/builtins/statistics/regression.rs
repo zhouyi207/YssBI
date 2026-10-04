@@ -165,15 +165,6 @@ fn summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
                     .and_then(|v| v.checked_add(k.checked_mul(k)?))
                     .and_then(|v| v.checked_mul(16)),
             )?;
-            // Bound O(n*k² + k³) delta-method work independently of output size.
-            if n.checked_add(k)
-                .and_then(|v| v.checked_mul(k))
-                .and_then(|v| v.checked_mul(k))
-                .is_none_or(|v| v > 100_000_000)
-            {
-                return Err(KernelError::BudgetExceeded);
-            }
-
             let options = MarginalOptions {
                 evaluation: match text(inv, "marginal_evaluation")? {
                     "average" => Evaluation::Average,

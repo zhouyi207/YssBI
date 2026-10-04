@@ -10,10 +10,13 @@ mod alignment;
 mod comparison;
 mod composition;
 mod difference;
+mod grouping;
 mod literal;
 mod relation;
 mod series;
 mod series_transform;
+mod snapshot;
+mod spill;
 mod table_transform;
 mod windows;
 
@@ -47,6 +50,13 @@ pub struct DataFusionRuntime {
 }
 
 impl yss_relational_contract::RelationFactory for DataFusionRuntime {
+    fn snapshot(
+        self: Arc<Self>,
+        relation: &RelationHandle,
+        control: &RelationControl,
+    ) -> Result<RelationHandle, RelationError> {
+        self.snapshot_relation(relation, control)
+    }
     fn literal_series(
         self: Arc<Self>,
         field: Field,
@@ -115,11 +125,23 @@ impl DataFusionRuntime {
     }
 
     pub fn new(memory_bytes: usize, batch_size: usize) -> Result<Arc<Self>, RelationError> {
-        if memory_bytes == 0 || batch_size == 0 {
+        Self::build(Some(memory_bytes), batch_size)
+    }
+
+    /// Host computation shares a pool without a fixed process-wide byte ceiling.
+    pub fn unbounded(batch_size: usize) -> Result<Arc<Self>, RelationError> {
+        Self::build(None, batch_size)
+    }
+
+    fn build(memory_bytes: Option<usize>, batch_size: usize) -> Result<Arc<Self>, RelationError> {
+        if memory_bytes == Some(0) || batch_size == 0 {
             return Err(RelationError::InvalidInput);
         }
-        let environment = RuntimeEnvBuilder::new()
-            .with_memory_limit(memory_bytes, 1.0)
+        let mut environment = RuntimeEnvBuilder::new();
+        if let Some(bytes) = memory_bytes {
+            environment = environment.with_memory_limit(bytes, 1.0);
+        }
+        let environment = environment
             .build_arc()
             .map_err(|_| RelationError::QueryFailed)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -135,7 +157,7 @@ impl DataFusionRuntime {
             // consume the entire pool on high-core hosts before spilling can make progress.
             target_partitions: std::thread::available_parallelism()
                 .map_or(1, usize::from)
-                .min((memory_bytes / (64 * 1024 * 1024)).max(1)),
+                .min(memory_bytes.map_or(usize::MAX, |bytes| (bytes / (64 * 1024 * 1024)).max(1))),
         }))
     }
 
@@ -185,7 +207,7 @@ impl DataFusionRuntime {
             .read_table(Arc::new(table))
             .map_err(|_| RelationError::InvalidPlan)?;
         let (frame, schema, order) = ordered_user_frame(frame, &schema)?;
-        relation::DataFusionRelation::handle(
+        relation::DataFusionRelation::new(
             frame,
             schema,
             Arc::from([binding]),
@@ -194,6 +216,7 @@ impl DataFusionRuntime {
             false,
             order,
         )
+        .and_then(relation::DataFusionRelation::into_handle)
     }
 
     /// Useful at the already-materialized literal boundary; external imports use batch readers.
@@ -246,7 +269,7 @@ impl DataFusionRuntime {
             .read_batch(batch)
             .map_err(|_| RelationError::InvalidPlan)?;
         let (frame, schema, order) = ordered_user_frame(frame, &schema)?;
-        relation::DataFusionRelation::handle(
+        relation::DataFusionRelation::new(
             frame,
             schema,
             bindings,
@@ -255,6 +278,7 @@ impl DataFusionRuntime {
             false,
             order,
         )
+        .and_then(relation::DataFusionRelation::into_handle)
     }
 
     pub async fn prepare_numeric_columns(
@@ -387,6 +411,14 @@ fn ordered_user_frame(
 }
 
 impl RelationExecutor for DataFusionRuntime {
+    fn begin_group_map(
+        self: Arc<Self>,
+        groups: &yss_relational_contract::GroupedRelationHandle,
+        mode: yss_relational_contract::GroupMapMode,
+        control: &RelationControl,
+    ) -> Result<Box<dyn yss_relational_contract::RelationGroupMap>, RelationError> {
+        grouping::GroupMapping::begin(self, groups, mode, control)
+    }
     fn visit_batches(
         &self,
         relation: &RelationHandle,

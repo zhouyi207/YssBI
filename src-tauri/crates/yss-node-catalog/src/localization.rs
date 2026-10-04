@@ -184,10 +184,15 @@ impl std::fmt::Display for I18nBundleValidationError {
 impl std::error::Error for I18nBundleValidationError {}
 
 pub fn authoritative_static_descriptor(
-    registry: &NodeRegistry,
     protocol: &yss_node_protocol::NodeProtocol,
 ) -> Option<NodeCreation> {
-    if protocol.catalog.hidden || protocol.managed_role.is_some() {
+    if protocol.catalog.hidden
+        || protocol.managed_role.is_some()
+        || matches!(
+            protocol.instance_display,
+            yss_node_protocol::NodeInstanceDisplaySpec::ResourceParameter { .. }
+        )
+    {
         return None;
     }
     let required_parameters = protocol
@@ -208,15 +213,6 @@ pub fn authoritative_static_descriptor(
         return Some(NodeCreation::Static {
             node_type_id: protocol.type_id.clone(),
         });
-    }
-    if !required_parameters.iter().all(|parameter| {
-        matches!(
-            &parameter.value_type,
-            yss_node_protocol::TypeExpr::Concrete(type_id)
-                if registry.has_nominal_parameter_validator(type_id)
-        )
-    }) {
-        return None;
     }
     Some(NodeCreation::ParameterizedStatic {
         node_type_id: protocol.type_id.clone(),
@@ -278,7 +274,7 @@ impl BuiltinCatalog {
         let mut items = registry
             .iter()
             .filter_map(|(_, node)| {
-                let descriptor = authoritative_static_descriptor(registry, node.protocol())?;
+                let descriptor = authoritative_static_descriptor(node.protocol())?;
                 Some(self.static_item(node.protocol(), &locale, descriptor))
             })
             .collect::<Vec<_>>();

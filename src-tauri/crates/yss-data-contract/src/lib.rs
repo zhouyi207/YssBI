@@ -16,6 +16,8 @@ pub use conversion::{
 pub use data_value::{DataValue, DecimalLiteral, FilterLiteral, InvalidDecimal};
 pub use value_type::{ValueType, ValueTypeParseError};
 pub mod aggregation;
+/// Nominal port type for a source relation together with its grouping keys.
+pub const GROUPED_DATAFRAME_TYPE_ID: &str = "tabular.grouped_dataframe";
 pub mod table;
 
 mod tabular;

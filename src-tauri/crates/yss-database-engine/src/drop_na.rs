@@ -195,7 +195,7 @@ async fn resolve_columns(
         .aggregate(vec![], expressions)
         .map_err(|_| RelationError::InvalidPlan)?;
     let aggregate_schema = Arc::new(frame.schema().as_arrow().clone());
-    let scan = DataFusionRelation::handle(
+    let scan = DataFusionRelation::new(
         frame,
         aggregate_schema,
         adapter.bindings.clone(),
@@ -203,7 +203,8 @@ async fn resolve_columns(
         adapter.executor.clone(),
         false,
         vec![],
-    )?;
+    )?
+    .into_handle()?;
     let mut stream = scan.stream(control.clone()).await?;
     let mut has_null = vec![false; indexes.len()];
     let mut has_value = vec![false; indexes.len()];

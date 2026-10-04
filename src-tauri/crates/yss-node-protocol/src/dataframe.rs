@@ -30,17 +30,8 @@ impl<'de> Deserialize<'de> for ProjectColumns {
                 "project columns must not be empty",
             ));
         }
-        let mut seen = BTreeSet::new();
-        for column in &columns {
-            if !TabularColumnName::is_valid(column) {
-                return Err(serde::de::Error::custom(
-                    "project column names must not be blank",
-                ));
-            }
-            if !seen.insert(column.as_ref()) {
-                return Err(serde::de::Error::custom("project columns must be unique"));
-            }
-        }
+        validate_column_names(columns.iter().map(AsRef::as_ref))
+            .map_err(serde::de::Error::custom)?;
         Ok(Self(columns))
     }
 }
@@ -181,6 +172,38 @@ pub fn filter_comparison_is_compatible(
 
 pub fn prepare_project_columns_json(value: &serde_json::Value) -> Result<ProjectColumns, String> {
     serde_json::from_value::<ProjectColumns>(value.clone()).map_err(|error| error.to_string())
+}
+
+fn validate_column_names<'a>(
+    columns: impl IntoIterator<Item = &'a str>,
+) -> Result<(), &'static str> {
+    let mut seen = BTreeSet::new();
+    for column in columns {
+        if !TabularColumnName::is_valid(column) {
+            return Err("column names must not be blank");
+        }
+        if !seen.insert(column) {
+            return Err("column names must be unique");
+        }
+    }
+    Ok(())
+}
+
+/// Ordered, distinct column references; an empty list can mean all columns or no selection.
+pub fn prepare_column_names_json(value: &serde_json::Value) -> Result<Vec<Box<str>>, String> {
+    let columns = value
+        .as_array()
+        .ok_or("column names must be an array")?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(Box::from)
+                .ok_or("column names must be strings")
+        })
+        .collect::<Result<Vec<Box<str>>, _>>()?;
+    validate_column_names(columns.iter().map(AsRef::as_ref))?;
+    Ok(columns)
 }
 
 pub fn prepare_filter_predicate_json(value: &serde_json::Value) -> Result<FilterPredicate, String> {

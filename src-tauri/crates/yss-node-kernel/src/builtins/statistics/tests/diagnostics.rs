@@ -1,6 +1,122 @@
 use super::*;
 
 #[test]
+fn model_diagnostics_have_no_default_workspace_budget() {
+    let n = 512;
+    let p = 40;
+    let data = noise(n * (p + 1));
+    let predictors = data[..n * p].chunks_exact(n).collect::<Vec<_>>();
+    let y = (0..n)
+        .map(|i| {
+            2. + predictors
+                .iter()
+                .enumerate()
+                .map(|(j, x)| x[i] / (j + 1) as f64)
+                .sum::<f64>()
+                + data[n * p + i] * (1. + predictors[0][i].abs())
+        })
+        .collect::<Vec<_>>();
+    let weights = predictors[0]
+        .iter()
+        .map(|x| 1. / (1. + x.abs()).powi(2))
+        .collect::<Vec<_>>();
+    for method in ["OLS", "WLS"] {
+        let mut inputs = vec![("y", series(&y))];
+        inputs.extend(predictors.iter().map(|x| ("x", series(x))));
+        if method == "WLS" {
+            inputs.push(("weights", series(&weights)));
+        }
+        let fit = run(
+            "yssbi.statistics.linear.fit",
+            &inputs,
+            &[
+                ("method", string(method)),
+                ("constant", flag(true)),
+                ("covariance", string("nonrobust")),
+            ],
+            3,
+        )
+        .unwrap();
+        let model = [("model", fit[0].clone())];
+        for rhs in [false, true] {
+            for koenker in [false, true] {
+                let report = run(
+                    "yssbi.statistics.diagnostic.breusch_pagan",
+                    &model,
+                    &[("rhs", flag(rhs)), ("koenker", flag(koenker))],
+                    1,
+                )
+                .unwrap_or_else(|error| {
+                    panic!("{method}, rhs={rhs}, koenker={koenker}: {error:?}")
+                });
+                let result = field(&report[0], "result").unwrap();
+                assert_eq!(
+                    field(result, "df").unwrap(),
+                    &int(if rhs { p as i64 } else { 1 })
+                );
+                let probability =
+                    super::super::super::numeric_input(Some(field(result, "p_value").unwrap()))
+                        .unwrap();
+                assert!((0.0..=1.0).contains(&probability));
+            }
+        }
+        for (name, parameters) in [
+            ("vif", vec![]),
+            ("leverage", vec![]),
+            ("reset", vec![("rhs", flag(false))]),
+            ("reset", vec![("rhs", flag(true))]),
+            ("wald", vec![("hypothesis", string("x1 = 0"))]),
+            (
+                "breusch_godfrey",
+                vec![("lags", int(2)), ("bg_nomiss0", flag(true))],
+            ),
+        ] {
+            run(
+                &format!("yssbi.statistics.diagnostic.{name}"),
+                &model,
+                &parameters,
+                1,
+            )
+            .unwrap_or_else(|error| panic!("{method}, {name}: {error:?}"));
+        }
+        let control = KernelControl::new(
+            Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(30),
+        );
+        let invocation = KernelInvocation {
+            relations: &crate::tests::relations(),
+            inputs: &fit[..1],
+            input_keys: &["model"],
+            parameters: [("rhs", flag(false)), ("koenker", flag(false))]
+                .into_iter()
+                .map(|(key, value)| {
+                    (
+                        KernelParameterKey::new(key.into()).unwrap(),
+                        Cow::Owned(value),
+                    )
+                })
+                .collect(),
+            outputs: &[KernelOutputSpec {
+                data_type: ValueType::Struct("statistics.report".into()),
+                fields: None,
+            }],
+            control: &control,
+        };
+        let registry = KernelRegistry::default();
+        let id = KernelId::new("yssbi.statistics.diagnostic.breusch_pagan".into()).unwrap();
+        let result = registry.execute(&id, &invocation).unwrap();
+        validate_display(&result[0]);
+        control
+            .cancellation
+            .store(true, std::sync::atomic::Ordering::Release);
+        assert!(matches!(
+            registry.execute(&id, &invocation),
+            Err(KernelError::Cancelled)
+        ));
+    }
+}
+
+#[test]
 fn diagnostic_adapters_validate_paired_inputs_and_propagate_execution_limits() {
     let id = "yssbi.statistics.diagnostic.nri_idi";
     let params = [

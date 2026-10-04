@@ -9,7 +9,7 @@ use yss_relational_contract::RelationError;
 pub fn dataset_query_engine() -> Result<Arc<DataFusionRuntime>, DatasetStoreError> {
     static ENGINE: OnceLock<Result<Arc<DataFusionRuntime>, RelationError>> = OnceLock::new();
     ENGINE
-        .get_or_init(|| DataFusionRuntime::new(512 * 1024 * 1024, 8192))
+        .get_or_init(|| DataFusionRuntime::unbounded(8192))
         .clone()
         .map_err(Into::into)
 }

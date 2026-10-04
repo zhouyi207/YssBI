@@ -5,6 +5,7 @@
 mod builtin;
 mod catalog_entry;
 mod core_nodes;
+mod creation;
 mod dataframe;
 mod distribution;
 mod documentation;
@@ -34,6 +35,7 @@ pub(crate) const REROUTE_NODE_TYPE: &str = "yssbi.core.reroute";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use core_nodes::reroute::validate_reroute_protocol_contract;
+pub use creation::{NodeCreationPort, PortCountPolicy, node_creation_ports};
 pub use dataframe::{DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER};
 pub fn reroute_node_type() -> yss_node_protocol::NodeTypeId {
     yss_node_protocol::NodeTypeId::new(REROUTE_NODE_TYPE)

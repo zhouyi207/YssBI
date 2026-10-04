@@ -108,7 +108,7 @@ impl DataFusionRelation {
             Some(fields) => Schema::new(fields),
             None => frame.schema().as_arrow().clone(),
         });
-        Self::handle(
+        Self::new(
             frame,
             schema,
             self.bindings.clone(),
@@ -117,6 +117,7 @@ impl DataFusionRelation {
             false,
             order,
         )
+        .and_then(Self::into_handle)
     }
 
     pub(crate) fn group_aggregate(

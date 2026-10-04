@@ -76,7 +76,7 @@ fn columns(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
             value_type,
             value: DataValue::List(vec![]),
         }),
-        vec![],
+        vec![ParameterConstraint::ColumnNames],
     )
 }
 

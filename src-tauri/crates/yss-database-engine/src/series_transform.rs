@@ -890,7 +890,7 @@ impl DataFusionRelation {
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Self::handle(
+        Self::new(
             frame,
             Arc::new(Schema::new(fields)),
             self.bindings.clone(),
@@ -899,6 +899,7 @@ impl DataFusionRelation {
             false,
             vec![],
         )
+        .and_then(Self::into_handle)
     }
 }
 
