@@ -5,7 +5,7 @@ Connect a series to **input**, choose categorical or ordinal meaning, and enter 
 For example, text code `001` can mean “Treatment”; its leading zeros remain intact.
 
 Ordinal levels follow the configured order from low to high.
-An empty configuration inherits a compatible existing domain; otherwise the domain must be supplied.
+An empty configuration inherits a compatible existing domain. Categorical input without a domain is scanned in full during execution, giving each distinct non-null code a same-name label. Ordinal levels must still be supplied when none can be inherited.
 Duplicate codes, invalid domains and nonnull observations outside a declared domain fail explicitly instead of becoming missing values.
 
 To recode positive/negative codes as booleans, use To Binary.

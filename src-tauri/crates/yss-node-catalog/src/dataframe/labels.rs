@@ -29,8 +29,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             (
                 "Codes and labels",
                 "编码与标签",
-                "Declare exact codes and their labels; order ordinal levels. Empty configuration inherits a compatible domain.",
-                "填写精确编码及含义；顺序等级从低到高排列。留空时继承兼容值域。",
+                "Declare exact codes and their labels; order ordinal levels. Empty configuration inherits a compatible domain; categorical values without a domain receive same-name labels automatically.",
+                "填写精确编码及含义；顺序等级从低到高排列。留空时继承兼容值域；分类没有值域时按实际取值自动生成同名标签。",
             )
         };
         parameter.title_key =

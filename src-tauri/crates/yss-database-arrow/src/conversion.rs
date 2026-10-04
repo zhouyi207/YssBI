@@ -1,5 +1,8 @@
 //! Prepared semantic conversion shared by materialized values and lazy expressions.
 
+mod domain;
+pub use domain::InferredCategoricalDomain;
+
 use crate::semantic::PreparedSemanticValidator;
 use crate::{TabularArrowError, column_semantic, lossless_cast, with_column_semantic};
 use arrow::array::{
@@ -64,26 +67,10 @@ pub fn materialized_column(
         {
             // Bare categorical literals declare their meaning without a codebook. Establish
             // an unordered domain once; explicit domains and ordinal levels stay authoritative.
-            let codes = cast(array.as_ref(), &DataType::Utf8)?;
-            let codes = codes
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or(TabularArrowError::UnsupportedType)?;
-            let mut distinct = std::collections::BTreeSet::new();
-            for code in codes.iter().flatten() {
-                distinct.insert(code);
-                if distinct.len() > 65_536 {
-                    return Err(TabularArrowError::InvalidValue);
-                }
-            }
+            let mut domain = InferredCategoricalDomain::default();
+            domain.extend(array.as_ref())?;
             let mut semantic = metadata.semantic.clone();
-            semantic.values = distinct
-                .into_iter()
-                .map(|code| SemanticValue {
-                    value: code.into(),
-                    label: code.into(),
-                })
-                .collect();
+            semantic.values = domain.finish().values;
             semantic
         } else if metadata.semantic.kind == SemanticType::Binary
             && metadata.semantic.values.is_empty()
@@ -110,6 +97,17 @@ pub fn convert_semantic_values(
     spec: &SemanticConversion,
 ) -> Result<ConvertedValues, TabularArrowError> {
     let (field, array) = materialized_column("value", values, source_metadata)?;
+    let resolved;
+    let spec = if let Some(mut domain) = InferredCategoricalDomain::for_conversion(&field, spec)? {
+        domain.extend(array.as_ref())?;
+        resolved = SemanticConversion {
+            domain: domain.finish(),
+            ..spec.clone()
+        };
+        &resolved
+    } else {
+        spec
+    };
     let conversion = PreparedConversion::new(&field, spec)?;
     let result = conversion.convert(array.as_ref())?;
     let result = if conversion.metadata.temporal.is_some() {
@@ -475,10 +473,12 @@ fn target_field(
             SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
         ) {
             meaning.values.clone()
+        } else if spec.target == SemanticType::Categorical {
+            Vec::new()
         } else {
             return Err(TabularArrowError::InvalidValue);
         };
-        if semantic.values.is_empty() {
+        if semantic.values.is_empty() && spec.target == SemanticType::Ordinal {
             return Err(TabularArrowError::InvalidValue);
         }
         if spec.target == SemanticType::Ordinal

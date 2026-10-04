@@ -34,8 +34,8 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             SemanticType::Categorical,
             "To Categorical",
             "转分类",
-            "Declare or inherit categorical values and labels while preserving original codes and shape.",
-            "声明或继承分类取值与标签，保留原始编码及标量或数列结构。",
+            "Automatically map observed values to categories, or declare or inherit labels, preserving original codes and shape.",
+            "按实际取值自动生成分类映射，也可配置或继承标签，保留原始编码及标量或数列结构。",
         ),
         (
             "yssbi.value.to_ordinal",
@@ -200,8 +200,8 @@ fn conversion_parameters(
         SemanticType::Categorical => Some((
             "Values and Labels",
             "取值与标签",
-            "Declare original codes and labels. Empty configuration inherits a compatible source domain.",
-            "配置原始编码与标签；留空时继承兼容的源值域。",
+            "Optionally declare original codes and labels. Empty configuration inherits a source domain or automatically maps all distinct non-null values to same-name labels.",
+            "可配置原始编码与标签；留空时继承源值域，没有值域时按全部非空取值去重并自动生成同名标签。",
         )),
         SemanticType::Ordinal => Some((
             "Levels and Labels",

@@ -6,8 +6,8 @@
 mod conversion;
 mod edit_type;
 pub use conversion::{
-    PreparedConversion, convert_semantic_values, materialized_column, materialized_values,
-    temporal_metadata,
+    InferredCategoricalDomain, PreparedConversion, convert_semantic_values, materialized_column,
+    materialized_values, temporal_metadata,
 };
 mod scalar;
 mod temporal;

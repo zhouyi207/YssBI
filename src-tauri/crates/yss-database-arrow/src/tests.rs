@@ -532,6 +532,78 @@ fn semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels() {
 }
 
 #[test]
+fn categorical_conversion_infers_complete_exact_domains_without_replacing_values() {
+    use yss_data_contract::{ConversionDomain, NumericRepresentation, SemanticConversion};
+    let spec = SemanticConversion::new(SemanticType::Categorical, NumericRepresentation::Auto);
+    let input = vec![
+        TabularScalar::String("002".into()),
+        TabularScalar::Null,
+        TabularScalar::String("".into()),
+        TabularScalar::String("002".into()),
+        TabularScalar::String("001".into()),
+    ];
+    let converted = convert_semantic_values(&input, None, &spec).unwrap();
+    assert_eq!(converted.values, input);
+    let expected = ["", "001", "002"].map(|code| SemanticValue {
+        value: code.into(),
+        label: code.into(),
+    });
+    assert_eq!(converted.metadata.semantic.values, expected);
+    let mut domain = InferredCategoricalDomain::default();
+    domain
+        .extend(&StringArray::from(vec![Some("002"), None, Some("")]))
+        .unwrap();
+    domain
+        .extend(&StringArray::from(vec!["002", "001"]))
+        .unwrap();
+    assert_eq!(domain.finish().values, expected);
+
+    let exact = [TabularScalar::Unsigned(u64::MAX), TabularScalar::Null];
+    let converted = convert_semantic_values(&exact, None, &spec).unwrap();
+    assert_eq!(converted.values, exact);
+    assert_eq!(
+        converted.metadata.semantic.values[0].value,
+        u64::MAX.to_string()
+    );
+    for empty in [&[][..], &[TabularScalar::Null][..]] {
+        let converted = convert_semantic_values(empty, None, &spec).unwrap();
+        assert_eq!(converted.values, empty);
+        assert!(converted.metadata.semantic.values.is_empty());
+        assert_eq!(converted.metadata.semantic.kind, SemanticType::Categorical);
+    }
+    let mut explicit = spec.clone();
+    explicit.domain.values = vec![SemanticValue {
+        value: "001".into(),
+        label: "Treatment".into(),
+    }];
+    let converted = convert_semantic_values(&input[4..], None, &explicit).unwrap();
+    assert_eq!(converted.metadata.semantic.values, explicit.domain.values);
+    assert!(convert_semantic_values(&input, None, &explicit).is_err());
+    let inherited =
+        convert_semantic_values(&converted.values, Some(&converted.metadata), &spec).unwrap();
+    assert_eq!(inherited.metadata.semantic.values, explicit.domain.values);
+    let mut invalid = spec.clone();
+    invalid.domain.positive_value = Some("001".into());
+    assert!(convert_semantic_values(&input, None, &invalid).is_err());
+
+    // Domain limits fail without silently losing categories or truncating labels.
+    let too_long = "x".repeat(ConversionDomain::MAX_BYTES / 2 + 1);
+    assert!(
+        InferredCategoricalDomain::default()
+            .extend(&StringArray::from(vec![too_long]))
+            .is_err()
+    );
+    let too_many = StringArray::from_iter_values(
+        (0..=ConversionDomain::MAX_VALUES).map(|value| value.to_string()),
+    );
+    assert!(
+        InferredCategoricalDomain::default()
+            .extend(&too_many)
+            .is_err()
+    );
+}
+
+#[test]
 fn semantic_calendar_conversion_parses_formats_preserves_clock_and_rejects_precision_loss() {
     use yss_data_contract::TabularScalar as V;
     use yss_data_contract::{

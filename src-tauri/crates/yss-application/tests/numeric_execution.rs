@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 mod causal_models;
 #[path = "numeric_execution/comparison.rs"]
 mod comparison;
+#[path = "numeric_execution/conversion.rs"]
+mod conversion;
 #[path = "numeric_execution/decision.rs"]
 mod decision;
 #[path = "numeric_execution/description.rs"]
@@ -2807,6 +2809,12 @@ fn fixed_semantic_conversions_keep_metadata_in_scalar_and_series_chains() {
             ]))
         );
     };
+    evaluate(
+        "001",
+        vec![("yssbi.value.to_categorical", serde_json::json!({}))],
+        S::Categorical,
+        "001",
+    );
     let domain = serde_json::json!({"values":[{"value":"002","label":"low"},{"value":"001","label":"high"}]});
     for (kind, semantic, parameters) in [
         (

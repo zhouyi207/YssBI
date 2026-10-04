@@ -573,7 +573,9 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                     Boolean(_) => 5,
                     Statistical(Summary) => 11,
                     Statistical(Predict) => 5,
+                    Convert(SemanticType::Categorical) => 2,
                     Convert(_) => 1,
+                    Labels => 3,
                     Constant => 5,
                     Relational(
                         relational::RelationalKernel::Limit | relational::RelationalKernel::Join,

@@ -75,9 +75,12 @@ pub struct ConversionDomain {
 }
 
 impl ConversionDomain {
+    pub const MAX_VALUES: usize = 65_536;
+    pub const MAX_BYTES: usize = 1024 * 1024;
+
     pub fn is_valid(&self) -> bool {
         let mut seen = std::collections::BTreeSet::new();
-        self.values.len() <= 65_536
+        self.values.len() <= Self::MAX_VALUES
             && self
                 .values
                 .iter()
@@ -87,7 +90,7 @@ impl ConversionDomain {
                 .iter()
                 .map(|value| value.value.len().saturating_add(value.label.len()))
                 .sum::<usize>()
-                <= 1024 * 1024
+                <= Self::MAX_BYTES
             && self
                 .positive_value
                 .as_ref()

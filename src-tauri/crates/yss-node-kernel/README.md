@@ -134,6 +134,7 @@ Graph 的广播说明不提前改写标量值。数值、转换、比较和关�
 已物化的分类、顺序、日期时间及标识输出通过 `RuntimeValue::with_metadata` 保留含义、值域和已确定的时间表示。标注载荷只允许标量或平坦标量列表，字段私有，不能嵌套标注或包装资源句柄；后续转换继承元数据，展示端剥离标注投影原值。惰性数列通过 `RelationHandle::convert_series`
 生成表达式，持有共享的预编译转换对象；每个批次继续执行值域、精度和范围检查。数值表示策略、Null 和失败规则见内置节点帮助。
 七个 To 节点的目标语义由各自 Kernel 注册项固定；内核只读取该目标相关的配置，共用同一转换入口。
+To Categorical 和分类 Data Labels 在空配置且没有源值域时，复用 Arrow 的 `InferredCategoricalDomain` 收集完整非空取值，生成原值同名标签。标量/列表、裸分类字面量和分批读取的数列共用此收集器及 `ConversionDomain` 限额；内核控制数列扫描的取消、超时和内存预算，随后沿用原惰性数列转换，保留 Physical 与行对齐。显式或继承值域仍是完整约束；空输入允许空分类值域，Ordinal 不自动推断等级。
 
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
