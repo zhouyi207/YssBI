@@ -110,6 +110,10 @@ on edited columns apply after their patches. Both branches retain inserted rows,
 exact column identities; limits and display ordering apply to the combined effective view.
 Relation projections carry the exact source Arrow schema and reattach it to streamed batches;
 native CASE/projection optimization must not erase column identity or category metadata.
+Ordered relation streams disable optional round-robin repartitioning in their local query
+configuration: a computed projection must not redistribute batches after sorting when the
+ordering keys are no longer public columns. Source scanning and required hash partitions keep
+their normal parallelism; row-domain order and positional alignment remain stable.
 Profiles use native aggregate/top-group queries over the same snapshot and return the existing
 `yss-dataset-profile` DTOs. They exclude non-finite values from numeric summaries, count nulls
 separately, order tied categories deterministically, and handle empty tables.

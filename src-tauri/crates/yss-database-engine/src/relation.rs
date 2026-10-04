@@ -467,7 +467,18 @@ impl RelationPlan for DataFusionRelation {
     }
     fn stream(&self, control: RelationControl) -> RelationFuture<'_, RelationBatchStream> {
         Box::pin(async move {
-            let stream = controlled(self.frame.clone().execute_stream(), &control)
+            let (mut state, plan) = self.frame.clone().into_parts();
+            // A computed projection must not add round-robin partitions after the row-domain
+            // sort: its hidden ordering keys may already have left the public projection.
+            if !self.domain_order.is_empty() {
+                state
+                    .config_mut()
+                    .options_mut()
+                    .optimizer
+                    .enable_round_robin_repartition = false;
+            }
+            let frame = DataFrame::new(state, plan);
+            let stream = controlled(frame.execute_stream(), &control)
                 .await?
                 .map_err(crate::relation::query_error)?;
             let lease = self.lease.clone();
