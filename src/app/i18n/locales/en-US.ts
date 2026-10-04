@@ -276,8 +276,14 @@ export const enUS = {
       assistant_provider_configuration_invalid:
         "Invalid model configuration. Check the model name and API URL.",
       assistant_turn_failed: "This analysis failed. You can send another message.",
-      assistant_model_turn_limit_exceeded:
-        "This task reached the model turn limit. Completed operations are preserved; send another message to continue.",
+      assistant_provider_output_truncated:
+        "The model service truncated this output. Completed operations are preserved; continue the task or adjust the service's output settings.",
+      assistant_provider_stream_interrupted:
+        "The model response stream ended before completion. Completed operations are preserved; send another message to continue.",
+      assistant_provider_content_filtered:
+        "The model service filtered this response. Adjust the request and retry.",
+      assistant_provider_payment_required:
+        "The model service requires payment (HTTP 402). Check the service account balance or billing status.",
       assistant_turn_timed_out: "This analysis timed out. You can send another message.",
       assistant_stream_failed:
         "Assistant message synchronization failed. Reopen the assistant panel.",
@@ -364,6 +370,8 @@ export const enUS = {
     unknown:
       "The run could not finish. Check the logs using the error code and diagnostic reference.",
     node: "Locate node: {{name}}",
+    group: "Group {{ordinal}} · {{function}}",
+    emptyGroupProbe: "Empty-input schema probe · {{function}}",
     run: "Run #{{id}}",
     code: "Error code: {{code}}",
     incident: "Diagnostic reference: {{id}}",
@@ -371,7 +379,11 @@ export const enUS = {
       shapeMismatch: "Input column lengths or matrix dimensions do not match.",
       invalidParameter: "Node parameters are invalid. Check the method and its configuration.",
       unalignedSeries:
-        "Input columns have different row alignment. Select columns from the same data frame.",
+        "Input rows are not aligned. Select columns from the same data frame; Transform returns must preserve every group row and its order.",
+      groupSchemaMismatch:
+        "Groups returned inconsistent column names, order, physical types or semantics. Make the function return one consistent schema.",
+      groupKeyCollision:
+        "Group key output names collide with returned columns. Change the key prefix or the returned column names.",
       budgetExceeded: "The computation exceeds its memory budget. Reduce input rows or columns.",
       inputLayoutMismatch: "The node input layout does not match its implementation.",
       outputContractMismatch: "The node returned an output that does not match its declaration.",
@@ -395,6 +407,10 @@ export const enUS = {
         "The calculation results could not be committed. Check the project state and try again.",
       graph_draft_changed: "The graph or its dependencies changed. Run the current graph again.",
       graph_not_ready: "Resolve the graph's blocking problems before running it.",
+      inputResultUnavailable:
+        "An upstream result is missing or stale. Run its source first, or choose Run to Here.",
+      execution_input_result_unavailable:
+        "An upstream result is missing or stale. Run its source first, or choose Run to Here.",
       graph_resolution_failed:
         "Could not check the graph. Use the diagnostic reference for technical details.",
       graph_plan_failed:
@@ -449,12 +465,15 @@ export const enUS = {
       duplicate: "Duplicate",
       breakAllLinks: "Break All Links",
       selectLinkedNodes: "Select Linked Nodes",
+      runNode: "Run This Node",
+      runTo: "Run to Here",
       delete: "Delete",
     },
     pin: {
       breakLinks: "Break Links",
       resetValue: "Reset to Default",
       view: "View",
+      viewPrevious: "View Last Successful Result",
     },
   },
   projectPicker: {
@@ -1811,6 +1830,14 @@ export const enUS = {
     openFile: "Open file",
     showAllCommands: "Show all commands",
     nodePalette: {
+      configureFirst: "Configure before creating",
+      pinCounts: "Pin counts",
+      derivedPins: "Automatic",
+      create: "Create node",
+      back: "Back to nodes",
+      noParameters: "This node has no configurable parameters.",
+      createFailed:
+        "The node could not be created. Check the parameters, connection or target graph and retry.",
       unavailable: "Unavailable",
       searchPlaceholder: "Search nodes...",
       collapseAll: "Collapse All",
@@ -2216,6 +2243,11 @@ export const enUS = {
     },
     parameterEditor: {
       column: "Column",
+      enterColumn: "Enter one column name",
+      addColumn: "Add column",
+      unavailableColumn: "Unavailable in the current input",
+      unavailableChoice: "Currently unavailable",
+      noColumns: "The current input has no eligible columns",
       operator: "Operator",
       valueType: "Value type",
       selectColumn: "Select {{column}}",

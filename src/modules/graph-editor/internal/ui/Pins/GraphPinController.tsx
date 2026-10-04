@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { graphElementState, useGraphResultPresentation } from "@/features/application/results";
+import {
+  graphElementState,
+  useGraphResultPresentation,
+  stalePinResultReferences,
+} from "@/features/application/results";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
 import { useTranslation } from "react-i18next";
 import type { GraphContextMenuActions } from "@/features/application/editor";
@@ -42,16 +47,26 @@ function GraphPinContextMenu({
   pin,
   ...props
 }: Pick<GraphPinControllerProps, "graphPath" | "pin"> &
-  Omit<ComponentProps<typeof PinContextMenu>, "showView" | "onView">) {
+  Omit<
+    ComponentProps<typeof PinContextMenu>,
+    "showView" | "onView" | "showPreviousView" | "onViewPrevious"
+  >) {
   const target = graphPath ? { graphPath, address: pin.address, direction: pin.direction } : null;
   const showView = useGraphRead(
     (snapshot) =>
       target !== null && hasPinViewTarget(target, snapshot.graphEntities[target.graphPath]),
   );
+  const showPreviousView = useResourceStore(
+    (snapshot) => target !== null && stalePinResultReferences(target, snapshot).length > 0,
+  );
   return (
     <PinContextMenu
       {...props}
       showView={showView}
+      showPreviousView={showPreviousView}
+      onViewPrevious={() => {
+        if (target) void openPinInspectableView(target, "previous");
+      }}
       onView={() => {
         if (target) void openPinInspectableView(target);
       }}

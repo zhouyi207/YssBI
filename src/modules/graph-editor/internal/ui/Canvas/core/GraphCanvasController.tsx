@@ -92,10 +92,16 @@ export function GraphCanvasController({
     setPendingConnection,
   });
   const handlePaletteSelect = useCallback(
-    (descriptor: NodeCreationDescriptor, locale: string) => {
+    (
+      descriptor: NodeCreationDescriptor,
+      locale: string,
+      parameters?: Record<string, unknown>,
+      portCounts?: Record<string, number>,
+    ) => {
       if (contextMenu?.visible) {
-        void handleNodePaletteSelect(descriptor, locale, contextMenu);
+        return handleNodePaletteSelect(descriptor, locale, contextMenu, parameters, portCounts);
       }
+      return Promise.resolve(false);
     },
     [contextMenu, handleNodePaletteSelect],
   );
@@ -157,6 +163,10 @@ export function GraphCanvasController({
   );
   const contextMenuActions = useMemo(
     (): GraphContextMenuActions => ({
+      runNode:
+        activeGraph?.kind === "event_graph"
+          ? (nodeId, mode) => executeGraph(activeGraph.graphPath, { type: "node", nodeId, mode })
+          : null,
       selectNode: (nodeId, targetGroupId) => setSelectedNodeIds([nodeId], targetGroupId ?? groupId),
       copyNode: (nodeId) => copyNodes([nodeId]),
       cutNode: (nodeId) => cutNodes([nodeId]),
@@ -169,6 +179,8 @@ export function GraphCanvasController({
     }),
     [
       breakAllNodeLinks,
+      activeGraph,
+      executeGraph,
       copyNodes,
       cutNodes,
       deleteNodesById,

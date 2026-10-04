@@ -13,6 +13,8 @@ export interface CreateNodeFromDescriptorInput {
   locale: string;
   descriptor: NodeCreationDescriptor;
   position: NodePositionDto;
+  parameters?: Record<string, unknown>;
+  portCounts?: Record<string, number>;
   connectFrom?: PortAddressDto | null;
 }
 
@@ -31,6 +33,8 @@ export async function createNodeFromDescriptor(
       payload: {
         descriptor: input.descriptor,
         position: input.position,
+        parameters: input.parameters ?? {},
+        portCounts: input.portCounts ?? {},
         userLabel: null,
         connectFrom: input.connectFrom ?? null,
       },

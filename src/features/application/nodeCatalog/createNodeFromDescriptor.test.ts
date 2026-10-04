@@ -39,6 +39,8 @@ describe("createNodeFromDescriptor", () => {
         payload: {
           descriptor,
           position: { x: 12, y: 34 },
+          parameters: {},
+          portCounts: {},
           userLabel: null,
           connectFrom: null,
         },
@@ -46,7 +48,7 @@ describe("createNodeFromDescriptor", () => {
     });
   });
 
-  it("sends the exact parameterized-static descriptor unchanged", async () => {
+  it("sends initial parameters with the exact parameterized-static descriptor", async () => {
     const outcome = { status: "saving" as const };
     vi.mocked(applyGraphMutation).mockResolvedValue(outcome);
     const descriptor: NodeCreationDescriptor = {
@@ -61,6 +63,7 @@ describe("createNodeFromDescriptor", () => {
         locale: "en-US",
         descriptor,
         position: { x: 3, y: 7 },
+        parameters: { columns: ["industry", " sales "] },
       }),
     ).resolves.toBe(outcome);
 
@@ -69,7 +72,14 @@ describe("createNodeFromDescriptor", () => {
       expect.objectContaining({
         mutation: {
           type: "createNode",
-          payload: { descriptor, position: { x: 3, y: 7 }, userLabel: null, connectFrom: null },
+          payload: {
+            descriptor,
+            position: { x: 3, y: 7 },
+            parameters: { columns: ["industry", " sales "] },
+            portCounts: {},
+            userLabel: null,
+            connectFrom: null,
+          },
         },
       }),
     );
@@ -99,7 +109,14 @@ describe("createNodeFromDescriptor", () => {
       expect.objectContaining({
         mutation: {
           type: "createNode",
-          payload: { descriptor, position: { x: 5, y: 8 }, userLabel: null, connectFrom: null },
+          payload: {
+            descriptor,
+            position: { x: 5, y: 8 },
+            parameters: {},
+            portCounts: {},
+            userLabel: null,
+            connectFrom: null,
+          },
         },
       }),
     );
@@ -127,7 +144,14 @@ describe("createNodeFromDescriptor", () => {
       expect.objectContaining({
         mutation: {
           type: "createNode",
-          payload: { descriptor, position: { x: 5, y: 8 }, userLabel: null, connectFrom },
+          payload: {
+            descriptor,
+            position: { x: 5, y: 8 },
+            parameters: {},
+            portCounts: {},
+            userLabel: null,
+            connectFrom,
+          },
         },
       }),
     );

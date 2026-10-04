@@ -4,6 +4,11 @@
       "type": "default"
     },
     {
+      "type": "node",
+      "nodeId": "00000000-0000-0000-0000-000000000002",
+      "mode": "currentInputs"
+    },
+    {
       "includeDefaultResults": false,
       "reuseInputs": false,
       "outputs": [
@@ -60,6 +65,7 @@
         "code": "kernelFailed",
         "phase": "execution",
         "type": "runErrored",
+        "groups": [],
         "source": null
       },
       "run": {
@@ -75,6 +81,7 @@
         "code": "deadlineExceeded",
         "phase": "admission",
         "type": "runErrored",
+        "groups": [],
         "source": null
       },
       "run": {
@@ -90,6 +97,7 @@
         "code": "deadlineExceeded",
         "phase": "execution",
         "type": "runErrored",
+        "groups": [],
         "source": null
       },
       "run": {
@@ -105,6 +113,7 @@
         "code": "deadlineExceeded",
         "phase": "resourcePreparation",
         "type": "runErrored",
+        "groups": [],
         "source": null
       },
       "run": {
@@ -120,6 +129,7 @@
         "code": "deadlineExceeded",
         "phase": "finalization",
         "type": "runErrored",
+        "groups": [],
         "source": null
       },
       "run": {
@@ -135,6 +145,7 @@
         "code": "deadlineExceeded",
         "phase": "planValidation",
         "type": "runErrored",
+        "groups": [],
         "source": null
       },
       "run": {
@@ -178,6 +189,17 @@
     {
       "kind": {
         "type": "runErrored",
+        "groups": [
+          {
+            "caller": {
+              "graphPath": "events/contract.yssbi-event",
+              "nodeId": "00000000-0000-0000-0000-000000000001",
+              "portAddress": null
+            },
+            "function": "functions/Group.yssbi-function",
+            "ordinal": "9007199254740993"
+          }
+        ],
         "code": "divisionByZero",
         "phase": "execution",
         "source": {
@@ -222,7 +244,7 @@
           }
         },
         "state": "stale",
-        "resultId": null
+        "resultId": "18"
       },
       {
         "output": {

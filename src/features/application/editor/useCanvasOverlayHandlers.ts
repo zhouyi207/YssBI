@@ -3,45 +3,28 @@ import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/cre
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import { useEditorStore } from "@/features/core/editor";
+import { useEditorStore, type EditorContextMenuState } from "@/features/core/editor";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
 } from "@/features/core/graphInteraction/graphInteractionStore";
-import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { formatApplicationIpcError } from "@/features/application/errorReference";
 import { logger } from "@/utils/frontendLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";
+import {
+  captureEditorCommandTarget,
+  isEditorCommandTargetCurrent,
+  type EditorCommandTarget,
+} from "./editorCommandFocus";
 
-function interactionStillMatches(
-  panelInstanceId: string,
-  groupId: string,
-  graphPath: string,
-  menu: { x: number; y: number },
-  sourceAddress: PortAddressDto | null,
-): boolean {
-  const panel = workbenchLayoutRead.getPanel(panelInstanceId);
-  if (
-    !panel?.visible ||
-    panel.groupId !== groupId ||
-    panel.metadata.role !== "editor" ||
-    panel.metadata.resourceRef !== graphPath
-  )
-    return false;
-  const contextMenu = useEditorStore.getState().contextMenu;
-  if (
-    !contextMenu?.visible ||
-    contextMenu.panelInstanceId !== panelInstanceId ||
-    contextMenu.graphPath !== graphPath ||
-    contextMenu.x !== menu.x ||
-    contextMenu.y !== menu.y
-  )
-    return false;
-  const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
-  if (interaction.type !== "pendingNodeCreation") return sourceAddress === null;
+function paletteStillMatches(target: EditorCommandTarget, menu: EditorContextMenuState): boolean {
   return (
-    sourceAddress !== null &&
-    portAddressKey(interaction.session.source) === portAddressKey(sourceAddress)
+    isEditorCommandTargetCurrent(target) &&
+    menu.visible &&
+    menu.panelInstanceId === target.panelInstanceId &&
+    menu.groupId === target.groupId &&
+    menu.graphPath === target.resourceRef &&
+    useEditorStore.getState().contextMenu === menu
   );
 }
 
@@ -66,10 +49,34 @@ export function useCanvasOverlayHandlers({
     async (
       descriptor: NodeCreationDescriptor,
       locale: string,
-      contextMenu: { x: number; y: number },
+      contextMenu: EditorContextMenuState,
+      parameters: Record<string, unknown> = {},
+      portCounts: Record<string, number> = {},
     ) => {
       const canvasElement = canvasElementRef.current;
-      if (!canvasElement || !activeResourceRef) return;
+      const target = captureEditorCommandTarget(panelInstanceId);
+      if (
+        !canvasElement ||
+        !activeResourceRef ||
+        !target ||
+        target.groupId !== groupId ||
+        target.resourceRef !== activeResourceRef ||
+        !paletteStillMatches(target, contextMenu)
+      )
+        return false;
+      const interaction = getCanvasInteraction(
+        useGraphInteractionStore.getState(),
+        activeResourceRef,
+        groupId,
+      );
+      if (
+        interaction.type === "pendingNodeCreation"
+          ? interaction.session.panelInstanceId !== panelInstanceId ||
+            pendingConnection === null ||
+            portAddressKey(interaction.session.source) !== portAddressKey(pendingConnection)
+          : pendingConnection !== null
+      )
+        return false;
 
       const position = clientToWorldInCanvas(
         canvasElement,
@@ -85,26 +92,28 @@ export function useCanvasOverlayHandlers({
           locale,
           descriptor,
           position,
+          parameters,
+          portCounts,
           connectFrom: sourceAddress,
         });
-        if (
-          outcome.status !== "applied" ||
-          !interactionStillMatches(
-            panelInstanceId,
-            groupId,
-            activeResourceRef,
-            contextMenu,
-            sourceAddress,
+        if (outcome.status !== "applied") return false;
+        // Successful creation consumes its palette even if its connection gesture ended.
+        // Menu identity keeps a newer palette (including one at the same position) intact.
+        if (paletteStillMatches(target, contextMenu)) {
+          setContextMenu(null);
+          if (
+            isEditorCommandTargetCurrent(target) &&
+            useGraphInteractionStore.getState().interactions[activeResourceRef] === interaction
           )
-        )
-          return;
-        setContextMenu(null);
-        setPendingConnection(null);
+            setPendingConnection(null);
+        }
+        return true;
       } catch (error) {
         logger.graph.error(
           `Failed to create node '${descriptor.nodeTypeId}' in '${activeResourceRef}': ${formatApplicationIpcError(error)}`,
           "NodePalette",
         );
+        return false;
       }
     },
     [

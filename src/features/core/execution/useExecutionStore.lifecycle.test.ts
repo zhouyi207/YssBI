@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useExecutionStore } from "./useExecutionStore";
+import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 const run = {
   graphPath: "events/Main.yssbi-event",
   executionSessionId: "session",
@@ -23,6 +24,35 @@ describe("useExecutionStore run lifecycle", () => {
 
     store.applyRunEvent({ resultRevision: "1", run, kind: { type: "runStarted", outputs: [] } });
     expect(useExecutionStore.getState().getGraph(graphPath).run).toEqual(run);
+
+    const { outputAddress } = makeEditorProjectionFixture({ graphPath });
+    const first = { graphPath, port: outputAddress };
+    const second = {
+      graphPath,
+      port: { ...outputAddress, nodeId: "00000000-0000-0000-0000-000000000099" },
+    };
+    store.applyRunEvent({
+      resultRevision: "2",
+      run,
+      kind: { type: "runStarted", outputs: [first] },
+    });
+    const priorOutput = Object.values(
+      useExecutionStore.getState().getGraph(graphPath).outputRuns,
+    )[0];
+    const continuation = {
+      resultRevision: "4",
+      run,
+      kind: { type: "runStarted" as const, outputs: [first, second] },
+    };
+    expect(store.getRunEventOutputs(continuation)).toEqual([second]);
+    store.applyRunEvent(continuation);
+    expect(Object.values(useExecutionStore.getState().getGraph(graphPath).outputRuns)).toContain(
+      priorOutput,
+    );
+    expect(Object.values(useExecutionStore.getState().getGraph(graphPath).outputRuns)).toHaveLength(
+      2,
+    );
+    expect(useExecutionStore.getState().getGraph(graphPath).status).toBe("running");
 
     const successor = { ...run, executionSessionId: "successor-session" };
     store.applyRunEvent({

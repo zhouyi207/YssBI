@@ -53,7 +53,13 @@ describe("createExecutionStreamDrain", () => {
   });
 
   it.each([
-    { type: "runErrored", code: "kernelFailed", phase: "execution", source: null } as const,
+    {
+      type: "runErrored",
+      groups: [],
+      code: "kernelFailed",
+      phase: "execution",
+      source: null,
+    } as const,
     { type: "runCancelled" } as const,
   ])("treats $type as terminal", async (terminal) => {
     const drain = createExecutionStreamDrain();
@@ -66,7 +72,13 @@ describe("createExecutionStreamDrain", () => {
 
   it.each([
     { type: "runCompleted" } as const,
-    { type: "runErrored", code: "kernelFailed", phase: "execution", source: null } as const,
+    {
+      type: "runErrored",
+      groups: [],
+      code: "kernelFailed",
+      phase: "execution",
+      source: null,
+    } as const,
     { type: "runCancelled" } as const,
   ])(
     "settles $type transport and rejects the waiter when the consumer throws",

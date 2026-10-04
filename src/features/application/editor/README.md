@@ -22,6 +22,15 @@ features/core/editor/
 
 ## Usage
 
+Node palette 的“创建前配置参数”模式使用 `nodeCatalog/useNodeCreationForm` 管理局部输入，
+通过只读查询获得规范值、条件参数组和 Pin 数量范围；不同字段按序预览，同字段等待当前查询完成。
+提交先等待预览完成，再将参数和初始 Pin 总数交给既有创建命令。取消不创建节点，失败保留表单，
+项目、图、面板或来源端口改变后拒绝过期交互。正式图状态继续只来自 Rust 回执。
+创建成功按发起提交的目录实例关闭，不依赖连线手势仍然存活；在等待期间新打开的目录不受旧回执影响。
+
+`executeGraph` 接收显式 demand，复用图 FIFO、项目身份、版本和运行事件流程。
+全图入口检查整体就绪投影；节点入口交由 Rust 校验实际范围，避免无关节点阻断。
+
 ### Workbench composition
 
 ```tsx
@@ -148,7 +157,11 @@ the section title is not repeated inside its control. Collapsing one parameter a
 that section, and diagnostic focus keeps the graph/node/parameter identity on its wrapper.
 Every parameter uses one tagged `editor` object: for example `{ "kind": "number" }`,
 `{ "kind": "select", "options": ["OLS", "WLS"] }`, or a `projectColumns` / `filterPredicate`
-descriptor carrying its schema-derived choices and editable value. The renderer selects the
+descriptor carrying its schema-derived choices and editable value. These editors expose
+`schemaKnown` and `contextHint`: unknown inputs allow individual column-name entry and typed
+filter predicates; known inputs use the current choices, including a known empty set.
+Existing unavailable selections stay visible and removable. Schema changes preserve predicate
+operators, literal types and unfinished input. The renderer selects the
 existing control using `editor.kind`; grouping, display metadata and presentation remain separate.
 The panel and parameter sections use memoized boundaries over the existing structurally
 shared projection. Each section subscribes only to its own parameter diagnostics; unchanged
@@ -170,8 +183,10 @@ or when editing finishes; composite filter/domain editors wait until focus leave
 controls so a selection or row action can submit the complete change atomically. Escape
 restores the projected value. Unfinished or duplicate domain entries remain local input;
 Rust validates submitted parameters and owns undo/redo. Rejected edits retain the published
-projection and show the existing field error. Required column selections retain at least
-one column, following the Rust-issued `allowEmpty` flag.
+projection and show the existing field error. Clearing the last column submits an empty list
+when `allowEmpty` permits it, otherwise null removes the explicit required selection and
+leaves an incomplete node. `createNodeFromDescriptor` forwards initial `parameters` through
+the same graph mutation coordinator; quick creation supplies an empty map.
 
 Manual acceptance for this interaction covers column selection/reordering and independent
 labels across multiple selectors, filter column/operator/literal changes (including empty
@@ -199,10 +214,13 @@ Activating a cached graph reuses its ready loading status and loaded document st
 
 Focus synchronization is synchronous and never loads, retries or unloads graphs. Canvas gestures call the same focus coordinator directly. Visible panels and explicit data-dependent use cases call the same `ProjectIOStore.loadGraph` entry, which deduplicates in-flight loads and reuses cached graphs. Project restoration first ensures visible graphs, then synchronizes the active editor's focus. Cache cleanup follows successful loads and panel closure instead of every focus switch; the old activation/suspension queue and bootstrap retries are removed.
 
-Projection refresh rechecks its captured project and graph lifecycle after publishing stale state,
+Explicit projection reload rechecks its captured project and graph lifecycle after publishing stale state,
 before starting either a clean reload or a dirty-graph resolve. A synchronous subscriber cannot
 redirect the old request to a successor project. The existing session installation clears stale
 state atomically with the frame; refresh completion does not publish that flag a second time.
+Graph activity reads keep the installed document ready and publish the refreshed projection
+atomically through the same FIFO. Local edit notifications therefore do not unmount the canvas
+or reset its palette. Equal document revisions still refresh runtime-observed schemas.
 
 Graph loading captures its project before publishing loading state and rechecks ownership after
 status notifications, before cache cleanup and when reporting completion. Reentrant project

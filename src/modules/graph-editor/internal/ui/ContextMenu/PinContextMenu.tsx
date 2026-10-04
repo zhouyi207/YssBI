@@ -16,6 +16,8 @@ export interface PinContextMenuProps {
   onResetValue?: () => void;
   showView?: boolean;
   onView?: () => void;
+  showPreviousView?: boolean;
+  onViewPrevious?: () => void;
   onClose: () => void;
 }
 
@@ -27,6 +29,8 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   onResetValue,
   showView = false,
   onView,
+  showPreviousView = false,
+  onViewPrevious,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -58,9 +62,27 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         onClick: onView,
       });
     }
+    if (showPreviousView) {
+      primaryItems.push({
+        id: "viewPrevious",
+        label: p("viewPrevious"),
+        icon: <VscEye size={12} />,
+        onClick: onViewPrevious,
+      });
+    }
 
     return [{ items: primaryItems }];
-  }, [t, hasLinks, canReset, onBreakLinks, onResetValue, showView, onView]);
+  }, [
+    t,
+    hasLinks,
+    canReset,
+    onBreakLinks,
+    onResetValue,
+    showView,
+    onView,
+    showPreviousView,
+    onViewPrevious,
+  ]);
 
   return <ActionMenu position={position} sections={sections} onClose={onClose} />;
 };

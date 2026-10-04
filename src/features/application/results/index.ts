@@ -22,6 +22,7 @@ export {
   type GraphCacheAppearance,
 } from "./graphPresentation";
 export { useResultValue } from "./useResultValue";
+export { stalePinResultReferences } from "./resultProjection";
 export { usePagedResultRows } from "./usePagedResultRows";
 export {
   ResultViewPresentationProvider,

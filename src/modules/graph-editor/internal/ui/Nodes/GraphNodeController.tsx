@@ -154,6 +154,16 @@ export const GraphNodeController = memo(function GraphNodeController({
         onDelete={() => void contextMenuActions.deleteNode(node.id)}
         onBreakAllLinks={() => void contextMenuActions.breakAllNodeLinks(node.id)}
         onSelectLinked={() => contextMenuActions.selectLinkedNodes(node.id)}
+        onRunNode={
+          contextMenuActions.runNode
+            ? () => void contextMenuActions.runNode?.(node.id, "currentInputs")
+            : undefined
+        }
+        onRunTo={
+          contextMenuActions.runNode
+            ? () => void contextMenuActions.runNode?.(node.id, "dependencies")
+            : undefined
+        }
         onClose={() => setContextMenu(null)}
       />
     ) : null;

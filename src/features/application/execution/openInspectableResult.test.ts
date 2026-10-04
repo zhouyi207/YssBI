@@ -164,6 +164,30 @@ describe("openInspectableResult", () => {
       title: "Node result",
       presentation: { kind: "inspector" },
     });
+    const graphPath = "events/Main.yssbi-event";
+    const fixture = makeEditorProjectionFixture({ graphPath });
+    const session = makeGraphEditorSession(fixture.projection);
+    session.resultState = {
+      ...session.resultState,
+      executionSessionId: resultSessionFixture,
+      outputs: [
+        { output: { graphPath, port: fixture.outputAddress }, state: "stale", resultId: "17" },
+      ],
+    };
+    useResourceStore.getState().installGraphSession(graphPath, session, { mode: "load" });
+    const target = { graphPath, address: fixture.outputAddress, direction: "output" as const };
+    await expect(openPinInspectableView(target, "previous")).resolves.toBe(true);
+    expect(mocks.acquire).toHaveBeenLastCalledWith(resultReferenceFixture("17"));
+    expect(mocks.loadPinResult).not.toHaveBeenCalled();
+    useResourceStore.getState().setGraphResultState(graphPath, {
+      ...session.resultState,
+      revision: "1",
+      outputs: [
+        { output: { graphPath, port: fixture.outputAddress }, state: "valid", resultId: "18" },
+      ],
+    });
+    await expect(openPinInspectableView(target, "previous")).resolves.toBe(false);
+    expect(mocks.acquire).toHaveBeenCalledTimes(2);
   });
 
   it("stops the upstream target sequence when the project changes during a result read", async () => {

@@ -2,6 +2,7 @@ import type {
   GraphRunIdentityDto,
   RunPhase,
   ResultInspectionSource,
+  GroupFailureContext,
 } from "@/shared/types/domain/runEvent";
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
 
@@ -12,6 +13,7 @@ export interface RunFailureProjection {
   code: string;
   phase: RunPhase | null;
   source: ResultInspectionSource | null;
+  groups: readonly GroupFailureContext[];
   incidentId: string | null;
 }
 

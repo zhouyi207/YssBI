@@ -97,7 +97,7 @@ export function parseGraphResultState(value: unknown): GraphResultState {
       !["missing", "stale", "valid"].includes(entry.state as string)
     )
       return fail("output result state");
-    if (entry.state === "valid" ? !isResultId(entry.resultId) : entry.resultId !== null)
+    if (entry.state === "missing" ? entry.resultId !== null : !isResultId(entry.resultId))
       return fail("output result identity");
     const output = parseGraphOutput(entry.output);
     const key = graphOutputKey(output);

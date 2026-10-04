@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import localizedCatalog from "@/tests/fixtures/node-system-contracts/localized-catalog.json";
+import editorProjection from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import type { LocalizedCatalogDto } from "./catalogService";
 import { CatalogService } from "./catalogService";
 
@@ -11,6 +12,44 @@ const version = { sessionId: "00000000-0000-0000-0000-000000000090", revision: "
 describe("CatalogService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("queries a creation form without a node identity and rejects malformed parameter or pin contracts", async () => {
+    const response = {
+      values: { columns: [" sales "] },
+      groups: editorProjection.nodes.flatMap((node) => node.parameterGroups),
+      portCounts: { x: 4 },
+      ports: [
+        {
+          key: "x",
+          title: "X",
+          direction: "input",
+          count: { kind: "configurable", min: 0, max: null, memberTemplates: ["x"] },
+        },
+      ],
+    };
+    // Reuse a single existing parameter group, whose keys are unique within a node.
+    response.groups = response.groups.slice(0, 1);
+    vi.mocked(invoke).mockResolvedValue(response);
+    await expect(
+      CatalogService.getNodeCreationForm("project", "node", response.values, { x: 4 }, "en-US"),
+    ).resolves.toEqual(response);
+    expect(invoke).toHaveBeenCalledWith("get_node_creation_form", {
+      projectInstanceId: "project",
+      nodeTypeId: "node",
+      parameters: response.values,
+      portCounts: { x: 4 },
+      locale: "en-US",
+    });
+    for (const invalid of [
+      { ...response, portCounts: { x: 1.5 } },
+      { ...response, groups: [{ key: "missing-fields" }] },
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(invalid);
+      await expect(
+        CatalogService.getNodeCreationForm("project", "node", {}, {}, "en-US"),
+      ).rejects.toThrow();
+    }
   });
 
   it("requests a backend-filtered compatible catalog for the current graph version", async () => {

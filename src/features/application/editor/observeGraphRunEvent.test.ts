@@ -161,7 +161,13 @@ describe("observeGraphRunEvent", () => {
       observed.push({ status: graph.status, failure: graph.runFailure?.code });
     });
     installGraphRunEvent(
-      event({ type: "runErrored", code: "kernelFailed", phase: "execution", source: null }),
+      event({
+        type: "runErrored",
+        groups: [],
+        code: "kernelFailed",
+        phase: "execution",
+        source: null,
+      }),
     );
     stop();
     expect(observed).toEqual([{ status: "error", failure: "kernelFailed" }]);

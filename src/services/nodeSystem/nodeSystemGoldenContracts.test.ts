@@ -369,8 +369,8 @@ describe("Rust-generated node-system golden contracts", () => {
         value: {
           kind: "projectColumns",
           allowEmpty: false,
-          available: true,
-          unavailableReason: null,
+          schemaKnown: true,
+          contextHint: null,
           options: [{ name: "value", dataType: "Binary" }],
           value: ["value"],
         },
@@ -379,8 +379,8 @@ describe("Rust-generated node-system golden contracts", () => {
       {
         value: {
           kind: "filterPredicate",
-          available: true,
-          unavailableReason: null,
+          schemaKnown: true,
+          contextHint: null,
           columns: [
             {
               name: "value",

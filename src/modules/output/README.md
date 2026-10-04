@@ -11,6 +11,9 @@ Execution channel 直接交付 `RunEventDto`，传递运行生命周期与结果
 
 Output panel 展示当前图的运行失败摘要：从 RunErrored 投影原因、阶段和节点，可定位失败节点；运行开始前的 command rejection 使用安全错误代码回退。失败时 Application 打开 Output；清除错误或开始下一次运行清除本地摘要，不改变 Rust 的运行结果。日志、Assistant text 和 Graph Problems 各自保持原有职责与生命周期。
 
+分组失败展示执行事件中的外层到内层组编号及函数路径，空来源明确显示结构探测。
+该上下文与主失败节点分开保留，节点定位继续指向函数内部实际失败位置；前端不推测组或重放数据。
+
 当前图来自 `useActiveGraphContext` 对 FlexLayout 顶部活动 Graph 的读取；切到非 Graph 标签时不继续显示旧加载会话的失败。点击底部或右侧面板不会覆盖顶部选择。
 失败摘要保存 Rust 事件的完整运行身份；加载图只展示与当前语义 hash 和执行会话匹配的失败。Execution owner 在一次发布中结束该运行的输出活动，并写入 error 终态及失败详情，面板从同一身份读取 RunId。
 

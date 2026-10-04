@@ -20,6 +20,9 @@ import type { LocalizedCatalogBrowserRow } from "@/features/domain/nodeCatalog/l
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import { useDismissableOverlay } from "@/shared/ui/positionedOverlay";
 import { SidebarTreeSearchInput } from "@/modules/workbench/public";
+import { NodeCreationForm } from "@/modules/details/public";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
 
 export interface NodePaletteCatalogRowProps {
   readonly row: LocalizedCatalogBrowserRow;
@@ -46,7 +49,12 @@ export function NodePalette({
   graphPath?: string | null;
   sourcePort?: PortAddressDto | null;
   catalogRowRenderer: NodePaletteCatalogRowRenderer;
-  onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
+  onSelect: (
+    descriptor: NodeCreationDescriptor,
+    locale: string,
+    parameters?: Record<string, unknown>,
+    portCounts?: Record<string, number>,
+  ) => Promise<boolean> | void;
   onClose?: () => void;
 }) {
   const { t } = useTranslation();
@@ -61,8 +69,45 @@ export function NodePalette({
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
   const [activeItemKey, setActiveItemKey] = useState<string | null>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
+  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
+  const [configureFirst, setConfigureFirst] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [configuration, setConfiguration] = useState<{
+    descriptor: NodeCreationDescriptor;
+    projectInstanceId: string;
+    locale: string;
+    title: string;
+  } | null>(null);
+
+  const select = useCallback(
+    (descriptor: NodeCreationDescriptor) => {
+      if (!catalog) return;
+      setCreationError(null);
+      if (configureFirst && projectInstanceId && graphPath) {
+        const item = catalog.items.find((item) => item.creation === descriptor);
+        setConfiguration({
+          descriptor,
+          projectInstanceId,
+          locale: catalog.locale,
+          title: item?.title ?? descriptor.nodeTypeId,
+        });
+        return;
+      }
+      void Promise.resolve(onSelect(descriptor, catalog.locale))
+        .then((applied) => {
+          if (applied === false) setCreationError(t("canvas.nodePalette.createFailed"));
+        })
+        .catch((error: unknown) => setCreationError(formatInlineUserError(error, t)));
+    },
+    [catalog, configureFirst, projectInstanceId, graphPath, onSelect, t],
+  );
 
   useDismissableOverlay({ ref: paletteRef, onDismiss: onClose });
+
+  useEffect(() => {
+    if (configuration && configuration.projectInstanceId !== projectInstanceId)
+      setConfiguration(null);
+  }, [configuration, projectInstanceId]);
 
   useEffect(() => {
     setExpandedCategoryIds(
@@ -141,10 +186,10 @@ export function NodePalette({
       if (event.key === "Enter" && activeItem && catalog) {
         event.preventDefault();
         event.stopPropagation();
-        onSelect(activeItem.item.creation, catalog.locale);
+        select(activeItem.item.creation);
       }
     },
-    [activeItem, catalog, moveActiveItem, onSelect],
+    [activeItem, catalog, moveActiveItem, select],
   );
 
   useEffect(() => {
@@ -158,10 +203,32 @@ export function NodePalette({
       ref={paletteRef}
       className="menu-container fixed z-50 flex max-h-112 w-80 min-h-0 flex-col gap-1.5 overflow-hidden p-1.5 text-sm shadow-2xl animate-zoom-in"
       style={{ left: x, top: y }}
-      onKeyDown={handleKeyDown}
+      onKeyDown={configuration ? undefined : handleKeyDown}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      {status === "error" && (!catalog || !searchIndex) ? (
+      {configuration && graphPath ? (
+        <NodeCreationForm
+          key={`${configuration.projectInstanceId}:${configuration.descriptor.nodeTypeId}`}
+          projectInstanceId={configuration.projectInstanceId}
+          nodeTypeId={configuration.descriptor.nodeTypeId}
+          title={configuration.title}
+          graphPath={graphPath}
+          locale={configuration.locale}
+          onBack={() => setConfiguration(null)}
+          onCreate={async (parameters, portCounts) => {
+            if (configuration.projectInstanceId !== useProjectIOStore.getState().projectInstanceId)
+              return false;
+            return (
+              (await onSelect(
+                configuration.descriptor,
+                configuration.locale,
+                parameters,
+                portCounts,
+              )) !== false
+            );
+          }}
+        />
+      ) : status === "error" && (!catalog || !searchIndex) ? (
         <p role="alert" className="px-2 py-1 text-destructive">
           {nodeCatalogErrorText(error, t)}
         </p>
@@ -186,7 +253,22 @@ export function NodePalette({
               canToggleAllCategories={canToggleAllCategories}
               onToggleAllCategories={toggleAllCategories}
             />
+            {graphPath && (
+              <label className="mt-2 flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={configureFirst}
+                  onChange={(event) => setConfigureFirst(event.target.checked)}
+                />
+                {t("canvas.nodePalette.configureFirst")}
+              </label>
+            )}
           </div>
+          {creationError && (
+            <p role="alert" className="px-2 text-xs text-destructive">
+              {creationError}
+            </p>
+          )}
           <span
             role="status"
             aria-atomic="true"
@@ -221,7 +303,7 @@ export function NodePalette({
                         setCategoryExpanded(row.category.categoryId, expanded);
                       }
                     }}
-                    onItemSelect={(descriptor) => onSelect(descriptor, catalog.locale)}
+                    onItemSelect={select}
                   />
                 ))}
               </div>

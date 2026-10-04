@@ -6,7 +6,15 @@ import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { type GraphProjectionData } from "@/features/core/dataStore/graphProjection";
 import { graphOutputKey } from "@/features/domain/editorProjection";
 import type { ErrorReference } from "@/features/application/errorReference";
-import { resultReferenceKey, type GraphResultState } from "@/shared/types/domain/result";
+import {
+  resultReferenceKey,
+  type GraphResultState,
+  type ResultReference,
+} from "@/shared/types/domain/result";
+import {
+  inspectableRefsFromPinView,
+  type ResolvePinViewTargetParams,
+} from "@/features/core/execution/pinViewTarget";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { ResultAnalysis } from "@/shared/types/domain/resultReport";
 import type { ResultDescriptor, ResultPage, ResultValue } from "./types";
@@ -87,6 +95,28 @@ export function matchesResultOutput(
   if (!summary || summary.executionSessionId !== result.executionSessionId) return false;
   const output = indexResultOutputs(summary.outputs).get(key);
   return output?.state === "valid" && output.resultId === result.resultId;
+}
+
+type GraphResultRead = Pick<GraphProjectionData, "sessions" | "resultStates" | "graphEntities">;
+
+/** Explicit previous-value intent; these references never become current Pin bindings. */
+export function stalePinResultReferences(
+  params: ResolvePinViewTargetParams,
+  snapshot: GraphResultRead,
+): ResultReference[] {
+  const summary = snapshot.resultStates[params.graphPath];
+  const session = snapshot.sessions[params.graphPath];
+  if (!session || !summary || summary.semanticInputHash !== session.semanticInputHash) return [];
+  const outputs = indexResultOutputs(summary.outputs);
+  return inspectableRefsFromPinView(params, snapshot.graphEntities[params.graphPath]).flatMap(
+    (ref) => {
+      if (ref.kind !== "outputPin") return [];
+      const output = outputs.get(graphOutputKey({ graphPath: ref.graphPath, port: ref.output }));
+      return output?.state === "stale" && output.resultId
+        ? [{ executionSessionId: summary.executionSessionId, resultId: output.resultId }]
+        : [];
+    },
+  );
 }
 
 export function isCurrentPinResult(

@@ -596,7 +596,11 @@ describe("current result lifecycle", () => {
     const stale: GraphResultState = {
       ...current,
       revision: "1",
-      outputs: current.outputs.map((entry) => ({ ...entry, state: "stale", resultId: null })),
+      outputs: current.outputs.map((entry) => ({
+        ...entry,
+        state: "stale",
+        resultId: entry.resultId ?? "1",
+      })),
     };
     store.setGraphResultState(graphPath, stale);
     expect(aggregate).toHaveBeenCalledTimes(1);
@@ -608,6 +612,7 @@ describe("current result lifecycle", () => {
     event("1", { type: "runStarted", outputs: [] });
     event("1", {
       type: "runErrored",
+      groups: [],
       code: "kernelFailed",
       phase: "execution",
       source: { graphPath, nodeId: output.port.nodeId, portAddress: null },

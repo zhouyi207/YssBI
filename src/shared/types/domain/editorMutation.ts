@@ -32,6 +32,8 @@ export type EditorGraphMutationDto =
       payload: {
         descriptor: NodeCreationDescriptorDto;
         position: NodePositionDto;
+        parameters: Record<string, unknown>;
+        portCounts: Record<string, number>;
         userLabel: string | null;
         connectFrom: PortAddressDto | null;
       };

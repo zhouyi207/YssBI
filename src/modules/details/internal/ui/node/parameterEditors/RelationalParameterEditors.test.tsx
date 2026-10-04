@@ -31,8 +31,8 @@ describe("ProjectColumnsEditor", () => {
     const editor: Extract<ParameterEditorSpecDto, { kind: "projectColumns" }> = {
       kind: "projectColumns",
       allowEmpty: false,
-      available: false,
-      unavailableReason: "Connect DataFrame input",
+      schemaKnown: false,
+      contextHint: "Connect DataFrame input",
       options: [],
       value: [],
     };

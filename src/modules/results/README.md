@@ -12,6 +12,8 @@
 [public.ts](public.ts) 提供结果面板入口，报告组件位于 [internal/ui/info](internal/ui/info/)。
 读取、分页、分析和结果生命周期见 [Results application](../../features/application/results/README.md)。
 
+结果面板、独立 Inspector 和 Plot 窗口直接呈现数据、报告或图形，不附加图路径与运行编号信息栏。
+
 ## Inspect 与结果报告
 
 可视化节点通过同一 Result 引用与租约提供 `plot.data`。20 类图形共用

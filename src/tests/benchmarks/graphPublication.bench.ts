@@ -81,6 +81,7 @@ for (const count of [1000, 5000]) {
       semanticInputHash: session.projection.basis.semanticInputHash,
     },
     code: "kernelFailed",
+    groups: [],
     phase: "execution",
     source: { graphPath, nodeId: session.projection.nodes[0].nodeId, portAddress: null },
     incidentId: null,

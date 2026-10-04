@@ -36,10 +36,23 @@ it("keeps output-only changes out of execution views and hides failures after se
   store.applyRunEvent({
     resultRevision: "1",
     run,
-    kind: { type: "runErrored", code: "kernelFailed", phase: "execution", source: null },
+    kind: {
+      type: "runErrored",
+      groups: [
+        {
+          caller: { graphPath, nodeId: null, portAddress: null },
+          function: "functions/Group.yssbi-function",
+          ordinal: "2",
+        },
+      ],
+      code: "groupSchemaMismatch",
+      phase: "execution",
+      source: null,
+    },
   });
   const failed = read();
   expect(failed.graphs[graphPath].runFailure).toBe(store.getGraph(graphPath).runFailure);
+  expect(failed.graphs[graphPath].runFailure?.groups[0].ordinal).toBe("2");
   store.applyRunEvent(
     {
       resultRevision: "2",
@@ -60,7 +73,7 @@ it("keeps output-only changes out of execution views and hides failures after se
     runFailure: null,
   });
   expect(current.graphs[otherPath]).toBe(failed.graphs[otherPath]);
-  expect(failed.graphs[graphPath].runFailure?.code).toBe("kernelFailed");
+  expect(failed.graphs[graphPath].runFailure?.code).toBe("groupSchemaMismatch");
 
   store.releaseGraphExecutionState(graphPath);
   expect(read().graphs[graphPath]).toBeUndefined();

@@ -69,7 +69,7 @@ export function isFunctionEditorProjectionDto(
   );
 }
 
-function isJsonValue(value: unknown): boolean {
+export function isJsonValue(value: unknown): boolean {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
   if (typeof value === "number") return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(isJsonValue);
@@ -307,7 +307,7 @@ function isParameterGroup(value: unknown): value is ParameterGroupDto {
   );
 }
 
-function isParameterGroups(value: unknown): value is ParameterGroupDto[] {
+export function isParameterGroups(value: unknown): value is ParameterGroupDto[] {
   if (!Array.isArray(value) || !value.every(isParameterGroup)) return false;
   const groups = new Set<string>();
   const parameters = new Set<string>();

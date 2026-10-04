@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import type { ExecutionDemandDto } from "@/shared/types/domain/executionDemand";
 
 import { loadActivatedProject } from "@/features/application/project/projectHydration";
 import { hydrateProjectPath } from "@/features/application/project/projectSession";
@@ -204,7 +205,7 @@ export function useProjectOperations() {
   }, [t]);
 
   const executeGraph = useCallback(
-    async (targetGraphPath?: string) => {
+    async (targetGraphPath?: string, demand: ExecutionDemandDto = { type: "default" }) => {
       const graphPath = resolveExecutionGraphPath(targetGraphPath);
       if (!graphPath) return;
 
@@ -227,7 +228,7 @@ export function useProjectOperations() {
             const draft = useResourceStore.getState().sessions[graphPath];
             if (!draft || draft.saving) return null;
             const projection = useResourceStore.getState().graphEntities[graphPath];
-            if (!isGraphProjectionExecutable(projection)) {
+            if (demand.type === "default" && !isGraphProjectionExecutable(projection)) {
               showBlockingMessage(t("notifications.project.problemsBlockExecution"));
               return null;
             }
@@ -240,7 +241,7 @@ export function useProjectOperations() {
               graphPath,
               version: draft.version,
               semanticInputHash: draft.semanticInputHash,
-              demand: { type: "default" },
+              demand,
               onEvent: (event) => {
                 if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
                 if (event.kind.type !== "resultInspectionRequested") installGraphRunEvent(event);
@@ -267,9 +268,10 @@ export function useProjectOperations() {
           error.details.executionAccepted === false
         ) {
           execution.interruptExecution(graphPath);
-          showBlockingIpcError(
-            error,
-            (code) => `${t("notifications.project.executionRejected")} (${code})`,
+          showBlockingIpcError(error, (code) =>
+            t(`runFailure.causes.${code}`, {
+              defaultValue: `${t("notifications.project.executionRejected")} (${code})`,
+            }),
           );
           return;
         }

@@ -26,6 +26,10 @@ describe("execution wire parsers", () => {
         includeDefaultResults: false,
       }),
     ).not.toThrow();
+    const node = executionWire.demands.find((demand) => demand.type === "node");
+    expect(() => parseExecutionDemandDto({ ...node, mode: "dependencies" })).not.toThrow();
+    expect(() => parseExecutionDemandDto({ ...node, mode: "anything" })).toThrow();
+    expect(() => parseExecutionDemandDto({ ...node, nodeId: "not-a-uuid" })).toThrow();
   });
 
   it.each(executionWire.demands)("rejects extra keys on demand $type", (valid) => {
@@ -155,7 +159,13 @@ describe("execution wire parsers", () => {
     const valid = executionWire.runEvents[0];
     const deadline = {
       ...valid,
-      kind: { type: "runErrored", code: "deadlineExceeded", phase: "admission", source: null },
+      kind: {
+        type: "runErrored",
+        groups: [],
+        code: "deadlineExceeded",
+        phase: "admission",
+        source: null,
+      },
     };
 
     expect(parseRunEvent(deadline)).toEqual(deadline);
@@ -166,6 +176,34 @@ describe("execution wire parsers", () => {
     for (const phase of [null, 1, "unknown"]) {
       expect(() => parseRunEvent({ ...deadline, kind: { ...deadline.kind, phase } })).toThrow();
     }
+    const group = {
+      caller: {
+        graphPath: valid.run.graphPath,
+        nodeId: "00000000-0000-0000-0000-000000000002",
+        portAddress: null,
+      },
+      function: "functions/Group.yssbi-function",
+      ordinal: "9007199254740993",
+    };
+    const grouped = {
+      ...deadline,
+      kind: { ...deadline.kind, code: "groupSchemaMismatch", groups: [group] },
+    };
+    expect(parseRunEvent(grouped)).toEqual(grouped);
+    expect(
+      parseRunEvent({
+        ...grouped,
+        kind: { ...grouped.kind, groups: [{ ...group, ordinal: null }] },
+      }).kind,
+    ).toMatchObject({ groups: [{ ordinal: null }] });
+    for (const ordinal of [0, "0", "01", -1]) {
+      expect(() =>
+        parseRunEvent({ ...grouped, kind: { ...grouped.kind, groups: [{ ...group, ordinal }] } }),
+      ).toThrow();
+    }
+    const missingGroups = record(clone(deadline.kind));
+    delete missingGroups.groups;
+    expect(() => parseRunEvent({ ...deadline, kind: missingGroups })).toThrow();
   });
 
   it("rejects unknown variants and malformed graph run identities", () => {

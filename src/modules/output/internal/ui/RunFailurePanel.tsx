@@ -59,6 +59,14 @@ export function RunFailurePanel() {
             <p>
               {t(`runFailure.causes.${failure.code}`, { defaultValue: t("runFailure.unknown") })}
             </p>
+            {failure.groups.map((group, index) => (
+              <p key={index} className="break-all text-muted-foreground">
+                {t(group.ordinal === null ? "runFailure.emptyGroupProbe" : "runFailure.group", {
+                  ordinal: group.ordinal,
+                  function: group.function,
+                })}
+              </p>
+            ))}
             {failureSource?.nodeId ? (
               <button
                 type="button"

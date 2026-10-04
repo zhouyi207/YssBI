@@ -647,8 +647,8 @@ it("shares relational editor fields and recursive types while preserving incomin
   const project: Extract<ParameterEditorSpecDto, { kind: "projectColumns" }> = {
     kind: "projectColumns",
     allowEmpty: true,
-    available: true,
-    unavailableReason: null,
+    schemaKnown: true,
+    contextHint: null,
     options: [
       { name: "age", dataType: "Numeric" },
       { name: "label", dataType: "Text" },
@@ -657,8 +657,8 @@ it("shares relational editor fields and recursive types while preserving incomin
   };
   const filter: Extract<ParameterEditorSpecDto, { kind: "filterPredicate" }> = {
     kind: "filterPredicate",
-    available: true,
-    unavailableReason: null,
+    schemaKnown: true,
+    contextHint: null,
     columns: [
       {
         name: "age",
@@ -713,8 +713,8 @@ it("shares relational editor fields and recursive types while preserving incomin
   const fresh = structuredClone(session);
   const incoming = fresh.projection.nodes[0].parameterGroups[0].parameters;
   const projectNext = incoming[0].editor as typeof project;
-  projectNext.available = false;
-  projectNext.unavailableReason = "Changed";
+  projectNext.schemaKnown = false;
+  projectNext.contextHint = "Changed";
   projectNext.options[0].dataType = "Text";
   const filterNext = incoming[1].editor as typeof filter;
   filterNext.columns[0].name = "renamed";
@@ -784,7 +784,7 @@ it("shares relational editor fields and recursive types while preserving incomin
   expect(useResourceStore.getState().sessions[graphPath].projection).toBe(delta.projection);
   store.installGraphSession(graphPath, structuredClone(delta));
   expect(useResourceStore.getState().sessions[graphPath].projection).toBe(delta.projection);
-  expect(project.available).toBe(true);
+  expect(project.schemaKnown).toBe(true);
   expect(filter.value!.value).toEqual({ type: "integer", value: "18" });
   expect(type.inner[0].kind).toBe("Array");
 });

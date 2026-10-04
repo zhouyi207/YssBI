@@ -6,6 +6,8 @@ export const RUN_ERROR_CODES = {
   kernelFailed: true,
   invalidNumericInput: true,
   shapeMismatch: true,
+  groupSchemaMismatch: true,
+  groupKeyCollision: true,
   invalidParameter: true,
   unalignedSeries: true,
   budgetExceeded: true,
@@ -15,6 +17,7 @@ export const RUN_ERROR_CODES = {
   divisionByZero: true,
   nonFiniteResult: true,
   resourceUnavailable: true,
+  inputResultUnavailable: true,
   finalizationFailed: true,
 } as const;
 
@@ -34,6 +37,13 @@ export interface RunErrorOutcome {
   code: RunErrorCode;
   phase: RunPhase;
   source: ResultInspectionSource | null;
+  groups: readonly GroupFailureContext[];
+}
+
+export interface GroupFailureContext {
+  caller: ResultInspectionSource;
+  function: string;
+  ordinal: string | null;
 }
 
 export interface GraphRunIdentityDto {

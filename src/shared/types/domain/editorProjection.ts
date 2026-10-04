@@ -193,15 +193,18 @@ export interface DataframeColumnOptionDto {
   dataType: RelationalScalarTypeDto;
 }
 
-export type FilterOperatorDto =
-  | "equal"
-  | "notEqual"
-  | "lessThan"
-  | "lessThanOrEqual"
-  | "greaterThan"
-  | "greaterThanOrEqual"
-  | "isNull"
-  | "isNotNull";
+export const FILTER_OPERATORS = [
+  "equal",
+  "notEqual",
+  "lessThan",
+  "lessThanOrEqual",
+  "greaterThan",
+  "greaterThanOrEqual",
+  "isNull",
+  "isNotNull",
+] as const;
+export type FilterOperatorDto = (typeof FILTER_OPERATORS)[number];
+export const FILTER_LITERAL_TYPES = ["boolean", "integer", "decimal", "string"] as const;
 
 export type FilterLiteralDto =
   | { type: "boolean"; value: boolean }
@@ -223,15 +226,15 @@ export type ParameterEditorSpecDto =
   | {
       kind: "projectColumns";
       allowEmpty: boolean;
-      available: boolean;
-      unavailableReason: string | null;
+      schemaKnown: boolean;
+      contextHint: string | null;
       options: DataframeColumnOptionDto[];
       value: string[];
     }
   | {
       kind: "filterPredicate";
-      available: boolean;
-      unavailableReason: string | null;
+      schemaKnown: boolean;
+      contextHint: string | null;
       columns: Array<
         DataframeColumnOptionDto & {
           operators: FilterOperatorDto[];

@@ -9,12 +9,15 @@ import {
   type ResolvePinViewTargetParams,
 } from "@/features/core/execution/pinViewTarget";
 import { getGraphSnapshot } from "@/features/core/graph/read";
+import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   resolveInspectableResultRef,
+  stalePinResultReferences,
+  resultRef,
   type InspectableResultRef,
 } from "@/features/application/results";
 import {
@@ -80,17 +83,20 @@ export async function openInspectableResult(ref: InspectableResultRef): Promise<
 }
 
 /** Open pin/context-menu targets; tries upstream pins in order for input direction. */
-export async function openPinInspectableView(params: ResolvePinViewTargetParams): Promise<boolean> {
+export async function openPinInspectableView(
+  params: ResolvePinViewTargetParams,
+  mode: "current" | "previous" = "current",
+): Promise<boolean> {
   let project: ReturnType<typeof captureProjectIdentity>;
   try {
     project = captureProjectIdentity();
   } catch {
     return false;
   }
-  const refs = inspectableRefsFromPinView(
-    params,
-    getGraphSnapshot().graphEntities[params.graphPath],
-  );
+  const refs =
+    mode === "previous"
+      ? stalePinResultReferences(params, useResourceStore.getState()).map(resultRef)
+      : inspectableRefsFromPinView(params, getGraphSnapshot().graphEntities[params.graphPath]);
   for (const ref of refs) {
     const opened = await openInspectableResult(ref);
     if (!isCurrentProjectIdentity(project)) return false;

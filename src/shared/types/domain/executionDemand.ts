@@ -7,6 +7,7 @@ export interface GraphOutputRefDto {
 
 export type ExecutionDemandDto =
   | { type: "default" }
+  | { type: "node"; nodeId: string; mode: "currentInputs" | "dependencies" }
   | {
       type: "outputs";
       outputs: GraphOutputRefDto[];
@@ -16,5 +17,6 @@ export type ExecutionDemandDto =
 
 export const EXECUTION_DEMAND_TYPES = {
   default: true,
+  node: true,
   outputs: true,
 } as const satisfies Record<ExecutionDemandDto["type"], true>;

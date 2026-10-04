@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscCopy, VscLink, VscTrash } from "react-icons/vsc";
+import { VscCopy, VscLink, VscPlay, VscTrash } from "react-icons/vsc";
 import {
   ActionMenu,
   type ActionMenuPosition,
@@ -17,6 +17,8 @@ export interface NodeContextMenuProps {
   onDelete: () => void;
   onBreakAllLinks: () => void;
   onSelectLinked: () => void;
+  onRunNode?: () => void;
+  onRunTo?: () => void;
   onClose: () => void;
 }
 
@@ -30,6 +32,8 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   onDelete,
   onBreakAllLinks,
   onSelectLinked,
+  onRunNode,
+  onRunTo,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -38,6 +42,21 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   const sections = useMemo((): ActionMenuSection[] => {
     const n = (key: string) => t(`contextMenu.node.${key}`);
     return [
+      ...(onRunNode && onRunTo
+        ? [
+            {
+              items: [
+                {
+                  id: "runNode",
+                  label: n("runNode"),
+                  icon: <VscPlay size={12} />,
+                  onClick: onRunNode,
+                },
+                { id: "runTo", label: n("runTo"), icon: <VscPlay size={12} />, onClick: onRunTo },
+              ],
+            },
+          ]
+        : []),
       {
         items: [
           {
@@ -108,6 +127,8 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
     onDelete,
     onBreakAllLinks,
     onSelectLinked,
+    onRunNode,
+    onRunTo,
   ]);
 
   return <ActionMenu position={position} sections={sections} onClose={onClose} />;

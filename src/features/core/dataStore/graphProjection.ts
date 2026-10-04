@@ -320,8 +320,8 @@ function restoreParameterEditor(
     const valueEqual = sameFields(previous.value, next.value);
     if (
       previous.allowEmpty === next.allowEmpty &&
-      previous.available === next.available &&
-      previous.unavailableReason === next.unavailableReason &&
+      previous.schemaKnown === next.schemaKnown &&
+      previous.contextHint === next.contextHint &&
       optionsEqual &&
       valueEqual
     )
@@ -374,8 +374,8 @@ function restoreParameterEditor(
       if (!valueEqual && literal !== next.value.value) target().value!.value = literal;
     }
     if (
-      previous.available === next.available &&
-      previous.unavailableReason === next.unavailableReason &&
+      previous.schemaKnown === next.schemaKnown &&
+      previous.contextHint === next.contextHint &&
       columnsEqual &&
       valueEqual
     )

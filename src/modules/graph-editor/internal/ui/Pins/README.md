@@ -43,3 +43,8 @@ Only an open context menu subscribes to View availability, as a boolean read fro
 connection adjacency index. Closed menus add no connection subscription or result-reference
 allocation. Clicking View resolves targets from the current graph snapshot in the application;
 the UI does not retain a connection array captured during rendering.
+
+An open menu also reads the current result summary through the Results application's output index.
+When the Pin has a retained stale value, View previous successful result opens that exact execution
+session/result identity using the existing result lease. It neither executes the node nor installs
+the value as the current Pin result. Closed menus subscribe to neither availability check.

@@ -20,7 +20,12 @@ export type CanvasPaletteOverlayModel =
       y: number;
       graphPath: string | null;
       sourcePort: PortAddressDto | null;
-      onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
+      onSelect: (
+        descriptor: NodeCreationDescriptor,
+        locale: string,
+        parameters?: Record<string, unknown>,
+        portCounts?: Record<string, number>,
+      ) => Promise<boolean>;
       onClose: () => void;
     };
 
@@ -73,6 +78,7 @@ export default memo(function CanvasOverlays({
       {palette.kind === "visible"
         ? createPortal(
             <NodePalette
+              key={`${palette.graphPath}:${palette.x}:${palette.y}`}
               x={palette.x}
               y={palette.y}
               graphPath={palette.graphPath}

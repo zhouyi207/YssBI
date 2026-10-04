@@ -54,8 +54,6 @@ async function requestGraphProjection(
 ): Promise<boolean> {
   const isCurrent = () =>
     isCurrentProjectIdentity(identity) && isGraphLifecycleCurrent(graphPath, lifecycleToken);
-  if (!isCurrent()) return false;
-  setGraphProjectionStale(graphPath, true);
   if (!isCurrent() || isGraphSaving(graphPath)) return false;
   let session: GraphEditorSessionDto;
   try {
@@ -168,10 +166,22 @@ export async function loadGraphProjection(
   await ensureGraphActivity(identity, refreshGraphFromActivity);
   return enqueueGraphTask(
     graphPath,
-    () =>
-      requestGraphProjection(graphPath, "load", lifecycleToken, identity, (path, locale, token) =>
-        GraphProjectionService.loadGraph(path, locale, token, identity.projectInstanceId),
-      ),
+    () => {
+      if (
+        !isCurrentProjectIdentity(identity) ||
+        !isGraphLifecycleCurrent(graphPath, lifecycleToken)
+      )
+        return Promise.resolve(false);
+      setGraphProjectionStale(graphPath, true);
+      return requestGraphProjection(
+        graphPath,
+        "load",
+        lifecycleToken,
+        identity,
+        (path, locale, token) =>
+          GraphProjectionService.loadGraph(path, locale, token, identity.projectInstanceId),
+      );
+    },
     false,
   );
 }
@@ -190,9 +200,9 @@ export function hydrateGraphProjection(graphPath: string, locale: string): Promi
         return Promise.resolve(false);
       }
       if (isGraphSaving(graphPath)) return false;
+      setGraphProjectionStale(graphPath, true);
+      if (!isCurrent() || isGraphSaving(graphPath)) return false;
       if (isGraphModified(graphPath)) {
-        setGraphProjectionStale(graphPath, true);
-        if (!isCurrent() || isGraphSaving(graphPath)) return false;
         return refreshCurrentGraphProjection(graphPath, locale)
           .then((resolved) => resolved && isCurrent())
           .catch((error) => {
@@ -260,15 +270,10 @@ function refreshGraphFromActivity(
         BigInt(current.version.revision) > BigInt(editing.version.revision)
       )
         return true;
-      if (
-        editing &&
-        current?.version.sessionId === editing.version.sessionId &&
-        current.version.revision === editing.version.revision &&
-        current.saveDirty === editing.dirty &&
-        current.canUndo === editing.canUndo &&
-        current.canRedo === editing.canRedo
-      )
-        return true;
+      // Execution can refine Schema without changing the document or its revision.
+      // Equal editing metadata therefore does not prove the projection is current.
+      // Keep the installed canvas available while reading activity updates; marking it
+      // stale here unmounts the renderer and cancels gestures after every local edit.
       const token = startGraphLifecycle(graphPath);
       return requestGraphProjection(graphPath, "hydrate", token, identity, (path, locale) =>
         GraphProjectionService.hydrateGraph(identity.projectInstanceId, path, locale),

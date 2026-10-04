@@ -40,8 +40,8 @@ it("retains parameter identities through transport splices and the existing Zust
     editor: {
       kind: "projectColumns",
       allowEmpty: true,
-      available: true,
-      unavailableReason: null,
+      schemaKnown: true,
+      contextHint: null,
       options: [],
       value: [],
     },

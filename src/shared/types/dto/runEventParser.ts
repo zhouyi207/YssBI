@@ -80,6 +80,14 @@ export function parseExecutionDemandDto(value: unknown): ExecutionDemandDto {
     case "default":
       if (!hasExactKeys(value, ["type"])) return fail("default execution demand");
       return { type: "default" };
+    case "node":
+      if (
+        !hasExactKeys(value, ["type", "nodeId", "mode"]) ||
+        !isUuid(value.nodeId) ||
+        (value.mode !== "currentInputs" && value.mode !== "dependencies")
+      )
+        return fail("node execution demand");
+      return { type: "node", nodeId: value.nodeId, mode: value.mode };
     case "outputs":
       if (
         !hasExactKeys(value, ["type", "outputs", "includeDefaultResults", "reuseInputs"]) ||
@@ -109,10 +117,26 @@ function parseRunPhase(value: unknown): RunPhase {
 }
 
 function parseErrorOutcome(value: UnknownRecord): RunErrorOutcome {
+  if (!Array.isArray(value.groups)) return fail("group failure contexts");
   return {
     code: parseRunErrorCode(value.code),
     phase: parseRunPhase(value.phase),
     source: value.source === null ? null : parseResultInspectionSource(value.source),
+    groups: value.groups.map((group) => {
+      if (
+        !isRecord(group) ||
+        !hasExactKeys(group, ["caller", "function", "ordinal"]) ||
+        !isGraphResourcePath(group.function) ||
+        !group.function.startsWith("functions/") ||
+        !(group.ordinal === null || isPositiveDecimalId(group.ordinal))
+      )
+        return fail("group failure context");
+      return {
+        caller: parseResultInspectionSource(group.caller),
+        function: group.function,
+        ordinal: group.ordinal,
+      };
+    }),
   };
 }
 
@@ -165,7 +189,8 @@ function parseRunEventKind(value: unknown): RunEventKind {
       if (!hasExactKeys(value, ["type"])) return fail("runCompleted");
       return { type: "runCompleted" };
     case "runErrored":
-      if (!hasExactKeys(value, ["type", "code", "phase", "source"])) return fail("runErrored");
+      if (!hasExactKeys(value, ["type", "code", "phase", "source", "groups"]))
+        return fail("runErrored");
       return { type: "runErrored", ...parseErrorOutcome(value) };
     case "runCancelled":
       if (!hasExactKeys(value, ["type"])) return fail("runCancelled");

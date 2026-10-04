@@ -32,7 +32,7 @@ function updateGraph(
   patch: Partial<GraphExecutionState>,
 ) {
   return produce(state, (draft) => {
-    const graph = (draft.graphs[graphPath] ??= emptyGraphState());
+    const graph = (draft.graphs[graphPath] ??= castDraft(emptyGraphState()));
     Object.assign(graph, patch);
   });
 }
@@ -120,6 +120,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
                 code: event.kind.code,
                 phase: event.kind.phase,
                 source: castDraft(event.kind.source),
+                groups: castDraft(event.kind.groups),
                 incidentId: null,
               }
             : null;

@@ -1,4 +1,5 @@
 import { SEMANTIC_TYPES } from "./database";
+import { FILTER_OPERATORS, FILTER_LITERAL_TYPES } from "./editorProjection";
 import type {
   FilterLiteralDto,
   FilterOperatorDto,
@@ -17,16 +18,8 @@ const simpleEditorKinds = new Set([
   "toggle",
   "resource",
 ]);
-const filterOperators = new Set<FilterOperatorDto>([
-  "equal",
-  "notEqual",
-  "lessThan",
-  "lessThanOrEqual",
-  "greaterThan",
-  "greaterThanOrEqual",
-  "isNull",
-  "isNotNull",
-]);
+const filterOperators = new Set<FilterOperatorDto>(FILTER_OPERATORS);
+const filterLiteralTypes = new Set<string>(FILTER_LITERAL_TYPES);
 
 function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -47,8 +40,7 @@ function isColumnOption(value: unknown, withOperators: boolean): boolean {
         value.operators.every((operator) => filterOperators.has(operator as FilterOperatorDto)) &&
         Array.isArray(value.literalTypes) &&
         value.literalTypes.every(
-          (type) =>
-            type === "boolean" || type === "integer" || type === "decimal" || type === "string",
+          (type) => typeof type === "string" && filterLiteralTypes.has(type),
         )))
   );
 }
@@ -89,20 +81,19 @@ export function isParameterEditorSpecDto(value: unknown): value is ParameterEdit
       hasExactKeys(candidate, ["kind", "options"]) &&
       (candidate.options === null ||
         (Array.isArray(candidate.options) &&
-          candidate.options.length > 0 &&
           candidate.options.every((option) => typeof option === "string")))
     );
   }
   const commonValid =
-    typeof candidate.available === "boolean" &&
-    (candidate.unavailableReason === null || typeof candidate.unavailableReason === "string");
+    typeof candidate.schemaKnown === "boolean" &&
+    (candidate.contextHint === null || typeof candidate.contextHint === "string");
   if (candidate.kind === "projectColumns") {
     return (
       hasExactKeys(candidate, [
         "kind",
         "allowEmpty",
-        "available",
-        "unavailableReason",
+        "schemaKnown",
+        "contextHint",
         "options",
         "value",
       ]) &&
@@ -116,7 +107,7 @@ export function isParameterEditorSpecDto(value: unknown): value is ParameterEdit
   }
   if (candidate.kind === "filterPredicate") {
     return (
-      hasExactKeys(candidate, ["kind", "available", "unavailableReason", "columns", "value"]) &&
+      hasExactKeys(candidate, ["kind", "schemaKnown", "contextHint", "columns", "value"]) &&
       commonValid &&
       Array.isArray(candidate.columns) &&
       candidate.columns.every((column) => isColumnOption(column, true)) &&

@@ -30,8 +30,10 @@ import { normalizeIpcError } from "@/services/ipc/ipcError";
 import { logger } from "@/utils/frontendLogger";
 import {
   hydrateGraphProjection,
+  loadGraphProjection,
   resetGraphProjectionLifecycle,
 } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import * as graphActivity from "@/features/application/graphProjection/graphActivity";
 
 import type { GraphEditResultDto, GraphSaveResultDto } from "@/shared/types/domain/editorMutation";
 
@@ -58,6 +60,74 @@ describe("Graph draft task ordering", () => {
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     initialSession = makeGraphEditorSession(projection);
     useResourceStore.getState().installGraphSession(graphPath, initialSession, { mode: "load" });
+  });
+
+  it("keeps an edited graph ready while activity refreshes schema at the same revision", async () => {
+    useResourceStore.getState().setSnapshot({
+      resources: [buildFileResourceMeta("event_graph", graphPath, "Queue", { revision: 0 })],
+    });
+    const activity = vi.spyOn(graphActivity, "ensureGraphActivity").mockResolvedValue();
+    vi.spyOn(GraphProjectionService, "loadGraph").mockResolvedValue(initialSession);
+    expect(await loadGraphProjection(graphPath)).toBe(true);
+    const refresh = activity.mock.calls[0]![1];
+    const pendingEdit = deferred<GraphEditResultDto>();
+    const pendingRefresh = deferred<ReturnType<typeof makeGraphEditorSession>>();
+    const transform = vi
+      .spyOn(GraphEditingService, "transform")
+      .mockReturnValue(pendingEdit.promise);
+    const hydrate = vi
+      .spyOn(GraphProjectionService, "hydrateGraph")
+      .mockReturnValue(pendingRefresh.promise);
+    const edited = structuredClone(initialSession);
+    edited.editing = makeGraphEditingState({
+      dirty: true,
+      canUndo: true,
+      version: { ...edited.editing.version, revision: "1" },
+    });
+    edited.projection.nodes[0].position = { x: 100, y: 200 };
+    const observed = structuredClone(edited);
+    observed.projection.nodes[0].ports[0].resolvedSchema = {
+      kind: "derived",
+      fields: [{ name: "result", scalarType: "Numeric" }],
+    };
+    const key = resourceKey({ id: graphPath, kind: "event_graph" });
+    const readiness: boolean[] = [];
+    const stop = useResourceStore.subscribe((state) => {
+      const document = state.documents[key];
+      readiness.push(document.loaded && !document.stale && !document.conflict);
+    });
+    try {
+      const editing = applyGraphMutation({
+        graphPath,
+        mutation: {
+          type: "moveNodes",
+          payload: {
+            positions: [
+              { nodeId: edited.projection.nodes[0].nodeId, position: { x: 100, y: 200 } },
+            ],
+          },
+        },
+      });
+      await vi.waitFor(() => expect(transform).toHaveBeenCalledOnce());
+      const refreshing = refresh(graphPath, edited.editing);
+      expect(hydrate).not.toHaveBeenCalled();
+      pendingEdit.resolve({ ...edited, changed: true });
+      expect(await editing).toMatchObject({ status: "applied" });
+      await vi.waitFor(() => expect(hydrate).toHaveBeenCalledOnce());
+      expect.soft(useResourceStore.getState().documents[key].stale).toBe(false);
+      expect(useResourceStore.getState().sessions[graphPath].version.revision).toBe("1");
+      pendingRefresh.resolve(observed);
+      expect(await refreshing).toBe(true);
+      expect(useResourceStore.getState().sessions[graphPath].projection).toEqual(
+        observed.projection,
+      );
+      expect(readiness.length).toBeGreaterThan(0);
+      expect(readiness.every(Boolean)).toBe(true);
+    } finally {
+      stop();
+      pendingEdit.resolve({ ...edited, changed: true });
+      pendingRefresh.resolve(observed);
+    }
   });
 
   it("orders edit and refresh without resolving the pre-edit document", async () => {

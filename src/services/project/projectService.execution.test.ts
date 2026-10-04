@@ -241,6 +241,7 @@ describe("ProjectService execution contract", () => {
     {
       terminal: {
         type: "runErrored",
+        groups: [],
         code: "kernelFailed",
         phase: "execution",
         source: null,
@@ -350,6 +351,7 @@ describe("ProjectService execution contract", () => {
 
     const errored = runEvent({
       type: "runErrored",
+      groups: [],
       code: "kernelFailed",
       phase: "execution",
       source: null,

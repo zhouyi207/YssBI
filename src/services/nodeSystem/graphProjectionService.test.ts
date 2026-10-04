@@ -113,8 +113,8 @@ describe("GraphProjectionService", () => {
       };
       malformed.projection.nodes[0].parameterGroups[0].parameters[0].editor = {
         kind: "projectColumns",
-        available: true,
-        unavailableReason: null,
+        schemaKnown: true,
+        contextHint: null,
         options: [],
         value: [],
         compatibility: true,

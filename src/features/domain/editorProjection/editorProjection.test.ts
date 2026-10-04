@@ -376,8 +376,8 @@ describe("validateEditorGraphProjection", () => {
     const projection = validProjection();
     projection.nodes[0].parameterGroups[0].parameters[0].editor = {
       kind: "filterPredicate",
-      available: true,
-      unavailableReason: null,
+      schemaKnown: true,
+      contextHint: null,
       columns: [
         {
           name: "amount",

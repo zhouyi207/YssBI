@@ -155,6 +155,26 @@ export function NodeParameterEditor({
     }
   };
 
+  return (
+    <NodeParameterField
+      graphPath={graphPath}
+      parameter={parameter}
+      pending={pending}
+      errors={errors}
+      onCommit={commit}
+      formatFallback={formatFallback}
+    />
+  );
+}
+
+export function NodeParameterField({
+  graphPath,
+  parameter,
+  pending,
+  errors,
+  onCommit,
+  formatFallback,
+}: OrdinaryValueEditorProps & { graphPath: string; formatFallback(value: unknown): string }) {
   if (parameter.editor.kind === "graphConstant") {
     return (
       <GraphConstantValueEditor
@@ -162,7 +182,7 @@ export function NodeParameterEditor({
         parameter={parameter}
         pending={pending}
         errors={errors}
-        onCommit={commit}
+        onCommit={onCommit}
       />
     );
   }
@@ -171,7 +191,7 @@ export function NodeParameterEditor({
       parameter={parameter}
       pending={pending}
       errors={errors}
-      onCommit={commit}
+      onCommit={onCommit}
       formatFallback={formatFallback}
     />
   );
@@ -243,20 +263,24 @@ function ParameterValueEditor({
     );
   }
   if (editor.kind === "select" && editor.options !== null) {
+    const current = String(parameter.value ?? "");
+    const unavailable = parameter.value !== null && !editor.options.includes(current);
     return (
       <div className="space-y-1">
         <select
           aria-label={parameter.display.title}
           className={detailInlineInputClass}
-          value={String(parameter.value ?? "")}
+          value={current}
           disabled={pending}
-          aria-invalid={errors.length > 0}
+          aria-invalid={errors.length > 0 || unavailable}
           aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
           onChange={(event) => commit(event.target.value)}
         >
-          {!editor.options.includes(String(parameter.value ?? "")) && (
-            <option value={String(parameter.value ?? "")} disabled>
-              {parameter.value == null ? "—" : String(parameter.value)}
+          {!editor.options.includes(current) && (
+            <option value={current} disabled>
+              {parameter.value == null
+                ? "—"
+                : `${current} — ${t("detail.parameterEditor.unavailableChoice")}`}
             </option>
           )}
           {editor.options.map((option) => (
@@ -265,6 +289,9 @@ function ParameterValueEditor({
             </option>
           ))}
         </select>
+        {editor.options.length === 0 && (
+          <p className="text-xs text-muted-foreground">{t("detail.parameterEditor.noColumns")}</p>
+        )}
         <ParameterErrorList id={fieldErrorId} errors={errors} />
       </div>
     );
@@ -493,6 +520,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryV
   };
   const submit = (value: unknown) => onCommit(value, { onRejected: reset });
   const commitDraft = (resetInvalid = false) => {
+    if (draft === projectedDraft(projectedRef.current) && parseError === null) return;
     if (parameter.editor.kind === "number") {
       const parsed = parseNumberDraft(draft, parameter.valueType);
       if (!parsed.ok) {

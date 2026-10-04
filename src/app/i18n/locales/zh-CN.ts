@@ -261,8 +261,13 @@ export const zhCN = {
       assistant_invalid_provider_response: "模型服务返回了无法解析的响应，请检查接口兼容性后重试。",
       assistant_provider_configuration_invalid: "模型配置无效，请检查模型名称和 API 地址。",
       assistant_turn_failed: "本次分析失败，可以重新发送消息。",
-      assistant_model_turn_limit_exceeded:
-        "本次任务已达到模型调用轮次上限。已完成的操作仍然保留，可以发送消息继续。",
+      assistant_provider_output_truncated:
+        "模型服务截断了本次输出。已完成的操作仍然保留，可以继续任务或调整模型服务的输出设置。",
+      assistant_provider_stream_interrupted:
+        "模型响应流在完成前中断。已完成的操作仍然保留，可以发送消息继续。",
+      assistant_provider_content_filtered: "模型服务过滤了本次响应，请调整请求后重试。",
+      assistant_provider_payment_required:
+        "模型服务要求付款（HTTP 402），请检查服务账户的余额或计费状态。",
       assistant_turn_timed_out: "本次分析超时，可以重新发送消息。",
       assistant_stream_failed: "助手消息同步失败，请重新打开助手面板。",
       assistant_session_failed: "无法建立助手会话，请重新打开助手面板。",
@@ -346,13 +351,19 @@ export const zhCN = {
     title: "执行失败",
     unknown: "本次运行未能完成。请根据错误代码和诊断编号检查日志。",
     node: "定位节点：{{name}}",
+    group: "第 {{ordinal}} 组 · {{function}}",
+    emptyGroupProbe: "空输入结构探测 · {{function}}",
     run: "运行 #{{id}}",
     code: "错误代码：{{code}}",
     incident: "诊断编号：{{id}}",
     causes: {
       shapeMismatch: "输入列的长度或矩阵维度不匹配。请检查该节点的输入。",
       invalidParameter: "节点参数无效。请检查方法及其配置。",
-      unalignedSeries: "输入列的行对齐关系不同。请从同一数据帧选择参与运算的列。",
+      unalignedSeries:
+        "输入列的行对应关系不同。请选择同一数据帧中的列；Transform 返回表须保留组内全部行及原顺序。",
+      groupSchemaMismatch:
+        "不同组返回的列名、顺序、物理类型或语义不一致。请调整组函数，使所有组返回相同结构。",
+      groupKeyCollision: "分组键输出列与函数返回列重名。请修改分组键前缀或返回列名。",
       budgetExceeded: "本次计算所需内存超过预算。请减少输入行数或列数。",
       inputLayoutMismatch: "节点输入布局与计算实现不一致。请使用诊断编号查看详情。",
       outputContractMismatch: "节点计算返回了不符合声明的输出。请使用诊断编号查看详情。",
@@ -367,6 +378,9 @@ export const zhCN = {
       finalizationFailed: "计算结果未能完成提交。请检查项目状态后重试。",
       graph_draft_changed: "图或依赖资源已改变。请在当前图状态下重新运行。",
       graph_not_ready: "请先解决图中的阻断问题再运行。",
+      inputResultUnavailable: "上游结果尚未生成或已过期。请先运行上游，或选择“运行至此”。",
+      execution_input_result_unavailable:
+        "上游结果尚未生成或已过期。请先运行上游，或选择“运行至此”。",
       graph_resolution_failed: "无法完成图检查。请使用诊断编号查看技术详情。",
       graph_plan_failed: "无法准备执行计划。请使用诊断编号查看技术详情。",
       stale_project_lifecycle: "项目状态已改变。请在当前项目中重新运行。",
@@ -416,12 +430,15 @@ export const zhCN = {
       duplicate: "创建副本",
       breakAllLinks: "断开全部连接",
       selectLinkedNodes: "选择已连接节点",
+      runNode: "运行本节点",
+      runTo: "运行至此",
       delete: "删除",
     },
     pin: {
       breakLinks: "断开连接",
       resetValue: "恢复默认值",
       view: "查看",
+      viewPrevious: "查看上次成功结果",
     },
   },
   projectPicker: {
@@ -1648,6 +1665,13 @@ export const zhCN = {
     openFile: "打开文件",
     showAllCommands: "显示所有命令",
     nodePalette: {
+      configureFirst: "创建前配置参数",
+      pinCounts: "Pin 数量",
+      derivedPins: "自动确定",
+      create: "创建节点",
+      back: "返回节点列表",
+      noParameters: "此节点没有可配置参数。",
+      createFailed: "节点未能创建，请检查参数、连接或目标图后重试。",
       unavailable: "暂不可用",
       searchPlaceholder: "搜索节点…",
       collapseAll: "折叠所有内容",
@@ -2039,6 +2063,11 @@ export const zhCN = {
     },
     parameterEditor: {
       column: "列",
+      enterColumn: "输入一个列名",
+      addColumn: "添加列",
+      unavailableColumn: "当前输入中不可选",
+      unavailableChoice: "当前不可选",
+      noColumns: "当前输入没有可选列",
       operator: "运算符",
       valueType: "值类型",
       selectColumn: "选择{{column}}",
