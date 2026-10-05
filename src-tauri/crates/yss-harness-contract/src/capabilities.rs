@@ -5,13 +5,14 @@ use crate::graph::{validate_graph_hash, validate_graph_request};
 use crate::{
     ApplyGraphEditRequest, DatasetExported, DatasetProfileInspection, DatasetSchemaInspection,
     EditResourceRequest, ExecuteGraphRequest, ExportDatasetRequest, GraphEditReceipt,
-    GraphExecution, GraphInspection, GraphResults, GraphSaved, GraphValidation,
-    InspectDatasetProfileRequest, InspectDatasetSchemaRequest, InspectGraphRequest,
-    InspectProjectRequest, InspectResourceRequest, InspectResultRequest, ListGraphResultsRequest,
-    MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES, ManageResourceRequest,
-    NodeCatalogSearchResult, ProjectInspection, ResourceInspection, ResourceMutationReceipt,
-    ResultInspection, ResultValueInspection, SaveGraphRequest, SearchNodeCatalogRequest,
-    ValidateGraphRequest, validate_graph_edit_operation, validate_resource_id,
+    GraphExecution, GraphInspection, GraphInspectionPage, GraphResults, GraphSaved,
+    GraphValidation, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
+    InspectGraphRequest, InspectProjectRequest, InspectResourceRequest, InspectResultRequest,
+    ListGraphResultsRequest, MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES,
+    ManageResourceRequest, NodeCatalogSearchResult, ProjectInspection, ResourceInspection,
+    ResourceMutationReceipt, ResultInspection, ResultValueInspection, SaveGraphRequest,
+    SearchNodeCatalogRequest, ValidateGraphRequest, validate_graph_edit_operation,
+    validate_resource_id,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,8 @@ pub enum CapabilityId {
     RequestUiIntent,
     InspectGraph,
     SearchNodeCatalog,
+    SearchKnowledge,
+    ReadKnowledge,
     InspectDatasetSchema,
     InspectDatasetProfile,
     InspectResult,
@@ -52,6 +55,8 @@ impl CapabilityId {
             Self::RequestUiIntent => "request_ui_intent",
             Self::InspectGraph => "inspect_graph",
             Self::SearchNodeCatalog => "search_node_catalog",
+            Self::SearchKnowledge => "search_knowledge",
+            Self::ReadKnowledge => "read_knowledge",
             Self::InspectDatasetSchema => "inspect_dataset_schema",
             Self::InspectDatasetProfile => "inspect_dataset_profile",
             Self::InspectResult => "inspect_result",
@@ -74,6 +79,8 @@ impl CapabilityId {
             Self::RequestUiIntent => &CAPABILITY_DESCRIPTORS[12],
             Self::InspectGraph => &CAPABILITY_DESCRIPTORS[0],
             Self::SearchNodeCatalog => &CAPABILITY_DESCRIPTORS[1],
+            Self::SearchKnowledge => &CAPABILITY_DESCRIPTORS[17],
+            Self::ReadKnowledge => &CAPABILITY_DESCRIPTORS[18],
             Self::InspectDatasetSchema => &CAPABILITY_DESCRIPTORS[2],
             Self::InspectDatasetProfile => &CAPABILITY_DESCRIPTORS[3],
             Self::InspectResult => &CAPABILITY_DESCRIPTORS[4],
@@ -116,7 +123,7 @@ impl CapabilityDescriptor {
     }
 }
 
-pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 17] = [
+pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 19] = [
     CapabilityDescriptor {
         id: CapabilityId::InspectGraph,
         effect: ToolEffect::Inspect,
@@ -202,6 +209,16 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 17] = [
         effect: ToolEffect::Mutate,
         maximum_results: 1,
     },
+    CapabilityDescriptor {
+        id: CapabilityId::SearchKnowledge,
+        effect: ToolEffect::Inspect,
+        maximum_results: crate::MAX_KNOWLEDGE_RESULTS,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::ReadKnowledge,
+        effect: ToolEffect::Inspect,
+        maximum_results: 1,
+    },
 ];
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -215,6 +232,8 @@ pub enum AutomationCapabilityRequest {
     RequestUiIntent(yss_ui_contract::RequestUiIntent),
     InspectGraph(InspectGraphRequest),
     SearchNodeCatalog(SearchNodeCatalogRequest),
+    SearchKnowledge(crate::SearchKnowledgeRequest),
+    ReadKnowledge(crate::ReadKnowledgeRequest),
     InspectDatasetSchema(InspectDatasetSchemaRequest),
     InspectDatasetProfile(InspectDatasetProfileRequest),
     InspectResult(InspectResultRequest),
@@ -237,6 +256,8 @@ impl AutomationCapabilityRequest {
             Self::RequestUiIntent(_) => CapabilityId::RequestUiIntent,
             Self::InspectGraph(_) => CapabilityId::InspectGraph,
             Self::SearchNodeCatalog(_) => CapabilityId::SearchNodeCatalog,
+            Self::SearchKnowledge(_) => CapabilityId::SearchKnowledge,
+            Self::ReadKnowledge(_) => CapabilityId::ReadKnowledge,
             Self::InspectDatasetSchema(_) => CapabilityId::InspectDatasetSchema,
             Self::InspectDatasetProfile(_) => CapabilityId::InspectDatasetProfile,
             Self::InspectResult(_) => CapabilityId::InspectResult,
@@ -259,7 +280,9 @@ impl AutomationCapabilityRequest {
             Self::RequestUiIntent(request) => request
                 .validate()
                 .map_err(|_| CapabilityContractError::InvalidField("intent")),
-            Self::InspectGraph(request) => validate_resource_id("graphPath", &request.graph_path),
+            Self::InspectGraph(request) => request.validate(),
+            Self::SearchKnowledge(request) => request.validate(),
+            Self::ReadKnowledge(_) => Ok(()),
             Self::InspectDatasetSchema(request) => {
                 validate_resource_id("databaseId", &request.database_id)
             }
@@ -349,7 +372,10 @@ pub enum AutomationCapabilityResult {
     UiIntentInspection(yss_ui_contract::UiIntentReceipt),
     UiIntentReceipt(yss_ui_contract::UiIntentReceipt),
     GraphInspection(GraphInspection),
+    GraphInspectionPage(GraphInspectionPage),
     NodeCatalogSearch(NodeCatalogSearchResult),
+    KnowledgeSearch(crate::KnowledgeSearchResult),
+    KnowledgePassage(crate::KnowledgePassage),
     DatasetSchemaInspection(DatasetSchemaInspection),
     DatasetProfileInspection(DatasetProfileInspection),
     ResultInspection(ResultInspection),
@@ -388,8 +414,10 @@ impl AutomationCapabilityResult {
             Self::ResourceManaged(_) => CapabilityId::ManageResource,
             Self::ResourceEdited(_) => CapabilityId::EditResource,
             Self::DatasetExported(_) => CapabilityId::ExportDataset,
-            Self::GraphInspection(_) => CapabilityId::InspectGraph,
+            Self::GraphInspection(_) | Self::GraphInspectionPage(_) => CapabilityId::InspectGraph,
             Self::NodeCatalogSearch(_) => CapabilityId::SearchNodeCatalog,
+            Self::KnowledgeSearch(_) => CapabilityId::SearchKnowledge,
+            Self::KnowledgePassage(_) => CapabilityId::ReadKnowledge,
             Self::DatasetSchemaInspection(_) => CapabilityId::InspectDatasetSchema,
             Self::DatasetProfileInspection(_) => CapabilityId::InspectDatasetProfile,
             Self::ResultInspection(_) => CapabilityId::InspectResult,
@@ -475,17 +503,20 @@ impl CapabilityFailure {
 }
 
 pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema {
+    use crate::model::*;
     let mut schema = match capability_id {
         CapabilityId::InspectResource => schemars::schema_for!(InspectResourceRequest),
-        CapabilityId::ManageResource => schemars::schema_for!(ManageResourceRequest),
-        CapabilityId::EditResource => schemars::schema_for!(EditResourceRequest),
-        CapabilityId::ExportDataset => schemars::schema_for!(ExportDatasetRequest),
+        CapabilityId::ManageResource => schemars::schema_for!(ManageResourceInput),
+        CapabilityId::EditResource => schemars::schema_for!(EditResourceInput),
+        CapabilityId::ExportDataset => schemars::schema_for!(ExportDatasetInput),
         CapabilityId::InspectUiIntent => {
             schemars::schema_for!(yss_ui_contract::InspectUiIntentRequest)
         }
-        CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::RequestUiIntent),
-        CapabilityId::InspectGraph => schemars::schema_for!(InspectGraphRequest),
+        CapabilityId::RequestUiIntent => schemars::schema_for!(RequestUiIntentInput),
+        CapabilityId::InspectGraph => schemars::schema_for!(InspectGraphInput),
         CapabilityId::SearchNodeCatalog => schemars::schema_for!(SearchNodeCatalogRequest),
+        CapabilityId::SearchKnowledge => schemars::schema_for!(crate::SearchKnowledgeRequest),
+        CapabilityId::ReadKnowledge => schemars::schema_for!(crate::ReadKnowledgeRequest),
         CapabilityId::InspectDatasetSchema => {
             schemars::schema_for!(InspectDatasetSchemaRequest)
         }
@@ -494,10 +525,10 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
         }
         CapabilityId::InspectResult => schemars::schema_for!(InspectResultRequest),
         CapabilityId::InspectProject => schemars::schema_for!(InspectProjectRequest),
-        CapabilityId::ApplyGraphEdit => schemars::schema_for!(ApplyGraphEditRequest),
-        CapabilityId::ValidateGraph => schemars::schema_for!(ValidateGraphRequest),
-        CapabilityId::ExecuteGraph => schemars::schema_for!(ExecuteGraphRequest),
-        CapabilityId::SaveGraph => schemars::schema_for!(SaveGraphRequest),
+        CapabilityId::ApplyGraphEdit => schemars::schema_for!(ApplyGraphEditInput),
+        CapabilityId::ValidateGraph => schemars::schema_for!(GraphTargetInput),
+        CapabilityId::ExecuteGraph => schemars::schema_for!(ExecuteGraphInput),
+        CapabilityId::SaveGraph => schemars::schema_for!(GraphTargetInput),
         CapabilityId::ListGraphResults => schemars::schema_for!(ListGraphResultsRequest),
     };
     // All capability arguments are objects, including tagged enums whose schemas

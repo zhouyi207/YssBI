@@ -26,6 +26,50 @@ pub(super) use database::semantic_to_contract;
 type Publication<'a> = &'a mut dyn FnMut(&CommittedResourceMutation);
 type Result<T> = std::result::Result<T, CapabilityFailure>;
 
+impl ApplicationState {
+    /// Resolve explicit message references against the existing project index.
+    /// The Application resolver dispatches this filesystem read on its blocking pool.
+    pub fn resolve_harness_resources(
+        &self,
+        binding: &ProjectSessionBinding,
+        references: &[ProjectResourceRef],
+    ) -> Result<Vec<HarnessResourceReference>> {
+        if references.is_empty() {
+            return Ok(Vec::new());
+        }
+        let session = self.capture_session().map_err(map_session_capture_error)?;
+        if session.project_instance_id() != binding.project_instance_id()
+            || session.project_session_id() != binding.project_session_id()
+        {
+            return Err(CapabilityFailure::new(
+                CapabilityFailureCode::ProjectSessionChanged,
+            ));
+        }
+        let index = project_inspection(&session)?;
+        let mut seen = std::collections::BTreeSet::new();
+        let selected = references
+            .iter()
+            .map(|reference| {
+                if !seen.insert(reference) {
+                    return Err(invalid("resources"));
+                }
+                let entry = index
+                    .resources
+                    .iter()
+                    .find(|entry| &entry.resource == reference)
+                    .ok_or_else(unavailable)?;
+                Ok(HarnessResourceReference {
+                    resource: reference.clone(),
+                    name: entry.display_name.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.revalidate_captured_session(&session)
+            .map_err(map_session_revalidation_error)?;
+        Ok(selected)
+    }
+}
+
 fn invalid(field: &str) -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
 }

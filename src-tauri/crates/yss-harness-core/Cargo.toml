@@ -10,10 +10,12 @@ test-support = []
 
 [dependencies]
 thiserror.workspace = true
+tracing.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 yss-harness-contract = { path = "../yss-harness-contract" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 
 [dev-dependencies]
+yss-harness-tantivy = { path = "../yss-harness-tantivy" }
 yss-project-identity = { path = "../yss-project-identity" }

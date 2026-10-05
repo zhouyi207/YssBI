@@ -4,7 +4,7 @@ use crate::{ApprovalService, HarnessError, HarnessHost, ToolRegistry};
 use std::sync::Arc;
 use yss_harness_contract::{
     ApprovalGrantId, ApprovalGrantRecord, AutomationCapabilityRequest, AutomationCapabilityResult,
-    HarnessSessionId, HarnessSessionState, HarnessTurnId, ModelCapabilityRequest,
+    HarnessSessionId, HarnessSessionState, HarnessTurnId,
 };
 
 impl HarnessHost {
@@ -97,6 +97,7 @@ impl HarnessHost {
         let outcome = HarnessToolExecutor::new_approved(
             registry,
             Arc::clone(&self.ports.capability_gateway),
+            Arc::clone(&self.knowledge),
             Arc::clone(&self.ports.tool_ledger),
             Arc::clone(&self.ports.clock),
             Arc::clone(&self.ports.ids),
@@ -107,9 +108,8 @@ impl HarnessHost {
             approval_grant_id.clone(),
         )
         .with_output(output)
-        .execute(ModelCapabilityRequest { request })
+        .execute(request, None)
         .await?;
         Ok(outcome.result)
     }
 }
-use yss_harness_contract::ModelCapabilityExecutor;

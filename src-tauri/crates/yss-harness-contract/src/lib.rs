@@ -9,7 +9,11 @@ mod gateway;
 mod graph;
 mod harness;
 mod inspection;
-mod knowledge_memory;
+mod knowledge;
+mod knowledge_index;
+mod knowledge_tools;
+pub mod model;
+mod models;
 mod persistence;
 mod resources;
 mod statistics;
@@ -22,13 +26,17 @@ pub use gateway::*;
 pub use graph::*;
 pub use harness::*;
 pub use inspection::*;
-pub use knowledge_memory::*;
+pub use knowledge::*;
+pub use knowledge_index::*;
+pub use knowledge_tools::*;
+pub use models::*;
 pub use persistence::*;
 pub use resources::*;
 pub use statistics::*;
 pub use validation::{
     MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES, MAX_RESOURCE_ID_BYTES,
 };
+pub use yss_ui_contract::RequestUiIntent;
 
 pub(crate) use graph::validate_graph_edit_operation;
 pub(crate) use validation::validate_resource_id;

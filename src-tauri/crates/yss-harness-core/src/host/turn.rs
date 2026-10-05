@@ -1,19 +1,14 @@
-use crate::conversation::{agent_messages, bounded_query};
-use crate::{
-    HarnessError, HarnessHost, KnowledgeQuery, KnowledgeService, MemoryError, MemoryService,
-};
+use crate::conversation::agent_messages;
+use crate::{HarnessError, HarnessHost};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use yss_harness_contract::{
     AgentDriverFailureCode, AgentEvent, AgentTurnResult, AutomationIdKind, CancellationReason,
     CancellationToken, CapabilityFailureCode, HarnessEvent, HarnessSessionId, HarnessSessionState,
-    HarnessTurnId, HarnessTurnRecord, HarnessTurnState, MemoryAuthor, MemoryConfidence,
-    MemoryProposal, MemoryScope, MemorySourceRef, ProjectSessionBinding, RetentionPolicy,
-    SensitivityClass, StructuredMemoryValue,
+    HarnessTurnId, HarnessTurnRecord, HarnessTurnState, ProjectSessionBinding,
 };
 
 const MAX_USER_MESSAGE_BYTES: usize = 64 * 1024;
-const MAX_AGENT_TEXT_BYTES: usize = 1024 * 1024;
 
 impl HarnessHost {
     pub async fn submit_turn(
@@ -21,11 +16,17 @@ impl HarnessHost {
         session_id: &HarnessSessionId,
         expected_project: &ProjectSessionBinding,
         user_message: String,
-        active_graph_path: Option<String>,
+        resources: Vec<yss_harness_contract::ProjectResourceRef>,
+        model: Option<yss_harness_contract::LanguageModelSelection>,
     ) -> Result<AgentTurnResult, HarnessError> {
         validate_user_message(&user_message)?;
+        let mut selected = std::collections::BTreeSet::new();
+        if resources.iter().any(|entry| !selected.insert(entry)) {
+            return Err(HarnessError::InvalidMessage);
+        }
+        let (cancellation, _admission) = self.admit_turn(session_id)?;
         let access = self.session_access().await;
-        let mut session = self
+        let session = self
             .ports
             .sessions
             .load_session(session_id)
@@ -34,7 +35,65 @@ impl HarnessHost {
         if session.state != HarnessSessionState::Active || &session.project != expected_project {
             return Err(HarnessError::SessionNotActive);
         }
-        let (cancellation, _admission) = self.admit_turn(session_id)?;
+        let requested_model = model.or_else(|| {
+            session
+                .conversation
+                .as_ref()
+                .and_then(|value| value.model.clone())
+        });
+        // Reference lookup and credential access may perform I/O. They must be
+        // cancellable and must not block model selection or project replacement.
+        drop(access);
+        let preparation = async {
+            let references = if resources.is_empty() {
+                Vec::new()
+            } else {
+                self.ports
+                    .resources
+                    .resolve(expected_project, &resources, cancellation.clone())
+                    .await?
+            };
+            if references.len() != resources.len()
+                || references.iter().zip(&resources).any(|(entry, requested)| {
+                    &entry.resource != requested
+                        || entry.name.trim().is_empty()
+                        || entry.validate().is_err()
+                })
+            {
+                return Err(HarnessError::Capability(
+                    yss_harness_contract::CapabilityFailure::new(
+                        CapabilityFailureCode::InternalFailure,
+                    ),
+                ));
+            }
+            let resolved = self.ports.models.resolve(requested_model.as_ref()).await?;
+            Ok::<_, HarnessError>((references, resolved))
+        };
+        let (resources, resolved) = tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => return Err(HarnessError::Cancelled),
+            result = preparation => result?,
+        };
+        let access = self.session_access().await;
+        let mut session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        if cancellation.is_cancelled() {
+            return Err(HarnessError::Cancelled);
+        }
+        if session.state != HarnessSessionState::Active || &session.project != expected_project {
+            return Err(HarnessError::SessionNotActive);
+        }
+        if let Some(conversation) = &mut session.conversation
+            && conversation.model.is_none()
+        {
+            // A queued turn carries its own model; it must not replace the user's
+            // newer selection for subsequent turns.
+            conversation.model = Some(resolved.identity.selection.clone());
+        }
         if let Some(conversation) = &mut session.conversation
             && conversation.title.is_empty()
         {
@@ -45,9 +104,9 @@ impl HarnessHost {
                 .chars()
                 .take(60)
                 .collect();
-            session.updated_at = self.ports.clock.now();
-            self.ports.sessions.update_session(&session).await?;
         }
+        session.updated_at = self.ports.clock.now();
+        self.ports.sessions.update_session(&session).await?;
         // Session writes share the selection gate; executing a turn must not hold it.
         drop(access);
         let turn_id =
@@ -70,6 +129,8 @@ impl HarnessHost {
                 Some(&turn_id),
                 HarnessEvent::TurnStarted {
                     user_message: user_message.clone(),
+                    model: resolved.identity,
+                    resources: resources.clone(),
                 },
             )
             .await
@@ -80,77 +141,12 @@ impl HarnessHost {
             return Err(error);
         }
 
-        let preparation = async {
-            let memory_service = MemoryService::new(
-                Arc::clone(&self.ports.memory),
-                Arc::clone(&self.ports.clock),
-                Arc::clone(&self.ports.ids),
-            );
-            match memory_service
-                .propose(MemoryProposal {
-                    session_id: session.id.clone(),
-                    scope: MemoryScope::Session,
-                    value: StructuredMemoryValue::ResearchQuestion {
-                        question: user_message.clone(),
-                    },
-                    source_refs: vec![MemorySourceRef {
-                        source_id: turn_id.to_string(),
-                        source_revision: "1".to_owned(),
-                    }],
-                    confidence: MemoryConfidence::High,
-                    project: Some(session.project.clone()),
-                    sensitivity: SensitivityClass::Internal,
-                    created_by: MemoryAuthor::User,
-                    supersedes: None,
-                    retention: RetentionPolicy::Session,
-                })
-                .await
-            {
-                Ok(record) => {
-                    self.event_writer()
-                        .append(
-                            session_id,
-                            Some(&turn_id),
-                            HarnessEvent::MemoryRecorded { record },
-                        )
-                        .await?;
-                }
-                Err(MemoryError::PolicyRejected) => {}
-                Err(error) => return Err(HarnessError::from(error)),
-            }
-
-            let knowledge = KnowledgeService::new(Arc::clone(&self.ports.knowledge))
-                .search(KnowledgeQuery {
-                    text: bounded_query(&user_message, 256),
-                    scopes: Vec::new(),
-                    project: Some(session.project.clone()),
-                    limit: 5,
-                })
-                .await?;
-            for hit in &knowledge {
-                self.event_writer()
-                    .append(
-                        session_id,
-                        Some(&turn_id),
-                        HarnessEvent::KnowledgeCited {
-                            citation: hit.citation.clone(),
-                        },
-                    )
-                    .await?;
-            }
-            Ok::<_, HarnessError>(knowledge)
-        }
-        .await;
-        let knowledge = match preparation {
-            Ok(knowledge) => knowledge,
-            Err(error) => return self.fail_turn(&mut turn, error).await,
-        };
-
         let previous = match crate::conversation::history(
             self.ports.events.as_ref(),
             self.ports.tool_ledger.as_ref(),
             session_id,
             &turn_id,
+            &session.project,
         )
         .await
         {
@@ -159,6 +155,8 @@ impl HarnessHost {
         };
         let orchestrator = match crate::orchestration::TurnOrchestrator::new(
             self.ports.clone(),
+            resolved.driver,
+            self.knowledge.clone(),
             session.clone(),
             turn_id.clone(),
             self.event_writer(),
@@ -170,14 +168,16 @@ impl HarnessHost {
             Err(error) => return self.fail_turn(&mut turn, error.into()).await,
         };
         let result = orchestrator
-            .run(agent_messages(
-                user_message,
-                &knowledge,
-                previous,
-                active_graph_path.as_deref(),
-                &self.report_writing_skill,
-                yss_harness_contract::AgentRole::Manager,
-            ))
+            .run(
+                agent_messages(
+                    user_message,
+                    previous.messages,
+                    &resources,
+                    &self.report_writing_skill,
+                    yss_harness_contract::AgentRole::Manager,
+                ),
+                previous.observations,
+            )
             .await;
 
         if cancellation.reason() == Some(CancellationReason::DeadlineElapsed) {
@@ -199,14 +199,6 @@ impl HarnessHost {
         }
         match result {
             Ok(result) => {
-                if result.final_text.len() > MAX_AGENT_TEXT_BYTES {
-                    return self
-                        .fail_turn(
-                            &mut turn,
-                            HarnessError::Agent(AgentDriverFailureCode::InvalidProviderResponse),
-                        )
-                        .await;
-                }
                 turn.state = HarnessTurnState::Completed;
                 turn.final_text = Some(result.final_text.clone());
                 turn.finished_at = Some(self.ports.clock.now());

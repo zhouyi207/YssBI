@@ -87,7 +87,11 @@ async fn rejects_incompatible_schema_without_rewriting_records() {
         .execute(&pool)
         .await
         .unwrap();
-    let store = SqliteHarnessStore { pool, path: None };
+    let store = SqliteHarnessStore {
+        pool,
+        path: None,
+        knowledge_generation: Default::default(),
+    };
     assert_eq!(
         store.ensure_schema().await.unwrap_err().code,
         PersistenceFailureCode::InvalidRecord
@@ -185,9 +189,9 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         workflow_step_id: None,
         project,
         capability_id: yss_harness_contract::CapabilityId::InspectGraph,
-        request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
-            graph_path: "events/Main.yssbi-event".to_owned(),
-        }),
+        request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
+            "events/Main.yssbi-event".to_owned(),
+        )),
         state: ToolInvocationState::Running,
         result: None,
         failure: None,

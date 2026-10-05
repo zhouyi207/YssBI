@@ -3,15 +3,20 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeSet;
 use yss_data_contract::{FilterLiteral, TabularColumnName};
 
+mod schema;
+
 pub const PROJECT_COLUMNS_TYPE_ID: &str = "yssbi.dataframe.project_columns";
 pub const FILTER_PREDICATE_TYPE_ID: &str = "yssbi.dataframe.filter_predicate";
 pub const PROJECT_COLUMNS_VALIDATOR_ID: &str = "yssbi.dataframe.project_columns.codec";
 pub const FILTER_PREDICATE_VALIDATOR_ID: &str = "yssbi.dataframe.filter_predicate.codec";
 pub const DATAFRAME_NOMINAL_CODEC_VERSION: u32 = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(transparent)]
-pub struct ProjectColumns(Box<[Box<str>]>);
+#[schemars(extend("uniqueItems" = true))]
+pub struct ProjectColumns(
+    #[schemars(with = "Vec<TabularColumnName>", length(min = 1))] Box<[Box<str>]>,
+);
 
 impl ProjectColumns {
     pub fn as_slice(&self) -> &[Box<str>] {
@@ -36,7 +41,7 @@ impl<'de> Deserialize<'de> for ProjectColumns {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum FilterOperator {
     Equal,

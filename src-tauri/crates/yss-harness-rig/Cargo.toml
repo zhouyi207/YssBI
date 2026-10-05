@@ -9,6 +9,7 @@ publish = false
 futures-util.workspace = true
 rig-agent.workspace = true
 rig-core.workspace = true
+rig-reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error = "0.1.20"
@@ -16,3 +17,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 tracing.workspace = true
 yss-harness-contract = { path = "../yss-harness-contract" }
+yss-canonical-hash = { path = "../yss-canonical-hash" }
+
+[dev-dependencies]
+rig-core = { workspace = true, features = ["test-utils"] }

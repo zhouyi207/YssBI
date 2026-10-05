@@ -1,11 +1,36 @@
 use crate::{
-    CapabilityContractError, DatasetSchemaInspection, GraphInspection, validate_resource_id,
+    CapabilityContractError, DatasetSchemaInspection, GraphInspection, GraphInspectionPage,
+    GraphInspectionView, validate_resource_id,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 pub use yss_chart_document::ChartType;
 pub use yss_project_identity::{ProjectResourceKind, ProjectResourceRef};
+
+/// An explicit user-selected target. Contents remain with their resource owner.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HarnessResourceReference {
+    pub resource: ProjectResourceRef,
+    pub name: String,
+}
+
+impl HarnessResourceReference {
+    pub fn validate(&self) -> Result<(), CapabilityContractError> {
+        validate_resource_id("resource.id", &self.resource.id)
+    }
+}
+
+/// Resolve explicit references through the project owner during turn preparation.
+pub trait HarnessResourceResolverPort: Send + Sync {
+    fn resolve<'a>(
+        &'a self,
+        project: &'a crate::ProjectSessionBinding,
+        resources: &'a [ProjectResourceRef],
+        cancellation: crate::CancellationToken,
+    ) -> crate::AgentFuture<'a, Result<Vec<HarnessResourceReference>, crate::CapabilityFailure>>;
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -18,6 +43,12 @@ pub struct ResourceVersion {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectResourceRequest {
     pub resource: ProjectResourceRef,
+    /// Return identity and dirty state without materializing the content.
+    #[serde(default)]
+    pub metadata_only: bool,
+    /// Graph resources default to a paged overview. Use inspect_graph for filters and details.
+    #[serde(default)]
+    pub graph_view: GraphInspectionView,
     #[serde(default)]
     pub offset: usize,
     #[serde(default = "default_page_size")]
@@ -357,8 +388,15 @@ pub struct ResourceInspection {
     deny_unknown_fields
 )]
 pub enum ResourceContent {
+    Metadata,
     Graph {
         graph: GraphInspection,
+        function: Option<FunctionSignatureInspection>,
+        can_undo: bool,
+        can_redo: bool,
+    },
+    GraphPage {
+        graph: GraphInspectionPage,
         function: Option<FunctionSignatureInspection>,
         can_undo: bool,
         can_redo: bool,
@@ -425,6 +463,18 @@ pub struct DatasetExported {
 impl InspectResourceRequest {
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
         validate_resource_id("resource.id", &self.resource.id)?;
+        if self.graph_view != GraphInspectionView::Overview
+            && (self.metadata_only
+                || !matches!(
+                    self.resource.kind,
+                    ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
+                ))
+        {
+            return Err(CapabilityContractError::InvalidField("graphView"));
+        }
+        if self.graph_view == GraphInspectionView::Full && self.offset != 0 {
+            return Err(CapabilityContractError::InvalidField("offset"));
+        }
         let maximum = match self.resource.kind {
             ProjectResourceKind::Doc => 16_384,
             ProjectResourceKind::Mind => 500,

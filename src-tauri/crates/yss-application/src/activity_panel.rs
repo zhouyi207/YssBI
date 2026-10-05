@@ -8,6 +8,8 @@ use yss_project_identity::ProjectInstanceId;
 use crate::graph::catalog::{CatalogQueryApplicationError, LocalizedCatalogRequest};
 use crate::session::ApplicationState;
 
+mod assistant;
+
 #[derive(Debug)]
 pub enum ActivityText {
     Key(&'static str),
@@ -23,6 +25,11 @@ pub struct ActivityTool {
 
 #[derive(Debug)]
 pub enum ActivityItem {
+    Conversation {
+        session_id: String,
+        title: String,
+        last_opened_at: u64,
+    },
     EventGraph {
         path: String,
         name: String,

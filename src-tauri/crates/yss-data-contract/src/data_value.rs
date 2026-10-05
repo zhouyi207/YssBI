@@ -19,9 +19,12 @@ pub enum DataValue {
 
 /// Lossless decimal spelling for persisted literals and exact Arrow decimal filters.
 /// The execution boundary chooses the numeric representation used for arithmetic.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, schemars::JsonSchema)]
 #[serde(transparent)]
-pub struct DecimalLiteral(Box<str>);
+pub struct DecimalLiteral(
+    #[schemars(regex(pattern = r"^(?:0|-?[1-9][0-9]*|-?(?:0|[1-9][0-9]*)\.[0-9]*[1-9])$"))]
+    Box<str>,
+);
 
 impl TryFrom<f64> for DecimalLiteral {
     type Error = InvalidDecimal;
@@ -122,7 +125,7 @@ fn is_canonical_decimal(value: &str) -> bool {
     integer_valid && fraction_valid && !value.ends_with('.')
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(
     tag = "type",
     content = "value",
@@ -131,7 +134,11 @@ fn is_canonical_decimal(value: &str) -> bool {
 )]
 pub enum FilterLiteral {
     Boolean(bool),
-    Integer(#[serde(with = "signed_integer")] i64),
+    Integer(
+        #[serde(with = "signed_integer")]
+        #[schemars(with = "String", regex(pattern = r"^(?:0|-?[1-9][0-9]*)$"))]
+        i64,
+    ),
     Decimal(DecimalLiteral),
     String(Box<str>),
 }

@@ -23,7 +23,24 @@ pub enum AgentRole {
 #[serde(rename_all = "snake_case")]
 pub enum AgentControlTool {
     DelegateTask,
+    FollowupTask,
     ProposeStatisticalPlan,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentFollowup {
+    pub run_id: AgentRunId,
+    pub instruction: String,
+    #[serde(default)]
+    pub resource_versions: Vec<AgentResourceVersion>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentResourceVersion {
+    pub resource: ProjectResourceRef,
+    pub version: ResourceVersion,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -203,5 +220,9 @@ pub struct AgentTaskOutcome {
 }
 
 pub fn agent_task_schema() -> schemars::Schema {
-    schemars::schema_for!(AgentTask)
+    schemars::schema_for!(crate::model::AgentTaskInput)
+}
+
+pub fn agent_followup_schema() -> schemars::Schema {
+    schemars::schema_for!(crate::model::AgentFollowupInput)
 }

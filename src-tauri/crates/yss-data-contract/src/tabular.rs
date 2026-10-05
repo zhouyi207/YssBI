@@ -199,8 +199,8 @@ impl<'de> Deserialize<'de> for TabularScalar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TabularColumnName(Box<str>);
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, schemars::JsonSchema)]
+pub struct TabularColumnName(#[schemars(regex(pattern = r"\S"))] Box<str>);
 
 impl TryFrom<&str> for TabularColumnName {
     type Error = TabularContractError;

@@ -1,6 +1,7 @@
 #![deny(unused_must_use)]
 pub use yss_data_contract::SemanticType;
 
+mod configuration_schema;
 mod data_series;
 pub mod dataframe;
 mod identity;

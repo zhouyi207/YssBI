@@ -1,5 +1,66 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
+
+pub fn model_identity() -> yss_harness_contract::LanguageModelIdentity {
+    yss_harness_contract::LanguageModelIdentity {
+        selection: yss_harness_contract::LanguageModelSelection {
+            provider_id: "test-provider".into(),
+            model_id: "test-model".into(),
+        },
+        provider_name: "Test provider".into(),
+        model_name: "Test model".into(),
+    }
+}
+
+pub fn fixed_model(
+    driver: std::sync::Arc<dyn yss_harness_contract::AgentDriverPort>,
+) -> std::sync::Arc<dyn yss_harness_contract::LanguageModelResolverPort> {
+    struct FixedModel(std::sync::Arc<dyn yss_harness_contract::AgentDriverPort>);
+    impl yss_harness_contract::LanguageModelResolverPort for FixedModel {
+        fn resolve<'a>(
+            &'a self,
+            _: Option<&'a yss_harness_contract::LanguageModelSelection>,
+        ) -> yss_harness_contract::AgentFuture<
+            'a,
+            Result<
+                yss_harness_contract::ResolvedLanguageModel,
+                yss_harness_contract::AgentDriverFailure,
+            >,
+        > {
+            Box::pin(async {
+                Ok(yss_harness_contract::ResolvedLanguageModel {
+                    identity: model_identity(),
+                    driver: self.0.clone(),
+                })
+            })
+        }
+    }
+    std::sync::Arc::new(FixedModel(driver))
+}
+
+pub struct FixtureResourceResolver;
+
+impl yss_harness_contract::HarnessResourceResolverPort for FixtureResourceResolver {
+    fn resolve<'a>(
+        &'a self,
+        _: &'a yss_harness_contract::ProjectSessionBinding,
+        resources: &'a [yss_harness_contract::ProjectResourceRef],
+        _: yss_harness_contract::CancellationToken,
+    ) -> yss_harness_contract::AgentFuture<
+        'a,
+        Result<Vec<yss_harness_contract::HarnessResourceReference>, CapabilityFailure>,
+    > {
+        Box::pin(async {
+            Ok(resources
+                .iter()
+                .map(|resource| yss_harness_contract::HarnessResourceReference {
+                    name: resource.id.clone(),
+                    resource: resource.clone(),
+                })
+                .collect())
+        })
+    }
+}
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use yss_harness_contract::{
@@ -10,11 +71,10 @@ use yss_harness_contract::{
     HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId,
     HarnessSessionRecord, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
     IdGeneratorPort, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
-    KnowledgeSourceStatus, KnowledgeSourceStorePort, MemoryRecord, MemoryRecordId, MemoryStatus,
-    MemoryStorePort, ModelCapabilityExecutor, PersistenceFailure, PersistenceFailureCode,
-    PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort, ToolInvocationRecord,
-    UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState,
-    WorkflowStorePort, WorkflowVersion,
+    KnowledgeSourceStatus, KnowledgeSourceStorePort, ModelCapabilityExecutor, PersistenceFailure,
+    PersistenceFailureCode, PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort,
+    ToolInvocationRecord, UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId,
+    WorkflowRunRecord, WorkflowRunState, WorkflowStorePort, WorkflowVersion,
 };
 
 pub struct FixedClock {
@@ -55,7 +115,6 @@ impl IdGeneratorPort for SequentialIds {
             AutomationIdKind::AgentRun => "agent",
             AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
-            AutomationIdKind::MemoryRecord => "memory",
             AutomationIdKind::ApprovalGrant => "approval",
         };
         let value = self.next.fetch_add(1, Ordering::AcqRel) + 1;
@@ -168,7 +227,7 @@ struct InMemoryState {
     definitions: BTreeMap<(WorkflowId, WorkflowVersion), WorkflowDefinition>,
     runs: BTreeMap<WorkflowRunId, WorkflowRunRecord>,
     invocations: BTreeMap<yss_harness_contract::IdempotencyKey, ToolInvocationRecord>,
-    memories: BTreeMap<MemoryRecordId, MemoryRecord>,
+    knowledge_generation: u64,
     knowledge_sources: BTreeMap<KnowledgeSourceId, KnowledgeSourceRecord>,
     knowledge_documents:
         BTreeMap<yss_harness_contract::KnowledgeDocumentId, KnowledgeDocumentRecord>,
@@ -648,156 +707,72 @@ impl ApprovalStorePort for InMemoryHarnessStore {
     }
 }
 
-impl MemoryStorePort for InMemoryHarnessStore {
-    fn insert<'a>(
-        &'a self,
-        record: &'a MemoryRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if state
-                .memories
-                .insert(record.id.clone(), record.clone())
-                .is_some()
-            {
-                return Err(conflict());
-            }
-            Ok(())
-        })
-    }
-
-    fn load<'a>(
-        &'a self,
-        id: &'a MemoryRecordId,
-    ) -> PersistenceFuture<'a, Result<Option<MemoryRecord>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .memories
-                .get(id)
-                .cloned())
-        })
-    }
-
-    fn update<'a>(
-        &'a self,
-        record: &'a MemoryRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if !state.memories.contains_key(&record.id) {
-                return Err(not_found());
-            }
-            state.memories.insert(record.id.clone(), record.clone());
-            Ok(())
-        })
-    }
-
-    fn activate<'a>(
-        &'a self,
-        record: &'a MemoryRecord,
-        superseded: Option<&'a MemoryRecord>,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if state
-                .memories
-                .get(&record.id)
-                .is_none_or(|current| current.status != MemoryStatus::Proposed)
-            {
-                return Err(conflict());
-            }
-            if let Some(previous) = superseded {
-                if state
-                    .memories
-                    .get(&previous.id)
-                    .is_none_or(|current| current.status != MemoryStatus::Active)
-                {
-                    return Err(conflict());
-                }
-                state.memories.insert(previous.id.clone(), previous.clone());
-            }
-            state.memories.insert(record.id.clone(), record.clone());
-            Ok(())
-        })
-    }
-
-    fn query_session<'a>(
-        &'a self,
-        session_id: &'a HarnessSessionId,
-    ) -> PersistenceFuture<'a, Result<Vec<MemoryRecord>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .memories
-                .values()
-                .filter(|record| &record.session_id == session_id)
-                .cloned()
-                .collect())
-        })
-    }
-
-    fn list_active<'a>(
-        &'a self,
-    ) -> PersistenceFuture<'a, Result<Vec<MemoryRecord>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .memories
-                .values()
-                .filter(|record| record.status == MemoryStatus::Active)
-                .cloned()
-                .collect())
-        })
-    }
-}
-
 impl KnowledgeSourceStorePort for InMemoryHarnessStore {
-    fn upsert_source<'a>(
-        &'a self,
-        source: &'a KnowledgeSourceRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            self.state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .knowledge_sources
-                .insert(source.id.clone(), source.clone());
-            Ok(())
-        })
-    }
-
-    fn upsert_document<'a>(
-        &'a self,
-        document: &'a KnowledgeDocumentRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if !state.knowledge_sources.contains_key(&document.source_id) {
-                return Err(not_found());
-            }
-            state
-                .knowledge_documents
-                .insert(document.id.clone(), document.clone());
-            Ok(())
-        })
-    }
-
-    fn list_active_documents<'a>(
-        &'a self,
-    ) -> PersistenceFuture<
-        'a,
-        Result<Vec<(KnowledgeSourceRecord, KnowledgeDocumentRecord)>, PersistenceFailure>,
-    > {
+    fn list_active_sources(
+        &self,
+    ) -> PersistenceFuture<'_, Result<Vec<KnowledgeSourceRecord>, PersistenceFailure>> {
         Box::pin(async move {
             let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
             Ok(state
+                .knowledge_sources
+                .values()
+                .filter(|source| source.status == KnowledgeSourceStatus::Active)
+                .cloned()
+                .collect())
+        })
+    }
+
+    fn replace_source<'a>(
+        &'a self,
+        source: &'a KnowledgeSourceRecord,
+        documents: &'a [KnowledgeDocumentRecord],
+    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        Box::pin(async move {
+            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            let mut ids = std::collections::BTreeSet::new();
+            if documents
+                .iter()
+                .any(|document| document.source_id != source.id || !ids.insert(&document.id))
+            {
+                return Err(invalid_record());
+            }
+            if documents.iter().any(|document| {
+                state
+                    .knowledge_documents
+                    .get(&document.id)
+                    .is_some_and(|existing| existing.source_id != source.id)
+            }) {
+                return Err(conflict());
+            }
+            state
+                .knowledge_sources
+                .insert(source.id.clone(), source.clone());
+            state
+                .knowledge_documents
+                .retain(|_, document| document.source_id != source.id);
+            state.knowledge_documents.extend(
+                documents
+                    .iter()
+                    .map(|document| (document.id.clone(), document.clone())),
+            );
+            state.knowledge_generation += 1;
+            Ok(())
+        })
+    }
+
+    fn load_active_snapshot<'a>(
+        &'a self,
+        known_generation: Option<u64>,
+    ) -> PersistenceFuture<
+        'a,
+        Result<Option<yss_harness_contract::KnowledgeSourceSnapshot>, PersistenceFailure>,
+    > {
+        Box::pin(async move {
+            let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            if known_generation == Some(state.knowledge_generation) {
+                return Ok(None);
+            }
+            let documents = state
                 .knowledge_documents
                 .values()
                 .filter_map(|document| {
@@ -807,7 +782,33 @@ impl KnowledgeSourceStorePort for InMemoryHarnessStore {
                         .filter(|source| source.status == KnowledgeSourceStatus::Active)
                         .map(|source| (source.clone(), document.clone()))
                 })
-                .collect())
+                .collect();
+            Ok(Some(yss_harness_contract::KnowledgeSourceSnapshot {
+                generation: state.knowledge_generation,
+                documents,
+            }))
+        })
+    }
+
+    fn read_active_document<'a>(
+        &'a self,
+        document_id: &'a yss_harness_contract::KnowledgeDocumentId,
+    ) -> PersistenceFuture<
+        'a,
+        Result<Option<(KnowledgeSourceRecord, KnowledgeDocumentRecord)>, PersistenceFailure>,
+    > {
+        Box::pin(async move {
+            let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            Ok(state
+                .knowledge_documents
+                .get(document_id)
+                .and_then(|document| {
+                    state
+                        .knowledge_sources
+                        .get(&document.source_id)
+                        .filter(|source| source.status == KnowledgeSourceStatus::Active)
+                        .map(|source| (source.clone(), document.clone()))
+                }))
         })
     }
 
@@ -824,6 +825,10 @@ impl KnowledgeSourceStorePort for InMemoryHarnessStore {
                 .ok_or_else(not_found)?;
             source.status = KnowledgeSourceStatus::Deleted;
             source.updated_at = updated_at;
+            state
+                .knowledge_documents
+                .retain(|_, document| &document.source_id != source_id);
+            state.knowledge_generation += 1;
             Ok(())
         })
     }

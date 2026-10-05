@@ -5,11 +5,9 @@ use crate::messages::tool_result_json;
 use rig_agent::tool::{DynamicTool, ToolExecutionError, ToolOutput};
 use std::sync::{Arc, Mutex};
 use yss_harness_contract::{
-    AgentDriverFailure, AgentDriverFailureCode, AgentEvent, AgentEventOutput,
-    ApplyGraphEditRequest, AutomationCapabilityRequest, CapabilityFailure, CapabilityFailureCode,
-    CapabilityId, InspectDatasetProfileRequest, InspectDatasetSchemaRequest, InspectGraphRequest,
-    InspectProjectRequest, InspectResultRequest, ModelCapabilityExecutor, ModelCapabilityRequest,
-    SearchNodeCatalogRequest, StatisticalPlan, ToolDescriptor, statistical_plan_schema,
+    AgentDriverFailure, AgentDriverFailureCode, AgentEvent, AgentEventOutput, CapabilityFailure,
+    CapabilityFailureCode, CapabilityId, ModelCapabilityExecutor, ModelCapabilityRequest,
+    StatisticalPlan, ToolDescriptor, model::CapabilityInput, statistical_plan_schema,
 };
 
 use crate::arguments;
@@ -58,7 +56,7 @@ pub(crate) fn dynamic_tool(
         capability_id.as_str(),
         tool_description(capability_id),
         parameters,
-        move |_context, arguments| {
+        move |arguments| {
             let schema = Arc::clone(&schema);
             let capabilities = Arc::clone(&capabilities);
             let tasks = Arc::clone(&tasks);
@@ -106,29 +104,47 @@ pub(crate) fn dynamic_tool(
     ))
 }
 
-pub(crate) fn delegation_tool(
+pub(crate) fn worker_tool(
+    followup: bool,
     capabilities: Arc<dyn ModelCapabilityExecutor>,
     tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
     tool_failure: tokio::sync::watch::Sender<Option<AgentDriverFailure>>,
 ) -> Result<DynamicTool, AgentDriverFailure> {
-    let schema = Arc::new(
-        serde_json::to_value(yss_harness_contract::agent_task_schema())
-            .map_err(|_| invalid_response())?,
-    );
+    let (name, description, parameters) = if followup {
+        (
+            "followup_task",
+            "Continue an existing worker by runId, keeping its history, checkpoints and committed receipts. Inspect changed inputs before resuming; the host binds observed facts within the original grant. Use after partial completion or interruption instead of creating a fresh worker.",
+            serde_json::to_value(yss_harness_contract::agent_followup_schema()),
+        )
+    } else {
+        (
+            "delegate_task",
+            "Delegate a task with precise resources, permissions and completion criteria. The host captures read observations and deduplicates identical task specifications within this turn. Use followup_task to continue a previous worker.",
+            serde_json::to_value(yss_harness_contract::agent_task_schema()),
+        )
+    };
+    let schema = Arc::new(parameters.map_err(|_| invalid_response())?);
     Ok(DynamicTool::new(
-        "delegate_task",
-        "Delegate one bounded task to DataAgent, StatsAgent, PlotAgent, ReportAgent or ReviewAgent. Only Manager can use this tool. Supply exact input versions, allowed operations/resources, creation specifications, dependencies and completion criteria. Waits for a durable result with evidence; reusing an identical key returns its existing outcome.",
+        name,
+        description,
         (*schema).clone(),
-        move |_context, arguments| {
+        move |arguments| {
             let schema = schema.clone();
             let capabilities = capabilities.clone();
             let tasks = tasks.clone();
             let tool_failure = tool_failure.clone();
             Box::pin(async move {
-                let task = match arguments::decode::<yss_harness_contract::AgentTask>(
-                    arguments, &schema,
-                ) {
-                    Ok(task) => task,
+                enum Work {
+                    New(yss_harness_contract::model::AgentTaskInput),
+                    Followup(yss_harness_contract::model::AgentFollowupInput),
+                }
+                let decoded = if followup {
+                    arguments::decode(arguments, &schema).map(Work::Followup)
+                } else {
+                    arguments::decode(arguments, &schema).map(Work::New)
+                };
+                let work = match decoded {
+                    Ok(work) => work,
                     Err(error) => {
                         return tool_result_json(Err(error))
                             .map(ToolOutput::json)
@@ -142,23 +158,20 @@ pub(crate) fn delegation_tool(
                 };
                 let (sender, receiver) = tokio::sync::oneshot::channel();
                 let task = tokio::spawn(async move {
-                    let _ = sender.send(capabilities.delegate(task).await);
+                    let result = match work {
+                        Work::New(task) => capabilities.delegate(task).await,
+                        Work::Followup(request) => capabilities.followup(request).await,
+                    };
+                    let _ = sender.send(result);
                 });
                 tasks.lock().unwrap_or_else(|e| e.into_inner()).push(task);
                 let result = receiver.await.map_err(|_| {
                     runtime_tool_failure(&tool_failure, AgentDriverFailureCode::InternalFailure)
                 })?;
                 match result {
-                    Ok(outcome) => {
-                        serde_json::to_value(outcome)
-                            .map(ToolOutput::json)
-                            .map_err(|_| {
-                                runtime_tool_failure(
-                                    &tool_failure,
-                                    AgentDriverFailureCode::InternalFailure,
-                                )
-                            })
-                    }
+                    Ok(outcome) => Ok(ToolOutput::json(yss_harness_contract::model::task_outcome(
+                        &outcome,
+                    ))),
                     Err(error) => {
                         if let Some(code) = fatal_capability_failure(error.code) {
                             return Err(runtime_tool_failure(&tool_failure, code));
@@ -189,7 +202,7 @@ pub(crate) fn statistical_plan_tool(
         "propose_statistical_plan",
         "Propose a complete typed statistical plan for Harness policy validation before analytical execution. Returns accepted and the exact plan recorded by Harness after validation and persistence.",
         parameters,
-        move |_context, arguments| {
+        move |arguments| {
             let schema = Arc::clone(&schema);
             let output = Arc::clone(&output);
             let tool_failure = tool_failure.clone();
@@ -235,121 +248,126 @@ fn decode_request(
     capability_id: CapabilityId,
     arguments: serde_json::Value,
     schema: &serde_json::Value,
-) -> Result<AutomationCapabilityRequest, CapabilityFailure> {
+) -> Result<CapabilityInput, CapabilityFailure> {
     match capability_id {
+        CapabilityId::SearchKnowledge => {
+            arguments::decode(arguments, schema).map(CapabilityInput::SearchKnowledge)
+        }
+        CapabilityId::ReadKnowledge => {
+            arguments::decode(arguments, schema).map(CapabilityInput::ReadKnowledge)
+        }
         CapabilityId::InspectResource => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::InspectResource)
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectResource)
         }
         CapabilityId::ManageResource => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::ManageResource)
+            arguments::decode(arguments, schema).map(CapabilityInput::ManageResource)
         }
         CapabilityId::EditResource => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::EditResource)
+            arguments::decode(arguments, schema).map(CapabilityInput::EditResource)
         }
         CapabilityId::ExportDataset => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::ExportDataset)
+            arguments::decode(arguments, schema).map(CapabilityInput::ExportDataset)
         }
-        CapabilityId::InspectGraph => arguments::decode::<InspectGraphRequest>(arguments, schema)
-            .map(AutomationCapabilityRequest::InspectGraph),
+        CapabilityId::InspectGraph => {
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectGraph)
+        }
         CapabilityId::SearchNodeCatalog => {
-            arguments::decode::<SearchNodeCatalogRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::SearchNodeCatalog)
+            arguments::decode(arguments, schema).map(CapabilityInput::SearchNodeCatalog)
         }
         CapabilityId::InspectDatasetSchema => {
-            arguments::decode::<InspectDatasetSchemaRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::InspectDatasetSchema)
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectDatasetSchema)
         }
         CapabilityId::InspectDatasetProfile => {
-            arguments::decode::<InspectDatasetProfileRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::InspectDatasetProfile)
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectDatasetProfile)
         }
-        CapabilityId::InspectResult => arguments::decode::<InspectResultRequest>(arguments, schema)
-            .map(AutomationCapabilityRequest::InspectResult),
+        CapabilityId::InspectResult => {
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectResult)
+        }
         CapabilityId::InspectProject => {
-            arguments::decode::<InspectProjectRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::InspectProject)
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectProject)
         }
         CapabilityId::ApplyGraphEdit => {
-            arguments::decode::<ApplyGraphEditRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::ApplyGraphEdit)
+            arguments::decode(arguments, schema).map(CapabilityInput::ApplyGraphEdit)
         }
         CapabilityId::ValidateGraph => {
-            arguments::decode::<yss_harness_contract::ValidateGraphRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::ValidateGraph)
+            arguments::decode(arguments, schema).map(CapabilityInput::ValidateGraph)
         }
         CapabilityId::ExecuteGraph => {
-            arguments::decode::<yss_harness_contract::ExecuteGraphRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::ExecuteGraph)
+            arguments::decode(arguments, schema).map(CapabilityInput::ExecuteGraph)
         }
         CapabilityId::SaveGraph => {
-            arguments::decode::<yss_harness_contract::SaveGraphRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::SaveGraph)
+            arguments::decode(arguments, schema).map(CapabilityInput::SaveGraph)
         }
         CapabilityId::InspectUiIntent => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::InspectUiIntent)
+            arguments::decode(arguments, schema).map(CapabilityInput::InspectUiIntent)
         }
         CapabilityId::RequestUiIntent => {
-            arguments::decode(arguments, schema).map(AutomationCapabilityRequest::RequestUiIntent)
+            arguments::decode(arguments, schema).map(CapabilityInput::RequestUiIntent)
         }
         CapabilityId::ListGraphResults => {
-            arguments::decode::<yss_harness_contract::ListGraphResultsRequest>(arguments, schema)
-                .map(AutomationCapabilityRequest::ListGraphResults)
+            arguments::decode(arguments, schema).map(CapabilityInput::ListGraphResults)
         }
     }
 }
 
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
+        CapabilityId::SearchKnowledge => {
+            "Search statistical knowledge when background, methods or interpretation guidance is needed. Returns excerpts and passage references. Refine queries or scopes; read a passage before citing it. Sources never substitute for this project's computed results."
+        }
+        CapabilityId::ReadKnowledge => {
+            "Read a previously discovered knowledge passage. The host checks access and currentness and records its citation. If unavailable, search again."
+        }
         CapabilityId::InspectResource => {
-            "Read a project resource using its exact {kind,id} reference. Returns current version and typed contents: a graph and function signature, chart settings, paged mind topics, paged Markdown characters, or paged database rows with stable row IDs/schema/history state. offset/limit apply to characters for Doc, topics for Mind and rows for Database. Preserve content outside the returned page. Use the returned version for resource commands and edits."
+            "Read an exact resource {kind,id}. Returns its name, dirty state and typed, paged contents. metadataOnly:true omits contents. Graphs default to a paged overview; use inspect_graph for targeted details. Markdown offsets count Unicode characters. Read function contents before changing its signature. The host captures the read baseline."
         }
         CapabilityId::ManageResource => {
-            "Manage all project resources through one typed entry: create, rename, duplicate, delete or save. Creation of Database resources imports the specified CSV, Parquet, Excel or SQL source. Other resources are created by name. Existing-resource operations require the exact {kind,id} and version from inspect_resource or current committed facts. Only delete resources the user requested to remove. Returns committed changes, moves and actual new IDs; use them instead of guessing paths. Chart edits persist immediately; saving a Chart does not reach a separate unsaved GUI draft. Doc/Mind and database edits use their existing edit/save lifecycle."
+            "Create, rename, duplicate, delete or save an authorized resource. Create Databases from the specified source; create other resources by name. Use actual IDs and moves from receipts. Inspect a newly created or renamed resource before further edits or saves. Doc/Mind edits require explicit save; Chart edits persist immediately. Delete only requested resources."
         }
         CapabilityId::EditResource => {
-            "Edit typed resource contents using its current version: replace Chart settings and persist, apply an atomic Mind tree batch, change Markdown by complete replacement or character-range edits, apply one Database row/column/history operation, update Function signature, or undo/redo Graph history. Mind add_node declares clientId; later operations can refer to $clientId. IDs for new nodes/parameters are allocated by the host. Doc/Mind edits remain unsaved until manage_resource save; database operations retain their normal history/checkpoint behavior. Reinspect after version conflicts; do not reconstruct unseen Markdown/tree/data pages."
+            "Edit Chart settings, an atomic Mind tree batch, Markdown, Database rows/columns/history, function signature or graph history. The host binds the task's read baseline. Mind add_node declares clientId aliases referenced as $clientId; IDs for new nodes/parameters are host allocated. Save Doc/Mind after editing. Preserve unread content. On a conflict, return to the Manager to reassess the changed task."
         }
         CapabilityId::ExportDataset => {
-            "Export the current version of a project Database to the user-specified CSV or Parquet file using the normal database export owner. Requires a Database reference and current version. Returns the actual destination after successful publication. Do not claim success or blindly retry if publication outcome is uncertain."
+            "Export an authorized Database to the requested CSV or Parquet path. The host binds the captured resource. Returns the actual destination after publication; uncertain outcomes must be checked before retrying."
         }
         CapabilityId::InspectUiIntent => {
-            "Inspect a workbench intent receipt by ID to determine whether a requested UI operation is pending, claimed, applied, failed or expired."
+            "Inspect a workbench intent receipt by ID: pending, claimed, applied, failed or expired."
         }
         CapabilityId::RequestUiIntent => {
-            "Request opening any existing project resource with openResource and its exact {kind,id}; nodeId is optional for Event/Function Graph node focus only. Also supports opening a retained result or revealing an allowed panel. Use a unique clientKey, reused only for the identical request. Pending is acceptance, not success: inspect the receipt ID until applied/failed/expired. Requires the workbench to be attached; does not edit/save project data or own FlexLayout."
+            "Request opening a resource with exact {kind,id}, a retained result, or an allowed panel. nodeId optionally focuses a graph node. A pending/claimed receipt only acknowledges acceptance; inspect its ID before claiming completion. Does not edit or save data."
         }
         CapabilityId::InspectGraph => {
-            "Inspect the current Project graph by graphPath, whether or not an editor panel is open: revision, graphHash, semanticInputHash, ready, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Establish a baseline before editing or running; later successful edit/save receipts provide fresh facts and revisions. Inspect again when required facts are missing, the semantic baseline differs or a version conflict occurs."
+            "Read graph facts without executing nodes. Default view:overview pages node identities/names, counts and readiness. view:nodes includes parameter values and variable-pin templates; includeOptions adds current choices. view:ports includes addresses/types/constraints/literals; includeSchema adds columns. nodeIds filters nodes, ports and incident connections; portAddresses narrows ports. Diagnostics and constants have separate views. Follow page.nextOffset for additional needed items; omitted fields are unknown. view:full is expensive. Reuse committed edit facts and read only missing details. Execution outputs come from inspect_result."
         }
         CapabilityId::SearchNodeCatalog => {
-            "Search node IDs, localized names, aliases and technical terms. Use concise terms (e.g. decompose, ols, multiply) or node type IDs. Set includeParameters=true to read parameter definitions, defaults, constraints and configurable initial port counts before creating a node."
+            "Search node IDs, names, aliases and technical terms. Use concise terms or type IDs. includeParameters:true returns configurationSchema for parameters and portCounts plus pin declarations. Supply both maps in one create_node operation. Omitted values use defaults or remain incomplete; null resets. x-yss-requiredForExecution marks runtime requirements; x-yss-activeWhen describes conditional fields; x-yss-linkedPorts configures a shared pin count. Read connected choices through inspect_graph view:nodes includeOptions:true."
         }
         CapabilityId::InspectDatasetSchema => {
-            "Inspect a bounded dataset schema and its current runtime/schema revisions."
+            "Read dataset columns, physical types, semantic annotations and nullability. The host captures data currentness."
         }
         CapabilityId::InspectDatasetProfile => {
-            "Inspect bounded data-quality and shape statistics. null metrics (including duplicatedRows) mean unknown or not computed, never zero."
+            "Read dataset quality/profile facts. Null metrics mean unknown or not computed, never zero."
         }
         CapabilityId::InspectResult => {
-            "Read the complete result JSON produced by YssBI, including all nested fields and data references. DataFrame/DataSeries values are paged, never expanded in full. To read a tableRef from the JSON, call inspect_result with its resultRef.executionSessionId, resultRef.resultId and part. Execution sessions change on project restart; rediscover current result references instead of reusing stale IDs. offset and limit paginate rows; use nextOffset only when hasMore is true."
+            "Read complete result JSON, including nested fields and table references. DataFrame/DataSeries values are paged. To read tableRef use its resultRef.executionSessionId, resultRef.resultId and part. Follow nextOffset only while hasMore. Old execution references can expire; rediscover current results after project restart."
         }
         CapabilityId::InspectProject => {
-            "List all six project resource kinds with exact resource {kind,id}, displayName and current resource revision, including closed files. Reuse resource for inspect_resource/manage_resource/edit_resource and UI openResource. For graph-specific tools use resource.id as graphPath. Project membership comes from the project index; listing does not read resource contents or dataset rows."
+            "List all six project resource kinds with exact resource {kind,id} and displayName, including closed files. Reuse resource.id as graphPath. Listing does not read contents or data rows."
         }
         CapabilityId::ApplyGraphEdit => {
-            "Apply one atomic, undoable batch to the current Project graph after the user requests edits. No editor panel is required. Use baseRevision and graphHash from the latest inspection or committed receipt (toRevision for edits, resourceRevision for saves); use a unique clientKey per batch. Create nodes with parameters and portCounts (empty maps for defaults) in one operation. With clientId, reference the node as $clientId and initial variable input instances as $clientId.templateKey[0] in instanceId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters atomically merges supplied keys with current parameters; null resets a field to its protocol default. Conditional fields are resolved by the host. Each successful batch automatically persists the complete current graph and retains undo history. File, document, history and receipt commit together; a save failure does not apply the batch. Returns toRevision, graphHash and changes with complete changed nodes/parameters/ports/derived columns, changed connections and order, removals, constants, ready and complete diagnostics. Reuse the returned facts for subsequent edits or execution without inspecting again; apply the changes only to a matching fromRevision and baseSemanticInputHash. Unchanged entities are omitted. Replayed receipts retain the original facts. Oversized receipts are rejected before commit; use smaller batches."
+            "Apply and save an atomic, undoable graph edit batch. The host binds the task's observed graph and deduplicates retries. Create nodes with parameters and portCounts (empty maps for defaults) at once. clientId aliases use $clientId; initial variable pins use $clientId.templateKey[0] in instanceId. Supports node/connection/parameter/literal/constant and variable-pin edits. set_parameters merges keys; null resets defaults. Returns actual created IDs and committed changes: complete changed nodes, ports, parameters, connections, removals, constants, readiness and diagnostics. Reuse them for subsequent edits or execution. Unchanged entities are omitted; preserve unrelated content. A save failure leaves the batch uncommitted; oversized receipts require smaller batches."
         }
         CapabilityId::ValidateGraph => {
-            "Validate the current graph using graphHash from the latest inspection or successful edit receipt. The edit receipt already includes ready and diagnostics for its commit. Returns readiness and blocking diagnostics from editor analysis. This optional read-only check does not save, prepare an execution plan, or execute."
+            "Read current readiness and blocking diagnostics. Edit receipts already contain these facts. This optional check does not save or execute; the host binds the observed graph."
         }
         CapabilityId::ExecuteGraph => {
-            "Execute the current graph using its current graphHash and explicit demand. Use {type:default} for the full graph, or {type:node,nodeId,mode:currentInputs} to run one node using already evaluated current inputs. Use mode:dependencies to run to a node and compute missing dependencies; unrelated unfinished nodes do not block this scope. Missing or stale inputs return input_result_unavailable with a source location. Only evaluated results are returned; internal query plans remain deferred. Prepares its execution plan automatically; no prior validation call or artifact ID is required. Returns actual run status, failures and result references captured from this run's committed handoff. resultCount is the number published on success (null on failure); resultsComplete=false means the bounded references are not the complete output list. Use returned references directly with inspect_result for needed content, without listing the same results again. Later edits or runs do not change this receipt; referenced results still require availability checks. Does not save."
+            "Execute with explicit demand: {type:default} reruns the graph; {type:node,nodeId,mode:currentInputs} consumes existing inputs; mode:dependencies computes missing dependencies. Unrelated incomplete branches do not block node scope. The host binds the observed graph and prepares its plan. Check actual status and failures. Use returned result references directly with inspect_result. resultCount is null on failure; resultsComplete:false means references are partial. Does not save."
         }
         CapabilityId::SaveGraph => {
-            "Save the current graph only when the user requests saving. Pass the current graphHash. Uses the normal Save operation and clears its undo history. Returns fromRevision, resourceRevision, graphHash and the committed dirty/canUndo/canRedo state. Use resourceRevision as the next baseRevision without an inspection solely to refresh the version. These facts describe this save, not later edits."
+            "Save current manual graph changes when requested. Graph edit batches already save automatically. Returns committed dirty/canUndo/canRedo state; the host binds and advances the captured baseline."
         }
         CapabilityId::ListGraphResults => {
-            "List currently retained result IDs, run IDs and output ports for a graph, including manual runs. Use these IDs with inspect_result; do not ask the user to invent or locate an ID."
+            "List currently retained result references, run IDs and output ports, including manual runs. Use the returned references with inspect_result."
         }
     }
 }

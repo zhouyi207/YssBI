@@ -3,8 +3,8 @@ use crate::{CompiledWorkflow, HarnessError, HarnessHost, ToolRegistry, WorkflowR
 use std::sync::{Arc, Mutex, Weak};
 use yss_harness_contract::{
     AutomationIdKind, CancellationReason, CancellationToken, CapabilityFailureCode, HarnessEvent,
-    HarnessSessionId, HarnessSessionState, HarnessTurnId, ModelCapabilityRequest, WorkflowRunId,
-    WorkflowRunRecord, WorkflowRunState,
+    HarnessSessionId, HarnessSessionState, HarnessTurnId, WorkflowRunId, WorkflowRunRecord,
+    WorkflowRunState,
 };
 
 impl HarnessHost {
@@ -179,6 +179,7 @@ impl HarnessHost {
         let executor = HarnessToolExecutor::new_for_workflow(
             ToolRegistry::for_capability(request.capability_id()),
             Arc::clone(&self.ports.capability_gateway),
+            Arc::clone(&self.knowledge),
             Arc::clone(&self.ports.tool_ledger),
             Arc::clone(&self.ports.clock),
             Arc::clone(&self.ports.ids),
@@ -193,11 +194,7 @@ impl HarnessHost {
         // Pause/cancel can acquire the transition gate while the owner
         // waits on the capability. A second advance still cannot enter.
         drop(transition);
-        let outcome = executor
-            .execute(ModelCapabilityRequest {
-                request: request.clone(),
-            })
-            .await;
+        let outcome = executor.execute(request.clone(), None).await;
         let _completion = control.transitions.lock().await;
         let current = self
             .ports
@@ -497,4 +494,3 @@ impl Drop for WorkflowAdmission {
             .take();
     }
 }
-use yss_harness_contract::ModelCapabilityExecutor;

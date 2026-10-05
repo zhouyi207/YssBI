@@ -1,5 +1,9 @@
 //! Harness startup and project-session coordination over injected neutral ports.
 
+pub mod knowledge;
+pub mod models;
+pub(crate) mod resources;
+
 use std::sync::Arc;
 use thiserror::Error;
 use yss_harness_contract::{
@@ -34,6 +38,44 @@ pub enum HarnessSessionError {
 }
 
 impl ApplicationState {
+    pub async fn select_harness_model(
+        &self,
+        host: &HarnessHost,
+        principal: &PrincipalId,
+        session_id: &HarnessSessionId,
+        model: yss_harness_contract::LanguageModelSelection,
+    ) -> Result<HarnessSessionRecord, HarnessSessionError> {
+        let (captured, _binding, key) = self.harness_conversation_scope()?;
+        let mut access = host.session_access().await;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        let session = access
+            .select_model(session_id, principal, &key, model)
+            .await?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        Ok(session)
+    }
+
+    pub async fn rename_harness_session(
+        &self,
+        host: &HarnessHost,
+        principal: &PrincipalId,
+        session_id: &HarnessSessionId,
+        title: String,
+    ) -> Result<HarnessSessionRecord, HarnessSessionError> {
+        let (captured, _binding, key) = self.harness_conversation_scope()?;
+        let mut access = host.session_access().await;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        let session = access
+            .rename_conversation(session_id, principal, &key, title)
+            .await?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        Ok(session)
+    }
+
     pub async fn initialize_harness(
         &self,
         ports: HarnessPorts,
@@ -205,7 +247,10 @@ mod tests {
         ids: Arc<SequentialIds>,
     ) -> HarnessPorts {
         HarnessPorts {
-            agent_driver: Arc::new(MockAgentDriver::new("Saved answer")),
+            resources: Arc::new(yss_harness_core::test_support::FixtureResourceResolver),
+            models: yss_harness_core::test_support::fixed_model(Arc::new(MockAgentDriver::new(
+                "Saved answer",
+            ))),
             capability_gateway: Arc::new(RejectingCapabilityGateway),
             sessions: store.clone(),
             events: store.clone(),
@@ -213,7 +258,7 @@ mod tests {
             workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
-            memory: store.clone(),
+            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             approvals: store,
             clock,
             ids,
@@ -258,6 +303,7 @@ mod tests {
             &first.id,
             &first.project,
             "Remember the first conversation".into(),
+            vec![],
             None,
         )
         .await
@@ -271,6 +317,7 @@ mod tests {
             &second.id,
             &second.project,
             "Keep the second conversation separate".into(),
+            vec![],
             None,
         )
         .await
@@ -303,6 +350,46 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(sessions.len(), 2);
+        let project_id = application
+            .capture_session()
+            .unwrap()
+            .project_instance_id()
+            .clone();
+        let document = application
+            .assistant_activity_panel(&host, &principal, Some(project_id.clone()))
+            .await
+            .unwrap();
+        assert_eq!(document.panel_id, "assistant");
+        assert_eq!(document.project_instance_id, Some(project_id.to_string()));
+        assert_eq!(document.tools[0].id, "newConversation");
+        assert_eq!(document.rows.len(), 2);
+        for (row, session) in document.rows.iter().zip(&sessions) {
+            let crate::activity_panel::ActivityRowContent::Item(
+                crate::activity_panel::ActivityItem::Conversation {
+                    session_id,
+                    title,
+                    last_opened_at,
+                },
+            ) = &row.content
+            else {
+                panic!("expected conversation row");
+            };
+            assert_eq!(row.id, format!("conversation:{}", session.id));
+            assert_eq!(*session_id, session.id.to_string());
+            let metadata = session.conversation.as_ref().unwrap();
+            assert_eq!(*title, metadata.title);
+            assert_eq!(*last_opened_at, metadata.last_opened_at.get());
+        }
+        assert!(matches!(
+            application
+                .assistant_activity_panel(
+                    &host,
+                    &principal,
+                    Some(first.project.project_instance_id().clone()),
+                )
+                .await,
+            Err(HarnessSessionError::Changed)
+        ));
         assert_eq!(sessions[0].id, first.id);
         assert_eq!(
             sessions[0].conversation.as_ref().unwrap().title,
@@ -327,6 +414,7 @@ mod tests {
             &restored.id,
             &restored.project,
             "Continue the first conversation".into(),
+            vec![],
             None,
         )
         .await
@@ -335,7 +423,7 @@ mod tests {
             events
                 .into_iter()
                 .filter_map(|event| match event.event {
-                    yss_harness_contract::HarnessEvent::TurnStarted { user_message } => {
+                    yss_harness_contract::HarnessEvent::TurnStarted { user_message, .. } => {
                         Some(user_message)
                     }
                     _ => None,
@@ -355,9 +443,14 @@ mod tests {
         );
         assert!(
             application
-                .list_harness_sessions(&host, &PrincipalId::try_new("another-user").unwrap())
+                .assistant_activity_panel(
+                    &host,
+                    &PrincipalId::try_new("another-user").unwrap(),
+                    Some(project_id)
+                )
                 .await
                 .unwrap()
+                .rows
                 .is_empty()
         );
 
@@ -375,9 +468,10 @@ mod tests {
         let another_application = project_application(another_project);
         assert!(
             another_application
-                .list_harness_sessions(&host, &principal)
+                .assistant_activity_panel(&host, &principal, None)
                 .await
                 .unwrap()
+                .rows
                 .is_empty()
         );
         assert!(
@@ -398,7 +492,10 @@ mod tests {
         let application = ApplicationState::initialize().unwrap();
         let store = Arc::new(InMemoryHarnessStore::default());
         let ports = HarnessPorts {
-            agent_driver: Arc::new(MockAgentDriver::new("unused")),
+            resources: Arc::new(yss_harness_core::test_support::FixtureResourceResolver),
+            models: yss_harness_core::test_support::fixed_model(Arc::new(MockAgentDriver::new(
+                "unused",
+            ))),
             capability_gateway: Arc::new(RejectingCapabilityGateway),
             sessions: store.clone(),
             events: store.clone(),
@@ -406,7 +503,7 @@ mod tests {
             workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
-            memory: store.clone(),
+            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             approvals: store.clone(),
             clock: Arc::new(FixedClock::new(2_000)),
             ids: Arc::new(SequentialIds::default()),
@@ -445,16 +542,19 @@ mod tests {
             HarnessSessionState::Stale
         );
         assert!(
-            !KnowledgeService::new(store.clone())
-                .search(KnowledgeQuery {
-                    text: "quality".into(),
-                    scopes: Vec::new(),
-                    project: None,
-                    limit: 5,
-                })
-                .await
-                .unwrap()
-                .is_empty()
+            !KnowledgeService::new(
+                store.clone(),
+                Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex)
+            )
+            .search(KnowledgeQuery {
+                text: "quality".into(),
+                scopes: Vec::new(),
+                project: None,
+                limit: 5,
+            })
+            .await
+            .unwrap()
+            .is_empty()
         );
 
         let session = application

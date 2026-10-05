@@ -5,13 +5,13 @@ use std::task::Poll;
 use std::time::Duration;
 
 use yss_harness_contract::{
-    AgentEvent, AgentEventOutput, ApprovalGrantId, AutomationIdKind, CancellationToken,
-    CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityGatewayPort,
-    CapabilityId, CapabilityInvocationContext, CapabilityInvocationId, ClockPort, HarnessSessionId,
-    HarnessTurnId, IdGeneratorPort, IdempotencyKey, ModelCapabilityExecutor,
-    ModelCapabilityOutcome, ModelCapabilityRequest, PrincipalId, ProjectSessionBinding,
-    ToolDescriptor, ToolEffect, ToolInvocationBegin, ToolInvocationId, ToolInvocationLedgerPort,
-    ToolInvocationRecord, ToolInvocationState, WorkflowRunId, WorkflowStepId,
+    AgentEvent, AgentEventOutput, ApprovalGrantId, AutomationCapabilityRequest, AutomationIdKind,
+    CancellationToken, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
+    CapabilityGatewayPort, CapabilityId, CapabilityInvocationContext, CapabilityInvocationId,
+    ClockPort, HarnessSessionId, HarnessTurnId, IdGeneratorPort, IdempotencyKey,
+    ModelCapabilityOutcome, PrincipalId, ProjectSessionBinding, ToolDescriptor, ToolEffect,
+    ToolInvocationBegin, ToolInvocationId, ToolInvocationLedgerPort, ToolInvocationRecord,
+    ToolInvocationState, WorkflowRunId, WorkflowStepId,
 };
 
 #[derive(Clone, Debug)]
@@ -57,6 +57,7 @@ impl ToolRegistry {
 pub(crate) struct HarnessToolExecutor {
     registry: ToolRegistry,
     gateway: Arc<dyn CapabilityGatewayPort>,
+    knowledge: Arc<crate::KnowledgeService>,
     ledger: Arc<dyn ToolInvocationLedgerPort>,
     clock: Arc<dyn ClockPort>,
     ids: Arc<dyn IdGeneratorPort>,
@@ -73,6 +74,16 @@ pub(crate) struct HarnessToolExecutor {
 }
 
 impl HarnessToolExecutor {
+    pub(crate) fn new_call_key(&self) -> Result<String, CapabilityFailure> {
+        let id = self
+            .ids
+            .next_id(AutomationIdKind::ToolInvocation)
+            .map_err(|_| persistence_unavailable())?;
+        let digest = yss_canonical_hash::hash_canonical("yssbi.harness.call", &id)
+            .map_err(|_| persistence_unavailable())?;
+        Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+    }
+
     #[allow(
         clippy::too_many_arguments,
         reason = "the executor captures one explicit invocation authority envelope"
@@ -80,6 +91,7 @@ impl HarnessToolExecutor {
     pub(crate) fn new(
         registry: ToolRegistry,
         gateway: Arc<dyn CapabilityGatewayPort>,
+        knowledge: Arc<crate::KnowledgeService>,
         ledger: Arc<dyn ToolInvocationLedgerPort>,
         clock: Arc<dyn ClockPort>,
         ids: Arc<dyn IdGeneratorPort>,
@@ -92,6 +104,7 @@ impl HarnessToolExecutor {
         Self {
             registry,
             gateway,
+            knowledge,
             ledger,
             clock,
             ids,
@@ -115,6 +128,7 @@ impl HarnessToolExecutor {
     pub(crate) fn new_for_workflow(
         registry: ToolRegistry,
         gateway: Arc<dyn CapabilityGatewayPort>,
+        knowledge: Arc<crate::KnowledgeService>,
         ledger: Arc<dyn ToolInvocationLedgerPort>,
         clock: Arc<dyn ClockPort>,
         ids: Arc<dyn IdGeneratorPort>,
@@ -129,6 +143,7 @@ impl HarnessToolExecutor {
         Self {
             registry,
             gateway,
+            knowledge,
             ledger,
             clock,
             ids,
@@ -152,6 +167,7 @@ impl HarnessToolExecutor {
     pub(crate) fn new_approved(
         registry: ToolRegistry,
         gateway: Arc<dyn CapabilityGatewayPort>,
+        knowledge: Arc<crate::KnowledgeService>,
         ledger: Arc<dyn ToolInvocationLedgerPort>,
         clock: Arc<dyn ClockPort>,
         ids: Arc<dyn IdGeneratorPort>,
@@ -164,6 +180,7 @@ impl HarnessToolExecutor {
         Self {
             registry,
             gateway,
+            knowledge,
             ledger,
             clock,
             ids,
@@ -203,23 +220,24 @@ impl HarnessToolExecutor {
         Ok(())
     }
 
-    async fn execute_request(
+    pub(crate) async fn execute(
         &self,
-        request: ModelCapabilityRequest,
+        request: AutomationCapabilityRequest,
+        graph_observation: Option<String>,
     ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
         let agent = self
             .agent
             .as_ref()
             .map(|scope| scope.lock().unwrap_or_else(|e| e.into_inner()).clone());
         if let Some(scope) = &agent {
-            crate::authorize_agent_capability(scope, &request.request)?;
+            crate::authorize_agent_capability(scope, &request)?;
         }
-        let capability_id = request.request.capability_id();
+        let capability_id = request.capability_id();
         let descriptor = self.registry.descriptor(capability_id).ok_or_else(|| {
             CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
                 .with_detail("capabilityId", capability_id.as_str())
         })?;
-        request.request.validate().map_err(|_| {
+        request.validate().map_err(|_| {
             CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
                 .with_detail("capabilityId", capability_id.as_str())
         })?;
@@ -232,7 +250,7 @@ impl HarnessToolExecutor {
             .map_err(|_| persistence_unavailable())?;
         let idempotency_key =
             if let yss_harness_contract::AutomationCapabilityRequest::ApplyGraphEdit(edit) =
-                &request.request
+                &request
             {
                 let digest = yss_canonical_hash::hash_canonical(
                     "yssbi.assistant.graph-edit.idempotency.v1",
@@ -268,7 +286,7 @@ impl HarnessToolExecutor {
             workflow_step_id: self.workflow_step_id.clone(),
             project: self.project.clone(),
             capability_id,
-            request: request.request.clone(),
+            request: request.clone(),
             state: ToolInvocationState::Running,
             result: None,
             failure: None,
@@ -284,7 +302,7 @@ impl HarnessToolExecutor {
         {
             ToolInvocationBegin::Started => {}
             ToolInvocationBegin::Existing(existing) => {
-                if existing.request != request.request
+                if existing.request != request
                     || existing.project != self.project
                     || existing.session_id != self.session_id
                 {
@@ -296,7 +314,9 @@ impl HarnessToolExecutor {
             }
         }
 
-        let context = self.invocation_context(&record.idempotency_key)?;
+        let context = self
+            .invocation_context(&record.idempotency_key)?
+            .with_graph_observation(graph_observation.clone());
         let control = CapabilityControl::new(
             self.cancellation.clone(),
             Duration::from_millis(deadline.get().saturating_sub(self.clock.now().get())),
@@ -311,14 +331,20 @@ impl HarnessToolExecutor {
                 .await
             }
         };
+        let mut citation = None;
         let mut outcome = match started {
             Err(error) => Err(error),
             Ok(()) => {
                 // Catch adapter panics while polling so the authoritative ledger still closes.
                 let mut invocation = Box::pin(async {
-                    self.gateway
-                        .invoke(context.clone(), request.request, control.clone())
-                        .await
+                    match request {
+                        request @ (yss_harness_contract::AutomationCapabilityRequest::SearchKnowledge(_)
+                        | yss_harness_contract::AutomationCapabilityRequest::ReadKnowledge(_)) => {
+                            self.knowledge.invoke(request, &self.project, &control).await
+                        }
+                        request => self.gateway.invoke(context.clone(), request, control.clone()).await
+                            .map(|result| (result, None)),
+                    }
                 });
                 poll_fn(|context| {
                     match catch_unwind(AssertUnwindSafe(|| invocation.as_mut().poll(context))) {
@@ -329,6 +355,10 @@ impl HarnessToolExecutor {
                     }
                 })
                 .await
+                .map(|(result, observed)| {
+                    citation = observed;
+                    result
+                })
             }
         };
         if outcome.as_ref().is_err_and(|failure| {
@@ -350,6 +380,19 @@ impl HarnessToolExecutor {
             outcome = Err(CapabilityFailure::new(
                 CapabilityFailureCode::InternalFailure,
             ));
+        }
+        if let (Some(scope), Ok(result)) = (&agent, &outcome)
+            && let Err(failure) = crate::agents::validate_agent_read(scope, result)
+        {
+            outcome = Err(failure);
+        }
+        if let (Some(expected), Ok(result)) = (graph_observation.as_deref(), &outcome)
+            && graph_read_inputs(result).is_some_and(|actual| actual != expected)
+        {
+            outcome = Err(
+                CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+                    .with_detail("reason", "graph_inputs_changed"),
+            );
         }
         if outcome.as_ref().is_ok_and(|result| {
             result
@@ -407,7 +450,22 @@ impl HarnessToolExecutor {
         if !committed {
             delivery?;
         }
+        if let Ok(yss_harness_contract::AutomationCapabilityResult::GraphExecution(execution)) =
+            &outcome
+        {
+            self.emit(AgentEvent::GraphExecutionFinished {
+                invocation_id: invocation_id.clone(),
+                status: execution.status.clone(),
+                failure_code: execution.failure_code.clone(),
+            })
+            .await?;
+        }
 
+        if outcome.is_ok()
+            && let Some(citation) = citation
+        {
+            self.emit(AgentEvent::KnowledgeCited { citation }).await?;
+        }
         outcome.map(|result| ModelCapabilityOutcome {
             invocation_id,
             result,
@@ -471,16 +529,6 @@ impl HarnessToolExecutor {
     }
 }
 
-impl ModelCapabilityExecutor for HarnessToolExecutor {
-    fn execute<'a>(
-        &'a self,
-        request: ModelCapabilityRequest,
-    ) -> yss_harness_contract::AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>>
-    {
-        Box::pin(async move { self.execute_request(request).await })
-    }
-}
-
 fn replay_existing(
     existing: ToolInvocationRecord,
 ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
@@ -500,6 +548,20 @@ fn replay_existing(
 
 fn persistence_unavailable() -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::PersistenceUnavailable)
+}
+
+fn graph_read_inputs(result: &yss_harness_contract::AutomationCapabilityResult) -> Option<&str> {
+    use yss_harness_contract::{AutomationCapabilityResult as Result, ResourceContent};
+    match result {
+        Result::GraphInspection(value) => Some(&value.semantic_input_hash),
+        Result::GraphInspectionPage(value) => Some(&value.semantic_input_hash),
+        Result::ResourceInspection(value) => match &value.content {
+            ResourceContent::Graph { graph, .. } => Some(&graph.semantic_input_hash),
+            ResourceContent::GraphPage { graph, .. } => Some(&graph.semantic_input_hash),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -567,6 +629,10 @@ mod tests {
             let executor = HarnessToolExecutor::new(
                 ToolRegistry::for_agent(yss_harness_contract::AgentRole::Review),
                 Arc::new(FailingGateway(mode, clock.clone())),
+                Arc::new(crate::KnowledgeService::new(
+                    store.clone(),
+                    Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+                )),
                 store.clone(),
                 clock,
                 Arc::new(SequentialIds::default()),
@@ -581,13 +647,14 @@ mod tests {
             )
             .with_output(output.clone());
             let result = executor
-                .execute(ModelCapabilityRequest {
-                    request: AutomationCapabilityRequest::InspectDatasetProfile(
+                .execute(
+                    AutomationCapabilityRequest::InspectDatasetProfile(
                         InspectDatasetProfileRequest {
                             database_id: "data-1".into(),
                         },
                     ),
-                })
+                    None,
+                )
                 .await;
             assert_eq!(result.unwrap_err().code, expected);
             let records = store.tool_invocations();
@@ -756,6 +823,10 @@ mod tests {
         let executor = HarnessToolExecutor::new(
             ToolRegistry::for_agent(yss_harness_contract::AgentRole::Stats),
             gateway.clone(),
+            Arc::new(crate::KnowledgeService::new(
+                store.clone(),
+                Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            )),
             Arc::new(FailFirstFinish(store.clone(), AtomicBool::new(true))),
             Arc::new(FixedClock::new(1000)),
             Arc::new(SequentialIds::default()),
@@ -784,9 +855,10 @@ mod tests {
             }],
         };
         let first = executor
-            .execute(ModelCapabilityRequest {
-                request: AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
-            })
+            .execute(
+                AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -794,9 +866,10 @@ mod tests {
             ToolInvocationState::Running
         );
         let retry = executor
-            .execute(ModelCapabilityRequest {
-                request: AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
-            })
+            .execute(
+                AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(first, retry);
@@ -805,17 +878,16 @@ mod tests {
             ToolInvocationState::Succeeded
         );
         let retained = executor
-            .execute(ModelCapabilityRequest {
-                request: AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
-            })
+            .execute(
+                AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
+                None,
+            )
             .await
             .unwrap();
         assert_eq!(retained, first);
         edit.base_revision = 1;
         let conflict = executor
-            .execute(ModelCapabilityRequest {
-                request: AutomationCapabilityRequest::ApplyGraphEdit(edit),
-            })
+            .execute(AutomationCapabilityRequest::ApplyGraphEdit(edit), None)
             .await
             .unwrap_err();
         assert_eq!(conflict.code, CapabilityFailureCode::InvocationConflict);

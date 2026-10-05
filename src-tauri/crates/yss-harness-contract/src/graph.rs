@@ -7,6 +7,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+mod inspection;
+pub use inspection::*;
+
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GraphConstantLiteral {
@@ -207,12 +210,6 @@ pub(crate) fn validate_graph_json(value: &impl Serialize) -> Result<(), Capabili
         });
     }
     Ok(())
-}
-
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct InspectGraphRequest {
-    pub graph_path: String,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -538,6 +535,7 @@ pub struct GraphConnectionInspection {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphInspection {
+    pub version: crate::ResourceVersion,
     pub graph_path: String,
     pub semantic_input_hash: String,
     pub ready: bool,

@@ -1,5 +1,6 @@
 use crate::{activity_panel, session::ApplicationState};
 use tauri::{Manager, State, WebviewWindow};
+use yss_harness_contract::PrincipalId;
 use yss_plugin_runtime::PluginManager;
 use yss_project_identity::ProjectInstanceId;
 
@@ -40,6 +41,21 @@ pub async fn get_activity_panel_document(
     let manager = manager.inner().clone();
     let sync = window.state::<ActivityPanelSyncState>().inner().clone();
     let window_label = window.label().to_owned();
+    if panel_id == ActivityPanelId::Assistant {
+        let runtime = window.state::<super::command_harness::HarnessRuntimeState>();
+        let principal =
+            PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?;
+        let document = application
+            .assistant_activity_panel(runtime.host(), &principal, project_instance_id)
+            .await
+            .map_err(super::command_harness::map_session_error)?;
+        return sync.publish(
+            &window_label,
+            &locale,
+            cursor.as_deref(),
+            ActivityPanelDocumentDto::try_from(document)?,
+        );
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let document = match panel_id {
             ActivityPanelId::Project => match project_instance_id {
@@ -61,6 +77,7 @@ pub async fn get_activity_panel_document(
                     .list()
                     .map_err(super::command_plugin::plugin_error)?,
             ),
+            ActivityPanelId::Assistant => unreachable!("assistant projection is asynchronous"),
         };
         sync.publish(
             &window_label,

@@ -101,7 +101,7 @@ Application initialization directly constructs the concrete `CommandRuntime`, ob
 
 `tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Structured runtime observations are submitted through Rust tracing or the frontend LogService. Application has no separate operational-diagnostic command registry or stream. See [Runtime Signals](../../../../../src/features/application/observability/README.md).
 
-`HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal Application capabilities and read-only graph receipt recovery. Graph activity is a separate projection channel. Logging, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
+`HarnessRuntimeState` holds the Host, model and project knowledge services, and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal Application capabilities and read-only graph receipt recovery. Graph activity is a separate projection channel. Logging, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
 
 Native window geometry uses the official Window State plugin registered by the composition root.
 There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
@@ -143,10 +143,28 @@ SCI runtime; numerical rules remain in `yss-sci` and shared data/control types i
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 
 Desktop Harness commands expose provider configuration, session creation/listing/reopening,
-event subscriptions, turn submission/cancellation and memory management. DataAgent uses the
+event subscriptions, turn submission/cancellation and tool/citation inspection. DataAgent uses the
 existing dataset schema/profile capabilities for quality inspection. Generic workflow control
 remains a Core API, with its states delivered through the shared event stream.
-Provider configuration replies carry the current configured status consumed by Assistant.
+Project knowledge commands expose `list_harness_knowledge`, `rebuild_harness_knowledge` and
+`remove_harness_knowledge`. They delegate to the Application knowledge service and bind the
+captured desktop project identity. Citation inspection returns a verified passage and an optional
+original document reference; it does not expand the whole document. Source lifecycle and read
+validation are owned by the [Harness contract](../../../yss-harness-core/README.md).
+
+Model commands expose `list_harness_models`, `save_harness_provider`, `delete_harness_provider`,
+`discover_harness_models`, `set_default_harness_model` and `select_harness_model`.
+`discover_harness_models` takes `request: { config, apiKey }` and queries the current connection
+draft without saving it. An input key overrides the saved credential only for this request;
+null reuses the saved credential for `config.id`. Model definitions do not affect discovery.
+The Application model service owns the persisted catalogue and OS credential references. Replies
+contain provider metadata and `hasApiKey`, never credentials. Model selection updates conversation
+metadata; submit carries a captured model and explicit `resources: [{kind,id}]` for queued messages.
+Core admits cancellation before resolving references and models. Its neutral resource port uses
+Application's Project index on the blocking pool, checking the original project binding. Late
+lookup results after cancellation cannot start inference or publish a turn. Missing references fail
+before inference and leave the frontend input recoverable. Core resolves one immutable driver
+per turn, shared by its workers. Model settings failures remain local to model operations.
 
 Graph tools call Application directly through the capability gateway. Application reads the Project-owned editing state and validates the current revision/hash before editing, validating, running or saving. Rust returns the capability result; Graph Activity carries editing and execution notifications to frontend consumers.
 
@@ -275,8 +293,13 @@ Project registration commands consume Application's process-wide `ProjectManagem
 
 ## Activity panel projection
 
-`get_activity_panel_document` accepts Project, Nodes, Commands or Plugins, locale, and explicit project identity
-for Project/Nodes. A null project requests empty documents; Commands/Plugins require null.
+`get_activity_panel_document` accepts Project, Nodes, Commands, Plugins or Assistant, locale, and explicit project identity
+for Project/Nodes/Assistant. A null project requests empty Project/Nodes documents; Commands/Plugins require null.
+Assistant reads conversations for the current principal and project through the Harness session access gate,
+revalidating the captured application session and requested identity. With null identity it uses the current temporary
+conversation scope. Assistant remains a standalone query and is not accepted in ProjectIndex's Project/Nodes batch.
+Its conversation items contain only sessionId, title and lastOpenedAt; the Rust document also supplies the title,
+newConversation tool and empty state. Frontend mutations invalidate this document instead of publishing a separate list.
 The invoking WebView supplies the window identity. Cursors and request size are validated at this transport seam.
 
 Normal Project synchronization uses `get_project_index` with locale and Project/Nodes cursor requests.
@@ -288,7 +311,7 @@ A lost or invalid panel baseline causes one whole-response snapshot recovery; th
 
 The exact `yssbi.activity-panel.v1` envelope contains panel/project identity, publication revision,
 title, tools, complete depth-ordered rows, and optional empty-state presentation. Text is either
-a localization key or a literal. Category defaults and graph, chart, database, node, command and plugin item kinds are Rust-owned. The payload
+a localization key or a literal. Category defaults and graph, chart, database, node, command, plugin and conversation item kinds are Rust-owned. The payload
 contains resource references and node creation descriptors, not graph documents, database engines,
 connection strings, or table data. Row count, depth and serialized response size are bounded;
 invalid/oversized input is never partially rendered.

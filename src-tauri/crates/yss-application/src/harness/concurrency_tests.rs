@@ -110,7 +110,10 @@ fn host(sessions: &Arc<PausedSessions>) -> Arc<HarnessHost> {
     let store = &sessions.store;
     Arc::new(
         HarnessHost::new(HarnessPorts {
-            agent_driver: Arc::new(MockAgentDriver::new("unused")),
+            resources: Arc::new(yss_harness_core::test_support::FixtureResourceResolver),
+            models: yss_harness_core::test_support::fixed_model(Arc::new(MockAgentDriver::new(
+                "unused",
+            ))),
             capability_gateway: Arc::new(RejectingCapabilityGateway),
             sessions: sessions.clone(),
             events: store.clone(),
@@ -118,7 +121,7 @@ fn host(sessions: &Arc<PausedSessions>) -> Arc<HarnessHost> {
             workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
-            memory: store.clone(),
+            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             approvals: store.clone(),
             clock: Arc::new(FixedClock::new(1_000)),
             ids: Arc::new(SequentialIds::default()),
@@ -235,7 +238,7 @@ async fn session_selection_write_tails_and_queued_requests_preserve_current_bind
             let id = first.id.clone();
             let binding = first.project.clone();
             tokio::spawn(async move {
-                host.submit_turn(&id, &binding, "First title".into(), None)
+                host.submit_turn(&id, &binding, "First title".into(), vec![], None)
                     .await
             })
         };
@@ -399,6 +402,7 @@ async fn queued_turn_submission_preserves_the_opened_project_binding() {
         &opened.id,
         &opened.project,
         "Message for the previous binding".into(),
+        vec![],
         None,
     ));
     assert!(poll_once(stale.as_mut()).await.is_none());
@@ -413,12 +417,13 @@ async fn queued_turn_submission_preserves_the_opened_project_binding() {
         &reopened.id,
         &reopened.project,
         "Message for the current binding".into(),
+        vec![],
         None,
     )
     .await
     .unwrap();
     assert!(host.events_after(&first.id, 0).await.unwrap().iter().any(|entry|
-        matches!(&entry.event, yss_harness_contract::HarnessEvent::TurnStarted { user_message }
+        matches!(&entry.event, yss_harness_contract::HarnessEvent::TurnStarted { user_message, .. }
             if user_message == "Message for the current binding")));
     drop(application);
     let _ = std::fs::remove_dir_all(root);

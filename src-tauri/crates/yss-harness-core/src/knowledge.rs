@@ -1,15 +1,22 @@
 use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
+mod builtins;
+mod index;
+mod retrieval;
+#[cfg(test)]
+mod tests;
+mod tools;
+
+pub use builtins::install_builtin_statistical_knowledge;
+use index::{IndexedDocument, PreparedIndex};
+use retrieval::{chunk_id, passages};
 use yss_harness_contract::{
-    KnowledgeChunkId, KnowledgeDocumentId, KnowledgeDocumentRecord, KnowledgeSearchHit,
+    KnowledgeChunkId, KnowledgeCitation, KnowledgeDocumentId, KnowledgeDocumentRecord,
+    KnowledgeIndexFailure, KnowledgeIndexPort, KnowledgeIndexQuery, KnowledgeSearchHit,
     KnowledgeSourceId, KnowledgeSourceRecord, KnowledgeSourceStatus, KnowledgeSourceStorePort,
     PersistenceFailure, ProjectSessionBinding, SensitivityClass, SourceHash, UnixMillis,
 };
-
-const MAX_QUERY_BYTES: usize = 256;
-const MAX_RESULTS: u16 = 20;
-const MAX_EXCERPT_CHARS: usize = 480;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KnowledgeQuery {
@@ -21,80 +28,73 @@ pub struct KnowledgeQuery {
 
 pub struct KnowledgeService {
     store: Arc<dyn KnowledgeSourceStorePort>,
-}
-
-pub async fn install_builtin_statistical_knowledge(
-    store: Arc<dyn KnowledgeSourceStorePort>,
-    now: UnixMillis,
-) -> Result<(), KnowledgeError> {
-    let documents = [
-        (
-            "dataset-quality-review",
-            "Dataset quality review",
-            "Before estimation, establish measurement scales, missingness, duplicate keys, outliers, and variable semantics. Stop when the dataset revision changes or required semantics remain unknown.",
-            vec![
-                "statistics.data_quality".to_owned(),
-                "statistics.missingness".to_owned(),
-            ],
-            vec!["quality".to_owned(), "missingness".to_owned()],
-        ),
-        (
-            "ols-diagnostics",
-            "OLS assumptions and diagnostics",
-            "OLS reporting should pair effect estimates and uncertainty with residual checks, influential-observation diagnostics, robustness checks, and explicit limitations.",
-            vec![
-                "statistics.regression.ols".to_owned(),
-                "statistics.diagnostics".to_owned(),
-            ],
-            vec!["regression".to_owned(), "diagnostics".to_owned()],
-        ),
-    ];
-    let digest = yss_canonical_hash::hash_canonical("yssbi.knowledge.builtin.v1", &documents)
-        .map_err(|_| KnowledgeError::SourceIntegrity)?;
-    let source_hash = SourceHash::try_new(
-        digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>(),
-    )
-    .map_err(|_| KnowledgeError::SourceIntegrity)?;
-    let source_id = KnowledgeSourceId::try_new("yssbi-statistical-methods")
-        .map_err(|_| KnowledgeError::SourceIntegrity)?;
-    store
-        .upsert_source(&KnowledgeSourceRecord {
-            id: source_id.clone(),
-            title: "YssBI Statistical Methods".to_owned(),
-            version: "1.0.0".to_owned(),
-            license: "YssBI project documentation".to_owned(),
-            source_hash: source_hash.clone(),
-            status: KnowledgeSourceStatus::Active,
-            sensitivity: SensitivityClass::Public,
-            project: None,
-            updated_at: now,
-        })
-        .await?;
-    for (id, title, body, scopes, tags) in documents {
-        store
-            .upsert_document(&KnowledgeDocumentRecord {
-                id: KnowledgeDocumentId::try_new(id)
-                    .map_err(|_| KnowledgeError::SourceIntegrity)?,
-                source_id: source_id.clone(),
-                title: title.to_owned(),
-                body: body.to_owned(),
-                scopes,
-                tags,
-                source_hash: source_hash.clone(),
-                project: None,
-                sensitivity: SensitivityClass::Public,
-            })
-            .await?;
-    }
-    Ok(())
+    index: Arc<dyn KnowledgeIndexPort>,
+    cached: RwLock<Option<Arc<PreparedIndex>>>,
 }
 
 impl KnowledgeService {
-    pub fn new(store: Arc<dyn KnowledgeSourceStorePort>) -> Self {
-        Self { store }
+    pub fn new(
+        store: Arc<dyn KnowledgeSourceStorePort>,
+        index: Arc<dyn KnowledgeIndexPort>,
+    ) -> Self {
+        Self {
+            store,
+            index,
+            cached: RwLock::new(None),
+        }
+    }
+
+    pub async fn inspect(
+        &self,
+        citation: &KnowledgeCitation,
+        project: &ProjectSessionBinding,
+    ) -> Result<Option<String>, KnowledgeError> {
+        let reference = yss_harness_contract::KnowledgePassageReference {
+            document_id: citation.document_id.clone(),
+            chunk_id: citation.chunk_id.clone(),
+        };
+        Ok(self
+            .read_passage(&reference, project)
+            .await?
+            .filter(|(current, _)| current == citation)
+            .map(|(_, text)| text))
+    }
+
+    async fn read_passage(
+        &self,
+        reference: &yss_harness_contract::KnowledgePassageReference,
+        project: &ProjectSessionBinding,
+    ) -> Result<Option<(KnowledgeCitation, String)>, KnowledgeError> {
+        let Some((source, document)) = self
+            .store
+            .read_active_document(&reference.document_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let metadata = IndexedDocument::new(&source, &document);
+        if !metadata.visible(Some(project))
+            || source.status != KnowledgeSourceStatus::Active
+            || document.source_id != source.id
+            || document.id != reference.document_id
+            || document.source_hash != source.source_hash
+        {
+            return Ok(None);
+        }
+        let Some(text) = cited_passage(&document, &reference.chunk_id)?.map(str::to_owned) else {
+            return Ok(None);
+        };
+        Ok(Some((
+            KnowledgeCitation {
+                source_id: source.id,
+                document_id: document.id,
+                chunk_id: reference.chunk_id.clone(),
+                title: document.title,
+                version: source.version,
+                source_hash: document.source_hash,
+            },
+            text,
+        )))
     }
 
     pub async fn search(
@@ -102,104 +102,110 @@ impl KnowledgeService {
         query: KnowledgeQuery,
     ) -> Result<Vec<KnowledgeSearchHit>, KnowledgeError> {
         validate_query(&query)?;
-        let terms = tokenize(&query.text);
-        let mut hits = Vec::new();
-        for (source, document) in self.store.list_active_documents().await? {
-            if source.status != KnowledgeSourceStatus::Active
-                || source.id != document.source_id
-                || source.source_hash != document.source_hash
-            {
-                return Err(KnowledgeError::SourceIntegrity);
+        let snapshot = self.prepared_index(query.project.as_ref()).await?;
+        let mut allowed = BTreeSet::new();
+        for (id, metadata) in &snapshot.documents {
+            if metadata.matches(&query)? {
+                allowed.insert(id.clone());
             }
-            if !visible_to_project(source.project.as_ref(), query.project.as_ref())
-                || !visible_to_project(document.project.as_ref(), query.project.as_ref())
-                || !sensitivity_visible(
-                    source.sensitivity,
-                    source.project.as_ref(),
-                    query.project.as_ref(),
-                )
-                || !sensitivity_visible(
-                    document.sensitivity,
-                    document.project.as_ref(),
-                    query.project.as_ref(),
-                )
-                || !scope_matches(&document.scopes, &query.scopes)
-            {
-                continue;
-            }
-            let score = score_document(
-                &terms,
-                &document.title,
-                &document.scopes,
-                &document.tags,
-                &document.body,
-            );
-            if score == 0 {
-                continue;
-            }
-            hits.push(KnowledgeSearchHit {
-                citation: yss_harness_contract::KnowledgeCitation {
-                    source_id: source.id,
-                    document_id: document.id.clone(),
-                    chunk_id: chunk_id(&document.id.to_string(), &document.source_hash)?,
-                    title: document.title,
-                    version: source.version,
-                    source_hash: document.source_hash,
-                },
-                excerpt: excerpt(&document.body),
-                score,
-            });
         }
-        hits.sort_by(|left, right| {
-            right
-                .score
-                .cmp(&left.score)
-                .then_with(|| left.citation.title.cmp(&right.citation.title))
-                .then_with(|| left.citation.document_id.cmp(&right.citation.document_id))
-        });
-        hits.truncate(usize::from(query.limit));
+        let limit = usize::from(query.limit);
+        let mut hits = Vec::new();
+        while !allowed.is_empty() && hits.len() < limit {
+            let candidates = snapshot
+                .reader
+                .search(KnowledgeIndexQuery {
+                    text: query.text.clone(),
+                    documents: allowed.iter().cloned().collect(),
+                    limit: limit - hits.len(),
+                })
+                .await?;
+            if candidates.is_empty() {
+                break;
+            }
+            let remaining = allowed.len();
+            for candidate in candidates {
+                if !allowed.remove(&candidate.document_id) {
+                    continue;
+                }
+                if let Some(hit) = self.current_hit(&snapshot, &query, candidate).await? {
+                    hits.push(hit);
+                }
+                if hits.len() == limit {
+                    break;
+                }
+            }
+            if allowed.len() == remaining {
+                return Err(KnowledgeIndexFailure.into());
+            }
+            // Invalidated sources must not consume the result limit. Requery the
+            // remaining documents without rebuilding the immutable index.
+        }
         Ok(hits)
     }
+
+    async fn current_hit(
+        &self,
+        snapshot: &PreparedIndex,
+        query: &KnowledgeQuery,
+        candidate: yss_harness_contract::KnowledgeIndexHit,
+    ) -> Result<Option<KnowledgeSearchHit>, KnowledgeError> {
+        // The index never authorizes a read. Recheck the current owner after
+        // ranking, including writes/deletions which happened during indexing.
+        let Some((source, document)) = self
+            .store
+            .read_active_document(&candidate.document_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let metadata = IndexedDocument::new(&source, &document);
+        if snapshot.documents.get(&candidate.document_id) != Some(&metadata)
+            || !metadata.matches(query)?
+        {
+            return Ok(None);
+        }
+        let Some(passage) = cited_passage(&document, &candidate.chunk_id)? else {
+            return Ok(None);
+        };
+        if !candidate.score.is_finite() || !passage.contains(&candidate.excerpt) {
+            return Err(KnowledgeIndexFailure.into());
+        }
+        Ok(Some(KnowledgeSearchHit {
+            citation: KnowledgeCitation {
+                source_id: source.id,
+                document_id: document.id,
+                chunk_id: candidate.chunk_id,
+                title: document.title,
+                version: source.version,
+                source_hash: document.source_hash,
+            },
+            excerpt: candidate.excerpt,
+            score: candidate.score,
+        }))
+    }
+}
+
+fn cited_passage<'a>(
+    document: &'a KnowledgeDocumentRecord,
+    id: &KnowledgeChunkId,
+) -> Result<Option<&'a str>, KnowledgeError> {
+    for passage in passages(&document.body) {
+        if chunk_id(document.id.as_str(), &document.source_hash, passage)? == *id {
+            return Ok(Some(passage.text));
+        }
+    }
+    Ok(None)
 }
 
 fn validate_query(query: &KnowledgeQuery) -> Result<(), KnowledgeError> {
-    if query.text.trim().is_empty()
-        || query.text.len() > MAX_QUERY_BYTES
-        || query.limit == 0
-        || query.limit > MAX_RESULTS
-        || query.scopes.iter().any(|scope| scope.trim().is_empty())
-    {
-        return Err(KnowledgeError::InvalidQuery);
+    yss_harness_contract::SearchKnowledgeRequest {
+        query: query.text.clone(),
+        scopes: query.scopes.clone(),
+        limit: query.limit,
     }
-    Ok(())
-}
-
-fn tokenize(text: &str) -> BTreeSet<String> {
-    text.to_lowercase()
-        .split(|character: char| !character.is_alphanumeric() && character != '_')
-        .filter(|term| !term.is_empty())
-        .map(str::to_owned)
-        .collect()
-}
-
-fn score_document(
-    terms: &BTreeSet<String>,
-    title: &str,
-    scopes: &[String],
-    tags: &[String],
-    body: &str,
-) -> u32 {
-    let title = title.to_lowercase();
-    let scopes = scopes.join(" ").to_lowercase();
-    let tags = tags.join(" ").to_lowercase();
-    let body = body.to_lowercase();
-    terms.iter().fold(0u32, |score, term| {
-        score
-            .saturating_add(u32::from(title.contains(term)) * 4)
-            .saturating_add(u32::from(scopes.contains(term)) * 2)
-            .saturating_add(u32::from(tags.contains(term)) * 2)
-            .saturating_add(u32::from(body.contains(term)))
-    })
+    .validate()
+    .map_err(|_| KnowledgeError::InvalidQuery)
 }
 
 fn visible_to_project(
@@ -228,29 +234,6 @@ fn scope_matches(document_scopes: &[String], requested_scopes: &[String]) -> boo
         })
 }
 
-fn chunk_id(
-    document_id: &str,
-    source_hash: &SourceHash,
-) -> Result<KnowledgeChunkId, KnowledgeError> {
-    let digest =
-        yss_canonical_hash::hash_canonical("yssbi.knowledge.chunk.v1", &(document_id, source_hash))
-            .map_err(|_| KnowledgeError::SourceIntegrity)?;
-    let suffix = digest[..16]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    KnowledgeChunkId::try_new(format!("chunk-{suffix}"))
-        .map_err(|_| KnowledgeError::SourceIntegrity)
-}
-
-fn excerpt(body: &str) -> String {
-    let mut value = body.chars().take(MAX_EXCERPT_CHARS).collect::<String>();
-    if body.chars().count() > MAX_EXCERPT_CHARS {
-        value.push('…');
-    }
-    value
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum KnowledgeError {
     #[error("knowledge query is invalid")]
@@ -259,80 +242,6 @@ pub enum KnowledgeError {
     SourceIntegrity,
     #[error("knowledge persistence failed")]
     Persistence(#[from] PersistenceFailure),
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::test_support::InMemoryHarnessStore;
-    use yss_harness_contract::{
-        KnowledgeDocumentId, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
-        KnowledgeSourceStorePort, SensitivityClass, SourceHash, UnixMillis,
-    };
-
-    #[test]
-    fn lexical_score_prioritizes_title_and_scope_over_body_only_match() {
-        let terms = tokenize("regression diagnostics");
-        let title_score = score_document(
-            &terms,
-            "Regression diagnostics",
-            &["statistics.regression".to_owned()],
-            &[],
-            "details",
-        );
-        let body_score = score_document(&terms, "Notes", &[], &[], "regression diagnostics");
-
-        assert!(title_score > body_score);
-    }
-
-    #[tokio::test]
-    async fn deleted_sources_are_excluded_immediately_from_cited_results() {
-        let store = Arc::new(InMemoryHarnessStore::default());
-        let source_id = KnowledgeSourceId::try_new("methods").unwrap();
-        let source_hash = SourceHash::try_new("hash-1").unwrap();
-        store
-            .upsert_source(&KnowledgeSourceRecord {
-                id: source_id.clone(),
-                title: "YssBI Methods".to_owned(),
-                version: "1.0.0".to_owned(),
-                license: "YssBI".to_owned(),
-                source_hash: source_hash.clone(),
-                status: KnowledgeSourceStatus::Active,
-                sensitivity: SensitivityClass::Public,
-                project: None,
-                updated_at: UnixMillis::from_existing(1),
-            })
-            .await
-            .unwrap();
-        store
-            .upsert_document(&KnowledgeDocumentRecord {
-                id: KnowledgeDocumentId::try_new("ols-diagnostics").unwrap(),
-                source_id: source_id.clone(),
-                title: "OLS regression diagnostics".to_owned(),
-                body: "Check residual assumptions and influential observations.".to_owned(),
-                scopes: vec!["statistics.regression.ols".to_owned()],
-                tags: vec!["diagnostics".to_owned()],
-                source_hash,
-                project: None,
-                sensitivity: SensitivityClass::Public,
-            })
-            .await
-            .unwrap();
-        let service = KnowledgeService::new(store.clone());
-        let query = KnowledgeQuery {
-            text: "regression diagnostics".to_owned(),
-            scopes: vec!["statistics.regression".to_owned()],
-            project: None,
-            limit: 5,
-        };
-        assert_eq!(service.search(query.clone()).await.unwrap().len(), 1);
-
-        store
-            .mark_source_deleted(&source_id, UnixMillis::from_existing(2))
-            .await
-            .unwrap();
-        assert!(service.search(query).await.unwrap().is_empty());
-    }
+    #[error("knowledge search failed")]
+    Index(#[from] KnowledgeIndexFailure),
 }

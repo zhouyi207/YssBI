@@ -2844,9 +2844,8 @@ Assistant 删除本地的重复链接组件，直接使用共享 Markdown 组件
 地址解析、页面片段定位、点击与中键默认导航处理现在共用原 owner；Doc 仍由 Workbench 提供参考页策略。
 这项改动没有新增 UI 单元测试，实际中键、片段、窄面板和流式 Markdown 仍需桌面验收。
 
-会话初始化原先先接收事件、再安装异步记忆查询，较早快照可能恢复已被事件删除的记录，
-并把重连失败状态改回 ready。现先读取并安装一次记忆快照，再从序号 0 重放持久事件，
-同一 generation 贯穿两步，直接消除两个异步发布的覆盖关系。
+会话初始化直接订阅并回放持久事件；订阅接通前不开放发送，
+同一 generation 贯穿回放与订阅确认，迟到回调不能覆盖当前会话状态。
 重连中的替换订阅再次缺号或解析失败时，原 session owner 使该 stream generation 失效，
 进入错误状态并释放持有/迟到的订阅；发送还要求当前订阅存在。显式重载沿原入口恢复，未新建重试框架。
 
@@ -2854,10 +2853,9 @@ Service 的 HMR 与显式退订共用同一幂等清理入口，关闭后的 Cha
 HMR 先于订阅应答时，迟到 ID 被退订且请求被拒绝，不再交付一个已关闭的订阅。
 远端退订命令留在 Service 内部，外部仅持有订阅自身的释放操作。
 
-新增两项纯 Application 回归分别复现并验证：初始记忆快照不能撤销重放的删除、缺号的重放不能恢复 ready。
-第三项 Service 回归在添加前说明独立风险，旧实现实际返回已被 HMR 关闭的句柄；修复后验证拒绝迟到应答、
-单次远端清理及关闭后回调失效。三项均先失败再通过，没有 UI 测试或新依赖。
-原先用于定位的“记忆回复恢复连接状态”检查也实际复现失败；最终以快照/事件顺序回归保护共同根因。
+纯 Application 回归覆盖订阅和回放完成前禁止发送，以及缺号的重放不能恢复 ready。
+Service 回归验证拒绝 HMR 关闭后的迟到应答、单次远端清理及关闭后回调失效，
+没有 UI 测试或新依赖。
 
 ```powershell
 pnpm test:ts src/services/assistant/harnessService.test.ts src/services/assistant/harnessContract.test.ts src/features/application/assistant/assistantHarnessSession.test.ts src/features/application/assistant/assistantHarnessProjection.test.ts src/features/application/assistant/assistantMessageContent.test.ts src/features/application/assistant/assistantHarnessRuntime.test.tsx
@@ -3421,7 +3419,7 @@ resultId/runId/nodeId 与封闭 report/valueKind。ReportView 直接传 typed di
 新增一个纯边界回归在保持旧 JSON 行为的提取版本实际失败，读取四个自由字段 getter；修复后通过。
 Observability README 同步这些职责与日志内容边界，不依赖后端 sanitizer 为原始内容兜底。
 
-Harness Contract 本轮补读 agents/capabilities/context/graph/inspection/knowledge_memory/resources/
+Harness Contract 本轮补读 agents/capabilities/context/graph/inspection/knowledge/resources/
 statistics/validation、测试和 Cargo，结合前批 harness/gateway/persistence/lib 已覆盖全部生产文件。
 context 与 harness 两份 string_identity 宏合并为原 context 宏的 crate 内复用；21 个类型保持独立，
 derive、serde/schema、错误文本、UTF-8 128 字节限制及原字符串不归一化行为不变，没有新增抽象或测试。

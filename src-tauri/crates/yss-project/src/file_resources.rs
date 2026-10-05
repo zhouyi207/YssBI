@@ -215,6 +215,47 @@ fn snapshot<T: ResourceFile>(
 }
 
 impl ProjectState {
+    /// Reference consumers need a current authored document whose saved file still
+    /// exists and has not changed externally. Editors can continue using read_file
+    /// to recover dirty content even after external removal.
+    pub(crate) fn read_file_source<T: ResourceFile>(
+        &self,
+        project: &ProjectInstanceId,
+        path: &FilePath<T>,
+    ) -> Result<FileSnapshot<T>, ProjectOperationError> {
+        self.ensure_project_operational()?;
+        let session = self.capture_project_session()?;
+        let _lease = self.filesystem().acquire(session.root.clone())?;
+        self.validate_project_session(&session)?;
+        let (saved_hash, version) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            if publication.project_instance_id != project.as_str() {
+                return Err(ProjectOperationError::StaleProjectLifecycle {
+                    message: "document project changed".into(),
+                });
+            }
+            let data = self.project_data.read().unwrap();
+            let state = T::files(&data)
+                .get(path)
+                .ok_or_else(|| error("document not found"))?;
+            (state.saved_hash.clone(), state.version.clone())
+        };
+        let persisted = read_file_content::<T>(session.root.as_path(), path).map_err(error)?;
+        if persisted.fingerprint().map_err(error)? != saved_hash {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
+                message: "document file changed externally".into(),
+            });
+        }
+        let current = self.read_file(project, path)?;
+        self.validate_project_session(&session)?;
+        if current.version != version {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
+                message: "document changed during source read".into(),
+            });
+        }
+        Ok(current)
+    }
+
     pub(crate) fn read_file<T: ResourceFile>(
         &self,
         project: &ProjectInstanceId,

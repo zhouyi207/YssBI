@@ -1,8 +1,7 @@
-use crate::{HarnessError, HarnessHost, MemoryService};
-use std::sync::Arc;
+use crate::{HarnessError, HarnessHost};
 use yss_harness_contract::{
     AutomationIdKind, CancellationReason, HarnessEvent, HarnessSessionId, HarnessSessionRecord,
-    HarnessSessionState, MemoryRecord, MemoryRecordId, PrincipalId, ProjectSessionBinding,
+    HarnessSessionState, PrincipalId, ProjectSessionBinding,
 };
 
 /// Serializes session selection and binding writes without owning the current project.
@@ -12,6 +11,53 @@ pub struct HarnessSessionAccess<'a> {
 }
 
 impl HarnessSessionAccess<'_> {
+    pub async fn select_model(
+        &mut self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+        model: yss_harness_contract::LanguageModelSelection,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let mut session = self
+            .host
+            .conversation(session_id, principal, project_key)
+            .await?;
+        session
+            .conversation
+            .as_mut()
+            .ok_or(HarnessError::SessionNotFound)?
+            .model = Some(model);
+        session.updated_at = self.host.ports.clock.now();
+        self.host.ports.sessions.update_session(&session).await?;
+        Ok(session)
+    }
+
+    pub async fn rename_conversation(
+        &mut self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+        title: String,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(HarnessError::InvalidMessage);
+        }
+        let (_cancel, _admission) = self.host.admit_turn(session_id)?;
+        let mut session = self
+            .host
+            .conversation(session_id, principal, project_key)
+            .await?;
+        session
+            .conversation
+            .as_mut()
+            .ok_or(HarnessError::SessionNotFound)?
+            .title = title.to_owned();
+        session.updated_at = self.host.ports.clock.now();
+        self.host.ports.sessions.update_session(&session).await?;
+        Ok(session)
+    }
+
     pub async fn create_conversation(
         &mut self,
         principal_id: PrincipalId,
@@ -78,6 +124,7 @@ impl HarnessHost {
             project_key,
             title: String::new(),
             last_opened_at: self.ports.clock.now(),
+            model: None,
         };
         self.new_session(principal_id, project, Some(metadata))
             .await
@@ -217,65 +264,8 @@ impl HarnessHost {
             session.updated_at = self.ports.clock.now();
             self.ports.sessions.update_session(&session).await?;
             self.cancel_active_turn(&session.id, CancellationReason::ProjectReplaced);
-            MemoryService::new(
-                Arc::clone(&self.ports.memory),
-                Arc::clone(&self.ports.clock),
-                Arc::clone(&self.ports.ids),
-            )
-            .expire_session(&session.id)
-            .await?;
             stale_count += 1;
         }
         Ok(stale_count)
-    }
-
-    pub async fn session_memory(
-        &self,
-        session_id: &HarnessSessionId,
-    ) -> Result<Vec<MemoryRecord>, HarnessError> {
-        self.ports
-            .sessions
-            .load_session(session_id)
-            .await?
-            .ok_or(HarnessError::SessionNotFound)?;
-        Ok(MemoryService::new(
-            Arc::clone(&self.ports.memory),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-        )
-        .records_for_session(session_id)
-        .await?)
-    }
-
-    pub async fn delete_session_memory(
-        &self,
-        session_id: &HarnessSessionId,
-        record_id: &MemoryRecordId,
-    ) -> Result<(), HarnessError> {
-        if !self
-            .session_memory(session_id)
-            .await?
-            .iter()
-            .any(|record| &record.id == record_id)
-        {
-            return Err(HarnessError::MemoryNotFound);
-        }
-        MemoryService::new(
-            Arc::clone(&self.ports.memory),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-        )
-        .delete(record_id)
-        .await?;
-        self.event_writer()
-            .append(
-                session_id,
-                None,
-                HarnessEvent::MemoryDeleted {
-                    record_id: record_id.clone(),
-                },
-            )
-            .await?;
-        Ok(())
     }
 }

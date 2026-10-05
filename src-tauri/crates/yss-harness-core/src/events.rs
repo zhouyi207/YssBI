@@ -72,12 +72,15 @@ impl AgentEventOutput for PersistingAgentOutput {
                 .append(
                     &self.session_id,
                     Some(&self.turn_id),
-                    match &self.run_id {
-                        Some(run_id) => HarnessEvent::AgentRunOutput {
+                    match (&self.run_id, event) {
+                        (_, AgentEvent::KnowledgeCited { citation }) => {
+                            HarnessEvent::KnowledgeCited { citation }
+                        }
+                        (Some(run_id), event) => HarnessEvent::AgentRunOutput {
                             run_id: run_id.clone(),
                             event,
                         },
-                        None => HarnessEvent::Agent(event),
+                        (None, event) => HarnessEvent::Agent(event),
                     },
                 )
                 .await

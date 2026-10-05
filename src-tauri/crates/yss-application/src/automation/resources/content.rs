@@ -16,32 +16,62 @@ pub(in crate::automation) fn inspect_resource(
         session_id: None,
     };
     let mut dirty = false;
+    if request.metadata_only
+        && matches!(
+            request.resource.kind,
+            ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
+        )
+    {
+        let opened = application
+            .open_graph(crate::graph::open::OpenGraphRequest::new(
+                project,
+                graph_path(&request.resource)?,
+                0,
+                "en-US",
+            ))
+            .map_err(|_| unavailable())?;
+        let current = opened.editing();
+        return Ok(ResourceInspection {
+            resource: request.resource,
+            name: info.display_name,
+            version: ResourceVersion {
+                revision: current.version.revision.get(),
+                session_id: Some(current.version.session_id.to_string()),
+            },
+            dirty: current.dirty,
+            content: ResourceContent::Metadata,
+        });
+    }
     let content = match request.resource.kind {
         ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph => {
-            let AutomationCapabilityResult::GraphInspection(graph) =
-                crate::automation::graph::invoke_graph_capability(
-                    application,
-                    context.clone(),
-                    AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
-                        graph_path: request.resource.id.clone(),
-                    }),
-                    control,
-                )?
-            else {
-                return Err(unavailable());
+            let graph = crate::automation::graph::invoke_graph_capability(
+                application,
+                context.clone(),
+                AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
+                    view: request.graph_view,
+                    offset: request.offset,
+                    limit: request.limit,
+                    ..InspectGraphRequest::overview(request.resource.id.clone())
+                }),
+                control,
+            )?;
+            let graph_version = match &graph {
+                AutomationCapabilityResult::GraphInspection(graph) => &graph.version,
+                AutomationCapabilityResult::GraphInspectionPage(graph) => &graph.version,
+                _ => return Err(unavailable()),
             };
             let path = graph_path(&request.resource)?;
             let current = session
                 .project()
                 .read_graph_editing(&project, &path)
                 .map_err(project_error)?;
-            if current.state.version.revision.get() != graph.revision {
+            if current.state.version.revision.get() != graph_version.revision
+                || graph_version.session_id.as_deref()
+                    != Some(current.state.version.session_id.to_string().as_str())
+            {
                 return Err(conflict());
             }
-            version = ResourceVersion {
-                revision: graph.revision,
-                session_id: Some(current.state.version.session_id.to_string()),
-            };
+            version = graph_version.clone();
             dirty = current.state.dirty;
             let function = if request.resource.kind == ProjectResourceKind::FunctionGraph {
                 let document = session
@@ -75,11 +105,22 @@ pub(in crate::automation) fn inspect_resource(
             if after.state.version != current.state.version {
                 return Err(conflict());
             }
-            ResourceContent::Graph {
-                graph,
-                function,
-                can_undo: current.state.can_undo,
-                can_redo: current.state.can_redo,
+            match graph {
+                AutomationCapabilityResult::GraphInspection(graph) => ResourceContent::Graph {
+                    graph,
+                    function,
+                    can_undo: current.state.can_undo,
+                    can_redo: current.state.can_redo,
+                },
+                AutomationCapabilityResult::GraphInspectionPage(graph) => {
+                    ResourceContent::GraphPage {
+                        graph,
+                        function,
+                        can_undo: current.state.can_undo,
+                        can_redo: current.state.can_redo,
+                    }
+                }
+                _ => return Err(unavailable()),
             }
         }
         ProjectResourceKind::Chart => {
@@ -171,7 +212,11 @@ pub(in crate::automation) fn inspect_resource(
         name: info.display_name,
         version,
         dirty,
-        content,
+        content: if request.metadata_only {
+            ResourceContent::Metadata
+        } else {
+            content
+        },
     })
 }
 

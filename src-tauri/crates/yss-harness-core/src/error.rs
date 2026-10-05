@@ -1,6 +1,4 @@
-use crate::{
-    ApprovalError, KnowledgeError, MemoryError, WorkflowCompileError, WorkflowRuntimeError,
-};
+use crate::{ApprovalError, KnowledgeError, WorkflowCompileError, WorkflowRuntimeError};
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AutomationIdentityError, CapabilityFailure,
     IdGenerationFailure, PersistenceFailure,
@@ -16,10 +14,6 @@ pub enum HarnessError {
     Persistence(#[from] PersistenceFailure),
     #[error("harness knowledge retrieval failed")]
     Knowledge(#[from] KnowledgeError),
-    #[error("harness memory operation failed")]
-    Memory(#[from] MemoryError),
-    #[error("harness memory record was not found in the session")]
-    MemoryNotFound,
     #[error("harness approval operation failed")]
     Approval(#[from] ApprovalError),
     #[error("harness capability execution failed")]

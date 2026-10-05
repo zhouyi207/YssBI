@@ -43,7 +43,45 @@ Command-only request/response schemas may stay beside their handler. Shared type
 
 Harness tool lifecycle events are `tool_invocation_started`, `tool_invocation_completed`, and `tool_invocation_failed`. Each carries its actual invocation identity and capability ID; there is no pre-identity placeholder event or legacy event conversion.
 
+`graph_execution_finished` reports the graph's business outcome independently of
+tool-call completion. Agent completion retains its exact failure code. Resume,
+runtime recovery, text retraction, compaction and blocked delivery are replayable
+events; compaction exposes its occurrence without sending model checkpoint text to the UI.
+`context_compaction_progress` carries `completedBytes` and `totalBytes` for both
+Manager and Worker progress. Durable partial checkpoint text and prefix hashes
+remain inside the Harness; they are excluded from the wire projection.
+
 Harness workflow state reaches desktop consumers through `HarnessEventDto`. Session and turn
 command responses have their own DTOs; workflow run records remain in the Harness contract.
 
+Agent completion includes committed resource changes and result references for presentation.
+Result IDs in this UI projection are decimal strings, preserving the full u64 identity.
+`HarnessToolInspectionDto` is a read projection of the existing ledger: it contains selected
+operation facts, target identity, artifacts/results and recorded timing, excluding raw request
+payloads, credentials, rows and document bodies. It does not alter model messages or stored receipts.
+
 The complete wire and delivery contract is maintained in [Desktop IPC](../yss-application/src/ipc/README.md).
+
+Harness model configuration uses the provider-neutral model contracts from `yss-harness-contract`.
+`SaveHarnessProviderRequestDto.apiKey` is input-only: null retains the saved key, empty text clears it,
+and a nonempty key replaces it in the OS credential store. It has no Debug/Serialize implementation.
+`DiscoverHarnessModelsRequestDto` carries an unsaved provider connection in `config` and an
+input-only optional `apiKey`. Model definitions are ignored during discovery. A supplied key is
+temporary; null reuses the key saved for `config.id`, and no-key authentication ignores credentials.
+The request has no Debug/Serialize implementation and never commits settings or credentials.
+Provider configuration keeps the supplier name in `name` and a separate nullable `customName`
+for an optional configuration label. Provider list titles, configuration breadcrumbs and model-picker
+prefixes use the trimmed `customName`, falling back to `name` when it is blank. Provider lists still
+show the actual supplier `name` before the model count below the title. Both fields round-trip through
+save and catalogue responses. A turn's model identity captures that configuration display name in
+`providerName` at admission; replay uses the recorded name even after the configuration is renamed
+or deleted. Provider/model IDs remain the selection identity.
+The catalogue returns `hasApiKey`; sessions carry nullable `model` selection. Every `turn_started`
+payload records the executed model identity, display names, and `resources: [{resource: {kind,id}, name}]`
+for history replay. Input references carry only project resource identities; Application supplies
+names after resolving the current project index. The former implicit active-graph argument is removed.
+The frontend
+strictly parses these current shapes; obsolete provider-status and global-driver configuration
+commands are removed.
+
+Harness 引用详情返回 `{ text, resource }`：`text` 仅为已核验的引用片段，`resource` 是可打开的项目文档定位或 Null（内置来源）。项目知识来源管理返回来源 ID、标题、路径、状态与更新时间；内部项目根身份和内容摘要不进入此管理投影。当前状态为 `ready`、`changed`、`unavailable` 或 `empty`，业务规则归 [Harness 当前架构](../yss-harness-core/README.md)。

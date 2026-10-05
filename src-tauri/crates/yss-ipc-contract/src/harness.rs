@@ -1,22 +1,33 @@
 use serde::{Deserialize, Serialize};
+mod inspection;
+pub use inspection::{HarnessResultReferenceDto, HarnessToolInspectionDto};
 use yss_harness_contract::{
     AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, HarnessSessionRecord,
-    KnowledgeCitation, MemoryKind, MemoryRecord, MemoryScope, MemoryStatus, StatisticalPlan,
-    StructuredMemoryValue,
+    KnowledgeCitation, StatisticalPlan,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessRuntimeStatusDto {
-    pub provider_configured: bool,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HarnessCitationDetailDto {
+    pub text: String,
+    pub resource: Option<yss_harness_contract::ProjectResourceRef>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ConfigureHarnessProviderRequestDto {
-    pub model: String,
-    pub base_url: String,
-    pub api_key: String,
+pub struct SaveHarnessProviderRequestDto {
+    pub config: yss_harness_contract::LanguageModelProviderConfig,
+    /// Missing keeps the stored credential; an empty value explicitly clears it.
+    pub api_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DiscoverHarnessModelsRequestDto {
+    /// Connection draft only; model definitions do not participate in discovery.
+    pub config: yss_harness_contract::LanguageModelProviderConfig,
+    /// Input-only temporary key. Missing reuses the credential stored for config.id.
+    pub api_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -27,11 +38,16 @@ pub struct HarnessSessionDto {
     pub project_session_id: String,
     pub title: String,
     pub last_opened_at: u64,
+    pub model: Option<yss_harness_contract::LanguageModelSelection>,
 }
 
 impl From<HarnessSessionRecord> for HarnessSessionDto {
     fn from(record: HarnessSessionRecord) -> Self {
         Self {
+            model: record
+                .conversation
+                .as_ref()
+                .and_then(|value| value.model.clone()),
             title: record
                 .conversation
                 .as_ref()
@@ -62,32 +78,6 @@ pub struct HarnessSubscriptionDto {
     pub subscription_id: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessMemoryRecordDto {
-    pub record_id: String,
-    pub scope: MemoryScope,
-    pub kind: MemoryKind,
-    pub status: MemoryStatus,
-    pub value: StructuredMemoryValue,
-    pub created_at: u64,
-    pub updated_at: u64,
-}
-
-impl From<MemoryRecord> for HarnessMemoryRecordDto {
-    fn from(record: MemoryRecord) -> Self {
-        Self {
-            record_id: record.id.to_string(),
-            scope: record.scope,
-            kind: record.kind,
-            status: record.status,
-            value: record.value,
-            created_at: record.created_at.get(),
-            updated_at: record.updated_at.get(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessEventDto {
@@ -107,6 +97,31 @@ pub struct HarnessEventDto {
     rename_all_fields = "camelCase"
 )]
 pub enum HarnessEventKindDto {
+    ContextCompactionProgress {
+        completed_bytes: usize,
+        total_bytes: usize,
+    },
+    GraphExecutionFinished {
+        invocation_id: String,
+        status: String,
+        failure_code: Option<String>,
+    },
+    AgentRunResumed {
+        run_id: String,
+        role: yss_harness_contract::AgentRole,
+        objective: String,
+    },
+    TextRetracted {
+        characters: usize,
+    },
+    ContextCompacted,
+    RuntimeStatus {
+        phase: yss_harness_contract::AgentRuntimePhase,
+        attempt: u32,
+    },
+    DeliveryBlocked {
+        reason: String,
+    },
     AgentRunInvalidated {
         run_id: String,
     },
@@ -124,14 +139,19 @@ pub enum HarnessEventKindDto {
         run_id: String,
         role: yss_harness_contract::AgentRole,
         state: yss_harness_contract::AgentRunState,
+        failure_code: Option<yss_harness_contract::AgentDriverFailureCode>,
         summary: Option<String>,
         blocked_reason: Option<String>,
         warnings: Vec<String>,
         evidence_count: usize,
+        artifacts: Vec<yss_harness_contract::ResourceChange>,
+        results: Vec<HarnessResultReferenceDto>,
     },
     SessionCreated,
     TurnStarted {
         user_message: String,
+        model: yss_harness_contract::LanguageModelIdentity,
+        resources: Vec<yss_harness_contract::HarnessResourceReference>,
     },
     TextDelta {
         delta: String,
@@ -159,12 +179,6 @@ pub enum HarnessEventKindDto {
     TurnCancelled,
     KnowledgeCited {
         citation: KnowledgeCitation,
-    },
-    MemoryRecorded {
-        record: HarnessMemoryRecordDto,
-    },
-    MemoryDeleted {
-        record_id: String,
     },
     WorkflowPlanned {
         run_id: String,
@@ -214,6 +228,16 @@ impl From<&HarnessEventEnvelope> for HarnessEventDto {
 impl From<&HarnessEvent> for HarnessEventKindDto {
     fn from(event: &HarnessEvent) -> Self {
         match event {
+            HarnessEvent::AgentRunResumed {
+                request,
+                role,
+                objective,
+                ..
+            } => Self::AgentRunResumed {
+                run_id: request.run_id.to_string(),
+                role: *role,
+                objective: objective.clone(),
+            },
             HarnessEvent::AgentRunInvalidated { run_id } => Self::AgentRunInvalidated {
                 run_id: run_id.to_string(),
             },
@@ -239,6 +263,7 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
                 run_id: outcome.run_id.to_string(),
                 role: outcome.role,
                 state: outcome.state,
+                failure_code: outcome.failure_code,
                 summary: outcome.report.as_ref().map(|report| report.summary.clone()),
                 blocked_reason: outcome
                     .report
@@ -250,10 +275,23 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
                     .map(|report| report.warnings.clone())
                     .unwrap_or_default(),
                 evidence_count: outcome.evidence.len(),
+                artifacts: outcome.artifacts.clone(),
+                results: outcome
+                    .results
+                    .iter()
+                    .cloned()
+                    .map(HarnessResultReferenceDto::from)
+                    .collect(),
             },
             HarnessEvent::SessionCreated => Self::SessionCreated,
-            HarnessEvent::TurnStarted { user_message } => Self::TurnStarted {
+            HarnessEvent::TurnStarted {
+                user_message,
+                model,
+                resources,
+            } => Self::TurnStarted {
                 user_message: user_message.clone(),
+                model: model.clone(),
+                resources: resources.clone(),
             },
             HarnessEvent::Agent(event) => Self::from(event),
             HarnessEvent::TurnCompleted { final_text } => Self::TurnCompleted {
@@ -263,12 +301,6 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
             HarnessEvent::TurnCancelled => Self::TurnCancelled,
             HarnessEvent::KnowledgeCited { citation } => Self::KnowledgeCited {
                 citation: citation.clone(),
-            },
-            HarnessEvent::MemoryRecorded { record } => Self::MemoryRecorded {
-                record: record.clone().into(),
-            },
-            HarnessEvent::MemoryDeleted { record_id } => Self::MemoryDeleted {
-                record_id: record_id.to_string(),
             },
             HarnessEvent::WorkflowPlanned { run_id } => Self::WorkflowPlanned {
                 run_id: run_id.to_string(),
@@ -314,6 +346,38 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
 impl From<&AgentEvent> for HarnessEventKindDto {
     fn from(event: &AgentEvent) -> Self {
         match event {
+            AgentEvent::KnowledgeCited { citation } => Self::KnowledgeCited {
+                citation: citation.clone(),
+            },
+            AgentEvent::GraphExecutionFinished {
+                invocation_id,
+                status,
+                failure_code,
+            } => Self::GraphExecutionFinished {
+                invocation_id: invocation_id.to_string(),
+                status: status.clone(),
+                failure_code: failure_code.clone(),
+            },
+            AgentEvent::TextRetracted { characters } => Self::TextRetracted {
+                characters: *characters,
+            },
+            // Checkpoint text belongs to model context, not the user's transcript.
+            AgentEvent::ContextCompacted { .. } => Self::ContextCompacted,
+            AgentEvent::ContextCompactionProgress {
+                completed_bytes,
+                total_bytes,
+                ..
+            } => Self::ContextCompactionProgress {
+                completed_bytes: *completed_bytes,
+                total_bytes: *total_bytes,
+            },
+            AgentEvent::RuntimeStatus { phase, attempt } => Self::RuntimeStatus {
+                phase: *phase,
+                attempt: *attempt,
+            },
+            AgentEvent::DeliveryBlocked { reason } => Self::DeliveryBlocked {
+                reason: reason.clone(),
+            },
             AgentEvent::TextDelta { delta } => Self::TextDelta {
                 delta: delta.clone(),
             },
@@ -351,9 +415,30 @@ mod tests {
 
     #[test]
     fn harness_events_match_the_frontend_wire_fixture() {
+        let knowledge: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../src/tests/fixtures/node-system-contracts/harness-knowledge.json"
+        ))
+        .unwrap();
+        let sources: Vec<yss_harness_contract::ProjectKnowledgeSourceSummary> =
+            serde_json::from_value(knowledge["sources"].clone()).unwrap();
+        assert_eq!(serde_json::to_value(sources).unwrap(), knowledge["sources"]);
+        for key in ["citation", "builtin"] {
+            let detail: HarnessCitationDetailDto =
+                serde_json::from_value(knowledge[key].clone()).unwrap();
+            assert_eq!(serde_json::to_value(detail).unwrap(), knowledge[key]);
+        }
         let events = [
             HarnessEventKindDto::SessionCreated,
             HarnessEventKindDto::TurnStarted {
+                resources: vec![],
+                model: yss_harness_contract::LanguageModelIdentity {
+                    selection: yss_harness_contract::LanguageModelSelection {
+                        provider_id: "test-provider".into(),
+                        model_id: "test-model".into(),
+                    },
+                    provider_name: "Test provider".into(),
+                    model_name: "Test model".into(),
+                },
                 user_message: "Inspect the dataset".into(),
             },
             HarnessEventKindDto::ToolInvocationStarted {
@@ -362,9 +447,6 @@ mod tests {
             },
             HarnessEventKindDto::TurnCompleted {
                 final_text: "Schema inspected.".into(),
-            },
-            HarnessEventKindDto::MemoryDeleted {
-                record_id: "memory-1".into(),
             },
             HarnessEventKindDto::WorkflowStepFailed {
                 run_id: "workflow-1".into(),
@@ -376,13 +458,46 @@ mod tests {
                 capability_id: CapabilityId::InspectDatasetProfile,
                 failure_code: yss_harness_contract::CapabilityFailureCode::DeadlineElapsed,
             },
+            HarnessEventKindDto::AgentRunResumed {
+                run_id: "worker-1".into(),
+                role: yss_harness_contract::AgentRole::Report,
+                objective: "Save report".into(),
+            },
+            HarnessEventKindDto::RuntimeStatus {
+                phase: yss_harness_contract::AgentRuntimePhase::Reconnecting,
+                attempt: 1,
+            },
+            HarnessEventKindDto::ContextCompacted,
+            HarnessEventKindDto::TextRetracted { characters: 7 },
+            HarnessEventKindDto::GraphExecutionFinished {
+                invocation_id: "tool-3".into(),
+                status: "failed".into(),
+                failure_code: Some("resource_version_changed".into()),
+            },
+            HarnessEventKindDto::DeliveryBlocked {
+                reason: "report_document_not_saved".into(),
+            },
+            HarnessEventKindDto::AgentRunFinished {
+                run_id: "worker-1".into(),
+                role: yss_harness_contract::AgentRole::Report,
+                state: yss_harness_contract::AgentRunState::Failed,
+                failure_code: Some(
+                    yss_harness_contract::AgentDriverFailureCode::ProviderPaymentRequired,
+                ),
+                summary: None,
+                blocked_reason: None,
+                warnings: vec![],
+                evidence_count: 3,
+                artifacts: vec![],
+                results: vec![],
+            },
         ]
         .into_iter()
         .enumerate()
         .map(|(index, event)| HarnessEventDto {
             sequence: index as u64 + 1,
             session_id: "session-1".into(),
-            turn_id: ((1..=3).contains(&index) || index == 6).then(|| "turn-1".into()),
+            turn_id: ((1..=3).contains(&index) || index >= 5).then(|| "turn-1".into()),
             occurred_at: 1000,
             event,
         })
@@ -392,5 +507,20 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(serde_json::to_value(events).unwrap(), fixture);
+        let progress = AgentEvent::ContextCompactionProgress {
+            completed_bytes: 50,
+            total_bytes: 100,
+            checkpoint: Some(yss_harness_contract::ContextCompactionCheckpoint {
+                processed_bytes: 50,
+                prefix_hash: "private-prefix".into(),
+                summary: "private-model-context".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_value(HarnessEventKindDto::from(&progress)).unwrap(),
+            serde_json::json!({
+                "type":"context_compaction_progress", "payload":{"completedBytes":50,"totalBytes":100}
+            })
+        );
     }
 }

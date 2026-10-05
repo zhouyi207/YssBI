@@ -104,6 +104,7 @@ pub struct CapabilityInvocationContext {
     project: ProjectSessionBinding,
     approval_grant_id: Option<ApprovalGrantId>,
     agent: Option<AgentInvocationScope>,
+    graph_observation: Option<String>,
 }
 
 impl CapabilityInvocationContext {
@@ -120,6 +121,7 @@ impl CapabilityInvocationContext {
             project,
             approval_grant_id: None,
             agent: None,
+            graph_observation: None,
         }
     }
 
@@ -155,5 +157,15 @@ impl CapabilityInvocationContext {
 
     pub fn agent(&self) -> Option<&AgentInvocationScope> {
         self.agent.as_ref()
+    }
+
+    /// Captured semantic inputs for this graph call, never a model argument.
+    pub fn with_graph_observation(mut self, hash: Option<String>) -> Self {
+        self.graph_observation = hash;
+        self
+    }
+
+    pub fn graph_observation(&self) -> Option<&str> {
+        self.graph_observation.as_deref()
     }
 }

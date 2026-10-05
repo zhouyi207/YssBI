@@ -53,6 +53,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-harness-core` | `src-tauri/crates/yss-harness-core` | [Cargo.toml](../../src-tauri/crates/yss-harness-core/Cargo.toml) | [README](../../src-tauri/crates/yss-harness-core/README.md) |
 | `yss-harness-rig` | `src-tauri/crates/yss-harness-rig` | [Cargo.toml](../../src-tauri/crates/yss-harness-rig/Cargo.toml) | — |
 | `yss-harness-sqlite` | `src-tauri/crates/yss-harness-sqlite` | [Cargo.toml](../../src-tauri/crates/yss-harness-sqlite/Cargo.toml) | — |
+| `yss-harness-tantivy` | `src-tauri/crates/yss-harness-tantivy` | [Cargo.toml](../../src-tauri/crates/yss-harness-tantivy/Cargo.toml) | — |
 | `yss-ipc-channel` | `src-tauri/crates/yss-ipc-channel` | [Cargo.toml](../../src-tauri/crates/yss-ipc-channel/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-channel/README.md) |
 | `yss-ipc-contract` | `src-tauri/crates/yss-ipc-contract` | [Cargo.toml](../../src-tauri/crates/yss-ipc-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-contract/README.md) |
 | `yss-ipc-event` | `src-tauri/crates/yss-ipc-event` | [Cargo.toml](../../src-tauri/crates/yss-ipc-event/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-event/README.md) |

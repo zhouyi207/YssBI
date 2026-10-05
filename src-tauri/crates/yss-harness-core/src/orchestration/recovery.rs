@@ -10,6 +10,11 @@ pub(crate) async fn pending_agent_turns(
     for session in ports.sessions.load_active_sessions().await? {
         for envelope in ports.events.load_events_after(&session.id, 0).await? {
             match envelope.event {
+                HarnessEvent::AgentRunResumed { request, .. } => {
+                    if let Some(turn_id) = envelope.turn_id {
+                        pending.insert(request.run_id, turn_id);
+                    }
+                }
                 HarnessEvent::AgentRunStarted { run_id, .. } => {
                     if let Some(turn_id) = envelope.turn_id {
                         pending.insert(run_id, turn_id);
@@ -43,6 +48,14 @@ pub(crate) async fn recover_runs(
             continue;
         }
         match &envelope.event {
+            HarnessEvent::AgentRunResumed {
+                request,
+                role,
+                scope,
+                ..
+            } => {
+                runs.insert(request.run_id.clone(), (*role, Some(scope.clone())));
+            }
             HarnessEvent::AgentRunStarted {
                 run_id, role, task, ..
             } => {

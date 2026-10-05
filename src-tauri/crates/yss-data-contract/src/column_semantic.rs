@@ -64,7 +64,7 @@ impl std::str::FromStr for SemanticType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SemanticValue {
     /// Exact text representation of the stored value; never a JavaScript number.

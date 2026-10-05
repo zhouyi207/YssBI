@@ -46,6 +46,7 @@ pub struct HarnessConversationMetadata {
     pub project_key: String,
     pub title: String,
     pub last_opened_at: UnixMillis,
+    pub model: Option<crate::LanguageModelSelection>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -63,6 +64,12 @@ pub struct HarnessTurnRecord {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum HarnessEvent {
+    AgentRunResumed {
+        request: crate::AgentFollowup,
+        scope: crate::AgentTaskScope,
+        role: crate::AgentRole,
+        objective: String,
+    },
     AgentRunStarted {
         run_id: crate::AgentRunId,
         parent_run_id: Option<crate::AgentRunId>,
@@ -82,6 +89,8 @@ pub enum HarnessEvent {
     SessionCreated,
     TurnStarted {
         user_message: String,
+        model: crate::LanguageModelIdentity,
+        resources: Vec<crate::HarnessResourceReference>,
     },
     Agent(AgentEvent),
     TurnCompleted {
@@ -91,12 +100,6 @@ pub enum HarnessEvent {
     TurnCancelled,
     KnowledgeCited {
         citation: crate::KnowledgeCitation,
-    },
-    MemoryRecorded {
-        record: crate::MemoryRecord,
-    },
-    MemoryDeleted {
-        record_id: crate::MemoryRecordId,
     },
     WorkflowPlanned {
         run_id: WorkflowRunId,

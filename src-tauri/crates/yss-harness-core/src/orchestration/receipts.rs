@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Mutex};
 use yss_harness_contract::*;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Evidence {
     pub(super) invocations: Vec<ToolInvocationId>,
     pub(super) artifacts: Vec<ResourceChange>,
@@ -13,6 +13,19 @@ pub(super) struct Evidence {
 }
 
 impl Evidence {
+    pub(super) fn delivery_pending(&self) -> bool {
+        self.requires_saved_document
+            && (self.document_saves.is_empty() || self.document_saves.values().any(|saved| !saved))
+    }
+
+    pub(super) fn delivery_feedback(&self) -> Option<String> {
+        self.delivery_pending()
+            .then(|| serde_json::json!({
+                "reason": "report_document_not_saved",
+                "artifactCount": self.artifacts.len(),
+                "nextStep": "Continue from committed receipts. Create or edit the authorized Doc and save after the final edit. Do not repeat successful writes. If blocked, state the concrete missing requirement."
+            }).to_string())
+    }
     pub(super) fn for_task(task: &AgentTask) -> Self {
         Self {
             requires_saved_document: task.worker == AgentRole::Report
@@ -45,6 +58,16 @@ pub(super) fn record_receipt(
         return;
     };
     match result {
+        AutomationCapabilityResult::ResourceInspection(inspection) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource == inspection.resource)
+                && access.version.is_none()
+            {
+                access.version = Some(inspection.version.clone());
+            }
+        }
         AutomationCapabilityResult::ResourceManaged(receipt)
         | AutomationCapabilityResult::ResourceEdited(receipt) => {
             evidence.artifacts.extend(receipt.changes.clone());
@@ -210,14 +233,12 @@ pub(super) fn finish_outcome(
             next_steps: vec![],
         })
     });
-    if evidence.requires_saved_document
-        && (evidence.document_saves.is_empty()
-            || evidence.document_saves.values().any(|saved| !saved))
+    if evidence.delivery_pending()
         && let Some(report) = &mut report
         && report.blocked_reason.is_none()
     {
         report.blocked_reason = Some("report_document_not_saved".into());
-        report.next_steps.push("Delegate a corrected ReportAgent task with Doc creation/edit/save permissions. Write the report with edit_resource and finish with manage_resource save using the current version.".into());
+        report.next_steps.push("Use followup_task to continue this worker from committed receipts. Write the authorized report with edit_resource and finish with manage_resource save using the current version.".into());
     }
     let failure_code = result.as_ref().err().map(|error| error.code);
     let state = match failure_code {

@@ -1,0 +1,11 @@
+[package]
+name = "yss-harness-tantivy"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+tantivy.workspace = true
+tokio.workspace = true
+yss-harness-contract = { path = "../yss-harness-contract" }

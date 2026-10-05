@@ -31,3 +31,8 @@ NumericFold 只推导语义与标量/数列结构，整数/浮点选择、广播
 `aggregation` 拥有描述所支持的语义集合、内部摘要关系的字段，以及分组聚合的操作身份、语义约束和输出命名。内部描述摘要包含有效数、缺失数、Numeric 指标和分类类别数；完整类别频数由关系频数入口提供，节点内核组合为按类型区分的 Result。Catalog、Graph Analysis 与关系执行复用这些契约，不各自推测数值编码是否代表分类变量。
 
 `TabularColumnName` 统一校验列名，只拒绝空串或全空白名称，保留其他名称的精确字符串，包括两侧空格。表格快照、Protocol 选列与筛选条件、连接键共用这项规则，不通过 trim 改写列身份；列表唯一性、连接键组形状及筛选操作和值的约束仍由各自契约校验。
+
+节点配置需要的 `TabularColumnName`、`DecimalLiteral`、`FilterLiteral`、`SemanticValue` 和
+`ConversionDomain` 从本 crate 的类型生成 JSON Schema。整数筛选值和精确小数继续使用字符串，
+Schema 不将它们改成 JSON number。生成的结构描述供 Node Protocol 投影使用，范围、关联字段、
+累计字节数等业务校验仍由原有反序列化与验证入口执行。

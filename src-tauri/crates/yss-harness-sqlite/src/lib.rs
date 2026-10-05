@@ -7,7 +7,6 @@ mod codec;
 mod events;
 mod knowledge;
 mod ledger;
-mod memory;
 mod schema;
 mod session;
 mod workflow;
@@ -24,6 +23,7 @@ use yss_harness_contract::PersistenceFailure;
 pub struct SqliteHarnessStore {
     pool: SqlitePool,
     path: Option<PathBuf>,
+    knowledge_generation: std::sync::atomic::AtomicU64,
 }
 
 impl SqliteHarnessStore {
@@ -62,7 +62,11 @@ impl SqliteHarnessStore {
             .connect_with(options)
             .await
             .map_err(|_| unavailable())?;
-        let store = Self { pool, path };
+        let store = Self {
+            pool,
+            path,
+            knowledge_generation: Default::default(),
+        };
         store.ensure_schema().await?;
         Ok(store)
     }

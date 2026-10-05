@@ -39,13 +39,6 @@ pub(crate) const SCHEMA: &[&str] = &[
         payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         FOREIGN KEY(session_id) REFERENCES assistant_session(id)
     )"#,
-    r#"CREATE TABLE memory_record (
-        id TEXT PRIMARY KEY NOT NULL,
-        session_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
-        FOREIGN KEY(session_id) REFERENCES assistant_session(id)
-    )"#,
     r#"CREATE TABLE knowledge_source (
         id TEXT PRIMARY KEY NOT NULL,
         status TEXT NOT NULL,

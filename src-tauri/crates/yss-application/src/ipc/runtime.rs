@@ -53,7 +53,8 @@ impl CommandRuntime {
         app.manage(HarnessRuntimeState::new(
             harness.host,
             self.channels,
-            harness.provider,
+            harness.models,
+            harness.knowledge,
         ));
     }
 }

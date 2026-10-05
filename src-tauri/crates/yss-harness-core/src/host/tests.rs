@@ -43,7 +43,8 @@ fn cancellation_releases_active_turns_before_waking_reentrant_waiters() {
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = Arc::new(
         HarnessHost::new(HarnessPorts {
-            agent_driver: Arc::new(MockAgentDriver::new("unused")),
+            resources: Arc::new(crate::test_support::FixtureResourceResolver),
+            models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("unused"))),
             capability_gateway: Arc::new(RejectingCapabilityGateway),
             sessions: store.clone(),
             events: store.clone(),
@@ -51,7 +52,7 @@ fn cancellation_releases_active_turns_before_waking_reentrant_waiters() {
             workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
-            memory: store.clone(),
+            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             approvals: store,
             clock: Arc::new(FixedClock::new(1_000)),
             ids: Arc::new(SequentialIds::default()),
@@ -95,7 +96,10 @@ fn cancellation_releases_active_turns_before_waking_reentrant_waiters() {
 async fn session_turn_persists_one_gap_free_ordered_event_stream() {
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = HarnessHost::new(HarnessPorts {
-        agent_driver: Arc::new(MockAgentDriver::new("Evidence is ready.")),
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new(
+            "Evidence is ready.",
+        ))),
         capability_gateway: Arc::new(RejectingCapabilityGateway),
         sessions: store.clone(),
         events: store.clone(),
@@ -103,7 +107,7 @@ async fn session_turn_persists_one_gap_free_ordered_event_stream() {
         workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
-        memory: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
         approvals: store.clone(),
         clock: Arc::new(FixedClock::new(1_000)),
         ids: Arc::new(SequentialIds::default()),
@@ -120,11 +124,22 @@ async fn session_turn_persists_one_gap_free_ordered_event_stream() {
         .await
         .unwrap();
 
+    let references = vec![yss_harness_contract::HarnessResourceReference {
+        resource: yss_harness_contract::ProjectResourceRef {
+            kind: yss_harness_contract::ProjectResourceKind::Database,
+            id: "database-a".into(),
+        },
+        name: "database-a".into(),
+    }];
     let result = host
         .submit_turn(
             &session.id,
             &session.project,
             "Review the dataset.".to_owned(),
+            references
+                .iter()
+                .map(|entry| entry.resource.clone())
+                .collect(),
             None,
         )
         .await
@@ -151,6 +166,67 @@ async fn session_turn_persists_one_gap_free_ordered_event_stream() {
         HarnessEvent::TurnCompleted { .. }
     ));
     assert_eq!(store.published_events(), events);
+    assert!(events.iter().any(|event| matches!(&event.event, HarnessEvent::TurnStarted { resources, .. } if resources == &references)));
+}
+
+#[tokio::test]
+async fn conversation_rename_preserves_history_and_rejects_active_turns() {
+    let store = Arc::new(InMemoryHarnessStore::default());
+    let host = HarnessHost::new(HarnessPorts {
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("unused"))),
+        capability_gateway: Arc::new(RejectingCapabilityGateway),
+        sessions: store.clone(),
+        events: store.clone(),
+        event_sink: store.clone(),
+        workflows: store.clone(),
+        tool_ledger: store.clone(),
+        knowledge: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+        approvals: store,
+        clock: Arc::new(FixedClock::new(1000)),
+        ids: Arc::new(SequentialIds::default()),
+    })
+    .unwrap();
+    let principal = PrincipalId::try_new("user").unwrap();
+    let session = host
+        .session_access()
+        .await
+        .create_conversation(
+            principal.clone(),
+            "project-key".into(),
+            ProjectSessionBinding::new(
+                ProjectInstanceId::from_existing("project-1".into()),
+                ProjectSessionId::new("project-session-1"),
+            ),
+        )
+        .await
+        .unwrap();
+    let before = host.events_after(&session.id, 0).await.unwrap();
+    let (_cancel, admission) = host.admit_turn(&session.id).unwrap();
+    assert!(matches!(
+        host.session_access()
+            .await
+            .rename_conversation(&session.id, &principal, "project-key", "Renamed".into())
+            .await,
+        Err(HarnessError::ConcurrentTurn)
+    ));
+    drop(admission);
+    let renamed = host
+        .session_access()
+        .await
+        .rename_conversation(&session.id, &principal, "project-key", "  Renamed  ".into())
+        .await
+        .unwrap();
+    assert_eq!(renamed.conversation.unwrap().title, "Renamed");
+    assert_eq!(host.events_after(&session.id, 0).await.unwrap(), before);
+    assert!(matches!(
+        host.session_access()
+            .await
+            .rename_conversation(&session.id, &principal, "other-project", "Wrong".into())
+            .await,
+        Err(HarnessError::SessionNotFound)
+    ));
 }
 
 #[tokio::test]
@@ -184,22 +260,26 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
                     .unwrap();
                 capabilities
                     .execute(ModelCapabilityRequest {
-                        request: AutomationCapabilityRequest::InspectResult(InspectResultRequest {
-                            execution_session_id: "00000000-0000-0000-0000-000000000001".into(),
-                            result_id: 7,
-                            part: None,
-                            offset: 0,
-                            limit: 20,
-                        }),
+                        request: (AutomationCapabilityRequest::InspectResult(
+                            InspectResultRequest {
+                                execution_session_id: "00000000-0000-0000-0000-000000000001".into(),
+                                result_id: 7,
+                                part: None,
+                                offset: 0,
+                                limit: 20,
+                            },
+                        ))
+                        .into(),
                     })
                     .await
                     .unwrap();
                 assert!(
                     capabilities
                         .execute(ModelCapabilityRequest {
-                            request: AutomationCapabilityRequest::InspectProject(
+                            request: (AutomationCapabilityRequest::InspectProject(
                                 InspectProjectRequest {}
-                            )
+                            ))
+                            .into(),
                         })
                         .await
                         .is_err()
@@ -235,7 +315,8 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
         value: ResultValueInspection::Json(evidence.clone().into()),
     });
     let host = HarnessHost::new(HarnessPorts {
-        agent_driver: driver.clone(),
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(driver.clone()),
         capability_gateway: Arc::new(StaticCapabilityGateway::new(result.clone())),
         sessions: store.clone(),
         events: store.clone(),
@@ -243,7 +324,7 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
         workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
-        memory: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
         approvals: store.clone(),
         clock: Arc::new(FixedClock::new(1_000)),
         ids: Arc::new(SequentialIds::default()),
@@ -267,7 +348,7 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
     };
     for index in 0..12 {
         let outcome = host
-            .submit_turn(&session.id, &session.project, question(index), None)
+            .submit_turn(&session.id, &session.project, question(index), vec![], None)
             .await;
         assert_eq!(outcome.is_err(), index == 1 || index == 2);
     }
@@ -296,7 +377,7 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
         let (skill_index, content) = skill_messages[0];
         assert!(content.contains(STATISTICAL_REPORT_WRITING_ID));
         assert!(content.contains(STATISTICAL_REPORT_WRITING_VERSION));
-        assert!(content.contains(report.manifest.source_hash.as_str()));
+        assert!(!content.contains(report.manifest.source_hash.as_str()));
         assert!(skill_index > 0);
         assert!(
             skill_index
@@ -382,7 +463,8 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
     };
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = HarnessHost::new(HarnessPorts {
-        agent_driver: Arc::new(MockAgentDriver::new("Ready")),
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("Ready"))),
         capability_gateway: Arc::new(RejectingCapabilityGateway),
         sessions: store.clone(),
         events: store.clone(),
@@ -390,7 +472,7 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
         workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
-        memory: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
         approvals: store.clone(),
         clock: Arc::new(FixedClock::new(1000)),
         ids: Arc::new(SequentialIds::default()),
@@ -468,7 +550,8 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
 async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = HarnessHost::new(HarnessPorts {
-        agent_driver: Arc::new(MockAgentDriver::new("Plan ready.")),
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("Plan ready."))),
         capability_gateway: Arc::new(
             StaticCapabilityGateway::new(AutomationCapabilityResult::DatasetSchemaInspection(
                 DatasetSchemaInspection {
@@ -505,7 +588,7 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
         workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
-        memory: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
         approvals: store.clone(),
         clock: Arc::new(FixedClock::new(2_000)),
         ids: Arc::new(SequentialIds::default()),
@@ -525,6 +608,7 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
         &session.id,
         &session.project,
         "Review quality.".to_owned(),
+        vec![],
         None,
     )
     .await
@@ -582,7 +666,8 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
 async fn project_session_reconciliation_stales_old_active_sessions() {
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = HarnessHost::new(HarnessPorts {
-        agent_driver: Arc::new(MockAgentDriver::new("unused")),
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("unused"))),
         capability_gateway: Arc::new(RejectingCapabilityGateway),
         sessions: store.clone(),
         events: store.clone(),
@@ -590,7 +675,7 @@ async fn project_session_reconciliation_stales_old_active_sessions() {
         workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
-        memory: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
         approvals: store.clone(),
         clock: Arc::new(FixedClock::new(3_000)),
         ids: Arc::new(SequentialIds::default()),
@@ -671,7 +756,10 @@ impl CapabilityGatewayPort for ApprovedGateway {
 async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
     let store = Arc::new(InMemoryHarnessStore::default());
     let host = HarnessHost::new(HarnessPorts {
-        agent_driver: Arc::new(MockAgentDriver::new("Ready for approval.")),
+        resources: Arc::new(crate::test_support::FixtureResourceResolver),
+        models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new(
+            "Ready for approval.",
+        ))),
         capability_gateway: Arc::new(ApprovedGateway),
         sessions: store.clone(),
         events: store.clone(),
@@ -679,7 +767,7 @@ async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
         workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
-        memory: store.clone(),
+        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
         approvals: store.clone(),
         clock: Arc::new(FixedClock::new(4_000)),
         ids: Arc::new(SequentialIds::default()),
@@ -699,6 +787,7 @@ async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
         &session.id,
         &session.project,
         "Move the node.".to_owned(),
+        vec![],
         None,
     )
     .await

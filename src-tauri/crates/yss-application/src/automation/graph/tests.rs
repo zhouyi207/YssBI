@@ -2,6 +2,8 @@ use super::*;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::time::Duration;
 
+mod inspection;
+
 struct Fixture {
     directory: std::path::PathBuf,
     application: Option<ApplicationState>,
@@ -171,7 +173,8 @@ impl Fixture {
         let AutomationCapabilityResult::GraphInspection(graph) = self
             .action(AutomationCapabilityRequest::InspectGraph(
                 InspectGraphRequest {
-                    graph_path: self.path.clone(),
+                    view: GraphInspectionView::Full,
+                    ..InspectGraphRequest::overview(self.path.clone())
                 },
             ))
             .unwrap()
@@ -638,15 +641,17 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         panic!("node definition");
     };
     let definition = &definitions.matches[0];
-    assert!(
-        definition
-            .parameters
-            .as_ref()
-            .unwrap()
-            .iter()
-            .any(|parameter| parameter.key == "method"
-                && parameter.default_value == Some(serde_json::json!("OLS")))
-    );
+    let configuration = definition.configuration_schema.as_ref().unwrap();
+    let configuration_validator = jsonschema::validator_for(configuration).unwrap();
+    assert!(configuration_validator.is_valid(&serde_json::json!({
+        "parameters": {"method": "OLS"}, "portCounts": {"x": 4}
+    })));
+    assert!(!configuration_validator.is_valid(&serde_json::json!({
+        "parameters": {"method": "not_a_method"}, "portCounts": {"x": 4}
+    })));
+    assert!(!configuration_validator.is_valid(&serde_json::json!({
+        "parameters": {"method": "OLS"}, "portCounts": {"y": 2}
+    })));
     assert!(
         definition
             .ports
@@ -790,7 +795,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
 }
 
 #[test]
-fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() {
+fn agent_graph_execution_inherits_dependency_reads_and_preserves_explicit_version_guards() {
     let mut fixture = Fixture::new();
     fixture.inspect();
     let created = fixture.edit(vec![
@@ -821,6 +826,8 @@ fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() 
         let AutomationCapabilityResult::ResourceInspection(value) = fixture
             .action(AutomationCapabilityRequest::InspectResource(
                 InspectResourceRequest {
+                    graph_view: GraphInspectionView::Overview,
+                    metadata_only: true,
                     resource: resource.clone(),
                     offset: 0,
                     limit: 1,
@@ -830,6 +837,7 @@ fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() 
         else {
             panic!("resource")
         };
+        assert!(matches!(value.content, ResourceContent::Metadata));
         grants.push(AgentResourceAccess {
             resource,
             version: Some(value.version),
@@ -853,12 +861,50 @@ fn agent_graph_execution_requires_authority_for_its_real_dataset_dependencies() 
             ..Default::default()
         }),
     });
-    let AutomationCapabilityResult::GraphExecution(denied) = fixture.action(run.clone()).unwrap()
+    let AutomationCapabilityResult::GraphExecution(inherited) =
+        fixture.action(run.clone()).unwrap()
     else {
         panic!("execution")
     };
-    assert_eq!(denied.status, "failed");
-    assert!(denied.run_id.is_none());
+    assert_eq!(
+        inherited.status, "succeeded",
+        "{:?}",
+        inherited.failure_code
+    );
+    assert!(inherited.run_id.is_some());
+    let mut stale = grants.clone();
+    stale[1].version.as_mut().unwrap().revision += 1;
+    fixture.context = context.clone().with_agent(AgentInvocationScope {
+        run_id: AgentRunId::try_new("stale-dataset").unwrap(),
+        role: AgentRole::Stats,
+        task: Some(AgentTaskScope {
+            resources: stale,
+            ..Default::default()
+        }),
+    });
+    let AutomationCapabilityResult::GraphExecution(stale) = fixture.action(run.clone()).unwrap()
+    else {
+        panic!("execution")
+    };
+    assert_eq!(
+        stale.failure_code.as_deref(),
+        Some("resource_version_changed")
+    );
+    assert!(
+        stale
+            .failure_location
+            .as_ref()
+            .unwrap()
+            .contains(&fixture.dataset)
+    );
+    assert!(
+        stale
+            .failure_location
+            .as_ref()
+            .unwrap()
+            .contains("expected")
+    );
+
     fixture.context = context.with_agent(AgentInvocationScope {
         run_id: AgentRunId::try_new("scoped-stats").unwrap(),
         role: AgentRole::Stats,
@@ -1004,7 +1050,7 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
     assert!(matches!(
         crate::graph::run::run_graph(application, request(demand(output("table", "dataframe")))),
         Err(ExecutionApplicationError::ResourceBindings(
-            ResourceBindingError::ScopeDenied
+            ResourceBindingError::ScopeDenied { .. }
         ))
     ));
     let AutomationCapabilityResult::GraphExecution(executed) = fixture
@@ -1436,7 +1482,25 @@ fn oversized_graph_edit_facts_are_rejected_before_committing() {
 #[test]
 fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_failure() {
     let mut f = Fixture::new();
-    f.inspect();
+    let inspected = f.inspect();
+    let original_context = f.context.clone();
+    f.context = original_context
+        .clone()
+        .with_graph_observation(Some("f".repeat(64)));
+    let unchanged = f.document.clone();
+    assert_eq!(
+        f.action(f.edit_request(vec![node("yssbi.debug.view", "rejected")]))
+            .unwrap_err()
+            .code,
+        CapabilityFailureCode::RevisionConflict
+    );
+    assert_eq!(
+        f.document, unchanged,
+        "a changed semantic basis must be rejected before commit"
+    );
+    f.context = original_context
+        .clone()
+        .with_graph_observation(Some(inspected.semantic_input_hash));
     let mut create = node("yssbi.dataframe.groupby", "group");
     let GraphEditOperation::CreateNode { parameters, .. } = &mut create else {
         unreachable!()
@@ -1451,6 +1515,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
         node("yssbi.debug.view", "view"),
         connect(port("$group", "result"), port("$view", "data")),
     ]);
+    f.context = original_context;
     let node_id = parse_node_id(&created.created_nodes["group"]).unwrap();
     let id = &node_id.to_string();
     assert_eq!(f.document.connections.len(), 1);

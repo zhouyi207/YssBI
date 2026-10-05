@@ -56,7 +56,8 @@ async fn planned() -> (
     let gateway = Arc::new(BlockingGateway::default());
     let host = Arc::new(
         HarnessHost::new(HarnessPorts {
-            agent_driver: Arc::new(MockAgentDriver::new("Done")),
+            resources: Arc::new(crate::test_support::FixtureResourceResolver),
+            models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("Done"))),
             capability_gateway: gateway.clone(),
             sessions: store.clone(),
             events: store.clone(),
@@ -64,7 +65,7 @@ async fn planned() -> (
             workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
-            memory: store.clone(),
+            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             approvals: store.clone(),
             clock: Arc::new(FixedClock::new(1000)),
             ids: Arc::new(SequentialIds::default()),

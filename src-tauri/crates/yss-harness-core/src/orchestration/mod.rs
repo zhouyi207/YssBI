@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::{RwLock, Semaphore};
+use tracing::Instrument;
 use yss_harness_contract::*;
 
 use crate::conversation::agent_messages;
@@ -17,6 +18,8 @@ struct TaskEntry {
 
 pub(crate) struct TurnOrchestrator {
     pub ports: HarnessPorts,
+    driver: Arc<dyn AgentDriverPort>,
+    knowledge: Arc<crate::KnowledgeService>,
     pub session: HarnessSessionRecord,
     pub turn_id: HarnessTurnId,
     pub writer: EventWriter,
@@ -35,6 +38,8 @@ impl TurnOrchestrator {
     )]
     pub(crate) fn new(
         ports: HarnessPorts,
+        driver: Arc<dyn AgentDriverPort>,
+        knowledge: Arc<crate::KnowledgeService>,
         session: HarnessSessionRecord,
         turn_id: HarnessTurnId,
         writer: EventWriter,
@@ -51,6 +56,8 @@ impl TurnOrchestrator {
         .map_err(|_| driver_failure())?;
         Ok(Arc::new(Self {
             ports,
+            driver,
+            knowledge,
             session,
             turn_id,
             writer,
@@ -66,6 +73,7 @@ impl TurnOrchestrator {
     pub(crate) async fn run(
         self: &Arc<Self>,
         messages: Vec<AgentMessage>,
+        observations: ResourceObservations,
     ) -> Result<AgentTurnResult, AgentDriverFailure> {
         self.append(HarnessEvent::AgentRunStarted {
             run_id: self.manager_run_id.clone(),
@@ -99,21 +107,31 @@ impl TurnOrchestrator {
             scope,
             evidence: evidence.clone(),
             manager: Some(self.clone()),
+            observations: Mutex::new(observations),
         });
         let mut result = self
-            .ports
-            .agent_driver
-            .run_turn(request, executor, output, self.cancellation.clone())
+            .driver
+            .run_turn(request, executor.clone(), output.clone(), self.cancellation.clone())
+            .instrument(tracing::info_span!("harness_agent_run", session_id = %self.session.id, turn_id = %self.turn_id, agent_run_id = %self.manager_run_id, role = "manager"))
             .await;
         if self.cancellation.is_cancelled() {
             result = Err(cancelled_driver());
         }
-        let outcome = finish_outcome(
+        let mut outcome = finish_outcome(
             self.manager_run_id.clone(),
             AgentRole::Manager,
             &result,
             &evidence,
         );
+        if result.is_ok()
+            && let Some(reason) = executor.completion_feedback()
+        {
+            outcome.state = AgentRunState::Blocked;
+            output
+                .emit(AgentEvent::DeliveryBlocked { reason })
+                .await
+                .map_err(|_| driver_failure())?;
+        }
         self.append(HarnessEvent::AgentRunFinished {
             outcome: Box::new(outcome),
         })
@@ -148,6 +166,7 @@ impl TurnOrchestrator {
         HarnessToolExecutor::new(
             registry,
             self.ports.capability_gateway.clone(),
+            self.knowledge.clone(),
             self.ports.tool_ledger.clone(),
             self.ports.clock.clone(),
             self.ports.ids.clone(),
@@ -225,7 +244,26 @@ impl TurnOrchestrator {
             task: Some(Box::new(task.clone())),
         })
         .await?;
-        let evidence = Arc::new(Mutex::new(Evidence::for_task(&task)));
+        let evidence = Evidence::for_task(&task);
+        self.execute_task(
+            run_id,
+            task,
+            dependencies,
+            evidence,
+            WorkerContinuation::default(),
+        )
+        .await
+    }
+
+    async fn execute_task(
+        self: &Arc<Self>,
+        run_id: AgentRunId,
+        task: AgentTask,
+        dependencies: Vec<AgentTaskOutcome>,
+        evidence: Evidence,
+        continuation: WorkerContinuation,
+    ) -> Result<AgentTaskOutcome, CapabilityFailure> {
+        let evidence = Arc::new(Mutex::new(evidence));
         let admission = async {
             let slot = tokio::select! {
                 permit = self.slots.acquire() => permit.map_err(|_| driver_failure())?,
@@ -251,7 +289,7 @@ impl TurnOrchestrator {
         .await;
         let (result, _admission) = match admission {
             Ok(admission) => (
-                self.run_worker(&run_id, &task, dependencies, evidence.clone())
+                self.run_worker(&run_id, &task, dependencies, evidence.clone(), continuation)
                     .await,
                 Some(admission),
             ),
@@ -325,6 +363,7 @@ impl TurnOrchestrator {
         task: &AgentTask,
         dependencies: Vec<AgentTaskOutcome>,
         evidence: Arc<Mutex<Evidence>>,
+        continuation: WorkerContinuation,
     ) -> Result<AgentTurnResult, AgentDriverFailure> {
         let dependencies_current = {
             let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -375,26 +414,28 @@ impl TurnOrchestrator {
             scope,
             evidence: evidence.clone(),
             manager: None,
+            observations: Mutex::new(continuation.observations),
         });
-        let input = serde_json::to_string(
-            &serde_json::json!({ "task": task, "dependencies": dependencies }),
-        )
+        let input = serde_json::to_string(&serde_json::json!({
+            "task": model::AgentTaskInput::from(task),
+            "dependencies": dependencies.iter().map(model::task_outcome).collect::<Vec<_>>(),
+        }))
         .map_err(|_| driver_failure())?;
-        let messages = agent_messages(input, &[], Vec::new(), None, &self.skill, task.worker);
+        let messages = agent_messages(input, continuation.history, &[], &self.skill, task.worker);
         let request = Self::request(task.worker, messages, tools);
         let work = async {
             for access in &task.scope.resources {
                 if let Some(version) = &access.version {
                     let outcome = executor
-                        .execute(ModelCapabilityRequest {
-                            request: AutomationCapabilityRequest::InspectResource(
-                                InspectResourceRequest {
-                                    resource: access.resource.clone(),
-                                    offset: 0,
-                                    limit: 1,
-                                },
-                            ),
-                        })
+                        .execute_tool(AutomationCapabilityRequest::InspectResource(
+                            InspectResourceRequest {
+                                graph_view: GraphInspectionView::Overview,
+                                metadata_only: true,
+                                resource: access.resource.clone(),
+                                offset: 0,
+                                limit: 1,
+                            },
+                        ))
                         .await;
                     let outcome = match outcome {
                         Ok(outcome) => outcome,
@@ -405,12 +446,20 @@ impl TurnOrchestrator {
                             evidence
                                 .lock()
                                 .unwrap_or_else(|e| e.into_inner())
-                                .blocked_reason = Some("input_inspection_failed".into());
+                                .blocked_reason = Some(
+                                if failure.code == CapabilityFailureCode::RevisionConflict {
+                                    "input_revision_changed"
+                                } else {
+                                    "input_inspection_failed"
+                                }
+                                .into(),
+                            );
                             return Ok(AgentTurnResult {
-                                final_text: format!(
-                                    "Input resource inspection failed: {}. Inspect the current resource and correct the task before retrying.",
-                                    failure.code
-                                ),
+                                final_text: serde_json::json!({
+                                    "reason": "input_inspection_failed", "resource": access.resource,
+                                    "failureCode": failure.code,
+                                    "nextStep": "Inspect the current resource and correct the task before retrying."
+                                }).to_string(),
                             });
                         }
                     };
@@ -421,14 +470,17 @@ impl TurnOrchestrator {
                             .unwrap_or_else(|e| e.into_inner())
                             .blocked_reason = Some("input_revision_changed".into());
                         return Ok(AgentTurnResult {
-                            final_text: "Input resource version changed before execution. Inspect the current resource and delegate a task using its current version.".into(),
+                            final_text: serde_json::json!({
+                                "reason": "input_revision_changed", "resource": access.resource,
+                                "nextStep": "Inspect the changed resource, reassess the task, then resume the worker."
+                            }).to_string(),
                         });
                     }
                 }
             }
-            self.ports
-                .agent_driver
+            self.driver
                 .run_turn(request, executor, output, cancellation.clone())
+                .instrument(tracing::info_span!("harness_agent_run", session_id = %self.session.id, turn_id = %self.turn_id, agent_run_id = %run_id, role = task.worker.name()))
                 .await
         };
         tokio::pin!(work);
@@ -477,40 +529,113 @@ struct RunExecutor {
     scope: Arc<Mutex<AgentInvocationScope>>,
     evidence: Arc<Mutex<Evidence>>,
     manager: Option<Arc<TurnOrchestrator>>,
+    observations: Mutex<ResourceObservations>,
+}
+
+impl RunExecutor {
+    async fn execute_tool(
+        &self,
+        request: AutomationCapabilityRequest,
+    ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
+        let graph_observation = if self.manager.is_none() {
+            self.graph_observation(&request)
+        } else {
+            None
+        };
+        let outcome = match self.tools.execute(request.clone(), graph_observation).await {
+            Ok(outcome) => outcome,
+            Err(failure) => {
+                if self.manager.is_none()
+                    && matches!(
+                        failure.code,
+                        CapabilityFailureCode::RevisionConflict
+                            | CapabilityFailureCode::GraphDraftChanged
+                    )
+                {
+                    self.evidence
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .blocked_reason = Some("input_changed".into());
+                }
+                return Err(failure);
+            }
+        };
+        let mut evidence = self.evidence.lock().unwrap_or_else(|e| e.into_inner());
+        if !evidence.invocations.contains(&outcome.invocation_id) {
+            evidence.invocations.push(outcome.invocation_id.clone());
+            record_receipt(
+                &request,
+                &outcome.result,
+                &mut evidence,
+                &mut self.scope.lock().unwrap_or_else(|e| e.into_inner()),
+            );
+        }
+        Ok(outcome)
+    }
 }
 
 impl ModelCapabilityExecutor for RunExecutor {
+    fn completion_feedback(&self) -> Option<String> {
+        if let Some(manager) = &self.manager {
+            let tasks = manager.tasks.lock().unwrap_or_else(|e| e.into_inner());
+            let pending: Vec<_> = tasks.values().filter(|entry| {
+                Evidence::for_task(&entry.task).delivery_pending()
+                    && entry.outcome.as_ref().is_none_or(|outcome| outcome.state != AgentRunState::Completed)
+            }).map(|entry| serde_json::json!({
+                "runId": entry.run_id,
+                "state": entry.outcome.as_ref().map(|outcome| outcome.state),
+                "failureCode": entry.outcome.as_ref().and_then(|outcome| outcome.failure_code),
+                "artifactCount": entry.outcome.as_ref().map_or(0, |outcome| outcome.artifacts.len()),
+            })).collect();
+            return (!pending.is_empty()).then(|| serde_json::json!({
+                "reason": "report_delivery_incomplete", "pending": pending,
+                "nextStep": "Use followup_task to continue these workers from their receipts and finish saving the requested documents. Inspect changed inputs and reassess the task before resuming. Do not claim delivery without successful saves. If an external requirement prevents completion, explain the actual blocker."
+            }).to_string());
+        }
+        self.evidence
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .delivery_feedback()
+    }
     fn execute<'a>(
         &'a self,
         request: ModelCapabilityRequest,
     ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
         Box::pin(async move {
-            let outcome = self.tools.execute(request.clone()).await?;
-            let mut evidence = self.evidence.lock().unwrap_or_else(|e| e.into_inner());
-            if !evidence.invocations.contains(&outcome.invocation_id) {
-                evidence.invocations.push(outcome.invocation_id.clone());
-                record_receipt(
-                    &request.request,
-                    &outcome.result,
-                    &mut evidence,
-                    &mut self.scope.lock().unwrap_or_else(|e| e.into_inner()),
-                );
-            }
+            let request = self.bind_input(request.request).await?;
+            let outcome = self.execute_tool(request).await?;
+            self.observations
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .record(&outcome.result);
+            Ok(outcome)
+        })
+    }
+
+    fn followup<'a>(
+        &'a self,
+        request: model::AgentFollowupInput,
+    ) -> AgentFuture<'a, Result<AgentTaskOutcome, CapabilityFailure>> {
+        Box::pin(async move {
+            let outcome = self
+                .manager
+                .as_ref()
+                .ok_or_else(|| rejected("workers_cannot_delegate"))?
+                .followup(request, self)
+                .await?;
+            self.observations
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .invalidate(&outcome.artifacts);
             Ok(outcome)
         })
     }
 
     fn delegate<'a>(
         &'a self,
-        task: AgentTask,
+        task: model::AgentTaskInput,
     ) -> AgentFuture<'a, Result<AgentTaskOutcome, CapabilityFailure>> {
-        Box::pin(async move {
-            self.manager
-                .as_ref()
-                .ok_or_else(|| rejected("workers_cannot_delegate"))?
-                .delegate(task)
-                .await
-        })
+        Box::pin(async move { self.delegate_input(task).await })
     }
 }
 
@@ -530,8 +655,14 @@ fn cancelled_driver() -> AgentDriverFailure {
     AgentDriverFailure::new(AgentDriverFailureCode::Cancelled)
 }
 
+mod capabilities;
+mod continuation;
+use continuation::WorkerContinuation;
+mod delegation;
+mod observations;
 mod receipts;
 mod recovery;
+pub(crate) use observations::ResourceObservations;
 use receipts::{Evidence, finish_outcome, record_receipt};
 pub(crate) use recovery::{pending_agent_turns, recover_runs};
 

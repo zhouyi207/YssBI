@@ -185,6 +185,9 @@ mod tests {
         let directory = TestDirectory(
             std::env::temp_dir().join(format!("yss-application-runtime-{}", uuid::Uuid::new_v4())),
         );
+        let model_settings = directory.0.join("settings/language-models.json");
+        std::fs::create_dir_all(model_settings.parent().unwrap()).unwrap();
+        std::fs::write(&model_settings, b"invalid model settings").unwrap();
         let services = ApplicationServices::initialize(
             ApplicationPaths {
                 app_data_dir: directory.0.clone(),
@@ -201,7 +204,26 @@ mod tests {
         assert!(services.projects.path().is_file());
         assert!(services.projects.list_projects().await.unwrap().is_empty());
         assert!(services.plugins.list().unwrap().is_empty());
-        assert!(!services.harness.provider.is_configured());
+        assert!(services.harness.models.catalog().await.is_err());
+        assert_eq!(
+            std::fs::read(&model_settings).unwrap(),
+            b"invalid model settings"
+        );
+        std::fs::write(
+            &model_settings,
+            br#"{"providers":[],"defaultModel":null,"retiredCredentials":[]}"#,
+        )
+        .unwrap();
+        assert!(
+            services
+                .harness
+                .models
+                .catalog()
+                .await
+                .unwrap()
+                .providers
+                .is_empty()
+        );
         let captured = services.application.capture_session().unwrap();
         let session = services
             .application

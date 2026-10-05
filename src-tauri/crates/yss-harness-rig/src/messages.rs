@@ -2,7 +2,7 @@
 
 use crate::error::invalid_response;
 use rig_core::completion::Message;
-use rig_core::completion::message::{AssistantContent, ToolCall, ToolCallId, ToolFunction};
+use rig_core::completion::message::{AssistantContent, CallId, ToolCall, ToolFunction, ToolName};
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentMessage, CapabilityFailure,
 };
@@ -11,13 +11,16 @@ pub(crate) fn tool_result_json(
     outcome: Result<yss_harness_contract::AutomationCapabilityResult, CapabilityFailure>,
 ) -> Result<serde_json::Value, serde_json::Error> {
     match outcome {
-        Ok(result) => serde_json::to_value(result),
-        Err(failure) => serde_json::to_value(failure)
-            .map(|failure| serde_json::json!({"state": "failed", "failure": failure})),
+        Ok(result) => yss_harness_contract::model::capability_result(&result),
+        Err(failure) => Ok(
+            serde_json::json!({"state": "failed", "failure": yss_harness_contract::model::failure(&failure)}),
+        ),
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct PreparedMessages {
+    pub(crate) compaction_checkpoint: Option<yss_harness_contract::ContextCompactionCheckpoint>,
     pub(crate) preamble: String,
     pub(crate) history: Vec<Message>,
     pub(crate) prompt: Message,
@@ -34,7 +37,7 @@ impl PendingTools {
         if self
             .calls
             .iter()
-            .any(|(existing, _)| existing.wire_call_id() == call.wire_call_id())
+            .any(|(existing, _)| existing.id == call.id)
         {
             return Err(invalid_response());
         }
@@ -60,7 +63,7 @@ impl PendingTools {
         let (call, slot) = self
             .calls
             .iter_mut()
-            .find(|(call, _)| call.wire_call_id() == id)
+            .find(|(call, _)| call.id.wire() == id)
             .ok_or_else(invalid_response)?;
         if call.function.name != name || slot.is_some() {
             return Err(invalid_response());
@@ -90,14 +93,21 @@ pub(crate) fn prepare_messages(
     let mut preamble = Vec::new();
     let mut conversation = Vec::new();
     let mut pending = PendingTools::default();
+    let mut compaction_checkpoint = None;
     for message in messages {
         match message {
+            AgentMessage::CompactionCheckpoint { checkpoint } => {
+                compaction_checkpoint = Some(checkpoint)
+            }
             AgentMessage::DelegationCall { run_id, task } => {
                 let call = ToolCall::new(
-                    ToolCallId::new(run_id.to_string()).ok_or_else(invalid_response)?,
+                    CallId::from_wire(run_id.to_string()),
                     ToolFunction::new(
-                        "delegate_task".to_owned(),
-                        serde_json::to_value(task).map_err(|_| invalid_response())?,
+                        ToolName::new("delegate_task").map_err(|_| invalid_response())?,
+                        serde_json::to_value(yss_harness_contract::model::AgentTaskInput::from(
+                            &task,
+                        ))
+                        .map_err(|_| invalid_response())?,
                     ),
                 );
                 pending.push_call(call)?;
@@ -105,9 +115,9 @@ pub(crate) fn prepare_messages(
             AgentMessage::DelegationResult { outcome } => {
                 let id = outcome.run_id.to_string();
                 let result = Message::tool_result(
-                    id.clone(),
-                    "delegate_task",
-                    serde_json::to_string(&outcome).map_err(|_| invalid_response())?,
+                    CallId::from_wire(id.clone()),
+                    ToolName::new("delegate_task").map_err(|_| invalid_response())?,
+                    yss_harness_contract::model::task_outcome(&outcome).to_string(),
                 );
                 pending.resolve(&id, "delegate_task", result, &mut conversation)?;
             }
@@ -126,14 +136,20 @@ pub(crate) fn prepare_messages(
                 request,
             } => {
                 let name = request.capability_id().as_str().to_owned();
-                let mut encoded = serde_json::to_value(request).map_err(|_| invalid_response())?;
+                let mut encoded = serde_json::to_value(
+                    yss_harness_contract::model::CapabilityInput::from(&request),
+                )
+                .map_err(|_| invalid_response())?;
                 let arguments = encoded
                     .get_mut("payload")
                     .ok_or_else(invalid_response)?
                     .take();
                 let call = ToolCall::new(
-                    ToolCallId::new(invocation_id.to_string()).ok_or_else(invalid_response)?,
-                    ToolFunction::new(name, arguments),
+                    CallId::from_wire(invocation_id.to_string()),
+                    ToolFunction::new(
+                        ToolName::new(name).map_err(|_| invalid_response())?,
+                        arguments,
+                    ),
                 );
                 pending.push_call(call)?;
             }
@@ -146,8 +162,11 @@ pub(crate) fn prepare_messages(
                     AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure)
                 })?;
                 let id = invocation_id.to_string();
-                let result =
-                    Message::tool_result(id.clone(), capability_id.as_str(), result.to_string());
+                let result = Message::tool_result(
+                    CallId::from_wire(id.clone()),
+                    ToolName::new(capability_id.as_str()).map_err(|_| invalid_response())?,
+                    result.to_string(),
+                );
                 pending.resolve(&id, capability_id.as_str(), result, &mut conversation)?;
             }
             AgentMessage::Plan { plan } => {
@@ -169,6 +188,7 @@ pub(crate) fn prepare_messages(
         return Err(invalid_response());
     }
     Ok(PreparedMessages {
+        compaction_checkpoint,
         preamble: preamble.join("\n\n"),
         history: conversation,
         prompt,

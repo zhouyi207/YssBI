@@ -23,11 +23,13 @@ yss-ipc-channel = { path = "../yss-ipc-channel" }
 tokio = { workspace = true, features = ["sync", "time"] }
 tauri.workspace = true
 yss-harness-sqlite = { path = "../yss-harness-sqlite" }
+yss-harness-tantivy = { path = "../yss-harness-tantivy" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }
 yss-plugin-runtime = { path = "../yss-plugin-runtime" }
 yss-harness-rig = { path = "../yss-harness-rig" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 atomicwrites.workspace = true
+keyring = "4.2.0"
 yss-plugin-protocol = { path = "../yss-plugin-protocol" }
 serde.workspace = true
 serde_json.workspace = true
@@ -74,6 +76,8 @@ yss-database-io = { path = "../yss-database-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+jsonschema.workspace = true
+tempfile = "3"
 yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }
 yss-database-engine = { path = "../yss-database-engine" }
 yss-project-layout = { path = "../yss-project-layout" }

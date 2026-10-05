@@ -123,7 +123,11 @@ pub async fn get_project_index(
             &locale,
             request.cursor.as_deref(),
         )?;
-        if !request.panel_id.is_project_scoped() || !ids.insert(request.panel_id) {
+        if !matches!(
+            request.panel_id,
+            ActivityPanelId::Project | ActivityPanelId::Nodes
+        ) || !ids.insert(request.panel_id)
+        {
             return Err(CommandError::expected("activity_panel_scope_invalid"));
         }
     }

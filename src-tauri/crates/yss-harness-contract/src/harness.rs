@@ -67,11 +67,6 @@ pub struct SkillVersion(String);
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 #[schemars(transparent)]
-pub struct MemoryRecordId(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
 pub struct KnowledgeSourceId(String);
 
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
@@ -114,7 +109,6 @@ string_identity!(ToolInvocationId, "tool invocation id");
 string_identity!(IdempotencyKey, "idempotency key");
 string_identity!(SkillId, "skill id");
 string_identity!(SkillVersion, "skill version");
-string_identity!(MemoryRecordId, "memory record id");
 string_identity!(KnowledgeSourceId, "knowledge source id");
 string_identity!(KnowledgeDocumentId, "knowledge document id");
 string_identity!(KnowledgeChunkId, "knowledge chunk id");
@@ -160,6 +154,9 @@ impl ToolDescriptor {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentMessage {
+    CompactionCheckpoint {
+        checkpoint: ContextCompactionCheckpoint,
+    },
     DelegationCall {
         run_id: AgentRunId,
         task: crate::AgentTask,
@@ -210,7 +207,7 @@ pub struct AgentTurnResult {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelCapabilityRequest {
-    pub request: AutomationCapabilityRequest,
+    pub request: crate::model::CapabilityInput,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -223,6 +220,32 @@ pub struct ModelCapabilityOutcome {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AgentEvent {
+    KnowledgeCited {
+        citation: crate::KnowledgeCitation,
+    },
+    ContextCompactionProgress {
+        completed_bytes: usize,
+        total_bytes: usize,
+        checkpoint: Option<ContextCompactionCheckpoint>,
+    },
+    GraphExecutionFinished {
+        invocation_id: ToolInvocationId,
+        status: String,
+        failure_code: Option<String>,
+    },
+    TextRetracted {
+        characters: usize,
+    },
+    ContextCompacted {
+        summary: String,
+    },
+    RuntimeStatus {
+        phase: AgentRuntimePhase,
+        attempt: u32,
+    },
+    DeliveryBlocked {
+        reason: String,
+    },
     TextDelta {
         delta: String,
     },
@@ -242,6 +265,23 @@ pub enum AgentEvent {
         capability_id: CapabilityId,
         failure_code: crate::CapabilityFailureCode,
     },
+}
+
+/// A resumable summary of an exact source prefix, never a replacement for unread history.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContextCompactionCheckpoint {
+    pub processed_bytes: usize,
+    pub prefix_hash: String,
+    pub summary: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentRuntimePhase {
+    Compacting,
+    Reconnecting,
+    CheckingDelivery,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
@@ -284,11 +324,16 @@ pub enum AgentDriverFailureCode {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentDriverFailure {
     pub code: AgentDriverFailureCode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after_ms: Option<u64>,
 }
 
 impl AgentDriverFailure {
     pub const fn new(code: AgentDriverFailureCode) -> Self {
-        Self { code }
+        Self {
+            code,
+            retry_after_ms: None,
+        }
     }
 }
 
@@ -316,13 +361,29 @@ pub trait ModelCapabilityExecutor: Send + Sync {
 
     fn delegate<'a>(
         &'a self,
-        _task: crate::AgentTask,
+        _task: crate::model::AgentTaskInput,
     ) -> AgentFuture<'a, Result<crate::AgentTaskOutcome, CapabilityFailure>> {
         Box::pin(async {
             Err(CapabilityFailure::new(
                 crate::CapabilityFailureCode::InvalidRequest,
             ))
         })
+    }
+
+    fn followup<'a>(
+        &'a self,
+        _request: crate::model::AgentFollowupInput,
+    ) -> AgentFuture<'a, Result<crate::AgentTaskOutcome, CapabilityFailure>> {
+        Box::pin(async {
+            Err(CapabilityFailure::new(
+                crate::CapabilityFailureCode::InvalidRequest,
+            ))
+        })
+    }
+
+    /// Core's authoritative delivery check. Rig only feeds this back to the model.
+    fn completion_feedback(&self) -> Option<String> {
+        None
     }
 }
 
@@ -338,23 +399,6 @@ pub trait AgentDriverPort: Send + Sync {
         output: Arc<dyn AgentEventOutput>,
         cancellation: CancellationToken,
     ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>>;
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum AgentDriverConfigurationFailure {
-    #[error("agent provider configuration is invalid")]
-    Invalid,
-}
-
-pub trait AgentDriverConfigurationPort: Send + Sync {
-    fn configure(
-        &self,
-        base_url: String,
-        model: String,
-        credential: Option<SecretCredential>,
-    ) -> Result<bool, AgentDriverConfigurationFailure>;
-
-    fn is_configured(&self) -> bool;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -470,7 +514,6 @@ pub enum AutomationIdKind {
     AgentRun,
     WorkflowRun,
     ToolInvocation,
-    MemoryRecord,
     ApprovalGrant,
 }
 

@@ -30,6 +30,15 @@ impl ResourceFile for DocDocument {
     }
 }
 impl ProjectState {
+    /// Read current content only while its saved file remains a valid source.
+    pub fn read_doc_source(
+        &self,
+        project: &ProjectInstanceId,
+        path: &DocPath,
+    ) -> Result<DocSnapshot, ProjectOperationError> {
+        self.read_file_source(project, path)
+    }
+
     pub fn read_doc(
         &self,
         project: &ProjectInstanceId,

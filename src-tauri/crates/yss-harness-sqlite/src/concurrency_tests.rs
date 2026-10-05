@@ -25,6 +25,7 @@ async fn stale_conversations_remain_loadable_and_can_be_reactivated() {
     let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
     let mut session = session();
     session.conversation = Some(HarnessConversationMetadata {
+        model: None,
         project_key: "project-root".into(),
         title: "Dataset review".into(),
         last_opened_at: session.created_at,

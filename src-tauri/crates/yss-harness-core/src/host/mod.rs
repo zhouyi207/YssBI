@@ -20,6 +20,7 @@ use workflow::WorkflowControl;
 
 pub struct HarnessHost {
     ports: HarnessPorts,
+    knowledge: Arc<crate::KnowledgeService>,
     report_writing_skill: SkillPackage,
     active_turns: Arc<Mutex<BTreeMap<HarnessSessionId, CancellationToken>>>,
     session_access: tokio::sync::Mutex<()>,
@@ -29,6 +30,32 @@ pub struct HarnessHost {
 }
 
 impl HarnessHost {
+    pub async fn inspect_tool_invocation(
+        &self,
+        session_id: &HarnessSessionId,
+        invocation_id: &yss_harness_contract::ToolInvocationId,
+    ) -> Result<Option<yss_harness_contract::ToolInvocationRecord>, HarnessError> {
+        Ok(self
+            .ports
+            .tool_ledger
+            .load_invocation(session_id, invocation_id)
+            .await?)
+    }
+
+    pub async fn inspect_citation(
+        &self,
+        session_id: &HarnessSessionId,
+        citation: &yss_harness_contract::KnowledgeCitation,
+    ) -> Result<Option<String>, HarnessError> {
+        let session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        Ok(self.knowledge.inspect(citation, &session.project).await?)
+    }
+
     pub fn new(ports: HarnessPorts) -> Result<Self, HarnessError> {
         let report_writing_skill = SkillRegistry::with_builtins()
             .and_then(|registry| {
@@ -41,6 +68,10 @@ impl HarnessHost {
             })
             .map_err(|_| HarnessError::Agent(AgentDriverFailureCode::InternalFailure))?;
         Ok(Self {
+            knowledge: Arc::new(crate::KnowledgeService::new(
+                ports.knowledge.clone(),
+                ports.knowledge_index.clone(),
+            )),
             ports,
             report_writing_skill,
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
@@ -75,5 +106,9 @@ impl HarnessHost {
 
 #[cfg(test)]
 mod concurrency_tests;
+#[cfg(test)]
+mod knowledge_tests;
+#[cfg(test)]
+mod preparation_tests;
 #[cfg(test)]
 mod tests;

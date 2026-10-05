@@ -2,10 +2,9 @@
 
 use super::agent_definition;
 use yss_harness_contract::{
-    AgentInvocationScope, AgentResourceOperation as Op, AgentRole,
-    AutomationCapabilityRequest as Request, CapabilityFailure, CapabilityFailureCode,
-    ManageResourceRequest as Manage, ProjectResourceKind as Kind, ProjectResourceRef,
-    ResourceCreation,
+    AgentInvocationScope, AgentResourceOperation as Op, AgentRole, CapabilityFailure,
+    CapabilityFailureCode, ProjectResourceKind as Kind, ProjectResourceRef, ResourceCreation,
+    model::CapabilityInput as Request, model::ManageResourceInput as Manage,
 };
 
 fn denied() -> CapabilityFailure {
@@ -79,7 +78,7 @@ fn graph_resource(
 }
 
 /// Called both before ledger admission and at the Application gateway boundary.
-pub fn authorize_agent_capability(
+pub(crate) fn authorize_model_capability(
     scope: &AgentInvocationScope,
     request: &Request,
 ) -> Result<(), CapabilityFailure> {
@@ -97,7 +96,9 @@ pub fn authorize_agent_capability(
                 Err(denied())
             }
         }
-        Request::SearchNodeCatalog(_) => Ok(()),
+        Request::SearchNodeCatalog(_) | Request::SearchKnowledge(_) | Request::ReadKnowledge(_) => {
+            Ok(())
+        }
         Request::InspectResource(request) => {
             authorize_agent_resource(scope, &request.resource, Op::Inspect)
         }
@@ -165,7 +166,9 @@ pub fn authorize_agent_capability(
         }
         Request::EditResource(request) => {
             authorize_agent_resource(scope, &request.resource, Op::Edit)?;
-            if let yss_harness_contract::ResourceEdit::Chart { settings } = &request.edit {
+            if let yss_harness_contract::model::ResourceEditInput::Chart { settings } =
+                &request.edit
+            {
                 authorize_agent_resource(
                     scope,
                     &ProjectResourceRef {
@@ -190,4 +193,56 @@ pub fn authorize_agent_capability(
             }
         }
     }
+}
+
+/// Internal gateways share the same business authority checks as model admission.
+pub fn authorize_agent_capability(
+    scope: &AgentInvocationScope,
+    request: &yss_harness_contract::AutomationCapabilityRequest,
+) -> Result<(), CapabilityFailure> {
+    authorize_model_capability(scope, &request.into())
+}
+
+/// A worker must not mix newly changed resource contents into an older task grant.
+pub(crate) fn validate_agent_read(
+    scope: &AgentInvocationScope,
+    result: &yss_harness_contract::AutomationCapabilityResult,
+) -> Result<(), CapabilityFailure> {
+    use yss_harness_contract::AutomationCapabilityResult as Result;
+    let Some(task) = &scope.task else {
+        return Ok(());
+    };
+    let (access, version) = match result {
+        Result::ResourceInspection(value) => (
+            task.resources
+                .iter()
+                .find(|access| access.resource == value.resource),
+            &value.version,
+        ),
+        Result::GraphInspection(value) => (
+            task.resources.iter().find(|access| {
+                access.resource.id == value.graph_path
+                    && matches!(access.resource.kind, Kind::EventGraph | Kind::FunctionGraph)
+            }),
+            &value.version,
+        ),
+        Result::GraphInspectionPage(value) => (
+            task.resources.iter().find(|access| {
+                access.resource.id == value.graph_path
+                    && matches!(access.resource.kind, Kind::EventGraph | Kind::FunctionGraph)
+            }),
+            &value.version,
+        ),
+        _ => return Ok(()),
+    };
+    if access
+        .and_then(|access| access.version.as_ref())
+        .is_some_and(|expected| expected != version)
+    {
+        return Err(
+            CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+                .with_detail("reason", "task_input_changed"),
+        );
+    }
+    Ok(())
 }

@@ -103,6 +103,11 @@ fn invoke_capability(
             search_node_catalog(application, &captured, request)
                 .map(AutomationCapabilityResult::NodeCatalogSearch)
         }
+        AutomationCapabilityRequest::SearchKnowledge(_)
+        | AutomationCapabilityRequest::ReadKnowledge(_) => Err(CapabilityFailure::new(
+            CapabilityFailureCode::InvalidRequest,
+        )
+        .with_detail("reason", "knowledge_requires_harness_executor")),
         AutomationCapabilityRequest::InspectDatasetSchema(request) => {
             inspect_dataset_schema(&captured, request)
                 .map(AutomationCapabilityResult::DatasetSchemaInspection)
@@ -223,7 +228,7 @@ fn search_node_catalog(
                         .resource_path
                         .as_ref()
                         .map(|path| path.as_str().to_owned()),
-                    parameters: None,
+                    configuration_schema: None,
                     ports: None,
                 },
             )
@@ -250,7 +255,7 @@ fn search_node_catalog(
                 .parse()
                 .expect("catalog node type identity");
             if let Some(protocol) = captured.graph().registry().protocol(&node_type) {
-                matched.parameters = Some(catalog::parameter_definitions(protocol, item));
+                matched.configuration_schema = Some(catalog::configuration_schema(protocol, item));
                 matched.ports = Some(catalog::port_definitions(protocol));
             }
         }

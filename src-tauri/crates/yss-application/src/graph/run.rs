@@ -60,6 +60,7 @@ pub struct RunGraphRequest {
     demand: RunDemand,
     required_resources: Box<[ProjectResourceRequirement]>,
     resource_authorizations: Option<Box<[RunResourceAuthorization]>>,
+    inherit_graph_reads: bool,
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
     document: GraphDocument,
@@ -86,6 +87,7 @@ impl RunGraphRequest {
             demand: RunDemand::Default,
             required_resources: Box::new([]),
             resource_authorizations: None,
+            inherit_graph_reads: false,
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline: Instant::now() + std::time::Duration::from_secs(60),
             document,
@@ -121,6 +123,13 @@ impl RunGraphRequest {
 
     pub fn with_deadline(mut self, deadline: Instant) -> Self {
         self.deadline = deadline;
+        self
+    }
+
+    /// The caller has project read access and has authorized execution of this graph.
+    /// Only the selected graph's actual shared dependencies inherit that read access.
+    pub(crate) fn with_inherited_graph_reads(mut self) -> Self {
+        self.inherit_graph_reads = true;
         self
     }
 
@@ -284,8 +293,17 @@ pub enum ExecutionApplicationError {
 
 #[derive(Debug, Error)]
 pub enum ResourceBindingError {
-    #[error("execution resource is outside the caller's authorized scope")]
-    ScopeDenied,
+    #[error("resource {resource:?} requires {access:?} access")]
+    ScopeDenied {
+        resource: ProjectResourceId,
+        access: ProjectResourceAccess,
+    },
+    #[error("resource {resource:?} version changed: expected {expected}, actual {actual:?}")]
+    VersionChanged {
+        resource: ProjectResourceId,
+        expected: u64,
+        actual: Option<u64>,
+    },
     #[error("project dataset snapshot is unavailable")]
     Dataset(#[source] yss_database_runtime::error::DatabaseError),
     #[error("present resource has no version")]
@@ -324,7 +342,7 @@ pub fn run_graph(
 
 pub fn run_graph_with_sink<D>(
     state: &ApplicationState,
-    request: RunGraphRequest,
+    mut request: RunGraphRequest,
     mut deliver: D,
 ) -> Result<RunGraphReceipt, ExecutionApplicationError>
 where
@@ -384,10 +402,28 @@ where
         captured.execution(),
         None,
     )?;
-    let required_resources = merge_resource_requirements(
-        request.required_resources.iter().cloned(),
-        graph_resource_requirements(semantics, &scope)?,
-    );
+    let graph_reads = graph_resource_requirements(semantics, &scope)?;
+    if request.inherit_graph_reads
+        && let Some(allowed) = &mut request.resource_authorizations
+    {
+        let mut grants = allowed.to_vec();
+        for dependency in &graph_reads {
+            if dependency.access() == ProjectResourceAccess::Shared
+                && !grants
+                    .iter()
+                    .any(|entry| &entry.resource == dependency.resource())
+            {
+                grants.push(RunResourceAuthorization {
+                    resource: dependency.resource().clone(),
+                    access: ProjectResourceAccess::Shared,
+                    expected_version: None,
+                });
+            }
+        }
+        *allowed = grants.into_boxed_slice();
+    }
+    let required_resources =
+        merge_resource_requirements(request.required_resources.iter().cloned(), graph_reads);
     if let Some(allowed) = &request.resource_authorizations {
         for required in &required_resources {
             if !allowed.iter().any(|grant| {
@@ -396,7 +432,10 @@ where
                         || grant.access == ProjectResourceAccess::Exclusive)
             }) {
                 return Err(ExecutionApplicationError::ResourceBindings(
-                    ResourceBindingError::ScopeDenied,
+                    ResourceBindingError::ScopeDenied {
+                        resource: required.resource().clone(),
+                        access: required.access(),
+                    },
                 ));
             }
         }
@@ -418,13 +457,22 @@ where
                 .iter()
                 .find(|entry| &entry.resource == grant.resource())
                 .ok_or(ExecutionApplicationError::ResourceBindings(
-                    ResourceBindingError::ScopeDenied,
+                    ResourceBindingError::ScopeDenied {
+                        resource: grant.resource().clone(),
+                        access: grant.access(),
+                    },
                 ))?;
             if permitted
                 .expected_version
                 .is_some_and(|version| grant.version().map(|actual| actual.get()) != Some(version))
             {
-                return Err(ExecutionApplicationError::DraftChanged);
+                return Err(ExecutionApplicationError::ResourceBindings(
+                    ResourceBindingError::VersionChanged {
+                        resource: grant.resource().clone(),
+                        expected: permitted.expected_version.expect("version was checked"),
+                        actual: grant.version().map(|version| version.get()),
+                    },
+                ));
             }
         }
     }

@@ -56,7 +56,7 @@ Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用
 | Execution、当前 result identity、payload 和 provenance                       | Rust Execution `ResultStore`                     | Result 面板、独立结果查看器和 preview UI                     |
 | Statistical algorithms 与插件计算                                            | SCI / 独立插件进程；项目结果由 Core 提交         | report/chart presentation models                             |
 | 插件安装、启用、任务账本                                                     | Rust Plugin Manager                              | 插件列表与隔离页面                                           |
-| Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection                        |
+| Harness session、turn、workflow、ledger 和 ordered events                    | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection                        |
 | Root workbench topology、placement、active group/panel 和 edge state         | live root FlexLayout Model instance              | pane-local metadata keyed by panel identity                  |
 | JSON result page composition and UI intent receipts                          | Rust Application presentation session            | React validated page projection / existing workbench actions |
 | 本地偏好和临时交互状态                                                       | React `localStorage`、Zustand 或 component state | —                                                            |

@@ -10,6 +10,71 @@ struct Fixture {
 }
 
 #[test]
+fn message_references_use_project_identity_and_reject_missing_or_foreign_resources() {
+    let mut fixture = Fixture::new();
+    let doc = fixture.create(ResourceCreation::Doc {
+        name: "Methods".into(),
+    });
+    let graph = fixture.create(ResourceCreation::EventGraph {
+        name: "Analysis".into(),
+    });
+    let application = fixture.application.as_ref().unwrap().clone();
+    let binding = fixture.context.project().clone();
+    let references = application
+        .resolve_harness_resources(&binding, &[doc.clone(), graph.clone()])
+        .unwrap();
+    assert_eq!(
+        references
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Methods", "Analysis"]
+    );
+    assert_eq!(references[0].resource, doc);
+    assert_eq!(
+        serde_json::to_value(&references[0]).unwrap(),
+        serde_json::json!({"resource": doc, "name": "Methods"})
+    );
+    assert_eq!(
+        application
+            .resolve_harness_resources(&binding, &[doc.clone(), doc.clone()])
+            .unwrap_err()
+            .code,
+        CapabilityFailureCode::InvalidRequest
+    );
+    let foreign = ProjectSessionBinding::new(
+        yss_project_identity::ProjectInstanceId::from_existing("other-project".into()),
+        binding.project_session_id().clone(),
+    );
+    assert_eq!(
+        application
+            .resolve_harness_resources(&foreign, std::slice::from_ref(&graph))
+            .unwrap_err()
+            .code,
+        CapabilityFailureCode::ProjectSessionChanged
+    );
+    let version = fixture.inspect(&doc).version;
+    fixture.manage(ManageResourceRequest::Delete {
+        resource: doc.clone(),
+        version,
+    });
+    assert_eq!(
+        application
+            .resolve_harness_resources(&binding, &[doc])
+            .unwrap_err()
+            .code,
+        CapabilityFailureCode::ResourceUnavailable
+    );
+    assert_eq!(
+        application
+            .resolve_harness_resources(&binding, &[graph])
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gateway() {
     let mut fixture = Fixture::new();
     let doc = fixture.create(ResourceCreation::Doc {
@@ -85,6 +150,8 @@ fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gate
         fixture
             .call(AutomationCapabilityRequest::InspectResource(
                 InspectResourceRequest {
+                    graph_view: GraphInspectionView::Overview,
+                    metadata_only: false,
                     resource: doc,
                     offset: 0,
                     limit: 1
@@ -180,6 +247,8 @@ impl Fixture {
         let AutomationCapabilityResult::ResourceInspection(result) = self
             .call(AutomationCapabilityRequest::InspectResource(
                 InspectResourceRequest {
+                    graph_view: GraphInspectionView::Overview,
+                    metadata_only: false,
                     resource: resource.clone(),
                     offset,
                     limit,
@@ -349,6 +418,8 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
             assert_eq!(
                 f.call(AutomationCapabilityRequest::InspectResource(
                     InspectResourceRequest {
+                        graph_view: GraphInspectionView::Overview,
+                        metadata_only: false,
                         resource: item,
                         offset: 0,
                         limit: 100
@@ -843,7 +914,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         name: "Compute".into(),
     });
     let initial = f.inspect(&function);
-    let ResourceContent::Graph {
+    let ResourceContent::GraphPage {
         function: Some(signature),
         ..
     } = &initial.content
@@ -867,7 +938,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         },
     );
     let current = f.inspect(&function);
-    let ResourceContent::Graph {
+    let ResourceContent::GraphPage {
         function: Some(signature),
         ..
     } = &current.content
@@ -901,13 +972,13 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
     let event = f.create(ResourceCreation::EventGraph {
         name: "Main".into(),
     });
-    let ResourceContent::Graph { graph, .. } = f.inspect(&event).content else {
+    let ResourceContent::GraphPage { graph, .. } = f.inspect(&event).content else {
         panic!()
     };
     f.call(AutomationCapabilityRequest::ApplyGraphEdit(
         ApplyGraphEditRequest {
             graph_path: event.id.clone(),
-            base_revision: graph.revision,
+            base_revision: graph.version.revision,
             graph_hash: graph.graph_hash,
             client_key: "constant".into(),
             locale: "en-US".into(),
@@ -921,10 +992,10 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         },
     ))
     .unwrap();
-    let ResourceContent::Graph { graph, .. } = f.inspect(&event).content else {
+    let ResourceContent::GraphPage { graph, .. } = f.inspect(&event).content else {
         panic!()
     };
-    assert_eq!(graph.nodes.len(), 1);
+    assert_eq!(graph.counts.nodes, 1);
     f.edit(
         &event,
         ResourceEdit::GraphHistory {
@@ -932,10 +1003,10 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
             graph_hash: graph.graph_hash,
         },
     );
-    let ResourceContent::Graph { graph, .. } = f.inspect(&event).content else {
+    let ResourceContent::GraphPage { graph, .. } = f.inspect(&event).content else {
         panic!()
     };
-    assert!(graph.nodes.is_empty());
+    assert_eq!(graph.counts.nodes, 0);
     f.edit(
         &event,
         ResourceEdit::GraphHistory {
@@ -944,7 +1015,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         },
     );
     assert!(
-        matches!(f.inspect(&event).content, ResourceContent::Graph { graph, .. } if graph.nodes.len() == 1)
+        matches!(f.inspect(&event).content, ResourceContent::GraphPage { graph, .. } if graph.counts.nodes == 1)
     );
     f.save(&event);
     assert!(!f.inspect(&event).dirty);

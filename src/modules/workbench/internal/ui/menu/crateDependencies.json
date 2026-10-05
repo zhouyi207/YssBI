@@ -165,6 +165,12 @@
         "target": null
       },
       {
+        "name": "yss-harness-tantivy",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-ipc-channel",
         "kind": "normal",
         "optional": false,
@@ -1148,6 +1154,12 @@
     "manifest": "src-tauri/crates/yss-harness-rig/Cargo.toml",
     "dependencies": [
       {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
@@ -1158,6 +1170,18 @@
   {
     "name": "yss-harness-sqlite",
     "manifest": "src-tauri/crates/yss-harness-sqlite/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-harness-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-harness-tantivy",
+    "manifest": "src-tauri/crates/yss-harness-tantivy/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-harness-contract",

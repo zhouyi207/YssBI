@@ -3,6 +3,7 @@
 use yss_harness_contract::{AgentRole, CapabilityId as Cap};
 
 pub use policy::{authorize_agent_capability, authorize_agent_resource};
+pub(crate) use policy::{authorize_model_capability, validate_agent_read};
 mod policy;
 
 pub struct AgentDefinition {
@@ -23,7 +24,10 @@ impl AgentDefinition {
     pub fn control_tools(&self) -> Vec<yss_harness_contract::AgentControlTool> {
         use yss_harness_contract::AgentControlTool;
         match self.role {
-            AgentRole::Manager => vec![AgentControlTool::DelegateTask],
+            AgentRole::Manager => vec![
+                AgentControlTool::DelegateTask,
+                AgentControlTool::FollowupTask,
+            ],
             AgentRole::Stats => vec![AgentControlTool::ProposeStatisticalPlan],
             _ => vec![],
         }
@@ -39,6 +43,8 @@ impl AgentDefinition {
 }
 
 const READ: &[Cap] = &[
+    Cap::SearchKnowledge,
+    Cap::ReadKnowledge,
     Cap::InspectResource,
     Cap::InspectGraph,
     Cap::InspectDatasetSchema,
@@ -50,8 +56,10 @@ const READ: &[Cap] = &[
 pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     AgentDefinition {
         role: AgentRole::Manager,
-        instructions: include_str!("prompts/manager.txt"),
+        instructions: include_str!("prompts/manager.md"),
         capabilities: &[
+            Cap::SearchKnowledge,
+            Cap::ReadKnowledge,
             Cap::InspectProject,
             Cap::InspectResource,
             Cap::InspectGraph,
@@ -65,8 +73,10 @@ pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     },
     AgentDefinition {
         role: AgentRole::Data,
-        instructions: include_str!("prompts/data.txt"),
+        instructions: include_str!("prompts/data.md"),
         capabilities: &[
+            Cap::SearchKnowledge,
+            Cap::ReadKnowledge,
             Cap::InspectResource,
             Cap::InspectDatasetSchema,
             Cap::InspectDatasetProfile,
@@ -77,8 +87,10 @@ pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     },
     AgentDefinition {
         role: AgentRole::Stats,
-        instructions: include_str!("prompts/stats.txt"),
+        instructions: include_str!("prompts/stats.md"),
         capabilities: &[
+            Cap::SearchKnowledge,
+            Cap::ReadKnowledge,
             Cap::InspectResource,
             Cap::InspectDatasetSchema,
             Cap::InspectDatasetProfile,
@@ -96,8 +108,10 @@ pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     },
     AgentDefinition {
         role: AgentRole::Plot,
-        instructions: include_str!("prompts/plot.txt"),
+        instructions: include_str!("prompts/plot.md"),
         capabilities: &[
+            Cap::SearchKnowledge,
+            Cap::ReadKnowledge,
             Cap::InspectResource,
             Cap::InspectDatasetSchema,
             Cap::InspectResult,
@@ -109,8 +123,10 @@ pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     },
     AgentDefinition {
         role: AgentRole::Report,
-        instructions: include_str!("prompts/report.txt"),
+        instructions: include_str!("prompts/report.md"),
         capabilities: &[
+            Cap::SearchKnowledge,
+            Cap::ReadKnowledge,
             Cap::InspectResource,
             Cap::InspectResult,
             Cap::InspectGraph,
@@ -121,7 +137,7 @@ pub static AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     },
     AgentDefinition {
         role: AgentRole::Review,
-        instructions: include_str!("prompts/review.txt"),
+        instructions: include_str!("prompts/review.md"),
         capabilities: READ,
     },
 ];

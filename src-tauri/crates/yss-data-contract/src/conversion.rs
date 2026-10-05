@@ -65,10 +65,13 @@ impl TemporalPrecision {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversionDomain {
     #[serde(default)]
+    #[schemars(length(max = Self::MAX_VALUES))]
     pub values: Vec<SemanticValue>,
     #[serde(default)]
     pub positive_value: Option<String>,

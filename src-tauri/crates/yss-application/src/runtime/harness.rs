@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use yss_harness_contract::{
-    AgentDriverConfigurationPort, AutomationIdKind, CapabilityGatewayPort, ClockPort,
-    HarnessEventSinkPort, IdGenerationFailure, IdGeneratorPort, UnixMillis,
+    AutomationIdKind, CapabilityGatewayPort, ClockPort, HarnessEventSinkPort, IdGenerationFailure,
+    IdGeneratorPort, UnixMillis,
 };
 use yss_harness_core::{HarnessHost, HarnessPorts};
 
@@ -17,7 +17,8 @@ pub struct HarnessTransportPorts {
 
 pub struct HarnessServices {
     pub host: Arc<HarnessHost>,
-    pub provider: Arc<dyn AgentDriverConfigurationPort>,
+    pub models: Arc<crate::harness::models::LanguageModelService>,
+    pub knowledge: Arc<crate::harness::knowledge::ProjectKnowledgeService>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,7 +50,6 @@ impl IdGeneratorPort for HarnessIdGenerator {
             AutomationIdKind::AgentRun => "agent",
             AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
-            AutomationIdKind::MemoryRecord => "memory",
             AutomationIdKind::ApprovalGrant => "approval",
         };
         Ok(format!("{prefix}-{}", uuid::Uuid::new_v4()))
@@ -61,23 +61,39 @@ pub(super) async fn initialize(
     application: &ApplicationState,
     transport: HarnessTransportPorts,
 ) -> Result<HarnessServices, HarnessStartupError> {
-    let store = Arc::new(yss_harness_sqlite::SqliteHarnessStore::connect(app_dir).await?);
-    let provider = Arc::new(yss_harness_rig::ConfigurableAgentDriver::new());
+    let store = Arc::new(yss_harness_sqlite::SqliteHarnessStore::connect(app_dir.clone()).await?);
+    let models = Arc::new(crate::harness::models::LanguageModelService::new(
+        app_dir,
+        Arc::new(crate::harness::models::SystemModelCredentials),
+    ));
+    let clock = Arc::new(SystemHarnessClock);
+    let knowledge = Arc::new(crate::harness::knowledge::ProjectKnowledgeService::new(
+        application.clone(),
+        store.clone(),
+        clock.clone(),
+    ));
     let host = application
         .initialize_harness(HarnessPorts {
-            agent_driver: provider.clone(),
+            models: models.clone(),
+            resources: Arc::new(crate::harness::resources::ApplicationResourceResolver(
+                application.clone(),
+            )),
             capability_gateway: transport.capability_gateway,
             sessions: store.clone(),
             events: store.clone(),
             event_sink: transport.event_sink,
             workflows: store.clone(),
             tool_ledger: store.clone(),
-            knowledge: store.clone(),
-            memory: store.clone(),
+            knowledge: knowledge.clone(),
+            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             approvals: store,
-            clock: Arc::new(SystemHarnessClock),
+            clock,
             ids: Arc::new(HarnessIdGenerator),
         })
         .await?;
-    Ok(HarnessServices { host, provider })
+    Ok(HarnessServices {
+        host,
+        models,
+        knowledge,
+    })
 }

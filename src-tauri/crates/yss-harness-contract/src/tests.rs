@@ -19,6 +19,22 @@ fn graph_port_inspection_uses_current_field_names() {
 use super::*;
 
 #[test]
+fn model_catalog_preserves_shared_provider_and_generation_configuration() {
+    let wire: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../src/tests/fixtures/node-system-contracts/harness-models.json"
+    ))
+    .unwrap();
+    let catalog: LanguageModelCatalog = serde_json::from_value(wire.clone()).unwrap();
+    assert!(
+        catalog
+            .providers
+            .iter()
+            .all(|entry| entry.config.validate())
+    );
+    assert_eq!(serde_json::to_value(catalog).unwrap(), wire);
+}
+
+#[test]
 fn graph_tool_contracts_require_the_facts_used_by_followup_edits() {
     let mut request = serde_json::json!({
         "graphPath": "events/Main.yssbi-event", "baseRevision": 1,
@@ -36,11 +52,14 @@ fn graph_tool_contracts_require_the_facts_used_by_followup_edits() {
     assert!(serde_json::from_value::<ApplyGraphEditRequest>(request).is_err());
     let schema =
         serde_json::to_value(capability_input_schema(CapabilityId::ApplyGraphEdit)).unwrap();
+    for field in ["graphHash", "baseRevision", "clientKey"] {
+        assert!(schema["properties"].get(field).is_none());
+    }
     assert!(
         schema["required"]
             .as_array()
             .unwrap()
-            .contains(&serde_json::json!("graphHash"))
+            .contains(&serde_json::json!("operations"))
     );
 
     let mut node = serde_json::json!({

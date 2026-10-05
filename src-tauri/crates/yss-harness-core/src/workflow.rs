@@ -411,9 +411,9 @@ mod tests {
                 .iter()
                 .map(|dependency| WorkflowStepId::try_new(*dependency).unwrap())
                 .collect(),
-            request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
-                graph_path: "events/Main.yssbi-event".to_owned(),
-            }),
+            request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
+                "events/Main.yssbi-event".to_owned(),
+            )),
         }
     }
 

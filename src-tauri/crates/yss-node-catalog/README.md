@@ -47,6 +47,15 @@ GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配�
 资源绑定节点只通过捕获了资源身份和 revision 的目录描述创建，managed 和 hidden 节点维持专用边界。
 创建请求的实例参数由 Graph Editor 接收，不属于目录描述；参数声明、默认值及约束仍只来自 Protocol。
 
+`NodeProtocol::configuration_schema()` 将同一声明投影为 `parameters` / `portCounts` 的 JSON Schema。
+固定结构复用 Schemars 和 Data Contract 类型；列列表与筛选谓词的结构由 Protocol 的 nominal 类型提供。
+所有参数允许省略或用 Null 重置，必填项以 `x-yss-requiredForExecution` 标明；
+`x-yss-activeWhen` 描述条件字段，`x-yss-linkedPorts` 描述初始数量联动。
+Hidden 参数不进入配置 Schema，固定和派生端口不能通过 `portCounts` 配置。
+Application 只补充当前语言的标题与说明，Harness 按需交付 Schema，不维护另一套参数声明。
+这是未连接时的配置描述；连接后的列选项、nominal codec、端口组一致性和执行完整性仍由原有
+Protocol、Registry 与 Graph owners 校验，生成 Schema 不执行节点或读取数据。
+
 `View Data` 的输入只接受已连接的输出，不接受内联字面量或默认值；Catalog 声明这一输入策略，
 Analysis 和 Editor 共用协议校验。View 观察已有输出结果，不创建独立的结果值；查看标量时可连接常量输出。
 

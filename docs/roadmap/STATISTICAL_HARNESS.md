@@ -9,19 +9,13 @@
 
 ## Baseline
 
-当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面图编辑/校验/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill、lexical Knowledge 和 Session Memory。
+当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面图编辑/校验/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill 和 BM25 Knowledge；会话上下文复用对话事件、工具账本与压缩检查点。
 
-以下能力仍 gated：桌面图工作流之外的 Project write、external MCP exposure/client、unknown commit reconciliation、persistent User/Project Memory、vector retrieval、remote Skill 和 autonomous/background execution。
+以下能力仍 gated：外部或后台 Project write、external MCP exposure/client、unknown commit reconciliation、vector retrieval、remote Skill 和 autonomous/background execution。
 
-## 1. Production write capabilities
+## 1. External and background write capabilities
 
-候选能力：
-
-- chart create/update；
-- variable annotation；
-- reproducible report save。
-
-启用前必须同时满足：
+桌面已有资源写入与报告交付契约见 [Harness Core 的能力目录](../../src-tauri/crates/yss-harness-core/README.md#4-registered-capabilities)。将这些能力扩展到外部客户端、无桌面会话或后台任务之前，必须同时满足：
 
 - closed typed request/result 和 bounded batch；
 - exact principal/project/session/revision binding；
@@ -32,7 +26,7 @@
 - crash 后能够区分 not-started、committed 和 unknown outcome；
 - Assistant UI 可显示 pending approval、receipt、failure 和 undo/recovery action。
 
-桌面 `apply_graph_edit` 已接入当前草稿 FIFO、Rust staged validation 和单批撤销；显式图 Save 复用正常保存入口，见 current architecture。上述 gate 约束未来其他持久写能力及 external/headless graph adapters，不把桌面草稿投影扩展为外部写授权。
+上述 gate 约束 external/headless/background adapters，不把现有桌面写入能力或草稿投影视为外部写授权。具体资源仍由原有业务 owner 提交。
 
 ## 2. Commit outcome reconciliation and recovery
 
@@ -59,29 +53,42 @@ MCP adapter 与桌面监听入口尚未实现。生产暴露需要决定并实�
 
 ### Client
 
-外部 MCP tools 进入独立 untrusted registry。默认 effect 为 external，要求显式 approval、bounded result、network/data-sharing policy，并禁止直接写 Memory 或 Project。Remote prompt 不自动成为 trusted Skill，remote resource 不自动进入 Knowledge index。
+外部 MCP tools 进入独立 untrusted registry。默认 effect 为 external，要求显式 approval、bounded result、network/data-sharing policy，并禁止直接写 Project 或把对话持久化为长期记忆。Remote prompt 不自动成为 trusted Skill，remote resource 不自动进入 Knowledge index。
 
 内部 Assistant 继续直接调用 Capability Gateway，不建立 loopback MCP。
 
-## 4. Memory governance
+## 4. Context and discovery integration
 
-### Persistent User Memory
+- [x] 从节点协议生成配置 JSON Schema，目录按需返回参数、默认值、约束与初始 pin 数量。
+- [x] 使用 Tantivy 替换知识检索计分，配置中英文分词与可重建缓存；重复查询复用索引，按文档读取并核验引用。
+- [x] 来源与文档集合原子替换；删除和更新使缓存失效，构建期间的删除不能产生有效旧引用。
+- [ ] 以可选 Rig FastEmbed 适配器补充本地语义召回，验证模型下载、离线使用和 Windows 打包。
+- [ ] 评估 Rig Memory 的上下文窗口策略与当前增量压缩的组合，保留取消、持久化检查点和工具回执恢复。
 
-- user scope、retention、encryption 和 credential boundary；
-- proposal/review/approve/delete/export/disable UI；
-- supersede、conflict 和 invalidation；
-- 不跨用户、project 或 principal 泄漏 retrieval。
+对话事件仍是历史的唯一权威来源，不重新引入对话自动写入 User/Project Memory 的流程。
+Embedding 只索引明确选定的文档、节点说明及 Skill 发现信息，不将检索命中自动视作执行授权。
+MCP Client 可复用 Rig MCP 工具适配，Server 使用相同 rmcp SDK 并复用既有 Application Gateway。
 
-### Portable Project Memory
+## 显式上下文与知识库验收
 
-若需要随项目移动，Project Memory 必须成为 Project-owned explicit resource，具有 schema、revision、history 和 portability contract；不能只依赖 app-data SQLite。
-
-Episodic workflow summary 只有在来源、revision、sensitivity 和删除传播明确后才可持久化。
+- [x] 在对话输入中按名称/路径引用项目资源（点击入口或 `@`）。
+- [x] Rust 校验资源成员与项目绑定，引用随轮次保存并重放，历史可打开资源。
+- [x] 队列、未确认输入与重开会话保留引用；引用不展开整图或数据内容。
+- [x] 资源解析与模型准备纳入 Core 取消流程，迟到引用结果不能启动已停止的轮次。
+- [ ] 桌面人工验收：多选、移除、同名资源、删除后重试、重开会话和窄面板。
+- [x] 显式管理项目文档知识来源，显示索引状态、重建与移除入口。
+- [x] 中文查询、命中位置摘要与片段引用校验，展开引用只返回对应片段。
+- [x] 模型按需检索/读取知识片段；共用工具账本、计时、取消与历史回放，普通消息不自动检索。
+- [x] 知识引用可打开原始项目文档。
+- [ ] 桌面人工验收：知识来源添加/重建/移除、状态反馈、引用展开及原文打开。
+- [x] 来源内容变化、删除及项目切换后，旧索引不得继续产生当前有效引用。
+- [x] 委派/续接使用模型专用参数和任务结果投影；Core 捕获真实读取基线、自动去重，压缩和会话重开后继续校验。
+- [x] 业务工具使用模型专用参数与实时/历史统一结果投影；资源、函数签名及图语义依据由调用层捕获，冲突停止写入，压缩与续接从账本恢复。
 
 ## 5. Knowledge retrieval
 
 - 保留 source document/manifest 为 authority；
-- 增加可重建 chunk/index pipeline；
+- 按知识库规模评估持久化索引与增量 chunk/index 更新；
 - 评估 embedding provider 和本地/远程数据共享；
 - lexical + vector hybrid ranking 与 deterministic filters；
 - citation/source hash/version/license 完整性；
@@ -118,7 +125,7 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 
 ### Manager–Worker 桌面验收
 
-当前扁平六角色实现和预算契约见 [Harness Core](../../src-tauri/crates/yss-harness-core/README.md)。
+当前扁平六角色实现和执行契约见 [Harness Core](../../src-tauri/crates/yss-harness-core/README.md)。
 以下为真实模型与桌面人工验收，自动化契约测试不能替代：
 
 - [ ] 简单改图样式、续写报告只委派必要角色；Worker 不互相调用。
@@ -129,8 +136,11 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 
 ## 8. Provider and privacy controls
 
-- provider/model selection 与 capability discovery；
-- platform credential store，不把 token 写入 SQLite/Project/logs；
+- [x] provider/model 目录、原生 Rig 协议、会话选择与执行时模型归属；
+- [x] 系统凭据库、无密钥目录投影、原子配置与旧凭据清理；
+- [x] 后端供应商预设、无凭据本地服务、模型发现/批量添加与高级生成参数；
+- [ ] Claude、OpenAI Responses、Gemini、Kimi 与本地/兼容服务的真实模型桌面验收；
+- [ ] OAuth、云平台签名等其他认证方式按实际需求扩展；
 - transcript/prompt/tool payload 的 explicit data-sharing policy；
 - offline/unavailable/provider-rate-limit behavior；
 - retention/encryption policy；
@@ -151,4 +161,4 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 
 ## Deferred decisions
 
-以下实现选择由 ports 延后：provider/model、embedding model、vector index、Project Memory resource layout、remote Skill distribution、MCP transport 和 background scheduler。它们不得反转 Harness → ports → adapters 的依赖方向。
+以下实现选择由 ports 延后：embedding model、vector index、remote Skill distribution、MCP transport 和 background scheduler。它们不得反转 Harness → ports → adapters 的依赖方向。

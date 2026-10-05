@@ -1,6 +1,6 @@
 use super::{
-    enforce_result_bound, ensure_project_binding, inspect_port, inspect_result_category,
-    invalid_request, map_session_capture_error, map_session_revalidation_error,
+    ensure_project_binding, inspect_port, inspect_result_category, invalid_request,
+    map_session_capture_error, map_session_revalidation_error,
 };
 use crate::graph::edit::GraphDocumentChange;
 use crate::graph::edit::GraphDocumentEditor;
@@ -20,6 +20,8 @@ use yss_harness_contract::*;
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::PortKey;
 use yss_project_identity::OperationId;
+
+mod inspection;
 
 pub fn invoke_graph_capability(
     application: &ApplicationState,
@@ -102,33 +104,26 @@ pub fn invoke_graph_capability(
     if expected.is_some_and(|expected| expected != &hash) {
         return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
     }
+    if context
+        .graph_observation()
+        .is_some_and(|expected| expected != hex(&projection.basis.semantic_input_hash))
+    {
+        return Err(graph_failure(CapabilityFailureCode::RevisionConflict)
+            .with_detail("reason", "graph_inputs_changed"));
+    }
     let read_only = request.capability_id().descriptor().effect == ToolEffect::Inspect;
     let result = match request {
-        AutomationCapabilityRequest::InspectGraph(_) => {
-            enforce_result_bound(
-                CapabilityId::InspectGraph,
-                projection
-                    .nodes
-                    .iter()
-                    .map(|node| {
-                        1 + node.ports.len()
-                            + node
-                                .parameter_groups
-                                .iter()
-                                .map(|group| group.parameters.len())
-                                .sum::<usize>()
-                    })
-                    .sum::<usize>()
-                    + projection.connections.len(),
-            )?;
-            AutomationCapabilityResult::GraphInspection(inspect_projection(
-                &path,
-                document,
-                projection,
-                current.version.revision.get(),
-                hash,
-            )?)
-        }
+        AutomationCapabilityRequest::InspectGraph(request) => inspection::inspect(
+            request,
+            &path,
+            document,
+            projection,
+            ResourceVersion {
+                revision: current.version.revision.get(),
+                session_id: Some(current.version.session_id.to_string()),
+            },
+            hash,
+        )?,
         AutomationCapabilityRequest::ApplyGraphEdit(request) => {
             if request.base_revision != current.version.revision.get() {
                 return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
@@ -148,7 +143,10 @@ pub fn invoke_graph_capability(
                 &path,
                 document,
                 projection,
-                current.version.revision.get(),
+                ResourceVersion {
+                    revision: current.version.revision.get(),
+                    session_id: Some(current.version.session_id.to_string()),
+                },
                 hash,
             )?;
             let (transform, mut receipt) = transform_graph_edit(
@@ -304,7 +302,11 @@ pub fn invoke_graph_capability(
                         })
                     })
                     .collect::<Result<Vec<_>, CapabilityFailure>>()?;
-                run_request = run_request.with_resource_authorizations(authorizations);
+                // Manager's project read access follows only the graph dependencies
+                // selected by the execution owner. Explicit grants retain their versions.
+                run_request = run_request
+                    .with_resource_authorizations(authorizations)
+                    .with_inherited_graph_reads();
             }
             let outcome = run_graph_with_sink(application, run_request, |event| {
                 run_id = Some(event.identity().run_id().get());
@@ -323,11 +325,19 @@ pub fn invoke_graph_capability(
                 && failure_code.is_none()
                 && status != "cancelled"
             {
+                if let crate::graph::run::ExecutionApplicationError::ResourceBindings(binding) =
+                    error
+                {
+                    failure_location = Some(binding.to_string());
+                }
                 failure_code = Some(
                     match error {
                         crate::graph::run::ExecutionApplicationError::ResourceBindings(
-                            crate::graph::run::ResourceBindingError::ScopeDenied,
+                            crate::graph::run::ResourceBindingError::ScopeDenied { .. },
                         ) => "agent_scope_denied",
+                        crate::graph::run::ExecutionApplicationError::ResourceBindings(
+                            crate::graph::run::ResourceBindingError::VersionChanged { .. },
+                        ) => "resource_version_changed",
                         crate::graph::run::ExecutionApplicationError::DraftChanged => {
                             "resource_version_changed"
                         }
@@ -644,7 +654,10 @@ fn transform_graph_edit(
         &graph_path,
         staged,
         &transformed.projection_replacement.projection,
-        to_revision,
+        ResourceVersion {
+            revision: to_revision,
+            session_id: before.version.session_id.clone(),
+        },
         graph_hash.clone(),
     )?;
     let receipt = GraphEditReceipt {
@@ -870,7 +883,7 @@ fn inspect_projection(
     path: &GraphResourcePath,
     document: &GraphDocument,
     projection: &EditorProjectionModel,
-    revision: u64,
+    version: ResourceVersion,
     graph_hash: String,
 ) -> Result<GraphInspection, CapabilityFailure> {
     let nodes = projection
@@ -889,70 +902,11 @@ fn inspect_projection(
                 .flat_map(|group| group.parameters.iter())
                 .map(parameter)
                 .collect(),
-            ports: node
-                .ports
-                .iter()
-                .map(|port| GraphPortFacts {
-                    address: edit_port(&port.address),
-                    label: port
-                        .display
-                        .instance_label
-                        .as_deref()
-                        .unwrap_or(&port.display.label)
-                        .into(),
-                    direction: format!("{:?}", port.direction).to_lowercase(),
-                    orphan: port.orphan,
-                    data_type: match &port.type_state {
-                        EditorPortTypeState::Exact { display, .. }
-                        | EditorPortTypeState::Constrained { display, .. } => display.to_string(),
-                        EditorPortTypeState::Unknown { .. } => "unknown".into(),
-                        EditorPortTypeState::Conflict { .. } => "conflict".into(),
-                    },
-                    accepted_type: port.accepted_type.to_string(),
-                    maximum_connections: port.connections.maximum,
-                    connection_count: port.connections.current,
-                    schema: port
-                        .resolved_schema
-                        .as_ref()
-                        .map(|schema| {
-                            schema
-                                .fields
-                                .iter()
-                                .map(|field| {
-                                    (field.name.to_string(), format!("{:?}", field.scalar_type))
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                    literal: port.input.as_ref().and_then(|input| {
-                        input
-                            .literal_override
-                            .clone()
-                            .or_else(|| input.protocol_default.clone())
-                    }),
-                })
-                .collect(),
-            port_templates: node
-                .port_instance_additions
-                .iter()
-                .map(|template| GraphPortTemplateInspection {
-                    key: template.template_key.as_str().into(),
-                    direction: format!("{:?}", template.direction).to_lowercase(),
-                    can_add: template.can_add,
-                })
-                .collect(),
+            ports: node.ports.iter().map(inspection::port_facts).collect(),
+            port_templates: inspection::port_templates(node),
         })
         .collect();
-    let constants = document.constants.iter().map(|(id, constant)| {
-        let mut value = serde_json::json!({ "id": id, "name": constant.name, "dataType": constant.data_type, "description": constant.description, "tags": constant.tags, "hasTabularData": constant.tabular.is_some() });
-        let content_hash = yss_canonical_hash::hash_canonical("yssbi.assistant.graph-constant.v1", constant)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
-        value["contentHash"] = serde_json::json!(hex(&content_hash));
-        let primitive = match &constant.data_value { yss_data_contract::DataValue::Bool(_) | yss_data_contract::DataValue::Integer(_) | yss_data_contract::DataValue::Decimal(_) | yss_data_contract::DataValue::Null => true, yss_data_contract::DataValue::String(value) => value.len() <= 4096, _ => false };
-        value["valueIncluded"] = serde_json::json!(primitive);
-        if primitive { value["dataValue"] = serde_json::to_value(&constant.data_value).map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?; }
-        Ok((id.to_string(), value))
-    }).collect::<Result<_, CapabilityFailure>>()?;
+    let constants = inspection::constants(document, 0, usize::MAX)?;
     let diagnostics = diagnostics(projection);
     Ok(GraphInspection {
         graph_path: path.as_str().into(),
@@ -960,7 +914,8 @@ fn inspect_projection(
         ready: matches!(projection.outcome, EditorResolutionOutcome::Complete)
             && !diagnostics.iter().any(|diagnostic| diagnostic.blocking),
         graph_hash,
-        revision,
+        revision: version.revision,
+        version,
         nodes,
         connections: projection
             .connections

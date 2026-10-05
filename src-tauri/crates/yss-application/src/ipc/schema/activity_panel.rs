@@ -11,6 +11,7 @@ pub enum ActivityPanelId {
     Nodes,
     Commands,
     Plugins,
+    Assistant,
 }
 impl ActivityPanelId {
     pub fn as_str(self) -> &'static str {
@@ -19,10 +20,11 @@ impl ActivityPanelId {
             Self::Nodes => "nodes",
             Self::Commands => "commands",
             Self::Plugins => "plugins",
+            Self::Assistant => "assistant",
         }
     }
     pub fn is_project_scoped(self) -> bool {
-        matches!(self, Self::Project | Self::Nodes)
+        matches!(self, Self::Project | Self::Nodes | Self::Assistant)
     }
 }
 
@@ -71,6 +73,11 @@ impl From<app::ActivityTool> for ActivityToolDto {
     rename_all_fields = "camelCase"
 )]
 pub enum ActivityItemDto {
+    Conversation {
+        session_id: String,
+        title: String,
+        last_opened_at: u64,
+    },
     #[serde(rename = "event_graph")]
     EventGraph {
         path: String,
@@ -119,6 +126,15 @@ pub enum ActivityItemDto {
 impl From<app::ActivityItem> for ActivityItemDto {
     fn from(item: app::ActivityItem) -> Self {
         match item {
+            app::ActivityItem::Conversation {
+                session_id,
+                title,
+                last_opened_at,
+            } => Self::Conversation {
+                session_id,
+                title,
+                last_opened_at,
+            },
             app::ActivityItem::EventGraph { path, name } => Self::EventGraph { path, name },
             app::ActivityItem::FunctionGraph { path, name } => Self::FunctionGraph { path, name },
             app::ActivityItem::Chart { path, name } => Self::Chart { path, name },
@@ -264,5 +280,33 @@ impl TryFrom<app::ActivityPanelDocument> for ActivityPanelDocumentDto {
                 .collect(),
         };
         Ok(document)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn conversation_item_wire_contains_only_directory_fields() {
+        let dto = ActivityItemDto::from(app::ActivityItem::Conversation {
+            session_id: "session-1".into(),
+            title: "Analysis".into(),
+            last_opened_at: 1_020,
+        });
+        assert_eq!(
+            serde_json::to_value(dto).unwrap(),
+            json!({
+                "kind": "conversation",
+                "sessionId": "session-1",
+                "title": "Analysis",
+                "lastOpenedAt": 1_020,
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(ActivityPanelId::Assistant).unwrap(),
+            "assistant"
+        );
     }
 }
