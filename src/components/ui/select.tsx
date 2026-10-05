@@ -23,10 +23,10 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-full items-center justify-between gap-2 rounded-md border border-border bg-input/30 px-3 py-1 text-sm text-foreground shadow-xs transition-colors outline-none",
+        "flex min-w-0 w-full items-center justify-between gap-2 rounded-md border border-border bg-input/30 px-3 py-1 text-sm text-foreground shadow-xs transition-colors outline-none",
         "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
         "data-[size=default]:h-9 data-[size=sm]:h-7 data-[placeholder]:text-muted-foreground",
-        "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_[data-slot=select-value]]:truncate",
         className,
       )}
       {...props}
