@@ -18,6 +18,9 @@ from process monitoring and measurement-system declarations.
 `dataframe/labels` exposes categorical and ordinal value-label authoring over the
 existing semantic conversion contract. It is separate from column and node display names.
 
+Post-hoc comparison tables declare numeric group IDs and explicit text columns
+`group_a_label` / `group_b_label`, followed by the existing numeric comparison statistics.
+
 Node 由三个 crate 组成：
 
 `node_creation_ports` 从同一协议导出固定、用户可配置和派生端口的创建信息，GUI 与 Harness 共用。

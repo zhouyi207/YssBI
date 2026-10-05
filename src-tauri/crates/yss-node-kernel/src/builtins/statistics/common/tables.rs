@@ -8,6 +8,33 @@ pub(in crate::builtins::statistics) fn numeric_table<T, V: Into<Option<f64>>, co
     project: impl Fn(&T) -> [V; N],
     inv: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
+    scalar_table(
+        rows,
+        output_index,
+        names,
+        |row| {
+            let mut values = std::array::from_fn(|_| {
+                RuntimeValue::Scalar(yss_data_contract::TabularScalar::Null)
+            });
+            for (slot, value) in values.iter_mut().zip(project(row)) {
+                if let Some(value) = value.into() {
+                    *slot =
+                        RuntimeValue::float64(value).map_err(|_| KernelError::NonFiniteResult)?;
+                }
+            }
+            Ok(values)
+        },
+        inv,
+    )
+}
+
+pub(in crate::builtins::statistics) fn scalar_table<T, const N: usize>(
+    rows: &[T],
+    output_index: usize,
+    names: [&str; N],
+    project: impl Fn(&T) -> Result<[RuntimeValue; N], KernelError>,
+    inv: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
     let fields = inv
         .outputs
         .get(output_index)
@@ -27,11 +54,8 @@ pub(in crate::builtins::statistics) fn numeric_table<T, V: Into<Option<f64>>, co
         if i.is_multiple_of(1024) {
             inv.check_control()?;
         }
-        for (column, value) in columns.iter_mut().zip(project(row)) {
-            column.push(match value.into() {
-                Some(v) => RuntimeValue::float64(v).map_err(|_| KernelError::NonFiniteResult)?,
-                None => RuntimeValue::Scalar(yss_data_contract::TabularScalar::Null),
-            });
+        for (column, value) in columns.iter_mut().zip(project(row)?) {
+            column.push(value);
         }
     }
     let columns = columns.map(|c| RuntimeValue::List(c.into()));

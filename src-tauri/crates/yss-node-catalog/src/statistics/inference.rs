@@ -64,12 +64,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                     &["index", "estimate", "standard_error", "lower", "upper"],
                 )?
             } else {
-                fixed_numeric_table(
+                let mut port = fixed_numeric_table(
                     "comparisons",
                     "Comparisons",
                     &[
                         "group_a",
                         "group_b",
+                        "group_a_label",
+                        "group_b_label",
                         "estimate",
                         "standard_error",
                         "degrees_of_freedom",
@@ -79,7 +81,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                         "lower",
                         "upper",
                     ],
-                )?
+                )?;
+                if let Some(SchemaExpr::Fixed { fields }) = &mut port.schema {
+                    for field in &mut fields[2..4] {
+                        field.scalar_type =
+                            RelationalScalarType::Known(yss_data_contract::SemanticType::Text);
+                    }
+                }
+                port
             });
         }
         let mut parameters = if cluster {

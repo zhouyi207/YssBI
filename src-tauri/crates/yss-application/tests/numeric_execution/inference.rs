@@ -127,7 +127,7 @@ fn inference_tables_execute_with_labels_variants_and_more_than_512_rows() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|g| ["A", "B", "C"][g.as_u64().unwrap() as usize])
+                .map(|g| ["组乙", "组甲", "组丙"][g.as_u64().unwrap() as usize])
                 .collect::<Vec<_>>();
             vec![("y", f["y"].clone()), ("groups", json!(labels))]
         };
@@ -143,7 +143,7 @@ fn inference_tables_execute_with_labels_variants_and_more_than_512_rows() {
             };
             assert_eq!(
                 labels[0],
-                RuntimeValue::from(TabularScalar::String("A".into()))
+                RuntimeValue::from(TabularScalar::String("组乙".into()))
             );
             assert_eq!(number(field(&report, "comparisons")), 3.);
         }
@@ -168,8 +168,27 @@ fn inference_tables_execute_with_labels_variants_and_more_than_512_rows() {
         let page = table
             .page(if interval { 639 } else { 0 }, 10, &control)
             .unwrap();
-        assert_eq!(page.data.columns().len(), if interval { 5 } else { 10 });
-        let index = if interval { 4 } else { 7 };
+        assert_eq!(page.data.columns().len(), if interval { 5 } else { 12 });
+        if !interval {
+            let RuntimeValue::List(labels) = field(&report, "group_labels") else {
+                panic!("labels")
+            };
+            for (id_column, label_column, name) in
+                [(0, 2, "group_a_label"), (1, 3, "group_b_label")]
+            {
+                assert_eq!(page.columns[label_column].name.as_ref(), name);
+                for row in 0..page.row_count {
+                    let id = number(&RuntimeValue::from(
+                        page.data.columns()[id_column].values()[row].clone(),
+                    )) as usize;
+                    assert_eq!(
+                        RuntimeValue::from(page.data.columns()[label_column].values()[row].clone()),
+                        labels[id - 1]
+                    );
+                }
+            }
+        }
+        let index = if interval { 4 } else { 9 };
         let actual = serde_json::to_value(page.data.columns()[index].values()).unwrap()[0]
             .as_f64()
             .unwrap();
@@ -190,7 +209,7 @@ fn inference_tables_execute_with_labels_variants_and_more_than_512_rows() {
                 panic!("Welch table")
             };
             let page = table.page(0, 10, &control).unwrap();
-            let actual = serde_json::to_value(page.data.columns()[9].values()).unwrap()[0]
+            let actual = serde_json::to_value(page.data.columns()[11].values()).unwrap()[0]
                 .as_f64()
                 .unwrap();
             assert!((actual - f["cases"][5]["rows"][0]["upper"].as_f64().unwrap()).abs() < 1e-9);

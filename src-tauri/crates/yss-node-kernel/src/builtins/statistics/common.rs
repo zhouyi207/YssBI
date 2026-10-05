@@ -12,7 +12,7 @@ pub(super) use models::{model_dimensions, regression_outputs, with_model};
 mod inputs;
 mod tables;
 pub(super) use inputs::{categories, materialize, numeric};
-pub(super) use tables::{matrix_table, numeric_table};
+pub(super) use tables::{matrix_table, numeric_table, scalar_table};
 
 // Charge the temporary JSON representation and the resulting runtime containers together.
 pub(in crate::builtins) const STRUCTURED_VALUE_BYTES: usize = 128;

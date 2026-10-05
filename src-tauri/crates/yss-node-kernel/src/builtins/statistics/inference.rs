@@ -191,7 +191,7 @@ fn comparisons(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
     workspace(
         columns[0].values.len(),
         pairs,
-        10,
+        12,
         labels
             .len()
             .checked_mul(7)
@@ -226,12 +226,28 @@ fn comparisons(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
         },
         inv,
     )?;
-    let table = numeric_table(
+    let label = |index: usize| -> Result<RuntimeValue, KernelError> {
+        use yss_data_contract::TabularScalar;
+        let scalar = labels
+            .get(index.checked_sub(1).ok_or(KernelError::ShapeMismatch)?)
+            .ok_or(KernelError::ShapeMismatch)?;
+        let text = match scalar {
+            TabularScalar::String(text) => text.to_string(),
+            other => {
+                serde_json::to_string(other).map_err(|_| KernelError::OutputContractMismatch)?
+            }
+        };
+        Ok(RuntimeValue::Scalar(TabularScalar::String(text.into())))
+    };
+    let number = |value| RuntimeValue::float64(value).map_err(|_| KernelError::NonFiniteResult);
+    let table = scalar_table(
         &result.rows,
         1,
         [
             "group_a",
             "group_b",
+            "group_a_label",
+            "group_b_label",
             "estimate",
             "standard_error",
             "degrees_of_freedom",
@@ -242,18 +258,20 @@ fn comparisons(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
             "upper",
         ],
         |r| {
-            [
-                r.group_a as f64,
-                r.group_b as f64,
-                r.estimate,
-                r.standard_error,
-                r.degrees_of_freedom,
-                r.statistic,
-                r.p_value,
-                r.adjusted_p_value,
-                r.lower,
-                r.upper,
-            ]
+            Ok([
+                number(r.group_a as f64)?,
+                number(r.group_b as f64)?,
+                label(r.group_a)?,
+                label(r.group_b)?,
+                number(r.estimate)?,
+                number(r.standard_error)?,
+                number(r.degrees_of_freedom)?,
+                number(r.statistic)?,
+                number(r.p_value)?,
+                number(r.adjusted_p_value)?,
+                number(r.lower)?,
+                number(r.upper)?,
+            ])
         },
         inv,
     )?;
