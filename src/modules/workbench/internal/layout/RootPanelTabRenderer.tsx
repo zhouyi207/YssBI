@@ -91,20 +91,22 @@ export function RootPanelTabRenderer({
   const Icon =
     metadata.role === "view"
       ? VIEW_ICONS[metadata.viewId]
-      : metadata.role === "result" || metadata.role === "reference"
-        ? VscPreview
-        : metadata.role === "plugin"
-          ? VscExtensions
-          : (
-              {
-                event_graph: VscSymbolEvent,
-                function_graph: VscSymbolMethod,
-                chart: VscGraphLine,
-                mind: VscTypeHierarchy,
-                doc: VscFileText,
-                database: VscDatabase,
-              } as const
-            )[metadata.resourceKind];
+      : metadata.role === "conversation"
+        ? VscSparkle
+        : metadata.role === "result" || metadata.role === "reference"
+          ? VscPreview
+          : metadata.role === "plugin"
+            ? VscExtensions
+            : (
+                {
+                  event_graph: VscSymbolEvent,
+                  function_graph: VscSymbolMethod,
+                  chart: VscGraphLine,
+                  mind: VscTypeHierarchy,
+                  doc: VscFileText,
+                  database: VscDatabase,
+                } as const
+              )[metadata.resourceKind];
   const title = metadata.role === "view" ? t(VIEW_TITLE_KEYS[metadata.viewId]) : props.title;
   const sections: ActionMenuSection[] = contextMenu
     ? contextMenu.target.metadata.role === "editor"

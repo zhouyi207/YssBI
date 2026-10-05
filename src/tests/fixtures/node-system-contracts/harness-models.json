@@ -1,0 +1,69 @@
+{
+  "presets": [
+    {
+      "id": "gemini",
+      "name": "Google / Gemini",
+      "protocol": "gemini",
+      "adapter": "gcp.gemini/gemini",
+      "authentication": "api_key",
+      "baseUrl": "https://generativelanguage.googleapis.com"
+    },
+    {
+      "id": "custom-chat",
+      "name": "Custom",
+      "protocol": "open_ai_chat",
+      "adapter": "openai/openai",
+      "authentication": "api_key",
+      "baseUrl": ""
+    }
+  ],
+  "providers": [
+    {
+      "config": {
+        "id": "cloud",
+        "name": "Cloud",
+        "customName": "Team account",
+        "protocol": "gemini",
+        "adapter": "gcp.gemini/gemini",
+        "authentication": "api_key",
+        "baseUrl": "https://generativelanguage.googleapis.com",
+        "models": [
+          {
+            "id": "cloud-model",
+            "name": "Cloud model",
+            "contextWindow": 128000,
+            "maxOutputTokens": 8192,
+            "temperature": 0.5,
+            "topP": 0.8,
+            "additionalParameters": { "generation_config": { "thinking_level": "low", "seed": 7 } }
+          }
+        ]
+      },
+      "hasApiKey": false
+    },
+    {
+      "config": {
+        "id": "local",
+        "name": "Local",
+        "customName": null,
+        "protocol": "open_ai_chat",
+        "adapter": "openai/openai",
+        "authentication": "none",
+        "baseUrl": "http://localhost:11434/v1",
+        "models": [
+          {
+            "id": "local-model",
+            "name": "Local model",
+            "contextWindow": null,
+            "maxOutputTokens": null,
+            "temperature": null,
+            "topP": null,
+            "additionalParameters": {}
+          }
+        ]
+      },
+      "hasApiKey": false
+    }
+  ],
+  "defaultModel": { "providerId": "local", "modelId": "local-model" }
+}

@@ -8,7 +8,10 @@ import { resetWorkbenchLayout } from "../application/workbenchLayoutActions";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { DEFAULT_LOGS_LAYOUT } from "./logsLayoutModel";
 import { configureWorkbenchModel } from "./workbenchActivityGroup";
-import { createEmptyWorkbenchLayout } from "./workbenchLayoutDefaults";
+import {
+  createEmptyWorkbenchLayout,
+  WORKBENCH_WORKSPACE_LAYOUT_ID,
+} from "./workbenchLayoutDefaults";
 import { WorkbenchModelOperations } from "./workbenchLayoutOperations";
 import { PendingWorkbenchTransaction } from "./workbenchLayoutTransaction";
 import { createPersistedWorkbenchLayout, isValidRootLayout } from "./workbenchLayoutPersistence";
@@ -57,6 +60,7 @@ describe("workbench floating panels", () => {
       workbenchLayoutController.bind(binding, "float-reset");
       await workbenchLayoutController.whenHydrated();
       const ops = new WorkbenchModelOperations(binding.getModel());
+      const conversation = ops.openConversation({ sessionId: "session-1", title: "Conversation" });
       const first = ops.openEditor({
         resourceKind: "event_graph",
         resourceRef: "events/A",
@@ -84,7 +88,10 @@ describe("workbench floating panels", () => {
         reset.getPanel(first.panelInstanceId)?.groupId,
       );
       expect(reset.getActivePanel()?.panelInstanceId).toBe(second.panelInstanceId);
-      expect(Object.keys(reset.serialize().subLayouts ?? {})).toEqual([]);
+      expect(reset.getPanel(conversation.panelInstanceId)?.groupId).toBe(conversation.groupId);
+      expect(Object.keys(reset.serialize().subLayouts ?? {})).toEqual([
+        WORKBENCH_WORKSPACE_LAYOUT_ID,
+      ]);
     } finally {
       workbenchLayoutController.unbind(binding);
     }
@@ -145,7 +152,7 @@ describe("workbench floating panels", () => {
     ops.activate(first.panelInstanceId);
     expect(ops.getActivePanel()?.panelInstanceId).toBe(first.panelInstanceId);
     ops.activate(editor.panelInstanceId);
-    model.doAction(Actions.maximizeToggle(first.groupId));
+    model.doAction(Actions.maximizeToggle(first.groupId, WORKBENCH_WORKSPACE_LAYOUT_ID));
     expect(ops.getPanel(editor.panelInstanceId)?.visible).toBe(true);
     const persisted = createPersistedWorkbenchLayout(ops.serialize(), DEFAULT_LOGS_LAYOUT);
     expect(isValidRootLayout(persisted.root)).toBe(true);
@@ -170,7 +177,9 @@ describe("workbench floating panels", () => {
       expect(restored.getPanel(editor.panelInstanceId)?.location.type).toBe("grid");
       expect(restored.getPanel(editor.panelInstanceId)?.visible).toBe(true);
       expect(restored.getActivePanel()?.panelInstanceId).toBe(editor.panelInstanceId);
-      expect(Object.keys(restored.serialize().subLayouts ?? {})).toEqual([]);
+      expect(Object.keys(restored.serialize().subLayouts ?? {})).toEqual([
+        WORKBENCH_WORKSPACE_LAYOUT_ID,
+      ]);
     } finally {
       controller.unbind(binding);
     }

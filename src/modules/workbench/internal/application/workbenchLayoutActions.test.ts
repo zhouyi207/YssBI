@@ -4,6 +4,10 @@ import type { IJsonModel } from "flexlayout-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkbenchLayoutTransaction } from "../layout/workbenchTypes";
+import {
+  createEmptyWorkbenchLayout,
+  WORKBENCH_WORKSPACE_LAYOUT_ID,
+} from "../layout/workbenchLayoutDefaults";
 import type {
   ConfigureWorkbenchEdgeRequest,
   EnsureViewRequest,
@@ -136,6 +140,7 @@ const edgeLocation = (position: WorkbenchEdgePosition) => ({
 const gridLocation = { type: "grid" as const };
 
 function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["component"] {
+  if (metadata.role === "conversation") return "AssistantConversation";
   if (metadata.role === "editor") {
     return "EditorResource";
   }
@@ -169,11 +174,15 @@ function panel(
     groupId,
     component: componentFor(metadata),
     title:
-      metadata.role === "view"
-        ? metadata.viewId
-        : metadata.role === "result" || metadata.role === "plugin" || metadata.role === "reference"
-          ? metadata.title
-          : metadata.resourceRef,
+      metadata.role === "conversation"
+        ? metadata.sessionId
+        : metadata.role === "view"
+          ? metadata.viewId
+          : metadata.role === "result" ||
+              metadata.role === "plugin" ||
+              metadata.role === "reference"
+            ? metadata.title
+            : metadata.resourceRef,
     metadata,
     active,
     location,
@@ -185,7 +194,7 @@ function viewPanel(
   viewId: WorkbenchViewId,
   groupId = `edge-${viewId}`,
   location: WorkbenchPanelInfo["location"] = edgeLocation(
-    ["project", "nodes", "commands", "plugins"].includes(viewId)
+    ["project", "nodes", "commands", "plugins", "assistant"].includes(viewId)
       ? "left"
       : viewId === "logs" || viewId === "output" || viewId === "problems"
         ? "bottom"
@@ -238,16 +247,22 @@ function serializedLayout(groups: readonly GroupSeed[]): IJsonModel {
   const tabs = (group: GroupSeed) =>
     group.panelInstanceIds.map((id) => ({ type: "tab" as const, id }));
   return {
-    layout: {
-      type: "row",
-      children: groups
-        .filter((group) => group.location.type === "grid")
-        .map((group) => ({
-          type: "tabset",
-          id: group.groupId,
-          selected: group.panelInstanceIds.indexOf(group.activePanelInstanceId ?? ""),
-          children: tabs(group),
-        })),
+    ...createEmptyWorkbenchLayout(),
+    subLayouts: {
+      [WORKBENCH_WORKSPACE_LAYOUT_ID]: {
+        type: "tab",
+        layout: {
+          type: "row",
+          children: groups
+            .filter((group) => group.location.type === "grid")
+            .map((group) => ({
+              type: "tabset",
+              id: group.groupId,
+              selected: group.panelInstanceIds.indexOf(group.activePanelInstanceId ?? ""),
+              children: tabs(group),
+            })),
+        },
+      },
     },
     borders: groups.flatMap((group) =>
       group.location.type === "edge"
@@ -268,9 +283,10 @@ function serializedLayout(groups: readonly GroupSeed[]): IJsonModel {
 }
 function nestedGridLayout(groups: readonly GroupSeed[]): IJsonModel {
   const layout = serializedLayout(groups);
-  const children = layout.layout.children ?? [];
+  const workspace = layout.subLayouts![WORKBENCH_WORKSPACE_LAYOUT_ID].layout;
+  const children = workspace.children ?? [];
   if (children.length > 1)
-    layout.layout.children = [children[0], { type: "row", children: children.slice(1) }];
+    workspace.children = [children[0], { type: "row", children: children.slice(1) }];
   return layout;
 }
 
@@ -363,7 +379,9 @@ function createTransactionHarness(
       return info(existing);
     }
 
-    const position = ["project", "nodes", "commands", "plugins"].includes(request.viewId)
+    const position = ["project", "nodes", "commands", "plugins", "assistant"].includes(
+      request.viewId,
+    )
       ? "left"
       : request.viewId === "logs" || request.viewId === "output" || request.viewId === "problems"
         ? "bottom"
@@ -633,7 +651,7 @@ describe("semantic workbench layout actions", () => {
     expect(mocks.ensureView).not.toHaveBeenCalled();
   });
 
-  it("expands an existing but hidden Activity edge instead of collapsing it", async () => {
+  it("toggles the Activity edge with Assistant present and expands it when hidden", async () => {
     mocks.leftEdge = {
       position: "left",
       exists: true,
@@ -646,12 +664,20 @@ describe("semantic workbench layout actions", () => {
       viewPanel("nodes", "nodes", "workbench-edge-left", edgeLocation("left")),
       viewPanel("commands", "commands", "workbench-edge-left", edgeLocation("left")),
       viewPanel("plugins", "plugins", "workbench-edge-left", edgeLocation("left")),
+      viewPanel("assistant", "assistant", "workbench-edge-left", edgeLocation("left")),
     );
 
     await toggleActivityWorkbenchGroup();
 
     expect(mocks.setEdgeCollapsed).toHaveBeenCalledWith("left", false);
+    mocks.leftEdge = { ...mocks.leftEdge, visible: true };
+    await toggleActivityWorkbenchGroup();
+    expect(mocks.setEdgeCollapsed).toHaveBeenLastCalledWith("left", true);
     expect(mocks.runLayoutTransaction).not.toHaveBeenCalled();
+
+    await expect(toggleWorkbenchView("assistant")).resolves.toBe(true);
+    expect(mocks.reveal).toHaveBeenCalledWith("assistant");
+    expect(mocks.requestCloseWorkbenchPanel).not.toHaveBeenCalled();
   });
 
   it("creates a missing default tool through its deterministic home request", async () => {
@@ -839,14 +865,10 @@ describe("resetWorkbenchLayout", () => {
       "nodes",
       "commands",
       "created:plugins:1",
+      "created:assistant:2",
     ]);
     expect(harness.groupPanelIds("edge-bottom")).toEqual(["created:problems:3", "output", "logs"]);
-    expect(harness.groupPanelIds("edge-right")).toEqual([
-      "details",
-      "created:assistant:2",
-      "result-grid",
-      "result-right",
-    ]);
+    expect(harness.groupPanelIds("edge-right")).toEqual(["details", "result-grid", "result-right"]);
     expect(harness.configureCalls).toEqual([
       { position: "left", size: 280, collapsed: false },
       { position: "right", size: 330, collapsed: false },

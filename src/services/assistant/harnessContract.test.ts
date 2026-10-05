@@ -1,14 +1,65 @@
+import { isModelConfigured, languageModelCatalogSchema } from "./modelContract";
+import modelCatalog from "@/tests/fixtures/node-system-contracts/harness-models.json";
+import { testModelCatalog } from "@/tests/fixtures/harnessModels";
+import events from "@/tests/fixtures/node-system-contracts/harness-events.json";
 import { describe, expect, it } from "vitest";
 import {
   InvalidHarnessPayloadError,
-  parseHarnessRuntimeStatus,
-  parseHarnessMemoryRecord,
-  parseHarnessSessions,
+  parseHarnessSession,
   parseHarnessEvent,
   parseHarnessTurnResult,
+  parseHarnessToolInspection,
 } from "./harnessContract";
 
 describe("Harness wire contract", () => {
+  it("preserves tool times and exact result identities in inspected and completed output", () => {
+    const inspection = {
+      target: "docs/report.yssbi-doc",
+      parameters: { operation: "edit" },
+      artifacts: [
+        {
+          resource: { kind: "doc", id: "docs/report.yssbi-doc" },
+          revision: 7,
+          revisionKind: "resource",
+          deleted: false,
+        },
+      ],
+      results: [
+        {
+          executionSessionId: "00000000-0000-0000-0000-000000000001",
+          resultId: "18446744073709551615",
+          output: "node:result",
+        },
+      ],
+      startedAt: 1000,
+      finishedAt: 2500,
+    };
+    expect(parseHarnessToolInspection(inspection)).toEqual(inspection);
+    const finished = events.find((event) => event.type === "agent_run_finished")!;
+    const enriched = {
+      ...finished,
+      payload: {
+        ...finished.payload,
+        artifacts: inspection.artifacts,
+        results: inspection.results,
+      },
+    };
+    expect(parseHarnessEvent(enriched)).toEqual(enriched);
+    expect(() =>
+      parseHarnessToolInspection({
+        ...inspection,
+        results: [{ ...inspection.results[0], resultId: 12 }],
+      }),
+    ).toThrow(InvalidHarnessPayloadError);
+  });
+  it("accepts the shared Rust lifecycle fixture including recovery and exact failures", () => {
+    for (const event of events) expect(parseHarnessEvent(event)).toEqual(event);
+    const tool = events.find((event) => event.type === "tool_invocation_started")!;
+    for (const capabilityId of ["search_knowledge", "read_knowledge"]) {
+      const event = { ...tool, payload: { ...tool.payload, capabilityId } };
+      expect(parseHarnessEvent(event)).toEqual(event);
+    }
+  });
   it("accepts empty successful turn text in both the receipt and completion event", () => {
     for (const finalText of ["", "Completed"]) {
       const result = { finalText };
@@ -27,24 +78,6 @@ describe("Harness wire contract", () => {
       expect(() => parseHarnessTurnResult({ finalText })).toThrow(InvalidHarnessPayloadError);
     }
   });
-  it("parses memory lifecycle records and rejects unknown states", () => {
-    const memory = {
-      recordId: "memory-1",
-      scope: "session",
-      kind: "research_question",
-      value: { type: "research_question", question: "How does education relate to income?" },
-      createdAt: 1,
-      updatedAt: 2,
-    };
-    for (const status of ["proposed", "active", "superseded", "invalidated", "deleted"]) {
-      const record = { ...memory, status };
-      expect(parseHarnessMemoryRecord(record)).toEqual(record);
-    }
-    expect(() => parseHarnessMemoryRecord({ ...memory, status: "unknown" })).toThrow(
-      InvalidHarnessPayloadError,
-    );
-  });
-
   it("parses worker lifecycle and only permits model events inside worker output", () => {
     const base = { sequence: 1, sessionId: "session", turnId: "turn", occurredAt: 1 };
     const started = {
@@ -86,10 +119,13 @@ describe("Harness wire contract", () => {
         runId: "worker",
         role: "review",
         state: "blocked",
+        failureCode: null,
         summary: "Missing results",
         blockedReason: "Evidence unavailable",
         warnings: [],
         evidenceCount: 0,
+        artifacts: [],
+        results: [],
       },
     };
     expect(parseHarnessEvent(finished)).toEqual(finished);
@@ -114,13 +150,39 @@ describe("Harness wire contract", () => {
       }),
     ).toThrow(InvalidHarnessPayloadError);
   });
-  it("requires an explicit provider status", () => {
-    expect(parseHarnessRuntimeStatus({ providerConfigured: true })).toEqual({
-      providerConfigured: true,
-    });
-    expect(() => parseHarnessRuntimeStatus({})).toThrow(InvalidHarnessPayloadError);
+  it("preserves the Rust model catalog and derives availability from its authentication mode", () => {
+    expect(languageModelCatalogSchema.parse(testModelCatalog)).toEqual(testModelCatalog);
+    const catalog = languageModelCatalogSchema.parse(modelCatalog);
+    expect(catalog).toEqual(modelCatalog);
+    expect(isModelConfigured(catalog, catalog.defaultModel)).toBe(true);
+    expect(isModelConfigured(catalog, { providerId: "cloud", modelId: "cloud-model" })).toBe(false);
+    expect(isModelConfigured(catalog, { providerId: "local", modelId: "missing" })).toBe(false);
+    expect(
+      languageModelCatalogSchema.safeParse({
+        presets: [],
+        providers: [{ config: testModelCatalog.providers[0].config }],
+        defaultModel: null,
+      }).success,
+    ).toBe(false);
   });
-  it("preserves conversation identity and rejects malformed list metadata", () => {
+  it("validates compaction progress without accepting impossible completion counts", () => {
+    const event = {
+      sequence: 1,
+      sessionId: "session",
+      turnId: "turn",
+      occurredAt: 1,
+      type: "context_compaction_progress",
+      payload: { completedBytes: 40, totalBytes: 100 },
+    };
+    expect(parseHarnessEvent(event)).toEqual(event);
+    expect(() =>
+      parseHarnessEvent({ ...event, payload: { completedBytes: 101, totalBytes: 100 } }),
+    ).toThrow(InvalidHarnessPayloadError);
+    expect(() =>
+      parseHarnessEvent({ ...event, payload: { completedBytes: 0, totalBytes: 0 } }),
+    ).toThrow(InvalidHarnessPayloadError);
+  });
+  it("preserves conversation identity and rejects malformed session metadata", () => {
     const sessions = [
       {
         sessionId: "first",
@@ -128,6 +190,7 @@ describe("Harness wire contract", () => {
         projectSessionId: "old-session",
         title: "Previous analysis",
         lastOpenedAt: 2,
+        model: null,
       },
       {
         sessionId: "second",
@@ -135,16 +198,14 @@ describe("Harness wire contract", () => {
         projectSessionId: "current-session",
         title: "",
         lastOpenedAt: 1,
+        model: null,
       },
     ];
-    expect(parseHarnessSessions(sessions)).toEqual(sessions);
-    expect(() => parseHarnessSessions([sessions[0], sessions[0]])).toThrow(
+    expect(sessions.map(parseHarnessSession)).toEqual(sessions);
+    expect(() => parseHarnessSession({ ...sessions[0], lastOpenedAt: -1 })).toThrow(
       InvalidHarnessPayloadError,
     );
-    expect(() => parseHarnessSessions([{ ...sessions[0], lastOpenedAt: -1 }])).toThrow(
-      InvalidHarnessPayloadError,
-    );
-    expect(() => parseHarnessSessions([{ sessionId: "missing-metadata" }])).toThrow(
+    expect(() => parseHarnessSession({ sessionId: "missing-metadata" })).toThrow(
       InvalidHarnessPayloadError,
     );
   });

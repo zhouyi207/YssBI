@@ -730,9 +730,16 @@ describe("workbench panel close coordinator", () => {
       viewPanel("assistant-a", "assistant"),
     ]);
 
-    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a", "assistant-a"])).resolves.toBe(
-      true,
-    );
+    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a"])).resolves.toBe(true);
+    await expect(requestCloseWorkbenchPanel("assistant-a")).resolves.toBe(false);
+    seedPanels([
+      {
+        ...viewPanel("conversation-a", "assistant"),
+        component: "AssistantConversation",
+        metadata: { role: "conversation", sessionId: "session-a" },
+      },
+    ]);
+    await expect(requestCloseWorkbenchPanel("conversation-a")).resolves.toBe(false);
 
     seedPanels([
       editorPanel("editor-a", "events/Main.yssbi-event"),
@@ -743,6 +750,8 @@ describe("workbench panel close coordinator", () => {
       false,
     );
     expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual([
+      "assistant-a",
+      "conversation-a",
       "editor-a",
       "result-a",
       "details-a",

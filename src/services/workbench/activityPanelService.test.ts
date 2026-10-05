@@ -51,6 +51,71 @@ it("accepts concrete file and database items in project snapshots while keeping 
   }
 });
 
+it("validates conversation documents and applies rename and order patches without accepting duplicate identities", async () => {
+  const row = {
+    id: "conversation:first",
+    depth: 0,
+    kind: "item",
+    item: { kind: "conversation", sessionId: "first", title: "First", lastOpenedAt: 1 },
+  } satisfies ActivityPanelRow;
+  const second = {
+    ...row,
+    id: "conversation:second",
+    item: { ...row.item, sessionId: "second", title: "Second" },
+  } satisfies ActivityPanelRow;
+  const document = {
+    ...activityPanelFixture(
+      "assistant",
+      [row, second],
+      [
+        {
+          id: "newConversation",
+          icon: "add",
+          label: { key: "panel.assistantNewConversation" },
+        },
+      ],
+    ),
+    projectInstanceId: "project-1",
+  };
+  invoke.mockReset().mockResolvedValueOnce({ kind: "snapshot", cursor: "a1", document });
+  const first = await getActivityPanelDocument(
+    "assistant",
+    { projectInstanceId: "project-1" },
+    "en-US",
+  );
+  expect(first.document).toBe(document);
+  const renamed = { ...second.item, title: "Renamed", lastOpenedAt: 2 };
+  invoke.mockResolvedValueOnce({
+    kind: "patch",
+    baseCursor: "a1",
+    cursor: "a2",
+    patch: {},
+    operations: [
+      { op: "update", id: second.id, patch: { item: renamed } },
+      { op: "move", id: second.id, afterId: null },
+    ],
+  });
+  const updated = await getActivityPanelDocument(
+    "assistant",
+    { projectInstanceId: "project-1" },
+    "en-US",
+    first,
+  );
+  expect(updated.document.rows).toEqual([{ ...second, item: renamed }, row]);
+  expect(first.document.rows).toEqual([row, second]);
+  for (const item of [
+    { ...row.item, lastOpenedAt: -1 },
+    { ...row.item, lastOpenedAt: Number.MAX_SAFE_INTEGER },
+    { kind: "conversation", sessionId: "missing-metadata" },
+    { ...row.item, sessionId: "" },
+  ])
+    expect(parseActivityPanelDocument({ ...document, rows: [{ ...row, item }] })).toBeNull();
+  expect(
+    parseActivityPanelDocument({ ...document, rows: [row, { ...row, id: "duplicate" }] }),
+  ).toBeNull();
+  expect(parseActivityPanelDocument({ ...document, panelId: "project" })).toBeNull();
+});
+
 it("publishes a newly created mind through a coherent index and sidebar insert patch", async () => {
   const mind = {
     kind: "mind" as const,

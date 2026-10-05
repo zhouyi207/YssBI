@@ -79,26 +79,28 @@ function panel(
   metadata: WorkbenchPanelInfo["metadata"],
 ): WorkbenchPanelInfo {
   const component =
-    metadata.role === "editor"
-      ? "EditorResource"
-      : metadata.role === "reference"
-        ? "Reference"
-        : metadata.role === "result" || metadata.role === "plugin"
-          ? "Result"
-          : (
-              {
-                project: "Project",
-                nodes: "Nodes",
-                commands: "Commands",
-                plugins: "Plugins",
-                details: "Details",
-                assistant: "Assistant",
-                settings: "Settings",
-                logs: "Logs",
-                output: "Output",
-                problems: "Problems",
-              } as const
-            )[metadata.viewId];
+    metadata.role === "conversation"
+      ? "AssistantConversation"
+      : metadata.role === "editor"
+        ? "EditorResource"
+        : metadata.role === "reference"
+          ? "Reference"
+          : metadata.role === "result" || metadata.role === "plugin"
+            ? "Result"
+            : (
+                {
+                  project: "Project",
+                  nodes: "Nodes",
+                  commands: "Commands",
+                  plugins: "Plugins",
+                  details: "Details",
+                  assistant: "Assistant",
+                  settings: "Settings",
+                  logs: "Logs",
+                  output: "Output",
+                  problems: "Problems",
+                } as const
+              )[metadata.viewId];
   return {
     panelInstanceId,
     groupId: "group-main",

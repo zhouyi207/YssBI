@@ -46,30 +46,6 @@ function viewRequest(viewId: WorkbenchViewId) {
   };
 }
 
-async function createAssistantAtDefaultHome(): Promise<WorkbenchPanelInfo | null> {
-  let assistantPanelInstanceId: string | undefined;
-
-  await workbenchLayoutInternal.runLayoutTransaction((tx) => {
-    const details = tx.ensureView(viewRequest("details"));
-    const assistant = tx.ensureView(viewRequest("assistant"));
-    const detailsIndex = tx
-      .listGroupPanels(details.groupId)
-      .findIndex((panel) => panel.panelInstanceId === details.panelInstanceId);
-
-    tx.move({
-      panelInstanceId: assistant.panelInstanceId,
-      groupId: details.groupId,
-      index: detailsIndex < 0 ? 1 : detailsIndex + 1,
-      activate: true,
-    });
-    assistantPanelInstanceId = assistant.panelInstanceId;
-  });
-
-  return assistantPanelInstanceId
-    ? (workbenchLayoutRead.getPanel(assistantPanelInstanceId) ?? null)
-    : null;
-}
-
 export async function revealWorkbenchView(
   viewId: WorkbenchViewId,
 ): Promise<WorkbenchPanelInfo | null> {
@@ -78,7 +54,6 @@ export async function revealWorkbenchView(
     if (existing) {
       return (await workbenchLayoutControl.reveal(existing.panelInstanceId)) ? existing : null;
     }
-    if (viewId === "assistant") return await createAssistantAtDefaultHome();
     return await workbenchLayoutControl.ensureView(viewRequest(viewId));
   } catch (error) {
     showWorkbenchLayoutError(error);
@@ -190,9 +165,8 @@ export async function syncPluginWorkbenchViews(
 
 function activityPanelsInGroup(groupId: string): boolean {
   const panels = workbenchLayoutRead.listGroupPanels(groupId);
-  return (
-    panels.length >= WORKBENCH_ACTIVITY_DEFAULT_ORDER.length &&
-    panels.every((panel) => isWorkbenchActivityMetadata(panel.metadata))
+  return WORKBENCH_ACTIVITY_DEFAULT_ORDER.every((viewId) =>
+    panels.some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === viewId),
   );
 }
 
@@ -279,7 +253,6 @@ export async function resetWorkbenchLayout(): Promise<void> {
         tx.ensureView(viewRequest(viewId)),
       );
       const details = tx.ensureView(viewRequest("details"));
-      const assistant = tx.ensureView(viewRequest("assistant"));
       const logs = tx.ensureView(viewRequest("logs"));
       const output = tx.ensureView(viewRequest("output"));
       const problems = tx.ensureView(viewRequest("problems"));
@@ -298,11 +271,11 @@ export async function resetWorkbenchLayout(): Promise<void> {
         size: WORKBENCH_EDGE_SIZES.bottom,
         collapsed: true,
       });
+      const firstCentralPanel = centralPanels[0];
       const centralGroupId =
         tx.listGroups().find((group) => group.location.type === "grid")?.groupId ??
         tx.ensureCentralGroup();
 
-      const firstCentralPanel = centralPanels[0];
       if (firstCentralPanel) {
         tx.move({
           panelInstanceId: firstCentralPanel.panelInstanceId,
@@ -322,12 +295,6 @@ export async function resetWorkbenchLayout(): Promise<void> {
         panelInstanceId: details.panelInstanceId,
         groupId: right.groupId,
         index: 0,
-        activate: false,
-      });
-      tx.move({
-        panelInstanceId: assistant.panelInstanceId,
-        groupId: right.groupId,
-        index: 1,
         activate: false,
       });
       for (const [index, viewId] of WORKBENCH_BOTTOM_DEFAULT_ORDER.entries()) {
@@ -354,7 +321,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
         tx.move({
           panelInstanceId: panel.panelInstanceId,
           groupId: right.groupId,
-          index: index + 2,
+          index: index + 1,
         });
       }
 

@@ -81,7 +81,9 @@ function isCanonicalTarget(panel: WorkbenchPanelInfo): boolean {
 
 function isProjectScopedPanel(panel: WorkbenchPanelInfo): boolean {
   const metadata = panel.metadata;
-  return metadata.role === "editor" || metadata.role === "result";
+  return (
+    metadata.role === "editor" || metadata.role === "result" || metadata.role === "conversation"
+  );
 }
 
 function captureCloseSnapshot(requestedPanelIds: readonly string[]): CloseSnapshot | null {

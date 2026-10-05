@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ComponentProps } from "react";
+import { defaultUrlTransform, type ExtraProps } from "react-markdown";
 import {
   MarkdownTextPrimitive,
   normalizeMathDelimiters,
@@ -9,7 +10,11 @@ import { VscCheck, VscCopy } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { openExternalUrlWithDialog } from "@/features/application/window/openExternalUrlWithDialog";
 import { markdownProseClass } from "@/shared/ui/markdownProseClass";
-import { MarkdownLinkContext } from "@/shared/ui/MarkdownLink";
+import { MarkdownLink, MarkdownLinkContext } from "@/shared/ui/MarkdownLink";
+import {
+  assistantLinkResource,
+  openAssistantResource,
+} from "@/features/application/assistant/assistantResourceActions";
 import {
   markdownComponents,
   markdownRemarkPlugins,
@@ -52,9 +57,36 @@ function CodeHeader({ language, code }: CodeHeaderProps) {
   );
 }
 
+function AssistantMarkdownLink(props: ComponentProps<"a"> & ExtraProps) {
+  const { t } = useTranslation();
+  const [failed, setFailed] = useState(false);
+  const resource = props.href ? assistantLinkResource(props.href) : null;
+  if (!resource) return <MarkdownLink {...props} />;
+  return (
+    <>
+      <button
+        type="button"
+        className="inline cursor-pointer text-primary underline underline-offset-2"
+        onClick={() => {
+          setFailed(false);
+          void openAssistantResource(resource).catch(() => setFailed(true));
+        }}
+      >
+        {props.children}
+      </button>
+      {failed && (
+        <span role="alert" className="ml-1 text-xs text-destructive">
+          {t("panel.assistantResourceOpenFailed")}
+        </span>
+      )}
+    </>
+  );
+}
+
 const components = {
   ...markdownComponents,
   CodeHeader,
+  a: AssistantMarkdownLink,
 };
 
 export function AssistantMarkdown() {
@@ -70,6 +102,7 @@ export function AssistantMarkdown() {
         remarkPlugins={markdownRemarkPlugins}
         rehypePlugins={rehypePlugins}
         preprocess={normalizeMathDelimiters}
+        urlTransform={(url) => (url.startsWith("yssbi://") ? url : defaultUrlTransform(url))}
         smooth
         defer
       />

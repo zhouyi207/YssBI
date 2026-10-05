@@ -10,7 +10,6 @@ import { SettingsView } from "./SettingsView";
 
 const settings = vi.hoisted(() => ({
   resetAllToDefaults: vi.fn(),
-  resetAiToDefaults: vi.fn(),
   resetAppearanceToDefaults: vi.fn(),
   updateAppearance: vi.fn(),
 }));
@@ -26,6 +25,10 @@ vi.mock("react-i18next", () => ({
       return key;
     },
   }),
+}));
+
+vi.mock("./LanguageModelSettings", () => ({
+  LanguageModelSettings: () => <p>settings.models.title</p>,
 }));
 
 vi.mock("@/app/i18n", () => ({
@@ -67,11 +70,6 @@ vi.mock("@/shared/ui", () => ({
 
 vi.mock("@/features/core/settings/settingsStore", () => {
   const state = {
-    ai: {
-      openAiModel: "",
-      openAiBaseUrl: "https://api.openai.com/v1",
-      openAiApiKey: "",
-    },
     appearance: {
       colorTheme: "Dark Modern (Default)",
       language: "en-US",
@@ -79,10 +77,8 @@ vi.mock("@/features/core/settings/settingsStore", () => {
       smoothScroll: true,
     },
     isLoading: false,
-    updateAi: vi.fn(),
     updateAppearance: settings.updateAppearance,
     resetAllToDefaults: settings.resetAllToDefaults,
-    resetAiToDefaults: settings.resetAiToDefaults,
     resetAppearanceToDefaults: settings.resetAppearanceToDefaults,
   };
   const useSettingsStore = Object.assign(
@@ -107,7 +103,6 @@ describe("SettingsView preferences", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     settings.resetAllToDefaults.mockResolvedValue(undefined);
-    settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
     uiStore.showSettings();
     modalId = uiStore.getState().modals.find((modal) => modal.type === "settings")!.id;
@@ -145,16 +140,6 @@ describe("SettingsView preferences", () => {
     });
   }
 
-  it("exposes OpenAI model and API key controls in the AI section", async () => {
-    render();
-    await openSection("ai");
-
-    expect(host.textContent).toContain("settings.labels.openAiModel");
-    expect(host.textContent).toContain("settings.labels.openAiBaseUrl");
-    expect(host.textContent).toContain("settings.labels.openAiApiKey");
-    expect(host.querySelector('input[type="password"]')).not.toBeNull();
-  });
-
   it("hides unrelated settings for an unmatched search and restores them when cleared", () => {
     render();
     const search = host.querySelector('input[aria-label="settings.searchPlaceholder"]')!;
@@ -171,7 +156,7 @@ describe("SettingsView preferences", () => {
       (button) => button.textContent === "settings.clearSearch",
     )!;
     click(clear);
-    expect(host.querySelector('input[type="password"]')).not.toBeNull();
+    expect(host.textContent).toContain("settings.models.title");
     expect(host.querySelector('[role="status"]')).toBeNull();
   });
 
@@ -212,8 +197,8 @@ describe("SettingsView preferences", () => {
 
   it("shows a section reset failure with the active section", async () => {
     vi.spyOn(uiStore, "confirm").mockResolvedValue(true);
-    settings.resetAiToDefaults.mockRejectedValueOnce(
-      normalizeIpcError("reset_ai_settings", {
+    settings.resetAppearanceToDefaults.mockRejectedValueOnce(
+      normalizeIpcError("reset_appearance_settings", {
         code: "settings_section_reset_failed",
         details: null,
         incidentId: null,
@@ -221,6 +206,7 @@ describe("SettingsView preferences", () => {
     );
     render();
 
+    await openSection("appearance");
     const resetSection = [...host.querySelectorAll("button")].find(
       (item) => item.textContent === "common.restoreDefaults",
     );
@@ -236,7 +222,7 @@ describe("SettingsView preferences", () => {
     render();
 
     const resetAll = [...host.querySelectorAll("button")].find(
-      (item) => item.textContent === "common.restoreAllDefaults",
+      (item) => item.textContent === "settings.restorePreferences",
     );
     click(resetAll!);
     await flushPromises();
@@ -245,7 +231,7 @@ describe("SettingsView preferences", () => {
   });
 
   it.each([
-    ["common.restoreAllDefaults", "resetAllToDefaults"],
+    ["settings.restorePreferences", "resetAllToDefaults"],
     ["common.restoreDefaults", "resetAppearanceToDefaults"],
   ] as const)(
     "keeps %s pending until confirmed and leaves settings intact on cancel",

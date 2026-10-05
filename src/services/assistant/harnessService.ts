@@ -1,3 +1,5 @@
+import type { LanguageModelSelection } from "./modelContract";
+import { citationDetailSchema, type CitationDetail } from "./knowledgeService";
 import { Channel } from "@tauri-apps/api/core";
 
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
@@ -6,15 +8,13 @@ import { clearChannelMessageHandler } from "@/shared/platform/tauriWebview";
 
 import {
   parseHarnessEvent,
-  parseHarnessMemoryRecords,
-  parseHarnessRuntimeStatus,
   parseHarnessSession,
-  parseHarnessSessions,
   parseHarnessSubscription,
   parseHarnessTurnResult,
+  parseHarnessToolInspection,
+  type HarnessToolInspection,
+  type HarnessKnowledgeCitation,
   type HarnessEvent,
-  type HarnessMemoryRecord,
-  type HarnessRuntimeStatus,
   type HarnessSession,
   type HarnessTurnResult,
 } from "./harnessContract";
@@ -22,8 +22,6 @@ import {
 export type {
   HarnessEvent,
   HarnessKnowledgeCitation,
-  HarnessMemoryRecord,
-  HarnessRuntimeStatus,
   HarnessSession,
   HarnessTurnResult,
 } from "./harnessContract";
@@ -33,28 +31,40 @@ export interface HarnessEventSubscription {
 }
 
 export class HarnessService {
-  static async configureProvider(
-    model: string,
-    baseUrl: string,
-    apiKey: string,
-  ): Promise<HarnessRuntimeStatus> {
-    return parseHarnessRuntimeStatus(
-      await invokeCommand("configure_harness_provider", {
-        request: { model, baseUrl, apiKey },
-      }),
+  static async inspectTool(
+    sessionId: string,
+    invocationId: string,
+  ): Promise<HarnessToolInspection> {
+    return parseHarnessToolInspection(
+      await invokeCommand("inspect_harness_tool", { sessionId, invocationId }),
     );
+  }
+
+  static async inspectCitation(
+    sessionId: string,
+    citation: HarnessKnowledgeCitation,
+  ): Promise<CitationDetail> {
+    return citationDetailSchema.parse(
+      await invokeCommand("inspect_harness_citation", { sessionId, citation }),
+    );
+  }
+  static async selectModel(
+    sessionId: string,
+    model: LanguageModelSelection,
+  ): Promise<HarnessSession> {
+    return parseHarnessSession(await invokeCommand("select_harness_model", { sessionId, model }));
   }
 
   static async createSession(): Promise<HarnessSession> {
     return parseHarnessSession(await invokeCommand("create_harness_session"));
   }
 
-  static async listSessions(): Promise<readonly HarnessSession[]> {
-    return parseHarnessSessions(await invokeCommand("list_harness_sessions"));
-  }
-
   static async openSession(sessionId: string): Promise<HarnessSession> {
     return parseHarnessSession(await invokeCommand("open_harness_session", { sessionId }));
+  }
+
+  static async renameSession(sessionId: string, title: string): Promise<HarnessSession> {
+    return parseHarnessSession(await invokeCommand("rename_harness_session", { sessionId, title }));
   }
 
   static async subscribeEvents(
@@ -117,23 +127,16 @@ export class HarnessService {
   static async submitTurn(
     sessionId: string,
     message: string,
-    activeGraphPath: string | null = null,
+    resources: readonly import("@/shared/types/domain/resource").ResourceRef[] = [],
+    model: LanguageModelSelection | null = null,
   ): Promise<HarnessTurnResult> {
     return parseHarnessTurnResult(
-      await invokeCommand("submit_harness_turn", { sessionId, message, activeGraphPath }),
+      await invokeCommand("submit_harness_turn", { sessionId, message, resources, model }),
     );
   }
 
   static async cancelTurn(sessionId: string): Promise<void> {
     await invokeCommand("cancel_harness_turn", { sessionId });
-  }
-
-  static async listMemory(sessionId: string): Promise<readonly HarnessMemoryRecord[]> {
-    return parseHarnessMemoryRecords(await invokeCommand("list_harness_memory", { sessionId }));
-  }
-
-  static async deleteMemory(sessionId: string, recordId: string): Promise<void> {
-    await invokeCommand("delete_harness_memory", { sessionId, recordId });
   }
 
   private static async unsubscribeEvents(subscriptionId: string): Promise<void> {

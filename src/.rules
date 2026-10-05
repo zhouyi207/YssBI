@@ -3,6 +3,9 @@
 本文件适用于 `src/` 及其后代。新增或修改实现时，先复用已有 owner、schema、
 索引和更新入口；库的版本及依赖由根 `package.json` 拥有。
 
+涉及工作台 Activity 侧栏列表的修改，包括各业务模块、Application、Service 和共享
+类型中的相关代码，必须同时遵循 [Workbench 侧栏规则](modules/workbench/.rules)。
+
 ## Zustand 与状态订阅
 
 - 共享前端状态使用 Zustand，优先扩展所属领域的现有 store；不得为同一状态新增

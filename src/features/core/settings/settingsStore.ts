@@ -1,13 +1,8 @@
 import { create } from "zustand";
 import { shallow } from "zustand/shallow";
 import { parseSettingsPatch } from "@/shared/types/settings/parseSettings";
-import type {
-  AiSettings,
-  AppearanceSettings,
-  AppSettings,
-  PartialAppSettings,
-} from "@/shared/types/settings";
-import { DEFAULT_APPEARANCE, DEFAULT_AI } from "@/shared/config-default";
+import type { AppearanceSettings, AppSettings, PartialAppSettings } from "@/shared/types/settings";
+import { DEFAULT_APPEARANCE } from "@/shared/config-default";
 import { getThemeModeForPreset } from "@/shared/theme/colorThemePresets";
 import { logger } from "@/utils/frontendLogger";
 
@@ -43,11 +38,6 @@ function mergeAppearanceSettings(source?: Partial<AppearanceSettings>): Appearan
 
 function mergeSettings(settings: PartialAppSettings): AppSettings {
   return {
-    ai: {
-      openAiApiKey: settings.ai?.openAiApiKey ?? DEFAULT_AI.openAiApiKey,
-      openAiBaseUrl: settings.ai?.openAiBaseUrl ?? DEFAULT_AI.openAiBaseUrl,
-      openAiModel: settings.ai?.openAiModel ?? DEFAULT_AI.openAiModel,
-    },
     appearance: mergeAppearanceSettings(settings.appearance),
   };
 }
@@ -62,7 +52,9 @@ function loadLocalSettings(): AppSettings {
     if (!raw) return mergeSettings({});
     const parsed = parseSettingsPatch(JSON.parse(raw));
     if (!parsed) throw new Error("Invalid settings fields");
-    return mergeSettings(parsed);
+    const settings = mergeSettings(parsed);
+    if (raw !== JSON.stringify(settings)) saveLocalSettings(settings);
+    return settings;
   } catch {
     logger.app.warn(
       "Failed to load local settings: invalid or unavailable stored settings",
@@ -88,7 +80,6 @@ function saveLocalSettings(settings: AppSettings): void {
 
 function mergePatches(base: PartialAppSettings, patch: PartialAppSettings): PartialAppSettings {
   return {
-    ai: { ...base.ai, ...patch.ai },
     appearance: { ...base.appearance, ...patch.appearance },
   };
 }
@@ -99,27 +90,24 @@ export function applyClientSettingsFromRemote(incoming: PartialAppSettings): voi
   if (!patch) return;
   const current = useSettingsStore.getState();
   const merged = mergeSettings(mergePatches(mergePatches(current, patch), pendingSettings));
-  if (shallow(current.ai, merged.ai) && shallow(current.appearance, merged.appearance)) return;
+  if (shallow(current.appearance, merged.appearance)) return;
   saveLocalSettings(mergeSettings(mergePatches(loadLocalSettings(), patch)));
   useSettingsStore.setState((state) => settingsUpdate(state, merged, false));
 }
 
 interface SettingsStore {
-  ai: AiSettings;
   appearance: AppearanceSettings;
   isLoading: boolean;
 
   load: () => Promise<void>;
 
   // 更新后安排持久化。
-  updateAi: (updates: Partial<AiSettings>) => void;
   updateAppearance: (updates: Partial<AppearanceSettings>) => void;
 
   // 保存方法
   save: () => Promise<void>;
 
   // 恢复默认方法
-  resetAiToDefaults: () => Promise<void>;
   resetAppearanceToDefaults: () => Promise<void>;
 
   // 重新加载设置
@@ -131,13 +119,11 @@ function settingsUpdate(
   next: AppSettings,
   isLoading = current.isLoading,
 ): Partial<SettingsStore> {
-  const ai = shallow(current.ai, next.ai) ? current.ai : next.ai;
   const appearance = shallow(current.appearance, next.appearance)
     ? current.appearance
     : next.appearance;
-  if (ai === current.ai && appearance === current.appearance && isLoading === current.isLoading)
-    return current;
-  return { ai, appearance, isLoading };
+  if (appearance === current.appearance && isLoading === current.isLoading) return current;
+  return { appearance, isLoading };
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
@@ -156,8 +142,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     saveLocalSettings(settings);
     pendingSettings = {};
     installSettings(settings);
-    if (Object.keys(patch.ai ?? {}).length || Object.keys(patch.appearance ?? {}).length)
-      publishClientSettings?.(patch);
+    if (Object.keys(patch.appearance ?? {}).length) publishClientSettings?.(patch);
   };
 
   const scheduleSave = () => {
@@ -168,7 +153,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   };
 
   return {
-    ai: DEFAULT_AI,
     appearance: DEFAULT_APPEARANCE,
     isLoading: true,
 
@@ -177,15 +161,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       saveTimer = null;
       pendingSettings = {};
       installSettings(loadLocalSettings(), false);
-    },
-
-    updateAi: (updates) => {
-      const patch = parseSettingsPatch({ ai: updates });
-      if (!patch) throw new Error("Invalid AI settings fields");
-      pendingSettings = mergePatches(pendingSettings, patch);
-      const current = get();
-      installSettings({ ai: { ...current.ai, ...patch.ai }, appearance: current.appearance });
-      scheduleSave();
     },
 
     updateAppearance: (updates) => {
@@ -200,22 +175,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       if (next.lastDarkColorTheme !== current.lastDarkColorTheme)
         patch.lastDarkColorTheme = next.lastDarkColorTheme;
       pendingSettings = mergePatches(pendingSettings, { appearance: patch });
-      installSettings({ ai: get().ai, appearance: next });
+      installSettings({ appearance: next });
       scheduleSave();
     },
 
     // 立即保存当前状态
     save: saveImmediately,
 
-    resetAiToDefaults: async () => {
-      pendingSettings = mergePatches(pendingSettings, { ai: DEFAULT_AI });
-      installSettings({ ai: DEFAULT_AI, appearance: get().appearance });
-      await saveImmediately();
-    },
-
     resetAppearanceToDefaults: async () => {
       pendingSettings = mergePatches(pendingSettings, { appearance: DEFAULT_APPEARANCE });
-      installSettings({ ai: get().ai, appearance: DEFAULT_APPEARANCE });
+      installSettings({ appearance: DEFAULT_APPEARANCE });
       await saveImmediately();
     },
 

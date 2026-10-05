@@ -1,18 +1,14 @@
 import { useSettingsStore } from "./settingsStore";
-import type { AiSettings, AppearanceSettings } from "@/shared/types/settings";
+import type { AppearanceSettings } from "@/shared/types/settings";
 
 export interface SettingsUiCapability {
-  readonly updateAi: (updates: Partial<AiSettings>) => void;
   readonly updateAppearance: (updates: Partial<AppearanceSettings>) => void;
   readonly resetAllToDefaults: () => Promise<void>;
-  readonly resetAiToDefaults: () => Promise<void>;
   readonly resetAppearanceToDefaults: () => Promise<void>;
 }
 
 export const settingsUi: SettingsUiCapability = {
-  updateAi: (updates) => useSettingsStore.getState().updateAi(updates),
   updateAppearance: (updates) => useSettingsStore.getState().updateAppearance(updates),
   resetAllToDefaults: () => useSettingsStore.getState().resetAllToDefaults(),
-  resetAiToDefaults: () => useSettingsStore.getState().resetAiToDefaults(),
   resetAppearanceToDefaults: () => useSettingsStore.getState().resetAppearanceToDefaults(),
 };

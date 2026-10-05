@@ -9,7 +9,11 @@
 
 Rust 可以通过受控界面意图请求打开图、定位节点、打开结果或显示固定目录中的面板。工作台先认领请求，再调用现有编辑器、结果租约与面板入口，并回传实际执行状态。具体协议见 [工作台界面意图](../../../src-tauri/crates/yss-ui-contract/README.md)。
 
-Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与历史由 Harness 持久化，关闭或移动面板不结束对话。项目归属、恢复与多对话切换见 [Harness 会话契约](../../../src-tauri/crates/yss-harness-core/README.md#5-session-turn-and-events)。
+Assistant 是固定在左侧的对话列表，提供搜索、新建和重命名。点击条目在 sidebar 右侧、top 工作区左侧的独立 `assistant-conversations` 分组打开对话。该分组与 top 工作区并列，只接受 AI 对话，不属于 top 的编辑器布局；顶部不显示 panel tab 栏，由左侧列表选择、切换和关闭。每个会话只对应一个面板；再次点击当前可见的对话条目会关闭该面板，点击其他已打开条目则切换到对应面板。切换或折叠左侧 Activity 不关闭对话分组，最后一个对话面板关闭后原生布局回收该组。
+
+每个对话面板使用自己的 Harness runtime、事件投影、输入与订阅；左侧列表读取 Rust 生成的 Assistant Activity 文档，由 `sidebarStore` 缓存，不订阅完整消息，也不隐式创建对话。对话历史由 Harness 持久化，关闭面板不删除对话、不取消后台执行；重新打开恢复历史与按会话保存的草稿。项目归属、恢复与执行约定见 [Harness 会话契约](../../../src-tauri/crates/yss-harness-core/README.md#5-session-turn-and-events)。
+
+底栏提供独立的对话窗口开关：关闭时位于设置图标右侧，打开时与对话区左边缘对齐，侧栏缩放和折叠由同一 CSS subgrid 跟随。关闭操作通过既有面板关闭协调者移除整个对话组的面板；再次打开先查询当前项目的 Activity 文档，优先恢复刚才查看的对话，否则打开最近对话，空目录则新建。仅暂存已关闭对话的 sessionId 作为恢复目标，项目生命周期变化即失效；窗口是否显示仍从原生 Model 读取。
 
 ## 1. 渲染层级与 authority
 
@@ -17,17 +21,21 @@ Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与�
 WorkbenchWindow
 ├─ WorkbenchMenuBar
 └─ RootLayoutHost：一个 FlexLayout Layout + Model
-   ├─ left border：Project、Nodes、Commands、Plugins 和插件 sidebar
-   ├─ central column
-   │  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
-   │  └─ bottom content：Problems、Output、Logs 的内容面板
-   ├─ right border：Details、Assistant 和 Result 的默认位置
-   └─ bottom bar：贯穿窗口，最左侧设置、对齐中央区左边的原生 tab、对齐右边的状态信息
+   ├─ left border：Project、Nodes、Commands、Plugins、Assistant 和插件 sidebar
+   ├─ horizontal shell
+   │  ├─ AI conversation group：无顶部标签栏，只承载 AI 对话
+   │  └─ workspace host：固定且无标签栏，承载原生 workbench-workspace 嵌入布局
+   │     └─ top panel groups：资源编辑器、Result 和可移动工具面板
+   ├─ bottom content：Problems、Output、Logs 的内容面板
+   ├─ right border：Details 和 Result 的默认位置
+   └─ bottom bar：贯穿窗口，最左侧设置、随对话区定位的窗口开关、中央区原生 tab 和右侧状态信息
 ```
 
 Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动、分屏和窗口内 float。设置与导入由应用 Dialog 栈承载；浏览器 popout 和标签分组禁用。
 
-FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和活动分组；各 border 独立保存选择，不覆盖活动编辑区。主布局与所有 float 之间只保留一个原生 active tabset，激活分组时通过原生 Action 清除其他布局的 active 标记。`getActivePanel` 读取该分组的 selected tab，保存、菜单、侧栏高亮与命令目标因此包含浮动编辑器。非空分组始终有选中 tab，活动分组被删除后选定剩余分组。输入焦点由 DOM 和事件路径决定，不写入布局配置或另建状态库。
+同一个 Model 的主树只放置 AI 分组和 workspace host，top 使用原生 `type: "tab"` sublayout；没有第二个布局 Model 或 React 布局状态。workspace host 是结构节点，不进入业务 panel/group 查询，也不参与启动时的非空判断、关闭和命令目标。top 的分屏、最大化和浮窗停靠都限定在 `workbench-workspace`，不会重排、覆盖或隐藏左侧 AI 分组。AI 分组使用独立的 `conversation` location，资源组使用 `grid`。
+
+FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和活动分组；各 border 独立保存选择，不覆盖活动编辑区。AI 分组、top 嵌入布局与所有 float 之间只保留一个业务 active tabset，激活分组时通过原生 Action 清除其他布局的 active 标记。`getActivePanel` 读取该分组的 selected tab，保存、菜单、侧栏高亮与命令目标因此包含浮动编辑器。非空分组始终有选中 tab，活动分组被删除后选定剩余分组。输入焦点由 DOM 和事件路径决定，不写入布局配置或另建状态库。
 
 中央 group 的最后一个 tab 关闭或移走后，由 FlexLayout 删除空组并回收分屏空间；空 border 自动隐藏，底部仅保留承载状态信息的条带，空的内容面板仍消失。只有中央工作区没有非空 group 时才显示一份 watermark，侧栏和底部工具面板不影响该判断。FlexLayout 内部保留的最后一个空投放容器用于接收新 tab，不计入 Workbench 的 group 查询，也不显示分组标签栏。恢复旧布局时移除阻止空组删除的节点配置，由原生模型清理空组；不逐帧扫描或重建布局。
 
@@ -106,7 +114,7 @@ Logs 的业务语义见 [Runtime Signals](../../features/application/observabili
 
 ### 1.1 Activity 文档与模板
 
-四个内置 Activity panels 的文档均由 Rust 生成，共用 `ActivityPanelDocumentView`：
+Project、Nodes、Commands、Plugins、Assistant 五个内置 Activity panels 的 JSON 文档均由 Rust 生成，共用 `ActivityPanelDocumentView`：
 
 ```text
 Rust ProjectIndex ─┬→ 资源索引
@@ -117,7 +125,7 @@ get_project_index → { index, activityPanels: 游标增量 }
                          ↓
 ProjectPublicationCoordinator → ResourceStore + sidebarStore
 
-Rust Plugin Manager / Commands → get_activity_panel_document
+Rust Plugin Manager / Commands / Harness 对话 → get_activity_panel_document
                               → sidebarStore
                                       ↓
                      useActivityPanelDocument → 模板
@@ -126,11 +134,15 @@ Rust Plugin Manager / Commands → get_activity_panel_document
 Project 文档是传入 ProjectIndex 的纯投影，不独立扫描文件。Project/Nodes 使用同一份
 已捕获索引生成，Catalog 复用该索引并通过版本校验重验，而不是再次读盘。
 Global Plugins/Commands 与无活动项目时的空文档使用独立 Activity 查询，但共享相同的协议、缓存与渲染入口。
+Assistant 使用独立 Activity 查询，从 Harness 按当前用户和项目归属读取对话；未保存项目沿用当前临时会话归属。
+标题、工具栏、列表行和空状态由 Rust 生成，新建、重命名、打开与执行完成后失效重查，复用同一游标增量。
+列表不进入 ProjectIndex 发布批次，前端不从操作回执拼接第二份对话目录；搜索与重命名草稿保留为本地交互状态。
 后端决定分类、工具、默认展开、空提示和固定条目类型；不存在前端 Project 文档生成分支。
 
 文档只有 category、item、message 三种行。Project 的 item 使用共享资源类型定义中的
-event_graph、function_graph、chart、mind、doc、database；Nodes、Commands、Plugins 分别只接受
-node、command、plugin。快照和增量共用此校验。文本使用本地化 key 或字面值；资源路径是 opaque identity。
+event_graph、function_graph、chart、mind、doc、database；Nodes、Commands、Plugins、Assistant 分别只接受
+node、command、plugin、conversation。conversation 只含 sessionId、title、lastOpenedAt，不传完整会话与事件。
+快照和增量共用此校验。文本使用本地化 key 或字面值；资源路径是 opaque identity。
 Workbench 模板只接收文档、展开状态、格式化错误与有限操作回调，不订阅业务 store。
 已有资源打开、拖拽、详情和右键操作继续由对应 module/application owner 执行。
 数据行直接使用文档中必填的 resourcePath，不再反查前端索引补路径；可用的 loadFailed
@@ -188,10 +200,12 @@ insert/move 的 afterId 指定平面行顺序中的前一行，null 表示首行
 Commands 的可用性来自本地草稿历史，数据库运行状态和选中状态仍从既有 UI/runtime
 投影读取；这些变化不生成另一份资源文档。
 
-标题栏使用 `--workbench-tab-height`。分类统一复用 `SidebarTreeCategoryRow`；
+五个内置 Activity panels 共用 `ActivityPanelShell`：标题栏使用 `--workbench-tab-height`，
+统一侧栏背景、标题字重、水平留白与工具区域；标题和按钮由共用文档模板渲染，
+按钮同用 `icon-sm`，列表复用垂直 `ScrollArea`。分类统一复用 `SidebarTreeCategoryRow`；
 内容使用普通滚动列表，仅挂载展开分支，取消 Activity 的虚拟列表测量依赖。
 后端文档上限由 transport/parser 约束，超限明确失败，不静默截断。折叠只改变本地可见行，
-不会产生 IPC。四个面板的运行期文档、游标和错误由现有 `sidebarStore` 缓存，并按面板/项目/语言/生命周期隔离；
+不会产生 IPC。五个面板的运行期文档、游标和错误由现有 `sidebarStore` 缓存，并按面板/项目/语言/生命周期隔离；
 同作用域共享请求，过期作用域不能覆盖新文档。展开偏好按 panel/category 保存到
 `yssbi-activity-panel-expansion`；文档不落盘，FlexLayout placement 不进入该 store。
 旧 Project 分类偏好 key 不迁移，首次使用采用各文档定义的默认值。
@@ -205,31 +219,34 @@ tab 清理检查 exists 与 dirty，保留缺失但有未保存内容的编辑�
 
 ## 2. Root panel 角色与默认 home
 
-root group 可以混合承载不同角色；Activity group 和 bottom edge 具有成员限制。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
+top 工作区的 group 可以混合承载普通面板角色；AI、Activity group 和 bottom edge 具有成员限制。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束。Project、Nodes、Commands、Plugins、Assistant 五个内置 Activity panels 固定在左侧，可在左侧排序，不能移出、分屏、浮动或关闭；插件 sidebar 也只允许放在左侧。左侧折叠操作按五个内置 Activity 是否齐全判断。
 
 bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标签排序；助手、编辑器、Result 和插件面板不能加入底部组。原生拖放、程序化移动和持久化布局校验共用同一条放置规则。
 
-| 角色             | 内容                                      | deterministic home                  |
-| ---------------- | ----------------------------------------- | ----------------------------------- |
-| `editor`         | Graph/Function/Chart editor、只读数据表格 | 当前 central grid group             |
-| `view:project`   | Project activity panel                    | left Activity edge                  |
-| `view:nodes`     | Nodes activity panel                      | left Activity edge                  |
-| `view:commands`  | Commands activity panel                   | left Activity edge                  |
-| `view:details`   | permanent fixed Details                   | right edge index 0                  |
-| `view:assistant` | movable/closable Assistant                | right edge index 1 on default/reset |
-| `result`         | 一个可检查结果                            | right edge                          |
-| `reference`      | Markdown 外部文献或网页                   | right edge                          |
-| `view:logs`      | Logs workspace                            | bottom edge                         |
-| `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
-| `view:problems`  | Graph Problems                            | bottom edge                         |
+`conversation` role 以 `sessionId` 标识 Harness 会话，使用 `AssistantConversation` component。对话面板只属于主树最左侧的专用 tabset，原生 `enableTabStrip: false` 在创建与恢复时生效。列表读取原生可见面板同步高亮；面板可显式关闭，不可拖动、分屏或浮动，其他面板不能进入该组。资源打开使用 top 嵌入布局或当前浮动编辑组，即使聊天当前拥有焦点，也不会把文件放入聊天分组。没有资源编辑器时仍保留右侧工作区的空白投放容器。
+
+| 角色             | 内容                                      | deterministic home                          |
+| ---------------- | ----------------------------------------- | ------------------------------------------- |
+| `editor`         | Graph/Function/Chart editor、只读数据表格 | 当前 central grid group                     |
+| `view:project`   | Project activity panel                    | left Activity edge                          |
+| `view:nodes`     | Nodes activity panel                      | left Activity edge                          |
+| `view:commands`  | Commands activity panel                   | left Activity edge                          |
+| `view:details`   | permanent fixed Details                   | right edge index 0                          |
+| `view:assistant` | fixed Assistant activity panel            | left Activity edge，默认位于 Plugins 后     |
+| `conversation`   | AI 会话面板，无顶部标签栏                 | AI 专用分组，位于 sidebar 与 top 工作区之间 |
+| `result`         | 一个可检查结果                            | right edge                                  |
+| `reference`      | Markdown 外部文献或网页                   | right edge                                  |
+| `view:logs`      | Logs workspace                            | bottom edge                                 |
+| `view:output`    | Graph 运行失败摘要                        | bottom edge                                 |
+| `view:problems`  | Graph Problems                            | bottom edge                                 |
 
 默认空布局保留原生中央投放容器，并放置：
 
-- Project、Nodes、Commands、Plugins：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Commands → Plugins；
+- Project、Nodes、Commands、Plugins、Assistant：同一个 left edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Commands → Plugins → Assistant；
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom bar 使用原生 tab 切换、折叠和关闭面板，右侧承载状态信息；不保留另一套图标切换入口。
 
-right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。节点参数、配置、端口、诊断与文档统一由 Details 展示，节点选择只同步 Details 上下文；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts` 维护。
+right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，是固定在右侧的 permanent panel。节点参数、配置、端口、诊断与文档统一由 Details 展示，节点选择只同步 Details 上下文；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。五个内置 Activity panels 由默认/恢复/reset 流程确保存在，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts` 维护。
 
 Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
 exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
@@ -277,11 +294,11 @@ reference → { role, url, title }
 Singleton 与 multi-instance contract：
 
 - Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 由 `viewId` 保证 singleton；
-- Project、Nodes、Commands、Plugins 随默认 Activity group 安装且保持存在；
+- Project、Nodes、Commands、Plugins、Assistant 随默认 Activity group 安装，恢复时补齐缺失面板，且保持存在；
 - Details 是 permanent fixed singleton；
-- Assistant 是普通 layout-persisted singleton；
 - Settings 按需打开为应用 singleton Dialog，打开状态不进入布局 JSON；
 - Result 按完整结果引用复用并 reveal，不同运行产生的新引用创建独立面板；
+- Conversation 按 `sessionId` 复用；已打开会话、标签顺序和选择由原生布局持久化，对话正文不进入布局 JSON；
 - 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
 Result panel 固定读取 `reference`，不订阅 pin 的当前结果。删除来源节点或重新运行不会清空已打开的报告。
@@ -393,7 +410,7 @@ Coordinator 按顺序执行：
 命令以 root FlexLayout Model 的实时 group 为准：
 
 - `Ctrl+Tab` 在键盘事件所属面板的原生 group 中循环，未指向面板时使用主区或浮窗中的活动 group；
-- Close Group 关闭该 physical group 中 editor、Result 和 tool panels 的完整集合；若 group 同时包含 fixed Details，现有 close coordinator 拒绝整批关闭，Assistant 只能单独关闭；Assistant 移到不含 fixed panel 的普通 group 后沿用 Close Group；
+- Close Group 关闭该 physical group 中 editor、Result 和 tool panels 的完整集合；若 group 包含内置 Activity panel 或 fixed Details，现有 close coordinator 拒绝整批关闭；
 - editor tab 的 Close Others、Close All、Close Saved 只筛选该 group 中的 `editor` role；
 - split 作用于 active canonical editor，native FlexLayout drag/drop 继续拥有后续物理移动与顺序。
 
@@ -407,14 +424,14 @@ Coordinator 按顺序执行：
 
 文件菜单提供事件图、函数和图表的新建入口；创建后打开对应编辑器。“保存”与 `Ctrl+S`
 共用顶部活动 editor 的保存命令，仅保存该文件；无项目或顶部选中非文件 panel 时禁用。
-“项目另存为”仍由项目状态决定是否可用。视图菜单提供 Activity、Assistant 的切换和
+“项目另存为”仍由项目状态决定是否可用。视图菜单提供 Activity 侧栏切换、Assistant 定位和
 布局重置；Problems、Output、Logs 由底部原生 tab 切换，不在视图菜单中提供入口。
 
 ## 7. Reveal、reset 与 project replacement
 
 ### 7.1 Reveal
 
-Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；同一结果引用的 Result 只 reveal 既有 panel。
+Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 固定在右侧，五个内置 Activity panels 固定在左侧；View 菜单中的 Assistant 入口选中并展开左侧助手，不关闭面板。同一结果引用的 Result 只 reveal 既有 panel。
 
 设置菜单、底栏齿轮和 Ctrl+, 共用 `ui.showSettings()`，在应用 UIStore 中创建 singleton Dialog，与导入复用 Dialog 栈、背景虚化和焦点管理。Settings 模块拥有分类、搜索、表单和标题内容；设置值由 Settings store 持久化，窗口打开状态不进入布局 JSON。项目管理页的简化设置弹窗仍属于独立页面。
 
@@ -430,9 +447,10 @@ Reveal 已存在的 panel 时保持其实际位置，不把它搬回 determinist
 
 Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提交，并保留既有 editor、Result 与 panel identities：
 
-- Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
+- Project、Nodes、Commands、Plugins、Assistant 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor 与插件 editor panels（含浮窗中的面板）按 deterministic snapshot order 集中到第一个 central tabset；设置、导入 Dialog 不参与布局重置；
-- Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Result 回到其后，reset 不凭空创建 Result；
+- Details 回到 right edge index 0，Result 紧随其后，reset 不凭空创建 Result；
+- 已打开的 Conversation 面板保留在独立的 AI 分组，资源编辑器重置仅收拢 top 工作区；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 的原生 tab 顺序；重置完成时收起内容面板，用户点击底部 tab 再次展开；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
 - main Logs nested FlexLayout 恢复七 domain 默认布局；
@@ -445,7 +463,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 - 所有 editor；
 - 所有 Result。
 
-随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `ResourceStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；Conversation 标签随旧项目面板关闭，持久化 root 中的 editor、Result、Conversation 会被 scrub，避免新 project hydration 打开旧 project 内容。对话历史仍由 Harness 保留。Problems panel 保留与否不影响 `ResourceStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
 
 ## 8. Persistence contract
 
@@ -455,7 +473,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 yssbi-workbench-flexlayout:<window-label>
 ```
 
-原生 Model JSON 顶层仅接受 `global`、`layout`、`borders`、`subLayouts`；其余字段按无效快照处理，不接受旧 `popouts` 格式。tab config 只包含 metadata，不持久化输入焦点；含其他 config 字段的布局按现有无效快照规则回退默认布局。
+原生 Model JSON 顶层仅接受 `global`、`layout`、`borders`、`subLayouts`；其余字段按无效快照处理，不接受旧 `popouts` 格式。业务 tab config 只包含 metadata，不持久化输入焦点；含其他 config 字段的布局按现有无效快照规则回退默认布局。结构 tab `workbench-workspace-content` 没有业务 config，只允许引用固定的 `workbench-workspace` 嵌入布局。主树必须为 workspace host，或依次为 AI 分组、workspace host；不符合当前结构的布局回退默认值，不迁移历史布局。
 
 value 为：
 
@@ -470,7 +488,7 @@ value 为：
 在合法封套内，root 与 nested.logs 独立验证和恢复，一部分缺失或无效不丢弃另一部分。
 解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。root 的 float 与主树共用 ID、singleton 和数量校验，浮动矩形必须包含有限坐标及正尺寸；nested.logs 不接受浮动子布局。恢复时重新施加宿主的浮动、关闭和拖放约束，并保留普通浮窗的标签栏。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。设置与导入不注册为 root panel，也不恢复其打开状态、输入或进度。
 
-窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
+窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 从持久化快照移除；Project replacement 另外清理 editor。合法 root 恢复时补齐缺失的内置 Activity panels，包括 Assistant，并保留已有选择、尺寸和折叠状态。Assistant 位于左侧之外的已保存 root 不符合放置规则，沿用默认布局回退，不做迁移。插件缺失状态仍由插件注册协调者处理。
 
 旧 Dockview 存储不读取、不转换；第一次使用新键加载 FlexLayout 默认布局。此变化只影响工作台偏好，不迁移或修改项目资源。布局快照不保存后端结果本体和 Graph 撤销历史。
 
@@ -522,7 +540,9 @@ Tauri 主窗口创建尺寸与项目管理页默认尺寸一致；保存位置�
 
 src/app/workbench-layout.css 设置宿主尺寸、字体尺度、标题图标/dirty 标记与边框区域的排列。根布局将原生 border 元素排入 CSS Grid：左右侧栏延伸到底部栏上方，top/bottom border 的内容和分隔条与中央 tabsets 共用一列，bottom bar 横跨整个窗口。保留原生 Model、尺寸、测量与拖放能力，不增加布局模型或挪动组件 DOM。RootPanelTabRenderer 只贡献标题内容和业务右键菜单。关闭按钮、中键和原生关闭动作进入既有关闭协调者。
 
-底部直接使用 FlexLayout 原生 tab，取消独立 footer 和重复的面板 icon。StatusBar 只呈现状态条目，通过 onRenderTabSet 放进 bottom border 的原生 toolbar；Settings 使用同一底栏的 leading 插槽。整条栏贯穿窗口，通过 CSS subgrid 共用工作台列宽：设置位于窗口最左侧，三个 tab 对齐中央区左边，节点、连接、选中等状态对齐中央区右边。侧栏缩放和折叠时由 CSS 自动保持对齐，不测量边界、不维护偏移 CSS 变量。日志等内容仍只位于中央工作区下方。底部 tab 全部关闭后，可用 Ctrl+反引号重新打开 Logs，或重置布局恢复三个工具面板。底部所有 tab 都关闭时不显示内容面板，条带仍承载状态信息。Details 和 Assistant 使用右侧原生 tab。
+底部直接使用 FlexLayout 原生 tab，取消独立 footer 和重复的工具面板 icon。StatusBar 只呈现状态条目，通过 onRenderTabSet 放进 bottom border 的原生 toolbar；Settings 和应用组合层注入的对话窗口开关使用同一 leading 插槽，Workbench 不导入 Assistant 业务实现。整条栏贯穿窗口，通过 CSS subgrid 共用工作台列宽：设置位于窗口最左侧，对话开关按窗口显隐切换到设置右侧或中央区左边；原生 tab 在同列时预留开关宽度，节点、连接、选中等状态对齐中央区右边。侧栏缩放和折叠时由 CSS 自动保持对齐，不测量边界、不维护动态偏移。日志等内容仍只位于中央工作区下方。底部 tab 全部关闭后，可用 Ctrl+反引号重新打开 Logs，或重置布局恢复三个工具面板。底部所有 tab 都关闭时不显示内容面板，条带仍承载状态信息。Details 默认使用右侧原生 tab，Assistant 默认使用左侧原生 tab。
+
+底栏设置与对话开关共用 24×24px 按钮和 14px 图标，图标居中并保留键盘焦点提示。对话开关关闭时使用弱化前景色，打开时使用主题色与选中背景；悬停仍保留打开状态的颜色区分，明暗主题通过共享主题变量同步。
 
 ## 10. Verification
 

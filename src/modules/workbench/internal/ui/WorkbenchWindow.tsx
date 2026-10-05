@@ -13,6 +13,7 @@ export interface WorkbenchWindowProps {
   readonly watermarkComponent: FunctionComponent;
   readonly menuBar: ReactNode;
   readonly statusBar: ReactNode;
+  readonly conversationToggle: ReactNode;
   readonly dragOverlay?: ReactNode;
 }
 
@@ -26,6 +27,7 @@ export function WorkbenchWindow({
   watermarkComponent,
   menuBar,
   statusBar,
+  conversationToggle,
   dragOverlay,
 }: WorkbenchWindowProps) {
   return (
@@ -44,6 +46,7 @@ export function WorkbenchWindow({
           onClosePanels={onClosePanels}
           watermarkComponent={watermarkComponent}
           statusBar={statusBar}
+          conversationToggle={conversationToggle}
           dragOverlay={dragOverlay}
         />
       </div>

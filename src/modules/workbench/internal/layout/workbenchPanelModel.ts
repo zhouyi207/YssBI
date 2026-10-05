@@ -9,14 +9,19 @@ import {
 } from "@/shared/types/domain/result";
 import { isUuid } from "@/shared/types/domain/editorProjectionGuards";
 
-export const WORKBENCH_ACTIVITY_VIEW_IDS = ["project", "nodes", "commands", "plugins"] as const;
+export const WORKBENCH_ACTIVITY_VIEW_IDS = [
+  "project",
+  "nodes",
+  "commands",
+  "plugins",
+  "assistant",
+] as const;
 
 export type WorkbenchActivityViewId = (typeof WORKBENCH_ACTIVITY_VIEW_IDS)[number];
 
 export const WORKBENCH_VIEW_IDS = [
   ...WORKBENCH_ACTIVITY_VIEW_IDS,
   "details",
-  "assistant",
   "logs",
   "output",
   "problems",
@@ -37,6 +42,7 @@ export type WorkbenchComponentId =
   | "Plugin"
   | "Details"
   | "Assistant"
+  | "AssistantConversation"
   | "Result"
   | "Reference"
   | "Logs"
@@ -50,6 +56,11 @@ export type EditorPanelMetadata = EditorResourceTarget & {
 export type ViewPanelMetadata = {
   readonly role: "view";
   readonly viewId: WorkbenchViewId;
+};
+
+export type ConversationPanelMetadata = {
+  readonly role: "conversation";
+  readonly sessionId: string;
 };
 
 export type ResultPanelMetadata = {
@@ -77,6 +88,7 @@ export type WorkbenchPanelMetadata =
   | ViewPanelMetadata
   | ResultPanelMetadata
   | ReferencePanelMetadata
+  | ConversationPanelMetadata
   | PluginPanelMetadata;
 
 export interface WorkbenchPanelParams extends Record<string, unknown> {
@@ -167,6 +179,8 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
   if (!isRecord(value) || typeof value.role !== "string") return false;
 
   switch (value.role) {
+    case "conversation":
+      return hasKnownKeys(value, ["role", "sessionId"]) && isNonEmptyString(value.sessionId);
     case "reference":
       return (
         hasKnownKeys(value, ["role", "url", "title"]) &&
@@ -215,6 +229,7 @@ export function componentForWorkbenchMetadata(
   metadata: WorkbenchPanelMetadata,
 ): WorkbenchComponentId {
   if (metadata.role === "editor") return "EditorResource";
+  if (metadata.role === "conversation") return "AssistantConversation";
   if (metadata.role === "result") return "Result";
   if (metadata.role === "reference") return "Reference";
   if (metadata.role === "plugin") return "Plugin";

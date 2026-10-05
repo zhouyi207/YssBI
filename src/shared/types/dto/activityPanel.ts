@@ -13,6 +13,7 @@ const PANEL_ITEM_KINDS: Record<ActivityPanelId, readonly ActivityItem["kind"][]>
   nodes: ["node"],
   commands: ["command"],
   plugins: ["plugin"],
+  assistant: ["conversation"],
 };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -41,6 +42,7 @@ const actions = [
   "newMind",
   "newDoc",
   "importData",
+  "newConversation",
   "install",
   "refresh",
 ];
@@ -63,6 +65,14 @@ function item(value: unknown): value is ActivityItem {
   if (!record(value)) return false;
   const strings = (keys: string[]) => keys.every((key) => typeof value[key] === "string");
   switch (value.kind) {
+    case "conversation":
+      return (
+        exact(value, ["kind", "sessionId", "title", "lastOpenedAt"]) &&
+        strings(["sessionId", "title"]) &&
+        Boolean(value.sessionId) &&
+        integer(value.lastOpenedAt) &&
+        value.lastOpenedAt <= 8_640_000_000_000_000
+      );
     case "event_graph":
     case "function_graph":
     case "chart":
@@ -127,13 +137,14 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
     return null;
   if (
     value.schema !== "yssbi.activity-panel.v1" ||
-    !["project", "nodes", "commands", "plugins"].includes(value.panelId as string)
+    !["project", "nodes", "commands", "plugins", "assistant"].includes(value.panelId as string)
   )
     return null;
   if (value.projectInstanceId !== null && typeof value.projectInstanceId !== "string") return null;
   if (!integer(value.publicationRevision) || !text(value.title) || !tools(value.tools)) return null;
   if (!Array.isArray(value.rows) || value.rows.length > 10_000) return null;
   const ids = new Set<string>();
+  const conversations = new Set<string>();
   let previousDepth = -1;
   let previousCategory = true;
   for (const row of value.rows) {
@@ -166,6 +177,10 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
         if (!exact(row, ["id", "depth", "kind", "item"]) || !item(row.item)) return null;
         if (!PANEL_ITEM_KINDS[value.panelId as ActivityPanelId].includes(row.item.kind))
           return null;
+        if (row.item.kind === "conversation") {
+          if (conversations.has(row.item.sessionId)) return null;
+          conversations.add(row.item.sessionId);
+        }
         break;
       case "message":
         if (

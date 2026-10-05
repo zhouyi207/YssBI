@@ -132,6 +132,8 @@ export function createWorkbenchLayoutRuntime(): {
     ensureCentralGroup: () => mutate((model) => model.ensureCentralGroup()),
     openEditor: (request) => mutate((model) => model.openEditor(request)),
     openReference: (request) => mutate((model) => model.openReference(request)),
+    openConversation: (request) => mutate((model) => model.openConversation(request)),
+    updateConversationTitle: (request) => mutate((model) => model.updateConversationTitle(request)),
     ensureView: (request) => mutate((model) => model.ensureView(request)),
     upsertResult: (request) => mutate((model) => model.upsertResult(request)),
     replaceResult: (expected, request) => mutate((model) => model.replaceResult(expected, request)),

@@ -37,7 +37,7 @@ export function WorkbenchSettingsButton() {
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="flexlayout__border_toolbar_button"
+          className="flexlayout__border_toolbar_button workbench-status-icon-button"
           data-workbench-settings
           aria-label={settingsTitle}
           onClick={ui.showSettings}

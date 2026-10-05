@@ -1,3 +1,4 @@
+import { testModelIdentity } from "@/tests/fixtures/harnessModels";
 // @vitest-environment happy-dom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -13,23 +14,22 @@ vi.mock("@assistant-ui/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@assistant-ui/react")>();
   return { ...actual, useExternalStoreRuntime: vi.fn(actual.useExternalStoreRuntime) };
 });
-vi.mock("@/features/core/settings/read", () => {
-  const settings = {
-    isLoading: false,
-    ai: { openAiModel: "test", openAiBaseUrl: "https://example.test/v1", openAiApiKey: "test" },
-  };
+vi.mock("./assistantModels", async () => {
+  const { testModelCatalog } = await import("@/tests/fixtures/harnessModels");
   return {
-    getSettingsSnapshot: () => settings,
-    useSettingsRead: (select: (value: typeof settings) => unknown) => select(settings),
+    useAssistantModels: () => ({
+      catalog: testModelCatalog,
+      loading: false,
+      saving: false,
+      error: null,
+    }),
   };
 });
 vi.mock("@/services/assistant/harnessService", () => ({
   HarnessService: {
-    configureProvider: vi.fn(),
+    selectModel: vi.fn(),
     createSession: vi.fn(),
-    listSessions: vi.fn(),
     openSession: vi.fn(),
-    listMemory: vi.fn(),
     subscribeEvents: vi.fn(),
     submitTurn: vi.fn(),
   },
@@ -37,9 +37,6 @@ vi.mock("@/services/assistant/harnessService", () => ({
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  vi.mocked(HarnessService.configureProvider).mockResolvedValue({ providerConfigured: true });
-  vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
-  vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -53,14 +50,13 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
   const root = createRoot(host);
   let runtime!: ReturnType<typeof useAssistantHarnessRuntime>["runtime"];
   let emit!: Parameters<typeof HarnessService.subscribeEvents>[2];
-  vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
-  vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
-  vi.mocked(HarnessService.createSession).mockResolvedValue({
+  vi.mocked(HarnessService.openSession).mockResolvedValue({
     sessionId: "session-1",
     projectInstanceId: "project-1",
     projectSessionId: "project-session-1",
     title: "",
     lastOpenedAt: 0,
+    model: null,
   });
   vi.mocked(HarnessService.subscribeEvents).mockImplementation(
     async (_session, _sequence, onEvent) => {
@@ -90,7 +86,11 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
     );
   vi.mocked(HarnessService.submitTurn)
     .mockImplementationOnce(async () => {
-      event(2, "turn-1", "turn_started", { userMessage: "First request" });
+      event(2, "turn-1", "turn_started", {
+        model: testModelIdentity,
+        resources: [],
+        userMessage: "First request",
+      });
       const capabilityId = "inspect_dataset_profile";
       event(3, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-1" });
       event(4, "turn-1", "tool_invocation_started", { capabilityId, invocationId: "tool-2" });
@@ -109,12 +109,16 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
       });
     })
     .mockImplementationOnce(async () => {
-      event(9, "turn-2", "turn_started", { userMessage: "Second request" });
+      event(9, "turn-2", "turn_started", {
+        model: testModelIdentity,
+        resources: [],
+        userMessage: "Second request",
+      });
       event(10, "turn-2", "turn_completed", { finalText: "Recovered" });
       return { finalText: "Recovered" };
     });
   function Harness() {
-    const state = useAssistantHarnessRuntime();
+    const state = useAssistantHarnessRuntime("session-1");
     runtime = state.runtime;
     const { snapshot } = state;
     return createElement(
@@ -208,14 +212,13 @@ it("replays a missing tool failure and ignores callbacks from the replaced subsc
       type,
       ...(payload ? { payload } : {}),
     });
-  vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
-  vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
-  vi.mocked(HarnessService.createSession).mockResolvedValue({
+  vi.mocked(HarnessService.openSession).mockResolvedValue({
     sessionId: "session-1",
     projectInstanceId: "project-1",
     projectSessionId: "project-session-1",
     title: "",
     lastOpenedAt: 0,
+    model: null,
   });
   vi.mocked(HarnessService.subscribeEvents).mockImplementation(
     async (_session, afterSequence, onEvent, onError) => {
@@ -236,14 +239,20 @@ it("replays a missing tool failure and ignores callbacks from the replaced subsc
     },
   );
   function Harness() {
-    ({ runtime, snapshot } = useAssistantHarnessRuntime());
+    ({ runtime, snapshot } = useAssistantHarnessRuntime("session-1"));
     return null;
   }
   try {
     await act(async () => root.render(createElement(Harness)));
     await act(async () => vi.runOnlyPendingTimersAsync());
     await act(async () => {
-      callbacks[0].event(event(2, "turn_started", { userMessage: "Profile" }));
+      callbacks[0].event(
+        event(2, "turn_started", {
+          model: testModelIdentity,
+          resources: [],
+          userMessage: "Profile",
+        }),
+      );
       callbacks[0].event(
         event(3, "tool_invocation_started", {
           invocationId: "tool-1",
@@ -270,16 +279,14 @@ it("replays a missing tool failure and ignores callbacks from the replaced subsc
 it("ignores a session response arriving after the panel unmounts", async () => {
   const root = createRoot(document.createElement("div"));
   let resolve!: (session: Awaited<ReturnType<typeof HarnessService.createSession>>) => void;
-  vi.mocked(HarnessService.listSessions).mockResolvedValue([]);
-  vi.mocked(HarnessService.listMemory).mockResolvedValue([]);
-  vi.mocked(HarnessService.createSession).mockImplementation(
+  vi.mocked(HarnessService.openSession).mockImplementation(
     () =>
       new Promise((done) => {
         resolve = done;
       }),
   );
   function Harness() {
-    useAssistantHarnessRuntime();
+    useAssistantHarnessRuntime("session-1");
     return null;
   }
   await act(async () => root.render(createElement(Harness)));
@@ -291,6 +298,7 @@ it("ignores a session response arriving after the panel unmounts", async () => {
       projectSessionId: "project-session-1",
       title: "",
       lastOpenedAt: 0,
+      model: null,
     }),
   );
   expect(HarnessService.subscribeEvents).not.toHaveBeenCalled();

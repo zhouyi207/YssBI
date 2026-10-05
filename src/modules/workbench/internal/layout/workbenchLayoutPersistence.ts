@@ -9,7 +9,15 @@ import {
 } from "flexlayout-react";
 import { isLayoutJson, isRecord } from "./layoutSerialization";
 import { isValidLogsLayout } from "./logsLayoutModel";
-import { createEmptyWorkbenchLayout } from "./workbenchLayoutDefaults";
+import {
+  createEmptyWorkbenchLayout,
+  WORKBENCH_CONVERSATION_GROUP_ID,
+  WORKBENCH_CONVERSATION_GROUP_ATTRIBUTES,
+  WORKBENCH_WORKSPACE_LAYOUT_ID,
+  WORKBENCH_WORKSPACE_GROUP_ID,
+  WORKBENCH_WORKSPACE_GROUP_ATTRIBUTES,
+  WORKBENCH_WORKSPACE_PANEL_ID,
+} from "./workbenchLayoutDefaults";
 import {
   canMoveWorkbenchPanel,
   hasWorkbenchPanelCloseButton,
@@ -18,6 +26,7 @@ import {
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
+  isWorkbenchPersistentViewMetadata,
   type WorkbenchPanelMetadata,
 } from "./workbenchPanelModel";
 
@@ -35,9 +44,18 @@ export interface ParsedPersistedWorkbenchLayout {
 
 export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
   const identities = new Set<string>();
-  return isLayoutJson(
+  const valid = isLayoutJson(
     candidate,
     (tab, parent, floating) => {
+      if (tab.id === WORKBENCH_WORKSPACE_PANEL_ID)
+        return (
+          !floating &&
+          parent === WORKBENCH_WORKSPACE_GROUP_ID &&
+          tab.subLayoutId === WORKBENCH_WORKSPACE_LAYOUT_ID &&
+          tab.config === undefined &&
+          tab.component === undefined
+        );
+      if (tab.subLayoutId !== undefined || parent === WORKBENCH_WORKSPACE_GROUP_ID) return false;
       if (
         !isRecord(tab.config) ||
         Object.keys(tab.config).length !== 1 ||
@@ -51,23 +69,39 @@ export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
       )
         return false;
       const key =
-        metadata.role === "view"
-          ? "view:" + metadata.viewId
-          : metadata.role === "plugin"
-            ? "plugin:" + metadata.pluginId + ":" + metadata.viewId
-            : metadata.role === "reference"
-              ? "reference:" + metadata.url
-              : metadata.role === "result"
-                ? "result:" +
-                  metadata.reference.executionSessionId +
-                  ":" +
-                  metadata.reference.resultId
-                : undefined;
+        metadata.role === "conversation"
+          ? "conversation:" + metadata.sessionId
+          : metadata.role === "view"
+            ? "view:" + metadata.viewId
+            : metadata.role === "plugin"
+              ? "plugin:" + metadata.pluginId + ":" + metadata.viewId
+              : metadata.role === "reference"
+                ? "reference:" + metadata.url
+                : metadata.role === "result"
+                  ? "result:" +
+                    metadata.reference.executionSessionId +
+                    ":" +
+                    metadata.reference.resultId
+                  : undefined;
       if (key && identities.has(key)) return false;
       if (key) identities.add(key);
       return true;
     },
     true,
+    [WORKBENCH_WORKSPACE_LAYOUT_ID],
+  );
+  if (!valid) return false;
+  const layout = candidate as IJsonModel;
+  const children = layout.layout.children ?? [];
+  const workspace = children[children.length - 1];
+  const hasConversations = [...identities].some((key) => key.startsWith("conversation:"));
+  return (
+    !layout.global?.rootOrientationVertical &&
+    children.length === (hasConversations ? 2 : 1) &&
+    (!hasConversations ||
+      (children[0].type === "tabset" && children[0].id === WORKBENCH_CONVERSATION_GROUP_ID)) &&
+    workspace?.type === "tabset" &&
+    workspace.id === WORKBENCH_WORKSPACE_GROUP_ID
   );
 }
 function normalize(layout: IJsonModel): IJsonModel {
@@ -77,10 +111,18 @@ function normalize(layout: IJsonModel): IJsonModel {
     for (const child of children ?? []) {
       if (child.type !== "tab") continue;
       const tab = child as IJsonTabNode;
+      if (tab.id === WORKBENCH_WORKSPACE_PANEL_ID) {
+        tab.enableClose = false;
+        tab.enableDrag = false;
+        tab.enableFloat = false;
+        tab.enablePopout = false;
+      }
       const metadata: unknown = tab.config?.metadata;
       if (isWorkbenchPanelMetadata(metadata)) {
         tab.enableClose = hasWorkbenchPanelCloseButton(metadata);
         tab.enableFloat = canFloatWorkbenchPanel(metadata);
+        tab.enableDrag =
+          metadata.role !== "conversation" && !isWorkbenchPersistentViewMetadata(metadata);
         delete tab.enableFloatIcon;
         tab.enablePopout = false;
       }
@@ -95,6 +137,10 @@ function normalize(layout: IJsonModel): IJsonModel {
       delete tabset.enableTabStrip;
       delete tabset.enableDrag;
       delete tabset.enableDivide;
+      if (tabset.id === WORKBENCH_CONVERSATION_GROUP_ID)
+        Object.assign(tabset, WORKBENCH_CONVERSATION_GROUP_ATTRIBUTES);
+      if (tabset.id === WORKBENCH_WORKSPACE_GROUP_ID)
+        Object.assign(tabset, WORKBENCH_WORKSPACE_GROUP_ATTRIBUTES);
       normalizeTabs(tabset.children);
       return;
     }
@@ -170,7 +216,8 @@ export function prepareRootLayoutForPersistence(layout: IJsonModel): IJsonModel 
 export function scrubProjectScopedRootLayout(layout: IJsonModel): IJsonModel {
   return withoutPanels(
     layout,
-    (metadata) => metadata.role === "editor" || metadata.role === "result",
+    (metadata) =>
+      metadata.role === "editor" || metadata.role === "result" || metadata.role === "conversation",
   );
 }
 

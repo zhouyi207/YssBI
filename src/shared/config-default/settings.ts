@@ -1,10 +1,4 @@
-import type { AppearanceSettings, AiSettings } from "@/shared/types/settings";
-
-export const DEFAULT_AI: AiSettings = {
-  openAiApiKey: "",
-  openAiBaseUrl: "https://api.openai.com/v1",
-  openAiModel: "",
-};
+import type { AppearanceSettings } from "@/shared/types/settings";
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   colorTheme: "Dark Modern (Default)",

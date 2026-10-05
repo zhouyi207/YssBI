@@ -4,7 +4,7 @@ import { settingsUi } from "@/features/core/settings/ui";
 import { ui } from "@/features/core/ui/ui";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 
-type SettingsSection = "ai" | "appearance";
+type SettingsSection = "appearance";
 type ResetTarget = SettingsSection | "all";
 
 export function useSettingsReset(modalId: string) {
@@ -53,8 +53,7 @@ export function useSettingsReset(modalId: string) {
         await settingsUi.resetAllToDefaults();
       } else {
         setSectionResetError((current) => (current?.section === target ? null : current));
-        if (target === "ai") await settingsUi.resetAiToDefaults();
-        else await settingsUi.resetAppearanceToDefaults();
+        await settingsUi.resetAppearanceToDefaults();
       }
     } catch (error) {
       if (!mounted.current) return;

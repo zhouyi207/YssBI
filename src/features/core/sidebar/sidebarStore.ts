@@ -31,7 +31,7 @@ function loadExpansion(): Expansion {
       Object.entries(value)
         .filter(
           ([panelId, categories]) =>
-            ["project", "nodes", "commands", "plugins"].includes(panelId) &&
+            ["project", "nodes", "commands", "plugins", "assistant"].includes(panelId) &&
             categories &&
             typeof categories === "object" &&
             !Array.isArray(categories),
@@ -108,7 +108,7 @@ export const useSidebarStore = create<{
     }),
   clearProjectPanels: () =>
     set((state) => {
-      const { project: _project, nodes: _nodes, ...panels } = state.panels;
+      const { project: _project, nodes: _nodes, assistant: _assistant, ...panels } = state.panels;
       return { panels };
     }),
 

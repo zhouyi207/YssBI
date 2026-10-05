@@ -6,6 +6,7 @@ import { useProjectionLocaleSync } from "@/features/application/editor/useProjec
 import { useAppInitialization, useProjectSync } from "@/features/application/initialization";
 import { WatermarkView } from "@/modules/graph-editor/public";
 import { WorkbenchWindow } from "@/modules/workbench/public";
+import { AssistantConversationToggle } from "@/modules/assistant/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
 import { LoadStatus } from "@/shared/types/ui";
 import { resolveYssbiLayoutTheme } from "@/shared/theme/layoutTheme";
@@ -25,6 +26,7 @@ import { MarkdownLinkContext } from "@/shared/ui/MarkdownLink";
 
 const dragOverlay = <ActivityEditorDndOverlay />;
 const statusBar = <WorkbenchStatusBarContribution />;
+const conversationToggle = <AssistantConversationToggle />;
 const closePanels = (ids: readonly string[]): void => {
   void requestCloseWorkbenchPanels(ids);
 };
@@ -53,6 +55,7 @@ function WorkbenchReadyComposition() {
           watermarkComponent={WatermarkView}
           menuBar={<WorkbenchMenuContribution commands={commands} />}
           statusBar={statusBar}
+          conversationToggle={conversationToggle}
           dragOverlay={dragOverlay}
         />
       </PluginProvider>

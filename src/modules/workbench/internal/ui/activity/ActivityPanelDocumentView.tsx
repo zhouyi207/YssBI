@@ -29,6 +29,7 @@ export function ActivityPanelDocumentView({
   onRetry,
   actions = {},
   renderItem,
+  filterItem,
   onContextMenu,
   empty = false,
   notice,
@@ -42,6 +43,7 @@ export function ActivityPanelDocumentView({
   onRetry?: () => void;
   actions?: Partial<Record<ActivityActionId, () => void>>;
   renderItem: (item: ActivityItem, depth: number) => ReactNode;
+  filterItem?: (item: ActivityItem) => boolean;
   onContextMenu?: (event: MouseEvent, row: ActivityPanelRow) => void;
   empty?: boolean;
   notice?: ReactNode;
@@ -76,7 +78,7 @@ export function ActivityPanelDocumentView({
       if (collapsedDepth !== null && row.depth > collapsedDepth) return false;
       collapsedDepth =
         row.kind === "category" && !(expanded[row.id] ?? row.defaultExpanded) ? row.depth : null;
-      return true;
+      return row.kind !== "item" || !filterItem || filterItem(row.item);
     }) ?? [];
   const tabStopId = rows.some((row) => row.id === focusedRowId) ? focusedRowId : rows[0]?.id;
   const navigate = (event: KeyboardEvent<HTMLDivElement>) => {

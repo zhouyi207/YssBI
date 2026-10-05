@@ -1,25 +1,14 @@
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import {
   AuiIf,
   ActionBarPrimitive,
-  ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAuiState,
   type DataMessagePartComponent,
-  type SourceMessagePartComponent,
 } from "@assistant-ui/react";
 import { useTranslation } from "react-i18next";
-import { useShallow } from "zustand/react/shallow";
-import {
-  VscArrowDown,
-  VscCheck,
-  VscCopy,
-  VscDebugStop,
-  VscReferences,
-  VscSend,
-  VscSparkle,
-  VscTrash,
-} from "react-icons/vsc";
-
+import { VscArrowDown, VscCheck, VscCopy, VscSparkle } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -28,93 +17,27 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  useAssistantHarnessActions,
-  useAssistantHarnessSnapshot,
-} from "@/features/application/assistant/AssistantRuntimeProvider";
+import { useAssistantHarnessSnapshot } from "@/features/application/assistant/AssistantRuntimeProvider";
+import { assistantFailureKey } from "@/features/application/assistant/assistantMessageContent";
+import type { HarnessArtifact, HarnessResultReference } from "@/services/assistant/harnessContract";
 import { AssistantMarkdown } from "./AssistantMarkdown";
 import { AssistantToolCall, AssistantToolGroup } from "./AssistantToolCalls";
-import type { ProjectionAgentTask } from "@/features/application/assistant/assistantMessageContent";
+import { AssistantTurnModel, AssistantTurnTiming } from "./AssistantExecution";
+import { AssistantUserReferences } from "./AssistantReferences";
+import { AssistantComposer } from "./AssistantComposer";
+import { AgentTaskCard, StatisticalPlanCard } from "./AssistantTasks";
+import { AssistantArtifacts, AssistantSourceCard } from "./AssistantResources";
 
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="flex min-w-0 justify-end py-3">
       <div className="min-w-0 max-w-[90%] rounded-2xl rounded-br-sm bg-muted px-3.5 py-2.5 text-[13px] leading-7 wrap-anywhere text-foreground">
         <MessagePrimitive.Parts />
+        <AssistantUserReferences />
       </div>
     </MessagePrimitive.Root>
   );
 }
-
-function StatisticalPlanDetails({ data }: { data: unknown }) {
-  const { t } = useTranslation();
-  const plan = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
-  const researchQuestion =
-    typeof plan.researchQuestion === "string" ? plan.researchQuestion : t("panel.assistantPlan");
-  const analysisMode = typeof plan.analysisMode === "string" ? plan.analysisMode : "—";
-  const workflow = typeof plan.selectedWorkflow === "string" ? plan.selectedWorkflow : "—";
-  return (
-    <section className="my-3 rounded-lg bg-muted/50 p-3">
-      <div className="text-[0.6875rem] font-semibold tracking-wide text-muted-foreground uppercase">
-        {t("panel.assistantPlan")}
-      </div>
-      <p className="mt-1 text-[13px] leading-6 font-medium wrap-anywhere">{researchQuestion}</p>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[0.6875rem] leading-4">
-        <dt className="text-muted-foreground">{t("panel.assistantPlanMode")}</dt>
-        <dd>{analysisMode}</dd>
-        <dt className="text-muted-foreground">{t("panel.assistantPlanWorkflow")}</dt>
-        <dd className="min-w-0 wrap-anywhere">{workflow}</dd>
-      </dl>
-    </section>
-  );
-}
-
-const StatisticalPlanCard: DataMessagePartComponent = ({ data }) => (
-  <StatisticalPlanDetails data={data} />
-);
-
-const AgentTaskCard: DataMessagePartComponent = ({ data }) => {
-  const { t } = useTranslation();
-  const task = data as ProjectionAgentTask;
-  return (
-    <details className="my-2 min-w-0 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs">
-      <summary className="cursor-pointer leading-6">
-        <span className="font-medium">{t(`panel.assistantAgentRoles.${task.role}`)}</span>
-        <span className="ml-2 text-muted-foreground">
-          {t(`panel.assistantAgentStates.${task.state}`)}
-        </span>
-        <span className="mt-1 block wrap-anywhere text-muted-foreground">{task.objective}</span>
-      </summary>
-      {task.activity && (
-        <p className="mt-2 text-muted-foreground">
-          {t(`panel.assistantToolNames.${task.activity}`, { defaultValue: task.activity })}
-        </p>
-      )}
-      {task.summary && (
-        <p className="mt-2 whitespace-pre-wrap wrap-anywhere leading-6">{task.summary}</p>
-      )}
-      {task.plan !== null && <StatisticalPlanDetails data={task.plan} />}
-      {task.warnings.map((warning, index) => (
-        <p key={index} className="mt-2 wrap-anywhere text-muted-foreground">
-          {warning}
-        </p>
-      ))}
-    </details>
-  );
-};
-
-const SourceCard: SourceMessagePartComponent = ({ title }) => {
-  const { t } = useTranslation();
-  return (
-    <div className="my-2 flex min-w-0 items-start gap-2 text-xs leading-5 text-muted-foreground">
-      <VscReferences className="mt-1 shrink-0" aria-hidden />
-      <span className="wrap-anywhere">
-        {t("panel.assistantSource")}: {title}
-      </span>
-    </div>
-  );
-};
 
 function MessageActions() {
   const { t } = useTranslation();
@@ -140,32 +63,57 @@ function MessageActions() {
   );
 }
 
-function memoryLabel(value: Readonly<Record<string, unknown>>): string {
-  const payload =
-    typeof value.payload === "object" && value.payload !== null
-      ? (value.payload as Record<string, unknown>)
-      : {};
-  for (const key of ["question", "meaning", "rationale", "summary", "value"]) {
-    if (typeof payload[key] === "string") return payload[key];
-  }
-  return typeof value.type === "string" ? value.type : "Memory";
-}
+const AssistantFailure: DataMessagePartComponent = ({ data }) => {
+  const { t } = useTranslation();
+  const code =
+    typeof data === "object" && data !== null && "code" in data && typeof data.code === "string"
+      ? data.code
+      : "internal_failure";
+  return (
+    <div className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs leading-6">
+      <p>
+        {t(`panel.assistantErrors.${assistantFailureKey(code)}`, {
+          defaultValue: t("panel.assistantReplyInterrupted"),
+        })}
+      </p>
+      <details className="mt-1 text-muted-foreground">
+        <summary className="cursor-pointer">{t("panel.assistantTechnicalDetails")}</summary>
+        <code>{code}</code>
+      </details>
+    </div>
+  );
+};
+const ArtifactCard: DataMessagePartComponent = ({ data }) => (
+  <AssistantArtifacts
+    {...(data as {
+      artifacts: readonly HarnessArtifact[];
+      results: readonly HarnessResultReference[];
+    })}
+  />
+);
 
 function AssistantMessage() {
   const { t } = useTranslation();
   return (
     <MessagePrimitive.Root className="min-w-0 py-4">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
         <VscSparkle aria-hidden />
         {t("panel.assistant")}
+        <AssistantTurnTiming />
+        <AssistantTurnModel />
       </div>
       <div className="min-w-0 text-foreground">
         <MessagePrimitive.Parts
           components={{
             Text: AssistantMarkdown,
-            Source: SourceCard,
+            Source: AssistantSourceCard,
             data: {
-              by_name: { "statistical-plan": StatisticalPlanCard, "agent-task": AgentTaskCard },
+              by_name: {
+                "statistical-plan": StatisticalPlanCard,
+                "agent-task": AgentTaskCard,
+                "assistant-failure": AssistantFailure,
+                artifacts: ArtifactCard,
+              },
             },
             tools: { Fallback: AssistantToolCall },
             ToolGroup: AssistantToolGroup,
@@ -174,10 +122,14 @@ function AssistantMessage() {
         <MessageActions />
         <AuiIf
           condition={(state) =>
-            state.message.status?.type === "incomplete" && state.message.status.reason === "error"
+            state.message.status?.type === "incomplete" &&
+            state.message.status.reason === "error" &&
+            !state.message.content.some(
+              (part) => part.type === "data" && part.name === "assistant-failure",
+            )
           }
         >
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-xs leading-6 text-muted-foreground">
             {t("panel.assistantReplyInterrupted")}
           </p>
         </AuiIf>
@@ -187,7 +139,7 @@ function AssistantMessage() {
             state.message.status.reason === "cancelled"
           }
         >
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-xs leading-6 text-muted-foreground">
             {t("panel.assistantReplyStopped")}
           </p>
         </AuiIf>
@@ -196,84 +148,64 @@ function AssistantMessage() {
   );
 }
 
-export function AssistantThread() {
+const MESSAGE_COMPONENTS = { UserMessage, AssistantMessage };
+function PagedMessages({ viewport }: { viewport: RefObject<HTMLDivElement | null> }) {
   const { t } = useTranslation();
-  const snapshot = useAssistantHarnessSnapshot(
-    useShallow((state) => ({
-      status: state.status,
-      error: state.error,
-      sessionId: state.sessionId,
-      conversations: state.conversations,
-      isRunning: state.isRunning,
-      isEmpty: state.messages.length === 0,
-      memoryCount: state.memoryCount,
-      memoryRecords: state.memoryRecords,
-      activity: state.activity,
-    })),
-  );
-  const { deleteMemory, newConversation, selectConversation, reloadConversations } =
-    useAssistantHarnessActions();
-  const statusError = snapshot.error;
-  const statusText = statusError
-    ? t(`panel.assistantErrors.${statusError.code}`, {
-        defaultValue: t("panel.assistantStatusError"),
-      })
-    : snapshot.status === "initializing"
-      ? t("panel.assistantStatusInitializing")
-      : snapshot.status === "provider-unavailable"
-        ? t("panel.assistantStatusProviderUnavailable")
-        : snapshot.status === "ready" && snapshot.isRunning
-          ? t("panel.assistantStatusRunning")
-          : snapshot.status === "ready"
-            ? t("panel.assistantStatusReady")
-            : t("panel.assistantStatusError");
-
+  const count = useAuiState((state) => state.thread.messages.length);
+  const [start, setStart] = useState<number | null>(null);
+  const first = start ?? Math.max(0, count - 40);
+  const previousScroll = useRef<{ height: number; top: number } | null>(null);
+  useEffect(() => {
+    if (start === null && count > 0) setStart(first);
+  }, [count, first, start]);
+  useLayoutEffect(() => {
+    if (previousScroll.current && viewport.current) {
+      viewport.current.scrollTop =
+        previousScroll.current.top + viewport.current.scrollHeight - previousScroll.current.height;
+      previousScroll.current = null;
+    }
+  }, [first, viewport]);
   return (
-    <ThreadPrimitive.Root className="flex h-full min-h-0 min-w-0 flex-col bg-(--workbench-bg)">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <select
-          aria-label={t("panel.assistantConversations")}
-          className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          value={snapshot.sessionId ?? ""}
-          disabled={snapshot.status === "initializing" || snapshot.isRunning}
-          onChange={(event) => void selectConversation(event.target.value)}
-        >
-          {!snapshot.sessionId ? (
-            <option value="">{t("panel.assistantConversations")}</option>
-          ) : null}
-          {snapshot.conversations.map((session) => (
-            <option key={session.sessionId} value={session.sessionId}>
-              {session.title || t("panel.assistantNewConversation")}
-            </option>
-          ))}
-        </select>
+    <>
+      {first > 0 && (
         <Button
           type="button"
-          variant="ghost"
           size="xs"
-          disabled={
-            snapshot.status === "initializing" ||
-            snapshot.isRunning ||
-            (snapshot.sessionId !== null && snapshot.isEmpty)
-          }
-          onClick={() => void newConversation()}
+          variant="ghost"
+          className="mx-auto my-2"
+          onClick={() => {
+            if (viewport.current)
+              previousScroll.current = {
+                height: viewport.current.scrollHeight,
+                top: viewport.current.scrollTop,
+              };
+            setStart(Math.max(0, first - 40));
+          }}
         >
-          {t("panel.assistantNewConversation")}
+          {t("panel.assistantLoadEarlier", { count: first })}
         </Button>
-        {snapshot.status === "error" ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={() => void reloadConversations()}
-          >
-            {t("panel.assistantReloadConversations")}
-          </Button>
-        ) : null}
-      </div>
+      )}
+      {Array.from({ length: Math.max(0, count - first) }, (_, offset) => (
+        <ThreadPrimitive.MessageByIndex
+          key={first + offset}
+          index={first + offset}
+          components={MESSAGE_COMPONENTS}
+        />
+      ))}
+    </>
+  );
+}
+
+export function AssistantThread() {
+  const { t } = useTranslation();
+  const sessionId = useAssistantHarnessSnapshot((state) => state.sessionId);
+  const viewport = useRef<HTMLDivElement>(null);
+  return (
+    <ThreadPrimitive.Root className="flex h-full min-h-0 min-w-0 flex-col bg-(--workbench-bg)">
       <ThreadPrimitive.ViewportProvider>
         <div className="relative flex min-h-0 flex-1 flex-col">
           <ThreadPrimitive.Viewport
+            ref={viewport}
             className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
             autoScroll
           >
@@ -289,11 +221,7 @@ export function AssistantThread() {
                   </EmptyHeader>
                 </Empty>
               </AuiIf>
-              <ThreadPrimitive.Messages>
-                {({ message }) =>
-                  message.role === "user" ? <UserMessage /> : <AssistantMessage />
-                }
-              </ThreadPrimitive.Messages>
+              <PagedMessages key={sessionId} viewport={viewport} />
             </div>
           </ThreadPrimitive.Viewport>
           <ThreadPrimitive.ScrollToBottom asChild>
@@ -309,94 +237,7 @@ export function AssistantThread() {
             </Button>
           </ThreadPrimitive.ScrollToBottom>
         </div>
-
-        <div className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-1 pb-3">
-          <ComposerPrimitive.Root className="rounded-xl border border-border bg-background shadow-xs focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
-            <ComposerPrimitive.Input
-              aria-label={t("panel.assistantComposerLabel")}
-              className="max-h-40 min-h-20 w-full resize-none bg-transparent px-3 py-3 text-[13px] leading-6 outline-none placeholder:text-muted-foreground"
-              placeholder={t("panel.assistantComposerPlaceholder")}
-              submitMode="ctrlEnter"
-            />
-            <div className="flex min-w-0 items-center gap-2 px-2 py-1.5">
-              {snapshot.memoryCount > 0 ? (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="ghost"
-                      className="h-6 px-1.5 text-[0.625rem]"
-                    >
-                      {t("panel.assistantMemoryCount", { count: snapshot.memoryCount })}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" side="top" className="w-72 gap-2 p-2.5">
-                    <div className="text-xs font-semibold">{t("panel.assistantMemoryTitle")}</div>
-                    <div className="max-h-52 space-y-1 overflow-y-auto">
-                      {snapshot.memoryRecords.map((record) => (
-                        <div
-                          key={record.recordId}
-                          className="flex items-start gap-2 rounded border border-border p-2 text-[0.6875rem]"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-muted-foreground">{record.kind}</div>
-                            <div className="line-clamp-3 leading-4">
-                              {memoryLabel(record.value)}
-                            </div>
-                          </div>
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            aria-label={t("panel.assistantMemoryDelete")}
-                            title={t("panel.assistantMemoryDelete")}
-                            onClick={() => void deleteMemory(record.recordId).catch(() => {})}
-                          >
-                            <VscTrash aria-hidden />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              ) : null}
-              <span
-                role={statusError ? "alert" : undefined}
-                className={`min-w-0 flex-1 text-[0.6875rem] leading-4 ${statusError ? "text-destructive" : "text-muted-foreground"}`}
-              >
-                {snapshot.activity
-                  ? t("panel.assistantActivity", { activity: snapshot.activity })
-                  : statusText}
-              </span>
-              <AuiIf condition={(state) => state.thread.isRunning}>
-                <ComposerPrimitive.Cancel asChild>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={t("panel.assistantCancel")}
-                    title={t("panel.assistantCancel")}
-                  >
-                    <VscDebugStop aria-hidden />
-                  </Button>
-                </ComposerPrimitive.Cancel>
-              </AuiIf>
-              <AuiIf condition={(state) => !state.thread.isRunning}>
-                <ComposerPrimitive.Send asChild>
-                  <Button
-                    type="submit"
-                    size="icon-sm"
-                    aria-label={t("panel.assistantSend")}
-                    title={t("panel.assistantSend")}
-                  >
-                    <VscSend data-icon="inline-start" aria-hidden />
-                  </Button>
-                </ComposerPrimitive.Send>
-              </AuiIf>
-            </div>
-          </ComposerPrimitive.Root>
-        </div>
+        <AssistantComposer />
       </ThreadPrimitive.ViewportProvider>
     </ThreadPrimitive.Root>
   );

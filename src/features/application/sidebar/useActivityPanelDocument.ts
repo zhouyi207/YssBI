@@ -52,25 +52,36 @@ function requestStandalone(binding: ActivityPanelBinding): Promise<void> {
   })();
   return entry.promise;
 }
-function refreshPanel(binding: ActivityPanelBinding): void {
+function refreshPanel(binding: ActivityPanelBinding): Promise<void> {
+  if (binding.panelId === "assistant" && !isProjectLifecycleStateCurrent(binding))
+    return Promise.resolve();
   if ((binding.panelId === "project" || binding.panelId === "nodes") && binding.projectInstanceId) {
-    if (!isProjectLifecycleStateCurrent(binding)) return;
+    if (!isProjectLifecycleStateCurrent(binding)) return Promise.resolve();
     useSidebarStore.getState().startPanelRequest(binding);
-    void projectPublicationCoordinator.refreshIndex().catch((error) => {
-      if (!useSidebarStore.getState().panels[binding.panelId]?.error)
-        useSidebarStore
-          .getState()
-          .failPanelRequest(binding, toErrorReference(error, "activity_panel_sync_failed"));
-    });
+    return projectPublicationCoordinator
+      .refreshIndex()
+      .then(() => {})
+      .catch((error) => {
+        if (!useSidebarStore.getState().panels[binding.panelId]?.error)
+          useSidebarStore
+            .getState()
+            .failPanelRequest(binding, toErrorReference(error, "activity_panel_sync_failed"));
+      });
   } else {
-    void requestStandalone(binding);
+    return requestStandalone(binding);
   }
+}
+
+/** Invalidate the shared document after a committed action, including while its tab is hidden. */
+export function refreshActivityPanelDocument(panelId: ActivityPanelId): Promise<void> {
+  const entry = useSidebarStore.getState().panels[panelId];
+  return entry ? refreshPanel(entry.binding) : Promise.resolve();
 }
 
 /** All content is a cached Rust document; expansion is local UI state. */
 export function useActivityPanelDocument(panelId: ActivityPanelId, invalidation?: unknown) {
   const { i18n, t } = useTranslation();
-  const scoped = panelId === "project" || panelId === "nodes";
+  const scoped = panelId === "project" || panelId === "nodes" || panelId === "assistant";
   const installedProject = useProjectIOStore((state) => (scoped ? state.projectInstanceId : null));
   const lifecycle = captureProjectLifecycleState();
   const projectInstanceId =
@@ -96,10 +107,11 @@ export function useActivityPanelDocument(panelId: ActivityPanelId, invalidation?
       ? `${t("common.error")} [${current.error.code}]${current.error.incidentId ? ` · ${t("common.incidentId")}: ${current.error.incidentId}` : ""}`
       : null,
     loading: current?.loading ?? false,
-    refresh: () =>
-      refreshPanel(
+    refresh: () => {
+      void refreshPanel(
         useSidebarStore.getState().bindPanel({ panelId, projectInstanceId, locale, epoch }),
-      ),
+      );
+    },
     ...useActivityPanelExpansion(panelId),
   };
 }

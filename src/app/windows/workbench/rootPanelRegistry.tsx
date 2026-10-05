@@ -1,4 +1,4 @@
-import { AssistantPanel } from "@/modules/assistant/public";
+import { AssistantPanel, AssistantConversationPanel } from "@/modules/assistant/public";
 import { PluginsPanel, PluginViewFrame } from "@/modules/plugins/public";
 import { usePluginActions, usePlugins } from "./integrations/PluginProvider";
 import { useEffect, useState } from "react";
@@ -99,6 +99,10 @@ export const rootPanelRegistry = {
   Plugin: PluginDockPanel,
   Details: DetailsPane,
   Assistant: AssistantPanel,
+  AssistantConversation: ({ params }) =>
+    params.metadata.role === "conversation" ? (
+      <AssistantConversationPanel sessionId={params.metadata.sessionId} />
+    ) : null,
   Result: ResultDockPanel,
   Reference: ReferenceDockPanel,
   Logs: MainLogsDockPanel,

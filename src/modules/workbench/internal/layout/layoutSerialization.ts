@@ -9,6 +9,7 @@ export function isLayoutJson(
   value: unknown,
   validateTab: (tab: Record<string, unknown>, parent: string, floating: boolean) => boolean,
   allowFloats = false,
+  embeddedLayoutIds: readonly string[] = [],
 ): value is IJsonModel {
   if (!isRecord(value) || !isRecord(value.layout) || value.layout.type !== "row") return false;
   if (
@@ -18,10 +19,12 @@ export function isLayoutJson(
   if (value.global !== undefined && !isRecord(value.global)) return false;
   if (
     value.subLayouts !== undefined &&
-    (!isRecord(value.subLayouts) || (!allowFloats && Object.keys(value.subLayouts).length))
+    (!isRecord(value.subLayouts) ||
+      (!allowFloats && Object.keys(value.subLayouts).some((id) => !embeddedLayoutIds.includes(id))))
   )
     return false;
   const ids = new Set<string>();
+  const embeddedReferences = new Set<string>();
   let count = 0;
   const visit = (node: unknown, parent: string, depth: number, floating = false): boolean => {
     if (++count > 1024 || depth > 24 || !isRecord(node)) return false;
@@ -36,12 +39,18 @@ export function isLayoutJson(
       )
         return false;
     }
-    if (node.type === "tab")
-      return (
-        typeof node.id === "string" &&
-        node.subLayoutId === undefined &&
-        validateTab(node, parent, floating)
-      );
+    if (node.type === "tab") {
+      if (node.subLayoutId !== undefined) {
+        if (
+          typeof node.subLayoutId !== "string" ||
+          !embeddedLayoutIds.includes(node.subLayoutId) ||
+          embeddedReferences.has(node.subLayoutId)
+        )
+          return false;
+        embeddedReferences.add(node.subLayoutId);
+      }
+      return typeof node.id === "string" && validateTab(node, parent, floating);
+    }
     if (!["row", "tabset", "border"].includes(String(node.type))) return false;
     if (node.children !== undefined && !Array.isArray(node.children)) return false;
     const children = (node.children ?? []) as unknown[];
@@ -74,13 +83,18 @@ export function isLayoutJson(
       layoutId === "__main_layout_id__" ||
       ids.has(layoutId) ||
       !isRecord(layout) ||
-      layout.type !== "float" ||
+      (layout.type !== "float" &&
+        !(layout.type === "tab" && embeddedLayoutIds.includes(layoutId))) ||
       !isRecord(layout.layout) ||
-      layout.layout.type !== "row" ||
-      !isRecord(layout.rect)
+      layout.layout.type !== "row"
     )
       return false;
     ids.add(layoutId);
+    if (layout.type === "tab") {
+      if (!embeddedReferences.has(layoutId) || !visit(layout.layout, "", 0)) return false;
+      continue;
+    }
+    if (!isRecord(layout.rect)) return false;
     const rect = layout.rect;
     if (
       !["x", "y", "width", "height"].every(
@@ -92,6 +106,15 @@ export function isLayoutJson(
       return false;
     if (!visit(layout.layout, "", 0, true)) return false;
   }
+  if (
+    embeddedLayoutIds.some(
+      (id) =>
+        !isRecord(value.subLayouts) ||
+        !isRecord(value.subLayouts[id]) ||
+        value.subLayouts[id].type !== "tab",
+    )
+  )
+    return false;
   if (value.borders !== undefined && !Array.isArray(value.borders)) return false;
   const positions = new Set<string>();
   for (const border of (value.borders ?? []) as unknown[]) {

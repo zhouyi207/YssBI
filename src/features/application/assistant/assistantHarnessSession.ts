@@ -1,6 +1,14 @@
+import {
+  isModelConfigured,
+  type LanguageModelCatalog,
+  type LanguageModelSelection,
+} from "@/services/assistant/modelContract";
 import { createStore } from "zustand/vanilla";
+import { readAssistantDrafts, writeAssistantDrafts } from "./assistantDrafts";
+import { reloadAssistantConversations } from "./assistantConversations";
 import { toErrorReference } from "@/features/application/errorReference";
-import { getActiveGraphContext } from "@/features/application/editor/editorGroupContext";
+import type { ResourceRef } from "@/shared/types/domain/resource";
+import { resourceKey } from "@/features/core/resource";
 import {
   HarnessService,
   type HarnessEvent,
@@ -14,6 +22,7 @@ import {
 } from "./assistantHarnessProjection";
 
 const TERMINAL_TURN_ERRORS = new Set([
+  "assistant_resource_unavailable",
   "assistant_provider_unavailable",
   "assistant_authentication_failed",
   "assistant_rate_limited",
@@ -36,34 +45,32 @@ export class AssistantHarnessProjection {
   readonly getState = this.store.getState;
   readonly getInitialState = this.store.getInitialState;
   readonly subscribe = this.store.subscribe;
+  private replaySnapshot: AssistantHarnessSnapshot | null = null;
+  private readonly sessions = new Map<string, AssistantHarnessSnapshot>();
+  private readonly submissions = new Map<
+    string,
+    { text: string; resources: readonly ResourceRef[]; accepted: boolean }
+  >();
 
   private get snapshot(): AssistantHarnessSnapshot {
-    return this.store.getState();
+    return this.replaySnapshot ?? this.store.getState();
   }
   private subscription: HarnessEventSubscription | null = null;
   private generation = 0;
   private streamGeneration = 0;
-  private providerRequest = 0;
+  private modelRequest = 0;
+  private modelCatalog: LanguageModelCatalog | null = null;
   private recovering = false;
-  private submitting = false;
-  readonly start = async (): Promise<void> => {
+  readonly start = async (sessionId: string): Promise<void> => {
     this.stop();
     const generation = ++this.generation;
     this.update({ ...INITIAL_SNAPSHOT, status: "initializing" });
     try {
-      const conversations = await HarnessService.listSessions();
-      if (generation !== this.generation) return;
-      this.update({
-        ...this.snapshot,
-        conversations,
-      });
-      const session =
-        conversations.length > 0
-          ? await HarnessService.openSession(conversations[0].sessionId)
-          : await HarnessService.createSession();
+      const session = await HarnessService.openSession(sessionId);
       if (generation !== this.generation) return;
       await this.attachSession(session, generation);
     } catch (error) {
+      if (generation === this.generation) this.finishReplay();
       if (generation === this.generation)
         this.update({
           ...this.snapshot,
@@ -72,64 +79,46 @@ export class AssistantHarnessProjection {
         });
     }
   };
-
-  readonly newConversation = async (): Promise<void> => {
-    if (this.snapshot.isRunning || this.submitting || this.snapshot.status === "initializing")
-      return;
-    if (this.snapshot.sessionId && this.snapshot.messages.length === 0) return;
-    await this.changeConversation(null);
-  };
-
-  readonly selectConversation = async (sessionId: string): Promise<void> => {
-    if (
-      sessionId === this.snapshot.sessionId ||
-      this.snapshot.isRunning ||
-      this.submitting ||
-      this.snapshot.status === "initializing"
-    )
-      return;
-    await this.changeConversation(sessionId);
-  };
-
-  private async changeConversation(sessionId: string | null): Promise<void> {
-    const conversations = this.snapshot.conversations;
-    const providerConfigured = this.snapshot.providerConfigured;
-    this.stop();
-    const generation = ++this.generation;
-    this.update({ ...INITIAL_SNAPSHOT, conversations, providerConfigured });
-    try {
-      const session = sessionId
-        ? await HarnessService.openSession(sessionId)
-        : await HarnessService.createSession();
-      if (generation !== this.generation) return;
-      await this.attachSession(session, generation);
-    } catch (error) {
-      if (generation === this.generation)
-        this.update({
-          ...this.snapshot,
-          status: "error",
-          error: toErrorReference(error, "assistant_session_failed"),
-        });
-    }
-  }
 
   private async attachSession(session: HarnessSession, generation: number): Promise<void> {
+    void reloadAssistantConversations();
+    const cached = this.sessions.get(session.sessionId);
+    const drafts = cached
+      ? {
+          pending: cached.unsentMessage,
+          queued: cached.queuedMessages,
+          resources: cached.draftResources,
+        }
+      : readAssistantDrafts(session.sessionId);
     this.update({
       ...this.snapshot,
+      ...(cached
+        ? {
+            messages: cached.messages,
+            lastSequence: cached.lastSequence,
+            isRunning: cached.isRunning,
+            isStopping: cached.isStopping,
+            activity: cached.activity,
+            recoveryAttempt: cached.recoveryAttempt,
+            compactionProgress: cached.compactionProgress,
+          }
+        : {}),
+      unsentMessage: drafts.pending,
+      draftResources: drafts.resources,
+      queuedMessages: drafts.queued,
+      queuePaused: true,
       sessionId: session.sessionId,
-      conversations: [
-        session,
-        ...this.snapshot.conversations.filter((entry) => entry.sessionId !== session.sessionId),
-      ],
+      selectedModel: session.model ?? this.modelCatalog?.defaultModel ?? null,
+      providerConfigured: isModelConfigured(
+        this.modelCatalog,
+        session.model ?? this.modelCatalog?.defaultModel ?? null,
+      ),
     });
-    const memoryRecords = await HarnessService.listMemory(session.sessionId);
-    if (generation !== this.generation) return;
-    // Replay follows the initial memory snapshot so late snapshot data cannot undo events.
-    this.update({ ...this.snapshot, memoryRecords, memoryCount: memoryRecords.length });
     const streamGeneration = ++this.streamGeneration;
+    this.replaySnapshot = this.snapshot;
     const subscription = await HarnessService.subscribeEvents(
       session.sessionId,
-      0,
+      this.snapshot.lastSequence,
       (event) => {
         if (generation === this.generation && streamGeneration === this.streamGeneration)
           this.onEvent(event);
@@ -144,123 +133,251 @@ export class AssistantHarnessProjection {
       return;
     }
     this.subscription = subscription;
+    this.finishReplay();
     this.update({
       ...this.snapshot,
       status: this.snapshot.providerConfigured ? "ready" : "provider-unavailable",
     });
   }
 
-  private async refreshConversations(generation: number): Promise<void> {
-    try {
-      const conversations = await HarnessService.listSessions();
-      if (generation === this.generation) this.update({ ...this.snapshot, conversations });
-    } catch (error) {
-      if (generation === this.generation)
-        this.update({
-          ...this.snapshot,
-          error: toErrorReference(error, "assistant_session_failed"),
-        });
-    }
-  }
-
-  readonly invalidateProvider = (): void => {
-    this.providerRequest += 1;
-    this.update({ ...this.snapshot, providerConfigured: false });
+  readonly updateModels = (catalog: LanguageModelCatalog | null): void => {
+    this.modelCatalog = catalog;
+    const selectedModel = this.snapshot.selectedModel ?? catalog?.defaultModel ?? null;
+    const providerConfigured = isModelConfigured(catalog, selectedModel);
+    this.update({
+      ...this.snapshot,
+      selectedModel,
+      providerConfigured,
+      status:
+        this.subscription && ["ready", "provider-unavailable"].includes(this.snapshot.status)
+          ? providerConfigured
+            ? "ready"
+            : "provider-unavailable"
+          : this.snapshot.status,
+    });
   };
 
-  readonly syncProvider = async (model: string, baseUrl: string, apiKey: string): Promise<void> => {
+  readonly selectModel = async (model: LanguageModelSelection): Promise<void> => {
+    const sessionId = this.snapshot.sessionId;
+    if (!sessionId) return;
     const generation = this.generation;
-    const request = ++this.providerRequest;
+    const request = ++this.modelRequest;
+    this.update({ ...this.snapshot, selectingModel: true });
     try {
-      const runtime = await HarnessService.configureProvider(model, baseUrl, apiKey);
-      if (generation !== this.generation || request !== this.providerRequest) return;
+      const session = await HarnessService.selectModel(sessionId, model);
+      if (generation !== this.generation || request !== this.modelRequest) return;
       this.update({
         ...this.snapshot,
-        providerConfigured: runtime.providerConfigured,
+        selectedModel: session.model,
+        selectingModel: false,
         error: null,
-        status:
-          runtime.providerConfigured &&
-          this.snapshot.sessionId &&
-          this.subscription &&
-          (this.snapshot.status === "ready" || this.snapshot.status === "provider-unavailable")
-            ? "ready"
-            : runtime.providerConfigured
-              ? this.snapshot.status
-              : "provider-unavailable",
       });
+      this.updateModels(this.modelCatalog);
     } catch (error) {
-      if (generation !== this.generation || request !== this.providerRequest) return;
-      this.update({
-        ...this.snapshot,
-        providerConfigured: false,
-        status: "provider-unavailable",
-        error: toErrorReference(error, "assistant_provider_configuration_invalid"),
-      });
+      if (generation === this.generation && request === this.modelRequest)
+        this.update({
+          ...this.snapshot,
+          selectingModel: false,
+          error: toErrorReference(error, "assistant_provider_unavailable"),
+        });
     }
   };
 
   readonly stop = (): void => {
+    this.finishReplay();
+    if (this.snapshot.sessionId) {
+      this.sessions.delete(this.snapshot.sessionId);
+      this.sessions.set(this.snapshot.sessionId, this.snapshot);
+    }
+    // Only retain recent read projections. Drafts/queued inputs have their own persistence.
+    while (this.sessions.size > 3) this.sessions.delete(this.sessions.keys().next().value!);
     this.generation += 1;
     this.streamGeneration += 1;
-    this.submitting = false;
     this.recovering = false;
     const subscription = this.subscription;
     this.subscription = null;
     if (subscription) void subscription.unsubscribe().catch(() => {});
   };
 
-  readonly submit = async (text: string): Promise<void> => {
+  readonly submit = async (
+    text: string,
+    selectedResources?: readonly ResourceRef[],
+    model: LanguageModelSelection | null = this.snapshot.selectedModel,
+  ): Promise<boolean> => {
     const sessionId = this.snapshot.sessionId;
-    if (!sessionId || !text || this.isSendDisabled()) return;
+    if (!sessionId || !text || this.isSendDisabled()) return false;
+    const resources = (selectedResources ?? this.snapshot.draftResources).map((resource) => ({
+      ...resource,
+    }));
+    const fromComposer = selectedResources === undefined;
+    const submission = {
+      text,
+      resources,
+      accepted: false,
+      afterSequence: this.snapshot.lastSequence,
+    };
+    this.submissions.set(sessionId, submission);
     const generation = this.generation;
-    this.submitting = true;
-    this.update({ ...this.snapshot, isRunning: true, activity: null, error: null });
+    this.update({
+      ...this.snapshot,
+      isRunning: true,
+      activity: null,
+      compactionProgress: null,
+      error: null,
+      unsentMessage: { text, resources, model, afterSequence: this.snapshot.lastSequence },
+      draftResources: fromComposer ? [] : this.snapshot.draftResources,
+      queuePaused: false,
+    });
     try {
-      await HarnessService.submitTurn(sessionId, text, getActiveGraphContext()?.graphPath ?? null);
+      await HarnessService.submitTurn(sessionId, text, resources, model);
+      submission.accepted = true;
     } catch (error) {
-      if (generation !== this.generation || sessionId !== this.snapshot.sessionId) return;
+      if (sessionId !== this.snapshot.sessionId) return submission.accepted;
       const failure = toErrorReference(error, "assistant_turn_failed");
       this.update({
         ...this.snapshot,
         activity: null,
+        compactionProgress: null,
         error: failure.code === "harness_turn_cancelled" ? null : failure,
         status: TERMINAL_TURN_ERRORS.has(failure.code) ? this.snapshot.status : "error",
+        queuePaused: true,
       });
     } finally {
-      if (generation === this.generation && sessionId === this.snapshot.sessionId) {
-        this.submitting = false;
-        this.update({ ...this.snapshot, isRunning: false });
-        void this.refreshConversations(generation);
+      if (this.submissions.get(sessionId) === submission) this.submissions.delete(sessionId);
+      if (
+        sessionId === this.snapshot.sessionId &&
+        (generation === this.generation || this.subscription)
+      ) {
+        this.update({
+          ...this.snapshot,
+          isRunning: false,
+          isStopping: false,
+          unsentMessage: submission.accepted ? null : this.snapshot.unsentMessage,
+          draftResources:
+            !submission.accepted && fromComposer && this.snapshot.draftResources.length === 0
+              ? resources
+              : this.snapshot.draftResources,
+        });
+        void reloadAssistantConversations();
+        this.advanceQueue();
+      } else if (submission.accepted) {
+        const drafts = readAssistantDrafts(sessionId);
+        if (
+          drafts.pending?.text === text &&
+          drafts.pending.afterSequence === submission.afterSequence
+        )
+          writeAssistantDrafts(sessionId, null, drafts.queued, drafts.resources);
+        const cached = this.sessions.get(sessionId);
+        if (cached) this.sessions.set(sessionId, { ...cached, unsentMessage: null });
       }
     }
+    return submission.accepted;
   };
 
   readonly cancel = async (): Promise<void> => {
     const generation = this.generation;
     if (!this.snapshot.sessionId) return;
+    this.update({ ...this.snapshot, isStopping: true, error: null, queuePaused: true });
     try {
       await HarnessService.cancelTurn(this.snapshot.sessionId);
     } catch (error) {
       if (generation !== this.generation) return;
       const failure = toErrorReference(error, "assistant_turn_failed");
       if (failure.code !== "harness_turn_not_running")
-        this.update({ ...this.snapshot, error: failure });
-    }
-  };
-
-  readonly deleteMemory = async (recordId: string): Promise<void> => {
-    if (this.snapshot.sessionId) {
-      await HarnessService.deleteMemory(this.snapshot.sessionId, recordId);
+        this.update({ ...this.snapshot, error: failure, isStopping: false });
+      else this.update({ ...this.snapshot, isStopping: false });
     }
   };
 
   readonly isSendDisabled = (): boolean =>
     this.snapshot.status !== "ready" ||
     !this.snapshot.providerConfigured ||
+    this.snapshot.selectingModel ||
     !this.snapshot.sessionId ||
     !this.subscription ||
-    this.submitting ||
+    this.submissions.has(this.snapshot.sessionId) ||
     this.snapshot.isRunning;
+
+  readonly queueMessage = (text: string): void => {
+    if (!text.trim() || !this.snapshot.sessionId) return;
+    this.update({
+      ...this.snapshot,
+      queuedMessages: [
+        ...this.snapshot.queuedMessages,
+        {
+          id: crypto.randomUUID(),
+          text,
+          resources: [...this.snapshot.draftResources],
+          model: this.snapshot.selectedModel,
+        },
+      ],
+      draftResources: [],
+      queuePaused:
+        this.snapshot.isRunning && !this.snapshot.isStopping && this.snapshot.status === "ready"
+          ? false
+          : this.snapshot.queuePaused,
+    });
+  };
+
+  readonly removeQueuedMessage = (id: string): void => {
+    this.update({
+      ...this.snapshot,
+      queuedMessages: this.snapshot.queuedMessages.filter((item) => item.id !== id),
+    });
+  };
+
+  readonly sendNextQueued = async (): Promise<void> => {
+    const next = this.snapshot.queuedMessages[0];
+    if (!next || this.isSendDisabled()) return;
+    this.removeQueuedMessage(next.id);
+    await this.submit(next.text, next.resources, next.model);
+  };
+
+  private advanceQueue(): void {
+    if (
+      !this.replaySnapshot &&
+      !this.snapshot.queuePaused &&
+      !this.snapshot.error &&
+      this.snapshot.messages[this.snapshot.messages.length - 1]?.status.type === "complete"
+    )
+      void this.sendNextQueued();
+  }
+
+  readonly restoreUnsentMessage = (): void => {
+    const current = this.snapshot.draftResources;
+    const keys = new Set(current.map(resourceKey));
+    const restored =
+      this.snapshot.unsentMessage?.resources.filter(
+        (resource) => !keys.has(resourceKey(resource)),
+      ) ?? [];
+    this.update({
+      ...this.snapshot,
+      draftResources: [...current, ...restored],
+      unsentMessage: null,
+    });
+  };
+
+  readonly addResource = (resource: ResourceRef): void => {
+    if (
+      this.snapshot.draftResources.some(
+        (existing) => resourceKey(existing) === resourceKey(resource),
+      )
+    )
+      return;
+    this.update({
+      ...this.snapshot,
+      draftResources: [...this.snapshot.draftResources, { ...resource }],
+    });
+  };
+
+  readonly removeResource = (resource: ResourceRef): void => {
+    this.update({
+      ...this.snapshot,
+      draftResources: this.snapshot.draftResources.filter(
+        (existing) => resourceKey(existing) !== resourceKey(resource),
+      ),
+    });
+  };
 
   private readonly onEvent = (event: HarnessEvent): void => {
     if (event.sessionId !== this.snapshot.sessionId || event.sequence <= this.snapshot.lastSequence)
@@ -269,7 +386,29 @@ export class AssistantHarnessProjection {
       void this.recoverStream();
       return;
     }
+    if (event.type === "turn_started") {
+      const pending = this.submissions.get(event.sessionId);
+      if (
+        pending?.text === event.payload.userMessage &&
+        sameResources(
+          pending.resources,
+          event.payload.resources.map((entry) => entry.resource),
+        )
+      )
+        pending.accepted = true;
+      if (
+        this.snapshot.unsentMessage &&
+        event.sequence > this.snapshot.unsentMessage.afterSequence &&
+        event.payload.userMessage === this.snapshot.unsentMessage.text &&
+        sameResources(
+          this.snapshot.unsentMessage.resources,
+          event.payload.resources.map((entry) => entry.resource),
+        )
+      )
+        this.update({ ...this.snapshot, unsentMessage: null });
+    }
     this.update(reduceHarnessEvent(this.snapshot, event));
+    if (event.type === "turn_completed") this.advanceQueue();
   };
 
   private readonly onStreamError = (): void => {
@@ -277,6 +416,7 @@ export class AssistantHarnessProjection {
   };
 
   private failStream(error: unknown): void {
+    this.finishReplay();
     this.streamGeneration += 1;
     const subscription = this.subscription;
     this.subscription = null;
@@ -285,6 +425,9 @@ export class AssistantHarnessProjection {
       ...this.snapshot,
       status: "error",
       isRunning: false,
+      isStopping: false,
+      activity: null,
+      compactionProgress: null,
       error: toErrorReference(error, "assistant_stream_failed"),
     });
   }
@@ -302,10 +445,17 @@ export class AssistantHarnessProjection {
     const streamGeneration = ++this.streamGeneration;
     const previous = this.subscription;
     this.subscription = null;
-    this.update({ ...this.snapshot, status: "initializing" });
+    this.finishReplay();
+    this.update({
+      ...this.snapshot,
+      status: "initializing",
+      activity: null,
+      compactionProgress: null,
+    });
     try {
       await previous?.unsubscribe().catch(() => {});
       if (generation !== this.generation) return;
+      this.replaySnapshot = this.snapshot;
       const subscription = await HarnessService.subscribeEvents(
         sessionId,
         this.snapshot.lastSequence,
@@ -322,6 +472,7 @@ export class AssistantHarnessProjection {
         await subscription.unsubscribe();
       else {
         this.subscription = subscription;
+        this.finishReplay();
         this.update({
           ...this.snapshot,
           status: this.snapshot.providerConfigured ? "ready" : "provider-unavailable",
@@ -335,6 +486,39 @@ export class AssistantHarnessProjection {
   }
 
   private update(snapshot: AssistantHarnessSnapshot): void {
+    snapshot = {
+      ...snapshot,
+      isSubmitting: snapshot.sessionId !== null && this.submissions.has(snapshot.sessionId),
+    };
+    if (
+      snapshot.sessionId &&
+      (snapshot.unsentMessage !== this.snapshot.unsentMessage ||
+        snapshot.queuedMessages !== this.snapshot.queuedMessages ||
+        snapshot.draftResources !== this.snapshot.draftResources)
+    )
+      writeAssistantDrafts(
+        snapshot.sessionId,
+        snapshot.unsentMessage,
+        snapshot.queuedMessages,
+        snapshot.draftResources,
+      );
+    if (this.replaySnapshot) {
+      this.replaySnapshot = snapshot;
+      return;
+    }
     this.store.setState(snapshot, true);
   }
+
+  private finishReplay(): void {
+    const snapshot = this.replaySnapshot;
+    this.replaySnapshot = null;
+    if (snapshot) this.store.setState(snapshot, true);
+  }
+}
+
+function sameResources(left: readonly ResourceRef[], right: readonly ResourceRef[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((resource, index) => resourceKey(resource) === resourceKey(right[index]))
+  );
 }

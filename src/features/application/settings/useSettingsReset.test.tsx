@@ -7,7 +7,6 @@ import { useSettingsReset } from "./useSettingsReset";
 
 const settings = vi.hoisted(() => ({
   resetAllToDefaults: vi.fn(async () => {}),
-  resetAiToDefaults: vi.fn(async () => {}),
   resetAppearanceToDefaults: vi.fn(async () => {}),
 }));
 
@@ -52,7 +51,7 @@ it("admits one reset through confirmation and persistence, then releases it on c
   let duplicate!: Promise<void>;
   act(() => {
     first = current.resetSettings("all");
-    duplicate = current.resetSettings("ai");
+    duplicate = current.resetSettings("appearance");
   });
   const confirmations = uiStore.getState().modals.filter((modal) => modal.type === "confirm");
   expect(confirmations).toHaveLength(1);
@@ -62,7 +61,7 @@ it("admits one reset through confirmation and persistence, then releases it on c
     await Promise.all([first, duplicate]);
   });
   expect(settings.resetAllToDefaults).not.toHaveBeenCalled();
-  expect(settings.resetAiToDefaults).not.toHaveBeenCalled();
+  expect(settings.resetAppearanceToDefaults).not.toHaveBeenCalled();
   expect(current.isResetPending).toBe(false);
 
   let finishSave!: () => void;

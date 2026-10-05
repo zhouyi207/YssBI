@@ -1,3 +1,55 @@
+import {
+  languageModelSelectionSchema,
+  languageModelIdentitySchema,
+  type LanguageModelSelection,
+  type LanguageModelIdentity,
+} from "./modelContract";
+import { z } from "zod";
+import { isResultReference } from "@/shared/types/domain/result";
+import { RESOURCE_KINDS } from "@/shared/types/domain/resource";
+
+export const harnessResourceRefSchema = z.strictObject({
+  kind: z.enum(RESOURCE_KINDS),
+  id: z.string().min(1),
+});
+export const harnessResourceReferenceSchema = z.strictObject({
+  resource: harnessResourceRefSchema,
+  name: z.string().min(1),
+});
+export type HarnessResourceReference = z.infer<typeof harnessResourceReferenceSchema>;
+const resourceReferencesSchema = z.array(harnessResourceReferenceSchema);
+
+export const harnessArtifactSchema = z.object({
+  resource: z.object({
+    kind: z.enum(RESOURCE_KINDS),
+    id: z.string().min(1),
+  }),
+  revision: z.number().int().nonnegative(),
+  revisionKind: z.enum(["resource", "function_signature"]),
+  deleted: z.boolean(),
+});
+export type HarnessArtifact = z.infer<typeof harnessArtifactSchema>;
+const artifactsSchema = z.array(harnessArtifactSchema);
+const resultSchema = z
+  .object({ executionSessionId: z.string(), resultId: z.string(), output: z.string() })
+  .refine(isResultReference);
+const resultsSchema = z.array(resultSchema);
+export type HarnessResultReference = z.infer<typeof resultSchema>;
+const toolInspectionSchema = z.object({
+  target: z.string().nullable(),
+  parameters: z.record(z.string(), z.unknown()),
+  artifacts: artifactsSchema,
+  results: resultsSchema,
+  startedAt: z.number().int().nonnegative(),
+  finishedAt: z.number().int().nonnegative().nullable(),
+});
+export type HarnessToolInspection = z.infer<typeof toolInspectionSchema>;
+export function parseHarnessToolInspection(value: unknown): HarnessToolInspection {
+  const parsed = toolInspectionSchema.safeParse(value);
+  if (!parsed.success) throw new InvalidHarnessPayloadError("HarnessToolInspection");
+  return parsed.data;
+}
+
 const HARNESS_CAPABILITY_IDS = [
   "inspect_resource",
   "manage_resource",
@@ -7,6 +59,8 @@ const HARNESS_CAPABILITY_IDS = [
   "request_ui_intent",
   "inspect_graph",
   "search_node_catalog",
+  "search_knowledge",
+  "read_knowledge",
   "inspect_dataset_schema",
   "inspect_dataset_profile",
   "inspect_result",
@@ -40,25 +94,6 @@ export interface HarnessKnowledgeCitation {
   readonly sourceHash: string;
 }
 
-export interface HarnessMemoryRecord {
-  readonly recordId: string;
-  readonly scope: "session" | "project" | "user" | "episodic";
-  readonly kind:
-    | "research_question"
-    | "dataset_semantic"
-    | "variable_role"
-    | "study_design"
-    | "method_decision"
-    | "model_decision"
-    | "user_preference"
-    | "reporting_preference"
-    | "workflow_summary";
-  readonly status: "proposed" | "active" | "superseded" | "invalidated" | "deleted";
-  readonly value: Readonly<Record<string, unknown>>;
-  readonly createdAt: number;
-  readonly updatedAt: number;
-}
-
 export type HarnessEvent = Readonly<{
   sequence: number;
   sessionId: string;
@@ -66,6 +101,29 @@ export type HarnessEvent = Readonly<{
   occurredAt: number;
 }> &
   (
+    | Readonly<{
+        type: "agent_run_resumed";
+        payload: { runId: string; role: HarnessAgentRole; objective: string };
+      }>
+    | Readonly<{
+        type: "graph_execution_finished";
+        payload: {
+          invocationId: string;
+          status: "succeeded" | "failed" | "cancelled";
+          failureCode: string | null;
+        };
+      }>
+    | Readonly<{ type: "text_retracted"; payload: { characters: number } }>
+    | Readonly<{ type: "context_compacted" }>
+    | Readonly<{
+        type: "context_compaction_progress";
+        payload: { completedBytes: number; totalBytes: number };
+      }>
+    | Readonly<{
+        type: "runtime_status";
+        payload: { phase: "compacting" | "reconnecting" | "checking_delivery"; attempt: number };
+      }>
+    | Readonly<{ type: "delivery_blocked"; payload: { reason: string } }>
     | Readonly<{ type: "agent_run_invalidated"; payload: { runId: string } }>
     | Readonly<{
         type: "agent_run_started";
@@ -83,14 +141,24 @@ export type HarnessEvent = Readonly<{
           runId: string;
           role: HarnessAgentRole;
           state: HarnessAgentState;
+          failureCode: string | null;
           summary: string | null;
           blockedReason: string | null;
           warnings: readonly string[];
           evidenceCount: number;
+          artifacts: readonly HarnessArtifact[];
+          results: readonly HarnessResultReference[];
         };
       }>
     | Readonly<{ type: "session_created" | "turn_failed" | "turn_cancelled" }>
-    | Readonly<{ type: "turn_started"; payload: { userMessage: string } }>
+    | Readonly<{
+        type: "turn_started";
+        payload: {
+          userMessage: string;
+          model: LanguageModelIdentity;
+          resources: readonly HarnessResourceReference[];
+        };
+      }>
     | Readonly<{ type: "text_delta"; payload: { delta: string } }>
     | Readonly<{ type: "plan_proposed"; payload: { plan: unknown } }>
     | Readonly<{
@@ -103,8 +171,6 @@ export type HarnessEvent = Readonly<{
       }>
     | Readonly<{ type: "turn_completed"; payload: { finalText: string } }>
     | Readonly<{ type: "knowledge_cited"; payload: { citation: HarnessKnowledgeCitation } }>
-    | Readonly<{ type: "memory_recorded"; payload: { record: HarnessMemoryRecord } }>
-    | Readonly<{ type: "memory_deleted"; payload: { recordId: string } }>
     | Readonly<{
         type:
           | "workflow_planned"
@@ -125,16 +191,13 @@ export type HarnessEvent = Readonly<{
       }>
   );
 
-export interface HarnessRuntimeStatus {
-  readonly providerConfigured: boolean;
-}
-
 export interface HarnessSession {
   readonly sessionId: string;
   readonly projectInstanceId: string;
   readonly projectSessionId: string;
   readonly title: string;
   readonly lastOpenedAt: number;
+  readonly model: LanguageModelSelection | null;
 }
 
 export interface HarnessTurnResult {
@@ -194,73 +257,12 @@ function citation(value: unknown): HarnessKnowledgeCitation | null {
     : null;
 }
 
-const MEMORY_SCOPES = new Set(["session", "project", "user", "episodic"] as const);
-const MEMORY_KINDS = new Set([
-  "research_question",
-  "dataset_semantic",
-  "variable_role",
-  "study_design",
-  "method_decision",
-  "model_decision",
-  "user_preference",
-  "reporting_preference",
-  "workflow_summary",
-] as const);
-const MEMORY_STATUSES = new Set([
-  "proposed",
-  "active",
-  "superseded",
-  "invalidated",
-  "deleted",
-] as const);
-
-export function parseHarnessMemoryRecord(value: unknown): HarnessMemoryRecord {
-  const source = record(value);
-  const recordId = source && stringField(source, "recordId");
-  const memoryValue = source && record(source.value);
-  const createdAt = source && integerField(source, "createdAt");
-  const updatedAt = source && integerField(source, "updatedAt");
-  if (
-    !source ||
-    !recordId ||
-    !MEMORY_SCOPES.has(source.scope as never) ||
-    !MEMORY_KINDS.has(source.kind as never) ||
-    !MEMORY_STATUSES.has(source.status as never) ||
-    !memoryValue ||
-    createdAt === null ||
-    updatedAt === null
-  ) {
-    throw new InvalidHarnessPayloadError("HarnessMemoryRecord");
-  }
-  return {
-    recordId,
-    scope: source.scope as HarnessMemoryRecord["scope"],
-    kind: source.kind as HarnessMemoryRecord["kind"],
-    status: source.status as HarnessMemoryRecord["status"],
-    value: memoryValue,
-    createdAt,
-    updatedAt,
-  };
-}
-
-export function parseHarnessMemoryRecords(value: unknown): readonly HarnessMemoryRecord[] {
-  if (!Array.isArray(value)) throw new InvalidHarnessPayloadError("HarnessMemoryRecords");
-  return value.map(parseHarnessMemoryRecord);
-}
-
-export function parseHarnessRuntimeStatus(value: unknown): HarnessRuntimeStatus {
-  const source = record(value);
-  if (!source || typeof source.providerConfigured !== "boolean") {
-    throw new InvalidHarnessPayloadError("HarnessRuntimeStatus");
-  }
-  return { providerConfigured: source.providerConfigured };
-}
-
 export function parseHarnessSession(value: unknown): HarnessSession {
   const source = record(value);
   const sessionId = source && stringField(source, "sessionId");
   const projectInstanceValue = source && stringField(source, "projectInstanceId");
   const projectSessionId = source && stringField(source, "projectSessionId");
+  const model = languageModelSelectionSchema.nullable().safeParse(source?.model);
   if (
     !sessionId ||
     !projectInstanceValue ||
@@ -268,7 +270,8 @@ export function parseHarnessSession(value: unknown): HarnessSession {
     typeof source?.title !== "string" ||
     typeof source.lastOpenedAt !== "number" ||
     !Number.isSafeInteger(source.lastOpenedAt) ||
-    source.lastOpenedAt < 0
+    source.lastOpenedAt < 0 ||
+    !model.success
   ) {
     throw new InvalidHarnessPayloadError("HarnessSession");
   }
@@ -278,15 +281,8 @@ export function parseHarnessSession(value: unknown): HarnessSession {
     projectSessionId,
     title: source.title,
     lastOpenedAt: source.lastOpenedAt,
+    model: model.data,
   };
-}
-
-export function parseHarnessSessions(value: unknown): readonly HarnessSession[] {
-  if (!Array.isArray(value)) throw new InvalidHarnessPayloadError("HarnessSessions");
-  const sessions = value.map(parseHarnessSession);
-  if (new Set(sessions.map((session) => session.sessionId)).size !== sessions.length)
-    throw new InvalidHarnessPayloadError("HarnessSessions");
-  return sessions;
 }
 
 export function parseHarnessTurnResult(value: unknown): HarnessTurnResult {
@@ -320,11 +316,55 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
     throw new InvalidHarnessPayloadError("HarnessEvent");
   }
   const base = { sequence, sessionId, turnId: turnIdValue as string | null, occurredAt };
-  if (["session_created", "turn_failed", "turn_cancelled"].includes(type)) {
+  if (["session_created", "turn_failed", "turn_cancelled", "context_compacted"].includes(type)) {
     return { ...base, type } as HarnessEvent;
   }
   const eventPayload = payload(source);
   if (!eventPayload) throw new InvalidHarnessPayloadError("HarnessEvent");
+  if (type === "graph_execution_finished") {
+    const invocationId = stringField(eventPayload, "invocationId");
+    const { status, failureCode } = eventPayload;
+    if (
+      invocationId &&
+      (status === "succeeded" || status === "failed" || status === "cancelled") &&
+      (failureCode === null || typeof failureCode === "string")
+    ) {
+      return { ...base, type, payload: { invocationId, status, failureCode } };
+    }
+  }
+  if (type === "text_retracted") {
+    const characters = integerField(eventPayload, "characters");
+    if (characters !== null) return { ...base, type, payload: { characters } };
+  } else if (type === "context_compaction_progress") {
+    const completedBytes = integerField(eventPayload, "completedBytes");
+    const totalBytes = integerField(eventPayload, "totalBytes");
+    if (
+      completedBytes !== null &&
+      totalBytes !== null &&
+      totalBytes > 0 &&
+      completedBytes <= totalBytes
+    ) {
+      return { ...base, type, payload: { completedBytes, totalBytes } };
+    }
+  } else if (type === "runtime_status") {
+    const { phase } = eventPayload;
+    const attempt = integerField(eventPayload, "attempt");
+    if (
+      (phase === "compacting" || phase === "reconnecting" || phase === "checking_delivery") &&
+      attempt !== null
+    ) {
+      return { ...base, type, payload: { phase, attempt } };
+    }
+  } else if (type === "delivery_blocked") {
+    const reason = stringField(eventPayload, "reason");
+    if (reason) return { ...base, type, payload: { reason } };
+  } else if (type === "agent_run_resumed") {
+    const runId = stringField(eventPayload, "runId");
+    const { role, objective } = eventPayload;
+    if (runId && AGENT_ROLES.includes(role as HarnessAgentRole) && typeof objective === "string") {
+      return { ...base, type, payload: { runId, role: role as HarnessAgentRole, objective } };
+    }
+  }
   if (type === "agent_run_invalidated") {
     const runId = stringField(eventPayload, "runId");
     if (runId) return { ...base, type, payload: { runId } };
@@ -351,8 +391,15 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
       runId &&
       event &&
       [
+        "graph_execution_finished",
         "text_delta",
+        "text_retracted",
+        "context_compacted",
+        "context_compaction_progress",
+        "runtime_status",
+        "delivery_blocked",
         "plan_proposed",
+        "knowledge_cited",
         "tool_invocation_started",
         "tool_invocation_completed",
         "tool_invocation_failed",
@@ -363,12 +410,17 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
   } else if (type === "agent_run_finished") {
     const runId = stringField(eventPayload, "runId");
     const evidenceCount = integerField(eventPayload, "evidenceCount");
-    const { role, state, summary, blockedReason, warnings } = eventPayload;
+    const { role, state, summary, blockedReason, warnings, failureCode } = eventPayload;
+    const artifacts = artifactsSchema.safeParse(eventPayload.artifacts);
+    const results = resultsSchema.safeParse(eventPayload.results);
     if (
       runId &&
       evidenceCount !== null &&
+      artifacts.success &&
+      results.success &&
       AGENT_ROLES.includes(role as HarnessAgentRole) &&
       AGENT_STATES.includes(state as HarnessAgentState) &&
+      (failureCode === null || typeof failureCode === "string") &&
       (summary === null || typeof summary === "string") &&
       (blockedReason === null || typeof blockedReason === "string") &&
       Array.isArray(warnings) &&
@@ -381,17 +433,27 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
           runId,
           role: role as HarnessAgentRole,
           state: state as HarnessAgentState,
+          failureCode,
           summary,
           blockedReason,
           warnings,
           evidenceCount,
+          artifacts: artifacts.data,
+          results: results.data,
         },
       };
     }
   }
   if (type === "turn_started") {
     const userMessage = stringField(eventPayload, "userMessage");
-    if (userMessage) return { ...base, type, payload: { userMessage } };
+    const model = languageModelIdentitySchema.safeParse(eventPayload.model);
+    const resources = resourceReferencesSchema.safeParse(eventPayload.resources);
+    if (userMessage && model.success && resources.success)
+      return {
+        ...base,
+        type,
+        payload: { userMessage, model: model.data, resources: resources.data },
+      };
   } else if (type === "text_delta") {
     const delta = eventPayload.delta;
     if (typeof delta === "string") return { ...base, type, payload: { delta } };
@@ -416,15 +478,6 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
   } else if (type === "knowledge_cited") {
     const parsedCitation = citation(eventPayload.citation);
     if (parsedCitation) return { ...base, type, payload: { citation: parsedCitation } };
-  } else if (type === "memory_recorded") {
-    try {
-      return { ...base, type, payload: { record: parseHarnessMemoryRecord(eventPayload.record) } };
-    } catch {
-      // Fall through to the common malformed-event error.
-    }
-  } else if (type === "memory_deleted") {
-    const recordId = stringField(eventPayload, "recordId");
-    if (recordId) return { ...base, type, payload: { recordId } };
   } else if (
     type === "workflow_planned" ||
     type === "workflow_started" ||

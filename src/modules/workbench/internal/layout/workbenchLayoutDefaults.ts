@@ -6,6 +6,28 @@ import type {
   WorkbenchEdgePosition,
 } from "./workbenchTypes";
 export const WORKBENCH_ACTIVITY_GROUP_ID = "border_left";
+export const WORKBENCH_CONVERSATION_GROUP_ID = "assistant-conversations";
+export const WORKBENCH_WORKSPACE_LAYOUT_ID = "workbench-workspace";
+export const WORKBENCH_WORKSPACE_GROUP_ID = "workbench-workspace-host";
+export const WORKBENCH_WORKSPACE_PANEL_ID = "workbench-workspace-content";
+export const WORKBENCH_WORKSPACE_GROUP_ATTRIBUTES = {
+  id: WORKBENCH_WORKSPACE_GROUP_ID,
+  enableClose: false,
+  enableDeleteWhenEmpty: false,
+  enableTabStrip: false,
+  enableDrag: false,
+  enableDrop: false,
+  enableDivide: false,
+  enableMaximize: false,
+} as const;
+export const WORKBENCH_CONVERSATION_GROUP_ATTRIBUTES = {
+  id: WORKBENCH_CONVERSATION_GROUP_ID,
+  minWidth: 320,
+  enableTabStrip: false,
+  enableDrag: false,
+  enableDivide: false,
+  enableMaximize: false,
+} as const;
 export const WORKBENCH_EDGE_GROUP_IDS = {
   left: "border_left",
   right: "border_right",
@@ -18,7 +40,7 @@ export const WORKBENCH_HOME_LOCATION = {
   commands: "left",
   plugins: "left",
   details: "right",
-  assistant: "right",
+  assistant: "left",
   result: "right",
   reference: "right",
   logs: "bottom",
@@ -76,7 +98,26 @@ export function createEmptyWorkbenchLayout(): IJsonModel {
     ],
     layout: {
       type: "row",
-      children: [],
+      children: [
+        {
+          type: "tabset",
+          ...WORKBENCH_WORKSPACE_GROUP_ATTRIBUTES,
+          children: [
+            {
+              type: "tab",
+              id: WORKBENCH_WORKSPACE_PANEL_ID,
+              name: "",
+              subLayoutId: WORKBENCH_WORKSPACE_LAYOUT_ID,
+              contentClassName: "workbench-workspace-content",
+              enableClose: false,
+              enableDrag: false,
+            },
+          ],
+        },
+      ],
+    },
+    subLayouts: {
+      [WORKBENCH_WORKSPACE_LAYOUT_ID]: { type: "tab", layout: { type: "row", children: [] } },
     },
   };
 }
@@ -93,7 +134,7 @@ export function orderWorkbenchPanelIdsForReset(
     }
   };
   for (const bucket of WORKBENCH_RESET_BUCKET_ORDER) {
-    if (bucket === "grid") visit(layout.layout);
+    if (bucket === "grid") visit(layout.subLayouts![WORKBENCH_WORKSPACE_LAYOUT_ID].layout);
     else
       for (const tab of layout.borders?.find((border) => border.location === bucket)?.children ??
         []) {
@@ -119,11 +160,6 @@ const DETAILS_VIEW_REQUEST = {
   title: "Details",
 } as const;
 
-const ASSISTANT_VIEW_REQUEST = {
-  viewId: "assistant",
-  title: "Assistant",
-} as const;
-
 function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): number {
   const right = readSerializedEdge(transaction.serialize(), "right");
   return typeof right?.size === "number" ? right.size : WORKBENCH_EDGE_SIZES.right;
@@ -132,7 +168,7 @@ function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): num
 function configurePermanentDetailsSidebar(
   transaction: WorkbenchLayoutTransaction,
   details: WorkbenchPanelInfo,
-): string {
+): void {
   const right = transaction.configureEdge({
     position: "right",
     size: persistedRightSidebarSize(transaction),
@@ -144,7 +180,6 @@ function configurePermanentDetailsSidebar(
     index: 0,
     activate: false,
   });
-  return right.groupId;
 }
 
 function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction): void {
@@ -169,7 +204,6 @@ export function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction
     transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) }),
   );
   const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
-  const assistant = transaction.ensureView(ASSISTANT_VIEW_REQUEST);
   const logs = transaction.ensureView({ viewId: "logs", title: "Logs" });
   const output = transaction.ensureView({ viewId: "output", title: "Output" });
   const problems = transaction.ensureView({ viewId: "problems", title: "Problems" });
@@ -178,7 +212,7 @@ export function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction
     size: WORKBENCH_EDGE_SIZES.left,
     collapsed: false,
   });
-  const rightGroupId = configurePermanentDetailsSidebar(transaction, details);
+  configurePermanentDetailsSidebar(transaction, details);
   const bottom = transaction.configureEdge({
     position: "bottom",
     size: WORKBENCH_EDGE_SIZES.bottom,
@@ -190,12 +224,6 @@ export function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction
       groupId: left.groupId,
       index,
     });
-  });
-  transaction.move({
-    panelInstanceId: assistant.panelInstanceId,
-    groupId: rightGroupId,
-    index: 1,
-    activate: false,
   });
   for (const [index, viewId] of WORKBENCH_BOTTOM_DEFAULT_ORDER.entries()) {
     transaction.move({
@@ -217,15 +245,18 @@ export function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction
 
 export function ensureRestoredRootPanels(transaction: WorkbenchLayoutTransaction): void {
   ensurePermanentDetailsSidebar(transaction);
-  if (
-    !transaction
-      .listPanels()
-      .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "plugins")
-  ) {
+  const panels = transaction.listPanels();
+  const missingActivities = WORKBENCH_ACTIVITY_DEFAULT_ORDER.filter(
+    (viewId) =>
+      !panels.some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === viewId),
+  );
+  if (missingActivities.length > 0) {
     const active = transaction.getActivePanel();
     const left = readSerializedEdge(transaction.serialize(), "left");
     const leftGroup = left ? { activeView: left.activePanelId } : undefined;
-    transaction.ensureView({ viewId: "plugins", title: "Plugins" });
+    for (const viewId of missingActivities) {
+      transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) });
+    }
     if (leftGroup?.activeView) transaction.activate(leftGroup.activeView);
     if (active) transaction.activate(active.panelInstanceId);
     if (left)

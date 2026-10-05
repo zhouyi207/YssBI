@@ -25,6 +25,7 @@ export interface WorkbenchPanelInfo {
   readonly visible?: boolean;
   readonly location:
     | { readonly type: "grid" }
+    | { readonly type: "conversation" }
     | { readonly type: "float"; readonly layoutId: string }
     | { readonly type: "edge"; readonly position: WorkbenchEdgePosition };
 }
@@ -40,6 +41,7 @@ export interface WorkbenchGroupInfo {
   readonly active: boolean;
   readonly location:
     | { readonly type: "grid" }
+    | { readonly type: "conversation" }
     | { readonly type: "float"; readonly layoutId: string }
     | { readonly type: "edge"; readonly position: WorkbenchEdgePosition };
 }
@@ -101,6 +103,10 @@ export type EnsurePluginViewRequest = Omit<PluginPanelMetadata, "role">;
 
 export type UpsertResultRequest = Omit<ResultPanelMetadata, "role">;
 export type OpenReferenceRequest = Omit<ReferencePanelMetadata, "role">;
+export interface OpenConversationRequest {
+  readonly sessionId: string;
+  readonly title: string;
+}
 
 export type WorkbenchLayoutErrorCode =
   | "layout_not_ready"
@@ -147,6 +153,8 @@ export interface WorkbenchLayoutControlContract {
   ensureCentralGroup(): Promise<string>;
   openEditor(request: OpenEditorRequest): Promise<WorkbenchPanelInfo>;
   openReference(request: OpenReferenceRequest): Promise<WorkbenchPanelInfo>;
+  openConversation(request: OpenConversationRequest): Promise<WorkbenchPanelInfo>;
+  updateConversationTitle(request: OpenConversationRequest): Promise<void>;
   ensureView(request: EnsureViewRequest): Promise<WorkbenchPanelInfo>;
   upsertResult(request: UpsertResultRequest): Promise<WorkbenchPanelInfo>;
   replaceResult(

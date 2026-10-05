@@ -52,6 +52,7 @@ import { workbenchLayoutController } from "../application/workbenchLayoutControl
 import { snapTopLeftToCursor } from "../ui/dnd/snapTopLeftToCursorModifier";
 import { WorkbenchSettingsButton } from "../ui/status/StatusBar";
 import { workbenchLayoutRead } from "./workbenchRead";
+import { WORKBENCH_WORKSPACE_LAYOUT_ID } from "./workbenchLayoutDefaults";
 import { workbenchLayoutRootBinding } from "./workbenchRootBinding";
 import type {
   RootPanelActivationTarget,
@@ -90,6 +91,7 @@ export interface RootLayoutHostProps {
   readonly layoutTheme: string;
   readonly watermarkComponent: FunctionComponent;
   readonly statusBar: ReactNode;
+  readonly conversationToggle: ReactNode;
   readonly dragOverlay?: ReactNode;
 }
 function panelProps(node: TabNode): RootPanelProps | undefined {
@@ -184,6 +186,7 @@ export const RootLayoutHost = memo(
         layoutTheme,
         watermarkComponent: Watermark,
         statusBar,
+        conversationToggle,
         dragOverlay,
       },
       ref,
@@ -273,7 +276,7 @@ export const RootLayoutHost = memo(
               onRenderTabSet={(node, values) => {
                 const layoutId = node.getLayoutId();
                 const floatToolbarGroup =
-                  layoutId !== Model.MAIN_LAYOUT_ID
+                  layoutId !== Model.MAIN_LAYOUT_ID && layoutId !== WORKBENCH_WORKSPACE_LAYOUT_ID
                     ? (model.getMaximizedTabset(layoutId) ??
                       model.getFirstTabSet(model.getRootRow(layoutId)))
                     : undefined;
@@ -349,7 +352,7 @@ export const RootLayoutHost = memo(
                 }
                 if (
                   node instanceof TabSetNode &&
-                  node.getLayoutId() === Model.MAIN_LAYOUT_ID &&
+                  node.getLayoutId() === WORKBENCH_WORKSPACE_LAYOUT_ID &&
                   node.getTabNodes().length > 0 &&
                   node.getTabNodes().every((tab) => tab.isEnableFloat())
                 ) {
@@ -373,7 +376,12 @@ export const RootLayoutHost = memo(
                 }
                 if (!(node instanceof BorderNode)) return;
                 if (node.getLocation() === DockLocation.BOTTOM) {
-                  values.leading = <WorkbenchSettingsButton />;
+                  values.leading = (
+                    <>
+                      <WorkbenchSettingsButton />
+                      {conversationToggle}
+                    </>
+                  );
                   values.buttons.push(
                     <div key="workbench-status" className="min-w-0">
                       {statusBar}

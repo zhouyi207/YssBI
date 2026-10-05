@@ -1,8 +1,11 @@
-import { Actions, DockLocation, Model } from "flexlayout-react";
+import { Actions, DockLocation } from "flexlayout-react";
 import { describe, expect, it } from "vitest";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { configureWorkbenchModel } from "./workbenchActivityGroup";
-import { createEmptyWorkbenchLayout } from "./workbenchLayoutDefaults";
+import {
+  createEmptyWorkbenchLayout,
+  WORKBENCH_WORKSPACE_LAYOUT_ID,
+} from "./workbenchLayoutDefaults";
 import { createWorkbenchLayoutRuntime } from "./workbenchLayoutInternal";
 import { WorkbenchModelOperations } from "./workbenchLayoutOperations";
 import { PendingWorkbenchTransaction } from "./workbenchLayoutTransaction";
@@ -83,7 +86,9 @@ describe("workbench notification boundaries", () => {
         );
       expect(observed).toEqual([first.panelInstanceId]);
       expect(read.getPanel(first.panelInstanceId)?.groupId).toBe(target.groupId);
-      expect(binding.getModel().getActiveTabset(Model.MAIN_LAYOUT_ID)?.getId()).toBeUndefined();
+      expect(
+        binding.getModel().getActiveTabset(WORKBENCH_WORKSPACE_LAYOUT_ID)?.getId(),
+      ).toBeUndefined();
     } finally {
       unsubscribe();
       internal.unbind();
@@ -112,6 +117,7 @@ describe("workbench notification boundaries", () => {
     const logs = ops.ensureView({ viewId: "logs", title: "Logs" });
     const details = ops.ensureView({ viewId: "details", title: "Details" });
     const assistant = ops.ensureView({ viewId: "assistant", title: "Assistant" });
+    ops.ensureView({ viewId: "project", title: "Project" });
     ops.reveal(details.panelInstanceId);
     ops.activate(first.panelInstanceId);
     const calls = {
@@ -159,6 +165,8 @@ describe("workbench notification boundaries", () => {
     });
     expect(read.getActiveSnapshot()).toBe(activeBefore);
     ops.setEdgeCollapsed("right", true);
+    expect(calls.assistant).toBe(0);
+    ops.setEdgeCollapsed("left", true);
     // Even an unselected border tab's context menu observes the edge's collapse state.
     expect(calls.assistant).toBe(1);
     expect(calls.active).toBe(0);

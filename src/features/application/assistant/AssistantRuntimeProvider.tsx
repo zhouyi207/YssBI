@@ -1,3 +1,5 @@
+import type { ResourceRef } from "@/shared/types/domain/resource";
+import type { LanguageModelSelection } from "@/services/assistant/modelContract";
 import { AssistantRuntimeProvider as AssistantUiRuntimeProvider } from "@assistant-ui/react";
 import { createContext, useContext, useMemo, type PropsWithChildren } from "react";
 import { useStore } from "zustand";
@@ -7,30 +9,65 @@ import { useAssistantHarnessRuntime } from "./assistantHarnessRuntime";
 import type { AssistantHarnessSnapshot } from "./assistantHarnessProjection";
 
 interface AssistantHarnessContextValue {
+  readonly selectModel: (model: LanguageModelSelection) => Promise<void>;
   readonly projection: Pick<
     StoreApi<AssistantHarnessSnapshot>,
     "getState" | "getInitialState" | "subscribe"
   >;
-  readonly deleteMemory: (recordId: string) => Promise<void>;
-  readonly newConversation: () => Promise<void>;
-  readonly selectConversation: (sessionId: string) => Promise<void>;
-  readonly reloadConversations: () => Promise<void>;
+  readonly reconnect: () => Promise<void>;
+  readonly queueMessage: (text: string) => void;
+  readonly addResource: (resource: ResourceRef) => void;
+  readonly removeResource: (resource: ResourceRef) => void;
+  readonly removeQueuedMessage: (id: string) => void;
+  readonly sendNextQueued: () => Promise<void>;
+  readonly restoreUnsentMessage: () => void;
+  readonly continueTask: (text: string) => Promise<boolean>;
 }
 
 const AssistantHarnessContext = createContext<AssistantHarnessContextValue | null>(null);
 
-export function AssistantRuntimeProvider({ children }: PropsWithChildren) {
+export function AssistantRuntimeProvider({
+  children,
+  sessionId,
+}: PropsWithChildren<{ sessionId: string }>) {
   const {
     runtime,
     projection,
-    deleteMemory,
-    newConversation,
-    selectConversation,
-    reloadConversations,
-  } = useAssistantHarnessRuntime();
+    selectModel,
+    reconnect,
+    queueMessage,
+    removeQueuedMessage,
+    sendNextQueued,
+    restoreUnsentMessage,
+    addResource,
+    removeResource,
+    continueTask,
+  } = useAssistantHarnessRuntime(sessionId);
   const context = useMemo(
-    () => ({ projection, deleteMemory, newConversation, selectConversation, reloadConversations }),
-    [projection, deleteMemory, newConversation, selectConversation, reloadConversations],
+    () => ({
+      projection,
+      selectModel,
+      reconnect,
+      queueMessage,
+      removeQueuedMessage,
+      sendNextQueued,
+      restoreUnsentMessage,
+      addResource,
+      removeResource,
+      continueTask,
+    }),
+    [
+      projection,
+      selectModel,
+      reconnect,
+      queueMessage,
+      removeQueuedMessage,
+      sendNextQueued,
+      restoreUnsentMessage,
+      addResource,
+      removeResource,
+      continueTask,
+    ],
   );
 
   return (
@@ -53,10 +90,15 @@ export function useAssistantHarnessActions(): Omit<AssistantHarnessContextValue,
   if (!context) throw new Error("AssistantRuntimeProvider is missing");
   return useMemo(
     () => ({
-      deleteMemory: context.deleteMemory,
-      newConversation: context.newConversation,
-      selectConversation: context.selectConversation,
-      reloadConversations: context.reloadConversations,
+      selectModel: context.selectModel,
+      reconnect: context.reconnect,
+      queueMessage: context.queueMessage,
+      removeQueuedMessage: context.removeQueuedMessage,
+      sendNextQueued: context.sendNextQueued,
+      restoreUnsentMessage: context.restoreUnsentMessage,
+      addResource: context.addResource,
+      removeResource: context.removeResource,
+      continueTask: context.continueTask,
     }),
     [context],
   );

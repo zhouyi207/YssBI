@@ -1,3 +1,7 @@
+import { LanguageModelSettings } from "./LanguageModelSettings";
+import { KnowledgeSettings } from "./KnowledgeSettings";
+import { SettingsField } from "./SettingsField";
+import { SettingsPage } from "./SettingsPage";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   VscClose,
@@ -11,7 +15,13 @@ import { useTranslation } from "react-i18next";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { settingsUi } from "@/features/core/settings/ui";
 import { useSettingsReset } from "@/features/application/settings/useSettingsReset";
-import { Select } from "@/shared/ui";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -33,12 +43,12 @@ export function SettingsDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         aria-describedby={undefined}
-        className="flex h-[min(720px,88dvh)] max-w-[min(1000px,92vw)] flex-col gap-0 rounded-md bg-[var(--workbench-bg)] p-0 motion-reduce:animate-none max-[720px]:h-[92dvh] max-[720px]:max-w-[96vw]"
+        className="flex h-[min(760px,88dvh)] max-w-[min(1000px,92vw)] flex-col gap-0 bg-background p-0 motion-reduce:animate-none max-[720px]:h-[92dvh] max-[720px]:max-w-[96vw]"
       >
         <div className="settings-header">
           <div className="settings-title">
             <VscSettingsGear aria-hidden="true" />
-            <DialogTitle className="text-xs font-medium normal-case tracking-normal">
+            <DialogTitle className="text-sm font-semibold normal-case tracking-normal">
               {t("settings.title")}
             </DialogTitle>
           </div>
@@ -46,7 +56,7 @@ export function SettingsDialog({
             type="button"
             variant="ghost"
             size="icon"
-            className="settings-close"
+            className="text-muted-foreground"
             aria-label={t("settings.close")}
             title={t("settings.close")}
             onClick={onClose}
@@ -64,10 +74,8 @@ export function SettingsDialog({
 
 export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }) => {
   const { t } = useTranslation();
-  const ai = useSettingsRead((s) => s.ai);
   const appearance = useSettingsRead((s) => s.appearance);
   const isLoading = useSettingsRead((s) => s.isLoading);
-  const updateAi = settingsUi.updateAi;
   const updateAppearance = settingsUi.updateAppearance;
   const { resetSettings, isResetPending, isResetting, resetAllError, sectionResetError } =
     useSettingsReset(modalId);
@@ -77,6 +85,7 @@ export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }
 
   const sections = [
     { id: "ai", label: t("settings.sections.ai"), icon: VscSparkle },
+    { id: "knowledge", label: t("settings.knowledge.title"), icon: VscSearch },
     { id: "appearance", label: t("settings.sections.appearance"), icon: VscColorMode },
   ];
 
@@ -128,115 +137,90 @@ export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }
     );
   }
 
+  const currentSectionError =
+    visibleSections.length > 0 && sectionResetError?.section === activeSection
+      ? sectionResetError.message
+      : null;
+  const pageNotice =
+    resetAllError || currentSectionError ? (
+      <>
+        {resetAllError && (
+          <Alert data-settings-reset-all-error variant="destructive">
+            <VscError aria-hidden="true" />
+            <AlertDescription className="text-destructive">{resetAllError}</AlertDescription>
+          </Alert>
+        )}
+        {currentSectionError && (
+          <Alert data-settings-section-reset-error variant="destructive">
+            <VscError aria-hidden="true" />
+            <AlertDescription className="text-destructive">{currentSectionError}</AlertDescription>
+          </Alert>
+        )}
+      </>
+    ) : null;
+
   const renderContent = () => {
     switch (activeSection) {
       case "ai":
-        return (
-          <div className="space-y-8">
-            <div>
-              <div className="settings-section-heading">
-                <div>
-                  <h2>{t("settings.sections.ai")}</h2>
-                  <p>{t("settings.sectionDescriptions.ai")}</p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => resetSettings("ai")}
-                  disabled={isResetPending}
-                >
-                  {t("common.restoreDefaults")}
-                </Button>
-              </div>
-              <div className="settings-fields">
-                <SettingItem
-                  label={t("settings.labels.openAiModel")}
-                  description={t("settings.descriptions.openAiModel")}
-                  type="text"
-                  value={ai.openAiModel}
-                  onChange={(value) => updateAi({ openAiModel: value })}
-                  placeholder="gpt-4o-mini"
-                />
-                <SettingItem
-                  label={t("settings.labels.openAiBaseUrl")}
-                  description={t("settings.descriptions.openAiBaseUrl")}
-                  type="text"
-                  value={ai.openAiBaseUrl}
-                  onChange={(value) => updateAi({ openAiBaseUrl: value })}
-                  placeholder="https://api.openai.com/v1"
-                />
-                <SettingItem
-                  label={t("settings.labels.openAiApiKey")}
-                  description={t("settings.descriptions.openAiApiKey")}
-                  type="password"
-                  value={ai.openAiApiKey}
-                  onChange={(value) => updateAi({ openAiApiKey: value })}
-                  placeholder="sk-..."
-                />
-              </div>
-            </div>
-          </div>
-        );
+        return <LanguageModelSettings notice={pageNotice} />;
+      case "knowledge":
+        return <KnowledgeSettings notice={pageNotice} />;
       case "appearance":
         return (
-          <div className="space-y-8">
-            <div>
-              <div className="settings-section-heading">
-                <div>
-                  <h2>{t("settings.sections.appearance")}</h2>
-                  <p>{t("settings.sectionDescriptions.appearance")}</p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => resetSettings("appearance")}
-                  disabled={isResetPending}
-                >
-                  {t("common.restoreDefaults")}
-                </Button>
-              </div>
-              <div className="settings-fields">
-                <SettingItem
-                  label={t("settings.labels.colorTheme")}
-                  description={t("settings.descriptions.colorTheme")}
-                  type="select"
-                  options={themeOptions}
-                  value={appearance.colorTheme}
-                  onChange={(val) => updateAppearance({ colorTheme: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.language")}
-                  description={t("settings.descriptions.language")}
-                  type="select"
-                  options={languageOptions}
-                  value={appearance.language}
-                  onChange={(val) => {
-                    updateAppearance({ language: val as AppLanguage });
-                  }}
-                />
+          <SettingsPage
+            breadcrumbs={[{ label: t("settings.sections.appearance") }]}
+            actions={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => resetSettings("appearance")}
+                disabled={isResetPending}
+              >
+                {t("common.restoreDefaults")}
+              </Button>
+            }
+            notice={pageNotice}
+          >
+            <div className="settings-fields">
+              <SettingItem
+                label={t("settings.labels.colorTheme")}
+                description={t("settings.descriptions.colorTheme")}
+                type="select"
+                options={themeOptions}
+                value={appearance.colorTheme}
+                onChange={(val) => updateAppearance({ colorTheme: val })}
+              />
+              <SettingItem
+                label={t("settings.labels.language")}
+                description={t("settings.descriptions.language")}
+                type="select"
+                options={languageOptions}
+                value={appearance.language}
+                onChange={(val) => {
+                  updateAppearance({ language: val as AppLanguage });
+                }}
+              />
 
-                <SettingItem
-                  label={t("settings.labels.titleBarStyle")}
-                  description={t("settings.descriptions.titleBarStyle")}
-                  type="select"
-                  options={titleBarStyleOptions}
-                  value={appearance.titleBarStyle}
-                  onChange={(val) => {
-                    updateAppearance({ titleBarStyle: val as "custom" | "native" });
-                  }}
-                />
-                <SettingItem
-                  label={t("settings.labels.smoothScroll")}
-                  description={t("settings.descriptions.smoothScroll")}
-                  type="checkbox"
-                  checked={appearance.smoothScroll}
-                  onChange={(val) => updateAppearance({ smoothScroll: val })}
-                />
-              </div>
+              <SettingItem
+                label={t("settings.labels.titleBarStyle")}
+                description={t("settings.descriptions.titleBarStyle")}
+                type="select"
+                options={titleBarStyleOptions}
+                value={appearance.titleBarStyle}
+                onChange={(val) => {
+                  updateAppearance({ titleBarStyle: val as "custom" | "native" });
+                }}
+              />
+              <SettingItem
+                label={t("settings.labels.smoothScroll")}
+                description={t("settings.descriptions.smoothScroll")}
+                type="checkbox"
+                checked={appearance.smoothScroll}
+                onChange={(val) => updateAppearance({ smoothScroll: val })}
+              />
             </div>
-          </div>
+          </SettingsPage>
         );
       default:
         return null;
@@ -245,15 +229,6 @@ export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }
 
   return (
     <div className="settings-view">
-      {resetAllError ? (
-        <div className="shrink-0 px-6 pt-4">
-          <Alert data-settings-reset-all-error variant="destructive">
-            <VscError aria-hidden="true" />
-            <AlertDescription className="text-destructive">{resetAllError}</AlertDescription>
-          </Alert>
-        </div>
-      ) : null}
-
       <div className="settings-body">
         {/* Sidebar Navigation */}
         <aside className="settings-sidebar">
@@ -265,7 +240,7 @@ export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("settings.searchPlaceholder")}
               aria-label={t("settings.searchPlaceholder")}
-              className="h-7 pl-7"
+              className="pl-9"
             />
           </div>
           <ScrollArea className="min-h-0 flex-1" orientation="vertical">
@@ -292,26 +267,19 @@ export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }
               onClick={() => resetSettings("all")}
               disabled={isResetPending}
             >
-              {isResetting ? t("common.restoring") : t("common.restoreAllDefaults")}
+              {isResetting ? t("common.restoring") : t("settings.restorePreferences")}
             </Button>
           </div>
         </aside>
 
         {/* Main Content Area */}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ScrollArea className="flex-1 min-h-0" orientation="vertical">
-            <div className="settings-content">
-              {visibleSections.length > 0 && sectionResetError?.section === activeSection ? (
-                <Alert data-settings-section-reset-error variant="destructive">
-                  <VscError aria-hidden="true" />
-                  <AlertDescription className="text-destructive">
-                    {sectionResetError.message}
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-              {visibleSections.length > 0 ? (
-                renderContent()
-              ) : (
+          {visibleSections.length > 0 ? (
+            renderContent()
+          ) : (
+            <ScrollArea className="flex-1 min-h-0" orientation="vertical">
+              <div className="settings-content">
+                {pageNotice}
                 <div className="settings-empty" role="status">
                   <VscSearch aria-hidden="true" />
                   <h2>{t("settings.noResults")}</h2>
@@ -320,9 +288,9 @@ export const SettingsView: React.FC<{ readonly modalId: string }> = ({ modalId }
                     {t("settings.clearSearch")}
                   </Button>
                 </div>
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            </ScrollArea>
+          )}
         </main>
       </div>
     </div>
@@ -358,51 +326,40 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
   const controlId = React.useId();
 
   return (
-    <div className="settings-field">
-      <label htmlFor={controlId} className="mb-1.5 block text-sm font-medium text-foreground">
-        {label}
-      </label>
-      <div
-        id={`${controlId}-description`}
-        className="text-xs text-muted-foreground mb-3 leading-relaxed max-w-2xl"
-      >
-        {description}
-      </div>
-
-      <div className="settings-control">
-        {type === "checkbox" && (
-          <Switch
-            className="settings-switch"
-            id={controlId}
-            aria-describedby={`${controlId}-description`}
-            checked={props.checked}
-            onCheckedChange={(value) => props.onChange(value === true)}
-          />
-        )}
-        {(type === "text" || type === "password") && (
-          <Input
-            id={controlId}
-            type={type}
-            aria-describedby={`${controlId}-description`}
-            value={props.value}
-            onChange={(e) => props.onChange(e.target.value)}
-            placeholder={placeholder}
-            autoComplete={type === "password" ? "off" : undefined}
-            className="settings-input"
-          />
-        )}
-        {type === "select" && (
-          <div className="w-full">
-            <Select
-              id={controlId}
-              className="settings-input"
-              options={props.options}
-              value={props.value}
-              onChange={(val) => props.onChange(val)}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+    <SettingsField htmlFor={controlId} label={label} description={description}>
+      {type === "checkbox" && (
+        <Switch
+          id={controlId}
+          aria-describedby={`${controlId}-description`}
+          checked={props.checked}
+          onCheckedChange={(value) => props.onChange(value === true)}
+        />
+      )}
+      {(type === "text" || type === "password") && (
+        <Input
+          id={controlId}
+          type={type}
+          aria-describedby={`${controlId}-description`}
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete={type === "password" ? "off" : undefined}
+        />
+      )}
+      {type === "select" && (
+        <Select value={props.value} onValueChange={props.onChange}>
+          <SelectTrigger id={controlId} aria-describedby={`${controlId}-description`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {props.options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </SettingsField>
   );
 };

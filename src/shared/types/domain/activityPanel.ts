@@ -1,7 +1,7 @@
 import { FILE_RESOURCE_KINDS, type FileResourceKind } from "./resource";
 import type { NodeCreationDescriptorDto } from "./nodeCreationDescriptor";
 
-export type ActivityPanelId = "project" | "nodes" | "commands" | "plugins";
+export type ActivityPanelId = "project" | "nodes" | "commands" | "plugins" | "assistant";
 export const PROJECT_ACTIVITY_PANEL_IDS = ["project", "nodes"] as const;
 export type ProjectActivityPanelId = (typeof PROJECT_ACTIVITY_PANEL_IDS)[number];
 export type ActivityText = { readonly key: string } | { readonly text: string };
@@ -12,6 +12,7 @@ export type ActivityActionId =
   | "newMind"
   | "newDoc"
   | "importData"
+  | "newConversation"
   | "install"
   | "refresh";
 export interface ActivityTool {
@@ -29,6 +30,7 @@ export function isActivityFileItem(item: ActivityItem): item is ActivityFileItem
 }
 export type ActivityItem =
   | ActivityFileItem
+  | ActivityConversationItem
   | {
       readonly kind: "database";
       readonly id: string;
@@ -51,6 +53,12 @@ export type ActivityItem =
       readonly publisher: string;
       readonly enabled: boolean;
     };
+export interface ActivityConversationItem {
+  readonly kind: "conversation";
+  readonly sessionId: string;
+  readonly title: string;
+  readonly lastOpenedAt: number;
+}
 export type ActivityPanelRow = { readonly id: string; readonly depth: number } & (
   | {
       readonly kind: "category";

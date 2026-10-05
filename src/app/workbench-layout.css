@@ -6,6 +6,7 @@
   isolation: isolate;
   --flexlayout-font-size: 12px;
   --flexlayout-splitter-size: 6px;
+  --workbench-status-icon-button-size: 24px;
 }
 
 /* Keep host actions and native group controls on the same icon and hit-target scale. */
@@ -23,6 +24,47 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+}
+
+/* Bottom-bar controls share a square target and theme-aware toggle states. */
+.workbench-layout-host .workbench-status-icon-button {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: var(--workbench-status-icon-button-size);
+  height: var(--workbench-status-icon-button-size);
+  flex-shrink: 0;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  color: var(--muted-foreground);
+  background-color: transparent;
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    color: var(--primary);
+    background-color: var(--interactive-active);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  > svg {
+    flex-shrink: 0;
+  }
+}
+@media (hover: hover) {
+  .workbench-layout-host .workbench-status-icon-button:hover:not(:disabled) {
+    color: var(--foreground);
+    background-color: var(--interactive-hover);
+
+    &[aria-pressed="true"] {
+      color: var(--primary);
+      background-color: var(--interactive-hover-strong);
+    }
+  }
 }
 
 /* Match ContextMenu styling while preserving native overflow selection and drag-out. */
@@ -88,11 +130,33 @@
     display: grid !important;
     grid-template-columns: subgrid;
     > .flexlayout__border_leading {
-      grid-area: 1 / 1;
-      justify-content: center;
+      grid-area: 1 / 1 / 2 / 5;
+      position: relative;
+      display: grid;
+      grid-template-columns: subgrid;
+      pointer-events: none;
+      > [data-workbench-settings] {
+        grid-area: 1 / 1;
+        justify-self: center;
+        pointer-events: auto;
+      }
+      > [data-workbench-conversation-toggle] {
+        position: absolute;
+        grid-column: 2;
+        inset-inline-start: 0;
+        pointer-events: auto;
+        z-index: 1;
+        &[data-open="true"] {
+          grid-column: 4;
+        }
+      }
     }
     > .flexlayout__mini_scrollbar_container {
       grid-area: 1 / 4;
+    }
+    &:has([data-workbench-conversation-toggle][data-open="true"])
+      > .flexlayout__mini_scrollbar_container {
+      margin-left: var(--workbench-status-icon-button-size);
     }
     > .flexlayout__border_toolbar_bottom {
       grid-area: 1 / 5;
@@ -143,12 +207,29 @@
       }
     }
   }
+  /* When the sidebar is folded, the toggle and native tabs start in the same column. */
+  &:not(
+      :has(
+        > .flexlayout__layout_border_container_inner
+          > .flexlayout__border_left
+          [aria-selected="true"]
+      )
+    )
+    > .flexlayout__border_bottom:has([data-workbench-conversation-toggle])
+    > .flexlayout__mini_scrollbar_container {
+    margin-left: var(--workbench-status-icon-button-size);
+  }
 }
 .workbench-tab-label {
   display: inline-flex;
   min-width: 0;
   align-items: center;
   gap: 7px;
+}
+/* The workspace host only places the embedded top layout beside the AI column. */
+.workbench-layout-host .workbench-workspace-content {
+  border: 0;
+  border-radius: 0;
 }
 .workbench-tab-label > svg {
   flex-shrink: 0;

@@ -2,10 +2,11 @@ import {
   useExternalStoreRuntime,
   type AppendMessage,
   type ThreadMessageLike,
+  MessageNotSentError,
 } from "@assistant-ui/react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useStore } from "zustand";
-import { useSettingsRead } from "@/features/core/settings/read";
+import { useAssistantModels } from "./assistantModels";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { AssistantHarnessProjection } from "./assistantHarnessSession";
 import type { ProjectionMessage } from "./assistantHarnessProjection";
@@ -16,6 +17,14 @@ function convertProjectionMessage(message: ProjectionMessage): ThreadMessageLike
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
+    metadata: {
+      custom: {
+        finishedAt: message.finishedAt,
+        updatedAt: message.updatedAt,
+        model: message.model,
+        resources: message.resources,
+      },
+    },
     ...(message.role === "assistant" ? { status: message.status } : {}),
   };
 }
@@ -31,38 +40,27 @@ function appendedText(message: AppendMessage): string {
     .trim();
 }
 
-export function useAssistantHarnessRuntime() {
+export function useAssistantHarnessRuntime(sessionId: string) {
   const projectionRef = useRef<AssistantHarnessProjection | null>(null);
   projectionRef.current ??= new AssistantHarnessProjection();
   const projection = projectionRef.current;
-  const ai = useSettingsRead((state) => state.ai);
+  const models = useAssistantModels();
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  const isLoading = useSettingsRead((state) => state.isLoading);
   const snapshot = useStore(projection);
   useEffect(() => {
-    void projection.start();
+    void projection.start(sessionId);
     return projection.stop;
-  }, [projection, projectInstanceId]);
+  }, [projection, projectInstanceId, sessionId]);
   useEffect(() => {
-    if (isLoading || !snapshot.sessionId) return;
-    projection.invalidateProvider();
-    const timer = window.setTimeout(() => {
-      void projection.syncProvider(ai.openAiModel, ai.openAiBaseUrl, ai.openAiApiKey);
-    }, 300);
-    return () => {
-      window.clearTimeout(timer);
-      projection.invalidateProvider();
-    };
-  }, [
-    ai.openAiApiKey,
-    ai.openAiBaseUrl,
-    ai.openAiModel,
-    isLoading,
-    projection,
-    snapshot.sessionId,
-  ]);
+    projection.updateModels(models.catalog);
+  }, [projection, models.catalog, snapshot.sessionId]);
   const submit = useCallback(
-    (message: AppendMessage) => projection.submit(appendedText(message)),
+    async (message: AppendMessage) => {
+      const sessionId = projection.getState().sessionId;
+      const accepted = await projection.submit(appendedText(message));
+      if (!accepted && sessionId === projection.getState().sessionId)
+        throw new MessageNotSentError();
+    },
     [projection],
   );
   const runtime = useExternalStoreRuntime({
@@ -73,24 +71,42 @@ export function useAssistantHarnessRuntime() {
     onNew: submit,
     onCancel: projection.cancel,
   });
-  const drafts = useRef(new Map<string, string>());
-  const draftSessionId = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (draftSessionId.current === snapshot.sessionId) return;
-    if (draftSessionId.current)
-      drafts.current.set(draftSessionId.current, runtime.thread.composer.getState().text);
-    runtime.thread.composer.setText(
-      snapshot.sessionId ? (drafts.current.get(snapshot.sessionId) ?? "") : "",
-    );
-    draftSessionId.current = snapshot.sessionId;
+    const key = snapshot.sessionId ? `yssbi.assistant.draft.${snapshot.sessionId}` : null;
+    let draft = "";
+    try {
+      draft = key ? (localStorage.getItem(key) ?? "") : "";
+    } catch {
+      /* Storage may be unavailable. */
+    }
+    runtime.thread.composer.setText(draft);
+    if (!key) return;
+    let previous = draft;
+    const persist = () => {
+      const text = runtime.thread.composer.getState().text;
+      if (text === previous) return;
+      previous = text;
+      try {
+        if (text) localStorage.setItem(key, text);
+        else localStorage.removeItem(key);
+      } catch {
+        /* Keep the current composer usable when local storage is full. */
+      }
+    };
+    return runtime.thread.composer.subscribe(persist);
   }, [runtime, snapshot.sessionId]);
   return {
     runtime,
     snapshot,
     projection,
-    deleteMemory: projection.deleteMemory,
-    newConversation: projection.newConversation,
-    selectConversation: projection.selectConversation,
-    reloadConversations: projection.start,
+    selectModel: projection.selectModel,
+    reconnect: useCallback(() => projection.start(sessionId), [projection, sessionId]),
+    queueMessage: projection.queueMessage,
+    removeQueuedMessage: projection.removeQueuedMessage,
+    sendNextQueued: projection.sendNextQueued,
+    restoreUnsentMessage: projection.restoreUnsentMessage,
+    addResource: projection.addResource,
+    removeResource: projection.removeResource,
+    continueTask: projection.submit,
   };
 }

@@ -1,0 +1,16 @@
+{
+  "sources": [
+    {
+      "sourceId": "project-doc-example",
+      "title": "Methods",
+      "path": "docs/Methods.md",
+      "status": "ready",
+      "updatedAt": 1000
+    }
+  ],
+  "citation": {
+    "text": "Residual diagnostics and uncertainty.",
+    "resource": { "kind": "doc", "id": "docs/Methods.md" }
+  },
+  "builtin": { "text": "Built-in statistical methods.", "resource": null }
+}

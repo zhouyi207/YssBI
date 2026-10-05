@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_AI, DEFAULT_APPEARANCE } from "@/shared/config-default";
+import { DEFAULT_APPEARANCE } from "@/shared/config-default";
 import {
   COLOR_THEME_PRESETS,
   DEFAULT_DARK_THEME,
@@ -36,15 +36,12 @@ const APPEARANCE_KEYS = [
   "titleBarStyle",
 ];
 
-const AI_KEYS = ["openAiApiKey", "openAiBaseUrl", "openAiModel"];
-
 describe("settingsStore appearance persistence", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
     setClientSettingsPublisher(null);
     useSettingsStore.setState({
-      ai: DEFAULT_AI,
       appearance: DEFAULT_APPEARANCE,
       isLoading: true,
     });
@@ -62,17 +59,20 @@ describe("settingsStore appearance persistence", () => {
     const listener = vi.fn(() => observations.push(getSettingsSnapshot()));
     const unsubscribe = subscribeSettingsRead(listener);
     try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ai: { openAiModel: "loaded" } }));
+      localStorage.setItem(
+        SETTINGS_STORAGE_KEY,
+        JSON.stringify({ appearance: { language: "en-US" } }),
+      );
       await useSettingsStore.getState().load();
       expect(listener).toHaveBeenCalledOnce();
       expect(observations.map((snapshot) => snapshot.isLoading)).toEqual([false]);
-      expect(getSettingsSnapshot().ai.openAiModel).toBe("loaded");
-      expect(getSettingsSnapshot().appearance).toBe(before.appearance);
-      expect(before.ai.openAiModel).toBe(DEFAULT_AI.openAiModel);
+      expect(getSettingsSnapshot().appearance.language).toBe("en-US");
+      expect(getSettingsSnapshot().theme).toBe(before.theme);
+      expect(before.appearance.language).toBe(DEFAULT_APPEARANCE.language);
 
       const loaded = getSettingsSnapshot();
       await useSettingsStore.getState().load();
-      useSettingsStore.getState().updateAi({ openAiModel: "loaded" });
+      useSettingsStore.getState().updateAppearance({ language: "en-US" });
       await useSettingsStore.getState().save();
       expect(listener).toHaveBeenCalledOnce();
       expect(getSettingsSnapshot()).toBe(loaded);
@@ -83,7 +83,7 @@ describe("settingsStore appearance persistence", () => {
 
   it("keeps local pending fields and untouched branches when receiving remote settings", async () => {
     await useSettingsStore.getState().load();
-    useSettingsStore.getState().updateAi({ openAiModel: "pending" });
+    useSettingsStore.getState().updateAppearance({ smoothScroll: false });
     const pending = getSettingsSnapshot();
     const publisher = vi.fn();
     setClientSettingsPublisher(publisher);
@@ -91,11 +91,11 @@ describe("settingsStore appearance persistence", () => {
     const unsubscribe = subscribeSettingsRead(listener);
     try {
       applyClientSettingsFromRemote({
-        ai: { openAiModel: "remote" },
-        appearance: { language: "en-US" },
+        appearance: { language: "en-US", smoothScroll: true },
       });
       const remote = getSettingsSnapshot();
-      expect(remote.ai).toBe(pending.ai);
+      expect(remote.theme).toBe(pending.theme);
+      expect(remote.appearance.smoothScroll).toBe(false);
       expect(remote.appearance.language).toBe("en-US");
       expect(pending.appearance.language).toBe(DEFAULT_APPEARANCE.language);
       expect(listener).toHaveBeenCalledOnce();
@@ -105,12 +105,12 @@ describe("settingsStore appearance persistence", () => {
       expect(getSettingsSnapshot()).toBe(remote);
       expect(listener).toHaveBeenCalledOnce();
       expect(publisher).toHaveBeenCalledOnce();
-      expect(publisher.mock.calls[0][0].ai).toEqual({ openAiModel: "pending" });
+      expect(publisher.mock.calls[0][0].appearance).toEqual({ smoothScroll: false });
       expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!).appearance.language).toBe(
         "en-US",
       );
-      expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!).ai.openAiModel).toBe(
-        "pending",
+      expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!).appearance.smoothScroll).toBe(
+        false,
       );
     } finally {
       unsubscribe();
@@ -130,35 +130,18 @@ describe("settingsStore appearance persistence", () => {
     await useSettingsStore.getState().save();
 
     const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}");
-    expect(Object.keys(saved).sort()).toEqual(["ai", "appearance"]);
+    expect(Object.keys(saved).sort()).toEqual(["appearance"]);
     expect(saved.appearance.colorTheme).toBe("OLED Black");
   });
 
-  it("persists the OpenAI model and API key settings", async () => {
+  it("keeps provider credentials out of client preference storage", async () => {
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        ai: {
-          openAiModel: "gpt-test",
-          openAiBaseUrl: "https://example.test/v1",
-          openAiApiKey: "sk-test",
-        },
-      }),
+      JSON.stringify({ ai: { openAiApiKey: "secret" }, appearance: { language: "en-US" } }),
     );
-
     await useSettingsStore.getState().load();
-
-    expect(useSettingsStore.getState().ai).toEqual({
-      openAiApiKey: "sk-test",
-      openAiBaseUrl: "https://example.test/v1",
-      openAiModel: "gpt-test",
-    });
-    await useSettingsStore.getState().save();
-
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}") as {
-      ai?: Record<string, unknown>;
-    };
-    expect(Object.keys(saved.ai ?? {}).sort()).toEqual([...AI_KEYS].sort());
+    expect(getSettingsSnapshot().appearance.language).toBe("en-US");
+    expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)!)).not.toHaveProperty("ai");
   });
 
   it("switches and remembers presets atomically, reuses palettes, and resets via appearance", async () => {
@@ -181,19 +164,17 @@ describe("settingsStore appearance persistence", () => {
       const palette = getSettingsSnapshot().theme;
       expect(palette).toBe(COLOR_THEME_PRESETS["OLED Black"]);
 
-      settingsUi.updateAi({ openAiModel: "gpt-test" });
+      settingsUi.updateAppearance({ smoothScroll: false });
       expect(getSettingsSnapshot().theme).toBe(palette);
       expect(Object.isFrozen(palette)).toBe(true);
 
       await settingsUi.resetAppearanceToDefaults();
       expect(getSettingsSnapshot().theme).toBe(DEFAULT_DARK_THEME);
       expect(getSettingsSnapshot().appearance).toEqual(DEFAULT_APPEARANCE);
-      expect(getSettingsSnapshot().ai.openAiModel).toBe("gpt-test");
 
       settingsUi.updateAppearance({ colorTheme: "Light Modern" });
       await settingsUi.resetAllToDefaults();
       expect(getSettingsSnapshot().theme).toBe(DEFAULT_DARK_THEME);
-      expect(getSettingsSnapshot().ai).toEqual(DEFAULT_AI);
     } finally {
       unsubscribe();
     }

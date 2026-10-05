@@ -1,14 +1,9 @@
-import type { AiSettings, AppearanceSettings, PartialAppSettings } from "./index";
+import type { AppearanceSettings, PartialAppSettings } from "./index";
 import { SUPPORTED_LANGUAGES } from "./LanguageSettings";
 
 type Validators<T> = { [K in keyof T]-?: (value: unknown) => boolean };
 const isString = (value: unknown) => typeof value === "string";
 const fields = {
-  ai: {
-    openAiApiKey: isString,
-    openAiBaseUrl: isString,
-    openAiModel: isString,
-  } satisfies Validators<AiSettings>,
   appearance: {
     colorTheme: isString,
     lastLightColorTheme: isString,
@@ -27,7 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseSettingsPatch(value: unknown): PartialAppSettings | null {
   if (!isRecord(value)) return null;
   const result: Record<string, Record<string, unknown>> = {};
-  for (const section of ["ai", "appearance"] as const) {
+  for (const section of ["appearance"] as const) {
     if (!Object.prototype.hasOwnProperty.call(value, section)) continue;
     const input = value[section];
     if (!isRecord(input)) return null;
