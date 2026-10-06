@@ -18,6 +18,9 @@ use yss_relational_contract::{
 
 use crate::{DataFusionRuntime, ordered_user_frame};
 
+mod query;
+pub use query::DatasetRowsQuery;
+
 pub struct DatasetQuery {
     pub(crate) frame: DataFrame,
     pub(crate) schema: SchemaRef,
@@ -28,9 +31,15 @@ pub struct DatasetQuery {
 }
 
 pub struct DatasetQueryPage {
+    pub schema: SchemaRef,
     pub batches: Vec<RecordBatch>,
     pub row_count: usize,
     pub has_more: bool,
+}
+
+pub struct DatasetOrderNeighbors {
+    pub left: Option<String>,
+    pub right: Option<String>,
 }
 
 pub(crate) fn column(relation: Option<&str>, name: &str) -> Expr {
@@ -420,23 +429,16 @@ impl DatasetQuery {
         limit: usize,
         control: &RelationControl,
     ) -> Result<DatasetQueryPage, RelationError> {
-        if limit == 0 {
-            return Err(RelationError::InvalidInput);
-        }
-        let rows = yss_database_arrow::dataset_row_columns(&self.schema)
-            .map_err(|_| RelationError::InvalidInput)?
-            .ok_or(RelationError::InvalidInput)?;
-        let probe = limit.checked_add(1).ok_or(RelationError::InvalidInput)?;
-        let frame = self
-            .frame
-            .clone()
-            .sort(vec![
-                column(None, &rows.display_order).sort(true, false),
-                column(None, &rows.row_id).sort(true, false),
-            ])
-            .map_err(|_| RelationError::InvalidPlan)?;
-        let frame = crate::limit_frame(frame, offset, probe, self.ordered_single_file)?;
-        self.read_bounded(frame, limit, control)
+        self.page_query(
+            &DatasetRowsQuery {
+                columns: vec![],
+                filters: vec![],
+                order: vec![],
+                offset,
+                limit,
+            },
+            control,
+        )
     }
 
     pub fn contains_rows(
@@ -510,22 +512,91 @@ impl DatasetQuery {
             .and_then(|frame| frame.limit(0, Some(1)))
             .map_err(|_| RelationError::InvalidPlan)?;
         Ok(self
-            .read_bounded(frame, 1, control)?
+            .read_bounded(frame, self.schema.clone(), 1, control)?
             .batches
             .into_iter()
             .find(|batch| batch.num_rows() > 0))
     }
 
+    /// Neighbor order keys from the effective snapshot; None means a missing anchor.
+    pub fn insertion_neighbors(
+        &self,
+        before_row_id: Option<i64>,
+        control: &RelationControl,
+    ) -> Result<Option<DatasetOrderNeighbors>, RelationError> {
+        let rows = yss_database_arrow::dataset_row_columns(&self.schema)
+            .map_err(|_| RelationError::InvalidInput)?
+            .ok_or(RelationError::InvalidInput)?;
+        let read_order = |frame: DataFrame| -> Result<Option<String>, RelationError> {
+            let frame = frame
+                .select([column(None, &rows.display_order)])
+                .and_then(|frame| frame.limit(0, Some(1)))
+                .map_err(|_| RelationError::InvalidPlan)?;
+            let index = self
+                .schema
+                .index_of(&rows.display_order)
+                .map_err(|_| RelationError::InvalidInput)?;
+            let schema = Arc::new(
+                self.schema
+                    .project(&[index])
+                    .map_err(|_| RelationError::InvalidInput)?,
+            );
+            let page = self.read_bounded(frame, schema, 1, control)?;
+            let Some(batch) = page.batches.first() else {
+                return Ok(None);
+            };
+            let values = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<arrow::array::StringArray>()
+                .ok_or(RelationError::InvalidInput)?;
+            Ok(Some(values.value(0).to_owned()))
+        };
+        let right = if let Some(id) = before_row_id {
+            let frame = self
+                .frame
+                .clone()
+                .filter(
+                    column(None, &rows.row_id)
+                        .eq(Expr::Literal(ScalarValue::Int64(Some(id)), None)),
+                )
+                .map_err(|_| RelationError::InvalidPlan)?;
+            match read_order(frame)? {
+                Some(order) => Some(order),
+                None => return Ok(None),
+            }
+        } else {
+            None
+        };
+        let mut frame = self.frame.clone();
+        if let Some(right) = &right {
+            frame = frame
+                .filter(
+                    column(None, &rows.display_order)
+                        .lt(Expr::Literal(ScalarValue::Utf8(Some(right.clone())), None)),
+                )
+                .map_err(|_| RelationError::InvalidPlan)?;
+        }
+        let frame = frame
+            .sort(vec![column(None, &rows.display_order).sort(false, false)])
+            .map_err(|_| RelationError::InvalidPlan)?;
+        Ok(Some(DatasetOrderNeighbors {
+            left: read_order(frame)?,
+            right,
+        }))
+    }
+
     fn read_bounded(
         &self,
         frame: DataFrame,
+        schema: SchemaRef,
         limit: usize,
         control: &RelationControl,
     ) -> Result<DatasetQueryPage, RelationError> {
         let mut batches = Vec::new();
         let mut count = 0usize;
         let mut bytes = 0usize;
-        self.visit(frame, control, &mut |batch| {
+        self.visit(frame, schema.clone(), control, &mut |batch| {
             bytes = bytes
                 .checked_add(batch.get_array_memory_size())
                 .ok_or(RelationError::MemoryLimitExceeded)?;
@@ -542,10 +613,39 @@ impl DatasetQuery {
             Ok(())
         })?;
         Ok(DatasetQueryPage {
+            schema,
             batches,
             row_count: count.min(limit),
             has_more: count > limit,
         })
+    }
+
+    /// Stream only selected fields. Validation does not require display ordering.
+    pub fn visit_columns(
+        &self,
+        columns: &[&str],
+        control: &RelationControl,
+        visitor: &mut dyn FnMut(RecordBatch) -> Result<(), RelationError>,
+    ) -> Result<(), RelationError> {
+        let fields = columns
+            .iter()
+            .map(|name| {
+                self.schema
+                    .field_with_name(name)
+                    .cloned()
+                    .map_err(|_| RelationError::InvalidInput)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let schema = Arc::new(Schema::new_with_metadata(
+            fields,
+            self.schema.metadata().clone(),
+        ));
+        let frame = self
+            .frame
+            .clone()
+            .select(columns.iter().map(|name| column(None, name)))
+            .map_err(|_| RelationError::InvalidPlan)?;
+        self.visit(frame, schema, control, visitor)
     }
 
     pub fn visit_batches(
@@ -564,12 +664,13 @@ impl DatasetQuery {
                 column(None, &rows.row_id).sort(true, false),
             ])
             .map_err(|_| RelationError::InvalidPlan)?;
-        self.visit(frame, control, visitor)
+        self.visit(frame, self.schema.clone(), control, visitor)
     }
 
     fn visit(
         &self,
         frame: DataFrame,
+        schema: SchemaRef,
         control: &RelationControl,
         visitor: &mut dyn FnMut(RecordBatch) -> Result<(), RelationError>,
     ) -> Result<(), RelationError> {
@@ -584,7 +685,7 @@ impl DatasetQuery {
                 while let Some(batch) = crate::relation::controlled(stream.next(), control).await? {
                     let batch = batch.map_err(crate::relation::query_error)?;
                     let batch = RecordBatch::try_new_with_options(
-                        self.schema.clone(),
+                        schema.clone(),
                         batch.columns().to_vec(),
                         &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
                     )

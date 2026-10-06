@@ -9,6 +9,7 @@ mod database_state;
 mod edit_history;
 pub mod error;
 pub mod plot_query;
+mod profile_query;
 mod project_storage;
 pub mod runtime;
 pub mod session_api;
@@ -19,6 +20,7 @@ pub mod test_support;
 pub use database_instance::{DatabaseInstance, MAX_GET_DATAFRAME_ROWS};
 pub(crate) use database_state::{DatabaseState, DatasetEdit};
 pub use project_storage::{bind_dataset_instance, dataset_query_engine};
+pub use yss_database_engine::DatasetRowsQuery;
 
 #[cfg(test)]
 mod foundation_tests;

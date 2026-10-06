@@ -1,3 +1,6 @@
+pub use crate::profile_query::{
+    DatabaseProfileMetric, DatabaseProfileQuery, DatabaseProfileSnapshot, profile_snapshot,
+};
 use std::collections::BTreeSet;
 use std::num::NonZeroU64;
 
@@ -71,9 +74,13 @@ impl DatabaseMetaSnapshot {
 pub struct DatabasePageSnapshot {
     rows: TabularSnapshot,
     row_ids: Vec<i64>,
+    has_more: bool,
 }
 
 impl DatabasePageSnapshot {
+    pub fn has_more(&self) -> bool {
+        self.has_more
+    }
     pub fn rows(&self) -> &TabularSnapshot {
         &self.rows
     }
@@ -117,6 +124,12 @@ pub struct DatabaseQueryBasis {
 }
 
 impl DatabaseQueryBasis {
+    pub const fn runtime_revision(&self) -> DatabaseRuntimeRevision {
+        self.runtime_revision
+    }
+    pub const fn schema_revision(&self) -> DatabaseSchemaRevision {
+        self.schema_revision
+    }
     pub fn declaration_revision(&self) -> yss_database_contract::DatabaseDeclarationRevision {
         self.declaration.revision()
     }
@@ -129,8 +142,25 @@ pub struct DatabaseDeclarationTransition {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct DatabaseCellUpdate {
+    pub row_id: i64,
+    pub column: Box<str>,
+    pub value: TabularScalar,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum DatabaseMutationOperation {
     DeleteDatabase,
+    UpdateCells {
+        updates: Vec<DatabaseCellUpdate>,
+    },
+    InsertRows {
+        rows: Vec<std::collections::BTreeMap<String, TabularScalar>>,
+        before_row_id: Option<i64>,
+    },
+    DeleteRowIds {
+        row_ids: Vec<i64>,
+    },
     EditCell {
         row: usize,
         column: Box<str>,
@@ -143,6 +173,21 @@ pub enum DatabaseMutationOperation {
     DeleteRows {
         indices: Box<[usize]>,
         row_ids: Option<Box<[i64]>>,
+    },
+    CreateColumns {
+        columns: Vec<(Box<str>, DataType)>,
+    },
+    RenameColumns {
+        columns: Vec<(Box<str>, Box<str>)>,
+    },
+    DeleteColumns {
+        columns: Vec<Box<str>>,
+    },
+    CastColumns {
+        columns: Vec<(Box<str>, DataType, bool)>,
+    },
+    SetColumnSemantics {
+        columns: Vec<(Box<str>, yss_data_contract::ColumnSemantic)>,
     },
     AddColumn {
         name: Box<str>,
@@ -501,6 +546,28 @@ pub fn page_snapshot(
     Ok(DatabasePageSnapshot {
         rows: page.rows,
         row_ids: page.row_ids,
+        has_more: page.has_more,
+    })
+}
+
+pub fn page_query_snapshot(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+    query: &yss_database_engine::DatasetRowsQuery,
+    control: &yss_relational_contract::RelationControl,
+) -> Result<DatabasePageSnapshot, DatabaseError> {
+    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
+    if !runtime_snapshot.revisions.contains_key(&database) {
+        return Err(DatabaseError::not_found(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    let page = session.read_physical_page_query(&database, query, control)?;
+    Ok(DatabasePageSnapshot {
+        rows: page.rows,
+        row_ids: page.row_ids,
+        has_more: page.has_more,
     })
 }
 

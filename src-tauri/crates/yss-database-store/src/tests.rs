@@ -10,6 +10,10 @@ use arrow::record_batch::{RecordBatch, RecordBatchReader};
 use uuid::Uuid;
 use yss_relational_contract::{RelationBinding, RelationControl};
 
+mod columns;
+mod query;
+mod rows;
+
 struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {

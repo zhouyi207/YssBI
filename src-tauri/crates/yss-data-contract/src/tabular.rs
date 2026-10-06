@@ -59,6 +59,16 @@ pub enum TabularScalar {
     String(Box<str>),
 }
 
+impl schemars::JsonSchema for TabularScalar {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "TabularScalar".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": ["null", "boolean", "number", "string"] })
+    }
+}
+
 impl TabularScalar {
     /// Exact comparison of primitive carriers. Missing or incompatible values have no ordering.
     pub fn compare(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -244,8 +254,10 @@ impl TabularColumn {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, schemars::JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct TabularSnapshot {
+    #[schemars(with = "std::collections::BTreeMap<String, Vec<TabularScalar>>")]
     columns: Box<[TabularColumn]>,
 }
 

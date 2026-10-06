@@ -330,11 +330,29 @@ impl DatabaseRuntimeSession {
         self.physical.read_page(database, offset, limit)
     }
 
+    pub(crate) fn read_physical_page_query(
+        &self,
+        database: &DatabaseId,
+        query: &yss_database_engine::DatasetRowsQuery,
+        control: &yss_relational_contract::RelationControl,
+    ) -> Result<DatabaseRuntimePageSnapshot, DatabaseError> {
+        self.physical.read_page_query(database, query, control)
+    }
+
     pub(crate) fn read_physical_column_distributions(
         &self,
         database: &DatabaseId,
     ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
         self.physical.read_column_distributions(database)
+    }
+
+    pub(crate) fn read_physical_profile(
+        &self,
+        database: &DatabaseId,
+        query: &crate::profile_query::DatabaseProfileQuery,
+        control: &yss_relational_contract::RelationControl,
+    ) -> Result<crate::profile_query::DatabaseProfileSnapshot, DatabaseError> {
+        self.physical.read_profile(database, query, control)
     }
 
     pub(crate) fn read_physical_dataset_overview(

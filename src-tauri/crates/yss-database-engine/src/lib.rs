@@ -5,7 +5,7 @@ mod dataset;
 mod drop_na;
 mod page;
 mod profile;
-pub use dataset::{DatasetQuery, DatasetQueryPage};
+pub use dataset::{DatasetOrderNeighbors, DatasetQuery, DatasetQueryPage, DatasetRowsQuery};
 mod alignment;
 mod comparison;
 mod composition;

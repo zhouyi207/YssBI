@@ -3,13 +3,21 @@ use std::collections::BTreeMap;
 
 /// A format-neutral value tree. Object ordering and decimal spelling are stable
 /// so serialized protocol defaults do not depend on hash order or host floats.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum DataValue {
     #[default]
     Null,
     Bool(bool),
-    Integer(#[serde(with = "signed_integer")] i64),
-    Unsigned(#[serde(with = "unsigned_integer")] u64),
+    Integer(
+        #[serde(with = "signed_integer")]
+        #[schemars(with = "String", regex(pattern = r"^(?:0|-?[1-9][0-9]*)$"))]
+        i64,
+    ),
+    Unsigned(
+        #[serde(with = "unsigned_integer")]
+        #[schemars(with = "String", regex(pattern = r"^(?:0|[1-9][0-9]*)$"))]
+        u64,
+    ),
     Decimal(DecimalLiteral),
     String(Box<str>),
     Bytes(Vec<u8>),

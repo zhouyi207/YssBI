@@ -5,7 +5,7 @@ use thiserror::Error;
 
 /// Structure of an analysis value. Scalar meaning belongs exclusively to SemanticType;
 /// physical representation is carried by the value or field metadata, never by this type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", content = "inner")]
 pub enum ValueType {
     Scalar(crate::SemanticType),

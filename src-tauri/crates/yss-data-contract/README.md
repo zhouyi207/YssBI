@@ -36,3 +36,7 @@ NumericFold 只推导语义与标量/数列结构，整数/浮点选择、广播
 `ConversionDomain` 从本 crate 的类型生成 JSON Schema。整数筛选值和精确小数继续使用字符串，
 Schema 不将它们改成 JSON number。生成的结构描述供 Node Protocol 投影使用，范围、关联字段、
 累计字节数等业务校验仍由原有反序列化与验证入口执行。
+
+Harness 常量工具直接复用 `ValueType`、`DataValue` 与 `TabularSnapshot` 的生成 schema。
+DataValue 的有符号/无符号整数 schema 与实际 wire 一致，要求规范十进制字符串；表格列映射的 schema
+由本 crate 声明，列名唯一、等长及有限数值仍由原 TabularSnapshot 反序列化校验。

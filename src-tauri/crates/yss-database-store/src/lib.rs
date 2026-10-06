@@ -20,7 +20,7 @@ use yss_relational_contract::{
     DatasetOverlay, DatasetRelationInput, RelationBinding, RelationError,
 };
 
-pub use edits::{DatasetCellEdit, DatasetColumnCast};
+pub use edits::{DatasetCellEdit, DatasetColumnCast, DatasetInsertPosition, DatasetRowInsertion};
 pub use prepare::PreparedDataset;
 
 #[derive(Debug, thiserror::Error)]

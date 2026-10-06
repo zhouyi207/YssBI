@@ -1,7 +1,19 @@
 use serde::{Deserialize, Serialize};
 
 /// Internal interpretation of stored values, independent of their physical representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
 pub enum SemanticType {
     Numeric,
     Categorical,

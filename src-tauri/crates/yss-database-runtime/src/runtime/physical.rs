@@ -17,6 +17,7 @@ use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
 pub(crate) struct DatabaseRuntimePageSnapshot {
     pub(crate) rows: TabularSnapshot,
     pub(crate) row_ids: Vec<i64>,
+    pub(crate) has_more: bool,
 }
 
 pub(crate) struct DatabaseRuntimePhysicalState {
@@ -97,30 +98,43 @@ impl DatabaseRuntimePhysicalState {
         offset: usize,
         limit: usize,
     ) -> Result<DatabaseRuntimePageSnapshot, DatabaseError> {
-        let instance = self.required_instance(database)?;
-        let schema = instance
-            .data_schema()
-            .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
-        let count = limit.min(
-            instance
-                .row_count()
-                .map_err(|error| failure(database, DatabaseOperation::Query, error))?
-                .saturating_sub(offset),
-        );
-        if count == 0 {
+        if limit == 0 {
+            let schema = self
+                .required_instance(database)?
+                .data_schema()
+                .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
             return Ok(DatabaseRuntimePageSnapshot {
                 rows: empty_snapshot(schema.columns(), database)?,
-                row_ids: Vec::new(),
+                row_ids: vec![],
+                has_more: false,
             });
         }
+        self.read_page_query(
+            database,
+            &yss_database_engine::DatasetRowsQuery {
+                columns: vec![],
+                filters: vec![],
+                order: vec![],
+                offset,
+                limit,
+            },
+            &query_control(16 * 1024 * 1024),
+        )
+    }
+
+    pub(crate) fn read_page_query(
+        &self,
+        database: &DatabaseId,
+        query: &yss_database_engine::DatasetRowsQuery,
+        control: &yss_relational_contract::RelationControl,
+    ) -> Result<DatabaseRuntimePageSnapshot, DatabaseError> {
+        let instance = self.required_instance(database)?;
         let page = instance
             .query()
-            .and_then(|query| {
-                query
-                    .page(offset, count, &query_control(16 * 1024 * 1024))
-                    .map_err(Into::into)
-            })
+            .and_then(|dataset| dataset.page_query(query, control).map_err(Into::into))
             .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
+        let schema = yss_database_arrow::database_schema_fact(database, &page.schema)
+            .map_err(|_| DatabaseError::schema(DatabaseOperation::Query, Some(database.clone())))?;
         let roles = yss_database_arrow::dataset_row_columns(
             &instance
                 .snapshot()
@@ -169,7 +183,11 @@ impl DatabaseRuntimePhysicalState {
             .collect();
         let rows = TabularSnapshot::try_from_columns(columns)
             .map_err(|_| DatabaseError::schema(DatabaseOperation::Query, Some(database.clone())))?;
-        Ok(DatabaseRuntimePageSnapshot { rows, row_ids })
+        Ok(DatabaseRuntimePageSnapshot {
+            rows,
+            row_ids,
+            has_more: page.has_more,
+        })
     }
     pub(crate) fn read_column_distributions(
         &self,
@@ -220,6 +238,41 @@ impl DatabaseRuntimePhysicalState {
         }
         Ok(values)
     }
+    pub(crate) fn read_profile(
+        &self,
+        database: &DatabaseId,
+        request: &crate::profile_query::DatabaseProfileQuery,
+        control: &yss_relational_contract::RelationControl,
+    ) -> Result<crate::profile_query::DatabaseProfileSnapshot, DatabaseError> {
+        use crate::profile_query::{DatabaseProfileMetric as Metric, DatabaseProfileSnapshot};
+        let query = self
+            .required_instance(database)?
+            .query()
+            .and_then(|query| query.project_columns(&request.columns).map_err(Into::into))
+            .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
+        let read = || -> Result<_, DatasetStoreError> {
+            control.check()?;
+            Ok(DatabaseProfileSnapshot {
+                completeness: request
+                    .metrics
+                    .contains(&Metric::Completeness)
+                    .then(|| query.dataset_overview(control))
+                    .transpose()?,
+                statistics: request
+                    .metrics
+                    .contains(&Metric::Statistics)
+                    .then(|| query.column_stats(control))
+                    .transpose()?,
+                distributions: request
+                    .metrics
+                    .contains(&Metric::Distribution)
+                    .then(|| query.column_distributions(control))
+                    .transpose()?,
+            })
+        };
+        read().map_err(|error| failure(database, DatabaseOperation::Query, error))
+    }
+
     pub(crate) fn read_dataset_overview(
         &self,
         database: &DatabaseId,
@@ -258,11 +311,13 @@ impl DatabaseRuntimePhysicalState {
             .map_err(|error| failure(database, DatabaseOperation::PrepareMutation, error))?;
         let (store, _) = pending.recovery();
         let edit_state = before.edit_state();
+        let inserted_row_ids = pending.inserted_row_ids.clone();
         Ok(PreparedDatabasePhysicalMutation {
             physical: self.clone(),
             database: database.clone(),
             store,
             edit_state,
+            inserted_row_ids,
             pending: Some(pending),
             publication: None,
             commit_uncertain: false,
@@ -315,12 +370,18 @@ pub struct PreparedDatabasePhysicalMutation {
     database: DatabaseId,
     store: Arc<DatasetStore>,
     edit_state: EditState,
+    inserted_row_ids: Vec<i64>,
     pending: Option<PreparedInstanceMutation>,
     publication: Option<DatasetPublication>,
     commit_uncertain: bool,
     collect_garbage: bool,
 }
 impl PreparedDatabasePhysicalMutation {
+    /// Allocated by this preparation; callers publish these only after confirmed commit.
+    pub fn inserted_row_ids(&self) -> &[i64] {
+        &self.inserted_row_ids
+    }
+
     pub(crate) fn schema_changed(&self) -> Result<bool, DatabaseError> {
         self.pending
             .as_ref()

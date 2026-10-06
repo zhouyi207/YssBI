@@ -52,6 +52,25 @@ rewritten merely by opening or displaying them. Internal RowId and DisplayOrder
 columns stay non-null. Row IDs increase monotonically; insertion creates an independent order
 key between adjacent rows. Renaming a column changes its label and keeps its identity.
 
+Row preparation lives in `edits/rows.rs`. `prepare_cell_edits` validates every requested cell,
+rejects duplicate row/column targets, verifies stable row IDs against the effective snapshot,
+and merges each affected column patch once. `prepare_insert_rows` accepts initial column values
+and either a display index, a stable before-row anchor, or append. Missing values remain null;
+unknown/internal columns and invalid physical or semantic values reject the entire preparation.
+The engine reads only neighbor order keys for a stable anchor. Batch order keys divide the gap
+recursively, preserving the supplied row order without linear growth in key depth.
+The preparation returns allocated row IDs in input order, but callers expose them only after
+commit. Cell, insert and delete batches publish one snapshot and advance data revision once;
+their existing single-row entry points share this preparation. No intermediate edit is committed.
+
+Column preparation lives in `edits/columns.rs`. Creation, renaming, deletion, physical casts
+and semantic updates admit complete batches with distinct targets. Renaming validates the final
+namespace and supports swaps while retaining column identities and patches. New columns are
+nullable and initially null; deletion must retain at least one user column. Physical casts compose
+one query and materialize one generation, preserving each step's actual source type. Semantic
+validation streams only the selected columns once. A failure in any field or value leaves the
+committed head unchanged. Single-column consumers share these same preparations.
+
 ## Field meaning and physical conversion
 
 Data Detail edits Physical and Semantic independently. Exact Arrow fields own Physical, including

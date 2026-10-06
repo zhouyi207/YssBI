@@ -48,6 +48,19 @@ exact Arrow types, column identities, category metadata, stable RowId and indepe
 DisplayOrder. All host queries share a DataFusion RuntimeEnv. There is no mutable resident
 DataFrame in this runtime.
 
+`DatabaseMutationOperation::UpdateCells`, `InsertRows` and `DeleteRowIds` use the Store's
+atomic row preparations. They validate the complete batch before publication and create
+one existing `DatasetEdit` history entry. Insertions take a stable before-row anchor or append,
+initialize all supplied values, and retain the allocated row IDs with the physical preparation.
+The original Project/runtime handoff publishes that receipt after commit; it never infers IDs
+from a later page read. Undo and redo restore the entire batch, retaining monotonic allocation.
+
+`CreateColumns`, `RenameColumns`, `DeleteColumns`, `CastColumns` and `SetColumnSemantics`
+likewise prepare and publish one complete Store batch with one history entry. Column identity
+survives renaming, including swaps; casts retain the original generation for exact undo.
+Schema invalidation still comes from the actual before/after snapshots. Existing single-column
+operations use the same Store preparation rather than maintaining separate mutation semantics.
+
 ## Queries and display
 
 Metadata snapshots expose the Dataset Store's existing `data_revision`. Semantic-only changes preserve
@@ -69,12 +82,22 @@ infer a timestamp unit from bare `Datetime`/`DateTime`.
 
 `DatabasePageSnapshot::into_parts` transfers the owned table and stable row IDs to a consumer
 without cloning the page. Borrowed access remains available for callers that retain the snapshot.
+`page_query_snapshot` accepts the Engine's `DatasetRowsQuery`: selected user columns,
+an AND-list of typed predicates, ordered columns with direction/null placement, and row bounds.
+Filtering and ordering happen before projection and paging, so predicates may refer to columns
+that are not returned. The original filter expression and Ordinal ordering implementations are
+shared with relation queries. DisplayOrder and RowId break ordering ties deterministically.
+Private identity fields remain available to Runtime for row IDs but cannot be named by callers.
+The page includes the actual `has_more` probe and preserves the selected schema on empty pages;
+it does not claim a filtered total count. Ordinary DataView pages use this same query path.
 Application revalidates the captured query basis and application session after building its result.
 `DatabaseQueryBasis` captures the existing declaration observation together with runtime/schema
 revisions. Revalidation checks all three facts. Its declaration revision lets Application compare
 the runtime read to a caller's Project resource revision without adding a counter or a separate
 observation index. Numeric column-pair reads require an expected declaration revision and check
 it against the captured basis before materializing Arrow columns.
+Read-only getters also expose the captured runtime/schema revisions for Harness metadata binding;
+this does not query rows, materialize schemas or allocate a second revision authority.
 When both plot axes name the same column, the plot adapter projects and converts that column
 once and shares its immutable numeric values between the axes, preserving null positions and
 axis metadata. Distinct columns are read together from the same relation.
@@ -92,6 +115,12 @@ day/microsecond coordinate convention. Plugin snapshots use exact Arrow IPC batc
 Harness profile inspection calls `session_api::dataset_overview_with_control` with the caller's
 cancellation and query budget. Chart histograms use `session_api::column_distributions` through
 the Application revision-checked read boundary.
+
+`profile_query.rs`, re-exported by `session_api`, also admits explicit column selections and
+requested `Completeness`, `Statistics` or `Distribution` groups. One captured instance supplies
+all groups; only requested aggregate queries execute. Projection, physical types and semantics
+remain owned by the same Engine profile implementation. Empty selections and duplicate metric
+groups are rejected; omitted groups remain absent rather than becoming fabricated zero values.
 
 Semantic mapping initialization uses `session_api::column_values`. It projects the requested user column and reuses the engine's bounded `distinct_labels` stream over the complete effective snapshot. Arrow supplies canonical strings (including exact wide integers), nulls are omitted and values have deterministic lexical order. The query retains the existing 30-second/16 MiB budget and rejects domains above 65,536 entries rather than returning a partial mapping; it does not modify field metadata or data.
 

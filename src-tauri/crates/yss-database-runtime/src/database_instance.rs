@@ -8,8 +8,8 @@ use yss_database_contract::EditState;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat};
 use yss_database_schema::DatabaseSchemaFact;
 use yss_database_store::{
-    DatasetCellEdit, DatasetColumnCast, DatasetPublication, DatasetSnapshot, DatasetStoreError,
-    PreparedDataset,
+    DatasetCellEdit, DatasetColumnCast, DatasetInsertPosition, DatasetPublication,
+    DatasetRowInsertion, DatasetSnapshot, DatasetStoreError, PreparedDataset,
 };
 use yss_relational_contract::{RelationBinding, RelationControl, RelationError, RelationHandle};
 
@@ -190,6 +190,7 @@ impl DatabaseInstance {
         let control = query_control(128 * 1024 * 1024);
         let mut next_history = history.clone();
         let mut push_history = false;
+        let mut inserted_row_ids = Vec::new();
         let prepared = match operation {
             DatabaseMutationOperation::DeleteDatabase => {
                 store.prepare_delete(snapshot, operation_id)?
@@ -222,6 +223,54 @@ impl DatabaseInstance {
             operation => {
                 push_history = true;
                 match operation {
+                    DatabaseMutationOperation::UpdateCells { updates } => {
+                        let edits = updates
+                            .iter()
+                            .map(|update| {
+                                Ok(DatasetCellEdit {
+                                    row_id: update.row_id,
+                                    column: &update.column,
+                                    value: serde_json::to_value(&update.value)
+                                        .map_err(|_| DatasetStoreError::InvalidValue)?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, DatasetStoreError>>()?;
+                        store.prepare_cell_edits(snapshot, engine, operation_id, edits, &control)?
+                    }
+                    DatabaseMutationOperation::InsertRows {
+                        rows,
+                        before_row_id,
+                    } => {
+                        let rows = rows
+                            .iter()
+                            .map(|row| {
+                                row.iter()
+                                    .map(|(name, value)| {
+                                        serde_json::to_value(value)
+                                            .map(|value| (name.clone(), value))
+                                            .map_err(|_| DatasetStoreError::InvalidValue)
+                                    })
+                                    .collect::<Result<std::collections::BTreeMap<_, _>, _>>()
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let (prepared, ids) = store.prepare_insert_rows(
+                            snapshot,
+                            engine,
+                            operation_id,
+                            DatasetRowInsertion {
+                                position: before_row_id.map_or(
+                                    DatasetInsertPosition::End,
+                                    DatasetInsertPosition::BeforeRow,
+                                ),
+                                rows: &rows,
+                            },
+                            &control,
+                        )?;
+                        inserted_row_ids = ids;
+                        prepared
+                    }
+                    DatabaseMutationOperation::DeleteRowIds { row_ids } => store
+                        .prepare_delete_rows(snapshot, engine, operation_id, row_ids, &control)?,
                     DatabaseMutationOperation::EditCell {
                         row,
                         column,
@@ -268,6 +317,56 @@ impl DatabaseInstance {
                         };
                         store.prepare_delete_rows(snapshot, engine, operation_id, &ids, &control)?
                     }
+                    DatabaseMutationOperation::CreateColumns { columns } => {
+                        let columns = columns
+                            .iter()
+                            .map(|(name, dtype)| (name.as_ref(), dtype.clone()))
+                            .collect::<Vec<_>>();
+                        store.prepare_add_columns(snapshot, operation_id, &columns)?
+                    }
+                    DatabaseMutationOperation::RenameColumns { columns } => {
+                        let columns = columns
+                            .iter()
+                            .map(|(from, to)| (from.as_ref(), to.as_ref()))
+                            .collect::<Vec<_>>();
+                        store.prepare_rename_columns(snapshot, operation_id, &columns)?
+                    }
+                    DatabaseMutationOperation::DeleteColumns { columns } => store
+                        .prepare_delete_columns(
+                            snapshot,
+                            operation_id,
+                            &columns.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+                        )?,
+                    DatabaseMutationOperation::CastColumns { columns } => {
+                        let casts = columns
+                            .iter()
+                            .map(|(name, dtype, force)| DatasetColumnCast {
+                                column: name,
+                                data_type: dtype.clone(),
+                                force: *force,
+                            })
+                            .collect();
+                        store.prepare_cast_columns(
+                            snapshot,
+                            engine,
+                            operation_id,
+                            casts,
+                            &control,
+                        )?
+                    }
+                    DatabaseMutationOperation::SetColumnSemantics { columns } => {
+                        let columns = columns
+                            .iter()
+                            .map(|(name, semantic)| (name.as_ref(), semantic))
+                            .collect::<Vec<_>>();
+                        store.prepare_column_semantics(
+                            snapshot,
+                            engine,
+                            operation_id,
+                            &columns,
+                            &control,
+                        )?
+                    }
                     DatabaseMutationOperation::AddColumn { name, data_type } => {
                         store.prepare_add_column(snapshot, operation_id, name, data_type.clone())?
                     }
@@ -312,6 +411,7 @@ impl DatabaseInstance {
             prepared,
             history: next_history,
             push_history,
+            inserted_row_ids,
         })
     }
     fn row_id_at(&self, index: usize, control: &RelationControl) -> Result<i64, DatasetStoreError> {
@@ -335,6 +435,7 @@ pub(crate) struct PreparedInstanceMutation {
     prepared: PreparedDataset,
     history: crate::edit_history::EditHistory<DatasetEdit>,
     push_history: bool,
+    pub(crate) inserted_row_ids: Vec<i64>,
 }
 impl PreparedInstanceMutation {
     pub fn schema_changed(&self) -> bool {
