@@ -417,12 +417,12 @@ fn copy_mutations(
     }
     for (mind_path, mind) in &authority.minds {
         let path = PathBuf::from(mind_path.as_str());
-        let contents = mind.document.encode().map_err(prepare_error)?;
+        let contents = mind.content().encode().map_err(prepare_error)?;
         files.insert(path.clone(), write_mutation(path, contents));
     }
     for (doc_path, doc) in &authority.docs {
         let path = PathBuf::from(doc_path.as_str());
-        let contents = doc.document.encode().map_err(prepare_error)?;
+        let contents = doc.content().encode().map_err(prepare_error)?;
         files.insert(path.clone(), write_mutation(path, contents));
     }
     let mut mutations = directories

@@ -75,6 +75,16 @@ pub(crate) fn load_charts_from_root(
 fn scan_chart_documents(
     root: &Path,
 ) -> Result<Vec<(ChartResourcePath, ChartDocument)>, ProjectError> {
+    scan_chart_paths(root)?
+        .into_iter()
+        .map(|path| {
+            let document = read_chart_document_path(&root.join(path.as_str()))?;
+            Ok((path, document))
+        })
+        .collect()
+}
+
+pub(crate) fn scan_chart_paths(root: &Path) -> Result<Vec<ChartResourcePath>, ProjectError> {
     let charts_dir = root.join(CHARTS_DIR);
     let metadata = match std::fs::symlink_metadata(&charts_dir) {
         Ok(metadata) => metadata,
@@ -88,9 +98,9 @@ fn scan_chart_documents(
 
     let mut documents = Vec::new();
     walk_chart_directory(&charts_dir, &charts_dir, &mut documents)?;
-    documents.sort_by(|(left, _), (right, _)| left.cmp(right));
+    documents.sort();
     let mut portable_paths = HashSet::new();
-    for (path, _) in &documents {
+    for path in &documents {
         if !portable_paths.insert(path.display_name().portable_key()) {
             return Err(ProjectError::InvalidProjectFormat(format!(
                 "portable chart path collision at '{}'",
@@ -104,7 +114,7 @@ fn scan_chart_documents(
 fn walk_chart_directory(
     charts_dir: &Path,
     directory: &Path,
-    documents: &mut Vec<(ChartResourcePath, ChartDocument)>,
+    documents: &mut Vec<ChartResourcePath>,
 ) -> Result<(), ProjectError> {
     for entry in std::fs::read_dir(directory)? {
         let path = entry?.path();
@@ -151,8 +161,7 @@ fn walk_chart_directory(
                 "invalid chart resource path: path is not canonical",
             ));
         }
-        let document = read_chart_document_path(&path)?;
-        documents.push((chart_path, document));
+        documents.push(chart_path);
     }
     Ok(())
 }

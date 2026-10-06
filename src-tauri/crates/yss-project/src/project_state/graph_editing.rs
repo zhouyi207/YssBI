@@ -17,7 +17,10 @@ const HISTORY_LIMIT: usize = 50;
 const HISTORY_BYTE_LIMIT: usize = 16 * 1024 * 1024;
 const REQUEST_LIMIT: usize = 128;
 const REQUEST_BYTE_LIMIT: usize = 2 * 1024 * 1024;
-const REQUEST_RESULT_BYTE_LIMIT: usize = 64 * 1024;
+const REQUEST_IDENTITY_BYTE_LIMIT: usize = 64 * 1024;
+// Caller facts can contain a full batch delta; the total retained budget still
+// evicts older receipts independently of this single-command admission limit.
+const REQUEST_RESULT_BYTE_LIMIT: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct GraphEditVersion {
@@ -49,6 +52,7 @@ pub enum GraphEditCommandKind {
 /// Bounded caller-owned facts retained atomically with the original commit for replay.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct GraphEditCorrelation {
+    pub created_constants: BTreeMap<String, yss_graph_document::ConstantId>,
     pub client_key: String,
     pub document_hash: String,
     pub created_nodes: BTreeMap<String, yss_graph_document::NodeId>,
@@ -446,7 +450,7 @@ impl ProjectState {
         let identity_bytes = serde_json::to_vec(project)
             .map_err(|error| invalid_receipt(error.to_string()))?
             .len();
-        if identity_bytes > REQUEST_RESULT_BYTE_LIMIT {
+        if identity_bytes > REQUEST_IDENTITY_BYTE_LIMIT {
             return Err(invalid_receipt(
                 "graph receipt identity exceeds its budget".into(),
             ));
@@ -891,6 +895,7 @@ mod tests {
         );
 
         let large_correlation = GraphEditCorrelation {
+            created_constants: BTreeMap::new(),
             client_key: "batch".into(),
             document_hash: "0".repeat(64),
             created_nodes: (0..512)

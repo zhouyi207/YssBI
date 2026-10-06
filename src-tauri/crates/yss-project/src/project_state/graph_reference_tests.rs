@@ -250,6 +250,7 @@ fn duplicate_preserves_registered_constant_references_on_disk() {
             &source,
             ResourceRevision::INITIAL,
             OperationId::new(),
+            None,
         )
         .unwrap();
     let target = GraphResourcePath::new("events/Constants Copy.yssbi-event").unwrap();

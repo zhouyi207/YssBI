@@ -27,6 +27,19 @@ pub struct ResultReference {
     pub result_id: ResultId,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResultValidity {
+    CurrentValid,
+    CurrentStale,
+    Retained,
+}
+
+#[derive(Clone, Debug)]
+pub struct ResultReadSnapshot {
+    pub result: StoredResultSnapshot,
+    pub validity: ResultValidity,
+}
+
 /// Application maps Graph semantics and resource versions into this neutral execution input.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputResultInputs {

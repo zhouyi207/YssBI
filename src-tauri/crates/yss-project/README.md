@@ -55,6 +55,10 @@ GroupTransform 角色形成正文调用边。
 
 驻留查询通过 `ProjectState::has_resident_graph` 和 `read_resident_graph` 读取存在性或单个资源，避免图编辑和运行准备为此复制整份 `ProjectData`。这些查询保留操作准入检查，不从磁盘加载未驻留图；需要读取已声明资源的用例仍使用 `read_graph_resource_snapshot`，提交与返回前的身份/版本重验仍由对应操作完成。
 
+`read_resource_catalog` 提供资源身份、名称、版本和轻量状态；复用现有路径扫描和数据库声明，不读取正文、不复制 ProjectData、不打开关闭图。文件成员仍由磁盘路径决定，resident 状态只补充其版本、dirty 和初始业务引用。调用方通过原 `validate_project_index_version` 重验 publication 与 authority generation。数据库 dirty 仍归 Database owner；图尚未打开时不虚构编辑会话。
+
+Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在同一次复制提交中沿用名称分配规则；不通过复制后重命名实现。返回的实际名称和资源身份用于后续操作。
+
 ## Filesystem boundary
 
 项目入口路径解释位于 `src/filesystem.rs`，索引变化策略与 ProjectIndexInvalidation 位于 `src/file_changes.rs`，业务失败由 `src/operation_error.rs` 的 ProjectOperationError 表达。FS 仅接收明确的目录、相对路径、字节与校验回调，不依赖项目契约。项目操作 ID 显式转换为 TransactionId；注册库的根身份与 FS RootIdentity 通过不解释内容的字符串投影比较，已有存储值保持不变。
@@ -162,4 +166,4 @@ UI 与其他 Application 调用者使用同一个 typed command API，新增类�
 
 `read_graph_editing` 返回文档只读快照和编辑身份。`capture_graph_edit` 检查编辑会话与资源修订，`commit_graph_edit` 在同一 publication 边界安装候选文档、revision 及可逆历史。内容指纹用于 dirty 判断；历史没有完整文档或解析投影副本。保存、重命名与图卸载在各自事务中同步维护这些元数据。详情见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
 
-图命令回执的 `GraphEditCorrelation.result_facts` 可保留有界的调用方结果事实，与文档和实际提交版本原子记录。Application 拥有其中的 Harness 差分编码，Project 仅执行序列化预算和回执生命周期管理，不解释节点语义。查询原命令返回原始事实，不用当前图重建历史结果；总字节数、单回执大小和条目数继续受既有上限约束。
+图命令回执的 `GraphEditCorrelation.result_facts` 可保留有界的调用方结果事实，与文档和实际提交版本原子记录。Application 拥有其中的 Harness 差分编码，Project 仅执行序列化预算和回执生命周期管理，不解释节点语义。查询原命令返回原始事实，不用当前图重建历史结果。单次 correlation 序列化上限为 1 MiB，以容纳批量编辑的完整差分；每张图全部回执仍受 2 MiB 和 128 条上限约束，超出总预算时淘汰旧回执，单次超限在提交前拒绝。

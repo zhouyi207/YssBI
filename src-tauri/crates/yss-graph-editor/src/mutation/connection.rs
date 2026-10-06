@@ -2,6 +2,71 @@ use super::*;
 
 type MutationPort<'a> = crate::compatibility::ResolvedEditorPort<'a>;
 
+pub(super) fn update_connection_operations(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    context: EditorMutationContext<'_>,
+    updates: Vec<ConnectionUpdate>,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    let mut selected = BTreeSet::new();
+    let mut proposals = Vec::new();
+    for update in updates {
+        if !selected.insert(update.connection_id) {
+            return Err(invalid_editor_mutation(
+                "connection occurs more than once in an update",
+            ));
+        }
+        let original = document
+            .connections
+            .get(&update.connection_id)
+            .ok_or_else(|| {
+                editor_error(
+                    EditorMutationErrorCode::GraphConnectionNotFound,
+                    "connection update target does not exist",
+                )
+            })?;
+        proposals.push(DocumentConnection {
+            id: original.id,
+            output: update.output,
+            input: update.input,
+            order: update.order.unwrap_or_else(|| original.order.clone()),
+        });
+    }
+    // Free the whole selection first so swapping occupied endpoints is atomic.
+    let mut operations = disconnect_connection_operations(document, selected.iter().copied())?;
+    let mut staged = document.clone();
+    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
+    for proposal in proposals {
+        let mut next = connect_operations(
+            &staged,
+            registry,
+            context,
+            proposal.output,
+            proposal.input,
+            proposal.order,
+        )?;
+        for operation in &mut next {
+            match operation {
+                GraphDocumentOperation::RemoveConnection { connection }
+                    if selected.contains(&connection.id) =>
+                {
+                    return Err(invalid_editor_mutation(
+                        "updated connections compete for the same limited endpoint",
+                    ));
+                }
+                GraphDocumentOperation::InsertConnection { connection } => {
+                    connection.id = proposal.id
+                }
+                _ => {}
+            }
+        }
+        let patch = GraphDocumentPatch::new(next);
+        apply_graph_document_patch(&mut staged, &patch)?;
+        operations.extend(patch.operations);
+    }
+    Ok(operations)
+}
+
 pub(super) fn resolve_mutation_port<'a>(
     document: &'a GraphDocument,
     registry: &'a NodeRegistry,

@@ -194,7 +194,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         std::fs::write(
             root.join(path.as_str()),
             document
-                .document
+                .content()
                 .encode()
                 .map_err(ProjectError::InvalidProjectFormat)?,
         )?;
@@ -204,7 +204,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         std::fs::write(
             root.join(path.as_str()),
             document
-                .document
+                .content()
                 .encode()
                 .map_err(ProjectError::InvalidProjectFormat)?,
         )?;

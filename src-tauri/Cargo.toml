@@ -114,6 +114,7 @@ rig-core = { version = "=0.43.0", default-features = false, features = ["reqwest
 rig-reqwest = { version = "=0.43.0", default-features = false, features = ["rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+pulldown-cmark = { version = "0.13.4", default-features = false }
 schemars = "=1.2.2"
 jsonschema = { version = "=0.58.5", default-features = false }
 tantivy = { version = "=0.26.2", default-features = false, features = ["lz4-compression"] }

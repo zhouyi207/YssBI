@@ -20,6 +20,7 @@
 `nodes_ready` 对 Execution 选出的节点范围检查已有语义事实；`resources_for_nodes` 沿同一快照中可达函数
 收集实际资源身份。依赖环只使环及其依赖节点保持未解析，独立分支继续解析并复用缓存；图级循环诊断
 通过 related locations 标明受影响节点。连接诊断同时携带端点，输入不匹配阻断消费者，不阻断其生产者的独立执行。
+`diagnostics_for_nodes` 与 `nodes_ready` 共用这些定位规则，供局部校验分页消费；分页不会改变 readiness。
 
 `lib.rs` 汇总公开入口，内部职责如下：
 

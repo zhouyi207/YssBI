@@ -48,6 +48,21 @@ pub fn export_subgraph(
     catalog: &CatalogMutationValidationSnapshot,
     node_ids: Vec<NodeId>,
 ) -> Result<ClipboardSubgraph, MutationConflict> {
+    export_with_identities(document, registry, catalog, node_ids).map(|export| export.snapshot)
+}
+
+struct SubgraphExport {
+    snapshot: ClipboardSubgraph,
+    nodes: BTreeMap<NodeId, ClipboardNodeId>,
+    ports: BTreeMap<PortAddress, ClipboardPortAddress>,
+}
+
+fn export_with_identities(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    catalog: &CatalogMutationValidationSnapshot,
+    node_ids: Vec<NodeId>,
+) -> Result<SubgraphExport, MutationConflict> {
     let selected = validate_targets(document, node_ids)?;
     enforce_limit("nodes", selected.len(), MAX_CLIPBOARD_NODES)?;
 
@@ -109,6 +124,39 @@ pub fn export_subgraph(
             .iter()
             .flat_map(|connection| [&connection.output, &connection.input]),
     );
+
+    let mut source_ports = selected_bindings
+        .iter()
+        .map(|(address, _)| (*address).clone())
+        .chain(
+            selected_states
+                .iter()
+                .map(|(address, _)| (*address).clone()),
+        )
+        .chain(
+            selected_connections
+                .iter()
+                .flat_map(|connection| [connection.output.clone(), connection.input.clone()]),
+        )
+        .collect::<BTreeSet<_>>();
+    for node_id in &node_ids {
+        if let Some(protocol) = registry.protocol(&document.nodes[node_id].node_type) {
+            source_ports.extend(
+                protocol
+                    .interface
+                    .ports
+                    .iter()
+                    .filter(|port| matches!(port.cardinality, PortCardinality::Declared))
+                    .map(|port| PortAddress::declared(*node_id, port.key.clone())),
+            );
+        }
+    }
+    let ports = source_ports
+        .into_iter()
+        .map(|address| {
+            rewrite_address(&address, &local_nodes, &local_instances).map(|local| (address, local))
+        })
+        .collect::<Result<_, _>>()?;
 
     let mut parameter_bytes = 0usize;
     let mut nodes = Vec::with_capacity(node_ids.len());
@@ -196,18 +244,33 @@ pub fn export_subgraph(
         serialized_bytes,
         MAX_CLIPBOARD_SERIALIZED_BYTES,
     )?;
-    Ok(snapshot)
+    Ok(SubgraphExport {
+        snapshot,
+        nodes: local_nodes,
+        ports,
+    })
 }
 
-pub(crate) fn duplicate_subgraph(
+pub struct SubgraphDuplication {
+    pub patch: GraphDocumentPatch,
+    pub identities: SubgraphCopyMap,
+}
+
+pub struct SubgraphCopyMap {
+    pub nodes: BTreeMap<NodeId, NodeId>,
+    pub ports: BTreeMap<PortAddress, PortAddress>,
+}
+
+/// Source-to-copy identities come from the same allocation that produced the patch.
+pub fn duplicate_subgraph(
     graph_path: &GraphResourcePath,
     document: &GraphDocument,
     registry: &NodeRegistry,
     catalog: &CatalogMutationValidationSnapshot,
     node_ids: Vec<NodeId>,
     offset: NodePosition,
-) -> Result<GraphDocumentPatch, MutationConflict> {
-    let snapshot = export_subgraph(document, registry, catalog, node_ids.clone())?;
+) -> Result<SubgraphDuplication, MutationConflict> {
+    let exported = export_with_identities(document, registry, catalog, node_ids.clone())?;
     let origin_x = node_ids
         .iter()
         .map(|node_id| document.nodes[node_id].position.x)
@@ -218,17 +281,32 @@ pub(crate) fn duplicate_subgraph(
         .map(|node_id| document.nodes[node_id].position.y)
         .reduce(f64::min)
         .expect("subgraph export validates non-empty targets");
-    instantiate_subgraph(
+    let inserted = instantiate::instantiate_with_identities(
         graph_path,
         document,
         registry,
         catalog,
-        ValidatedClipboardSubgraph(snapshot),
+        ValidatedClipboardSubgraph(exported.snapshot),
         NodePosition {
             x: origin_x + offset.x,
             y: origin_y + offset.y,
         },
-    )
+    )?;
+    Ok(SubgraphDuplication {
+        patch: inserted.patch,
+        identities: SubgraphCopyMap {
+            nodes: exported
+                .nodes
+                .into_iter()
+                .map(|(source, local)| (source, inserted.nodes[&local]))
+                .collect(),
+            ports: exported
+                .ports
+                .into_iter()
+                .map(|(source, local)| (source, inserted.ports[&local].clone()))
+                .collect(),
+        },
+    })
 }
 
 fn invalid_clipboard(message: impl Into<Box<str>>) -> MutationConflict {

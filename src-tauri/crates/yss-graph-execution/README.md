@@ -73,6 +73,10 @@ View 的观察意图引用已连接输出的结果，保留各个请求节点身
 
 `RunRegistry` 通过 `RunState` 记录运行状态和终态。按完成顺序保留最近 1024 个终态，超过上限时淘汰最早完成者；Admitted、Running 和 Finalizing 不参与淘汰。保留期内取消请求仍区分 AlreadyCancelled / AlreadyTerminal，淘汰后返回 NotFound。该策略只作用于运行元数据，结果仍由 ResultStore 的租约规则管理。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
+同一运行记录使用单调时钟累计 Admitted、Running、Finalizing 的墙钟耗时，状态与计时在同一锁内读取。
+活动阶段的快照包含当前经过时间，所有终态固定计时；淘汰后明确不可用。Running 包括运行内的调度、
+资源准备和结果物化，不表示纯内核计算时间，也不包含准入前等待或 Harness 工具往返时间。
+
 函数签名/正文依赖、调用环、Entry/Return 一致性由 Analysis 检查，递归仍被拒绝。
 `PlanNodeSpecialization` 区分内核与结构操作，Call 按 Analysis 提供的参数 ID/端口绑定调用，
 不依赖端口标题或排序猜测形参。Entry/Return 只能在已绑定的私有调用帧内执行，公开计划准入拒绝独立结构入口。
@@ -124,6 +128,8 @@ Schema 反馈读取同一 ResultStore 的已求值结果，没有额外可写列
 结果以 `{ executionSessionId, resultId }` 标识，保留 type/presentation、payload 与生成时的 provenance。
 `StoredResult` 保存 `RuntimeValue`、输出类别和生成时的 `PlanOutputContract`，让已保留结果的类型与 Schema 不依赖当前图或重新推断数据。
 `StoredResultSnapshot` 表示共享结果的一致性读取视图；这一机制称为结果缓存与持有租约，不提供历次运行归档。
+`query_result_with_validity` 在同一 registry 读锁内交付保留值及其当前身份状态，区分当前有效、当前过时和仅被租约保留的旧结果。
+`query_graph_result_entries` 默认只列当前 Pin（含过时值），指定 RunId 时读取仍被持有的该次运行结果；不新增运行归档，也不复制 payload。
 当前输出和显式报告租约是结果的持有者；输出不再指向结果且最后一个租约释放后，移除结果索引。
 写入事务在锁内收集已移除的结果，释放 registry 锁后再释放这些值及其关系句柄；unwind 也遵守该释放顺序。
 计算中的查询通过临时 `Arc` 保证内存安全，最后一个共享引用释放后回收实际数据；不依赖周期性 GC 或前端计数。

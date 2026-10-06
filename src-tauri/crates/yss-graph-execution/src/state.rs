@@ -89,6 +89,21 @@ impl ExecutionRuntimeState {
         self.results.query_graph_results(graph, limit)
     }
 
+    pub fn query_graph_result_entries(
+        &self,
+        graph: &str,
+        run: Option<crate::run_registry::RunId>,
+    ) -> Vec<crate::result::ResultReadSnapshot> {
+        self.results.query_graph_result_entries(graph, run)
+    }
+
+    pub fn query_result_with_validity(
+        &self,
+        id: ResultId,
+    ) -> Option<crate::result::ResultReadSnapshot> {
+        self.results.query_result_with_validity(id)
+    }
+
     pub fn query_pin_result(
         &self,
         output: &crate::plan::PlanOutputRef,

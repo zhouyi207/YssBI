@@ -8,6 +8,24 @@ pub(crate) fn instantiate_subgraph(
     snapshot: ValidatedClipboardSubgraph,
     anchor: NodePosition,
 ) -> Result<GraphDocumentPatch, MutationConflict> {
+    instantiate_with_identities(graph_path, document, registry, catalog, snapshot, anchor)
+        .map(|inserted| inserted.patch)
+}
+
+pub(super) struct SubgraphInstantiation {
+    pub patch: GraphDocumentPatch,
+    pub nodes: BTreeMap<ClipboardNodeId, NodeId>,
+    pub ports: BTreeMap<ClipboardPortAddress, PortAddress>,
+}
+
+pub(super) fn instantiate_with_identities(
+    graph_path: &GraphResourcePath,
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    catalog: &CatalogMutationValidationSnapshot,
+    snapshot: ValidatedClipboardSubgraph,
+    anchor: NodePosition,
+) -> Result<SubgraphInstantiation, MutationConflict> {
     let ValidatedClipboardSubgraph(mut snapshot) = snapshot;
     validate_insert_budget(&snapshot)?;
     snapshot
@@ -57,7 +75,53 @@ pub(crate) fn instantiate_subgraph(
     let mut staged = document.clone();
     yss_graph_document_edit::apply_graph_document_patch(&mut staged, &patch)
         .map_err(|error| invalid_clipboard(format!("subgraph patch validation failed: {error}")))?;
-    Ok(patch)
+    let mut addresses = snapshot
+        .port_bindings
+        .iter()
+        .map(|binding| binding.address.clone())
+        .chain(
+            snapshot
+                .input_states
+                .iter()
+                .map(|state| state.address.clone()),
+        )
+        .chain(
+            snapshot
+                .connections
+                .iter()
+                .flat_map(|connection| [connection.output.clone(), connection.input.clone()]),
+        )
+        .collect::<BTreeSet<_>>();
+    for node in &snapshot.nodes {
+        let protocol = registry
+            .protocol(&node_types[&node.local_id])
+            .expect("validated node type");
+        addresses.extend(
+            protocol
+                .interface
+                .ports
+                .iter()
+                .filter(|port| matches!(port.cardinality, PortCardinality::Declared))
+                .map(|port| ClipboardPortAddress {
+                    node_id: node.local_id.clone(),
+                    port: ClipboardPortRef::Declared {
+                        key: port.key.clone(),
+                    },
+                }),
+        );
+    }
+    let ports = addresses
+        .into_iter()
+        .map(|address| {
+            instantiate_address(&address, &node_types, registry, &ids.nodes, &ids.instances)
+                .map(|actual| (address, actual))
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(SubgraphInstantiation {
+        patch,
+        nodes: ids.nodes,
+        ports,
+    })
 }
 
 fn import_constants(

@@ -16,12 +16,13 @@ pub use compatibility::{
     filter_compatible_catalog,
 };
 pub use mutation::{
-    EditorGraphMutation, EditorMutationError, EditorMutationErrorCode, MutationConflict,
-    NodePositionMutation, PortPlacement, merge_parameters_with_registry,
+    ConnectionUpdate, EditorGraphMutation, EditorMutationError, EditorMutationErrorCode,
+    MutationConflict, NodePositionMutation, PortPlacement, merge_parameters_with_registry,
 };
 pub use subgraph::{
     ClipboardConnection, ClipboardDynamicMemberOrigin, ClipboardDynamicPortBinding,
     ClipboardInputState, ClipboardLastKnownPortMetadata, ClipboardNode, ClipboardNodeCreation,
     ClipboardNodeId, ClipboardPortAddress, ClipboardPortBinding, ClipboardPortInstanceId,
-    ClipboardPortRef, ClipboardSubgraph, deserialize_clipboard_subgraph, export_subgraph,
+    ClipboardPortRef, ClipboardSubgraph, SubgraphCopyMap, SubgraphDuplication,
+    deserialize_clipboard_subgraph, duplicate_subgraph, export_subgraph,
 };

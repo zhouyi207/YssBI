@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -25,6 +26,26 @@ pub enum RunState {
     Succeeded,
     Cancelled,
     Failed,
+}
+
+/// Wall time in the owning run's lifecycle, not kernel CPU time or tool roundtrip time.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RunTiming {
+    pub admission: Duration,
+    pub running: Duration,
+    pub finalization: Duration,
+}
+
+impl RunTiming {
+    pub fn elapsed(self) -> Duration {
+        self.admission + self.running + self.finalization
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RunSnapshot {
+    pub state: RunState,
+    pub timing: RunTiming,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,6 +85,31 @@ struct RunRecords {
 struct RunRecord {
     state: RunState,
     cancellation: Option<Arc<AtomicBool>>,
+    phase_started: Instant,
+    timing: RunTiming,
+}
+
+impl RunRecord {
+    fn snapshot(&self, now: Instant) -> RunSnapshot {
+        let mut timing = self.timing;
+        let elapsed = now.saturating_duration_since(self.phase_started);
+        match self.state {
+            RunState::Admitted => timing.admission += elapsed,
+            RunState::Running => timing.running += elapsed,
+            RunState::Finalizing => timing.finalization += elapsed,
+            RunState::Succeeded | RunState::Cancelled | RunState::Failed => {}
+        }
+        RunSnapshot {
+            state: self.state,
+            timing,
+        }
+    }
+
+    fn advance(&mut self, next: RunState, now: Instant) {
+        self.timing = self.snapshot(now).timing;
+        self.phase_started = now;
+        self.state = next;
+    }
 }
 
 impl RunRegistry {
@@ -107,6 +153,8 @@ impl RunRegistry {
                 entry.insert(RunRecord {
                     state: RunState::Admitted,
                     cancellation,
+                    phase_started: Instant::now(),
+                    timing: RunTiming::default(),
                 });
                 Ok(())
             }
@@ -121,6 +169,15 @@ impl RunRegistry {
             .runs
             .get(&run)
             .map(|record| record.state)
+    }
+
+    pub fn snapshot(&self, run: RunId) -> Option<RunSnapshot> {
+        self.records
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .runs
+            .get(&run)
+            .map(|record| record.snapshot(Instant::now()))
     }
 
     pub(crate) fn cancel(&self, run: RunId) -> ExecutionCancelOutcome {
@@ -179,7 +236,7 @@ impl RunRegistry {
         if !valid {
             return Err(RunRegistryError::InvalidTransition);
         }
-        current.state = next;
+        current.advance(next, Instant::now());
         if matches!(
             next,
             RunState::Succeeded | RunState::Cancelled | RunState::Failed
@@ -207,6 +264,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn timing_tracks_live_phases_and_freezes_all_terminal_outcomes() {
+        let start = Instant::now();
+        for terminal in [RunState::Succeeded, RunState::Cancelled, RunState::Failed] {
+            let mut record = RunRecord {
+                state: RunState::Admitted,
+                cancellation: None,
+                phase_started: start,
+                timing: RunTiming::default(),
+            };
+            let at = |milliseconds| start + Duration::from_millis(milliseconds);
+            assert_eq!(
+                record.snapshot(at(2)).timing.admission,
+                Duration::from_millis(2)
+            );
+            record.advance(RunState::Running, at(3));
+            let running = record.snapshot(at(10));
+            assert_eq!(running.timing.admission, Duration::from_millis(3));
+            assert_eq!(running.timing.running, Duration::from_millis(7));
+            record.advance(RunState::Finalizing, at(12));
+            record.advance(terminal, at(17));
+            let finished = record.snapshot(at(17));
+            assert_eq!(finished.timing.elapsed(), Duration::from_millis(17));
+            assert_eq!(finished.timing.running, Duration::from_millis(9));
+            assert_eq!(finished.timing.finalization, Duration::from_millis(5));
+            assert_eq!(record.snapshot(at(100)), finished);
+        }
+    }
+
+    #[test]
     fn retention_uses_completion_order_and_preserves_active_and_finalizing_runs() {
         let registry = RunRegistry::new();
         let admitted = registry.admit_next(None).unwrap();
@@ -230,6 +316,7 @@ mod tests {
             registry.transition(run, RunState::Succeeded).unwrap();
         }
         assert_eq!(registry.state(first_completed), None);
+        assert_eq!(registry.snapshot(first_completed), None);
         assert_eq!(registry.state(older_id), Some(RunState::Failed));
         assert_eq!(registry.state(admitted), Some(RunState::Admitted));
         assert_eq!(registry.state(running), Some(RunState::Running));

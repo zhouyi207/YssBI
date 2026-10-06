@@ -1,6 +1,10 @@
 use crate::file::{FileContent, FilePath, FileState, MAX_FILE_BYTES, bounded};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+mod edit;
+mod query;
+pub use edit::{MindNodeMove, PreparedMindCopy};
+pub use query::{MindOutlineEntry, MindOutlinePage, MindSearchPage, MindTopicDetail, MindTree};
 pub const MAX_MIND_NODES: usize = 5_000;
 pub type MindPath = FilePath<MindDocument>;
 pub type MindState = FileState<MindDocument>;
@@ -119,69 +123,8 @@ impl FileContent for MindDocument {
         mind
     }
     fn apply(&mut self, edit: MindEdit) -> Result<(), String> {
-        let mind = self;
-        match edit {
-            MindEdit::AddNode { node } => mind.nodes.push(node),
-            MindEdit::SetContent { node_id, content } => {
-                node_mut(mind, &node_id)?.content = content
-            }
-            MindEdit::SetReference { node_id, reference } => {
-                node_mut(mind, &node_id)?.reference = reference
-            }
-            MindEdit::MoveNode {
-                node_id,
-                parent_id,
-                before_id,
-            } => {
-                if node_id == mind.root_id {
-                    return Err("cannot reparent mind root".into());
-                }
-                let index = mind
-                    .nodes
-                    .iter()
-                    .position(|n| n.id == node_id)
-                    .ok_or("mind node not found")?;
-                let mut node = mind.nodes.remove(index);
-                node.parent_id = Some(parent_id.clone());
-                let insert = match before_id {
-                    Some(before) => mind
-                        .nodes
-                        .iter()
-                        .position(|n| n.id == before && n.parent_id.as_ref() == Some(&parent_id))
-                        .ok_or("sibling not found")?,
-                    None => mind.nodes.len(),
-                };
-                mind.nodes.insert(insert, node);
-            }
-            MindEdit::RemoveNode { node_id } => {
-                if node_id == mind.root_id {
-                    return Err("cannot remove mind root".into());
-                }
-                node_mut(mind, &node_id)?;
-                let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
-                for node in &mind.nodes {
-                    if let Some(parent) = &node.parent_id {
-                        children.entry(parent).or_default().push(&node.id);
-                    }
-                }
-                let mut removed = HashSet::new();
-                let mut pending = vec![node_id.as_str()];
-                while let Some(id) = pending.pop() {
-                    if removed.insert(id.to_owned()) {
-                        pending.extend(children.get(id).into_iter().flatten().copied());
-                    }
-                }
-                mind.nodes.retain(|n| !removed.contains(&n.id));
-            }
-        }
-        mind.encode().map(|_| ())
+        self.apply_edit(edit)
     }
-}
-fn node_mut<'a>(mind: &'a mut MindDocument, id: &str) -> Result<&'a mut MindNode, String> {
-    mind.nodes
-        .iter_mut()
-        .find(|n| n.id == id)
-        .ok_or_else(|| "mind node not found".into())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,6 +135,16 @@ fn node_mut<'a>(mind: &'a mut MindDocument, id: &str) -> Result<&'a mut MindNode
     deny_unknown_fields
 )]
 pub enum MindEdit {
+    AddNodes {
+        nodes: Vec<MindNode>,
+        before_id: Option<String>,
+    },
+    MoveNodes {
+        moves: Vec<MindNodeMove>,
+    },
+    RemoveNodes {
+        node_ids: Vec<String>,
+    },
     AddNode {
         node: MindNode,
     },
@@ -216,6 +169,7 @@ pub enum MindEdit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod batches;
 
     #[test]
     fn mind_tree_contract_rejects_ambiguous_hierarchy_and_renderer_state() {

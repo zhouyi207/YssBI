@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+pulldown-cmark.workspace = true
 yss-project-layout = { path = "../yss-project-layout" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }

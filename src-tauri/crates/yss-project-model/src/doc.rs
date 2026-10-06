@@ -1,5 +1,7 @@
 use crate::file::{FileContent, FilePath, FileState, bounded};
 use serde::{Deserialize, Serialize};
+mod query;
+pub use query::*;
 pub type DocPath = FilePath<DocDocument>;
 pub type DocState = FileState<DocDocument>;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

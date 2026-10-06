@@ -14,6 +14,8 @@ it is not the project's file classification or navigation index.
 and a Doc edit cannot carry tree operations. Their paths reject the other kind's
 directory and extension. `file.rs` shares typed path mechanics, editing versions,
 saved-content fingerprints and patch structure without combining their contents.
+`FileState` keeps the current content fingerprint with its private document; replacement
+updates both together. Dirty-state metadata does not clone or encode the body.
 These models do not depend on a renderer, IPC or the filesystem. Existing graph
 and chart bodies retain their dedicated model owners.
 
@@ -40,5 +42,30 @@ Bounds are defined by `MAX_FILE_BYTES` in `file.rs` and `MAX_MIND_NODES` in `min
 Mind validation uses an ID index and connected-node set; adapters may build their
 own disposable child indexes. Validation happens before a candidate is committed.
 See [Project](../yss-project/README.md) for transactions and external-file behavior.
+
+`mind/query.rs` supplies a disposable `MindTree` over one validated document. Outline pages
+use preorder traversal and the persisted sibling order; depth is relative to the selected root.
+Search is a case-insensitive content substring within the selected subtree, with exact ancestor
+paths. Targeted reads retain the requested ID order and reject missing or repeated IDs.
+Queries borrow the original topics; they do not create persistent indexes or copy the whole body.
+
+`mind/edit.rs` owns bulk addition, parent changes and subtree removal. Additions validate the
+complete node set, so a child may precede its new parent in the batch. Bulk moves set all final
+parents before applying sibling positions in request order, then validate the final tree.
+`prepare_subtree_copy` allocates fresh IDs for disjoint source branches, preserves their contents
+and external references, and returns the exact identity map and one insertion command.
+Project continues to apply edits to an unpublished candidate and commits the whole file batch;
+these model commands do not change persistence, dirty-state or document session ownership.
+
+`doc/query.rs` borrows the current Markdown and derives a disposable Unicode location index.
+The `pulldown-cmark` event parser supplies top-level ATX/setext headings and source block
+boundaries; headings inside code, HTML, quoted blocks or list items do not become document sections.
+Heading indices and character starts distinguish repeated titles. Sections include their heading
+and descendants through the next heading of equal or shallower level. These locations describe
+one captured document; the calling layer must retain its version when reusing them.
+Reads preserve the original bytes and use Unicode scalar ranges, preferring a complete block
+near the requested page end. Long blocks continue across pages. Literal, case-sensitive search
+includes overlapping matches and returns exact character ranges and source-preserving context.
+No Markdown AST or secondary document state is persisted.
 
 Focused validation: `pnpm test:rs:package -p yss-project-model --lib`.

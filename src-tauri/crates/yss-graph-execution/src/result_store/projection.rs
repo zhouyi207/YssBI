@@ -117,6 +117,48 @@ impl ResultStoreRegistry {
 }
 
 impl ResultStore {
+    pub(crate) fn query_result_with_validity(
+        &self,
+        id: crate::result::ResultId,
+    ) -> Option<crate::result::ResultReadSnapshot> {
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        registry.read_snapshot(id)
+    }
+
+    /// Without a run filter, return current pins including retained stale values.
+    /// A run filter reads only still-owned immutable results, never a run archive.
+    pub(crate) fn query_graph_result_entries(
+        &self,
+        graph: &str,
+        run: Option<crate::run_registry::RunId>,
+    ) -> Vec<crate::result::ResultReadSnapshot> {
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(run) = run {
+            registry
+                .values
+                .iter()
+                .filter(|(_, entry)| {
+                    entry.snapshot.output().graph().as_str() == graph
+                        && entry.snapshot.provenance().run_id() == run
+                })
+                .filter_map(|(id, _)| registry.read_snapshot(*id))
+                .collect()
+        } else {
+            registry
+                .outputs
+                .iter()
+                .filter(|(output, _)| output.graph().as_str() == graph)
+                .filter_map(|(_, cached)| registry.read_snapshot(cached.result?))
+                .collect()
+        }
+    }
+
     pub(crate) fn schema_candidates(&self, graph: &str) -> Vec<StoredResultSnapshot> {
         let registry = self
             .registry
@@ -217,5 +259,29 @@ impl ResultStore {
             .read()
             .unwrap_or_else(|error| error.into_inner());
         registry.query_cache_states(graph, semantic_input_hash)
+    }
+}
+
+impl ResultStoreRegistry {
+    fn read_snapshot(
+        &self,
+        id: crate::result::ResultId,
+    ) -> Option<crate::result::ResultReadSnapshot> {
+        use crate::result::{ResultReadSnapshot, ResultValidity};
+        let entry = self.values.get(&id)?;
+        if !entry.snapshot.value().is_evaluated() {
+            return None;
+        }
+        let validity = match self.outputs.get(entry.snapshot.output()) {
+            Some(cached) if cached.result == Some(id) && cached.valid => {
+                ResultValidity::CurrentValid
+            }
+            Some(cached) if cached.result == Some(id) => ResultValidity::CurrentStale,
+            _ => ResultValidity::Retained,
+        };
+        Some(ResultReadSnapshot {
+            result: entry.snapshot.clone(),
+            validity,
+        })
     }
 }

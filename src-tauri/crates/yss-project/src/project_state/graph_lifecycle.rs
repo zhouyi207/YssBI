@@ -131,6 +131,7 @@ impl ProjectState {
         source_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
+        name: Option<String>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
@@ -161,7 +162,7 @@ impl ProjectState {
         let (target, name) = Self::allocate_graph_path_from_snapshot(
             snapshot.session.root.as_path().to_str(),
             &snapshot.data,
-            &format!("{} Copy", source.name),
+            name.as_deref().unwrap_or(&format!("{} Copy", source.name)),
             source.kind,
         )?;
         mutation_context
@@ -1029,7 +1030,8 @@ mod tests {
                 &session.instance_id,
                 &path,
                 wrong_revision,
-                yss_project_identity::OperationId::new()
+                yss_project_identity::OperationId::new(),
+                None,
             ),
             Err(ProjectOperationError::ResourceRevisionConflict { .. })
         ));
@@ -1098,6 +1100,7 @@ mod tests {
                 &event,
                 ResourceRevision::INITIAL,
                 yss_project_identity::OperationId::new(),
+                None,
             )
             .unwrap()
             .into_parts();

@@ -84,14 +84,17 @@ pub struct FileVersion {
 }
 #[derive(Debug, Clone)]
 pub struct FileState<T: FileContent> {
-    pub document: T,
+    document: T,
     pub version: FileVersion,
     pub saved_hash: String,
+    current_hash: String,
 }
 impl<T: FileContent> FileState<T> {
     pub fn new(document: T, session_id: String) -> Result<Self, String> {
+        let current_hash = document.fingerprint()?;
         Ok(Self {
-            saved_hash: document.fingerprint()?,
+            saved_hash: current_hash.clone(),
+            current_hash,
             document,
             version: FileVersion {
                 session_id,
@@ -99,8 +102,18 @@ impl<T: FileContent> FileState<T> {
             },
         })
     }
-    pub fn dirty(&self) -> Result<bool, String> {
-        Ok(self.document.fingerprint()? != self.saved_hash)
+    pub fn dirty(&self) -> bool {
+        self.current_hash != self.saved_hash
+    }
+    pub fn content(&self) -> &T {
+        &self.document
+    }
+    /// Install validated content and its identity together; metadata reads remain constant-time.
+    pub fn replace_content(&mut self, document: T) -> Result<(), String> {
+        let identity = document.fingerprint()?;
+        self.document = document;
+        self.current_hash = identity;
+        Ok(())
     }
 }
 

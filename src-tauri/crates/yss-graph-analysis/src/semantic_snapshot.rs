@@ -57,29 +57,41 @@ impl GraphSemanticSnapshot {
         if found != nodes.len() {
             return false;
         }
+        !self
+            .diagnostics_for_nodes(nodes)
+            .any(|diagnostic| diagnostic.blocking)
+            && {
+                let resources = self.resources_for_nodes(nodes);
+                self.functions
+                    .iter()
+                    .filter(|(path, _)| resources.contains(path.as_str()))
+                    .all(|(_, function)| function.state != GraphFunctionState::Invalid)
+            }
+    }
+
+    /// The same location rules used by readiness, including consumer-side connection failures.
+    pub fn diagnostics_for_nodes<'a>(
+        &'a self,
+        nodes: &'a std::collections::BTreeSet<NodeId>,
+    ) -> impl Iterator<Item = &'a GraphDiagnosticFact> + 'a {
         let resources = self.resources_for_nodes(nodes);
-        let local = |location: &GraphDiagnosticLocation| match location {
+        let local = move |location: &GraphDiagnosticLocation| match location {
             GraphDiagnosticLocation::Node(node)
             | GraphDiagnosticLocation::Parameter { node_id: node, .. } => nodes.contains(node),
             GraphDiagnosticLocation::Port(port) => nodes.contains(&port.node_id),
             GraphDiagnosticLocation::Resource(resource) => resources.contains(resource.as_ref()),
             GraphDiagnosticLocation::Graph | GraphDiagnosticLocation::Connection(_) => false,
         };
-        !self.diagnostics.iter().any(|diagnostic| {
+        self.diagnostics.iter().filter(move |diagnostic| {
             if matches!(diagnostic.primary, GraphDiagnosticLocation::Connection(_)) {
                 // A bad consumer binding must not prevent evaluating its producer.
-                return diagnostic.blocking && diagnostic.related.get(1).is_none_or(&local);
+                return diagnostic.related.get(1).is_none_or(&local);
             }
-            diagnostic.blocking
-                && (local(&diagnostic.primary)
-                    || diagnostic.related.iter().any(&local)
-                    || (matches!(diagnostic.primary, GraphDiagnosticLocation::Graph)
-                        && diagnostic.related.is_empty()))
-        }) && self
-            .functions
-            .iter()
-            .filter(|(path, _)| resources.contains(path.as_str()))
-            .all(|(_, function)| function.state != GraphFunctionState::Invalid)
+            local(&diagnostic.primary)
+                || diagnostic.related.iter().any(&local)
+                || (matches!(diagnostic.primary, GraphDiagnosticLocation::Graph)
+                    && diagnostic.related.is_empty())
+        })
     }
 
     /// Resource identities used by the selected nodes and their reachable function bodies.

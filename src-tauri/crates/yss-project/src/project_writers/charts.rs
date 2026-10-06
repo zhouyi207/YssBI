@@ -54,6 +54,7 @@ impl ProjectState {
         source: &ChartResourcePath,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
+        name: Option<String>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
@@ -70,7 +71,11 @@ impl ProjectState {
             .keys()
             .map(ChartResourcePath::display_name)
             .collect::<Vec<_>>();
-        let unique = allocate_unique_resource_name(source.display_name(), existing);
+        let requested = name.as_deref().map(ResourceName::parse).transpose()?;
+        let unique = allocate_unique_resource_name(
+            requested.as_ref().unwrap_or_else(|| source.display_name()),
+            existing,
+        );
         let target = ChartResourcePath::from_name(&unique);
         let mutation_context = context(
             self,

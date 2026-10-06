@@ -105,6 +105,7 @@ pub enum FileCommand<T: FileContent> {
     Duplicate {
         path: FilePath<T>,
         version: FileVersion,
+        name: Option<String>,
     },
     Delete {
         path: FilePath<T>,
@@ -209,8 +210,8 @@ fn snapshot<T: ResourceFile>(
         path: path.clone(),
         version: document.version.clone(),
         kind: T::KIND,
-        content: document.document.clone(),
-        dirty: document.dirty().map_err(error)?,
+        content: document.content().clone(),
+        dirty: document.dirty(),
     })
 }
 
@@ -307,7 +308,7 @@ impl ProjectState {
             | FileCommand::Save { path, version }
             | FileCommand::Discard { path, version }
             | FileCommand::Rename { path, version, .. }
-            | FileCommand::Duplicate { path, version }
+            | FileCommand::Duplicate { path, version, .. }
             | FileCommand::Delete { path, version } => {
                 let current = T::files(data)
                     .get(path)
@@ -348,11 +349,11 @@ impl ProjectState {
                 result_snapshot = Some(snapshot(project, &path, &document)?);
                 FilePatch::Put { path, document }
             }
-            FileCommand::Duplicate { .. } => {
+            FileCommand::Duplicate { name, .. } => {
                 let (source_path, source) = source.expect("source command");
-                let path = unique_path(source_path.name())?;
+                let path = unique_path(name.as_deref().unwrap_or_else(|| source_path.name()))?;
                 let body = source
-                    .document
+                    .content()
                     .duplicate(&mut || uuid::Uuid::new_v4().to_string());
                 let document =
                     FileState::<T>::new(body, uuid::Uuid::new_v4().to_string()).map_err(error)?;
@@ -377,9 +378,9 @@ impl ProjectState {
                     FileCommand::Discard { .. } => {
                         match read_file_content(captured.session.root.as_path(), &path) {
                             Ok(body) => {
-                                document.document = body;
+                                document.replace_content(body).map_err(error)?;
                                 document.saved_hash =
-                                    document.document.fingerprint().map_err(error)?;
+                                    document.content().fingerprint().map_err(error)?;
                                 result_snapshot = Some(snapshot(project, &path, &document)?);
                                 FilePatch::Put { path, document }
                             }
@@ -433,9 +434,11 @@ impl ProjectState {
                                 if edits.is_empty() || edits.len() > 512 {
                                     return Err(error("invalid document edit batch size"));
                                 }
+                                let mut content = document.content().clone();
                                 for edit in edits {
-                                    document.document.apply(edit).map_err(error)?;
+                                    content.apply(edit).map_err(error)?;
                                 }
+                                document.replace_content(content).map_err(error)?;
                             }
                             FileCommand::Save { .. } => {
                                 if read_file_content(captured.session.root.as_path(), &path)
@@ -447,7 +450,7 @@ impl ProjectState {
                                     return Err(ProjectOperationError::ResourceRevisionConflict { message: "saved document changed externally; discard or reopen before saving".into() });
                                 }
                                 document.saved_hash =
-                                    document.document.fingerprint().map_err(error)?;
+                                    document.content().fingerprint().map_err(error)?;
                                 writes.push(write(&path, &document)?);
                             }
                             _ => unreachable!(),
@@ -512,7 +515,7 @@ fn write<T: ResourceFile>(
 ) -> Result<StagedFilesystemMutation, ProjectOperationError> {
     Ok(StagedFilesystemMutation::Write {
         relative_path: path.as_str().into(),
-        contents: document.document.encode().map_err(error)?,
+        contents: document.content().encode().map_err(error)?,
     })
 }
 
@@ -616,7 +619,7 @@ pub(crate) fn external_changes<T: ResourceFile>(
     let mut changes = Vec::new();
     for (path, mut document) in incoming.clone() {
         if let Some(previous) = T::files(data).get(&path) {
-            if previous.dirty().map_err(error)? || previous.document == document.document {
+            if previous.dirty() || previous.content() == document.content() {
                 continue;
             }
             document.version.session_id = previous.version.session_id.clone();
@@ -628,7 +631,7 @@ pub(crate) fn external_changes<T: ResourceFile>(
         changes.push(FilePatch::Put { path, document });
     }
     for (path, previous) in T::files(data) {
-        if !incoming.contains_key(path) && !previous.dirty().map_err(error)? {
+        if !incoming.contains_key(path) && !previous.dirty() {
             changes.push(FilePatch::Remove { path: path.clone() });
         }
     }
@@ -857,6 +860,7 @@ mod tests {
             state,
             project,
             FileCommand::Duplicate {
+                name: None,
                 path: discarded.path.clone(),
                 version: discarded.version,
             },
@@ -897,14 +901,23 @@ mod tests {
                                 node_id: before.root_id.clone(),
                                 content: "must not commit".into()
                             },
-                            MindEdit::AddNode {
-                                node: yss_project_model::mind::MindNode {
-                                    id: "bad".into(),
-                                    parent_id: Some("absent".into()),
-                                    content: "bad".into(),
-                                    reference: None
-                                }
-                            }
+                            MindEdit::AddNodes {
+                                nodes: vec![
+                                    yss_project_model::mind::MindNode {
+                                        id: "good".into(),
+                                        parent_id: Some(before.root_id.clone()),
+                                        content: "must not commit either".into(),
+                                        reference: None,
+                                    },
+                                    yss_project_model::mind::MindNode {
+                                        id: "bad".into(),
+                                        parent_id: Some("absent".into()),
+                                        content: "bad".into(),
+                                        reference: None,
+                                    },
+                                ],
+                                before_id: None,
+                            },
                         ]
                     }
                 )
@@ -914,15 +927,70 @@ mod tests {
             state.read_file(project, &mind.path).unwrap().content,
             before
         );
+        let mind = apply(
+            state,
+            project,
+            FileCommand::Edit {
+                path: mind.path,
+                version: mind.version,
+                edits: vec![MindEdit::AddNodes {
+                    nodes: vec![
+                        yss_project_model::mind::MindNode {
+                            id: "leaf".into(),
+                            parent_id: Some("branch".into()),
+                            content: "Evidence".into(),
+                            reference: None,
+                        },
+                        yss_project_model::mind::MindNode {
+                            id: "branch".into(),
+                            parent_id: Some(before.root_id.clone()),
+                            content: "Results".into(),
+                            reference: None,
+                        },
+                    ],
+                    before_id: None,
+                }],
+            },
+        );
+        assert!(mind.dirty);
+        assert!(
+            state
+                .apply_file_command(
+                    project,
+                    OperationId::new(),
+                    FileCommand::Edit {
+                        path: mind.path.clone(),
+                        version: mind.version.clone(),
+                        edits: vec![
+                            MindEdit::SetContent {
+                                node_id: mind.content.root_id.clone(),
+                                content: "must roll back".into()
+                            },
+                            MindEdit::MoveNodes {
+                                moves: vec![yss_project_model::mind::MindNodeMove {
+                                    node_id: "branch".into(),
+                                    parent_id: "leaf".into(),
+                                    before_id: None
+                                }]
+                            },
+                        ],
+                    }
+                )
+                .is_err()
+        );
+        let after = state.read_file(project, &mind.path).unwrap();
+        assert_eq!(after.content, mind.content);
+        assert_eq!(after.version, mind.version);
         let copy = apply(
             state,
             project,
             FileCommand::Duplicate {
+                name: None,
                 path: mind.path,
                 version: mind.version,
             },
         );
-        let (source, copy) = (before, copy.content);
+        let (source, copy) = (mind.content, copy.content);
         assert_ne!(source.root_id, copy.root_id);
         assert_eq!(source.nodes[0].content, copy.nodes[0].content);
         let reopened =

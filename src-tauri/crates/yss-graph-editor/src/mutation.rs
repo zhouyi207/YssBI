@@ -21,6 +21,8 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[path = "mutation/authoring.rs"]
+mod authoring;
 #[path = "mutation/connection.rs"]
 mod connection;
 use connection::{
@@ -142,6 +144,17 @@ pub enum PortPlacement {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum EditorGraphMutation {
+    SetNodeLabel {
+        node_id: NodeId,
+        label: Option<String>,
+    },
+    SetPortCounts {
+        node_id: NodeId,
+        counts: yss_node_protocol::InitialPortCounts,
+    },
+    UpdateConnections {
+        connections: Vec<ConnectionUpdate>,
+    },
     InsertConstantReference {
         id: yss_graph_document::ConstantId,
         position: NodePosition,
@@ -222,9 +235,22 @@ pub struct NodePositionMutation {
     pub position: NodePosition,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConnectionUpdate {
+    pub connection_id: ConnectionId,
+    pub output: PortAddress,
+    pub input: PortAddress,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<Option<OrderKey>>,
+}
+
 impl EditorGraphMutation {
     pub fn referenced_ports<'a>(&'a self, document: &'a GraphDocument) -> Vec<&'a PortAddress> {
         match self {
+            Self::UpdateConnections { connections } => connections
+                .iter()
+                .flat_map(|item| [&item.output, &item.input])
+                .collect(),
             Self::Connect { output, input, .. } => vec![output, input],
             Self::MoveConnections { source, target } => vec![source, target],
             Self::InsertReroute { connection_id, .. } => document
@@ -267,6 +293,15 @@ impl EditorGraphMutation {
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let catalog_validation = context.catalog;
         let operations = match self {
+            Self::SetNodeLabel { node_id, label } => {
+                authoring::set_node_label(document, node_id, label)?
+            }
+            Self::SetPortCounts { node_id, counts } => {
+                authoring::set_port_counts(document, registry, node_id, counts)?
+            }
+            Self::UpdateConnections { connections } => {
+                connection::update_connection_operations(document, registry, context, connections)?
+            }
             Self::InsertConstantReference { id, position } => {
                 validate_position(position)?;
                 if !document.constants.contains_key(&id) {
@@ -561,7 +596,8 @@ impl EditorGraphMutation {
                     })?,
                     node_ids,
                     offset,
-                );
+                )
+                .map(|duplicated| duplicated.patch);
             }
             Self::InsertSubgraph { snapshot, anchor } => {
                 return crate::subgraph::instantiate_subgraph(
@@ -1150,18 +1186,11 @@ fn add_port_instance_operations(
     place_port_member(document, node_id, templates, instance_id, placement, true)
 }
 
-fn place_port_member(
+fn user_created_member_sequence(
     document: &GraphDocument,
     node_id: NodeId,
     templates: &[PortKey],
-    member: PortInstanceId,
-    placement: PortPlacement,
-    create: bool,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    if matches!(placement, PortPlacement::Before(target) | PortPlacement::After(target) if target == member)
-    {
-        return Ok(Vec::new());
-    }
+) -> Vec<PortInstanceId> {
     let mut orders = BTreeMap::new();
     for (address, binding) in &document.port_bindings {
         if address.node_id != node_id {
@@ -1184,9 +1213,23 @@ fn place_port_member(
         .map(|(id, order)| (order, id))
         .collect::<Vec<_>>();
     sequence.sort();
-    let mut members = sequence
+    sequence.into_iter().map(|(_, id)| id).collect()
+}
+
+fn place_port_member(
+    document: &GraphDocument,
+    node_id: NodeId,
+    templates: &[PortKey],
+    member: PortInstanceId,
+    placement: PortPlacement,
+    create: bool,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    if matches!(placement, PortPlacement::Before(target) | PortPlacement::After(target) if target == member)
+    {
+        return Ok(Vec::new());
+    }
+    let mut members = user_created_member_sequence(document, node_id, templates)
         .into_iter()
-        .map(|(_, id)| id)
         .filter(|id| id != &member)
         .collect::<Vec<_>>();
     let index = match placement {

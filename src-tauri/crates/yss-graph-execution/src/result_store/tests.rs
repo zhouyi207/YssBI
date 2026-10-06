@@ -531,6 +531,10 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
     store.begin_run(first, &[output()], None, &BTreeMap::new());
     assert!(store.publish(&[result(1, first)], &[]));
     let id = ResultId::from_existing(1);
+    assert_eq!(
+        store.query_result_with_validity(id).unwrap().validity,
+        crate::result::ResultValidity::CurrentValid
+    );
     let weak = Arc::downgrade(store.get(id).unwrap().value());
     let a = Uuid::new_v4();
     let b = Uuid::new_v4();
@@ -563,6 +567,10 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
             .result_id(),
         ResultId::from_existing(2)
     );
+    let old_run = store.query_graph_result_entries("events/main.yssbi-event", Some(first));
+    assert_eq!(old_run.len(), 1);
+    assert_eq!(old_run[0].validity, crate::result::ResultValidity::Retained);
+    drop(old_run);
     store.release(a, "main").unwrap();
     store.release(a, "main").unwrap();
     assert!(store.get(id).is_some());
@@ -572,6 +580,12 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
     ));
     store.release(b, "report-window").unwrap();
     assert!(store.get(id).is_none());
+    assert!(
+        store
+            .query_graph_result_entries("events/main.yssbi-event", Some(first))
+            .is_empty()
+    );
+    assert!(store.query_result_with_validity(id).is_none());
     assert!(weak.upgrade().is_none());
     assert!(store.get(ResultId::from_existing(2)).is_some());
 }
@@ -630,6 +644,13 @@ fn rerun_preserves_previous_success_until_replacement_and_rejects_obsolete_publi
     assert!(store.publish(&[result(1, first)], &[]));
     let previous = Arc::downgrade(store.get(ResultId::from_existing(1)).unwrap().value());
     store.begin_run(second, &[output()], None, &BTreeMap::new());
+    let pending = store.query_graph_result_entries("events/main.yssbi-event", None);
+    assert_eq!(pending.len(), 1);
+    assert_eq!(
+        pending[0].validity,
+        crate::result::ResultValidity::CurrentStale
+    );
+    drop(pending);
     assert!(previous.upgrade().is_some());
     assert!(store.get(ResultId::from_existing(1)).is_some());
     assert!(store.query_pin_result(&output()).is_none());
