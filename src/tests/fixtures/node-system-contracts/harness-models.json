@@ -39,7 +39,8 @@
           }
         ]
       },
-      "hasApiKey": false
+      "hasApiKey": false,
+      "reasoningDefaults": { "cloud-model": "low" }
     },
     {
       "config": {

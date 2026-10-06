@@ -1,5 +1,6 @@
 import type { ResourceRef } from "@/shared/types/domain/resource";
 import type { LanguageModelSelection } from "@/services/assistant/modelContract";
+import type { HarnessTurnOptions } from "@/services/assistant/harnessContract";
 import { AssistantRuntimeProvider as AssistantUiRuntimeProvider } from "@assistant-ui/react";
 import { createContext, useContext, useMemo, type PropsWithChildren } from "react";
 import { useStore } from "zustand";
@@ -9,6 +10,7 @@ import { useAssistantHarnessRuntime } from "./assistantHarnessRuntime";
 import type { AssistantHarnessSnapshot } from "./assistantHarnessProjection";
 
 interface AssistantHarnessContextValue {
+  readonly setTurnOptions: (options: HarnessTurnOptions) => void;
   readonly selectModel: (model: LanguageModelSelection) => Promise<void>;
   readonly projection: Pick<
     StoreApi<AssistantHarnessSnapshot>,
@@ -34,6 +36,7 @@ export function AssistantRuntimeProvider({
     runtime,
     projection,
     selectModel,
+    setTurnOptions,
     reconnect,
     queueMessage,
     removeQueuedMessage,
@@ -47,6 +50,7 @@ export function AssistantRuntimeProvider({
     () => ({
       projection,
       selectModel,
+      setTurnOptions,
       reconnect,
       queueMessage,
       removeQueuedMessage,
@@ -59,6 +63,7 @@ export function AssistantRuntimeProvider({
     [
       projection,
       selectModel,
+      setTurnOptions,
       reconnect,
       queueMessage,
       removeQueuedMessage,
@@ -91,6 +96,7 @@ export function useAssistantHarnessActions(): Omit<AssistantHarnessContextValue,
   return useMemo(
     () => ({
       selectModel: context.selectModel,
+      setTurnOptions: context.setTurnOptions,
       reconnect: context.reconnect,
       queueMessage: context.queueMessage,
       removeQueuedMessage: context.removeQueuedMessage,

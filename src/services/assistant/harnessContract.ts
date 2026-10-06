@@ -1,12 +1,38 @@
 import {
   languageModelSelectionSchema,
   languageModelIdentitySchema,
+  reasoningEffortSchema,
   type LanguageModelSelection,
   type LanguageModelIdentity,
 } from "./modelContract";
 import { z } from "zod";
 import { isResultReference } from "@/shared/types/domain/result";
 import { RESOURCE_KINDS } from "@/shared/types/domain/resource";
+
+export const harnessTurnOptionsSchema = z.strictObject({
+  mode: z.enum(["ask", "write"]),
+  reasoningEffort: reasoningEffortSchema.nullable(),
+});
+export type HarnessTurnOptions = z.infer<typeof harnessTurnOptionsSchema>;
+export const DEFAULT_TURN_OPTIONS: HarnessTurnOptions = Object.freeze({
+  mode: "write",
+  reasoningEffort: null,
+});
+const tokenCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable();
+export const modelTokenUsageSchema = z.strictObject({
+  inputTokens: tokenCount,
+  outputTokens: tokenCount,
+  cachedInputTokens: tokenCount,
+  cacheCreationInputTokens: tokenCount,
+  reasoningTokens: tokenCount,
+});
+export type ModelTokenUsage = z.infer<typeof modelTokenUsageSchema>;
+const usageReportSchema = z.strictObject({
+  usage: modelTokenUsageSchema,
+  contextWindow: z.number().int().positive().nullable(),
+  purpose: z.enum(["response", "compaction"]),
+});
+export type HarnessUsageReport = z.infer<typeof usageReportSchema>;
 
 export const harnessResourceRefSchema = z.strictObject({
   kind: z.enum(RESOURCE_KINDS),
@@ -42,6 +68,7 @@ const toolInspectionSchema = z.object({
   results: resultsSchema,
   startedAt: z.number().int().nonnegative(),
   finishedAt: z.number().int().nonnegative().nullable(),
+  failure: z.object({ code: z.string(), details: z.record(z.string(), z.string()) }).nullable(),
 });
 export type HarnessToolInspection = z.infer<typeof toolInspectionSchema>;
 export function parseHarnessToolInspection(value: unknown): HarnessToolInspection {
@@ -52,26 +79,85 @@ export function parseHarnessToolInspection(value: unknown): HarnessToolInspectio
 
 const HARNESS_CAPABILITY_IDS = [
   "inspect_resource",
-  "manage_resource",
+  "create_resource",
+  "import_database",
+  "rename_resource",
+  "duplicate_resource",
+  "delete_resource",
+  "save_resource",
+  "undo_resource",
+  "redo_resource",
+  "insert_rows",
+  "update_cells",
+  "delete_rows",
+  "create_columns",
+  "rename_columns",
+  "delete_columns",
+  "cast_columns",
+  "set_column_semantics",
   "edit_resource",
-  "export_dataset",
+  "export_database",
   "inspect_ui_intent",
   "request_ui_intent",
   "inspect_graph",
-  "search_node_catalog",
+  "browse_nodes",
+  "inspect_node_type",
+  "find_nodes",
+  "find_constants",
+  "inspect_constants",
+  "create_constants",
+  "update_constants",
+  "delete_constants",
+  "inspect_nodes",
+  "find_connections",
   "search_knowledge",
   "read_knowledge",
+  "inspect_database",
+  "inspect_database_schema",
+  "profile_database",
+  "read_database_rows",
+  "inspect_mind",
+  "inspect_chart",
+  "update_chart",
+  "inspect_document",
+  "read_document",
+  "search_document",
+  "replace_document_text",
+  "append_document",
+  "write_document",
+  "find_topics",
+  "inspect_topics",
+  "create_topics",
+  "update_topics",
+  "move_topics",
+  "delete_topics",
+  "duplicate_topics",
   "inspect_dataset_schema",
   "inspect_dataset_profile",
   "inspect_result",
-  "inspect_project",
+  "read_result_table",
+  "list_resources",
   "apply_graph_edit",
+  "create_nodes",
+  "update_nodes",
+  "delete_nodes",
+  "duplicate_nodes",
+  "move_nodes",
+  "create_connections",
+  "update_connections",
+  "delete_connections",
   "validate_graph",
   "execute_graph",
   "save_graph",
   "list_graph_results",
 ] as const;
 export type HarnessCapabilityId = (typeof HARNESS_CAPABILITY_IDS)[number];
+const HARNESS_CONTROL_TOOLS = [
+  "delegate_task",
+  "followup_task",
+  "propose_statistical_plan",
+] as const;
+export type HarnessToolId = HarnessCapabilityId | (typeof HARNESS_CONTROL_TOOLS)[number];
 
 const AGENT_ROLES = ["manager", "data", "stats", "plot", "report", "review"] as const;
 export type HarnessAgentRole = (typeof AGENT_ROLES)[number];
@@ -101,6 +187,9 @@ export type HarnessEvent = Readonly<{
   occurredAt: number;
 }> &
   (
+    | Readonly<{ type: "turn_configured"; payload: { options: HarnessTurnOptions } }>
+    | Readonly<{ type: "reasoning_delta"; payload: { delta: string } }>
+    | Readonly<{ type: "usage_reported"; payload: HarnessUsageReport }>
     | Readonly<{
         type: "agent_run_resumed";
         payload: { runId: string; role: HarnessAgentRole; objective: string };
@@ -163,11 +252,11 @@ export type HarnessEvent = Readonly<{
     | Readonly<{ type: "plan_proposed"; payload: { plan: unknown } }>
     | Readonly<{
         type: "tool_invocation_started" | "tool_invocation_completed";
-        payload: { invocationId: string; capabilityId: HarnessCapabilityId };
+        payload: { invocationId: string; capabilityId: HarnessToolId };
       }>
     | Readonly<{
         type: "tool_invocation_failed";
-        payload: { invocationId: string; capabilityId: HarnessCapabilityId; failureCode: string };
+        payload: { invocationId: string; capabilityId: HarnessToolId; failureCode: string };
       }>
     | Readonly<{ type: "turn_completed"; payload: { finalText: string } }>
     | Readonly<{ type: "knowledge_cited"; payload: { citation: HarnessKnowledgeCitation } }>
@@ -215,7 +304,7 @@ export class InvalidHarnessPayloadError extends Error {
   }
 }
 
-const CAPABILITY_IDS = new Set<HarnessCapabilityId>(HARNESS_CAPABILITY_IDS);
+const TOOL_IDS = new Set<HarnessToolId>([...HARNESS_CAPABILITY_IDS, ...HARNESS_CONTROL_TOOLS]);
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -237,9 +326,9 @@ function payload(value: Record<string, unknown>): Record<string, unknown> | null
   return record(value.payload);
 }
 
-function capability(value: unknown): HarnessCapabilityId | null {
-  return typeof value === "string" && CAPABILITY_IDS.has(value as HarnessCapabilityId)
-    ? (value as HarnessCapabilityId)
+function toolIdentity(value: unknown): HarnessToolId | null {
+  return typeof value === "string" && TOOL_IDS.has(value as HarnessToolId)
+    ? (value as HarnessToolId)
     : null;
 }
 
@@ -321,6 +410,17 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
   }
   const eventPayload = payload(source);
   if (!eventPayload) throw new InvalidHarnessPayloadError("HarnessEvent");
+  if (type === "turn_configured") {
+    const parsed = harnessTurnOptionsSchema.safeParse(eventPayload.options);
+    if (parsed.success) return { ...base, type, payload: { options: parsed.data } };
+  }
+  if (type === "usage_reported") {
+    const parsed = usageReportSchema.safeParse(eventPayload);
+    if (parsed.success) return { ...base, type, payload: parsed.data };
+  }
+  if (type === "reasoning_delta" && typeof eventPayload.delta === "string") {
+    return { ...base, type, payload: { delta: eventPayload.delta } };
+  }
   if (type === "graph_execution_finished") {
     const invocationId = stringField(eventPayload, "invocationId");
     const { status, failureCode } = eventPayload;
@@ -391,6 +491,8 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
       runId &&
       event &&
       [
+        "usage_reported",
+        "reasoning_delta",
         "graph_execution_finished",
         "text_delta",
         "text_retracted",
@@ -461,13 +563,13 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
     return { ...base, type, payload: { plan: eventPayload.plan } };
   } else if (type === "tool_invocation_started" || type === "tool_invocation_completed") {
     const invocationId = stringField(eventPayload, "invocationId");
-    const capabilityId = capability(eventPayload.capabilityId);
+    const capabilityId = toolIdentity(eventPayload.capabilityId);
     if (invocationId && capabilityId) {
       return { ...base, type, payload: { invocationId, capabilityId } };
     }
   } else if (type === "tool_invocation_failed") {
     const invocationId = stringField(eventPayload, "invocationId");
-    const capabilityId = capability(eventPayload.capabilityId);
+    const capabilityId = toolIdentity(eventPayload.capabilityId);
     const failureCode = stringField(eventPayload, "failureCode");
     if (invocationId && capabilityId && failureCode) {
       return { ...base, type, payload: { invocationId, capabilityId, failureCode } };

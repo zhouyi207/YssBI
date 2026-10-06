@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import {
   openAssistantConversation,
+  closeAssistantConversation,
   toggleAssistantConversationWindow,
 } from "./assistantConversationPanels";
 import { HarnessService } from "@/services/assistant/harnessService";
@@ -123,6 +124,12 @@ it("opens historical conversations from the current document and toggles only th
   await openAssistantConversation("history", true);
   expect(state.open).toHaveBeenCalledTimes(2);
   expect(state.close).toHaveBeenCalledTimes(1);
+  state.projectInstanceId = "current-project";
+  useSidebarStore.getState().clearProjectPanels();
+  await closeAssistantConversation("history");
+  expect(state.close).toHaveBeenCalledTimes(2);
+  expect(state.close).toHaveBeenLastCalledWith("chat-panel");
+  expect(state.open).toHaveBeenCalledTimes(2);
 });
 
 it("closes the whole conversation window and reopens the previously visible conversation", async () => {

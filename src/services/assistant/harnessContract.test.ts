@@ -33,8 +33,19 @@ describe("Harness wire contract", () => {
       ],
       startedAt: 1000,
       finishedAt: 2500,
+      failure: {
+        code: "invalid_request",
+        details: { category: "missing_field", path: "$.constraints", expected: 'type="string"' },
+      },
     };
     expect(parseHarnessToolInspection(inspection)).toEqual(inspection);
+    expect(parseHarnessToolInspection({ ...inspection, failure: null }).failure).toBeNull();
+    expect(() =>
+      parseHarnessToolInspection({
+        ...inspection,
+        failure: { code: "invalid_request", details: { path: 42 } },
+      }),
+    ).toThrow(InvalidHarnessPayloadError);
     const finished = events.find((event) => event.type === "agent_run_finished")!;
     const enriched = {
       ...finished,
@@ -55,7 +66,13 @@ describe("Harness wire contract", () => {
   it("accepts the shared Rust lifecycle fixture including recovery and exact failures", () => {
     for (const event of events) expect(parseHarnessEvent(event)).toEqual(event);
     const tool = events.find((event) => event.type === "tool_invocation_started")!;
-    for (const capabilityId of ["search_knowledge", "read_knowledge"]) {
+    for (const capabilityId of [
+      "search_knowledge",
+      "read_knowledge",
+      "delegate_task",
+      "followup_task",
+      "propose_statistical_plan",
+    ]) {
       const event = { ...tool, payload: { ...tool.payload, capabilityId } };
       expect(parseHarnessEvent(event)).toEqual(event);
     }
@@ -154,6 +171,8 @@ describe("Harness wire contract", () => {
     expect(languageModelCatalogSchema.parse(testModelCatalog)).toEqual(testModelCatalog);
     const catalog = languageModelCatalogSchema.parse(modelCatalog);
     expect(catalog).toEqual(modelCatalog);
+    expect(catalog.providers[0].reasoningDefaults?.["cloud-model"]).toBe("low");
+    expect(catalog.providers[1].reasoningDefaults).toBeUndefined();
     expect(isModelConfigured(catalog, catalog.defaultModel)).toBe(true);
     expect(isModelConfigured(catalog, { providerId: "cloud", modelId: "cloud-model" })).toBe(false);
     expect(isModelConfigured(catalog, { providerId: "local", modelId: "missing" })).toBe(false);

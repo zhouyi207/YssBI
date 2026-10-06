@@ -12,6 +12,8 @@ import {
   parseHarnessSubscription,
   parseHarnessTurnResult,
   parseHarnessToolInspection,
+  DEFAULT_TURN_OPTIONS,
+  type HarnessTurnOptions,
   type HarnessToolInspection,
   type HarnessKnowledgeCitation,
   type HarnessEvent,
@@ -129,9 +131,10 @@ export class HarnessService {
     message: string,
     resources: readonly import("@/shared/types/domain/resource").ResourceRef[] = [],
     model: LanguageModelSelection | null = null,
+    options: HarnessTurnOptions = DEFAULT_TURN_OPTIONS,
   ): Promise<HarnessTurnResult> {
     return parseHarnessTurnResult(
-      await invokeCommand("submit_harness_turn", { sessionId, message, resources, model }),
+      await invokeCommand("submit_harness_turn", { sessionId, message, resources, model, options }),
     );
   }
 

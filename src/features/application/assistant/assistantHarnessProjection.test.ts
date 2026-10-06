@@ -27,6 +27,79 @@ function apply(
   );
 }
 
+it("replays options and reasoning while separating latest context from worker and compaction usage", () => {
+  let snapshot = apply(INITIAL_SNAPSHOT, "turn_started", {
+    model: testModelIdentity,
+    resources: [],
+    userMessage: "Review",
+  });
+  snapshot = apply(snapshot, "turn_configured", {
+    options: { mode: "ask", reasoningEffort: "high" },
+  });
+  snapshot = apply(snapshot, "reasoning_delta", { delta: "Check " });
+  snapshot = apply(snapshot, "reasoning_delta", { delta: "evidence" });
+  snapshot = apply(snapshot, "text_delta", { delta: "Findings" });
+  const report = {
+    usage: {
+      inputTokens: 100,
+      outputTokens: 20,
+      cachedInputTokens: 60,
+      cacheCreationInputTokens: null,
+      reasoningTokens: 10,
+    },
+    contextWindow: 1000,
+    purpose: "response",
+  };
+  snapshot = apply(snapshot, "usage_reported", report);
+  snapshot = apply(snapshot, "agent_run_output", {
+    runId: "worker",
+    event: {
+      type: "usage_reported",
+      payload: { ...report, usage: { ...report.usage, inputTokens: 500 } },
+    },
+  });
+  snapshot = apply(snapshot, "usage_reported", {
+    ...report,
+    purpose: "compaction",
+    usage: {
+      ...report.usage,
+      inputTokens: null,
+      outputTokens: 0,
+      cachedInputTokens: null,
+      reasoningTokens: null,
+    },
+  });
+  expect(snapshot.usage).toMatchObject({
+    calls: 3,
+    incomplete: true,
+    latest: report,
+    total: {
+      inputTokens: 600,
+      outputTokens: 40,
+      cachedInputTokens: 120,
+      reasoningTokens: 20,
+      cacheCreationInputTokens: null,
+    },
+  });
+  expect(snapshot.messages[1]).toMatchObject({
+    options: { mode: "ask", reasoningEffort: "high" },
+    content: [
+      { type: "reasoning", text: "Check evidence" },
+      { type: "text", text: "Findings" },
+    ],
+  });
+  expect(snapshot.turnOptions).toEqual(INITIAL_SNAPSHOT.turnOptions);
+  snapshot = apply(snapshot, "context_compacted");
+  expect(snapshot.usage.latest).toBeNull();
+  expect(snapshot.usage.total.inputTokens).toBe(600);
+  snapshot = apply(snapshot, "turn_started", {
+    model: testModelIdentity,
+    resources: [],
+    userMessage: "Next",
+  });
+  expect(snapshot.usage).toEqual(INITIAL_SNAPSHOT.usage);
+});
+
 it("retains elapsed boundaries for completed tools, resumed worker attempts and cancelled turns", () => {
   let snapshot = apply(
     INITIAL_SNAPSHOT,
@@ -270,7 +343,7 @@ it("replays sampling recovery and keeps exact failure and business delivery stat
     resources: [],
     userMessage: "Create report",
   });
-  blocked = apply(blocked, "delivery_blocked", { reason: "report_document_not_saved" });
+  blocked = apply(blocked, "delivery_blocked", { reason: "report_resource_not_saved" });
   blocked = apply(blocked, "turn_completed", { finalText: "Could not save" });
   expect(blocked.messages[1].status).toEqual({ type: "incomplete", reason: "error" });
   blocked = apply(blocked, "agent_run_resumed", {

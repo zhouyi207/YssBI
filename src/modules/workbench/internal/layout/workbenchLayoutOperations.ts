@@ -78,6 +78,11 @@ export function modelGroups(model: Model): (TabSetNode | BorderNode)[] {
 }
 export function panelIsVisible(tab: TabNode): boolean {
   const parent = tab.getParent();
+  if (
+    tab.getLayoutId() === WORKBENCH_WORKSPACE_LAYOUT_ID &&
+    tab.getModel().getMaximizedTabset(Model.MAIN_LAYOUT_ID)
+  )
+    return false;
   return (
     (parent instanceof TabSetNode || parent instanceof BorderNode) &&
     parent.getSelectedNode() === tab &&
@@ -129,6 +134,7 @@ export class WorkbenchModelOperations {
       metadata,
       active: active === tab,
       visible: panelIsVisible(tab),
+      maximized: this.model.getMaximizedTabset(tab.getLayoutId()) === parent,
       location: nodeLocation(parent),
     };
   };
@@ -273,6 +279,12 @@ export class WorkbenchModelOperations {
         Actions.updateNodeAttributes(panel.panelInstanceId, { name: request.title }),
       );
   };
+  toggleConversationMaximized = (sessionId: string): void => {
+    const panel = this.listPanels().find(
+      (entry) => entry.metadata.role === "conversation" && entry.metadata.sessionId === sessionId,
+    );
+    if (panel) this.model.doAction(Actions.maximizeToggle(panel.groupId, Model.MAIN_LAYOUT_ID));
+  };
   ensurePluginView = (request: EnsurePluginViewRequest): WorkbenchPanelInfo => {
     const existing = this.listPanels().find(
       (panel) =>
@@ -390,6 +402,9 @@ export class WorkbenchModelOperations {
   private activationActions = (id: string, parent: TabSetNode | BorderNode): Action[] => {
     const actions: Action[] = [];
     const layoutId = parent.getLayoutId();
+    const rootMaximized = this.model.getMaximizedTabset(Model.MAIN_LAYOUT_ID);
+    if (layoutId === WORKBENCH_WORKSPACE_LAYOUT_ID && rootMaximized)
+      actions.push(Actions.maximizeToggle(rootMaximized.getId(), Model.MAIN_LAYOUT_ID));
     const maximized = this.model.getMaximizedTabset(layoutId);
     if (parent instanceof TabSetNode && maximized && maximized !== parent)
       actions.push(Actions.maximizeToggle(maximized.getId(), layoutId));

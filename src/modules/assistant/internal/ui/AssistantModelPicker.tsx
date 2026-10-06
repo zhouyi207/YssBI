@@ -1,77 +1,96 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useStore } from "zustand";
-import { useShallow } from "zustand/react/shallow";
-import { VscSettingsGear } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
-import { assistantModels } from "@/features/application/assistant/assistantModels";
+import {
+  Combobox,
+  ComboboxTrigger,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
 import {
   useAssistantHarnessActions,
   useAssistantHarnessSnapshot,
 } from "@/features/application/assistant/AssistantRuntimeProvider";
+import { assistantModels } from "@/features/application/assistant/assistantModels";
 import { modelSelectionKey, providerDisplayName } from "@/services/assistant/modelContract";
 import { ui } from "@/features/core/ui/ui";
 
 export function AssistantModelPicker() {
   const { t } = useTranslation();
   const catalog = useStore(assistantModels, (state) => state.catalog);
-  const { selectedModel, selectingModel, sessionId } = useAssistantHarnessSnapshot(
-    useShallow((state) => ({
-      selectedModel: state.selectedModel,
-      selectingModel: state.selectingModel,
-      sessionId: state.sessionId,
-    })),
-  );
+  const selectedModel = useAssistantHarnessSnapshot((state) => state.selectedModel);
+  const disabled = useAssistantHarnessSnapshot((state) => !state.sessionId || state.selectingModel);
   const { selectModel } = useAssistantHarnessActions();
-  const key = modelSelectionKey(selectedModel);
-  const choices =
-    catalog?.providers.flatMap(({ config, hasApiKey }) =>
-      config.models.map((model) => ({
-        key: modelSelectionKey({ providerId: config.id, modelId: model.id }),
-        selection: { providerId: config.id, modelId: model.id },
-        label: `${providerDisplayName(config)} · ${model.name}`,
-        enabled: config.authentication === "none" || hasApiKey,
-      })),
-    ) ?? [];
+  const choices = useMemo(
+    () =>
+      catalog?.providers.flatMap(({ config, hasApiKey }) =>
+        config.models.map((model) => ({
+          key: modelSelectionKey({ providerId: config.id, modelId: model.id }),
+          selection: { providerId: config.id, modelId: model.id },
+          label: `${providerDisplayName(config)} · ${model.name}`,
+          enabled: config.authentication === "none" || hasApiKey,
+        })),
+      ) ?? [],
+    [catalog],
+  );
+  const selected =
+    choices.find((choice) => choice.key === modelSelectionKey(selectedModel)) ?? null;
+  const label =
+    selected?.label ??
+    t(selectedModel ? "settings.models.unavailable" : "settings.models.chooseModel");
   return (
-    <div className="flex min-w-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
-      <select
+    <Combobox
+      items={choices}
+      value={selected}
+      onValueChange={(choice) => {
+        if (choice?.enabled) void selectModel(choice.selection);
+      }}
+      itemToStringLabel={(choice) => choice.label}
+      isItemEqualToValue={(a, b) => a.key === b.key}
+    >
+      <ComboboxTrigger
+        disabled={disabled}
+        render={<Button type="button" variant="ghost" size="xs" />}
+        className="max-w-60 min-w-0 shrink gap-1 px-1"
         aria-label={t("settings.models.chooseModel")}
-        title={t("settings.models.nextTurn")}
-        className="h-7 min-w-0 flex-1 rounded-md bg-transparent px-1 text-xs outline-none focus:ring-1 focus:ring-ring"
-        disabled={!sessionId || selectingModel}
-        value={key}
-        onChange={(event) => {
-          const model = choices.find((choice) => choice.key === event.target.value);
-          if (model) void selectModel(model.selection);
-        }}
+        title={label}
       >
-        {!choices.some((choice) => choice.key === key) && (
-          <option value={key}>
-            {t(key ? "settings.models.unavailable" : "settings.models.chooseModel")}
-          </option>
-        )}
-        {choices.map((choice) => (
-          <option
-            className="bg-background text-foreground"
-            key={choice.key}
-            value={choice.key}
-            disabled={!choice.enabled}
-          >
-            {choice.label}
-            {choice.enabled ? "" : ` · ${t("settings.models.needsKey")}`}
-          </option>
-        ))}
-      </select>
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="ghost"
-        aria-label={t("settings.models.manage")}
-        title={t("settings.models.manage")}
-        onClick={() => ui.showSettings()}
-      >
-        <VscSettingsGear aria-hidden />
-      </Button>
-    </div>
+        <span className="truncate">{label}</span>
+      </ComboboxTrigger>
+      <ComboboxContent side="top" align="end" className="w-80">
+        <ComboboxInput
+          showTrigger={false}
+          placeholder={t("panel.assistantSearchModels")}
+          aria-label={t("panel.assistantSearchModels")}
+        />
+        <ComboboxEmpty>{t("panel.assistantNoModels")}</ComboboxEmpty>
+        <ComboboxList>
+          {(choice) => (
+            <ComboboxItem
+              key={choice.key}
+              value={choice}
+              disabled={!choice.enabled}
+              className="text-xs"
+            >
+              {choice.label}
+              {!choice.enabled && ` · ${t("settings.models.needsKey")}`}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="m-1"
+          onClick={() => ui.showSettings()}
+        >
+          {t("settings.models.manage")}
+        </Button>
+      </ComboboxContent>
+    </Combobox>
   );
 }

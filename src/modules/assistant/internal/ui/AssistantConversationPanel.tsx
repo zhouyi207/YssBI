@@ -4,6 +4,7 @@ import { AssistantRuntimeProvider } from "@/features/application/assistant/Assis
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import { workbenchLayoutControl, showWorkbenchLayoutError } from "@/modules/workbench/public";
 import { AssistantThread } from "./AssistantThread";
+import { AssistantConversationHeader } from "./AssistantConversationHeader";
 
 export function AssistantConversationPanel({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation();
@@ -22,10 +23,14 @@ export function AssistantConversationPanel({ sessionId }: { sessionId: string })
   }, [sessionId, title, t]);
   return (
     <div
-      className="h-full min-h-0 w-full min-w-0 overflow-hidden"
+      className="assistant-conversation flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-(--workbench-bg)"
       data-assistant-conversation={sessionId}
     >
       <AssistantRuntimeProvider key={sessionId} sessionId={sessionId}>
+        <AssistantConversationHeader
+          sessionId={sessionId}
+          title={title || t("panel.assistantNewConversation")}
+        />
         <AssistantThread />
       </AssistantRuntimeProvider>
     </div>

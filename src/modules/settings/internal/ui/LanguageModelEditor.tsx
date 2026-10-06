@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   languageModelConfigSchema,
+  REASONING_EFFORTS,
   type LanguageModelConfig,
   type LanguageModelProvider,
 } from "@/services/assistant/modelContract";
@@ -150,6 +152,29 @@ export function LanguageModelEditor({
             />
           </SettingsField>
         </div>
+        <fieldset className="space-y-2 border-t border-border pt-3">
+          <legend className="text-xs font-medium">{t("settings.models.reasoningEfforts")}</legend>
+          <p className="text-xs text-muted-foreground">{t("settings.models.reasoningHint")}</p>
+          <div className="flex gap-4">
+            {REASONING_EFFORTS.map((effort) => (
+              <label key={effort} className="flex items-center gap-2 text-xs">
+                <Checkbox
+                  checked={model.reasoningEfforts?.includes(effort) ?? false}
+                  onCheckedChange={(checked) =>
+                    onChange({
+                      reasoningEfforts: checked
+                        ? REASONING_EFFORTS.filter(
+                            (item) => item === effort || model.reasoningEfforts?.includes(item),
+                          )
+                        : (model.reasoningEfforts ?? []).filter((item) => item !== effort),
+                    })
+                  }
+                />
+                {t(`panel.assistantEffort.${effort}`)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <Collapsible
           open={advanced}
           onOpenChange={setAdvanced}

@@ -1,21 +1,29 @@
 import { languageModelSelectionSchema } from "@/services/assistant/modelContract";
 import { z } from "zod";
-import { harnessResourceRefSchema } from "@/services/assistant/harnessContract";
+import {
+  harnessResourceRefSchema,
+  harnessTurnOptionsSchema,
+  DEFAULT_TURN_OPTIONS,
+  type HarnessTurnOptions,
+} from "@/services/assistant/harnessContract";
 import type { ResourceRef } from "@/shared/types/domain/resource";
 
 const pendingSchema = z.object({
+  options: harnessTurnOptionsSchema,
   text: z.string(),
   resources: z.array(harnessResourceRefSchema),
   model: languageModelSelectionSchema.nullable(),
   afterSequence: z.number().int().nonnegative(),
 });
 const queuedSchema = z.object({
+  options: harnessTurnOptionsSchema,
   id: z.string(),
   text: z.string(),
   resources: z.array(harnessResourceRefSchema),
   model: languageModelSelectionSchema.nullable(),
 });
 const draftsSchema = z.object({
+  options: harnessTurnOptionsSchema,
   pending: pendingSchema.nullable(),
   queued: z.array(queuedSchema),
   resources: z.array(harnessResourceRefSchema),
@@ -33,7 +41,7 @@ export function readAssistantDrafts(sessionId: string): z.infer<typeof draftsSch
   } catch {
     /* Unavailable storage must not prevent reading durable conversations. */
   }
-  return { pending: null, queued: [], resources: [] };
+  return { pending: null, queued: [], resources: [], options: DEFAULT_TURN_OPTIONS };
 }
 
 export function writeAssistantDrafts(
@@ -41,11 +49,11 @@ export function writeAssistantDrafts(
   pending: PendingAssistantMessage | null,
   queued: readonly QueuedAssistantMessage[],
   resources: readonly ResourceRef[],
+  options: HarnessTurnOptions,
 ): void {
   try {
     const key = `yssbi.assistant.pending.${sessionId}`;
-    if (!pending && queued.length === 0 && resources.length === 0) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify({ pending, queued, resources }));
+    localStorage.setItem(key, JSON.stringify({ pending, queued, resources, options }));
   } catch {
     /* The active input remains in the session projection if storage is unavailable. */
   }

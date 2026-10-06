@@ -87,9 +87,9 @@ export function AssistantToolGroup({
     <Collapsible
       open={expanded ?? active}
       onOpenChange={setExpanded}
-      className="my-2 min-w-0 rounded-lg border border-border/60 bg-muted/20 text-xs"
+      className="my-2 min-w-0 rounded-md border border-border/60 text-xs"
     >
-      <CollapsibleTrigger className="group flex w-full min-w-0 flex-wrap items-center gap-2 rounded-lg px-3 py-2.5 text-left text-muted-foreground hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
+      <CollapsibleTrigger className="group flex w-full min-w-0 flex-wrap items-center gap-2 rounded-md px-2 py-1.5 text-left text-muted-foreground hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
         <VscChevronRight
           aria-hidden
           className="shrink-0 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
@@ -238,6 +238,20 @@ export function AssistantToolDetails({
                 {t("panel.assistantRetryDetails")}
               </Button>
             </div>
+          )}
+          {inspection?.failure && (
+            <dl className="mb-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-destructive">
+              {Object.entries(inspection.failure.details).map(([key, value]) => (
+                <div key={key} className="contents">
+                  <dt>{t(`panel.assistantToolFacts.${key}`, { defaultValue: key })}</dt>
+                  <dd className="min-w-0 wrap-anywhere">
+                    {key === "reason" || key === "category"
+                      ? t(`panel.assistantToolValues.${value}`, { defaultValue: value })
+                      : value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           )}
           {inspection && Object.entries(inspection.parameters).length > 0 && (
             <dl className="mb-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">

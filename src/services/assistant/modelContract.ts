@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const REASONING_EFFORTS = ["low", "medium", "high"] as const;
+export const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
+export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
+
 export const languageModelSelectionSchema = z.strictObject({
   providerId: z.string().min(1),
   modelId: z.string().min(1),
@@ -11,6 +15,7 @@ export const languageModelIdentitySchema = z.strictObject({
   modelName: z.string().min(1),
 });
 export const languageModelConfigSchema = z.strictObject({
+  reasoningEfforts: z.array(reasoningEffortSchema).optional(),
   id: z.string().min(1),
   name: z.string().min(1),
   contextWindow: z.number().int().positive().nullable(),
@@ -48,7 +53,11 @@ export const languageModelCatalogSchema = z.strictObject({
     }),
   ),
   providers: z.array(
-    z.strictObject({ config: languageModelProviderSchema, hasApiKey: z.boolean() }),
+    z.strictObject({
+      config: languageModelProviderSchema,
+      hasApiKey: z.boolean(),
+      reasoningDefaults: z.record(z.string(), reasoningEffortSchema).optional(),
+    }),
   ),
   defaultModel: languageModelSelectionSchema.nullable(),
 });
@@ -57,6 +66,16 @@ export type LanguageModelIdentity = z.infer<typeof languageModelIdentitySchema>;
 export type LanguageModelConfig = z.infer<typeof languageModelConfigSchema>;
 export type LanguageModelProvider = z.infer<typeof languageModelProviderSchema>;
 export type LanguageModelCatalog = z.infer<typeof languageModelCatalogSchema>;
+
+/** An absent or empty override does not require users to opt in to effort selection. */
+export function modelReasoningEfforts(
+  model: LanguageModelConfig | undefined,
+  defaultEffort: ReasoningEffort | null = null,
+) {
+  if (!model) return undefined;
+  const efforts = model.reasoningEfforts?.length ? model.reasoningEfforts : REASONING_EFFORTS;
+  return defaultEffort && !efforts.includes(defaultEffort) ? [...efforts, defaultEffort] : efforts;
+}
 
 export function providerDisplayName(
   provider: Pick<LanguageModelProvider, "name" | "customName">,

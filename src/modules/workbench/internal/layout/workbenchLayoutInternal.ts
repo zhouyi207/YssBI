@@ -134,6 +134,8 @@ export function createWorkbenchLayoutRuntime(): {
     openReference: (request) => mutate((model) => model.openReference(request)),
     openConversation: (request) => mutate((model) => model.openConversation(request)),
     updateConversationTitle: (request) => mutate((model) => model.updateConversationTitle(request)),
+    toggleConversationMaximized: (sessionId) =>
+      mutate((model) => model.toggleConversationMaximized(sessionId)),
     ensureView: (request) => mutate((model) => model.ensureView(request)),
     upsertResult: (request) => mutate((model) => model.upsertResult(request)),
     replaceResult: (expected, request) => mutate((model) => model.replaceResult(expected, request)),

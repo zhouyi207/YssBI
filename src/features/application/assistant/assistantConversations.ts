@@ -72,9 +72,13 @@ export const createAssistantConversation = () =>
 export const renameAssistantConversation = (sessionId: string, title: string) =>
   mutateConversation(() => HarnessService.renameSession(sessionId, title.trim()));
 
+export function useAssistantConversationMutationState() {
+  const state = useMutations();
+  return isProjectLifecycleStateCurrent(state.scope) ? state : { saving: false, error: null };
+}
+
 export function useAssistantConversationMutations() {
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  const state = useMutations();
   useEffect(() => {
     currentScope();
     const reload = () => {
@@ -83,5 +87,5 @@ export function useAssistantConversationMutations() {
     window.addEventListener("focus", reload);
     return () => window.removeEventListener("focus", reload);
   }, [projectInstanceId]);
-  return isProjectLifecycleStateCurrent(state.scope) ? state : { saving: false, error: null };
+  return useAssistantConversationMutationState();
 }

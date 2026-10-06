@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { useTranslation } from "react-i18next";
 import { useAssistantHarnessSnapshot } from "@/features/application/assistant/AssistantRuntimeProvider";
+import { harnessTurnOptionsSchema } from "@/services/assistant/harnessContract";
 
 export function AssistantElapsed({
   startedAt,
@@ -95,6 +96,20 @@ export function AssistantTurnModel() {
       title={`${model.providerName} · ${model.modelName}`}
     >
       {model.modelName}
+    </span>
+  );
+}
+
+export function AssistantTurnOptions() {
+  const { t } = useTranslation();
+  const value = useAuiState((state) => state.message.metadata.custom.options);
+  const options = harnessTurnOptionsSchema.safeParse(value);
+  if (!options.success) return null;
+  return (
+    <span className="text-[11px] font-normal text-muted-foreground">
+      {t(`panel.assistantModes.${options.data.mode}`)}
+      {options.data.reasoningEffort &&
+        ` · ${t(`panel.assistantEffort.${options.data.reasoningEffort}`)}`}
     </span>
   );
 }

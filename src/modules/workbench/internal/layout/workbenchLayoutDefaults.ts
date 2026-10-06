@@ -26,7 +26,7 @@ export const WORKBENCH_CONVERSATION_GROUP_ATTRIBUTES = {
   enableTabStrip: false,
   enableDrag: false,
   enableDivide: false,
-  enableMaximize: false,
+  enableMaximize: true,
 } as const;
 export const WORKBENCH_EDGE_GROUP_IDS = {
   left: "border_left",

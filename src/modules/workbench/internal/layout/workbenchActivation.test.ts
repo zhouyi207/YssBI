@@ -48,6 +48,18 @@ describe("native central activation", () => {
     expect(ops.getPanel(first.panelInstanceId)?.visible).toBe(true);
     ops.reveal(first.panelInstanceId);
     expect(model.getMaximizedTabset(WORKBENCH_WORKSPACE_LAYOUT_ID)?.getId()).toBe(editor.groupId);
+    ops.toggleConversationMaximized("conversation-1");
+    expect(model.getMaximizedTabset()?.getId()).toBe(first.groupId);
+    expect(ops.getPanel(first.panelInstanceId)?.maximized).toBe(true);
+    expect(ops.getPanel(editor.panelInstanceId)?.visible).toBe(false);
+    ops.toggleConversationMaximized("conversation-1");
+    expect(ops.getPanel(first.panelInstanceId)?.maximized).toBe(false);
+    expect(ops.getPanel(editor.panelInstanceId)?.visible).toBe(true);
+    ops.toggleConversationMaximized("conversation-1");
+    ops.reveal(editor.panelInstanceId);
+    expect(ops.getPanel(first.panelInstanceId)?.maximized).toBe(false);
+    expect(ops.getPanel(editor.panelInstanceId)?.visible).toBe(true);
+    expect(model.getMaximizedTabset(WORKBENCH_WORKSPACE_LAYOUT_ID)?.getId()).toBe(editor.groupId);
     expect(ops.move({ panelInstanceId: first.panelInstanceId, groupId: editor.groupId })).toBe(
       false,
     );
@@ -95,7 +107,9 @@ describe("native central activation", () => {
     ).toBe("invalid");
     ops.removePanels([first.panelInstanceId]);
     expect(ops.getPanel(second.panelInstanceId)?.visible).toBe(true);
+    ops.toggleConversationMaximized("conversation-2");
     ops.removePanels([second.panelInstanceId]);
+    expect(model.getMaximizedTabset()).toBeUndefined();
     expect(model.getNodeById(WORKBENCH_CONVERSATION_GROUP_ID)).toBeUndefined();
     expect(ops.getPanel(editor.panelInstanceId)?.visible).toBe(true);
   });

@@ -23,6 +23,7 @@ export interface WorkbenchPanelInfo {
   readonly active: boolean;
   /** Live FlexLayout visibility; omitted by transaction-only projections. */
   readonly visible?: boolean;
+  readonly maximized?: boolean;
   readonly location:
     | { readonly type: "grid" }
     | { readonly type: "conversation" }
@@ -155,6 +156,7 @@ export interface WorkbenchLayoutControlContract {
   openReference(request: OpenReferenceRequest): Promise<WorkbenchPanelInfo>;
   openConversation(request: OpenConversationRequest): Promise<WorkbenchPanelInfo>;
   updateConversationTitle(request: OpenConversationRequest): Promise<void>;
+  toggleConversationMaximized(sessionId: string): Promise<void>;
   ensureView(request: EnsureViewRequest): Promise<WorkbenchPanelInfo>;
   upsertResult(request: UpsertResultRequest): Promise<WorkbenchPanelInfo>;
   replaceResult(

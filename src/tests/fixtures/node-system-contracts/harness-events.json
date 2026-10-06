@@ -129,7 +129,7 @@
     "occurredAt": 1000,
     "type": "delivery_blocked",
     "payload": {
-      "reason": "report_document_not_saved"
+      "reason": "report_resource_not_saved"
     }
   },
   {
@@ -149,6 +149,47 @@
       "evidenceCount": 3,
       "artifacts": [],
       "results": []
+    }
+  },
+  {
+    "sequence": 14,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "turn_configured",
+    "payload": {
+      "options": {
+        "mode": "ask",
+        "reasoningEffort": "high"
+      }
+    }
+  },
+  {
+    "sequence": 15,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "reasoning_delta",
+    "payload": {
+      "delta": "Checking evidence"
+    }
+  },
+  {
+    "sequence": 16,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "usage_reported",
+    "payload": {
+      "usage": {
+        "inputTokens": 100,
+        "outputTokens": 20,
+        "cachedInputTokens": 60,
+        "cacheCreationInputTokens": null,
+        "reasoningTokens": 10
+      },
+      "contextWindow": 1000,
+      "purpose": "response"
     }
   }
 ]

@@ -6,9 +6,18 @@ import {
   ThreadPrimitive,
   useAuiState,
   type DataMessagePartComponent,
+  type ReasoningMessagePartComponent,
 } from "@assistant-ui/react";
 import { useTranslation } from "react-i18next";
-import { VscArrowDown, VscCheck, VscCopy, VscSparkle } from "react-icons/vsc";
+import {
+  VscArrowDown,
+  VscCheck,
+  VscCopy,
+  VscSparkle,
+  VscLightbulb,
+  VscChevronRight,
+} from "react-icons/vsc";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -22,22 +31,44 @@ import { assistantFailureKey } from "@/features/application/assistant/assistantM
 import type { HarnessArtifact, HarnessResultReference } from "@/services/assistant/harnessContract";
 import { AssistantMarkdown } from "./AssistantMarkdown";
 import { AssistantToolCall, AssistantToolGroup } from "./AssistantToolCalls";
-import { AssistantTurnModel, AssistantTurnTiming } from "./AssistantExecution";
+import {
+  AssistantTurnModel,
+  AssistantTurnTiming,
+  AssistantTurnOptions,
+} from "./AssistantExecution";
 import { AssistantUserReferences } from "./AssistantReferences";
 import { AssistantComposer } from "./AssistantComposer";
 import { AgentTaskCard, StatisticalPlanCard } from "./AssistantTasks";
 import { AssistantArtifacts, AssistantSourceCard } from "./AssistantResources";
 
 function UserMessage() {
+  const { t } = useTranslation();
   return (
-    <MessagePrimitive.Root className="flex min-w-0 justify-end py-3">
-      <div className="min-w-0 max-w-[90%] rounded-2xl rounded-br-sm bg-muted px-3.5 py-2.5 text-[13px] leading-7 wrap-anywhere text-foreground">
+    <MessagePrimitive.Root className="min-w-0 border-b border-border/60 py-4">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">{t("panel.assistantYou")}</p>
+      <div className="min-w-0 text-[13px] leading-7 wrap-anywhere whitespace-pre-wrap text-foreground">
         <MessagePrimitive.Parts />
         <AssistantUserReferences />
       </div>
     </MessagePrimitive.Root>
   );
 }
+
+const AssistantReasoning: ReasoningMessagePartComponent = ({ text }) => {
+  const { t } = useTranslation();
+  return (
+    <Collapsible className="my-2 min-w-0 text-xs text-muted-foreground">
+      <CollapsibleTrigger className="group flex items-center gap-2 py-1 text-left">
+        <VscLightbulb aria-hidden />
+        <span>{t("panel.assistantThinking")}</span>
+        <VscChevronRight aria-hidden className="group-data-[state=open]:rotate-90" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="max-h-72 overflow-auto border-l border-border py-2 pl-5 leading-6 whitespace-pre-wrap wrap-anywhere">
+        {text}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
 
 function MessageActions() {
   const { t } = useTranslation();
@@ -101,11 +132,13 @@ function AssistantMessage() {
         {t("panel.assistant")}
         <AssistantTurnTiming />
         <AssistantTurnModel />
+        <AssistantTurnOptions />
       </div>
       <div className="min-w-0 text-foreground">
         <MessagePrimitive.Parts
           components={{
             Text: AssistantMarkdown,
+            Reasoning: AssistantReasoning,
             Source: AssistantSourceCard,
             data: {
               by_name: {
@@ -201,7 +234,7 @@ export function AssistantThread() {
   const sessionId = useAssistantHarnessSnapshot((state) => state.sessionId);
   const viewport = useRef<HTMLDivElement>(null);
   return (
-    <ThreadPrimitive.Root className="flex h-full min-h-0 min-w-0 flex-col bg-(--workbench-bg)">
+    <ThreadPrimitive.Root className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--workbench-bg)">
       <ThreadPrimitive.ViewportProvider>
         <div className="relative flex min-h-0 flex-1 flex-col">
           <ThreadPrimitive.Viewport

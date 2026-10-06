@@ -1,5 +1,6 @@
 import {
   isModelConfigured,
+  modelReasoningEfforts,
   type LanguageModelCatalog,
   type LanguageModelSelection,
 } from "@/services/assistant/modelContract";
@@ -9,6 +10,7 @@ import { reloadAssistantConversations } from "./assistantConversations";
 import { toErrorReference } from "@/features/application/errorReference";
 import type { ResourceRef } from "@/shared/types/domain/resource";
 import { resourceKey } from "@/features/core/resource";
+import type { HarnessTurnOptions } from "@/services/assistant/harnessContract";
 import {
   HarnessService,
   type HarnessEvent,
@@ -88,6 +90,7 @@ export class AssistantHarnessProjection {
           pending: cached.unsentMessage,
           queued: cached.queuedMessages,
           resources: cached.draftResources,
+          options: cached.turnOptions,
         }
       : readAssistantDrafts(session.sessionId);
     this.update({
@@ -101,9 +104,11 @@ export class AssistantHarnessProjection {
             activity: cached.activity,
             recoveryAttempt: cached.recoveryAttempt,
             compactionProgress: cached.compactionProgress,
+            usage: cached.usage,
           }
         : {}),
       unsentMessage: drafts.pending,
+      turnOptions: drafts.options,
       draftResources: drafts.resources,
       queuedMessages: drafts.queued,
       queuePaused: true,
@@ -144,9 +149,19 @@ export class AssistantHarnessProjection {
     this.modelCatalog = catalog;
     const selectedModel = this.snapshot.selectedModel ?? catalog?.defaultModel ?? null;
     const providerConfigured = isModelConfigured(catalog, selectedModel);
+    const model = catalog?.providers
+      .find(({ config }) => config.id === selectedModel?.providerId)
+      ?.config.models.find((model) => model.id === selectedModel?.modelId);
+    const turnOptions =
+      catalog &&
+      this.snapshot.turnOptions.reasoningEffort !== null &&
+      !modelReasoningEfforts(model)?.includes(this.snapshot.turnOptions.reasoningEffort)
+        ? { ...this.snapshot.turnOptions, reasoningEffort: null }
+        : this.snapshot.turnOptions;
     this.update({
       ...this.snapshot,
       selectedModel,
+      turnOptions,
       providerConfigured,
       status:
         this.subscription && ["ready", "provider-unavailable"].includes(this.snapshot.status)
@@ -183,6 +198,10 @@ export class AssistantHarnessProjection {
     }
   };
 
+  readonly setTurnOptions = (options: HarnessTurnOptions): void => {
+    this.update({ ...this.snapshot, turnOptions: { ...options } });
+  };
+
   readonly stop = (): void => {
     this.finishReplay();
     if (this.snapshot.sessionId) {
@@ -203,6 +222,7 @@ export class AssistantHarnessProjection {
     text: string,
     selectedResources?: readonly ResourceRef[],
     model: LanguageModelSelection | null = this.snapshot.selectedModel,
+    options: HarnessTurnOptions = this.snapshot.turnOptions,
   ): Promise<boolean> => {
     const sessionId = this.snapshot.sessionId;
     if (!sessionId || !text || this.isSendDisabled()) return false;
@@ -224,12 +244,12 @@ export class AssistantHarnessProjection {
       activity: null,
       compactionProgress: null,
       error: null,
-      unsentMessage: { text, resources, model, afterSequence: this.snapshot.lastSequence },
+      unsentMessage: { text, resources, model, options, afterSequence: this.snapshot.lastSequence },
       draftResources: fromComposer ? [] : this.snapshot.draftResources,
       queuePaused: false,
     });
     try {
-      await HarnessService.submitTurn(sessionId, text, resources, model);
+      await HarnessService.submitTurn(sessionId, text, resources, model, options);
       submission.accepted = true;
     } catch (error) {
       if (sessionId !== this.snapshot.sessionId) return submission.accepted;
@@ -266,7 +286,7 @@ export class AssistantHarnessProjection {
           drafts.pending?.text === text &&
           drafts.pending.afterSequence === submission.afterSequence
         )
-          writeAssistantDrafts(sessionId, null, drafts.queued, drafts.resources);
+          writeAssistantDrafts(sessionId, null, drafts.queued, drafts.resources, drafts.options);
         const cached = this.sessions.get(sessionId);
         if (cached) this.sessions.set(sessionId, { ...cached, unsentMessage: null });
       }
@@ -309,6 +329,7 @@ export class AssistantHarnessProjection {
           text,
           resources: [...this.snapshot.draftResources],
           model: this.snapshot.selectedModel,
+          options: this.snapshot.turnOptions,
         },
       ],
       draftResources: [],
@@ -330,7 +351,7 @@ export class AssistantHarnessProjection {
     const next = this.snapshot.queuedMessages[0];
     if (!next || this.isSendDisabled()) return;
     this.removeQueuedMessage(next.id);
-    await this.submit(next.text, next.resources, next.model);
+    await this.submit(next.text, next.resources, next.model, next.options);
   };
 
   private advanceQueue(): void {
@@ -344,6 +365,7 @@ export class AssistantHarnessProjection {
   }
 
   readonly restoreUnsentMessage = (): void => {
+    const pending = this.snapshot.unsentMessage;
     const current = this.snapshot.draftResources;
     const keys = new Set(current.map(resourceKey));
     const restored =
@@ -353,8 +375,10 @@ export class AssistantHarnessProjection {
     this.update({
       ...this.snapshot,
       draftResources: [...current, ...restored],
+      turnOptions: pending?.options ?? this.snapshot.turnOptions,
       unsentMessage: null,
     });
+    if (pending?.model) void this.selectModel(pending.model);
   };
 
   readonly addResource = (resource: ResourceRef): void => {
@@ -494,13 +518,15 @@ export class AssistantHarnessProjection {
       snapshot.sessionId &&
       (snapshot.unsentMessage !== this.snapshot.unsentMessage ||
         snapshot.queuedMessages !== this.snapshot.queuedMessages ||
-        snapshot.draftResources !== this.snapshot.draftResources)
+        snapshot.draftResources !== this.snapshot.draftResources ||
+        snapshot.turnOptions !== this.snapshot.turnOptions)
     )
       writeAssistantDrafts(
         snapshot.sessionId,
         snapshot.unsentMessage,
         snapshot.queuedMessages,
         snapshot.draftResources,
+        snapshot.turnOptions,
       );
     if (this.replaySnapshot) {
       this.replaySnapshot = snapshot;

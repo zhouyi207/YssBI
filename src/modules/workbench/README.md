@@ -225,6 +225,8 @@ bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标�
 
 `conversation` role 以 `sessionId` 标识 Harness 会话，使用 `AssistantConversation` component。对话面板只属于主树最左侧的专用 tabset，原生 `enableTabStrip: false` 在创建与恢复时生效。列表读取原生可见面板同步高亮；面板可显式关闭，不可拖动、分屏或浮动，其他面板不能进入该组。资源打开使用 top 嵌入布局或当前浮动编辑组，即使聊天当前拥有焦点，也不会把文件放入聊天分组。没有资源编辑器时仍保留右侧工作区的空白投放容器。
 
+对话标题栏的最大化/还原复用主布局原生 `maximizeToggle`，面板投影直接读取 Model 的最大化状态，不增加布局状态 owner。对话最大化期间，内嵌工作区面板投影为不可见；显式打开或 reveal 工作区资源会还原主布局，保留工作区原有标签选择及其自身最大化状态。
+
 | 角色             | 内容                                      | deterministic home                          |
 | ---------------- | ----------------------------------------- | ------------------------------------------- |
 | `editor`         | Graph/Function/Chart editor、只读数据表格 | 当前 central grid group                     |

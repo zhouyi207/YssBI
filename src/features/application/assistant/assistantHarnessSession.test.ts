@@ -2,6 +2,10 @@ import { testModelCatalog, testModelIdentity } from "@/tests/fixtures/harnessMod
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { HarnessService, type HarnessEvent } from "@/services/assistant/harnessService";
 import { AssistantHarnessProjection } from "./assistantHarnessSession";
+import {
+  modelReasoningEfforts,
+  type LanguageModelConfig,
+} from "@/services/assistant/modelContract";
 
 vi.mock("@/features/application/editor/editorGroupContext", () => ({
   getActiveGraphContext: () => null,
@@ -47,6 +51,57 @@ beforeEach(() => {
   vi.mocked(HarnessService.openSession).mockResolvedValue(session);
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it("preserves chosen effort for unconfigured models and applies only explicit restrictions", async () => {
+  vi.mocked(HarnessService.subscribeEvents).mockResolvedValue({
+    unsubscribe: vi.fn().mockResolvedValue(undefined),
+  });
+  vi.mocked(HarnessService.submitTurn).mockResolvedValue({ finalText: "Done" });
+  const projection = new AssistantHarnessProjection();
+  await projection.start(session.sessionId);
+  const withEfforts = (reasoningEfforts: LanguageModelConfig["reasoningEfforts"]) => ({
+    ...testModelCatalog,
+    providers: testModelCatalog.providers.map((provider) => ({
+      ...provider,
+      config: {
+        ...provider.config,
+        models: provider.config.models.map((model) => ({ ...model, reasoningEfforts })),
+      },
+    })),
+  });
+  projection.updateModels(testModelCatalog);
+  const model = testModelCatalog.providers[0].config.models[0];
+  expect(modelReasoningEfforts(model)).toEqual(["low", "medium", "high"]);
+  expect(modelReasoningEfforts({ ...model, reasoningEfforts: [] })).toEqual([
+    "low",
+    "medium",
+    "high",
+  ]);
+  expect(modelReasoningEfforts({ ...model, reasoningEfforts: ["low"] })).toEqual(["low"]);
+  expect(modelReasoningEfforts({ ...model, reasoningEfforts: ["low"] }, "high")).toEqual([
+    "low",
+    "high",
+  ]);
+  expect(modelReasoningEfforts(undefined)).toBeUndefined();
+  projection.setTurnOptions({ mode: "write", reasoningEffort: "high" });
+  projection.updateModels(testModelCatalog);
+  expect(projection.getState().turnOptions.reasoningEffort).toBe("high");
+  projection.updateModels(withEfforts([]));
+  expect(projection.getState().turnOptions.reasoningEffort).toBe("high");
+  expect(await projection.submit("Use high effort")).toBe(true);
+  expect(HarnessService.submitTurn).toHaveBeenLastCalledWith(
+    session.sessionId,
+    "Use high effort",
+    [],
+    testModelIdentity.selection,
+    { mode: "write", reasoningEffort: "high" },
+  );
+  projection.updateModels(withEfforts(["high"]));
+  expect(projection.getState().turnOptions.reasoningEffort).toBe("high");
+  projection.updateModels(withEfforts(["low"]));
+  expect(projection.getState().turnOptions.reasoningEffort).toBeNull();
+  projection.stop();
+});
 
 it("keeps rejected input without treating an accepted failing turn as an unsent draft", async () => {
   let onEvent!: (event: HarnessEvent) => void;
@@ -123,7 +178,9 @@ it("pauses queued follow-ups on cancellation even when the in-flight task comple
   const pending = projection.submit("Run");
   const originalResource = { kind: "event_graph" as const, id: "events/original.yssbi-event" };
   projection.addResource(originalResource);
+  projection.setTurnOptions({ mode: "ask", reasoningEffort: "high" });
   projection.queueMessage("Follow up");
+  projection.setTurnOptions({ mode: "write", reasoningEffort: null });
   await projection.cancel();
   finish();
   await pending;
@@ -166,6 +223,7 @@ it("pauses queued follow-ups on cancellation even when the in-flight task comple
     "Follow up",
     [originalResource],
     testModelIdentity.selection,
+    { mode: "ask", reasoningEffort: "high" },
   );
   expect(projection.getState().queuedMessages).toEqual([]);
   expect(projection.getState().draftResources).toEqual([nextResource]);
@@ -265,6 +323,7 @@ it("advances a queued follow-up when its terminal event arrives after the submit
     "Follow up",
     [],
     testModelIdentity.selection,
+    { mode: "write", reasoningEffort: null },
   );
   expect(projection.getState().queuedMessages).toEqual([]);
   projection.stop();

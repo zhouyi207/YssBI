@@ -70,6 +70,24 @@ export async function toggleAssistantConversationWindow(): Promise<void> {
   else await revealWorkbenchView("assistant");
 }
 
+export async function closeAssistantConversation(sessionId: string): Promise<void> {
+  const scope = captureProjectLifecycleState();
+  if (scope.projectInstanceId !== useProjectIOStore.getState().projectInstanceId) return;
+  const panel = workbenchLayoutRead
+    .listPanels()
+    .find(
+      (panel) => panel.metadata.role === "conversation" && panel.metadata.sessionId === sessionId,
+    );
+  if (!panel) return;
+  try {
+    const closed = await requestCloseWorkbenchPanel(panel.panelInstanceId);
+    if (closed && isProjectLifecycleStateCurrent(scope))
+      rememberClosedAssistantConversation(sessionId);
+  } catch (error) {
+    showWorkbenchLayoutError(error);
+  }
+}
+
 export async function openAssistantConversation(sessionId: string, toggle: boolean): Promise<void> {
   const directory = useSidebarStore.getState().panels.assistant;
   if (
@@ -92,9 +110,7 @@ export async function openAssistantConversation(sessionId: string, toggle: boole
     );
   try {
     if (toggle && existing?.visible) {
-      const closed = await requestCloseWorkbenchPanel(existing.panelInstanceId);
-      if (closed && isProjectLifecycleStateCurrent(directory.binding))
-        rememberClosedAssistantConversation(session.sessionId);
+      await closeAssistantConversation(session.sessionId);
       return;
     }
     await workbenchLayoutControl.openConversation({
