@@ -45,6 +45,7 @@
     "generate:diagnostics:check": "node src-tauri/crates/yss-graph-diagnostics/scripts/generate-graph-diagnostics.mjs --check",
     "samples:build": "cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example build_samples",
     "samples:check": "cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example build_samples -- --check",
+    "measure:harness": "cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example measure_harness --",
     "test:rs:package": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:plugin:package": "node --test plugins/scripts/package-plugin.test.mjs"
   },

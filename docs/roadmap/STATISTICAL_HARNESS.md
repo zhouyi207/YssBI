@@ -7,6 +7,8 @@
 
 本文件只记录未来工作，不描述当前产品能力。已实现边界见 [Statistical Harness 当前架构](../../src-tauri/crates/yss-harness-core/README.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。
 
+模型可见工具按业务领域拆分、内部自动处理同步信息的专项设计与实施顺序见 [AI Harness 领域工具重构计划](HARNESS_TOOL_ARCHITECTURE.md)。
+
 ## Baseline
 
 当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面图编辑/校验/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill 和 BM25 Knowledge；会话上下文复用对话事件、工具账本与压缩检查点。

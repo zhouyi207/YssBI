@@ -66,4 +66,6 @@
 
 节点配置与执行机制的实施顺序、接口改动及验收见[节点独立配置与分步执行计划](roadmap/NODE_AUTHORING_AND_EXECUTION.md)。
 
+模型工具按项目资源、图与节点、数据库、Mind、文档和运行结果拆分的方案见 [AI Harness 领域工具重构计划](roadmap/HARNESS_TOOL_ARCHITECTURE.md)。
+
 移动文档时更新引用和章节链接，删除旧正文；新增细节先由现有模块 owner 承接。生成索引通过原生成器更新。
