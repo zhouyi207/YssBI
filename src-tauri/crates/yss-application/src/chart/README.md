@@ -9,6 +9,8 @@
 
 [resources.rs](resources.rs) 协调 Project 的图表文档操作；[query.rs](query.rs) 捕获及重验项目、数据库版本；[projection.rs](projection.rs) 只接收数值和轴格式并生成有界绘图点，不访问会话或执行器。采样保留原有步长规则，输出点数组受请求上限约束，不再先复制全部有效点。
 
+复制的可选名称直接交给 Project writer，在同一次文件事务中分配实际名称和新路径；GUI 未指定时沿用默认副本命名。
+
 独立图表的 `ChartPreview` 与图结果的 `PlotResultView` 复用现有 `ChartRenderer`。图表预览按项目、路径、声明和 Rust 投影的数据库 revision 缓存；配置变更或视图离开后，旧请求不再更新该视图。图结果仍由 ResultStore 和报告租约管理。真实界面的切换、编辑与迟到回执验收见[组件计划](../../../../../docs/roadmap/COMPONENT_REFACTOR.md)。
 
 直方图列分布与散点/折线列对读取都携带前端捕获的数据库资源 revision；没有该版本时不发出查询。
@@ -20,6 +22,8 @@
 GUI 的独立 Chart Save 按提交的完整内容覆盖资源，不接受 frontend `expectedRevision`。
 Harness 的图表设置编辑携带读取时的资源 revision，Application 将它交给同一 Project writer，
 在捕获事务基线时比较并在提交处重验，拒绝覆盖期间发生的新修改。
+Harness 的 `inspect_chart` 返回当前类型化配置；`update_chart` 只合并显式设置的字段，再通过上述 writer 立即持久化。
+省略字段保持原值，轴的 null 清空对应配置，空 databaseId 断开数据源；这两个工具不触发数据计算或图表渲染。
 `ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Rust Project 单独管理。
 `yss-chart-document::ChartType` 是图表类型的唯一 Rust 定义；文档、Project 索引和变更状态、Harness 设置
 共用 histogram/scatter/line 枚举及其序列化，Application 不再维护字符串与类型之间的映射。

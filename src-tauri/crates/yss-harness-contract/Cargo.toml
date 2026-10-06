@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+yss-data-contract = { path = "../yss-data-contract" }
 yss-chart-document = { path = "../yss-chart-document" }
 yss-ui-contract = { path = "../yss-ui-contract" }
 schemars.workspace = true

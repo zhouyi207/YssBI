@@ -21,6 +21,9 @@ pub enum LanguageModelAuthentication {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LanguageModelConfig {
+    /// Optional effort restrictions; an empty list leaves provider validation authoritative.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reasoning_efforts: Vec<crate::ReasoningEffort>,
     pub id: String,
     pub name: String,
     pub context_window: Option<u32>,
@@ -162,6 +165,9 @@ pub trait LanguageModelResolverPort: Send + Sync {
 pub struct LanguageModelProviderStatus {
     pub config: LanguageModelProviderConfig,
     pub has_api_key: bool,
+    /// Read projection of declared defaults, keyed by model ID. Not saved configuration.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub reasoning_defaults: std::collections::BTreeMap<String, crate::ReasoningEffort>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -110,13 +110,36 @@ impl ApplicationState {
         offset: usize,
         limit: usize,
     ) -> Result<ResultPageProjection, ReportQueryError> {
+        self.query_result_table_with_refs(
+            reference,
+            part,
+            offset,
+            limit,
+            &super::structured::table_marker,
+        )
+    }
+
+    pub(crate) fn query_result_table_with_refs(
+        &self,
+        reference: ResultReference,
+        part: ResultTablePart,
+        offset: usize,
+        limit: usize,
+        table: &dyn Fn(&str, usize) -> RuntimeValue,
+    ) -> Result<ResultPageProjection, ReportQueryError> {
         if let ResultTablePart::Structured(path) = &part {
             return self.with_report_result(reference, |snapshot| {
                 if !super::structured::supports(snapshot) {
                     return Err(ReportQueryError::WrongKind);
                 }
-                super::structured::page(snapshot.value().value(), path, offset, limit)
-                    .map_err(|_| ReportQueryError::InvalidRequest)
+                super::structured::page_with_tables(
+                    snapshot.value().value(),
+                    path,
+                    offset,
+                    limit,
+                    table,
+                )
+                .map_err(|_| ReportQueryError::InvalidRequest)
             });
         }
         self.with_linear_regression_summary(reference, |result, summary| {

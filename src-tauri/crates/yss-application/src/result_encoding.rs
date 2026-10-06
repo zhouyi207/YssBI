@@ -7,18 +7,31 @@ use yss_node_kernel::RuntimeValue;
 pub(crate) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 
 pub(crate) fn report_to_json(projection: LinearRegressionReportProjection) -> serde_json::Value {
+    let reference = serde_json::json!({
+        "executionSessionId": projection.reference.execution_session_id.as_uuid().to_string(),
+        "resultId": projection.reference.result_id.get().to_string(),
+    });
+    report_to_json_with_refs(
+        projection,
+        reference,
+        &|part, count| serde_json::json!({"kind": "tableRef", "part": part, "rowCount": count}),
+    )
+}
+
+pub(crate) fn report_to_json_with_refs(
+    projection: LinearRegressionReportProjection,
+    reference: serde_json::Value,
+    table: &dyn Fn(&str, usize) -> serde_json::Value,
+) -> serde_json::Value {
     serde_json::json!({
         "summary": projection.summary,
         "title": projection.title,
         "endog_name": projection.endog_name,
         "paramNames": projection.param_names,
-        "resultRef": {
-            "executionSessionId": projection.reference.execution_session_id.as_uuid().to_string(),
-            "resultId": projection.reference.result_id.get().to_string(),
-        },
+        "resultRef": reference,
         "presentation": crate::graph::results::report::presentation::data(&projection.model, projection.condition_number),
-        "coefficients": { "kind": "tableRef", "part": "coefficients", "rowCount": projection.coefficient_count },
-        "observations": { "kind": "tableRef", "part": "observations", "rowCount": projection.observation_count },
+        "coefficients": table("coefficients", projection.coefficient_count),
+        "observations": table("observations", projection.observation_count),
     })
 }
 
@@ -45,6 +58,19 @@ fn encode_inline_projection(
             .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
         ResultValueProjection::LinearReport(report) => report_to_json(*report),
     };
+    bound_inline_json(value)
+}
+
+pub(crate) fn bound_inline_json(
+    value: serde_json::Value,
+) -> Result<serde_json::Value, ResultQueryApplicationError> {
+    if !json_fits_budget(&value, MAX_INLINE_RESULT_JSON_BYTES) {
+        return Err(ResultQueryApplicationError::PageTooLarge);
+    }
+    Ok(value)
+}
+
+pub(crate) fn json_fits_budget(value: &impl serde::Serialize, maximum_bytes: usize) -> bool {
     // Count encoded bytes without allocating a second, potentially large byte buffer.
     struct Budget(usize);
     impl std::io::Write for Budget {
@@ -52,16 +78,14 @@ fn encode_inline_projection(
             self.0 = self
                 .0
                 .checked_sub(bytes.len())
-                .ok_or_else(|| std::io::Error::other("inline result budget exceeded"))?;
+                .ok_or_else(|| std::io::Error::other("JSON byte budget exceeded"))?;
             Ok(bytes.len())
         }
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
     }
-    serde_json::to_writer(Budget(MAX_INLINE_RESULT_JSON_BYTES), &value)
-        .map_err(|_| ResultQueryApplicationError::PageTooLarge)?;
-    Ok(value)
+    serde_json::to_writer(Budget(maximum_bytes), value).is_ok()
 }
 
 pub(crate) fn runtime_value_to_json(

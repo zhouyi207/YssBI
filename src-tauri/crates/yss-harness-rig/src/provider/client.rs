@@ -158,6 +158,7 @@ impl RigProviderClient {
             .filter(|model| !model.id.trim().is_empty())
             .filter(|model| !matches!(model.r#type.as_deref(), Some("embedding" | "embeddings")))
             .map(|model| LanguageModelConfig {
+                reasoning_efforts: Vec::new(),
                 id: model.id.clone(),
                 name: model.display_name().to_owned(),
                 context_window: model.context_length,

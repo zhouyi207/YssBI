@@ -6,27 +6,27 @@ use yss_database_contract::DatabaseId;
 use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
 use yss_graph_document::{PortAddress, PortRef};
 use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
-use yss_graph_execution::result::ResultId;
 use yss_harness_contract::{
-    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityContractError,
-    CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityId,
-    CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
-    DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
-    InspectDatasetSchemaRequest, InspectResultRequest, NodeCatalogMatch, NodeCatalogSearchResult,
-    ProjectInspection, ResultCategoryInspection, ResultInspection, ResultValueInspection,
-    SearchNodeCatalogRequest,
+    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityControl, CapabilityFailure,
+    CapabilityFailureCode, CapabilityId, CapabilityInvocationContext, DatasetColumnSchema,
+    DatasetProfileInspection, DatasetSchemaInspection, GraphPortInspection,
+    InspectDatasetProfileRequest, InspectDatasetSchemaRequest, ResultCategoryInspection,
 };
-use yss_node_catalog::LocalizedCatalogItem;
+#[cfg(test)]
+use yss_harness_contract::{
+    InspectResultRequest, ReadResultTableRequest, ResultInspection, ResultRef, ResultValidity,
+    ResultValueInspection, TableRef,
+};
+#[cfg(test)]
 use yss_node_kernel::RuntimeValue;
 
-use crate::graph::catalog::{
-    CatalogQueryApplicationError, LocalizedCatalogRequest, localized_node_catalog_in_session,
-};
+use crate::graph::catalog::CatalogQueryApplicationError;
 use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 mod graph;
 mod resources;
+mod results;
 pub use graph::invoke_graph_capability;
 
 impl ApplicationState {
@@ -57,15 +57,31 @@ fn invoke_capability(
         request.capability_id().descriptor().effect == yss_harness_contract::ToolEffect::Inspect;
     request
         .validate()
-        .map_err(|error| invalid_request(request.capability_id(), error))?;
+        .map_err(|error| error.into_failure(request.capability_id()))?;
     let captured = application
         .capture_session()
         .map_err(map_session_capture_error)?;
     ensure_project_binding(&captured, &context)?;
 
     let result = match request {
+        AutomationCapabilityRequest::ReadMind(request) => {
+            resources::read_mind(application, &captured, request, control)
+                .map(AutomationCapabilityResult::MindRead)
+        }
+        AutomationCapabilityRequest::InspectChart(request) => {
+            resources::inspect_chart(application, &captured, request, control)
+                .map(AutomationCapabilityResult::ChartInspection)
+        }
+        AutomationCapabilityRequest::ReadDocument(request) => {
+            resources::read_document(application, &captured, request, control)
+                .map(AutomationCapabilityResult::DocumentRead)
+        }
+        AutomationCapabilityRequest::ReadDatabase(request) => {
+            resources::read_database(application, &captured, request, control)
+                .map(AutomationCapabilityResult::DatabaseRead)
+        }
         AutomationCapabilityRequest::InspectResource(request) => {
-            resources::inspect_resource(application, &captured, &context, request, control)
+            resources::inspect_resource(application, &captured, request, control)
                 .map(AutomationCapabilityResult::ResourceInspection)
         }
         AutomationCapabilityRequest::ManageResource(request) => {
@@ -76,9 +92,9 @@ fn invoke_capability(
             return resources::edit_resource(application, &captured, request, control, publish)
                 .map(AutomationCapabilityResult::ResourceEdited);
         }
-        AutomationCapabilityRequest::ExportDataset(request) => {
-            return resources::export_dataset(application, &captured, request, control)
-                .map(AutomationCapabilityResult::DatasetExported);
+        AutomationCapabilityRequest::ExportDatabase(request) => {
+            return resources::export_database(application, &captured, request, control)
+                .map(AutomationCapabilityResult::DatabaseExported);
         }
         AutomationCapabilityRequest::InspectUiIntent(request) => application
             .inspect_ui_intent(captured.project_instance_id(), request)
@@ -88,20 +104,30 @@ fn invoke_capability(
             .request_ui_intent(
                 captured.project_instance_id(),
                 &format!("harness:{}", context.harness_session_id().as_str()),
-                request,
+                request.into(),
             )
             .map(AutomationCapabilityResult::UiIntentReceipt)
             .map_err(map_ui_error),
         request @ (AutomationCapabilityRequest::InspectGraph(_)
+        | AutomationCapabilityRequest::FindNodes(_)
+        | AutomationCapabilityRequest::FindConstants(_)
+        | AutomationCapabilityRequest::InspectConstants(_)
+        | AutomationCapabilityRequest::InspectNodes(_)
+        | AutomationCapabilityRequest::FindConnections(_)
+        | AutomationCapabilityRequest::GraphMutation(_)
         | AutomationCapabilityRequest::ApplyGraphEdit(_)
         | AutomationCapabilityRequest::ValidateGraph(_)
         | AutomationCapabilityRequest::ExecuteGraph(_)
         | AutomationCapabilityRequest::SaveGraph(_)) => {
             return graph::invoke_graph_capability(application, context, request, control);
         }
-        AutomationCapabilityRequest::SearchNodeCatalog(request) => {
-            search_node_catalog(application, &captured, request)
-                .map(AutomationCapabilityResult::NodeCatalogSearch)
+        AutomationCapabilityRequest::BrowseNodes(request) => {
+            catalog::browse_nodes(application, &captured, request)
+                .map(AutomationCapabilityResult::NodeCatalogPage)
+        }
+        AutomationCapabilityRequest::InspectNodeType(request) => {
+            catalog::inspect_node_type(application, &captured, request)
+                .map(AutomationCapabilityResult::NodeTypeInspection)
         }
         AutomationCapabilityRequest::SearchKnowledge(_)
         | AutomationCapabilityRequest::ReadKnowledge(_) => Err(CapabilityFailure::new(
@@ -117,15 +143,19 @@ fn invoke_capability(
                 .map(AutomationCapabilityResult::DatasetProfileInspection)
         }
         AutomationCapabilityRequest::InspectResult(request) => {
-            inspect_result(application, &captured, request, control)
+            results::inspect_result(application, &captured, request)
                 .map(AutomationCapabilityResult::ResultInspection)
         }
-        AutomationCapabilityRequest::InspectProject(_) => {
-            inspect_project(&captured).map(AutomationCapabilityResult::ProjectInspection)
+        AutomationCapabilityRequest::ReadResultTable(request) => {
+            results::read_table(application, &captured, request, control)
+                .map(AutomationCapabilityResult::ResultTablePage)
+        }
+        AutomationCapabilityRequest::ListResources(request) => {
+            resources::project_inspection(&captured, request)
+                .map(AutomationCapabilityResult::ProjectInspection)
         }
         AutomationCapabilityRequest::ListGraphResults(request) => {
-            graph::list_graph_results(&captured, request.graph_path)
-                .map(AutomationCapabilityResult::GraphResults)
+            results::list_results(&captured, request).map(AutomationCapabilityResult::GraphResults)
         }
     }?;
 
@@ -167,12 +197,6 @@ fn ensure_project_binding(
     Ok(())
 }
 
-fn inspect_project(captured: &ApplicationSession) -> Result<ProjectInspection, CapabilityFailure> {
-    let project = resources::project_inspection(captured)?;
-    enforce_result_bound(CapabilityId::InspectProject, project.resources.len())?;
-    Ok(project)
-}
-
 fn inspect_port(address: &PortAddress) -> GraphPortInspection {
     match &address.port {
         PortRef::Declared { key } => GraphPortInspection::Declared {
@@ -191,113 +215,6 @@ fn inspect_port(address: &PortAddress) -> GraphPortInspection {
 }
 
 mod catalog;
-
-fn search_node_catalog(
-    application: &ApplicationState,
-    captured: &Arc<ApplicationSession>,
-    request: SearchNodeCatalogRequest,
-) -> Result<NodeCatalogSearchResult, CapabilityFailure> {
-    let result = localized_node_catalog_in_session(
-        application,
-        captured,
-        LocalizedCatalogRequest::new(
-            captured.project_instance_id().clone(),
-            request.locale.clone(),
-        ),
-    )
-    .map_err(map_catalog_error)?;
-    let (_, _, _, catalog) = result.into_transport_parts().into_fields();
-    let normalized_query = request.query.to_lowercase();
-    let mut matches = catalog
-        .items
-        .iter()
-        .filter(|item| item.available)
-        .filter_map(|item| {
-            let score = catalog_item_score(item, &normalized_query);
-            (score > 0).then_some((score, item))
-        })
-        .map(|(score, item)| {
-            (
-                score,
-                NodeCatalogMatch {
-                    node_type_id: item.node_type_id.to_string(),
-                    title: item.title.to_string(),
-                    category_id: item.category_id.to_string(),
-                    style_id: item.style_id.to_string(),
-                    resource_path: item
-                        .resource_path
-                        .as_ref()
-                        .map(|path| path.as_str().to_owned()),
-                    configuration_schema: None,
-                    ports: None,
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    matches.sort_by(|(left_score, left), (right_score, right)| {
-        right_score
-            .cmp(left_score)
-            .then_with(|| left.title.cmp(&right.title))
-            .then_with(|| left.node_type_id.cmp(&right.node_type_id))
-    });
-    matches.truncate(usize::from(request.limit));
-    if request.include_parameters {
-        for (_, matched) in &mut matches {
-            let Some(item) = catalog.items.iter().find(|item| {
-                item.node_type_id.as_ref() == matched.node_type_id
-                    && item.resource_path.as_ref().map(|path| path.as_str())
-                        == matched.resource_path.as_deref()
-            }) else {
-                continue;
-            };
-            let node_type = matched
-                .node_type_id
-                .parse()
-                .expect("catalog node type identity");
-            if let Some(protocol) = captured.graph().registry().protocol(&node_type) {
-                matched.configuration_schema = Some(catalog::configuration_schema(protocol, item));
-                matched.ports = Some(catalog::port_definitions(protocol));
-            }
-        }
-    }
-
-    Ok(NodeCatalogSearchResult {
-        locale: catalog.locale.into_string(),
-        matches: matches.into_iter().map(|(_, item)| item).collect(),
-    })
-}
-
-fn catalog_item_score(item: &LocalizedCatalogItem, normalized_query: &str) -> usize {
-    if normalized_query.trim().is_empty() {
-        return 1;
-    }
-    let fixed_fields = [
-        item.node_type_id.as_ref(),
-        item.title.as_ref(),
-        item.category_id.as_ref(),
-        item.style_id.as_ref(),
-    ];
-    let fields = fixed_fields
-        .into_iter()
-        .chain(item.aliases.iter().map(AsRef::as_ref))
-        .chain(item.technical_terms.iter().map(AsRef::as_ref))
-        .chain(item.backend_search_text.iter().map(AsRef::as_ref))
-        .chain(item.resource_names.iter().map(AsRef::as_ref))
-        .map(str::to_lowercase)
-        .collect::<Vec<_>>();
-    let exact = usize::from(
-        fields
-            .iter()
-            .any(|value| value.contains(normalized_query.trim())),
-    ) * 100;
-    let tokens = normalized_query
-        .split(|c: char| c.is_whitespace() || matches!(c, '.' | '_' | '-' | '/' | ',' | '|'))
-        .filter(|token| !token.is_empty());
-    exact
-        + tokens
-            .filter(|token| fields.iter().any(|value| value.contains(token)))
-            .count()
-}
 
 fn inspect_dataset_schema(
     captured: &ApplicationSession,
@@ -380,7 +297,7 @@ fn inspect_dataset_profile(
             max_input_bytes: 16 * 1024 * 1024,
         },
     )
-    .map_err(|error| map_dataset_profile_error(error, &request.database_id))?;
+    .map_err(|error| map_dataset_profile_error(&error, &request.database_id))?;
     control.check()?;
     let inspection = DatasetProfileInspection {
         database_id: request.database_id.clone(),
@@ -408,7 +325,7 @@ fn inspect_dataset_profile(
 }
 
 fn map_dataset_profile_error(
-    error: yss_database_runtime::error::DatabaseError,
+    error: &yss_database_runtime::error::DatabaseError,
     database_id: &str,
 ) -> CapabilityFailure {
     use yss_database_runtime::error::DatabaseErrorCode;
@@ -419,119 +336,6 @@ fn map_dataset_profile_error(
         _ => CapabilityFailureCode::DatabaseUnavailable,
     };
     CapabilityFailure::new(code).with_detail("databaseId", database_id)
-}
-
-fn inspect_result(
-    application: &ApplicationState,
-    captured: &ApplicationSession,
-    request: InspectResultRequest,
-    control: &CapabilityControl,
-) -> Result<ResultInspection, CapabilityFailure> {
-    let execution_session_id =
-        uuid::Uuid::parse_str(&request.execution_session_id).map_err(|_| {
-            invalid_request(
-                CapabilityId::InspectResult,
-                CapabilityContractError::InvalidField("executionSessionId"),
-            )
-        })?;
-    if execution_session_id != captured.execution_session_id().as_uuid() {
-        return Err(CapabilityFailure::new(
-            CapabilityFailureCode::ResultUnavailable,
-        ));
-    }
-    let result = captured
-        .execution()
-        .query_result(ResultId::from_existing(request.result_id))
-        .ok_or_else(|| {
-            CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable)
-                .with_detail("resultId", request.result_id.to_string())
-        })?;
-    let reference = result.provenance().reference();
-    let page = if let Some(part) = request.part.as_deref() {
-        let part = part.parse().map_err(|_| {
-            invalid_request(
-                CapabilityId::InspectResult,
-                CapabilityContractError::InvalidField("part"),
-            )
-        })?;
-        Some(
-            application
-                .query_result_table(reference, part, request.offset, usize::from(request.limit))
-                .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
-        )
-    } else if matches!(
-        result.value().value().unannotated(),
-        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_)
-    ) {
-        Some(
-            application
-                .query_result_page_with_control(
-                    reference,
-                    request.offset,
-                    usize::from(request.limit),
-                    &yss_relational_contract::RelationControl {
-                        cancellation: control.cancellation_flag(),
-                        deadline: control.deadline(),
-                        max_input_bytes: 1024 * 1024,
-                    },
-                )
-                .map_err(map_result_query_error)?
-                .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
-        )
-    } else {
-        None
-    };
-    let value = if let Some(page) = page {
-        let rows = page
-            .values
-            .iter()
-            .map(crate::result_encoding::runtime_value_to_json)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?;
-        ResultValueInspection::Table {
-            columns: page
-                .columns
-                .iter()
-                .map(|column| column.name.to_string())
-                .collect(),
-            column_types: page
-                .columns
-                .iter()
-                .map(|column| column.data_type.to_string())
-                .collect(),
-            next_offset: page.offset + rows.len(),
-            has_more: page.has_more,
-            rows,
-        }
-    } else {
-        ResultValueInspection::Json(
-            crate::result_encoding::query_result_json(application, reference)
-                .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
-                .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
-        )
-    };
-    Ok(ResultInspection {
-        result_id: request.result_id,
-        category: inspect_result_category(result.value().category()),
-        value,
-    })
-}
-
-fn map_result_query_error(
-    error: crate::graph::results::ResultQueryApplicationError,
-) -> CapabilityFailure {
-    use crate::graph::results::ResultQueryApplicationError;
-    use yss_relational_contract::RelationError;
-
-    CapabilityFailure::new(match error {
-        ResultQueryApplicationError::Relation(RelationError::Cancelled) => {
-            CapabilityFailureCode::Cancelled
-        }
-        ResultQueryApplicationError::Relation(RelationError::DeadlineExceeded) => {
-            CapabilityFailureCode::DeadlineElapsed
-        }
-        _ => CapabilityFailureCode::ResultUnavailable,
-    })
 }
 
 fn inspect_result_category(category: ResultCategory) -> ResultCategoryInspection {
@@ -591,23 +395,6 @@ fn enforce_result_bound(
         );
     }
     Ok(())
-}
-
-fn invalid_request(
-    capability_id: CapabilityId,
-    error: CapabilityContractError,
-) -> CapabilityFailure {
-    let failure = CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
-        .with_detail("capabilityId", capability_id.as_str());
-    match error {
-        CapabilityContractError::InvalidField(field) => failure.with_detail("field", field),
-        CapabilityContractError::FieldTooLong { field, maximum } => failure
-            .with_detail("field", field)
-            .with_detail("maximumBytes", maximum.to_string()),
-        CapabilityContractError::InvalidLimit { maximum } => {
-            failure.with_detail("maximumResults", maximum.to_string())
-        }
-    }
 }
 
 fn map_session_capture_error(_: SessionCaptureError) -> CapabilityFailure {
@@ -731,7 +518,7 @@ mod tests {
                 Some(DatabaseId::from_existing("database-1".into())),
                 DatasetStoreError::Query(source),
             );
-            let failure = map_dataset_profile_error(error, "database-1");
+            let failure = map_dataset_profile_error(&error, "database-1");
             assert_eq!(failure.code, expected);
             assert_eq!(failure.details["databaseId"], "database-1");
             let wire = serde_json::to_value(&failure).unwrap();
@@ -774,7 +561,8 @@ mod tests {
         assert_eq!(nested["text"], text);
         assert_eq!(nested["coefficients"].as_array().unwrap().len(), 150);
         let result = AutomationCapabilityResult::ResultInspection(ResultInspection {
-            result_id: 1,
+            result_ref: ResultRef::new("test".into(), 1),
+            validity: ResultValidity::Retained,
             category: ResultCategoryInspection::Value,
             value: ResultValueInspection::Json(json),
         });
@@ -793,120 +581,131 @@ mod tests {
                 },
             );
         let captured = application.capture_session().unwrap();
+        let result_ref = results::result_ref(reference);
         let control = CapabilityControl::new(
             yss_harness_contract::CancellationToken::default(),
             std::time::Duration::from_secs(10),
         );
-        let inspect = |part: Option<&str>, offset, limit| {
-            inspect_result(
+        let inspect = |reference| {
+            results::inspect_result(
                 &application,
                 &captured,
                 InspectResultRequest {
-                    execution_session_id: reference.execution_session_id.as_uuid().to_string(),
-                    result_id: reference.result_id.get(),
-                    part: part.map(str::to_owned),
-                    offset,
-                    limit,
+                    result_ref: reference,
+                    schema_offset: 0,
+                    schema_limit: 50,
                 },
-                &control,
             )
-            .unwrap()
-            .value
         };
-        let stale = inspect_result(
+        let overview = inspect(result_ref.clone()).unwrap();
+        let ResultValueInspection::Json(json) = overview.value else {
+            panic!("result overview");
+        };
+        let desktop = crate::result_encoding::query_result_json(&application, reference)
+            .unwrap()
+            .unwrap();
+        assert_eq!(json["presentation"], desktop["presentation"]);
+        assert_eq!(json["paramNames"], desktop["paramNames"]);
+        assert_eq!(json["resultRef"], serde_json::json!(result_ref));
+        assert!(json["resultRef"].is_string());
+        assert_eq!(json["observations"]["rowCount"], 1000);
+        let metrics = json["presentation"]["summary"]["items"].as_array().unwrap();
+        assert_eq!(
+            metrics
+                .iter()
+                .find(|v| v["id"] == "numObservations")
+                .unwrap()["value"],
+            1000
+        );
+        let request = |table_ref, offset, limit, columns| ReadResultTableRequest {
+            table_ref,
+            columns,
+            offset,
+            limit,
+            column_offset: 0,
+            column_limit: 50,
+        };
+        let coefficients: TableRef =
+            serde_json::from_value(json["coefficients"]["tableRef"].clone()).unwrap();
+        let page = results::read_table(
             &application,
             &captured,
-            InspectResultRequest {
-                execution_session_id: uuid::Uuid::new_v4().to_string(),
-                result_id: reference.result_id.get(),
-                part: None,
-                offset: 0,
-                limit: 20,
-            },
+            request(coefficients.clone(), 0, 1, vec!["coef".into()]),
             &control,
-        );
-        assert!(
-            matches!(stale, Err(failure) if failure.code == CapabilityFailureCode::ResultUnavailable)
-        );
-        let ResultValueInspection::Json(json) = inspect(None, 0, 20) else {
-            panic!("full result JSON");
-        };
-        assert_eq!(
-            json,
-            crate::result_encoding::query_result_json(&application, reference)
-                .unwrap()
-                .unwrap()
-        );
-        let metrics = json["presentation"]["summary"]["items"].as_array().unwrap();
-        let metric = |id: &str| &metrics.iter().find(|metric| metric["id"] == id).unwrap()["value"];
-        assert_eq!(metric("numObservations"), 1_000);
-        assert!(metric("fStatistic").is_number());
-        assert_eq!(json["coefficients"]["kind"], "tableRef");
-        assert_eq!(json["observations"]["rowCount"], 1_000);
-        assert!(json.get("design").is_none());
-        assert!(json.get("residuals").is_none());
-        let ResultValueInspection::Table {
-            rows,
-            columns,
-            next_offset,
-            has_more,
-            ..
-        } = inspect(Some("coefficients"), 0, 1)
-        else {
-            panic!("coefficient page");
-        };
-        assert_eq!(rows.len(), 1);
-        assert_eq!(columns[1], "coef");
-        assert_eq!(rows[0][1], model.coefficients[0]);
-        assert!(has_more);
-        assert_eq!(next_offset, 1);
-        let ResultValueInspection::Table {
-            rows,
-            next_offset,
-            has_more,
-            ..
-        } = inspect(Some("observations"), 7, 3)
-        else {
-            panic!("observation page");
-        };
-        assert_eq!(rows.len(), 3);
-        assert_eq!(rows[0][0], 8);
-        assert_eq!(rows[0][2], model.residuals[7]);
-        assert_eq!(next_offset, 10);
-        assert!(has_more);
+        )
+        .unwrap();
+        assert_eq!(page.columns.len(), 1);
+        assert_eq!(page.rows[0][0], model.coefficients[0]);
+        assert_eq!(page.page.next_offset, Some(1));
+        let observations: TableRef =
+            serde_json::from_value(json["observations"]["tableRef"].clone()).unwrap();
+        let page = results::read_table(
+            &application,
+            &captured,
+            request(observations, 7, 3, vec![]),
+            &control,
+        )
+        .unwrap();
+        assert_eq!(page.rows[0][0], 8);
+        assert_eq!(page.rows[0][2], model.residuals[7]);
+        assert_eq!(page.page.next_offset, Some(10));
+        assert_eq!(page.page.total, Some(1000));
+        let invalid = results::read_table(
+            &application,
+            &captured,
+            request(coefficients, 0, 1, vec!["absent".into()]),
+            &control,
+        )
+        .unwrap_err();
+        assert_eq!(invalid.code, CapabilityFailureCode::InvalidRequest);
+        for part in ["null", "", "structured:/invented_table"] {
+            let failure = results::read_table(
+                &application,
+                &captured,
+                request(
+                    TableRef::new(result_ref.clone(), Some(part.into())),
+                    0,
+                    20,
+                    vec![],
+                ),
+                &control,
+            )
+            .unwrap_err();
+            assert_eq!(failure.details["reason"], "table_not_found");
+        }
+        let stale = inspect(ResultRef::new(
+            uuid::Uuid::new_v4().to_string(),
+            reference.result_id.get(),
+        ))
+        .unwrap_err();
+        assert_eq!(stale.details["reason"], "reference_expired");
         let series = captured
             .execution()
             .query_graph_results("events/report.yssbi-event", 100)
             .into_iter()
             .find(|result| matches!(result.value().value(), RuntimeValue::List(_)))
             .unwrap();
-        let page = inspect_result(
+        let series_ref = results::result_ref(series.provenance().reference());
+        let ResultValueInspection::Tabular {
+            table_ref,
+            schema_page,
+            ..
+        } = inspect(series_ref).unwrap().value
+        else {
+            panic!("schema overview");
+        };
+        assert_eq!(schema_page.total, Some(1));
+        let page = results::read_table(
             &application,
             &captured,
-            InspectResultRequest {
-                execution_session_id: reference.execution_session_id.as_uuid().to_string(),
-                result_id: series.provenance().result_id().get(),
-                part: None,
-                offset: 5,
-                limit: 7,
-            },
+            request(table_ref.clone(), 5, 7, vec![]),
             &control,
         )
         .unwrap();
-        let ResultValueInspection::Table {
-            rows,
-            has_more,
-            next_offset,
-            ..
-        } = &page.value
-        else {
-            panic!("in-memory series must remain paged");
-        };
-        assert_eq!(rows.len(), 7);
-        assert_eq!(*next_offset, 12);
-        assert!(*has_more);
+        assert_eq!(page.rows.len(), 7);
+        assert_eq!(page.page.next_offset, Some(12));
         assert!(
-            AutomationCapabilityResult::ResultInspection(page)
+            AutomationCapabilityResult::ResultTablePage(page)
                 .validate_budget(1)
                 .is_err()
         );
@@ -920,16 +719,10 @@ mod tests {
             std::time::Duration::ZERO,
         );
         let failures = [cancelled, expired].map(|control| {
-            inspect_result(
+            results::read_table(
                 &application,
                 &captured,
-                InspectResultRequest {
-                    execution_session_id: reference.execution_session_id.as_uuid().to_string(),
-                    result_id: series.provenance().result_id().get(),
-                    part: None,
-                    offset: 5,
-                    limit: 7,
-                },
+                request(table_ref.clone(), 5, 7, vec![]),
                 &control,
             )
             .unwrap_err()
@@ -939,7 +732,7 @@ mod tests {
             failures,
             [
                 CapabilityFailureCode::Cancelled,
-                CapabilityFailureCode::DeadlineElapsed,
+                CapabilityFailureCode::DeadlineElapsed
             ]
         );
     }

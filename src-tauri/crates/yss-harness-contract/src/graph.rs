@@ -9,6 +9,10 @@ use std::collections::BTreeMap;
 
 mod inspection;
 pub use inspection::*;
+mod queries;
+pub use queries::*;
+mod constants;
+pub use constants::*;
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -22,14 +26,17 @@ pub enum GraphConstantLiteral {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ValidateGraphRequest {
-    pub graph_path: String,
+    pub graph: GraphResourceRef,
     pub graph_hash: String,
+    pub node_ids: Vec<String>,
+    pub offset: usize,
+    pub limit: usize,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExecuteGraphRequest {
-    pub graph_path: String,
+    pub graph: GraphResourceRef,
     pub graph_hash: String,
     pub demand: GraphExecutionDemand,
 }
@@ -61,12 +68,6 @@ pub enum NodeExecutionMode {
 pub struct SaveGraphRequest {
     pub graph_path: String,
     pub graph_hash: String,
-}
-
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ListGraphResultsRequest {
-    pub graph_path: String,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -138,6 +139,9 @@ pub struct GraphValidation {
     pub graph_path: String,
     pub graph_hash: String,
     pub ready: bool,
+    pub node_ids: Vec<String>,
+    pub scope_node_count: usize,
+    pub page: crate::InspectionPage,
     pub diagnostics: Vec<GraphDiagnosticInspection>,
 }
 
@@ -148,12 +152,25 @@ pub struct GraphExecution {
     pub graph_hash: String,
     pub run_id: Option<u64>,
     pub status: String,
+    /// Absent if rejected before run admission or its metadata is no longer retained.
+    pub timing: Option<GraphRunTiming>,
     pub failure_code: Option<String>,
     pub failure_location: Option<String>,
     /// Number of results published by a successful run; unknown when execution failed.
     pub result_count: Option<usize>,
     pub results_complete: bool,
     pub results: Vec<GraphResultReference>,
+}
+
+/// Monotonic wall time from run admission, independent of tool-call/queue duration.
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphRunTiming {
+    pub elapsed_ms: u64,
+    pub admission_ms: u64,
+    /// Includes scheduling, resource preparation and result materialization, not just kernels.
+    pub running_ms: u64,
+    pub finalization_ms: u64,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -171,8 +188,8 @@ pub struct GraphSaved {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphResultReference {
-    pub execution_session_id: String,
-    pub result_id: u64,
+    pub result_ref: crate::ResultRef,
+    pub validity: crate::ResultValidity,
     pub run_id: u64,
     pub output: String,
     pub category: ResultCategoryInspection,
@@ -181,7 +198,10 @@ pub struct GraphResultReference {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphResults {
-    pub graph_path: String,
+    pub graph: GraphResourceRef,
+    pub run_status: Option<String>,
+    pub run_timing: Option<GraphRunTiming>,
+    pub page: crate::InspectionPage,
     pub results: Vec<GraphResultReference>,
 }
 
@@ -228,10 +248,12 @@ pub struct GraphEditPosition {
 )]
 pub enum GraphEditPortRef {
     Declared {
+        /// Existing node UUID, or "$clientId" for a node created in this same batch. A bare clientId is not a node ID.
         node_id: String,
         port_key: String,
     },
     Instance {
+        /// Existing node UUID, or "$clientId" for a node created in this same batch. A bare clientId is not a node ID.
         node_id: String,
         template_key: String,
         instance_id: String,
@@ -246,6 +268,23 @@ pub enum GraphEditPortRef {
     rename_all_fields = "camelCase"
 )]
 pub enum GraphEditOperation {
+    CreateTypedConstant {
+        declaration: ConstantDeclaration,
+    },
+    UpdateTypedConstant {
+        update: ConstantUpdate,
+    },
+    SetNodeLabel {
+        node_id: String,
+        label: Option<String>,
+    },
+    SetPortCounts {
+        node_id: String,
+        counts: BTreeMap<String, u16>,
+    },
+    UpdateConnections {
+        connections: Vec<GraphConnectionUpdate>,
+    },
     CreateConstant {
         name: String,
         value: GraphConstantLiteral,
@@ -334,10 +373,98 @@ pub struct ApplyGraphEditRequest {
     pub operations: Vec<GraphEditOperation>,
 }
 
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphMutationRequest {
+    pub input: crate::model::GraphMutationInput,
+    pub base_revision: u64,
+    pub graph_hash: String,
+    pub client_key: String,
+}
+
+impl GraphMutationRequest {
+    pub fn edit_request(&self) -> ApplyGraphEditRequest {
+        ApplyGraphEditRequest {
+            graph_path: self.input.graph().id.clone(),
+            base_revision: self.base_revision,
+            graph_hash: self.graph_hash.clone(),
+            client_key: self.client_key.clone(),
+            locale: "en-US".into(),
+            operations: self.input.operations(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphConnectionUpdate {
+    pub connection_id: String,
+    pub output: GraphEditPortRef,
+    pub input: GraphEditPortRef,
+    /// Omit to retain ordering; null clears it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_optional"
+    )]
+    pub order: Option<Option<String>>,
+}
+
+pub(crate) fn present_optional<'de, T: Deserialize<'de>, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error> {
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
 pub(crate) fn validate_graph_edit_operation(
     operation: &GraphEditOperation,
 ) -> Result<(), CapabilityContractError> {
     match operation {
+        GraphEditOperation::CreateTypedConstant { declaration } => {
+            validate_resource_id("clientId", &declaration.client_id)?;
+            validate_resource_id("name", &declaration.name)?;
+            if let Some(node) = &declaration.reference_node
+                && (!node.position.x.is_finite() || !node.position.y.is_finite())
+            {
+                return Err(CapabilityContractError::InvalidField("position"));
+            }
+        }
+        GraphEditOperation::UpdateTypedConstant { update } => {
+            validate_resource_id("constantId", &update.constant_id)?;
+            if let Some(name) = &update.name {
+                validate_resource_id("name", name)?;
+            }
+        }
+        GraphEditOperation::SetNodeLabel { node_id, label } => {
+            validate_resource_id("nodeId", node_id)?;
+            if label.as_ref().is_some_and(|label| label.len() > 1024) {
+                return Err(CapabilityContractError::InvalidField("label"));
+            }
+        }
+        GraphEditOperation::SetPortCounts { node_id, counts } => {
+            validate_resource_id("nodeId", node_id)?;
+            for key in counts.keys() {
+                validate_resource_id("portCounts", key)?;
+            }
+        }
+        GraphEditOperation::UpdateConnections { connections } => {
+            if connections.is_empty() || connections.len() > 200 {
+                return Err(CapabilityContractError::InvalidField("connections"));
+            }
+            for connection in connections {
+                validate_resource_id("connectionId", &connection.connection_id)?;
+                validate_graph_edit_port(&connection.output)?;
+                validate_graph_edit_port(&connection.input)?;
+                if connection
+                    .order
+                    .as_ref()
+                    .and_then(Option::as_ref)
+                    .is_some_and(|order| order.len() > 1024)
+                {
+                    return Err(CapabilityContractError::InvalidField("order"));
+                }
+            }
+        }
         GraphEditOperation::CreateConstant {
             name, value, x, y, ..
         } => {
@@ -550,6 +677,7 @@ pub struct GraphInspection {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphEditReceipt {
+    pub created_constants: BTreeMap<String, String>,
     pub graph_path: String,
     pub from_revision: u64,
     pub to_revision: u64,

@@ -43,6 +43,20 @@ Command-only request/response schemas may stay beside their handler. Shared type
 
 Harness tool lifecycle events are `tool_invocation_started`, `tool_invocation_completed`, and `tool_invocation_failed`. Each carries its actual invocation identity and capability ID; there is no pre-identity placeholder event or legacy event conversion.
 
+Tool failure codes use the Contract's public failure projection in both live events and replay.
+Business and control-call diagnostics distinguish `resource_read_required` (current contents need verification)
+from `resource_changed` (a detected conflict). Internal revision and project-binding codes remain
+in durable domain events; the desktop receives the same business classification as the model.
+
+Turn submission carries typed `options` (`mode`, `reasoningEffort`). The durable
+`turn_configured` event records the admitted options independently of `turn_started`.
+`reasoning_delta` carries public reasoning text. `usage_reported` carries nullable
+normalized token counts, `contextWindow`, and `purpose` (`response` or `compaction`),
+including when nested in Worker events. Unknown counts remain null. The frontend
+parses these same shapes; Rust serialization and TypeScript parsing share the wire fixture.
+Mode authorization, model capability configuration and usage aggregation semantics are
+defined in the [Harness contract](../yss-harness-core/README.md).
+
 `graph_execution_finished` reports the graph's business outcome independently of
 tool-call completion. Agent completion retains its exact failure code. Resume,
 runtime recovery, text retraction, compaction and blocked delivery are replayable
@@ -57,8 +71,11 @@ command responses have their own DTOs; workflow run records remain in the Harnes
 Agent completion includes committed resource changes and result references for presentation.
 Result IDs in this UI projection are decimal strings, preserving the full u64 identity.
 `HarnessToolInspectionDto` is a read projection of the existing ledger: it contains selected
-operation facts, target identity, artifacts/results and recorded timing, excluding raw request
-payloads, credentials, rows and document bodies. It does not alter model messages or stored receipts.
+operation facts, target identity, artifacts/results, recorded timing and nullable `failure`
+(`code`, `details`). Control calls read the same facts from their durable lifecycle events.
+Failure details reuse the Contract's public failure projection, retaining schema paths and
+expectations while excluding internal version fields. Raw request payloads, credentials,
+rows and document bodies are excluded. This projection does not alter model messages or stored receipts.
 
 The complete wire and delivery contract is maintained in [Desktop IPC](../yss-application/src/ipc/README.md).
 
@@ -76,7 +93,10 @@ show the actual supplier `name` before the model count below the title. Both fie
 save and catalogue responses. A turn's model identity captures that configuration display name in
 `providerName` at admission; replay uses the recorded name even after the configuration is renamed
 or deleted. Provider/model IDs remain the selection identity.
-The catalogue returns `hasApiKey`; sessions carry nullable `model` selection. Every `turn_started`
+The catalogue returns `hasApiKey` and, when known, a read-only `reasoningDefaults` map from
+model ID to declared default effort. Rig derives the map from the same native parameter fields
+it uses for requests; it is not provider configuration or a second saved default.
+Sessions carry nullable `model` selection. Every `turn_started`
 payload records the executed model identity, display names, and `resources: [{resource: {kind,id}, name}]`
 for history replay. Input references carry only project resource identities; Application supplies
 names after resolving the current project index. The former implicit active-graph argument is removed.

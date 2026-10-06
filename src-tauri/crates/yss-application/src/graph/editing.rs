@@ -373,7 +373,7 @@ impl ApplicationState {
             &request.locale,
             (*operation.document).clone(),
         )?;
-        editor.apply(mutation)?;
+        let _ = editor.apply(mutation)?;
         let update = editor.finish(self)?;
         let receipt = captured
             .project()

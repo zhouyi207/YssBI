@@ -8,41 +8,43 @@ pub(super) struct Evidence {
     pub(super) results: Vec<GraphResultReference>,
     pub(super) plan: Option<StatisticalPlan>,
     pub(super) blocked_reason: Option<String>,
-    requires_saved_document: bool,
-    document_saves: BTreeMap<ProjectResourceRef, bool>,
+    requires_saved_artifact: bool,
+    artifact_saves: BTreeMap<ProjectResourceRef, bool>,
 }
 
 impl Evidence {
     pub(super) fn delivery_pending(&self) -> bool {
-        self.requires_saved_document
-            && (self.document_saves.is_empty() || self.document_saves.values().any(|saved| !saved))
+        self.requires_saved_artifact
+            && (self.artifact_saves.is_empty() || self.artifact_saves.values().any(|saved| !saved))
     }
 
     pub(super) fn delivery_feedback(&self) -> Option<String> {
         self.delivery_pending()
             .then(|| serde_json::json!({
-                "reason": "report_document_not_saved",
+                "reason": "report_resource_not_saved",
                 "artifactCount": self.artifacts.len(),
-                "nextStep": "Continue from committed receipts. Create or edit the authorized Doc and save after the final edit. Do not repeat successful writes. If blocked, state the concrete missing requirement."
+                "nextStep": "Continue from committed receipts. Create or edit the authorized Doc or Mind and save after the final edit. Do not repeat successful writes. If blocked, state the concrete missing requirement."
             }).to_string())
     }
     pub(super) fn for_task(task: &AgentTask) -> Self {
         Self {
-            requires_saved_document: task.worker == AgentRole::Report
-                && (task
-                    .scope
-                    .creations
-                    .iter()
-                    .any(|grant| matches!(grant.specification, ResourceCreation::Doc { .. }))
-                    || task.scope.resources.iter().any(|access| {
-                        access.resource.kind == ProjectResourceKind::Doc
-                            && access.operations.iter().any(|operation| {
-                                matches!(
-                                    operation,
-                                    AgentResourceOperation::Edit | AgentResourceOperation::Save
-                                )
-                            })
-                    })),
+            requires_saved_artifact: task.worker == AgentRole::Report
+                && (task.scope.creations.iter().any(|grant| {
+                    matches!(
+                        grant.specification,
+                        ResourceCreation::Doc { .. } | ResourceCreation::Mind { .. }
+                    )
+                }) || task.scope.resources.iter().any(|access| {
+                    matches!(
+                        access.resource.kind,
+                        ProjectResourceKind::Doc | ProjectResourceKind::Mind
+                    ) && access.operations.iter().any(|operation| {
+                        matches!(
+                            operation,
+                            AgentResourceOperation::Edit | AgentResourceOperation::Save
+                        )
+                    })
+                })),
             ..Self::default()
         }
     }
@@ -58,6 +60,46 @@ pub(super) fn record_receipt(
         return;
     };
     match result {
+        AutomationCapabilityResult::ChartInspection(inspection) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource == inspection.chart.resource())
+                && access.version.is_none()
+            {
+                access.version = Some(inspection.version.clone());
+            }
+        }
+        AutomationCapabilityResult::DocumentRead(inspection) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource == inspection.document.resource())
+                && access.version.is_none()
+            {
+                access.version = Some(inspection.version.clone());
+            }
+        }
+        AutomationCapabilityResult::MindRead(inspection) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource == inspection.mind.resource())
+                && access.version.is_none()
+            {
+                access.version = Some(inspection.version.clone());
+            }
+        }
+        AutomationCapabilityResult::DatabaseRead(inspection) => {
+            if let Some(access) = task
+                .resources
+                .iter_mut()
+                .find(|access| access.resource == inspection.database.resource())
+                && access.version.is_none()
+            {
+                access.version = Some(inspection.version.clone());
+            }
+        }
         AutomationCapabilityResult::ResourceInspection(inspection) => {
             if let Some(access) = task
                 .resources
@@ -72,11 +114,14 @@ pub(super) fn record_receipt(
         | AutomationCapabilityResult::ResourceEdited(receipt) => {
             evidence.artifacts.extend(receipt.changes.clone());
             for change in &receipt.changes {
-                if change.resource.kind != ProjectResourceKind::Doc {
+                if !matches!(
+                    change.resource.kind,
+                    ProjectResourceKind::Doc | ProjectResourceKind::Mind
+                ) {
                     continue;
                 }
                 if change.deleted {
-                    evidence.document_saves.remove(&change.resource);
+                    evidence.artifact_saves.remove(&change.resource);
                 } else {
                     // Only the matching successful Save receipt proves delivery.
                     // A later edit or rename requires another save before completion.
@@ -91,7 +136,7 @@ pub(super) fn record_receipt(
                             && change.revision_kind == ResourceRevisionKind::Resource
                     );
                     evidence
-                        .document_saves
+                        .artifact_saves
                         .insert(change.resource.clone(), saved);
                 }
             }
@@ -153,6 +198,15 @@ pub(super) fn record_receipt(
                     });
                 }
             }
+            for state in &receipt.resources {
+                if let Some(access) = task
+                    .resources
+                    .iter_mut()
+                    .find(|access| access.resource == state.resource)
+                {
+                    access.version = Some(state.version.clone());
+                }
+            }
         }
         AutomationCapabilityResult::GraphExecution(value) => {
             add_results(task, evidence, &value.results)
@@ -205,8 +259,7 @@ fn add_results(
 ) {
     for result in results {
         let access = AgentResultAccess {
-            execution_session_id: result.execution_session_id.clone(),
-            result_id: result.result_id,
+            result_ref: result.result_ref.clone(),
         };
         if !task.results.contains(&access) {
             task.results.push(access);
@@ -237,8 +290,8 @@ pub(super) fn finish_outcome(
         && let Some(report) = &mut report
         && report.blocked_reason.is_none()
     {
-        report.blocked_reason = Some("report_document_not_saved".into());
-        report.next_steps.push("Use followup_task to continue this worker from committed receipts. Write the authorized report with edit_resource and finish with manage_resource save using the current version.".into());
+        report.blocked_reason = Some("report_resource_not_saved".into());
+        report.next_steps.push("Use followup_task to continue this worker from committed receipts. Use the authorized document or topic editing tools and finish with save_resource. A Mind-only task does not require a Doc.".into());
     }
     let failure_code = result.as_ref().err().map(|error| error.code);
     let state = match failure_code {

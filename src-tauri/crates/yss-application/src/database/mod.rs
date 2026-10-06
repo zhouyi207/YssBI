@@ -30,6 +30,12 @@ pub struct DatabaseMutationResult<T> {
     pub mutation: CommittedResourceMutation,
 }
 
+#[derive(Debug)]
+pub struct DatabaseEditResult {
+    pub edit_state: yss_database_contract::EditState,
+    pub inserted_row_ids: Vec<i64>,
+}
+
 impl ApplicationState {
     fn capture_database_session(
         &self,

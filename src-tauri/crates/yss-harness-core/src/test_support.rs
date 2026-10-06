@@ -178,21 +178,18 @@ impl CapabilityGatewayPort for RejectingCapabilityGateway {
 }
 
 pub struct StaticCapabilityGateway {
-    results: BTreeMap<
-        yss_harness_contract::CapabilityId,
-        yss_harness_contract::AutomationCapabilityResult,
-    >,
+    results: Vec<yss_harness_contract::AutomationCapabilityResult>,
 }
 
 impl StaticCapabilityGateway {
     pub fn new(result: yss_harness_contract::AutomationCapabilityResult) -> Self {
         Self {
-            results: BTreeMap::from([(result.capability_id(), result)]),
+            results: vec![result],
         }
     }
 
     pub fn with_result(mut self, result: yss_harness_contract::AutomationCapabilityResult) -> Self {
-        self.results.insert(result.capability_id(), result);
+        self.results.push(result);
         self
     }
 }
@@ -206,7 +203,9 @@ impl CapabilityGatewayPort for StaticCapabilityGateway {
     ) -> CapabilityFuture<'a> {
         Box::pin(async move {
             self.results
-                .get(&request.capability_id())
+                .iter()
+                .rev()
+                .find(|result| result.accepts_capability(request.capability_id()))
                 .cloned()
                 .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))
         })

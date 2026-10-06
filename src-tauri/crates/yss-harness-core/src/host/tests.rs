@@ -141,6 +141,7 @@ async fn session_turn_persists_one_gap_free_ordered_event_stream() {
                 .map(|entry| entry.resource.clone())
                 .collect(),
             None,
+            Default::default(),
         )
         .await
         .unwrap();
@@ -232,7 +233,7 @@ async fn conversation_rename_preserves_history_and_rejects_active_turns() {
 #[tokio::test]
 async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_cancellation() {
     use yss_harness_contract::{
-        AgentFuture, InspectProjectRequest, InspectResultRequest, ResultCategoryInspection,
+        AgentFuture, InspectResultRequest, ListResourcesRequest, ResultCategoryInspection,
         ResultInspection, ResultValueInspection,
     };
     struct RecordingDriver(Mutex<Vec<AgentTurnRequest>>);
@@ -262,11 +263,12 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
                     .execute(ModelCapabilityRequest {
                         request: (AutomationCapabilityRequest::InspectResult(
                             InspectResultRequest {
-                                execution_session_id: "00000000-0000-0000-0000-000000000001".into(),
-                                result_id: 7,
-                                part: None,
-                                offset: 0,
-                                limit: 20,
+                                result_ref: yss_harness_contract::ResultRef::new(
+                                    "00000000-0000-0000-0000-000000000001".into(),
+                                    7,
+                                ),
+                                schema_offset: 0,
+                                schema_limit: 50,
                             },
                         ))
                         .into(),
@@ -276,8 +278,8 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
                 assert!(
                     capabilities
                         .execute(ModelCapabilityRequest {
-                            request: (AutomationCapabilityRequest::InspectProject(
-                                InspectProjectRequest {}
+                            request: (AutomationCapabilityRequest::ListResources(
+                                ListResourcesRequest::default()
                             ))
                             .into(),
                         })
@@ -310,7 +312,8 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
     let driver = Arc::new(RecordingDriver(Mutex::new(Vec::new())));
     let evidence = "full-tool-result:".to_owned() + &"v".repeat(8192) + ":result-tail";
     let result = AutomationCapabilityResult::ResultInspection(ResultInspection {
-        result_id: 7,
+        result_ref: yss_harness_contract::ResultRef::new("test".into(), 7),
+        validity: yss_harness_contract::ResultValidity::Retained,
         category: ResultCategoryInspection::Value,
         value: ResultValueInspection::Json(evidence.clone().into()),
     });
@@ -348,7 +351,14 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
     };
     for index in 0..12 {
         let outcome = host
-            .submit_turn(&session.id, &session.project, question(index), vec![], None)
+            .submit_turn(
+                &session.id,
+                &session.project,
+                question(index),
+                vec![],
+                None,
+                Default::default(),
+            )
             .await;
         assert_eq!(outcome.is_err(), index == 1 || index == 2);
     }
@@ -513,7 +523,8 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
                 InspectDatasetProfileRequest {
                     database_id: "data-1".into(),
                 },
-            ),
+            )
+            .into(),
             state: ToolInvocationState::Running,
             result: None,
             failure: None,
@@ -523,10 +534,30 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
         })
         .await
         .unwrap();
+    let mut rejected = store.tool_invocations().pop().unwrap();
+    rejected.id = ToolInvocationId::try_new("rejected-write-interrupted").unwrap();
+    rejected.idempotency_key = IdempotencyKey::try_new("rejected-write-interrupted").unwrap();
+    rejected.capability_id = yss_harness_contract::CapabilityId::WriteDocument;
+    rejected.request = yss_harness_contract::ToolInvocationRequest::Rejected {
+        capability_id: rejected.capability_id,
+        input: None,
+    };
+    store.begin(&rejected).await.unwrap();
     assert_eq!(host.recover_interrupted_turns().await.unwrap(), 1);
     assert_eq!(host.recover_interrupted_turns().await.unwrap(), 0);
     assert!(store.load_running_invocations().await.unwrap().is_empty());
     assert!(store.load_running_turns().await.unwrap().is_empty());
+    assert_eq!(
+        store
+            .load_invocation(&session.id, &rejected.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .failure
+            .unwrap()
+            .code,
+        CapabilityFailureCode::InternalFailure
+    );
     assert_eq!(
         store.load_turn(&turn.id).await.unwrap().unwrap().state,
         HarnessTurnState::Failed
@@ -534,6 +565,10 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
     assert!(matches!(
         host.events_after(&session.id, 1).await.unwrap().as_slice(),
         [
+            HarnessEventEnvelope {
+                event: HarnessEvent::Agent(AgentEvent::ToolInvocationFailed { .. }),
+                ..
+            },
             HarnessEventEnvelope {
                 event: HarnessEvent::Agent(AgentEvent::ToolInvocationFailed { .. }),
                 ..
@@ -610,6 +645,7 @@ async fn dataset_quality_workflow_persists_and_completes_its_typed_tool_step() {
         "Review quality.".to_owned(),
         vec![],
         None,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -727,6 +763,7 @@ impl CapabilityGatewayPort for ApprovedGateway {
             ));
             Ok(AutomationCapabilityResult::GraphEditReceipt(
                 GraphEditReceipt {
+                    created_constants: Default::default(),
                     graph_hash: "0".repeat(64),
                     created_nodes: BTreeMap::new(),
                     created_ports: BTreeMap::new(),
@@ -789,6 +826,7 @@ async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
         "Move the node.".to_owned(),
         vec![],
         None,
+        Default::default(),
     )
     .await
     .unwrap();

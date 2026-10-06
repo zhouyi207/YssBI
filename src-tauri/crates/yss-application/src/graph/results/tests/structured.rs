@@ -312,6 +312,51 @@ fn nested_array_parts_preserve_paths_values_and_page_limits() {
     );
     assert_eq!(overview["empty"]["rowCount"], 0);
     assert_eq!(overview["empty"]["kind"], "tableRef");
+    let user_fields = RuntimeValue::Record(Arc::new(
+        [
+            (
+                "resultRef".into(),
+                TabularScalar::String("user reference".into()).into(),
+            ),
+            (
+                "tableRef".into(),
+                TabularScalar::String("user table".into()).into(),
+            ),
+            (
+                "part".into(),
+                TabularScalar::String("user part".into()).into(),
+            ),
+        ]
+        .into(),
+    ));
+    let root_with_user_fields = RuntimeValue::Record(Arc::new(
+        [
+            ("user".into(), user_fields),
+            ("arrays".into(), small.clone()),
+        ]
+        .into(),
+    ));
+    let table = |part: &str, _count: usize| {
+        RuntimeValue::Record(Arc::new(
+            [(
+                "tableRef".into(),
+                TabularScalar::String(format!("opaque:{part}").into()).into(),
+            )]
+            .into(),
+        ))
+    };
+    let adapted = crate::result_encoding::runtime_value_to_json(
+        &project_with_tables(&root_with_user_fields, &table).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        adapted["user"],
+        serde_json::json!({"resultRef": "user reference", "tableRef": "user table", "part": "user part"})
+    );
+    assert_eq!(
+        adapted["arrays"]["values"]["tableRef"],
+        "opaque:structured:/arrays/values"
+    );
     let column = RuntimeValue::List(
         (0..150)
             .map(|i| TabularScalar::Unsigned(u64::MAX - i).into())
@@ -331,6 +376,13 @@ fn nested_array_parts_preserve_paths_values_and_page_limits() {
     assert_eq!(stage.values.len(), 1);
     let wire = crate::result_encoding::runtime_value_to_json(&stage.values[0]).unwrap();
     assert_eq!(wire[0]["a/~"]["part"], "structured:/stages/119/a~1~0");
+    let adapted_stage = page_with_tables(&root, "/stages", 119, 10, &table).unwrap();
+    let adapted_wire =
+        crate::result_encoding::runtime_value_to_json(&adapted_stage.values[0]).unwrap();
+    assert_eq!(
+        adapted_wire[0]["a/~"]["tableRef"],
+        "opaque:structured:/stages/119/a~1~0"
+    );
     let tail = page(&root, "/stages/119/a~1~0", 149, 100).unwrap();
     let wire = crate::result_encoding::runtime_value_to_json(&tail.values[0]).unwrap();
     assert_eq!(wire[0], (u64::MAX - 149).to_string());

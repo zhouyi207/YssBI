@@ -2,7 +2,6 @@
 use super::{map_session_capture_error, map_session_revalidation_error};
 use crate::events::CommittedResourceMutation;
 use crate::session::{ApplicationSession, ApplicationState};
-use std::collections::BTreeMap;
 use yss_chart_document::ChartResourcePath;
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 use yss_harness_contract::*;
@@ -15,12 +14,19 @@ use yss_project_model::{
     mind::{MindDocument, MindPath},
 };
 
+mod chart;
+pub(super) use chart::inspect_chart;
 mod content;
 mod database;
+mod document;
+pub(super) use document::read_document;
+mod mind;
+pub(super) use mind::read_mind;
 #[cfg(test)]
 mod tests;
 pub(super) use content::{edit_resource, inspect_resource};
-pub(super) use database::export_dataset;
+pub(super) use database::export_database;
+pub(super) use database::read_database;
 pub(super) use database::semantic_to_contract;
 
 type Publication<'a> = &'a mut dyn FnMut(&CommittedResourceMutation);
@@ -45,7 +51,8 @@ impl ApplicationState {
                 CapabilityFailureCode::ProjectSessionChanged,
             ));
         }
-        let index = project_inspection(&session)?;
+        let index = read_index(&session)?;
+        let resources = resource_entries(&index);
         let mut seen = std::collections::BTreeSet::new();
         let selected = references
             .iter()
@@ -53,8 +60,7 @@ impl ApplicationState {
                 if !seen.insert(reference) {
                     return Err(invalid("resources"));
                 }
-                let entry = index
-                    .resources
+                let entry = resources
                     .iter()
                     .find(|entry| &entry.resource == reference)
                     .ok_or_else(unavailable)?;
@@ -66,6 +72,14 @@ impl ApplicationState {
             .collect::<Result<Vec<_>>>()?;
         self.revalidate_captured_session(&session)
             .map_err(map_session_revalidation_error)?;
+        session
+            .project()
+            .validate_project_index_version(
+                session.project_instance_id(),
+                index.publication_revision,
+                index.authority_generation,
+            )
+            .map_err(project_error)?;
         Ok(selected)
     }
 }
@@ -86,92 +100,67 @@ fn reference(kind: ProjectResourceKind, id: impl Into<String>) -> ProjectResourc
     }
 }
 
-fn resource_entries(index: &yss_project::ProjectIndex) -> Vec<ProjectResourceInspection> {
-    let mut entries = Vec::new();
-    let mut add = |kind, id: String, display_name: String, revision: ResourceRevision| {
-        entries.push(ProjectResourceInspection {
-            resource: reference(kind, id),
-            display_name,
-            revision: revision.get(),
-        });
-    };
-    for item in &index.event_graphs {
-        add(
-            ProjectResourceKind::EventGraph,
-            item.path.clone(),
-            item.name.clone(),
-            item.revision,
-        );
-    }
-    for item in &index.function_graphs {
-        add(
-            ProjectResourceKind::FunctionGraph,
-            item.path.clone(),
-            item.name.clone(),
-            item.revision,
-        );
-    }
-    for item in &index.charts {
-        add(
-            ProjectResourceKind::Chart,
-            item.chart_path.as_str().into(),
-            item.name.clone(),
-            item.revision,
-        );
-    }
-    for item in &index.minds {
-        add(
-            ProjectResourceKind::Mind,
-            item.path.as_str().into(),
-            item.name.clone(),
-            item.revision,
-        );
-    }
-    for item in &index.docs {
-        add(
-            ProjectResourceKind::Doc,
-            item.path.as_str().into(),
-            item.name.clone(),
-            item.revision,
-        );
-    }
-    for item in &index.databases {
-        add(
-            ProjectResourceKind::Database,
-            item.id.clone(),
-            item.name.clone().unwrap_or_else(|| item.id.clone()),
-            item.revision,
-        );
-    }
-    entries.sort_by(|left, right| left.resource.cmp(&right.resource));
-    entries
+fn resource_entries(
+    index: &yss_project::resource_catalog::ResourceCatalog,
+) -> Vec<ProjectResourceInspection> {
+    index
+        .resources
+        .iter()
+        .map(|entry| ProjectResourceInspection {
+            resource: entry.resource.clone(),
+            display_name: entry.name.clone(),
+            revision: entry.revision.get(),
+        })
+        .collect()
 }
 
-fn read_index(session: &ApplicationSession) -> Result<yss_project::ProjectIndex> {
+pub(super) fn read_index(
+    session: &ApplicationSession,
+) -> Result<yss_project::resource_catalog::ResourceCatalog> {
     session
         .project()
-        .read_project_index(session.project_instance_id())
+        .read_resource_catalog(session.project_instance_id())
         .map_err(super::map_project_inspection_error)
 }
-pub(super) fn project_inspection(session: &ApplicationSession) -> Result<ProjectInspection> {
+pub(super) fn project_inspection(
+    session: &ApplicationSession,
+    request: ListResourcesRequest,
+) -> Result<ProjectInspection> {
     let index = read_index(session)?;
-    let resources = resource_entries(&index);
+    let query = request.query.as_deref().unwrap_or_default().to_lowercase();
+    let matched = resource_entries(&index)
+        .into_iter()
+        .filter(|entry| {
+            (request.kinds.is_empty() || request.kinds.contains(&entry.resource.kind))
+                && (query.is_empty()
+                    || entry.display_name.to_lowercase().contains(&query)
+                    || entry.resource.id.to_lowercase().contains(&query))
+        })
+        .collect::<Vec<_>>();
+    let total = matched.len();
+    let resources = matched
+        .into_iter()
+        .skip(request.offset)
+        .take(request.limit)
+        .collect::<Vec<_>>();
+    let page = InspectionPage::known(request.offset, resources.len(), total);
     session
         .project()
         .validate_project_index_version(
             session.project_instance_id(),
             index.publication_revision,
-            index.authority_generation(),
+            index.authority_generation,
         )
         .map_err(project_error)?;
     Ok(ProjectInspection {
         project_name: index.project_name,
         publication_revision: index.publication_revision,
         resources,
+        page,
     })
 }
 fn metadata(
-    index: &yss_project::ProjectIndex,
+    index: &yss_project::resource_catalog::ResourceCatalog,
     resource: &ProjectResourceRef,
 ) -> Result<ProjectResourceInspection> {
     resource_entries(index)
@@ -184,46 +173,20 @@ fn check_version(
     resource: &ProjectResourceRef,
     version: &ResourceVersion,
 ) -> Result<()> {
-    let current = metadata(&read_index(session)?, resource)?;
-    if current.revision != version.revision {
+    let catalog = read_index(session)?;
+    let current = catalog
+        .resources
+        .iter()
+        .find(|entry| entry.resource == *resource)
+        .ok_or_else(unavailable)?;
+    if current.revision.get() != version.revision
+        || (version.session_id.is_some() && current.session_id != version.session_id)
+    {
         return Err(conflict());
-    }
-    match resource.kind {
-        ProjectResourceKind::Mind => {
-            let current = session
-                .project()
-                .read_mind(session.project_instance_id(), &mind_path(resource)?)
-                .map_err(project_error)?;
-            if version.session_id.as_deref() != Some(&current.version.session_id) {
-                return Err(conflict());
-            }
-        }
-        ProjectResourceKind::Doc => {
-            let current = session
-                .project()
-                .read_doc(session.project_instance_id(), &doc_path(resource)?)
-                .map_err(project_error)?;
-            if version.session_id.as_deref() != Some(&current.version.session_id) {
-                return Err(conflict());
-            }
-        }
-        ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
-            if version.session_id.is_some() =>
-        {
-            let current = session
-                .project()
-                .read_graph_editing(session.project_instance_id(), &graph_path(resource)?)
-                .map_err(project_error)?;
-            if version.session_id.as_deref()
-                != Some(current.state.version.session_id.to_string().as_str())
-            {
-                return Err(conflict());
-            }
-        }
-        _ => {}
     }
     Ok(())
 }
+
 fn graph_path(resource: &ProjectResourceRef) -> Result<GraphResourcePath> {
     let path = GraphResourcePath::new(&resource.id).map_err(|_| invalid("resource.id"))?;
     let kind = match path.kind() {
@@ -330,6 +293,7 @@ fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMuta
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(ResourceMutationReceipt {
+        database_edit: None,
         publication_revision: Some(mutation.publication_revision),
         changes,
         moves: mutation
@@ -340,13 +304,19 @@ fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMuta
                 to: reference(file_resource_kind(item.kind), item.to.to_string()),
             })
             .collect(),
-        created_nodes: BTreeMap::new(),
+        mind_edit: None,
+        document_edit: None,
+        resources: Vec::new(),
     })
 }
 fn committed(
+    application: &ApplicationState,
+    session: &ApplicationSession,
     mutation: CommittedResourceMutation,
     publish: Publication<'_>,
 ) -> Result<ResourceMutationReceipt> {
+    let mut receipt = mutation_receipt(&mutation)?;
+    attach_committed_metadata(application, session, &mut receipt);
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publish(&mutation))).is_err() {
         tracing::warn!(
             domain = "Application",
@@ -354,7 +324,60 @@ fn committed(
             "Resource committed but its publication callback panicked"
         );
     }
-    mutation_receipt(&mutation)
+    Ok(receipt)
+}
+
+fn attach_committed_metadata(
+    application: &ApplicationState,
+    session: &ApplicationSession,
+    receipt: &mut ResourceMutationReceipt,
+) {
+    // Metadata is a continuation aid, not the commit verdict. Never turn a real
+    // commit into a failure or advance its baseline to a later concurrent edit.
+    let Ok(catalog) = read_index(session) else {
+        return;
+    };
+    let states = receipt
+        .changes
+        .iter()
+        .filter(|change| !change.deleted && change.revision_kind == ResourceRevisionKind::Resource)
+        .filter_map(|change| {
+            let metadata = catalog.resources.iter().find(|entry| {
+                entry.resource == change.resource && entry.revision.get() == change.revision
+            })?;
+            let dirty = metadata.dirty.or_else(|| {
+                application
+                    .query_database_edit_state_for_application(
+                        session.project_instance_id().clone(),
+                        metadata.resource.id.clone(),
+                        metadata.revision,
+                    )
+                    .ok()
+                    .map(|state| state.is_modified)
+            });
+            Some(ResourceMutationState {
+                resource: metadata.resource.clone(),
+                name: metadata.name.clone(),
+                version: ResourceVersion {
+                    revision: metadata.revision.get(),
+                    session_id: metadata.session_id.clone(),
+                },
+                dirty,
+                root_topic_id: metadata.root_topic_id.clone(),
+            })
+        })
+        .collect();
+    if session
+        .project()
+        .validate_project_index_version(
+            session.project_instance_id(),
+            catalog.publication_revision,
+            catalog.authority_generation,
+        )
+        .is_ok()
+    {
+        receipt.resources = states;
+    }
 }
 
 pub(super) fn manage_resource(
@@ -398,24 +421,27 @@ pub(super) fn manage_resource(
                     .map_err(file_error)?
                     .mutation
             }
-            ResourceCreation::Database { source } => {
+            ResourceCreation::Database { source, name } => {
                 application
                     .load_database_for_application(
                         project,
                         operation,
                         database::import_source(source),
+                        name,
                     )
                     .map_err(database_error)?
                     .mutation
             }
         };
-        return committed(mutation, publish);
+        return committed(application, session, mutation, publish);
     }
     let (resource, version) = match &request {
         ManageResourceRequest::Rename {
             resource, version, ..
         }
-        | ManageResourceRequest::Duplicate { resource, version }
+        | ManageResourceRequest::Duplicate {
+            resource, version, ..
+        }
         | ManageResourceRequest::Delete { resource, version }
         | ManageResourceRequest::Save { resource, version } => (resource, version),
         ManageResourceRequest::Create { .. } => unreachable!(),
@@ -430,8 +456,8 @@ pub(super) fn manage_resource(
                 ManageResourceRequest::Rename { name, .. } => application
                     .rename_graph_resource(project, path, expected, name, 0, operation)
                     .map_err(graph_error)?,
-                ManageResourceRequest::Duplicate { .. } => application
-                    .duplicate_graph_resource(project, path, expected, operation)
+                ManageResourceRequest::Duplicate { name, .. } => application
+                    .duplicate_graph_resource(project, path, expected, operation, name)
                     .map_err(graph_error)?,
                 ManageResourceRequest::Delete { .. } => application
                     .remove_graph_resource(project, path, expected, operation)
@@ -448,15 +474,16 @@ pub(super) fn manage_resource(
                 ManageResourceRequest::Rename { name, .. } => application
                     .rename_chart_resource(project, operation, path, expected, name, 0)
                     .map_err(chart_error)?,
-                ManageResourceRequest::Duplicate { .. } => application
-                    .duplicate_chart_resource(project, operation, path, expected)
+                ManageResourceRequest::Duplicate { name, .. } => application
+                    .duplicate_chart_resource(project, operation, path, expected, name)
                     .map_err(chart_error)?,
                 ManageResourceRequest::Delete { .. } => application
                     .remove_chart_resource(project, operation, path, expected)
                     .map_err(chart_error)?,
                 ManageResourceRequest::Save { .. } => {
                     // Charts have no Rust editing buffer; saving the current persisted version is a no-op.
-                    return Ok(ResourceMutationReceipt {
+                    let mut receipt = ResourceMutationReceipt {
+                        database_edit: None,
                         publication_revision: None,
                         changes: vec![ResourceChange {
                             resource: resource.clone(),
@@ -465,8 +492,12 @@ pub(super) fn manage_resource(
                             deleted: false,
                         }],
                         moves: vec![],
-                        created_nodes: BTreeMap::new(),
-                    });
+                        mind_edit: None,
+                        document_edit: None,
+                        resources: Vec::new(),
+                    };
+                    attach_committed_metadata(application, session, &mut receipt);
+                    return Ok(receipt);
                 }
                 _ => unreachable!(),
             }
@@ -480,7 +511,11 @@ pub(super) fn manage_resource(
                     version,
                     name,
                 },
-                ManageResourceRequest::Duplicate { .. } => FileCommand::Duplicate { path, version },
+                ManageResourceRequest::Duplicate { name, .. } => FileCommand::Duplicate {
+                    path,
+                    version,
+                    name,
+                },
                 ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
                 ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
                 _ => unreachable!(),
@@ -499,7 +534,11 @@ pub(super) fn manage_resource(
                     version,
                     name,
                 },
-                ManageResourceRequest::Duplicate { .. } => FileCommand::Duplicate { path, version },
+                ManageResourceRequest::Duplicate { name, .. } => FileCommand::Duplicate {
+                    path,
+                    version,
+                    name,
+                },
                 ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
                 ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
                 _ => unreachable!(),
@@ -524,9 +563,9 @@ pub(super) fn manage_resource(
                         .map_err(database_error)?
                         .mutation
                 }
-                ManageResourceRequest::Duplicate { .. } => {
+                ManageResourceRequest::Duplicate { name, .. } => {
                     application
-                        .duplicate_database_for_application(project, id, expected, operation)
+                        .duplicate_database_for_application(project, id, expected, operation, name)
                         .map_err(database_error)?
                         .mutation
                 }
@@ -540,7 +579,7 @@ pub(super) fn manage_resource(
             }
         }
     };
-    committed(mutation, publish)
+    committed(application, session, mutation, publish)
 }
 
 fn project_error(error: yss_project::ProjectOperationError) -> CapabilityFailure {

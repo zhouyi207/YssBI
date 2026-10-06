@@ -1,8 +1,12 @@
 //! Harness startup and project-session coordination over injected neutral ports.
 
+mod gateway;
 pub mod knowledge;
 pub mod models;
-pub(crate) mod resources;
+mod resources;
+
+pub use gateway::ApplicationCapabilityGateway;
+pub use resources::ApplicationResourceResolver;
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -19,7 +23,7 @@ use crate::session::{ApplicationSession, ApplicationState, SessionCaptureError};
 pub enum HarnessInitializationError {
     #[error("initial Harness project session could not be captured")]
     SessionCapture(#[from] SessionCaptureError),
-    #[error("Harness host could not be initialized")]
+    #[error("Harness host could not be initialized: {0}")]
     Host(#[from] HarnessError),
     #[error("Harness builtin knowledge could not be initialized")]
     Knowledge(#[from] KnowledgeError),
@@ -305,6 +309,7 @@ mod tests {
             "Remember the first conversation".into(),
             vec![],
             None,
+            Default::default(),
         )
         .await
         .unwrap();
@@ -319,6 +324,7 @@ mod tests {
             "Keep the second conversation separate".into(),
             vec![],
             None,
+            Default::default(),
         )
         .await
         .unwrap();
@@ -416,6 +422,7 @@ mod tests {
             "Continue the first conversation".into(),
             vec![],
             None,
+            Default::default(),
         )
         .await
         .unwrap();

@@ -10,7 +10,7 @@ pub enum HarnessError {
     Identity(#[from] AutomationIdentityError),
     #[error("automation id generation failed")]
     IdGeneration(#[from] IdGenerationFailure),
-    #[error("harness persistence failed")]
+    #[error("harness persistence failed: {0}")]
     Persistence(#[from] PersistenceFailure),
     #[error("harness knowledge retrieval failed")]
     Knowledge(#[from] KnowledgeError),

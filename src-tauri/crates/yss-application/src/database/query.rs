@@ -29,6 +29,7 @@ pub struct DatabaseMetaResult {
 pub struct DatabaseRowsResult {
     pub rows: TabularSnapshot,
     pub row_ids: Vec<i64>,
+    pub has_more: bool,
 }
 
 impl ApplicationState {
@@ -69,9 +70,71 @@ impl ApplicationState {
             DatabaseApplicationOperation::ReadRows,
             |session, database| {
                 let page = session_api::page_snapshot(session, database, offset, limit)?;
+                let has_more = page.has_more();
                 let (rows, row_ids) = page.into_parts();
-                Ok(DatabaseRowsResult { rows, row_ids })
+                Ok(DatabaseRowsResult {
+                    rows,
+                    row_ids,
+                    has_more,
+                })
             },
+        )
+    }
+
+    pub fn query_database_rows_selected_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        query: &yss_database_runtime::DatasetRowsQuery,
+        control: &yss_relational_contract::RelationControl,
+    ) -> Result<DatabaseRowsResult, DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        if query.limit > MAX_GET_DATAFRAME_ROWS {
+            return Err(DatabaseUseCaseError::Database(
+                DatabaseOperationError::RowLimitExceeded {
+                    database_id: id,
+                    operation: DatabaseApplicationOperation::ReadRows,
+                    requested_rows: query.limit,
+                    max_rows: MAX_GET_DATAFRAME_ROWS,
+                },
+            ));
+        }
+        read_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            expected_revision,
+            DatabaseApplicationOperation::ReadRows,
+            |session, database| {
+                let page = session_api::page_query_snapshot(session, database, query, control)?;
+                let has_more = page.has_more();
+                let (rows, row_ids) = page.into_parts();
+                Ok(DatabaseRowsResult {
+                    rows,
+                    row_ids,
+                    has_more,
+                })
+            },
+        )
+    }
+
+    pub fn query_database_profile_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        query: &session_api::DatabaseProfileQuery,
+        control: &yss_relational_contract::RelationControl,
+    ) -> Result<session_api::DatabaseProfileSnapshot, DatabaseUseCaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        read_database_in_captured_session(
+            self,
+            &captured,
+            &id,
+            expected_revision,
+            DatabaseApplicationOperation::ColumnDistribution,
+            |session, database| session_api::profile_snapshot(session, database, query, control),
         )
     }
 
@@ -224,6 +287,7 @@ mod tests {
                     has_header: true,
                     infer_schema_length: Some(10),
                 },
+                None,
             )
             .unwrap()
             .data
@@ -263,6 +327,130 @@ mod tests {
         assert!(matches!(result, Err(DatabaseUseCaseError::Database(
             DatabaseOperationError::StaleRevision { expected_revision, .. }
         )) if expected_revision == expected));
+    }
+
+    #[test]
+    fn selected_database_pages_retain_row_ids_and_the_original_revision_gate() {
+        use yss_database_runtime::DatasetRowsQuery;
+        use yss_relational_contract::{
+            RelationComparison, RelationControl, RelationPredicate, SortColumn,
+        };
+        let (_fixture, state, id) = imported_database("value,label\n2,a\n1,b\n2,c\n");
+        let captured = state.capture_session().unwrap();
+        let instance = captured.project_instance_id().clone();
+        let expected = revision(&captured, &id);
+        let control = RelationControl {
+            cancellation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(20),
+            max_input_bytes: 16 * 1024 * 1024,
+        };
+        let query = DatasetRowsQuery {
+            columns: vec!["label".into()],
+            filters: vec![RelationPredicate {
+                column: "value".into(),
+                comparison: RelationComparison::GreaterEqual,
+                value: Some(yss_data_contract::FilterLiteral::Integer(2)),
+            }],
+            order: vec![SortColumn {
+                column: "value".into(),
+                ascending: false,
+                nulls_first: false,
+            }],
+            offset: 1,
+            limit: 1,
+        };
+        let page = state
+            .query_database_rows_selected_for_application(
+                instance.clone(),
+                id.clone(),
+                expected,
+                &query,
+                &control,
+            )
+            .unwrap();
+        assert_eq!(page.row_ids, [2]);
+        assert_eq!(
+            serde_json::to_value(&page.rows).unwrap()["columns"],
+            serde_json::json!({"label":["c"]})
+        );
+        assert!(!page.has_more);
+        let profile_query = session_api::DatabaseProfileQuery {
+            columns: vec!["value".into()],
+            metrics: vec![session_api::DatabaseProfileMetric::Statistics],
+        };
+        let profile = state
+            .query_database_profile_for_application(
+                instance.clone(),
+                id.clone(),
+                expected,
+                &profile_query,
+                &control,
+            )
+            .unwrap();
+        assert!(profile.completeness.is_none() && profile.distributions.is_none());
+        assert_eq!(profile.statistics.unwrap().len(), 1);
+        state
+            .mutate_database_for_application(
+                instance.clone(),
+                id.clone(),
+                expected,
+                OperationId::new(),
+                crate::database::DatabaseMutation::UpdateCells {
+                    updates: vec![yss_database_runtime::session_api::DatabaseCellUpdate {
+                        row_id: page.row_ids[0],
+                        column: "value".into(),
+                        value: yss_data_contract::TabularScalar::Integer(9),
+                    }],
+                },
+            )
+            .unwrap();
+        assert_stale(
+            state.query_database_rows_selected_for_application(
+                instance.clone(),
+                id.clone(),
+                expected,
+                &query,
+                &control,
+            ),
+            expected,
+        );
+        assert_stale(
+            state.query_database_profile_for_application(
+                instance.clone(),
+                id.clone(),
+                expected,
+                &profile_query,
+                &control,
+            ),
+            expected,
+        );
+        let mut query = query;
+        query.offset = 0;
+        let page = state
+            .query_database_rows_selected_for_application(
+                instance.clone(),
+                id.clone(),
+                revision(&captured, &id),
+                &query,
+                &control,
+            )
+            .unwrap();
+        assert_eq!(page.row_ids, [2]);
+        assert!(page.has_more);
+        control
+            .cancellation
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            state
+                .query_database_rows_selected_for_application(
+                    instance,
+                    id.clone(),
+                    revision(&captured, &id),
+                    &query,
+                    &control
+                )
+                .is_err()
+        );
     }
 
     #[test]

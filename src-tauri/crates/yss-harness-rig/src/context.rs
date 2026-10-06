@@ -33,6 +33,7 @@ pub(crate) struct ContextHook {
     capabilities: Arc<dyn ModelCapabilityExecutor>,
     cancellation: CancellationToken,
     max_output_tokens: Option<u32>,
+    context_window: Option<u32>,
     temperature: Option<f64>,
     additional_parameters: serde_json::Value,
     state: Arc<Mutex<State>>,
@@ -56,6 +57,7 @@ impl ContextHook {
             capabilities,
             cancellation,
             max_output_tokens,
+            context_window,
             temperature: None,
             additional_parameters: serde_json::json!({}),
             state: Arc::new(Mutex::new(State {

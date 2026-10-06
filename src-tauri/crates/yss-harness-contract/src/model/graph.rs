@@ -6,59 +6,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectGraphInput {
-    pub graph_path: String,
-    #[serde(default)]
-    pub view: GraphInspectionView,
-    #[serde(default)]
-    pub node_ids: Vec<String>,
-    #[serde(default)]
-    pub port_addresses: Vec<GraphEditPortRef>,
-    #[serde(default)]
-    pub offset: usize,
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    #[serde(default)]
-    pub include_schema: bool,
-    #[serde(default)]
-    pub include_options: bool,
-}
-
-fn default_limit() -> usize {
-    50
+    pub graph: GraphResourceRef,
 }
 
 impl From<&InspectGraphRequest> for InspectGraphInput {
     fn from(value: &InspectGraphRequest) -> Self {
         Self {
-            graph_path: value.graph_path.clone(),
-            view: value.view,
-            node_ids: value.node_ids.clone(),
-            port_addresses: value.port_addresses.clone(),
-            offset: value.offset,
-            limit: value.limit,
-            include_schema: value.include_schema,
-            include_options: value.include_options,
+            graph: value.graph.clone(),
         }
     }
 }
 
 impl From<InspectGraphInput> for InspectGraphRequest {
     fn from(value: InspectGraphInput) -> Self {
-        Self {
-            graph_path: value.graph_path,
-            view: value.view,
-            node_ids: value.node_ids,
-            port_addresses: value.port_addresses,
-            offset: value.offset,
-            limit: value.limit,
-            include_schema: value.include_schema,
-            include_options: value.include_options,
-            if_unchanged: None,
-        }
+        Self::summary(value.graph)
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+// Read projection for a stored internal operation; no callable model schema.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApplyGraphEditInput {
     pub graph_path: String,
@@ -66,7 +32,8 @@ pub struct ApplyGraphEditInput {
     pub operations: Vec<GraphEditOperation>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+// Read projection for a stored internal operation; no callable model schema.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphTargetInput {
     pub graph_path: String,
@@ -75,6 +42,41 @@ pub struct GraphTargetInput {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExecuteGraphInput {
-    pub graph_path: String,
-    pub demand: GraphExecutionDemand,
+    pub graph: GraphResourceRef,
+    #[serde(default)]
+    pub node_id: Option<String>,
+    /// Required only to override the default dependencies mode for a selected node.
+    #[serde(default)]
+    pub mode: Option<NodeExecutionMode>,
+}
+
+impl ExecuteGraphInput {
+    pub fn demand(&self) -> Result<GraphExecutionDemand, CapabilityContractError> {
+        match &self.node_id {
+            Some(node_id) => Ok(GraphExecutionDemand::Node {
+                node_id: node_id.clone(),
+                mode: self.mode.clone().unwrap_or(NodeExecutionMode::Dependencies),
+            }),
+            None if self.mode.is_none() => Ok(GraphExecutionDemand::Default),
+            None => Err(CapabilityContractError::InvalidField("mode")),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ValidateGraphInput {
+    pub graph: GraphResourceRef,
+    #[serde(default)]
+    #[schemars(length(max = 200))]
+    pub node_ids: Vec<String>,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_diagnostic_limit")]
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: usize,
+}
+
+fn default_diagnostic_limit() -> usize {
+    50
 }

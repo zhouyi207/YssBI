@@ -17,6 +17,7 @@ struct TaskEntry {
 }
 
 pub(crate) struct TurnOrchestrator {
+    options: HarnessTurnOptions,
     pub ports: HarnessPorts,
     driver: Arc<dyn AgentDriverPort>,
     knowledge: Arc<crate::KnowledgeService>,
@@ -32,6 +33,12 @@ pub(crate) struct TurnOrchestrator {
 }
 
 impl TurnOrchestrator {
+    fn check_task_mode(&self, scope: &AgentTaskScope) -> Result<(), CapabilityFailure> {
+        if self.options.mode == HarnessMode::Ask && !scope.is_read_only() {
+            return Err(rejected("ask_mode_read_only"));
+        }
+        Ok(())
+    }
     #[allow(
         clippy::too_many_arguments,
         reason = "one user-turn authority and its injected services"
@@ -46,6 +53,7 @@ impl TurnOrchestrator {
         skill: SkillPackage,
         cancellation: CancellationToken,
         access: Arc<RwLock<()>>,
+        options: HarnessTurnOptions,
     ) -> Result<Arc<Self>, AgentDriverFailure> {
         let manager_run_id = AgentRunId::try_new(
             ports
@@ -55,6 +63,7 @@ impl TurnOrchestrator {
         )
         .map_err(|_| driver_failure())?;
         Ok(Arc::new(Self {
+            options,
             ports,
             driver,
             knowledge,
@@ -72,7 +81,7 @@ impl TurnOrchestrator {
 
     pub(crate) async fn run(
         self: &Arc<Self>,
-        messages: Vec<AgentMessage>,
+        mut messages: Vec<AgentMessage>,
         observations: ResourceObservations,
     ) -> Result<AgentTurnResult, AgentDriverFailure> {
         self.append(HarnessEvent::AgentRunStarted {
@@ -95,8 +104,18 @@ impl TurnOrchestrator {
             turn_id: self.turn_id.clone(),
             run_id: None,
         });
-        let registry = ToolRegistry::for_agent(AgentRole::Manager);
-        let request = Self::request(AgentRole::Manager, messages, registry.descriptors());
+        let registry = ToolRegistry::for_agent(AgentRole::Manager).with_mode(self.options.mode);
+        let resources_requiring_read = observations.resources_requiring_read();
+        if !resources_requiring_read.is_empty() {
+            messages.insert(0, AgentMessage::System {
+                content: serde_json::json!({
+                    "reason": "resource_read_required",
+                    "resourceIds": resources_requiring_read,
+                    "nextStep": "Read the listed resources before relying on historical facts for a new or resumed task. Their current contents have not been verified; do not assume they have changed."
+                }).to_string(),
+            });
+        }
+        let request = self.request(AgentRole::Manager, messages, registry.descriptors());
         let executor = Arc::new(RunExecutor {
             tools: self.executor(
                 registry,
@@ -141,12 +160,17 @@ impl TurnOrchestrator {
     }
 
     fn request(
+        &self,
         role: AgentRole,
-        messages: Vec<AgentMessage>,
+        mut messages: Vec<AgentMessage>,
         tools: Vec<ToolDescriptor>,
     ) -> AgentTurnRequest {
         let definition = crate::agent_definition(role);
+        if self.options.mode == HarnessMode::Ask {
+            messages.insert(0, AgentMessage::System { content: "Ask mode: answer and inspect existing resources only. Do not create, edit, save, export, execute graphs, or request UI actions. Delegate only read-only tasks. Explain when the user needs to switch to Write mode.".into() });
+        }
         AgentTurnRequest {
+            options: self.options,
             role,
             tool_concurrency: definition.tool_concurrency(),
             control_tools: definition.control_tools(),
@@ -191,6 +215,7 @@ impl TurnOrchestrator {
         self: &Arc<Self>,
         task: AgentTask,
     ) -> Result<AgentTaskOutcome, CapabilityFailure> {
+        self.check_task_mode(&task.scope)?;
         task.validate()
             .map_err(|error| rejected(&error.to_string()))?;
         if self.cancellation.is_cancelled() {
@@ -402,7 +427,7 @@ impl TurnOrchestrator {
             role: task.worker,
             evidence: evidence.clone(),
         });
-        let registry = ToolRegistry::for_agent(task.worker);
+        let registry = ToolRegistry::for_agent(task.worker).with_mode(self.options.mode);
         let tools = registry.descriptors();
         let executor = Arc::new(RunExecutor {
             tools: self.executor(
@@ -422,18 +447,14 @@ impl TurnOrchestrator {
         }))
         .map_err(|_| driver_failure())?;
         let messages = agent_messages(input, continuation.history, &[], &self.skill, task.worker);
-        let request = Self::request(task.worker, messages, tools);
+        let request = self.request(task.worker, messages, tools);
         let work = async {
             for access in &task.scope.resources {
                 if let Some(version) = &access.version {
                     let outcome = executor
                         .execute_tool(AutomationCapabilityRequest::InspectResource(
                             InspectResourceRequest {
-                                graph_view: GraphInspectionView::Overview,
-                                metadata_only: true,
                                 resource: access.resource.clone(),
-                                offset: 0,
-                                limit: 1,
                             },
                         ))
                         .await;
@@ -448,7 +469,7 @@ impl TurnOrchestrator {
                                 .unwrap_or_else(|e| e.into_inner())
                                 .blocked_reason = Some(
                                 if failure.code == CapabilityFailureCode::RevisionConflict {
-                                    "input_revision_changed"
+                                    "input_changed"
                                 } else {
                                     "input_inspection_failed"
                                 }
@@ -457,21 +478,21 @@ impl TurnOrchestrator {
                             return Ok(AgentTurnResult {
                                 final_text: serde_json::json!({
                                     "reason": "input_inspection_failed", "resource": access.resource,
-                                    "failureCode": failure.code,
+                                    "failure": model::failure(&failure),
                                     "nextStep": "Inspect the current resource and correct the task before retrying."
                                 }).to_string(),
                             });
                         }
                     };
-                    if !matches!(outcome.result, AutomationCapabilityResult::ResourceInspection(ref value) if &value.version == version)
+                    if !matches!(outcome.result, AutomationCapabilityResult::ResourceInspection(ref value) if crate::agents::resource_version_matches(access.resource.kind, version, &value.version))
                     {
                         evidence
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
-                            .blocked_reason = Some("input_revision_changed".into());
+                            .blocked_reason = Some("input_changed".into());
                         return Ok(AgentTurnResult {
                             final_text: serde_json::json!({
-                                "reason": "input_revision_changed", "resource": access.resource,
+                                "reason": "input_changed", "resource": access.resource,
                                 "nextStep": "Inspect the changed resource, reassess the task, then resume the worker."
                             }).to_string(),
                         });
@@ -537,12 +558,24 @@ impl RunExecutor {
         &self,
         request: AutomationCapabilityRequest,
     ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
+        self.execute_tool_started(request, self.tools.now()).await
+    }
+
+    async fn execute_tool_started(
+        &self,
+        request: AutomationCapabilityRequest,
+        started_at: UnixMillis,
+    ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
         let graph_observation = if self.manager.is_none() {
             self.graph_observation(&request)
         } else {
             None
         };
-        let outcome = match self.tools.execute(request.clone(), graph_observation).await {
+        let outcome = match self
+            .tools
+            .execute_started(request.clone(), graph_observation, started_at)
+            .await
+        {
             Ok(outcome) => outcome,
             Err(failure) => {
                 if self.manager.is_none()
@@ -575,6 +608,22 @@ impl RunExecutor {
 }
 
 impl ModelCapabilityExecutor for RunExecutor {
+    fn begin_control<'a>(
+        &'a self,
+        tool: AgentControlTool,
+    ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+        Box::pin(self.tools.begin_control(tool))
+    }
+
+    fn finish_control<'a>(
+        &'a self,
+        invocation_id: ToolInvocationId,
+        tool: AgentControlTool,
+        failure: Option<CapabilityFailure>,
+    ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+        Box::pin(self.tools.finish_control(invocation_id, tool, failure))
+    }
+
     fn completion_feedback(&self) -> Option<String> {
         if let Some(manager) = &self.manager {
             let tasks = manager.tasks.lock().unwrap_or_else(|e| e.into_inner());
@@ -602,13 +651,36 @@ impl ModelCapabilityExecutor for RunExecutor {
         request: ModelCapabilityRequest,
     ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
         Box::pin(async move {
-            let request = self.bind_input(request.request).await?;
-            let outcome = self.execute_tool(request).await?;
+            let started_at = self.tools.now();
+            let input = request.request;
+            let request =
+                match crate::tools::contain_tool_failure(self.bind_input(input.clone())).await {
+                    Ok(request) => request,
+                    Err(failure) => {
+                        return self
+                            .tools
+                            .reject(input.capability_id(), Some(input), failure, started_at)
+                            .await;
+                    }
+                };
+            let outcome = self.execute_tool_started(request, started_at).await?;
             self.observations
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .record(&outcome.result);
             Ok(outcome)
+        })
+    }
+
+    fn reject_arguments<'a>(
+        &'a self,
+        capability_id: CapabilityId,
+        failure: CapabilityFailure,
+    ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+        Box::pin(async move {
+            self.tools
+                .reject(capability_id, None, failure, self.tools.now())
+                .await
         })
     }
 

@@ -161,6 +161,7 @@ impl ApplicationState {
         graph_path: GraphResourcePath,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
+        name: Option<String>,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured.project().duplicate_graph_resource(
@@ -169,6 +170,7 @@ impl ApplicationState {
             &graph_path,
             expected_revision,
             operation_id,
+            name,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;

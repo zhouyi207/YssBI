@@ -7,8 +7,22 @@ pub(crate) async fn pending_agent_turns(
     ports: &HarnessPorts,
 ) -> Result<Vec<HarnessTurnRecord>, PersistenceFailure> {
     let mut pending = BTreeMap::new();
+    let mut controls = BTreeMap::new();
     for session in ports.sessions.load_active_sessions().await? {
         for envelope in ports.events.load_events_after(&session.id, 0).await? {
+            if let Some((event, _)) = control_event(&envelope.event) {
+                match event {
+                    AgentEvent::ControlToolStarted { invocation_id, .. } => {
+                        if let Some(turn_id) = &envelope.turn_id {
+                            controls.insert(invocation_id.clone(), turn_id.clone());
+                        }
+                    }
+                    AgentEvent::ControlToolFinished { invocation_id, .. } => {
+                        controls.remove(invocation_id);
+                    }
+                    _ => {}
+                }
+            }
             match envelope.event {
                 HarnessEvent::AgentRunResumed { request, .. } => {
                     if let Some(turn_id) = envelope.turn_id {
@@ -28,7 +42,7 @@ pub(crate) async fn pending_agent_turns(
         }
     }
     let mut turns = BTreeMap::new();
-    for id in pending.into_values() {
+    for id in pending.into_values().chain(controls.into_values()) {
         if let Some(turn) = ports.sessions.load_turn(&id).await? {
             turns.insert(id, turn);
         }
@@ -42,6 +56,44 @@ pub(crate) async fn recover_runs(
     turn: &HarnessTurnRecord,
 ) -> Result<(), crate::HarnessError> {
     let events = ports.events.load_events_after(&turn.session_id, 0).await?;
+    let mut controls = BTreeMap::new();
+    for envelope in &events {
+        if envelope.turn_id.as_ref() != Some(&turn.id) {
+            continue;
+        }
+        if let Some((event, run_id)) = control_event(&envelope.event) {
+            match event {
+                AgentEvent::ControlToolStarted {
+                    invocation_id,
+                    tool,
+                } => {
+                    controls.insert(invocation_id.clone(), (*tool, run_id.cloned()));
+                }
+                AgentEvent::ControlToolFinished { invocation_id, .. } => {
+                    controls.remove(invocation_id);
+                }
+                _ => {}
+            }
+        }
+    }
+    for (invocation_id, (tool, run_id)) in controls {
+        let event = AgentEvent::ControlToolFinished {
+            invocation_id,
+            tool,
+            failure_code: Some(CapabilityFailureCode::OutcomeUnknown),
+            failure_details: None,
+        };
+        writer
+            .append(
+                &turn.session_id,
+                Some(&turn.id),
+                match run_id {
+                    Some(run_id) => HarnessEvent::AgentRunOutput { run_id, event },
+                    None => HarnessEvent::Agent(event),
+                },
+            )
+            .await?;
+    }
     let mut runs = BTreeMap::new();
     for envelope in &events {
         if envelope.turn_id.as_ref() != Some(&turn.id) {
@@ -102,8 +154,8 @@ pub(crate) async fn recover_runs(
                 && record.agent_run_id.as_ref() == Some(&run_id)
             {
                 evidence.invocations.push(invocation_id.clone());
-                if let Some(result) = record.result {
-                    record_receipt(&record.request, &result, &mut evidence, &mut scope);
+                if let (Some(request), Some(result)) = (record.request.bound(), &record.result) {
+                    record_receipt(request, result, &mut evidence, &mut scope);
                 }
             }
         }
@@ -118,4 +170,12 @@ pub(crate) async fn recover_runs(
         }).await?;
     }
     Ok(())
+}
+
+fn control_event(event: &HarnessEvent) -> Option<(&AgentEvent, Option<&AgentRunId>)> {
+    match event {
+        HarnessEvent::Agent(event) => Some((event, None)),
+        HarnessEvent::AgentRunOutput { run_id, event } => Some((event, Some(run_id))),
+        _ => None,
+    }
 }

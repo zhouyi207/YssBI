@@ -24,16 +24,55 @@ pub(crate) struct ResourceObservations {
     datasets: BTreeMap<String, (u64, u64)>,
     graph_details: BTreeMap<String, GraphBasis>,
     signatures: BTreeMap<String, (ResourceVersion, u64)>,
+    document_sections: BTreeMap<String, BTreeMap<model::DocumentSectionRef, ResourceVersion>>,
 }
 
 impl ResourceObservations {
+    pub(super) fn resources_requiring_read(&self) -> BTreeSet<&str> {
+        // Explicit resource reads shadow graph-only observations, as in observation().
+        let resource_graphs = self
+            .resources
+            .keys()
+            .filter(|resource| {
+                matches!(
+                    resource.kind,
+                    ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
+                )
+            })
+            .map(|resource| resource.id.as_str())
+            .collect::<BTreeSet<_>>();
+        self.resources
+            .iter()
+            .filter_map(|(resource, observation)| {
+                matches!(observation, Observation::PreviousSession).then_some(resource.id.as_str())
+            })
+            .chain(self.graphs.iter().filter_map(|(path, observation)| {
+                (matches!(observation, Observation::PreviousSession)
+                    && !resource_graphs.contains(path.as_str()))
+                .then_some(path.as_str())
+            }))
+            .collect()
+    }
+
     pub(super) fn graph_inputs(&self, path: &str) -> Option<String> {
         self.graph_details
             .get(path)
             .map(|basis| basis.inputs.clone())
     }
 
+    pub(super) fn document_section_version(
+        &self,
+        path: &str,
+        section: &model::DocumentSectionRef,
+    ) -> Option<ResourceVersion> {
+        self.document_sections.get(path)?.get(section).cloned()
+    }
+
     pub(super) fn refresh_from(&mut self, source: &Self, resource: &ProjectResourceRef) {
+        if let Some(sections) = source.document_sections.get(&resource.id) {
+            self.document_sections
+                .insert(resource.id.clone(), sections.clone());
+        }
         if let Some(basis) = source.graph_details.get(&resource.id) {
             self.graph_details
                 .insert(resource.id.clone(), basis.clone());
@@ -76,9 +115,13 @@ impl ResourceObservations {
             Some(Observation::Read(version)) => Ok(Some(version.clone())),
             // A resumed worker can use its own committed receipts within the same project session.
             Some(Observation::ChangedByWorker) if resume => Ok(None),
-            Some(Observation::ChangedByWorker | Observation::PreviousSession) => Err(
+            Some(observation @ (Observation::ChangedByWorker | Observation::PreviousSession)) => Err(
                 CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
-                    .with_detail("reason", "resource_requires_current_read")
+                    .with_detail("reason", if matches!(observation, Observation::PreviousSession) {
+                        "resource_requires_current_read"
+                    } else {
+                        "resource_changed_by_worker"
+                    })
                     .with_detail("resourceId", &resource.id)
                     .with_detail("nextStep", "Inspect the resource again and reassess the task before delegating or resuming.")),
             None => Ok(None),
@@ -109,36 +152,23 @@ impl ResourceObservations {
         };
         match result {
             AutomationCapabilityResult::ResourceInspection(value) => {
-                if current && let ResourceContent::Database { schema, .. } = &value.content {
+                if current
+                    && let ResourceContent::DatabaseMetadata {
+                        runtime_revision,
+                        schema_revision,
+                    } = &value.content
+                {
                     self.datasets.insert(
-                        schema.database_id.clone(),
-                        (schema.runtime_revision, schema.schema_revision),
+                        value.resource.id.clone(),
+                        (*runtime_revision, *schema_revision),
                     );
                 }
                 self.resources
                     .insert(value.resource.clone(), observed(&value.version));
-                let (graph, function) = match &value.content {
-                    ResourceContent::Graph {
-                        graph, function, ..
-                    } => (
-                        Some((&graph.graph_hash, &graph.semantic_input_hash)),
-                        function.as_ref(),
-                    ),
-                    ResourceContent::GraphPage {
-                        graph, function, ..
-                    } => (
-                        Some((&graph.graph_hash, &graph.semantic_input_hash)),
-                        function.as_ref(),
-                    ),
-                    _ => (None, None),
-                };
-                if let Some((hash, inputs)) = graph {
-                    self.graph_detail(&value.resource.id, &value.version, hash, inputs, current);
-                }
-                if current && let Some(function) = function {
+                if current && let ResourceContent::Function { signature } = &value.content {
                     self.signatures.insert(
                         value.resource.id.clone(),
-                        (value.version.clone(), function.revision),
+                        (value.version.clone(), signature.revision),
                     );
                 } else if !current {
                     self.signatures.remove(&value.resource.id);
@@ -163,6 +193,34 @@ impl ResourceObservations {
                     &value.semantic_input_hash,
                     current,
                 );
+            }
+            AutomationCapabilityResult::ChartInspection(value) => {
+                self.resources
+                    .insert(value.chart.resource(), observed(&value.version));
+            }
+            AutomationCapabilityResult::DocumentRead(value) => {
+                self.resources
+                    .insert(value.document.resource(), observed(&value.version));
+                if current {
+                    let sections = self
+                        .document_sections
+                        .entry(value.document.id.clone())
+                        .or_default();
+                    for section in value.content.sections() {
+                        sections.insert(section.clone(), value.version.clone());
+                    }
+                } else {
+                    self.document_sections.remove(&value.document.id);
+                }
+            }
+            AutomationCapabilityResult::MindRead(value) => {
+                self.resources
+                    .insert(value.mind.resource(), observed(&value.version));
+            }
+            AutomationCapabilityResult::DatabaseRead(value) => {
+                self.datasets.remove(&value.database.id);
+                self.resources
+                    .insert(value.database.resource(), observed(&value.version));
             }
             AutomationCapabilityResult::DatasetSchemaInspection(value) => self.database(
                 &value.database_id,
@@ -221,6 +279,19 @@ impl ResourceObservations {
                 for moved in &value.moves {
                     self.graph_details.remove(&moved.from.id);
                     self.signatures.remove(&moved.from.id);
+                    self.resources
+                        .insert(moved.from.clone(), Observation::ChangedByWorker);
+                }
+                for state in &value.resources {
+                    self.resources
+                        .insert(state.resource.clone(), observed(&state.version));
+                }
+            }
+            AutomationCapabilityResult::ResourceEdited(value)
+            | AutomationCapabilityResult::ResourceManaged(value) => {
+                for state in &value.resources {
+                    self.resources
+                        .insert(state.resource.clone(), Observation::PreviousSession);
                 }
             }
             _ => {}
@@ -300,7 +371,7 @@ impl ResourceObservations {
         }
     }
 
-    pub(super) fn needs_database_content(&self, resource: &ProjectResourceRef) -> bool {
+    pub(super) fn needs_database_binding(&self, resource: &ProjectResourceRef) -> bool {
         resource.kind == ProjectResourceKind::Database && self.datasets.contains_key(&resource.id)
     }
 
@@ -308,18 +379,22 @@ impl ResourceObservations {
         &mut self,
         value: &ResourceInspection,
     ) -> Result<ResourceVersion, CapabilityFailure> {
-        if self.needs_database_content(&value.resource) {
-            let ResourceContent::Database { schema, .. } = &value.content else {
+        if self.needs_database_binding(&value.resource) {
+            let ResourceContent::DatabaseMetadata {
+                runtime_revision,
+                schema_revision,
+            } = &value.content
+            else {
                 return Err(CapabilityFailure::new(
                     CapabilityFailureCode::InternalFailure,
                 ));
             };
-            if self.datasets.get(&value.resource.id)
-                != Some(&(schema.runtime_revision, schema.schema_revision))
+            if self.datasets.get(&value.resource.id) != Some(&(*runtime_revision, *schema_revision))
             {
                 return Err(
                     CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
                         .with_detail("reason", "dataset_changed_since_read")
+                        .with_detail("resourceId", &value.resource.id)
                         .with_detail(
                             "nextStep",
                             "Inspect the current dataset and reassess the task before delegating.",
@@ -364,7 +439,7 @@ impl ResourceObservations {
             }
             // A worker receipt cannot silently replace the Manager's previously read basis.
             if self.observation(&change.resource).is_some()
-                || self.needs_database_content(&change.resource)
+                || self.needs_database_binding(&change.resource)
             {
                 self.resources
                     .insert(change.resource.clone(), Observation::ChangedByWorker);

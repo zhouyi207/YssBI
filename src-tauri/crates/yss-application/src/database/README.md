@@ -18,13 +18,15 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 
 当前工作台数据面板只读展示分页行，底栏提供刷新和导出，对应的 Details 提供元数据、选中内容预览与列设置；不再提供独立数据库窗口。前端 `DatabaseService` 仅保留导入、查询、资源管理及 Details 使用的类型转换和语义设置入口。后端数据库编辑、历史和 checkpoint 仍由 Database runtime 的当前契约拥有。
 
-桌面 IPC 只注册这些实际使用的入口。数据概览由 Harness 的 profile capability 携带查询控制直接读取；行列编辑、撤销重做、checkpoint 和编辑状态通过统一资源工具调用 Application 用例。
+桌面 IPC 只注册这些实际使用的入口。数据概览由 Harness 的 profile capability 携带查询控制直接读取；行列编辑、checkpoint 和编辑状态通过资源工具调用 Application 用例。撤销重做使用明确的 `undo_resource` / `redo_resource`，继续调用同一个 DatabaseMutation 与原历史、checkpoint 所有者。
 Profile 查询保留 Runtime 已分类的取消和期限错误，分别返回 `cancelled` 和 `deadline_elapsed`；其他数据库查询错误继续返回 `database_unavailable`。
 
-Harness 通过统一资源工具调用这些后端用例，覆盖导入、分页读取、行列编辑、物理类型转换、
-列语义、撤销重做、checkpoint、重命名和删除。每次修改携带 Project 资源 revision；资源检查中的
+Harness 通过明确的 `insert_rows`、`update_cells`、`delete_rows` 调用原子行用例；列编辑使用
+`create_columns`、`rename_columns`、`delete_columns`、`cast_columns` 和 `set_column_semantics`。
+读取通过 `inspect_database`、`inspect_database_schema`、`profile_database` 和 `read_database_rows`；导入导出使用
+`import_database` / `export_database`。资源生命周期工具覆盖撤销重做、checkpoint、重命名和删除。每次修改携带 Project 资源 revision；资源检查中的
 元数据、分页和编辑状态沿用本次资源检查捕获的同一 revision。`duplicate_database_for_application` 复用流式 Parquet
-导出和导入，保留数据及列元数据，由现有名称分配器生成副本名称并分配新 DatabaseId。
+导出和导入，保留数据及列元数据，由现有名称分配器按可选目标名称生成副本名称并分配新 DatabaseId。名称在导入事务内确定，不追加重命名操作。
 Harness 导出还携带预期资源 revision，创建临时文件前同时核对 Project 与 Runtime 声明版本，
 写入目标文件前再次核对原读取基线和 Project 版本；普通 GUI 导出仍使用当前版本。
 
@@ -36,13 +38,35 @@ Harness 导出还携带预期资源 revision，创建临时文件前同时核对
 导出和导入沿用同一次捕获，不在中途改读当前会话。分页响应接收 Runtime 快照移交的表数据和行 ID，
 不再克隆完整分页数据；行数限制和错误映射保持在原用例边界。
 
+Harness 的数据库读取适配位于 `automation/resources/database/read.rs`。概览只交付计数和编辑状态，schema
+先选择再分页；行页先筛选和排序再投影，携带同一快照的稳定行身份和真实继续位置。画像通过
+`read/profile.rs` 投影选中指标，不将 Runtime DTO 或并发字段直接写入模型结果。
+导入入口接受可选名称，在原导入准备与唯一名称分配中一次确定；省略时继续由来源生成名称。
+
 列取值初始化按单列读取整列非空去重值，用于前端语义映射草稿；沿用 Runtime 的有界读取，不使用表格当前页或分布查询的截断类别。查询本身不修改语义或数据。
+
+`query_database_rows_selected_for_application` 在相同读取 gate 内传入 Engine 的类型化列投影、
+AND 筛选与多列排序，以及调用方的取消、期限和读取字节预算。它返回实际 `has_more` 和同一快照的
+稳定 rowId；排序或筛选不会把页面位置用作行身份。未返回的列仍可作为筛选和排序依据，
+空页保留选择的列结构；普通桌面分页也复用同一个 Engine 查询实现，其现有 IPC 投影保持不变。
+`query_database_profile_for_application` 沿用同一个 gate，将所选列和指标组交给 Runtime，
+只执行请求的完整性、统计摘要或分布查询；不为了局部画像先计算全部列。
 
 元数据携带 Dataset Store 已有的数据修订号，经 Runtime 快照传递，前端发布协调器在安装变更索引前准备已加载数据库的元数据。Semantic 修改保持数据修订号，允许已接纳表格页面继续展示；Physical 转换和行列数据变化推进修订号并触发分页重读。查询本身仍要求完整资源 revision 匹配。
 
 编辑、保存、删除按数据库 ID 从 Project 读取声明；重命名只读取同域的声明快照，均不复制整份项目。
 修改协调器从捕获会话与目标声明取得项目和数据库身份，不要求调用方再传一组相同 ID；客户端预期
 revision、操作身份和最终 Project/Database 提交检查继续显式保留。
+
+行批次使用 `DatabaseMutation::UpdateCells`、`InsertRows` 和 `DeleteRowIds`。更新和删除按稳定 rowId
+定位，插入按可选 before-row ID 或追加位置一次初始化多行；类型、语义和全部目标由 Store 在同一个
+准备中校验。Runtime 形成一个撤销单位，Application 沿用原提交与发布协议。编辑回执的
+`DatabaseEditResult` 交付提交对应的 EditState 和新建 rowId；不在提交后另读页面推断身份。
+桌面单列设置的原 EditState wire 保持不变，由 IPC 显式投影编辑回执。
+列批次将全部类型名称先交给 Arrow owner 解析，再使用 Runtime 的单次物理准备、提交和历史入口。
+重命名统一校验最终名称，转换统一物化，语义校验只扫描指定列；任一项失败不发布部分修改。
+Harness 将编辑回执投影为 `databaseEdit`，交付实际插入 ID、成功提交的目标列名、提交项数和历史/dirty 状态。
+重命名返回新名称，删除返回已删除名称；资源的提交版本沿用原资源回执推进，不把页面行号传入这些写入用例。
 
 runtime 登记必须关联实际物理准备及其存储恢复记录，schema 变化由准备前后的快照决定。未提交的物理准备通过释放对象清理；已提交或提交结果不确定的变更保留给 SQLite operation record 恢复。Application 只在存储尚未提交时补偿 runtime 登记，会话关闭后由 `resolve_storage_recoveries` 统一核对持久化结果。
 

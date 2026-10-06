@@ -180,6 +180,22 @@ mod tests {
         assert_eq!(std::fs::read(database_path).unwrap(), invalid_database);
     }
 
+    #[test]
+    fn harness_startup_preserves_the_host_persistence_failure_code() {
+        let error = ApplicationStartupError::from(HarnessStartupError::from(
+            crate::harness::HarnessInitializationError::from(yss_harness_core::HarnessError::from(
+                yss_harness_contract::PersistenceFailure::new(
+                    yss_harness_contract::PersistenceFailureCode::InvalidRecord,
+                ),
+            )),
+        ));
+
+        assert_eq!(
+            error.to_string(),
+            "Harness initialization failed: Harness application initialization failed: Harness host could not be initialized: harness persistence failed: invalid_record"
+        );
+    }
+
     #[tokio::test]
     async fn default_runtime_connects_persistent_services_without_a_desktop_host() {
         let directory = TestDirectory(

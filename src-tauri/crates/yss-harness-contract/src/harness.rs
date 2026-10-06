@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::context::string_identity;
 use crate::{
-    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityFailure, CapabilityId,
+    AutomationCapabilityResult, CapabilityFailure, CapabilityFailureCode, CapabilityId,
     StatisticalPlan, capability_input_schema,
 };
 
@@ -175,7 +175,7 @@ pub enum AgentMessage {
     },
     ToolCall {
         invocation_id: crate::ToolInvocationId,
-        request: AutomationCapabilityRequest,
+        request: crate::ToolInvocationRequest,
     },
     ToolResult {
         invocation_id: crate::ToolInvocationId,
@@ -190,6 +190,7 @@ pub enum AgentMessage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentTurnRequest {
+    pub options: crate::HarnessTurnOptions,
     pub role: crate::AgentRole,
     pub tool_concurrency: usize,
     pub control_tools: Vec<crate::AgentControlTool>,
@@ -220,6 +221,14 @@ pub struct ModelCapabilityOutcome {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AgentEvent {
+    ReasoningDelta {
+        delta: String,
+    },
+    UsageReported {
+        usage: crate::ModelTokenUsage,
+        context_window: Option<u32>,
+        purpose: crate::ModelCallPurpose,
+    },
     KnowledgeCited {
         citation: crate::KnowledgeCitation,
     },
@@ -252,6 +261,16 @@ pub enum AgentEvent {
     PlanProposed {
         plan: StatisticalPlan,
     },
+    ControlToolStarted {
+        invocation_id: ToolInvocationId,
+        tool: crate::AgentControlTool,
+    },
+    ControlToolFinished {
+        invocation_id: ToolInvocationId,
+        tool: crate::AgentControlTool,
+        failure_code: Option<crate::CapabilityFailureCode>,
+        failure_details: Option<std::collections::BTreeMap<String, String>>,
+    },
     ToolInvocationStarted {
         invocation_id: ToolInvocationId,
         capability_id: CapabilityId,
@@ -264,6 +283,7 @@ pub enum AgentEvent {
         invocation_id: ToolInvocationId,
         capability_id: CapabilityId,
         failure_code: crate::CapabilityFailureCode,
+        failure_details: Option<std::collections::BTreeMap<String, String>>,
     },
 }
 
@@ -354,10 +374,44 @@ pub enum AgentOutputFailure {
 pub type AgentFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub trait ModelCapabilityExecutor: Send + Sync {
+    /// Core owns control-call identity and durable timing; adapters supply no clock.
+    fn begin_control<'a>(
+        &'a self,
+        _tool: crate::AgentControlTool,
+    ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+        Box::pin(async {
+            Err(CapabilityFailure::new(
+                CapabilityFailureCode::InternalFailure,
+            ))
+        })
+    }
+
+    fn finish_control<'a>(
+        &'a self,
+        _invocation_id: ToolInvocationId,
+        _tool: crate::AgentControlTool,
+        _failure: Option<CapabilityFailure>,
+    ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+        Box::pin(async {
+            Err(CapabilityFailure::new(
+                CapabilityFailureCode::InternalFailure,
+            ))
+        })
+    }
+
     fn execute<'a>(
         &'a self,
         request: ModelCapabilityRequest,
     ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>>;
+
+    /// Report a provider argument failure through the host-owned invocation lifecycle.
+    fn reject_arguments<'a>(
+        &'a self,
+        _capability_id: CapabilityId,
+        failure: CapabilityFailure,
+    ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+        Box::pin(async move { Err(failure) })
+    }
 
     fn delegate<'a>(
         &'a self,

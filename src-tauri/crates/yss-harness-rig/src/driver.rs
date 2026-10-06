@@ -5,7 +5,7 @@ use crate::error::{cancelled, invalid_response};
 use crate::messages::prepare_messages;
 use crate::recovery::{TurnOutput, backoff, retryable};
 use crate::stream::consume_text_stream_with_activity;
-use crate::tools::{dynamic_tool, statistical_plan_tool, worker_tool};
+use crate::tools::{control_tool, dynamic_tool};
 use rig_agent::agent::AgentBuilder;
 use rig_core::{DynModel, operation::Completion};
 use std::sync::{Arc, Mutex};
@@ -16,6 +16,8 @@ use yss_harness_contract::{
 };
 
 pub struct RigAgentDriver {
+    protocol: yss_harness_contract::LanguageModelProtocol,
+    reasoning_efforts: Vec<yss_harness_contract::ReasoningEffort>,
     model: DynModel<Completion>,
     context_window: Option<u32>,
     max_output_tokens: Option<u32>,
@@ -26,6 +28,8 @@ pub struct RigAgentDriver {
 impl RigAgentDriver {
     pub fn new(model: impl Into<DynModel<Completion>>) -> Self {
         Self {
+            protocol: yss_harness_contract::LanguageModelProtocol::OpenAiChat,
+            reasoning_efforts: Vec::new(),
             model: model.into(),
             context_window: None,
             max_output_tokens: None,
@@ -39,6 +43,8 @@ impl RigAgentDriver {
         config: &yss_harness_contract::LanguageModelConfig,
         protocol: yss_harness_contract::LanguageModelProtocol,
     ) -> Self {
+        self.protocol = protocol;
+        self.reasoning_efforts = config.reasoning_efforts.clone();
         self.context_window = config.context_window;
         self.max_output_tokens = config.max_output_tokens;
         self.temperature = config.temperature;
@@ -76,6 +82,12 @@ impl RigAgentDriver {
         if request.tool_concurrency == 0 {
             return Err(invalid_response());
         }
+        let parameters = crate::run_options::reasoning_parameters(
+            self.additional_parameters.clone(),
+            self.protocol,
+            &self.reasoning_efforts,
+            request.options.reasoning_effort,
+        )?;
         let prepared = prepare_messages(request.messages)?;
         let tool_tasks = Arc::new(Mutex::new(Vec::new()));
         let (tool_failure, failure_receiver) = tokio::sync::watch::channel(None);
@@ -91,28 +103,14 @@ impl RigAgentDriver {
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if request
-            .control_tools
-            .contains(&yss_harness_contract::AgentControlTool::ProposeStatisticalPlan)
-        {
-            tools.push(statistical_plan_tool(
+        for control in &request.control_tools {
+            tools.push(control_tool(
+                *control,
+                Arc::clone(&capabilities),
                 Arc::clone(&output),
+                Arc::clone(&tool_tasks),
                 tool_failure.clone(),
             )?);
-        }
-        for control in &request.control_tools {
-            if matches!(
-                control,
-                yss_harness_contract::AgentControlTool::DelegateTask
-                    | yss_harness_contract::AgentControlTool::FollowupTask
-            ) {
-                tools.push(worker_tool(
-                    *control == yss_harness_contract::AgentControlTool::FollowupTask,
-                    Arc::clone(&capabilities),
-                    Arc::clone(&tool_tasks),
-                    tool_failure.clone(),
-                )?);
-            }
         }
         let output = Arc::new(TurnOutput::new(output));
         let hook = ContextHook::new(
@@ -124,7 +122,7 @@ impl RigAgentDriver {
             self.context_window,
             self.max_output_tokens,
         )
-        .with_model_parameters(self.temperature, self.additional_parameters.clone());
+        .with_model_parameters(self.temperature, parameters.clone());
         let mut builder = AgentBuilder::new(self.model.clone())
             .name(request.role.name())
             .preamble(&prepared.preamble)
@@ -132,6 +130,7 @@ impl RigAgentDriver {
             // model's final response or cancellation, not a product turn quota.
             .default_max_turns(usize::MAX)
             .record_content_telemetry(false)
+            .add_hook(crate::tools::ToolCallFeedback)
             .add_hook(hook.clone());
         if let Some(tokens) = self.max_output_tokens {
             builder = builder.max_tokens(u64::from(tokens));
@@ -139,11 +138,12 @@ impl RigAgentDriver {
         if let Some(temperature) = self.temperature {
             builder = builder.temperature(temperature);
         }
-        builder = builder.additional_params(self.additional_parameters.clone());
+        builder = builder.additional_params(parameters);
         let agent = builder.dynamic_tools(tools).build();
         let stream_output = Arc::clone(&output);
         let stream_cancellation = cancellation.clone();
         let concurrency = request.tool_concurrency;
+        let context_window = self.context_window;
         let prompt = tokio::spawn(
             async move {
                 let mut completed_calls = 0;
@@ -162,6 +162,7 @@ impl RigAgentDriver {
                         failure_receiver.clone(),
                         request.output_mode == yss_harness_contract::AgentOutputMode::FinalResponse,
                         hook.activity.clone(),
+                        context_window,
                     )
                     .await;
                     hook.activity.finish();

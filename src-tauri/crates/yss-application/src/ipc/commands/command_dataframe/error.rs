@@ -255,6 +255,8 @@ fn internal_error_code(operation: DatabaseApplicationOperation) -> &'static str 
         DatabaseApplicationOperation::Load
         | DatabaseApplicationOperation::ReadEditState
         | DatabaseApplicationOperation::EditCell
+        | DatabaseApplicationOperation::UpdateCells
+        | DatabaseApplicationOperation::InsertRows
         | DatabaseApplicationOperation::AddRow
         | DatabaseApplicationOperation::DeleteRows
         | DatabaseApplicationOperation::AddColumn
@@ -266,7 +268,12 @@ fn internal_error_code(operation: DatabaseApplicationOperation) -> &'static str 
         | DatabaseApplicationOperation::RedoEdit
         | DatabaseApplicationOperation::Save
         | DatabaseApplicationOperation::Rename
-        | DatabaseApplicationOperation::Delete => "internal_error",
+        | DatabaseApplicationOperation::Delete
+        | DatabaseApplicationOperation::CreateColumns
+        | DatabaseApplicationOperation::RenameColumns
+        | DatabaseApplicationOperation::DeleteColumns
+        | DatabaseApplicationOperation::CastColumns
+        | DatabaseApplicationOperation::SetColumnSemantics => "internal_error",
     }
 }
 
@@ -281,8 +288,15 @@ fn operation_name(operation: DatabaseApplicationOperation) -> &'static str {
         DatabaseApplicationOperation::ColumnDistribution => "columnDistribution",
         DatabaseApplicationOperation::ReadEditState => "readEditState",
         DatabaseApplicationOperation::EditCell => "editCell",
+        DatabaseApplicationOperation::UpdateCells => "updateCells",
+        DatabaseApplicationOperation::InsertRows => "insertRows",
         DatabaseApplicationOperation::AddRow => "addRow",
         DatabaseApplicationOperation::DeleteRows => "deleteRows",
+        DatabaseApplicationOperation::CreateColumns => "createColumns",
+        DatabaseApplicationOperation::RenameColumns => "renameColumns",
+        DatabaseApplicationOperation::DeleteColumns => "deleteColumns",
+        DatabaseApplicationOperation::CastColumns => "castColumns",
+        DatabaseApplicationOperation::SetColumnSemantics => "setColumnSemantics",
         DatabaseApplicationOperation::AddColumn => "addColumn",
         DatabaseApplicationOperation::DeleteColumn => "deleteColumn",
         DatabaseApplicationOperation::CastColumn => "castColumn",

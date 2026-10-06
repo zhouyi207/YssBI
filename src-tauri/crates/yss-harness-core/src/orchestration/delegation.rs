@@ -70,26 +70,22 @@ impl RunExecutor {
         resource: &ProjectResourceRef,
         capture_unobserved: bool,
     ) -> Result<Option<ResourceVersion>, CapabilityFailure> {
-        let needs_database_content = {
+        let needs_database_binding = {
             let observations = self.observations.lock().unwrap_or_else(|e| e.into_inner());
             match observations.version(resource, !capture_unobserved) {
                 Ok(Some(version)) => return Ok(Some(version)),
                 Err(failure) => return Err(failure),
                 Ok(None) => {}
             }
-            observations.needs_database_content(resource)
+            observations.needs_database_binding(resource)
         };
-        if !capture_unobserved && !needs_database_content {
+        if !capture_unobserved && !needs_database_binding {
             return Ok(None);
         }
         let outcome = self
             .execute_tool(AutomationCapabilityRequest::InspectResource(
                 InspectResourceRequest {
                     resource: resource.clone(),
-                    metadata_only: !needs_database_content,
-                    graph_view: GraphInspectionView::Overview,
-                    offset: 0,
-                    limit: 1,
                 },
             ))
             .await?;

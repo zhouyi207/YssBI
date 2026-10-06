@@ -6,13 +6,30 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SearchNodeCatalogRequest {
+pub struct BrowseNodesRequest {
+    #[serde(default)]
     pub query: String,
     pub locale: String,
-    pub limit: u16,
-    /// Include the node's configuration JSON Schema and pin declarations before creating it.
     #[serde(default)]
-    pub include_parameters: bool,
+    pub category: Option<String>,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_catalog_page_limit")]
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: u16,
+}
+
+fn default_catalog_page_limit() -> u16 {
+    20
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InspectNodeTypeRequest {
+    /// Exact type IDs returned by browse_nodes; one definition per requested type.
+    #[schemars(length(min = 1, max = 100))]
+    pub type_ids: Vec<String>,
+    pub locale: String,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -29,38 +46,83 @@ pub struct InspectDatasetProfileRequest {
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct InspectResultRequest {
-    pub execution_session_id: String,
-    pub result_id: u64,
-    /// Table-reference part returned in result JSON. Omit to read the full JSON result.
+pub struct ListResourcesRequest {
     #[serde(default)]
-    pub part: Option<String>,
+    pub kinds: Vec<crate::ProjectResourceKind>,
+    /// Case-insensitive name or path substring; does not search resource contents.
+    #[serde(default)]
+    pub query: Option<String>,
     #[serde(default)]
     pub offset: usize,
-    #[serde(default = "default_result_page_limit")]
-    pub limit: u16,
+    #[serde(default = "default_resource_page_limit")]
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: usize,
 }
 
-fn default_result_page_limit() -> u16 {
-    20
+fn default_resource_page_limit() -> usize {
+    100
 }
 
-#[derive(Clone, Debug, Default, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+impl Default for ListResourcesRequest {
+    fn default() -> Self {
+        Self {
+            kinds: vec![],
+            query: None,
+            offset: 0,
+            limit: default_resource_page_limit(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct InspectProjectRequest {}
+pub struct InspectionPage {
+    pub offset: usize,
+    pub returned: usize,
+    pub total: Option<usize>,
+    pub has_more: bool,
+    pub next_offset: Option<usize>,
+}
+
+impl InspectionPage {
+    pub fn known(offset: usize, returned: usize, total: usize) -> Self {
+        let end = offset.saturating_add(returned);
+        Self {
+            offset,
+            returned,
+            total: Some(total),
+            has_more: end < total,
+            next_offset: (end < total).then_some(end),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NodeCatalogMatch {
-    pub node_type_id: String,
+    pub type_id: String,
     pub title: String,
     pub category_id: String,
-    pub style_id: String,
+    pub summary: Option<String>,
     pub resource_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NodeTypeDefinition {
+    pub type_id: String,
+    pub title: String,
+    pub documentation: Option<String>,
     /// Schema for the parameters and portCounts maps accepted at creation.
-    pub configuration_schema: Option<serde_json::Value>,
-    /// Fixed, configurable and derived pin templates. Included with configuration_schema.
-    pub ports: Option<Vec<NodeCreationPortDefinition>>,
+    pub configuration_schema: serde_json::Value,
+    pub ports: Vec<NodeCreationPortDefinition>,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NodeTypeInspection {
+    pub locale: String,
+    pub types: Vec<NodeTypeDefinition>,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -91,9 +153,10 @@ pub enum NodePortCountPolicy {
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NodeCatalogSearchResult {
+pub struct NodeCatalogPage {
     pub locale: String,
     pub matches: Vec<NodeCatalogMatch>,
+    pub page: InspectionPage,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -148,22 +211,24 @@ pub enum ResultCategoryInspection {
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ResultValueInspection {
     Json(serde_json::Value),
-    Table {
-        columns: Vec<String>,
-        #[serde(rename = "columnTypes")]
-        column_types: Vec<String>,
-        rows: Vec<serde_json::Value>,
-        #[serde(rename = "nextOffset")]
-        next_offset: usize,
-        #[serde(rename = "hasMore")]
-        has_more: bool,
+    Tabular {
+        #[serde(rename = "tableRef")]
+        table_ref: crate::TableRef,
+        columns: Vec<crate::ResultColumn>,
+        #[serde(rename = "schemaPage")]
+        schema_page: crate::InspectionPage,
+        #[serde(rename = "rowCount")]
+        row_count: Option<usize>,
+        #[serde(rename = "schemaKnown")]
+        schema_known: bool,
     },
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResultInspection {
-    pub result_id: u64,
+    pub result_ref: crate::ResultRef,
+    pub validity: crate::ResultValidity,
     pub category: ResultCategoryInspection,
     pub value: ResultValueInspection,
 }
@@ -182,4 +247,5 @@ pub struct ProjectInspection {
     pub project_name: String,
     pub publication_revision: u64,
     pub resources: Vec<ProjectResourceInspection>,
+    pub page: InspectionPage,
 }

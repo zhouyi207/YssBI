@@ -29,6 +29,397 @@ fn source(f: &Fixture) -> GraphEditOperation {
 }
 
 #[test]
+fn catalog_pages_filter_before_projection_and_resolve_exact_type_batches() {
+    let mut f = Fixture::new();
+    let mut request = BrowseNodesRequest {
+        query: String::new(),
+        locale: "en-US".into(),
+        category: None,
+        offset: 0,
+        limit: 1,
+    };
+    let AutomationCapabilityResult::NodeCatalogPage(first) = f
+        .action(AutomationCapabilityRequest::BrowseNodes(request.clone()))
+        .unwrap()
+    else {
+        panic!("catalog")
+    };
+    assert!(first.page.has_more);
+    assert_eq!(first.page.returned, 1);
+    assert!(
+        !serde_json::to_string(&first)
+            .unwrap()
+            .contains("configurationSchema")
+    );
+    request.offset = first.page.next_offset.unwrap();
+    let AutomationCapabilityResult::NodeCatalogPage(second) = f
+        .action(AutomationCapabilityRequest::BrowseNodes(request.clone()))
+        .unwrap()
+    else {
+        panic!("catalog")
+    };
+    assert_ne!(first.matches, second.matches);
+    request.category = Some(first.matches[0].category_id.clone());
+    request.offset = 0;
+    request.limit = 100;
+    let AutomationCapabilityResult::NodeCatalogPage(category) = f
+        .action(AutomationCapabilityRequest::BrowseNodes(request))
+        .unwrap()
+    else {
+        panic!("catalog")
+    };
+    assert!(!category.matches.is_empty());
+    assert!(
+        category
+            .matches
+            .iter()
+            .all(|item| item.category_id == first.matches[0].category_id)
+    );
+    let first_id = first.matches[0].type_id.clone();
+    let second_id = second.matches[0].type_id.clone();
+    let AutomationCapabilityResult::NodeTypeInspection(definitions) = f
+        .action(AutomationCapabilityRequest::InspectNodeType(
+            InspectNodeTypeRequest {
+                type_ids: vec![first_id.clone(), second_id.clone(), first_id.clone()],
+                locale: "en-US".into(),
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("definitions")
+    };
+    assert_eq!(
+        definitions.types.len(),
+        if first_id == second_id { 1 } else { 2 }
+    );
+    assert!(
+        definitions
+            .types
+            .iter()
+            .all(|item| item.configuration_schema.is_object())
+    );
+    let error = f
+        .action(AutomationCapabilityRequest::InspectNodeType(
+            InspectNodeTypeRequest {
+                type_ids: vec![first_id, "yssbi.not_a_node".into()],
+                locale: "en-US".into(),
+            },
+        ))
+        .unwrap_err();
+    assert_eq!(error.code, CapabilityFailureCode::CatalogUnavailable);
+
+    for query in ["to_numeric", "YSSBI.VALUE.TO_NUMERIC"] {
+        let AutomationCapabilityResult::NodeCatalogPage(page) = f
+            .action(AutomationCapabilityRequest::BrowseNodes(
+                BrowseNodesRequest {
+                    query: query.into(),
+                    locale: "zh-CN".into(),
+                    category: None,
+                    offset: 0,
+                    limit: 100,
+                },
+            ))
+            .unwrap()
+        else {
+            panic!("catalog")
+        };
+        assert_eq!(page.matches.len(), 1, "{query}: {:?}", page.matches);
+        assert_eq!(page.matches[0].type_id, "yssbi.value.to_numeric");
+    }
+    let AutomationCapabilityResult::NodeCatalogPage(page) = f
+        .action(AutomationCapabilityRequest::BrowseNodes(
+            BrowseNodesRequest {
+                query: "bin 分箱".into(),
+                locale: "zh-CN".into(),
+                category: None,
+                offset: 0,
+                limit: 100,
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("catalog")
+    };
+    assert!(
+        !page
+            .matches
+            .iter()
+            .any(|item| item.type_id.contains("durbin") || item.type_id.ends_with(".combine"))
+    );
+    let AutomationCapabilityResult::NodeCatalogPage(page) = f
+        .action(AutomationCapabilityRequest::BrowseNodes(
+            BrowseNodesRequest {
+                query: "线性回归".into(),
+                locale: "zh-CN".into(),
+                category: None,
+                offset: 0,
+                limit: 100,
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("catalog")
+    };
+    assert!(
+        page.matches
+            .iter()
+            .any(|item| item.type_id == "yssbi.statistics.linear.fit")
+    );
+}
+
+#[test]
+fn targeted_graph_queries_page_filtered_entities_and_preserve_unknown_schema_without_running() {
+    let mut f = Fixture::new();
+    let mut first = node("yssbi.numeric.multiply", "first");
+    let mut second = node("yssbi.numeric.multiply", "second");
+    for (operation, label) in [(&mut first, "Target A"), (&mut second, "target B")] {
+        let GraphEditOperation::CreateNode { user_label, .. } = operation else {
+            unreachable!()
+        };
+        *user_label = Some(label.into());
+    }
+    let receipt = f.edit(vec![
+        source(&f),
+        node("yssbi.dataframe.decompose", "known"),
+        node("yssbi.dataframe.decompose", "unknown"),
+        first,
+        second,
+        connect(port("$source", "dataframe"), port("$known", "dataframe")),
+    ]);
+    let graph = GraphResourceRef::for_path(&f.path);
+    let before = f.inspect();
+    let application = f.application.as_ref().unwrap().clone();
+    let session = application.capture_session().unwrap();
+    let result_revision = session.execution().result_revision();
+    let mut request = FindNodesRequest {
+        graph: graph.clone(),
+        query: Some("TARGET".into()),
+        type_ids: vec!["yssbi.numeric.multiply".into()],
+        node_ids: vec![],
+        offset: 1,
+        limit: 1,
+    };
+    let AutomationCapabilityResult::GraphInspectionPage(page) = f
+        .action(AutomationCapabilityRequest::FindNodes(request.clone()))
+        .unwrap()
+    else {
+        panic!("nodes")
+    };
+    assert_eq!(page.page.as_ref().unwrap().total, 2);
+    let GraphInspectionItems::Nodes(nodes) = &page.content else {
+        panic!("nodes")
+    };
+    assert_eq!(nodes.len(), 1);
+    assert!(nodes[0].parameters.is_none());
+    let public =
+        model::capability_result(&AutomationCapabilityResult::GraphInspectionPage(page)).unwrap();
+    assert_eq!(public["payload"]["page"]["returned"], 1);
+    assert_eq!(public["payload"]["page"]["hasMore"], false);
+    request.offset = usize::MAX;
+    let AutomationCapabilityResult::GraphInspectionPage(page) = f
+        .action(AutomationCapabilityRequest::FindNodes(request))
+        .unwrap()
+    else {
+        panic!("nodes")
+    };
+    assert_eq!(page.page.unwrap().offset, 2);
+    assert!(matches!(page.content, GraphInspectionItems::Nodes(nodes) if nodes.is_empty()));
+    let request = InspectNodesRequest {
+        graph: graph.clone(),
+        node_ids: vec![
+            receipt.created_nodes["known"].clone(),
+            receipt.created_nodes["unknown"].clone(),
+        ],
+        fields: vec![NodeInspectionField::Parameters, NodeInspectionField::Schema],
+        port_offset: 0,
+        port_limit: 100,
+        column_offset: 1,
+        column_limit: 1,
+    };
+    let AutomationCapabilityResult::GraphInspectionPage(page) = f
+        .action(AutomationCapabilityRequest::InspectNodes(request.clone()))
+        .unwrap()
+    else {
+        panic!("details")
+    };
+    let GraphInspectionItems::NodeDetails(details) = page.content else {
+        panic!("details")
+    };
+    let known = details
+        .iter()
+        .find(|node| node.node.node_id == receipt.created_nodes["known"])
+        .unwrap();
+    let schema = known
+        .ports
+        .as_ref()
+        .unwrap()
+        .iter()
+        .find(|port| port.schema_known == Some(true))
+        .unwrap();
+    assert_eq!(schema.schema.as_ref().unwrap().len(), 1);
+    assert_eq!(schema.schema_page.as_ref().unwrap().offset, 1);
+    assert_eq!(schema.schema_page.as_ref().unwrap().total, Some(2));
+    let unknown = details
+        .iter()
+        .find(|node| node.node.node_id == receipt.created_nodes["unknown"])
+        .unwrap();
+    assert!(
+        unknown
+            .ports
+            .as_ref()
+            .unwrap()
+            .iter()
+            .all(|port| port.schema_known == Some(false)
+                && port.schema.is_none()
+                && port.schema_page.is_none())
+    );
+    let AutomationCapabilityResult::GraphInspectionPage(page) = f
+        .action(AutomationCapabilityRequest::InspectNodes(
+            InspectNodesRequest {
+                port_limit: 1,
+                ..request
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("ports")
+    };
+    let GraphInspectionItems::NodeDetails(details) = page.content else {
+        panic!("ports")
+    };
+    assert!(
+        details
+            .iter()
+            .all(|node| node.ports.as_ref().unwrap().len() == 1)
+    );
+    let AutomationCapabilityResult::GraphInspectionPage(page) = f
+        .action(AutomationCapabilityRequest::FindConnections(
+            FindConnectionsRequest {
+                graph: graph.clone(),
+                node_ids: vec![receipt.created_nodes["source"].clone()],
+                ports: vec![port(&receipt.created_nodes["known"], "dataframe")],
+                offset: 0,
+                limit: 1,
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("connections")
+    };
+    assert_eq!(
+        page.content,
+        GraphInspectionItems::Connections(before.connections.clone())
+    );
+    let AutomationCapabilityResult::GraphInspectionPage(summary) = f
+        .action(AutomationCapabilityRequest::InspectGraph(
+            InspectGraphRequest::summary(graph),
+        ))
+        .unwrap()
+    else {
+        panic!("summary")
+    };
+    assert_eq!(summary.content, GraphInspectionItems::Summary);
+    assert_eq!(summary.counts.nodes, 5);
+    assert_eq!(summary.runs, Some(vec![]));
+    let overview = summary.overview.as_ref().unwrap();
+    assert_eq!(overview.detail, GraphOverviewDetail::Configuration);
+    assert_eq!(overview.nodes.len(), 5);
+    assert_eq!(overview.connections, before.connections);
+    for node in &overview.nodes {
+        assert!(node.parameter_options.is_none() && node.port_templates.is_none());
+        let stored = &f.document.nodes[&parse_node_id(&node.node_id).unwrap()];
+        for (key, value) in stored.parameters.iter() {
+            assert_eq!(
+                node.parameters.as_ref().unwrap()[key.as_str()],
+                Some(value.clone())
+            );
+        }
+    }
+    let public = model::capability_result(&AutomationCapabilityResult::GraphInspectionPage(
+        summary.clone(),
+    ))
+    .unwrap();
+    assert_eq!(
+        public["payload"]["overview"],
+        serde_json::to_value(overview).unwrap()
+    );
+    assert!(public["payload"].get("version").is_none());
+    assert_eq!(session.execution().result_revision(), result_revision);
+    assert_eq!(f.inspect(), before);
+}
+
+#[test]
+fn initial_graph_context_downgrades_whole_sections_by_encoded_size_without_truncating_structure() {
+    let mut f = Fixture::new();
+    f.inspect();
+    let mut group = node("yssbi.dataframe.groupby", "group");
+    let GraphEditOperation::CreateNode { parameters, .. } = &mut group else {
+        unreachable!()
+    };
+    // Escaped bytes count too; character count alone would incorrectly admit this.
+    parameters.insert("keys".into(), serde_json::json!(["a\n".repeat(12_000)]));
+    let created = f.edit(vec![group, node("yssbi.numeric.multiply", "number")]);
+    f.edit(vec![GraphEditOperation::SetLiteral {
+        address: port(&created.created_nodes["number"], "left"),
+        literal: Some(serde_json::json!(7)),
+    }]);
+    let graph = GraphResourceRef::for_path(&f.path);
+    let before = f.inspect();
+    let summary = query(&mut f, InspectGraphRequest::summary(graph.clone()));
+    let overview = summary.overview.unwrap();
+    assert_eq!(overview.detail, GraphOverviewDetail::Topology);
+    assert_eq!(overview.nodes.len(), before.nodes.len());
+    assert_eq!(overview.connections, before.connections);
+    assert!(overview.nodes.iter().all(|node| node.parameters.is_none()));
+    assert!(overview.literals.is_empty());
+    assert!(serde_json::to_vec(&overview).unwrap().len() <= 32 * 1024);
+    assert_eq!(
+        f.inspect(),
+        before,
+        "a bounded read must not change configuration"
+    );
+
+    f.edit(vec![GraphEditOperation::SetParameters {
+        node_id: created.created_nodes["group"].clone(),
+        parameters: [("keys".into(), serde_json::json!(["label"]))].into(),
+    }]);
+    let summary = query(&mut f, InspectGraphRequest::summary(graph.clone()));
+    let overview = summary.overview.unwrap();
+    assert_eq!(overview.detail, GraphOverviewDetail::Configuration);
+    assert_eq!(overview.literals.len(), 1);
+    assert_eq!(
+        overview.literals[0].address,
+        port(&created.created_nodes["number"], "left")
+    );
+    assert_eq!(overview.literals[0].value, serde_json::json!(7));
+
+    f.edit(
+        (0..80)
+            .map(|index| {
+                let mut operation = node("yssbi.numeric.multiply", &format!("n{index}"));
+                let GraphEditOperation::CreateNode { user_label, .. } = &mut operation else {
+                    unreachable!()
+                };
+                *user_label = Some("节点".repeat(50));
+                operation
+            })
+            .collect(),
+    );
+    let before = f.inspect();
+    let summary = query(&mut f, InspectGraphRequest::summary(graph));
+    assert_eq!(summary.counts.nodes, 82);
+    let overview = summary.overview.unwrap();
+    assert_eq!(overview.detail, GraphOverviewDetail::Counts);
+    assert!(
+        overview.nodes.is_empty()
+            && overview.connections.is_empty()
+            && overview.literals.is_empty()
+    );
+    assert!(serde_json::to_vec(&overview).unwrap().len() <= 32 * 1024);
+    assert_eq!(f.inspect(), before);
+}
+
+#[test]
 fn graph_reads_page_overviews_and_fetch_only_requested_node_and_port_facts() {
     let mut f = Fixture::new();
     let mut operations = vec![source(&f), node("yssbi.dataframe.decompose", "columns")];
@@ -205,32 +596,19 @@ fn graph_reads_page_overviews_and_fetch_only_requested_node_and_port_facts() {
         kind: ProjectResourceKind::EventGraph,
         id: f.path.clone(),
     };
-    let mut resource_request = InspectResourceRequest {
-        resource,
-        graph_view: GraphInspectionView::Overview,
-        metadata_only: false,
-        offset: 0,
-        limit: 50,
-    };
     let AutomationCapabilityResult::ResourceInspection(value) = f
         .action(AutomationCapabilityRequest::InspectResource(
-            resource_request.clone(),
+            InspectResourceRequest {
+                resource: resource.clone(),
+            },
         ))
         .unwrap()
     else {
         panic!("resource")
     };
-    assert!(matches!(value.content, ResourceContent::GraphPage { graph, .. } if graph == first));
-    resource_request.graph_view = GraphInspectionView::Full;
-    let AutomationCapabilityResult::ResourceInspection(value) = f
-        .action(AutomationCapabilityRequest::InspectResource(
-            resource_request,
-        ))
-        .unwrap()
-    else {
-        panic!("resource")
-    };
-    assert!(matches!(value.content, ResourceContent::Graph { graph, .. } if graph == full));
+    assert_eq!(value.resource, resource);
+    assert!(matches!(value.content, ResourceContent::Metadata));
+    assert_eq!(value.version, first.version);
 }
 
 #[test]
@@ -308,10 +686,6 @@ fn conditional_graph_reads_bind_query_pages_and_current_edit_and_dependency_iden
         .action(AutomationCapabilityRequest::InspectResource(
             InspectResourceRequest {
                 resource: database.clone(),
-                metadata_only: true,
-                graph_view: GraphInspectionView::Overview,
-                offset: 0,
-                limit: 1,
             },
         ))
         .unwrap()
@@ -322,11 +696,11 @@ fn conditional_graph_reads_bind_query_pages_and_current_edit_and_dependency_iden
         EditResourceRequest {
             resource: database,
             version: value.version,
-            edit: ResourceEdit::Database {
-                operation: DatasetOperation::RenameColumn {
-                    old_name: "x".into(),
-                    new_name: "renamed_x".into(),
-                },
+            edit: ResourceEdit::RenameColumns {
+                columns: vec![model::DatabaseColumnRename {
+                    column: "x".into(),
+                    name: "renamed_x".into(),
+                }],
             },
         },
     ))

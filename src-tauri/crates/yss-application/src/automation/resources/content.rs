@@ -1,243 +1,111 @@
 use super::*;
-use yss_project_model::mind::{MindEdit, MindNode, MindReference};
 
 pub(in crate::automation) fn inspect_resource(
     application: &ApplicationState,
     session: &ApplicationSession,
-    context: &CapabilityInvocationContext,
     request: InspectResourceRequest,
     control: &CapabilityControl,
 ) -> Result<ResourceInspection> {
     let index = read_index(session)?;
-    let info = metadata(&index, &request.resource)?;
+    let info = index
+        .resources
+        .iter()
+        .find(|entry| entry.resource == request.resource)
+        .ok_or_else(unavailable)?;
     let project = session.project_instance_id().clone();
     let mut version = ResourceVersion {
-        revision: info.revision,
-        session_id: None,
+        revision: info.revision.get(),
+        session_id: info.session_id.clone(),
     };
-    let mut dirty = false;
-    if request.metadata_only
-        && matches!(
-            request.resource.kind,
-            ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
-        )
-    {
-        let opened = application
-            .open_graph(crate::graph::open::OpenGraphRequest::new(
-                project,
-                graph_path(&request.resource)?,
-                0,
-                "en-US",
-            ))
-            .map_err(|_| unavailable())?;
-        let current = opened.editing();
-        return Ok(ResourceInspection {
-            resource: request.resource,
-            name: info.display_name,
-            version: ResourceVersion {
-                revision: current.version.revision.get(),
-                session_id: Some(current.version.session_id.to_string()),
-            },
-            dirty: current.dirty,
-            content: ResourceContent::Metadata,
-        });
-    }
+    let mut dirty = info.dirty.unwrap_or(false);
     let content = match request.resource.kind {
-        ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph => {
-            let graph = crate::automation::graph::invoke_graph_capability(
-                application,
-                context.clone(),
-                AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
-                    view: request.graph_view,
-                    offset: request.offset,
-                    limit: request.limit,
-                    ..InspectGraphRequest::overview(request.resource.id.clone())
-                }),
-                control,
-            )?;
-            let graph_version = match &graph {
-                AutomationCapabilityResult::GraphInspection(graph) => &graph.version,
-                AutomationCapabilityResult::GraphInspectionPage(graph) => &graph.version,
-                _ => return Err(unavailable()),
-            };
+        ProjectResourceKind::FunctionGraph => {
+            // Function signatures retain their existing capability; no graph body is projected.
             let path = graph_path(&request.resource)?;
+            session
+                .project()
+                .load_graph_document(&project, &path, 0)
+                .map_err(project_error)?;
             let current = session
                 .project()
                 .read_graph_editing(&project, &path)
                 .map_err(project_error)?;
-            if current.state.version.revision.get() != graph_version.revision
-                || graph_version.session_id.as_deref()
-                    != Some(current.state.version.session_id.to_string().as_str())
-            {
+            if current.state.version.revision.get() != version.revision {
                 return Err(conflict());
             }
-            version = graph_version.clone();
-            dirty = current.state.dirty;
-            let function = if request.resource.kind == ProjectResourceKind::FunctionGraph {
-                let document = session
-                    .project()
-                    .read_graph_resource_snapshot(&project, &path)
-                    .map_err(project_error)?;
-                document
-                    .function
-                    .as_ref()
-                    .map(|function| FunctionSignatureInspection {
-                        revision: function.revision.get(),
-                        parameters: function
-                            .signature
-                            .parameters
-                            .iter()
-                            .map(|parameter| FunctionParameterInspection {
-                                id: Some(parameter.id.to_string()),
-                                name: parameter.name.clone(),
-                                type_name: parameter.type_name.clone(),
-                            })
-                            .collect(),
-                        return_type: function.signature.return_type.clone(),
-                    })
-            } else {
-                None
-            };
-            let after = session
+            let document = session
                 .project()
-                .read_graph_editing(&project, &path)
+                .read_graph_resource_snapshot(&project, &path)
                 .map_err(project_error)?;
-            if after.state.version != current.state.version {
-                return Err(conflict());
-            }
-            match graph {
-                AutomationCapabilityResult::GraphInspection(graph) => ResourceContent::Graph {
-                    graph,
-                    function,
-                    can_undo: current.state.can_undo,
-                    can_redo: current.state.can_redo,
-                },
-                AutomationCapabilityResult::GraphInspectionPage(graph) => {
-                    ResourceContent::GraphPage {
-                        graph,
-                        function,
-                        can_undo: current.state.can_undo,
-                        can_redo: current.state.can_redo,
-                    }
-                }
-                _ => return Err(unavailable()),
-            }
-        }
-        ProjectResourceKind::Chart => {
-            let document = application
-                .load_chart_resource(
-                    project,
-                    chart_path(&request.resource)?,
-                    Some(index.publication_revision),
-                )
-                .map_err(chart_error)?;
-            ResourceContent::Chart {
-                settings: ChartSettings {
-                    database_id: document.database_id,
-                    chart_type: document.chart_type,
-                    x: document.encodings.x,
-                    y: document.encodings.y,
-                },
-            }
-        }
-        ProjectResourceKind::Mind => {
-            let snapshot = application
-                .read_mind(project, mind_path(&request.resource)?)
-                .map_err(file_error)?;
+            let function = document.function.as_ref().ok_or_else(unavailable)?;
             version = ResourceVersion {
-                revision: snapshot.version.revision.get(),
-                session_id: Some(snapshot.version.session_id),
+                revision: current.state.version.revision.get(),
+                session_id: Some(current.state.version.session_id.to_string()),
             };
-            dirty = snapshot.dirty;
-            let total_nodes = snapshot.content.nodes.len();
-            let nodes = snapshot
-                .content
-                .nodes
-                .into_iter()
-                .skip(request.offset)
-                .take(request.limit)
-                .map(|node| MindTopic {
-                    id: node.id,
-                    parent_id: node.parent_id,
-                    content: node.content,
-                    reference: node.reference.map(mind_reference_to_contract),
-                })
-                .collect::<Vec<_>>();
-            let end = request.offset.saturating_add(nodes.len());
-            ResourceContent::Mind {
-                root_id: snapshot.content.root_id,
-                nodes,
-                total_nodes,
-                next_offset: (end < total_nodes).then_some(end),
-            }
-        }
-        ProjectResourceKind::Doc => {
-            let snapshot = application
-                .read_doc(project, doc_path(&request.resource)?)
-                .map_err(file_error)?;
-            version = ResourceVersion {
-                revision: snapshot.version.revision.get(),
-                session_id: Some(snapshot.version.session_id),
-            };
-            dirty = snapshot.dirty;
-            let total_characters = snapshot.content.0.chars().count();
-            let markdown: String = snapshot
-                .content
-                .0
-                .chars()
-                .skip(request.offset)
-                .take(request.limit)
-                .collect();
-            let end = request.offset.saturating_add(markdown.chars().count());
-            ResourceContent::Doc {
-                markdown,
-                total_characters,
-                next_offset: (end < total_characters).then_some(end),
+            dirty = current.state.dirty;
+            ResourceContent::Function {
+                signature: FunctionSignatureInspection {
+                    revision: function.revision.get(),
+                    parameters: function
+                        .signature
+                        .parameters
+                        .iter()
+                        .map(|parameter| FunctionParameterInspection {
+                            id: Some(parameter.id.to_string()),
+                            name: parameter.name.clone(),
+                            type_name: parameter.type_name.clone(),
+                        })
+                        .collect(),
+                    return_type: function.signature.return_type.clone(),
+                },
             }
         }
         ProjectResourceKind::Database => {
-            let (content, modified) = database::inspect_database(
-                application,
-                session,
-                &request,
-                ResourceRevision::new(version.revision),
-            )?;
-            dirty = modified;
-            content
+            let basis = session
+                .database()
+                .capture_query_basis(&yss_database_contract::DatabaseId::from_existing(
+                    request.resource.id.clone().into_boxed_str(),
+                ))
+                .map_err(|_| unavailable())?;
+            if basis.declaration_revision().get() != version.revision {
+                return Err(conflict());
+            }
+            dirty = application
+                .query_database_edit_state_for_application(
+                    project,
+                    request.resource.id.clone(),
+                    info.revision,
+                )
+                .map_err(database_error)?
+                .is_modified;
+            yss_database_runtime::session_api::revalidate_query_basis(session.database(), &basis)
+                .map_err(|_| conflict())?;
+            ResourceContent::DatabaseMetadata {
+                runtime_revision: basis.runtime_revision().get(),
+                schema_revision: basis.schema_revision().get(),
+            }
         }
+        _ => ResourceContent::Metadata,
     };
-    check_version(session, &request.resource, &version)?;
+    if request.resource.kind == ProjectResourceKind::FunctionGraph {
+        check_version(session, &request.resource, &version)?;
+    } else {
+        session
+            .project()
+            .validate_project_index_version(
+                session.project_instance_id(),
+                index.publication_revision,
+                index.authority_generation,
+            )
+            .map_err(project_error)?;
+    }
+    control.check()?;
     Ok(ResourceInspection {
         resource: request.resource,
-        name: info.display_name,
+        name: info.name.clone(),
         version,
         dirty,
-        content: if request.metadata_only {
-            ResourceContent::Metadata
-        } else {
-            content
-        },
-    })
-}
-
-fn mind_reference_to_contract(reference: MindReference) -> MindResourceReference {
-    match reference {
-        MindReference::Resource { path } => MindResourceReference::Resource { path },
-        MindReference::GraphNode { path, node_id } => MindResourceReference::GraphNode {
-            path: path.as_str().into(),
-            node_id,
-        },
-        MindReference::Database { database_id } => MindResourceReference::Database { database_id },
-    }
-}
-fn mind_reference_from_contract(reference: MindResourceReference) -> Result<MindReference> {
-    Ok(match reference {
-        MindResourceReference::Resource { path } => MindReference::Resource { path },
-        MindResourceReference::GraphNode { path, node_id } => MindReference::GraphNode {
-            path: GraphResourcePath::new(&path).map_err(|_| invalid("reference.path"))?,
-            node_id,
-        },
-        MindResourceReference::Database { database_id } => MindReference::Database { database_id },
+        content,
     })
 }
 
@@ -252,154 +120,91 @@ pub(in crate::automation) fn edit_resource(
     let resource = request.resource;
     let project = session.project_instance_id().clone();
     let operation = OperationId::new();
-    let mut created_nodes = BTreeMap::new();
+    let mut mind_edit = None;
+    let mut document_edit = None;
+    let mut database_edit = None;
     control.check()?;
     let mutation = match request.edit {
-        ResourceEdit::Chart { settings } => {
-            let mut document = yss_chart_document::ChartDocument::new(settings.database_id);
-            document.chart_type = settings.chart_type;
-            document.encodings = yss_chart_document::ChartEncodings {
-                x: settings.x,
-                y: settings.y,
-            };
-            application
-                .save_chart_resource(
-                    project,
-                    operation,
-                    chart_path(&resource)?,
-                    document,
-                    Some(ResourceRevision::new(request.version.revision)),
-                )
-                .map_err(chart_error)?
+        ResourceEdit::UpdateChart { settings } => chart::update_chart(
+            application,
+            session,
+            &resource,
+            &request.version,
+            settings,
+            operation,
+            control,
+        )?,
+        edit @ (ResourceEdit::CreateTopics { .. }
+        | ResourceEdit::UpdateTopics { .. }
+        | ResourceEdit::MoveTopics { .. }
+        | ResourceEdit::DeleteTopics { .. }
+        | ResourceEdit::DuplicateTopics { .. }) => {
+            let (mutation, facts) = mind::edit_mind(
+                application,
+                session,
+                &resource,
+                &request.version,
+                edit,
+                control,
+            )?;
+            mind_edit = Some(facts);
+            mutation
         }
-        ResourceEdit::Mind { operations } => {
-            let mut edits = Vec::with_capacity(operations.len());
-            for edit in operations {
-                control.check()?;
-                let resolve = |id: String, aliases: &BTreeMap<String, String>| -> Result<String> {
-                    match id.strip_prefix('$') {
-                        Some(alias) => aliases.get(alias).cloned().ok_or_else(|| invalid("nodeId")),
-                        None => Ok(id),
-                    }
-                };
-                edits.push(match edit {
-                    MindOperation::AddNode {
-                        client_id,
-                        parent_id,
-                        content,
-                    } => {
-                        if client_id.is_empty()
-                            || client_id.len() > 128
-                            || created_nodes.contains_key(&client_id)
-                        {
-                            return Err(invalid("clientId"));
-                        }
-                        let parent_id = resolve(parent_id, &created_nodes)?;
-                        let id = uuid::Uuid::new_v4().to_string();
-                        created_nodes.insert(client_id, id.clone());
-                        MindEdit::AddNode {
-                            node: MindNode {
-                                id,
-                                parent_id: Some(parent_id),
-                                content,
-                                reference: None,
-                            },
-                        }
-                    }
-                    MindOperation::SetContent { node_id, content } => MindEdit::SetContent {
-                        node_id: resolve(node_id, &created_nodes)?,
-                        content,
-                    },
-                    MindOperation::SetReference { node_id, reference } => MindEdit::SetReference {
-                        node_id: resolve(node_id, &created_nodes)?,
-                        reference: reference.map(mind_reference_from_contract).transpose()?,
-                    },
-                    MindOperation::MoveNode {
-                        node_id,
-                        parent_id,
-                        before_id,
-                    } => MindEdit::MoveNode {
-                        node_id: resolve(node_id, &created_nodes)?,
-                        parent_id: resolve(parent_id, &created_nodes)?,
-                        before_id: before_id
-                            .map(|id| resolve(id, &created_nodes))
-                            .transpose()?,
-                    },
-                    MindOperation::RemoveNode { node_id } => MindEdit::RemoveNode {
-                        node_id: resolve(node_id, &created_nodes)?,
-                    },
-                });
-            }
+        edit @ (ResourceEdit::ReplaceDocumentText { .. }
+        | ResourceEdit::AppendDocument { .. }
+        | ResourceEdit::WriteDocument { .. }) => {
+            let (mutation, facts) = document::edit_document(
+                application,
+                session,
+                &resource,
+                &request.version,
+                edit,
+                control,
+            )?;
+            document_edit = Some(facts);
+            mutation
+        }
+        edit @ (ResourceEdit::InsertRows { .. }
+        | ResourceEdit::UpdateCells { .. }
+        | ResourceEdit::DeleteRows { .. }
+        | ResourceEdit::CreateColumns { .. }
+        | ResourceEdit::RenameColumns { .. }
+        | ResourceEdit::DeleteColumns { .. }
+        | ResourceEdit::CastColumns { .. }
+        | ResourceEdit::SetColumnSemantics { .. }) => {
+            let column_names = database::edited_columns(&edit);
+            let (edit, item_count) = database::edit_operation(edit)?;
             let result = application
-                .apply_mind_command(
+                .mutate_database_for_application(
                     project,
+                    resource.id.clone(),
+                    ResourceRevision::new(request.version.revision),
                     operation,
-                    FileCommand::Edit {
-                        path: mind_path(&resource)?,
-                        version: file_version(&request.version)?,
-                        edits,
-                    },
+                    edit,
                 )
-                .map_err(file_error)?;
-            if let Some(snapshot) = result.snapshot {
-                created_nodes
-                    .retain(|_, id| snapshot.content.nodes.iter().any(|node| &node.id == id));
-            }
+                .map_err(database_error)?;
+            database_edit = Some(DatabaseEditReceipt {
+                item_count,
+                inserted_row_ids: result.data.inserted_row_ids,
+                column_names,
+                dirty: result.data.edit_state.is_modified,
+                can_undo: result.data.edit_state.can_undo,
+                can_redo: result.data.edit_state.can_redo,
+            });
             result.mutation
         }
-        ResourceEdit::Doc { operations } => {
-            let path = doc_path(&resource)?;
-            let snapshot = application
-                .read_doc(project.clone(), path.clone())
-                .map_err(file_error)?;
-            if snapshot.version != file_version(&request.version)? {
-                return Err(conflict());
-            }
-            let mut markdown = snapshot.content.0;
-            for edit in operations {
-                control.check()?;
-                match edit {
-                    MarkdownOperation::SetMarkdown {
-                        markdown: replacement,
-                    } => markdown = replacement,
-                    MarkdownOperation::ReplaceRange {
-                        start,
-                        end,
-                        markdown: replacement,
-                    } => {
-                        let boundaries: Vec<_> = markdown
-                            .char_indices()
-                            .map(|(offset, _)| offset)
-                            .chain(std::iter::once(markdown.len()))
-                            .collect();
-                        if start > end || end >= boundaries.len() {
-                            return Err(invalid("range"));
-                        }
-                        markdown.replace_range(boundaries[start]..boundaries[end], &replacement);
-                    }
-                }
-            }
-            application
-                .apply_doc_command(
-                    project,
-                    operation,
-                    FileCommand::Edit {
-                        path,
-                        version: snapshot.version,
-                        edits: vec![yss_project_model::doc::DocEdit::SetMarkdown { markdown }],
-                    },
-                )
-                .map_err(file_error)?
-                .mutation
-        }
-        ResourceEdit::Database { operation: edit } => {
+        ResourceEdit::DatabaseHistory { redo } => {
             application
                 .mutate_database_for_application(
                     project,
                     resource.id.clone(),
                     ResourceRevision::new(request.version.revision),
                     operation,
-                    database::edit_operation(edit),
+                    if redo {
+                        crate::database::DatabaseMutation::Redo
+                    } else {
+                        crate::database::DatabaseMutation::Undo
+                    },
                 )
                 .map_err(database_error)?
                 .mutation
@@ -467,13 +272,17 @@ pub(in crate::automation) fn edit_resource(
                 .change_graph_history(request, redo)
                 .map_err(graph_error)?;
             return Ok(graph_receipt(
+                application,
+                session,
                 resource,
                 result.editing.version.revision.get(),
             ));
         }
     };
-    let mut receipt = committed(mutation, publish)?;
-    receipt.created_nodes = created_nodes;
+    let mut receipt = committed(application, session, mutation, publish)?;
+    receipt.mind_edit = mind_edit;
+    receipt.document_edit = document_edit;
+    receipt.database_edit = database_edit;
     Ok(receipt)
 }
 
@@ -518,8 +327,14 @@ fn graph_request(
         current.document,
     ))
 }
-fn graph_receipt(resource: ProjectResourceRef, revision: u64) -> ResourceMutationReceipt {
-    ResourceMutationReceipt {
+fn graph_receipt(
+    application: &ApplicationState,
+    session: &ApplicationSession,
+    resource: ProjectResourceRef,
+    revision: u64,
+) -> ResourceMutationReceipt {
+    let mut receipt = ResourceMutationReceipt {
+        database_edit: None,
         publication_revision: None,
         changes: vec![ResourceChange {
             resource,
@@ -528,8 +343,12 @@ fn graph_receipt(resource: ProjectResourceRef, revision: u64) -> ResourceMutatio
             deleted: false,
         }],
         moves: vec![],
-        created_nodes: BTreeMap::new(),
-    }
+        mind_edit: None,
+        document_edit: None,
+        resources: Vec::new(),
+    };
+    attach_committed_metadata(application, session, &mut receipt);
+    receipt
 }
 pub(super) fn save_graph(
     application: &ApplicationState,
@@ -542,6 +361,8 @@ pub(super) fn save_graph(
         .save_current_graph(request)
         .map_err(graph_error)?;
     Ok(graph_receipt(
+        application,
+        session,
         resource.clone(),
         result.resource_revision.get(),
     ))

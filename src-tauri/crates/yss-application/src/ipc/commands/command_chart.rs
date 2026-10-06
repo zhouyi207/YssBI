@@ -96,6 +96,7 @@ pub fn duplicate_chart(
             operation_id,
             chart_path,
             expected_revision,
+            None,
         )
         .map_err(|error| chart_application_command_error(&error))?;
     let result = crate::ipc::schema::application_event::resource_mutation_to_transport(&result);

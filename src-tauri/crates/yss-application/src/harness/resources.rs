@@ -7,7 +7,7 @@ use yss_harness_contract::{
     ProjectSessionBinding,
 };
 
-pub(crate) struct ApplicationResourceResolver(pub ApplicationState);
+pub struct ApplicationResourceResolver(pub ApplicationState);
 
 impl HarnessResourceResolverPort for ApplicationResourceResolver {
     fn resolve<'a>(

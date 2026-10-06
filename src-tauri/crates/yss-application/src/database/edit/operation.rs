@@ -2,6 +2,16 @@ use crate::database::{DatabaseApplicationOperation, DatabaseOperationError, Data
 
 /// Editable DataView operations admitted by the database runtime.
 pub enum DatabaseMutation {
+    UpdateCells {
+        updates: Vec<yss_database_runtime::session_api::DatabaseCellUpdate>,
+    },
+    InsertRows {
+        rows: Vec<std::collections::BTreeMap<String, yss_data_contract::TabularScalar>>,
+        before_row_id: Option<i64>,
+    },
+    DeleteRowIds {
+        row_ids: Vec<i64>,
+    },
     EditCell {
         row: usize,
         column: String,
@@ -14,6 +24,21 @@ pub enum DatabaseMutation {
     DeleteRows {
         indices: Vec<usize>,
         row_ids: Option<Vec<i64>>,
+    },
+    CreateColumns {
+        columns: Vec<(String, String)>,
+    },
+    RenameColumns {
+        columns: Vec<(String, String)>,
+    },
+    DeleteColumns {
+        columns: Vec<String>,
+    },
+    CastColumns {
+        columns: Vec<(String, String, bool)>,
+    },
+    SetColumnSemantics {
+        columns: Vec<(String, yss_data_contract::ColumnSemantic)>,
     },
     AddColumn {
         name: String,
@@ -42,9 +67,17 @@ pub enum DatabaseMutation {
 impl DatabaseMutation {
     pub fn operation(&self) -> DatabaseApplicationOperation {
         match self {
+            Self::UpdateCells { .. } => DatabaseApplicationOperation::UpdateCells,
+            Self::InsertRows { .. } => DatabaseApplicationOperation::InsertRows,
+            Self::DeleteRowIds { .. } => DatabaseApplicationOperation::DeleteRows,
             Self::EditCell { .. } => DatabaseApplicationOperation::EditCell,
             Self::AddRow { .. } => DatabaseApplicationOperation::AddRow,
             Self::DeleteRows { .. } => DatabaseApplicationOperation::DeleteRows,
+            Self::CreateColumns { .. } => DatabaseApplicationOperation::CreateColumns,
+            Self::RenameColumns { .. } => DatabaseApplicationOperation::RenameColumns,
+            Self::DeleteColumns { .. } => DatabaseApplicationOperation::DeleteColumns,
+            Self::CastColumns { .. } => DatabaseApplicationOperation::CastColumns,
+            Self::SetColumnSemantics { .. } => DatabaseApplicationOperation::SetColumnSemantics,
             Self::AddColumn { .. } => DatabaseApplicationOperation::AddColumn,
             Self::DeleteColumn { .. } => DatabaseApplicationOperation::DeleteColumn,
             Self::CastColumn { .. } => DatabaseApplicationOperation::CastColumn,
@@ -70,6 +103,19 @@ pub(super) fn runtime_database_mutation(
         })
     };
     match mutation {
+        DatabaseMutation::UpdateCells { updates } => {
+            Ok(DatabaseMutationOperation::UpdateCells { updates })
+        }
+        DatabaseMutation::InsertRows {
+            rows,
+            before_row_id,
+        } => Ok(DatabaseMutationOperation::InsertRows {
+            rows,
+            before_row_id,
+        }),
+        DatabaseMutation::DeleteRowIds { row_ids } => {
+            Ok(DatabaseMutationOperation::DeleteRowIds { row_ids })
+        }
         DatabaseMutation::EditCell {
             row,
             column,
@@ -99,6 +145,49 @@ pub(super) fn runtime_database_mutation(
             Ok(DatabaseMutationOperation::DeleteRows {
                 indices: distinct_indices.into_boxed_slice(),
                 row_ids: row_ids.map(Vec::into_boxed_slice),
+            })
+        }
+        DatabaseMutation::CreateColumns { columns } => {
+            Ok(DatabaseMutationOperation::CreateColumns {
+                columns: columns
+                    .into_iter()
+                    .map(|(name, dtype)| {
+                        yss_database_arrow::editable_data_type(&dtype)
+                            .map(|dtype| (name.into(), dtype))
+                            .map_err(|_| invalid("dtype"))
+                    })
+                    .collect::<Result<_, _>>()?,
+            })
+        }
+        DatabaseMutation::RenameColumns { columns } => {
+            Ok(DatabaseMutationOperation::RenameColumns {
+                columns: columns
+                    .into_iter()
+                    .map(|(from, to)| (from.into(), to.into()))
+                    .collect(),
+            })
+        }
+        DatabaseMutation::DeleteColumns { columns } => {
+            Ok(DatabaseMutationOperation::DeleteColumns {
+                columns: columns.into_iter().map(Into::into).collect(),
+            })
+        }
+        DatabaseMutation::CastColumns { columns } => Ok(DatabaseMutationOperation::CastColumns {
+            columns: columns
+                .into_iter()
+                .map(|(name, dtype, force)| {
+                    yss_database_arrow::editable_data_type(&dtype)
+                        .map(|dtype| (name.into(), dtype, force))
+                        .map_err(|_| invalid("dtype"))
+                })
+                .collect::<Result<_, _>>()?,
+        }),
+        DatabaseMutation::SetColumnSemantics { columns } => {
+            Ok(DatabaseMutationOperation::SetColumnSemantics {
+                columns: columns
+                    .into_iter()
+                    .map(|(name, semantic)| (name.into(), semantic))
+                    .collect(),
             })
         }
         DatabaseMutation::AddColumn { name, dtype } => Ok(DatabaseMutationOperation::AddColumn {

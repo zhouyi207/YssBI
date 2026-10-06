@@ -24,7 +24,7 @@ yss-harness-core
     └─ ordered event sequence
     ↓ typed ports
     ├─ LanguageModelResolverPort → Application model settings → yss-harness-rig (AgentDriverPort)
-    ├─ CapabilityGatewayPort → yss-application::ipc blocking adapter → yss-application
+    ├─ CapabilityGatewayPort → yss-application::harness blocking adapter → yss-application
     ├─ KnowledgeIndexPort → yss-harness-tantivy (BM25)
     └─ persistence ports → yss-harness-sqlite
 ```
@@ -43,7 +43,7 @@ provider-neutral 请求构建模型与工具循环，不另设角色注册表或
 | DataAgent    | 数据理解、质量检查及获准的 Database 准备、导入和导出                 |
 | StatsAgent   | 复用 StatisticalPlan，选择节点、编辑分析图、执行并读取诊断与结果     |
 | PlotAgent    | 读取指定数据/结果，创建和编辑 Chart；图形能力仍由 Chart owner 决定   |
-| ReportAgent  | 复用 statistical-report-writing，创建、编辑和保存 Doc                |
+| ReportAgent  | 撰写 Doc 报告，或创建、编辑和保存任务指定的 Mind                     |
 | ReviewAgent  | 独立上下文中的只读审查，返回问题和证据；不能修改或委派               |
 
 一个用户 Turn 内创建一个 Manager run 和按需启动的 Worker runs。只有 Manager 的 executor
@@ -66,7 +66,7 @@ Core 从 Manager 的真实读取回执捕获版本，未读取过的资源通过
 Core 和 Application Gateway 共用角色策略，按工具、操作、资源种类、具体资源和结果引用
 检查权限。Manager 生成的任务不能改变角色边界，例如 Report 获得 `edit_resource` 也不能
 编辑 Database。新资源仅从真实回执取得 ID，并继承明确声明的操作。统计图执行另外在
-Application 的准备入口核对实际资源需求、语义依赖和资源版本；已授权的图执行继承 Manager 对实际语义依赖的共享读取权限，显式依赖版本仍须匹配，不继承写入权限。项目会话、审批和资源 Owner 的提交校验继续生效。内部图/资源读取回执保留完整版本；模型只看到业务事实。`inspect_resource(metadataOnly: true)` 在模型侧仅返回身份、名称和 dirty 状态，内部预检不序列化整份节点/连线内容。
+Application 的准备入口核对实际资源需求、语义依赖和资源版本；已授权的图执行继承 Manager 对实际语义依赖的共享读取权限，显式依赖版本仍须匹配，不继承写入权限。项目会话、审批和资源 Owner 的提交校验继续生效。内部图/资源读取回执保留完整版本；模型只看到业务事实。`inspect_resource` 返回身份、名称和 dirty 状态；函数资源另保留既有签名投影，不返回节点或连线正文。
 
 Worker 使用角色规范、单个任务、必要约束和指定依赖的结构化交付，不复制整个用户会话。
 报告 Skill 只加载到 Manager/Report，统计计划工具只提供给 Stats。Worker 以最后一条文本或
@@ -77,7 +77,7 @@ Markdown 回复收尾，不要求 JSON 包装，也不限制回复为 32 KiB。C
 
 “生成／输出／撰写分析报告”默认交付项目内已保存的 Doc；明确要求只在聊天中回答、不创建文件或简短解释时，由 Manager 直接回答。
 Manager 为 ReportAgent 提供 Doc 创建或编辑/保存授权和真实证据引用，Core 绑定实际读取版本；ReportAgent 通过现有资源工具写入 Markdown，并在最后一次修改后显式保存。
-对于有 Doc 创建、正文编辑或保存授权的 ReportAgent 任务，Core 根据本次任务的成功回执检查文档交付：至少有一份 Doc 保存成功，且所有仍存在的已修改 Doc 都已保存。仅返回任务摘要、只创建或编辑、保存失败、保存后再修改都不能形成 `Completed`，会返回 `Blocked` 和 `report_document_not_saved`。明确的只读检查、重命名或删除任务仍按其操作范围完成。
+对于有 Doc 或 Mind 创建、内容编辑或保存授权的 ReportAgent 任务，Core 根据本次任务的成功回执检查交付：至少有一份获准资源保存成功，且所有仍存在的已修改 Doc/Mind 都已保存。仅返回任务摘要、只创建或编辑、保存失败、保存后再修改都不能形成 `Completed`，会返回 `Blocked` 和 `report_resource_not_saved`。Mind 任务可以独立交付已保存的 Mind，不要求另建 Doc。明确的只读检查、重命名或删除任务仍按其操作范围完成。
 报告内容的证据质量仍由 Worker 和独立 Review 负责。Manager 收到完成且含 Doc 回执的结果后请求打开文档，聊天正文只汇总结果、文档位置和限制；失败或受阻不能改为粘贴完整报告并宣称交付。
 
 Manager/Worker 的模型循环持续到模型完成、用户取消或真实执行错误，不设置固定调用轮数、
@@ -108,11 +108,13 @@ interrupted，保留已经提交的工具证据，不自动重做可能已提交
 任务卡片和运行状态，统计计划继续复用现有展示。真实模型与桌面人工验收见
 [Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
 
-`followup_task(runId, instruction)` resumes the same durable run ID, including across user turns and after restart. Core rebuilds scope from the original grant and successful receipts, restores the latest context checkpoint plus subsequent history, and binds any fresh Manager observations only to resources already in that scope. It never adds resources or operations. Without a fresh observation, the worker retains its committed baseline; a changed project session requires current reads before that baseline can be reused. Dependencies and input versions are rechecked under the existing execution gate. Unknown commit outcomes block continuation until reconciled; committed graph edits retain their owner-level idempotency. Startup recovery closes unfinished resumed runs as interrupted and never automatically repeats their writes.
+`followup_task(runId, instruction)` resumes the same durable run ID, including across user turns and after restart. Core rebuilds scope from the original grant and successful receipts, restores the latest context checkpoint plus subsequent history, and binds any fresh Manager observations only to resources already in that scope. It never adds resources or operations. Without a fresh Manager observation, each granted resource must match the worker's current-project read or commit receipt; older session records do not invalidate a later verified receipt. Another project rebind requires current reads again before that baseline can be reused. Dependencies and input versions are rechecked under the existing execution gate. Unknown commit outcomes block continuation until reconciled; committed graph edits retain their owner-level idempotency. Startup recovery closes unfinished resumed runs as interrupted and never automatically repeats their writes.
 
 Recovery, compaction, delivery checks and graph business outcomes have dedicated persisted events. IPC hides checkpoint text while preserving lifecycle facts and exact failure codes. Reopening a conversation therefore retains provider failures and undelivered status. Tool-call completion is distinct from graph execution success. Model observations carry session, turn and agent-run correlation through tracing spans without recording prompts, data or credentials.
 
 ## Source organization
+
+Manager 与 Review 可用 `validate_graph` 读取全图或指定依赖范围的就绪事实；它不授予图编辑或执行权限。没有 Worker 任务信封的 Manager 通过原图检查用例捕获本次只读校验基线；Worker 继续核对授权版本，不以新读取覆盖已过期的写入依据。Report 可检查已授权数据库的概览和 schema，以核对报告的数据来源、行列数和变量类型，不能修改数据库。所有 Worker 仍受原资源读取范围约束；共享工具指令提到的其他角色工具不因此获得注册或授权。
 
 Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各自 crate 根导出。内部按实际职责组织：
 
@@ -164,7 +166,7 @@ Harness 只通过 constructor-injected ports 使用外部能力：
 - `KnowledgeIndexPort` / `KnowledgeIndexReaderPort`：构造不可变检索投影并查询，不授予来源读取权限；
 - clock 和 ID generator。
 
-adapter 不得把 framework type 带入 Core，也不得拥有 policy。Application Gateway 每次调用根据 principal、Harness session、Project instance/session、resource currentness、approval、deadline、cancellation 和 invocation identity 验证请求。模型请求只携带角色、并发度、输出模式、上下文和工具签名；授权身份由 Core executor 与事件输出持有，不重复塞入 Rig 不使用的请求字段。
+adapter 不得把 framework type 带入 Core，也不得拥有 policy。Application Gateway 每次调用根据 principal、Harness session、Project instance/session、resource currentness、approval、deadline、cancellation 和 invocation identity 验证请求。模型请求只携带角色、并发度、输出模式、用户执行选项、上下文和工具签名；授权身份由 Core executor 与事件输出持有，不重复塞入 Rig 不使用的请求字段。
 
 ## 4. Registered capabilities
 
@@ -173,78 +175,140 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 不透明标识。数据库声明中的 DatabaseId 与 publication key 不可互换。图内部编辑与运行继续
 共用节点图协议，传入对应的 `resource.id` 作为 `graphPath`。
 
-桌面按 `ToolRegistry::for_agent(role)` 选择工具；Workflow step 和批准执行只注册本次所需的单个能力。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
+桌面按 `ToolRegistry::for_agent(role).with_mode(mode)` 选择工具；Workflow step 和批准执行只注册本次所需的单个能力。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
 
-| Capability                | 作用                                                                                     |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| `inspect_project`         | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                                     |
-| `inspect_resource`        | 按统一资源标识读取正文或分页数据，包含图表设置、Mind 树、Markdown、数据行和列语义        |
-| `manage_resource`         | 创建、重命名、复制、删除和保存；数据通过明确的 CSV、Parquet、Excel 或 SQL 来源创建       |
-| `edit_resource`           | 图表设置、Mind 树批次、Markdown 文本/范围、数据行列/类型/语义/历史、函数签名及图撤销重做 |
-| `export_dataset`          | 将指定版本的数据导出为 CSV 或 Parquet，返回真实目标路径                                  |
-| `inspect_graph`           | 读取当前图文档、参数、列绑定、端口约束和诊断                                             |
-| `search_node_catalog`     | 查询 localized node catalog                                                              |
-| `search_knowledge`        | 按需搜索当前项目可见的知识，返回摘要和可读取的片段引用                                   |
-| `read_knowledge`          | 核验并读取指定片段，成功后记录可展开的来源引用                                           |
-| `inspect_dataset_schema`  | 读取列结构、物理类型和语义                                                               |
-| `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                                                  |
-| `inspect_result`          | 读取完整结果 JSON；数列、表格及 JSON 中的 tableRef 按需分页                              |
-| `apply_graph_edit`        | 原子应用并自动保存可撤销的图编辑批次                                                     |
-| `validate_graph`          | 只读校验已观察的当前图，返回可运行性与阻断诊断                                           |
-| `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs                    |
-| `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                                               |
-| `save_graph`              | 用户要求保存时调用正常的独立 Save                                                        |
-| `inspect_ui_intent`       | 按 ID 读取工作台界面操作回执                                                             |
-| `request_ui_intent`       | 请求打开六类资源/结果、定位图节点或显示允许的面板，返回待执行回执                        |
+| Capability                                                         | 作用                                                                           |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `list_resources`                                                   | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                           |
+| `inspect_resource`                                                 | 统一资源身份、名称与保存状态，保留函数签名，正文通过领域工具读取               |
+| `create_resource`                                                  | 按种类和名称创建图、Chart、Mind 或 Doc，返回实际身份及初始业务引用             |
+| `import_database`                                                  | 从明确的 CSV、Parquet、Excel 或 SQL 来源创建数据库，可在同一导入事务中指定名称 |
+| `rename_resource`                                                  | 重命名并返回实际新资源身份                                                     |
+| `duplicate_resource`                                               | 可指定名称的原子复制，沿用 owner 的身份和名称分配                              |
+| `delete_resource`                                                  | 删除获准资源并保留实际提交回执                                                 |
+| `save_resource`                                                    | 按资源 owner 的保存边界提交，返回已核对的状态                                  |
+| `edit_resource`                                                    | 本轮保留的函数签名编辑                                                         |
+| `inspect_chart` / `update_chart`                                   | 类型化配置读取与指定字段更新，沿用立即持久化                                   |
+| `inspect_document` / `read_document` / `search_document`           | 文档大纲、章节/字符范围及带原文上下文的精确搜索                                |
+| `replace_document_text` / `append_document` / `write_document`     | 原子精确替换、追加与明确整篇替换，保留显式保存生命周期                         |
+| `inspect_mind` / `find_topics` / `inspect_topics`                  | 有限大纲、子树搜索和定向主题正文、子主题与引用                                 |
+| `create_topics` / `update_topics` / `move_topics`                  | 原子建树、正文/引用修改与最终父子关系调整                                      |
+| `delete_topics` / `duplicate_topics`                               | 子树删除或复制，返回实际删除范围或全新主题身份映射                             |
+| `insert_rows` / `update_cells` / `delete_rows`                     | 按稳定 rowId 原子插入并初始化、更新单元格或删除行；插入回执交付实际 ID         |
+| `create_columns` / `rename_columns` / `delete_columns`             | 原子修改列集合与名称，保留现有身份、默认空值和至少一列的规则                   |
+| `cast_columns` / `set_column_semantics`                            | 原子转换物理类型或设置业务语义，验证整个批次后提交                             |
+| `export_database`                                                  | 将授权数据库导出为 CSV 或 Parquet，返回真实目标路径，工具层保留原读取基线校验  |
+| `inspect_graph`                                                    | 读取图计数、就绪、已有运行状态及按字节预算降级的节点配置和连接概览             |
+| `browse_nodes`                                                     | 搜索、按类别筛选并分页浏览可创建节点类型                                       |
+| `inspect_node_type`                                                | 批量读取指定类型的参数 schema、默认值和 Pin 数量约束                           |
+| `find_nodes`                                                       | 按名称、类型或 ID 筛选图中节点，再分页读取身份摘要                             |
+| `inspect_nodes`                                                    | 按 ID 读取指定参数、Pin、schema 和选项，Pin/列分别分页                         |
+| `find_connections`                                                 | 按节点及 Pin 交集筛选、分页读取连接与真实端点                                  |
+| `create_nodes`                                                     | 单批创建并配置参数、Pin 数量及初始连接，返回节点和 Pin 别名映射                |
+| `update_nodes`                                                     | 按明确字段批量修改参数、标签、字面量和 Pin 数量，或精确删除指定可变 Pin        |
+| `delete_nodes` / `duplicate_nodes` / `move_nodes`                  | 删除、复制或移动节点，沿用同一原子编辑与历史边界                               |
+| `create_connections` / `update_connections` / `delete_connections` | 按真实端点批量连接、按 ID 原子重接或删除                                       |
+| `find_constants` / `inspect_constants`                             | 按名称查找常量摘要；按 ID 与值范围读取，文本/集合/表格分别分页                 |
+| `create_constants` / `update_constants` / `delete_constants`       | 原子修改类型化常量，可同时创建初始引用节点                                     |
+| `search_knowledge`                                                 | 按需搜索当前项目可见的知识，返回摘要和可读取的片段引用                         |
+| `read_knowledge`                                                   | 核验并读取指定片段，成功后记录可展开的来源引用                                 |
+| `inspect_database`                                                 | 读取名称、行列计数及编辑状态，不附完整 schema 或数据行                         |
+| `inspect_database_schema`                                          | 选择列并分页读取类型、物理类型和业务语义                                       |
+| `profile_database`                                                 | 只计算指定列和完整性、统计摘要或分布指标组                                     |
+| `read_database_rows`                                               | 按列投影、AND 条件与多列排序读取行页，返回稳定 rowId 和真实继续位置            |
+| `inspect_result`                                                   | 读取标量、结果结构和分页 schema，交付完整表引用，不读取数据行                  |
+| `read_result_table`                                                | 按完整表引用、选定列及行范围读取，返回实际行页和列页                           |
+| `validate_graph`                                                   | 全图或所选节点实际依赖范围的只读就绪检查，诊断独立分页                         |
+| `execute_graph`                                                    | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs          |
+| `list_graph_results`                                               | 按图、节点、Pin 或运行筛选结果引用与有效性，支持分页，包括手动运行产物         |
+| `undo_resource` / `redo_resource`                                  | 在已授权的 Graph 或 Database 中导航一个原有历史单位                            |
+| `inspect_ui_intent`                                                | 按 ID 读取工作台界面操作回执                                                   |
+| `request_ui_intent`                                                | 请求打开六类资源/结果、定位图节点或显示允许的面板，返回待执行回执              |
 
 界面意图契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
+Harness 的 `openResult` 意图接收结果工具给出的完整 `resultRef`；工具层转换为 UI owner 的内部来源标识。
+请求历史、意图返回值和状态查询使用同一业务投影，不向模型暴露执行会话标识或幂等 key。
 模型必须区分意图被接受与前端已完成操作，具体校验、回执、恢复与会话边界见 [工作台界面意图](../yss-ui-contract/README.md)。
+
+节点、连接和常量写入均在 Application 适配到现有 Graph 原子事务，提交整个当前图并保留一个撤销步骤。
+`createdNodes`、`createdPorts`、`createdConstants` 是提交时实际分配的映射；复制时节点映射以原节点 ID 为键，
+Pin 映射以原端口地址文本为键，值仍是可直接传给工具的真实端点。映射随 Project 幂等回执保留，重放不重新分配。
+`update_nodes` 省略标签表示保留，显式 null 清空；Pin 缩减按 owner 顺序保留前面的实例并报告断连。
+`update_connections` 先在候选中释放本批所选连接，再整体校验新端点，因此可交换已占用输入并保留连接 ID。
+常量类型和值复用 Data Contract，整数以带标签的十进制字符串传输。列表不返回大值；定向读取的 `valuePath`
+可选择嵌套对象或列表，文本按 Unicode 字符续读，表格按列和行分页。分页内容不能作为完整常量回写。
+`apply_graph_edit` 与 `save_graph` 已从模型目录、角色工具集及可调用 schema 移除。内部批量编辑与保存用例继续服务明确工具；已存账本仍按原名称投影业务参数，历史可读不代表工具仍可调用。函数签名分支继续保留。
+
+数据库读取参数只接受 `database: {kind: "database", id}`，由 Core 将 Worker 已获准的原读取基线绑定到内部
+`DatabaseReadRequest`；首次读取由 Application 的原查询 gate 建立基线。四种读取结果均推进同一个观察表，
+Worker 已有基线不会因读取自动变成新版本。实时结果和历史只投影 `database` 与类型化业务内容。
+schema 默认 50 列、最大 100 列；行页默认 20 行、最大 1000 行，显式选择至多 100 列。
+过滤条件全部为 AND，比较使用 Data Contract 精确字面量；空值判断不带比较值。排序复用原列语义，
+并列值按显示顺序及 rowId 定位。过滤后的总数未知时为 null，分页仍返回实际 `hasMore` 与 `nextOffset`。
+画像只运行明确选择的指标组；省略的指标组不会计算。旧 `inspect_dataset_schema` / `inspect_dataset_profile`
+不再注册给模型，其内部请求仍服务 Workflow 与既存历史。
 
 `inspect_result` 与界面复用 Application 的有界 `query_result_projection` 和共享 `result_encoding` 映射，返回 `ResultValueInspection::Json`。内联结果受投影展开预算及 64 KiB 编码上限约束，超限明确拒绝，不静默裁剪。原生报告使用概览、参数目录与表引用，统计数据按表引用继续读取。普通结果字段、嵌套对象与文本没有 AI 专用白名单或截断规则。
 
-DataFrame、DataSeries 和内存数列仍通过 `offset`/`limit` 分页，不展开全部数据。JSON 中的数据引用保持原样；AI 可以把 `resultRef.executionSessionId`、`resultRef.resultId` 和 `tableRef.part` 传给同一个 `inspect_result` 继续分页读取。未指定 `part` 时读取完整 JSON；指定 `part` 时读取该结果公开的表。分页响应使用 JSON 行值和 `nextOffset`/`hasMore`，保留行数及字节边界。项目会话、结果可用性、取消和 deadline 检查继续生效。
+`inspect_result` 接受完整的 opaque `resultRef`；DataFrame、DataSeries 和内存数列只返回表引用与分页 schema，不读取数据行。`read_result_table` 接受完整 `tableRef`，按列选择及行范围读取。行页默认 20、最大 1000，列页默认 50、最大 100；响应分别携带实际行页和列页。关系选列在读取数据前下推至原查询 owner，未知列或重复列明确拒绝。项目会话、结果可用性、取消和 deadline 检查继续生效。
 
-结构化统计结果的所有数组也保持 `tableRef`，包括小数组及空数组。没有 `part` 的概览
-不展开数组；后续 inspect 使用同一结果身份并原样传回后端生成的 `structured:` part。
-分页内的嵌套数组继续返回引用，不隐式读取其他数组或把完整模型数据放进回执。
+结构化统计结果的数组保持表引用，包括小数组、空数组和分页内的嵌套数组。完整引用在原投影生成位置编码，用户数据中的 `resultRef`、`tableRef`、`part` 等字段保持原值，不做递归键名替换。模型不接触内部会话和表路径，也不拼接引用。编码只包含原 ResultStore 身份与原表选择，不引入身份映射表、结果租约或第二份缓存。
+
+`list_graph_results` 可按节点、输出 Pin、运行筛选并分页；默认包含当前 Pin 的有效值和保留的过时值，指定运行只读取仍被原 owner 持有的结果。每个引用和读取回执区分 `currentValid`、`currentStale`、`retained`。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
 
 Model-facing schema 来自 Contract 的 `model::CapabilityInput` 所用业务参数类型。
 `ModelCapabilityExecutor` 接收公开意图；Core 的 [capabilities.rs](src/orchestration/capabilities.rs) 先授权，
 再绑定 Worker 已捕获的资源版本、函数签名版本、图文档与语义依据，生成内部 typed request。
 模型不填写 revision/sessionId、图 hash、条件查询 token 或幂等 key。内部 Workflow/审批直接使用原有内部契约。
 Rig 实时返回与历史回放共用 `model::capability_result`，工具历史参数共用 `CapabilityInput` 投影；
-错误投影保留业务诊断并将冲突转为重新读取、重新评估任务的指引。统计结果和用户值不按字段名递归过滤。
+错误投影保留输入 schema 声明的业务字段、参数范围和下一步指引；不透传内部字段名。
+内部 `RevisionConflict` / `GraphDraftChanged` 在实时工具、历史回放与 Worker 预检反馈中通过同一公开错误投影转换。
+已确认变化返回 `resource_changed`；历史读取尚未在当前项目中核验，或普通工具缺少必要的读取依据，
+统一返回 `resource_read_required`，不能据此断言内容发生变化，也不将其误报为参数格式错误。
+两者保留具体 `resourceId`，文档章节错误指引重新读取大纲，模型不协商内部版本。
+工具卡片的失败码也复用此投影，内部事件与账本仍保留真实内部诊断。
+统计结果和用户值不按字段名递归过滤。
 
-Worker 的资源版本沿真实提交回执推进；新建或移动后的资源先显式读取。函数签名使用独立的读取与提交版本。
+Worker 的资源版本沿真实提交回执推进；新建、复制或重命名回执的 `resources` 包含可继续使用的真实身份、名称、dirty 状态和 Mind 根主题引用，内部另保留完整版本。只在缺少所需正文或发生并发变化时重新读取。函数签名使用独立的读取与提交版本。
 图初次操作缺少内部 hash 时仅补充最小概览，并核对完整授权版本；已有编辑/保存回执可直接推进，避免仅为刷新版本重复查询。
 同一 Worker 的分页图读取核对语义输入，图编辑/校验/执行通过内部调用上下文将语义依据交给 Application，
 复用本次打开图的解析投影在操作前检查。资源或语义冲突会停止后续写入，Manager 读取并重新评估后才能续接。
 Worker 压缩和续接通过完整账本重建这些依据，Manager 的新读取只能刷新原授权内的资源。
 执行可能发现动态列，因此执行回执使旧图结构依据失效，下次操作按原图授权补读；不把自己的执行结果误判为外部冲突。
 Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再由 executor 分派到 Core KnowledgeService 或 Application Gateway，最后持久化成功 result 或 structured failure。两条路径共用授权、取消、deadline、计时和事件收尾；idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
+已解码、已授权请求的业务参数校验失败也记录调用账本和开始/失败事件，不进入实际资源操作；保留校验字段与范围，便于模型修正及界面追踪。
 
-`inspect_project` 复用 Project 的 `read_project_index`，与左侧项目树使用同一资源成员来源，
-不从内存中已加载的 GraphDocument 集合推断项目有哪些图。列举资源不改变图的加载状态；返回前重验索引版本，
-读取失败或版本变化返回 typed failure。模型条目包含 `resource` 和显示名称；内部投影另有资源与 Project publication revision。模型使用返回的图 `resource.id` 作为 `graphPath`，
-再通过 `inspect_graph` 按需读取当前文档；图编辑和执行均不要求先打开编辑器面板。
+`list_resources` 复用 Project 的 `read_resource_catalog`，沿用图、Chart、Mind、Doc 的路径扫描与数据库声明身份，
+不复制 ProjectData、读取文件正文或加载关闭的图。按 kinds 及不区分大小写的名称/路径 query 筛选后分页，默认 100 项、范围 1..100；
+`page` 返回实际数量、总数、hasMore 和 nextOffset。返回前重验 Project 索引依据，失败或变化返回 typed failure。
+模型条目包含 `resource` 和显示名称；内部投影另有资源与 Project publication revision。新的图查询使用返回的完整引用作为 `graph`，
+其 schema 仅接受事件图或函数图。显式消息引用解析使用同一完整目录，不受模型分页限制。
 
-图查询默认返回 `GraphInspectionPage` 的业务概览：`ready`、全图数量统计及分页节点身份/名称，不展开参数、端口、连线、列结构或编辑器描述。
-`view: nodes` 读取参数值及可变端口模板；`includeOptions` 显式请求当前参数候选和提示。
-`view: ports` 分页读取端口地址、类型、连接约束及输入字面量；`includeSchema` 显式请求列结构，
-未请求的 schema 字段省略；请求后用 `schemaKnown` 区分未知与已解析结构。`nodeIds` 限定节点、端口或关联连线范围，
-`portAddresses` 进一步限定端口。`connections`、`diagnostics` 和 `constants` 独立分页。
-`page.total` 是匹配项总数，`nextOffset` 为 null 才表示末页；省略字段或未读取的页不表示内容不存在。
+`inspect_resource` 也走这条轻量目录；数据库 dirty 状态独立查询其编辑 owner，不读取行数据。
+其内部元信息仅附带 Runtime 已捕获的运行和 schema 版本，用于核对工作流或历史观察；模型投影不包含这些字段。
+关闭图的元信息允许没有编辑会话身份；首次打开在相同资源 revision 上补齐会话，之后继续严格比较完整依据。
+修改回执只附带与实际提交版本一致的元信息，并推进 Core 授权和历史观察。并发变化或查询失败不会把已提交操作改写成失败，
+也不会用较新的元信息覆盖提交基线；缺失的状态由后续明确读取补齐。
+
+`inspect_graph` 的公开输入只有 `graph`，结果包含 `ready`、全图数量及现有运行状态；运行来自原 Execution 恢复投影，
+并标注是否对应当前语义输入。该工具不附节点、Pin、常量或结果值。
+`find_nodes` 先按名称/标题/ID query、精确 typeIds 和 nodeIds 筛选，再分页读取摘要。
+`inspect_nodes` 按 nodeIds 与 fields 读取 parameters、ports、schema、options，默认 parameters 和 ports；
+portOffset/portLimit 按每个节点应用，columnOffset/columnLimit 按每个 Pin 的 schema 应用。
+未请求的 schema 省略，`schemaKnown:false` 表示未知，不返回伪造的空列集合。
+`find_connections` 组合节点及精确 Pin 条件，返回它们的交集和实际连接端点。
+公开 `page`、`portPage` 和 `schemaPage` 包含实际范围、总数、hasMore 和 nextOffset；未读取内容仍是未知。
 Worker 的分页读取由调用层核对资源与语义依据，冲突页不作为成功结果进入模型上下文。
 
 内部 `observationHash` 绑定图文档/编辑/语义身份及完整查询选项（含分页和筛选），模型不接收该字段或 `ifUnchanged` 参数。内部同一查询携带
 `ifUnchanged` 且标识匹配时只返回当前基线、数量及 `content.kind: unchanged`，不重复发送正文。
 本地未保留该查询内容时不能使用条件读取；改变查询范围、页码、图版本或语义依赖都不会误命中。
-它不维护另一份图缓存，也不改变编辑/执行的权限或版本准入。`view: full` 是显式全量读取，
-继续返回完整 `GraphInspection`，主要用于确实需要全部细节的检查；常规发现和委派不使用该视图。
+它不维护另一份图缓存，也不改变编辑/执行的权限或版本准入。内部 `view: full` 继续为原编辑与函数用例提供完整 `GraphInspection`，
+不属于公开 `inspect_graph` 输入。
 
-`inspect_resource` 对图默认返回 `ResourceContent::GraphPage`，沿用 offset/limit，保留函数签名及
-undo/redo 元数据。`graphView: full` 显式返回完整 `ResourceContent::Graph`；局部筛选走
-`inspect_graph`。仅核对版本使用 `metadataOnly:true`。运行数据仍由 `inspect_result` 独立读取。
+`inspect_resource` 只接受 resource，不再提供 graphView、metadataOnly 或正文分页参数。
+图概览走 `inspect_graph`，局部筛选走 `find_nodes` / `inspect_nodes` / `find_connections`。
+函数资源的既有签名通过 `content.kind: function` 返回，仍可用于范围外的签名编辑；运行数据由结果工具独立读取。
 Application 的 `automation/graph/inspection.rs` 从同一次捕获的编辑投影生成查询结果，完整快照和
 局部查询复用端口/常量映射；Rig 工具说明及角色提示引导按需读取并复用编辑增量。
 
@@ -256,76 +320,124 @@ Application 的 `automation/graph/inspection.rs` 从同一次捕获的编辑投�
 Harness 的 `ChartSettings` 复用 `yss-chart-document::ChartType`；工具 schema 和文档序列化共享
 同一个 histogram/scatter/line 枚举，资源适配器直接传递该类型，不另设图表类型定义或字符串映射。
 
-Mind 添加主题由宿主分配真实 ID，批次内可用 `$clientId` 引用；非法树操作整批不提交。
-Markdown 的分页和范围修改按 Unicode 字符计数，允许修改已读片段并保留未读取正文。
+Mind 的公开 DTO 归 Contract 的 `model/mind`，领域回执归 `mind.rs`；Application 的
+`automation/resources/mind` 只投影原 `MindTree` 查询和翻译原 `MindEdit` 命令。
+`inspect_mind` 默认读取相对深度 2、50 项大纲，最多深度 20、200 项；`find_topics`
+执行大小写不敏感的正文子串搜索，默认 50、最多 100 项，并给出至多最后 32 个祖先/自身 ID，
+通过 `pathComplete` 明示路径是否完整。摘要最多 160 个 Unicode 字符，不返回整棵树正文。
+`inspect_topics` 每次最多 20 个主题，正文默认且最多 2048 个 Unicode 字符，子主题默认且最多 50 个；
+两种分页各有实际范围与继续位置。读取保留原会话和版本，在返回前重验，模型投影不含同步信息。
+
+五种主题编辑每次最多 200 个请求项，仍通过 Project 的单次 File Edit 提交。
+创建先分配整批真实 ID，再解析 `$clientId` 父引用，因此可以引用稍后声明的父主题；
+更新中省略 reference 保留引用，null 明确清空；移动按整批最终关系校验，不因暂时父关系拒绝合法交换。
+删除包括全部后代且不能删除资源根；复制子树分配全新 ID，外部引用原样保留，失效外部目标不等同于坏树。
+`mindEdit` 回执提供实际创建映射、影响主题、删除主题及 dirty；回执体积在提交前核对，非法批次不发布。
+Report 可写 Mind，其他角色仍受原只读边界约束。主题工具沿真实读写回执绑定版本，显式 `save_resource`
+完成持久化。原 `edit_resource` 的 Mind 参数、`MindOperation` 和通用资源回执的 `createdNodes` 已移除。
+`inspect_resource` 的模型参数由 `model::InspectResourceInput` 定义；正文分页由各领域工具声明单位、范围及继续位置。
+Markdown 的范围按 Unicode 字符计数；局部编辑使用 `replace_document_text` 的 replacements 列表，
+在同一个捕获正文中按顺序匹配唯一原文。空原文、零匹配或多处匹配拒绝整个批次，返回字段与修正指引，
+不提交前面的操作；成功后仍通过原 Doc owner 按捕获版本原子提交并显式保存。未读正文保持不变。
+
+六个公开文档工具的 DTO 归 `model/document`，Application 的 `automation/resources/document`
+调用原 Doc 快照、`DocView` 和 File Edit。`inspect_document` 默认 50、最多 100 个标题，正文长度
+独立于大纲页；`read_document` 默认 8192、最多 16384 个 Unicode 字符，在可行时沿完整块边界结束，
+返回实际绝对范围、所选范围、相对分页位置及本页是否覆盖整个所选范围。
+`search_document` 是大小写敏感的原文子串搜索，包含重叠命中，默认 20、最多 100 项；
+每侧上下文默认 120、最多 500 个字符。若 JSON 转义导致结果超出共享预算，减少本页条目并返回实际继续位置。
+
+章节引用包含标题序号和字符位置，区分重复标题。Core 在现有 ResourceObservations 中从读取回执
+记录每个引用的内部文档版本，随历史重放恢复并传入 Worker；正文编辑只推进资源版本，不给旧章节引用
+偷偷换基线。旧引用或 GUI 并发修改会被拒绝，重新读取首张完整大纲页才能刷新定位。
+模型无需接触版本、会话或校验摘要。该观察投影不拥有正文或持久化 AST。
+
+`write_document` 表达明确的整篇初始化/替换；`append_document` 原样追加，包括调用者提供的换行。
+读页大小和原 Graph 的 JSON 输入预算不限制完整文档写入，实际大小仍由 Doc owner 的 `MAX_FILE_BYTES`
+约束。`documentEdit` 回执返回每步实际 Unicode 变更范围、最终字符数和 dirty，成功后继续通过
+`save_resource` 保存。旧模型 Markdown 操作枚举及 `edit_resource` 的 Doc 分支已移除，Report
+不再注册通用内容编辑工具；报告提示和内置写作 Skill 使用这些明确工具。
 数据读取按行分页并返回稳定 row IDs、物理类型、列语义及历史状态；复制通过既有导出/导入 owner
 保留数据和 Schema，产生新的数据库身份。导出在替换目标前重验版本，发布结果不确定时不自动重试。
 
-Doc/Mind 修改保留现有 Edit/Save 生命周期；图历史与数据库历史也沿用各自 owner。
-图表设置修改立即持久化。Chart 没有 Rust 未保存缓冲区，`manage_resource` 的 Chart Save
+Doc/Mind 修改保留现有 Edit/Save 生命周期；`undo_resource` / `redo_resource` 只支持已有历史的 Graph 与 Database，要求 Edit 授权，并由调用层绑定原读取版本。通用模型编辑不再接受 GraphHistory 或数据库 Undo/Redo 分支。账本记录明确的公开工具名；实际历史与保存边界仍归原 owner，Graph 历史导航不自动保存。
+
+数据库行修改使用三个明确工具，`database` 引用在 schema 中只允许 Database。Data 角色还须持有该资源的 Edit 授权，Core 在既有资源 envelope 中补齐此前观察版本；成功回执继续推进同一观察状态。`insert_rows` 按可选 `beforeRowId` 或追加位置初始化行，省略列为 null；`update_cells` 拒绝重复 rowId/column，null 显式清空；`delete_rows` 只接收稳定行 ID。每批最多 200 个请求项，Store 在原准备/提交路径验证整个批次，形成一个 Runtime 历史单位；这不是计算行数限制。公开回执的 `databaseEdit` 返回实际插入 ID、提交项数、dirty 和历史可用状态，不返回行值或内部版本。通用 `edit_resource` 不再提供单行插入、单元格修改或按页位置删除分支。
+
+五个列工具使用同一 Database 授权与回执路径，每批最多 200 个列目标。新增列初值为空，重命名支持最终名称交换且保留身份；删除必须保留至少一列。物理类型名称由原 Arrow owner 解析，每列转换要求显式 `force`：允许无法表示的值转为空，但不能绕过语义约束。语义修改只更新元数据并验证全部当前值。批次失败不提交，成功只产生一个撤销单位；`databaseEdit.columnNames` 返回本次提交的目标名称（重命名后的名称或已删除名称）。原模型 `DatasetOperation` 与 `edit_resource` 的 Database 分支已移除，Data 角色不再注册通用内容编辑工具。
+图表设置修改立即持久化。Chart 没有 Rust 未保存缓冲区，`save_resource` 的 Chart 保存
 确认已持久化版本，不读取或保存独立的前端配置草稿；后续发布继续保留前端未提交的修改。
 资源回执返回实际变化、删除标识、移动和创建的节点 ID，不猜测新名称对应的路径。
 Gateway 将真实提交送入既有 Project 事件发布入口，使侧栏和编辑器通过同一发布协调器刷新。
 通知交付失败不会把已提交写操作改写为未提交；模型仍根据实际回执继续。
 
-Application 的 `invoke_automation_capability` 是同步业务入口。`yss-application::ipc` 的 `ApplicationCapabilityGateway` 使用 blocking worker 调用它，避免在 Tokio async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
+Application 的 `invoke_automation_capability` 是同步业务入口。`yss-application::harness` 的 `ApplicationCapabilityGateway` 使用 Tokio blocking worker 调用它，供桌面及独立测量共用，避免在 async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
 
-工具生命周期事件由持有 ledger identity 的 Harness executor 产生：准入后发送 `ToolInvocationStarted`，结束时发送 `ToolInvocationCompleted` 或带 `failureCode` 的 `ToolInvocationFailed`。失败码区分取消与超时；事件不携带数据行、结果或异常原文。账本或事件持久化失败可能留下待恢复记录；已完成的业务提交仍返回真实结果，不被交付失败改写。Rig 只执行模型工具映射，不生成另一套工具完成状态。
+工具生命周期事件由持有 ledger identity 的 Harness executor 产生：准入后发送 `ToolInvocationStarted`，结束时发送 `ToolInvocationCompleted` 或带 `failureCode` 和结构化 `failureDetails` 的 `ToolInvocationFailed`。普通工具与控制工具均保留分类所需的原因；IPC 使用完整诊断投影公开错误码。失败码区分取消与超时；事件不携带数据行、结果或异常原文。账本或事件持久化失败可能留下待恢复记录；已完成的业务提交仍返回真实结果，不被交付失败改写。Rig 只执行模型工具映射，不生成另一套工具完成状态。
 
 图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
-`execute_graph` 必须提供 demand：`default` 全图重算；`node` 带 `nodeId` 及 `currentInputs` / `dependencies`
-模式，分别消费当前已求值输入或补算必要依赖。局部执行不要求无关分支就绪。输入缺失或过期返回
+`execute_graph` 使用 graph 与可选 nodeId/mode；未指定节点时全图重算，指定节点时采用 `currentInputs` / `dependencies`
+模式，分别消费当前已求值输入或补算必要依赖，节点默认 dependencies。局部执行不要求无关分支就绪。输入缺失或过期返回
 `input_result_unavailable` 与源位置；内部查询计划不计作已发布的可查看结果。
 
 同一次图请求复用打开图时捕获的文档、编辑身份和解析投影，图检查、校验及 Harness 执行准入不重复读取和解析同一图。编辑与保存仍由 Project 在提交时重验捕获版本，执行准备继续重验文档及依赖。快照直接以 graphPath、revision、graphHash 和 semanticInputHash 标识；编辑请求的 graphHash、节点端口与参数、快照事实和编辑回执中的必需字段缺失时拒绝解析，不补成空值或空集合。
 
-`apply_graph_edit` 自动应用用户要求的编辑；调用层补齐内部 `baseRevision`（后端图修订）和 `graphHash`，Owner 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向后端图历史 添加一次变更；任一操作失败都不安装部分候选。调用层按业务参数与实际读取依据生成内部 `clientKey`，在 session/turn/run 内幂等；同一依据的重复请求返回已有 receipt，复用 key 修改请求会被拒绝。
+明确的节点、连接和常量写工具转换为内部 `ApplyGraphEditRequest`；调用层补齐 `baseRevision`、`graphHash` 和幂等身份，Owner 拒绝过期请求。创建节点的参数、Pin 总数和初始连接可一次提交，常量可连同初始引用节点创建。每批只添加一次图历史变更；任一操作失败都不安装部分候选。调用层按业务参数与实际读取依据生成内部 `clientKey`，在 session/turn/run 内幂等；同一依据的重复请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
-Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复针对 `apply_graph_edit`，不提供执行和保存的跨进程重放。
+Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复服务所有明确图编辑工具的共同提交内核，不提供执行和保存的跨进程重放。
 
 `create_node` 的 `parameters` 和 `portCounts` 均为必需映射，快速创建传空映射；可直接提交列名列表及可变端口总数。
 声明 `clientId` 后，初始用户端口按模板顺序获得 `$clientId.templateKey[0]` 形式的批次内实例别名；
 后续连接使用该别名，回执交付真实端口地址。序号只用于本批别名，不进入文档连接身份。
 参数合并、未完成编辑、资源绑定及端口数量限制与 GUI 共用 Graph Editor 和 Protocol。
 
-目录搜索通过 `includeParameters: true` 按需返回 `configurationSchema`，描述创建请求的
+`browse_nodes` 按名称、别名、技术词及类别筛选，返回不含配置的分页类型摘要和资源绑定；
+搜索保留 `to_numeric` 与完整 type ID，不拆解标识符；ASCII 词匹配边界，避免 `bin` 命中 `Durbin` 等词中间，中文仍按子串匹配。实际范围与继续位置由 `page` 交付。已知类型可直接用 `inspect_node_type` 批量读取，无须先搜索；复用本轮已读定义。它返回 `configurationSchema`，描述创建请求的
 `parameters` 和 `portCounts`，另附端口模板、方向和固定/可变/派生分类。Schema 从冻结 Registry
-中的 Node Protocol 生成，Application 补充本地化文本；先排序和限量，再生成详细定义。
+中的 Node Protocol 生成，Application 补充本地化文本；仅为指定且可创建的类型生成详细定义。
 省略参数保留默认值或未完成配置，Null 表示重置；`x-yss-requiredForExecution` 标明运行所需字段，
 `x-yss-activeWhen` 标明条件字段，`x-yss-linkedPorts` 表示共享数量的模板。
 固定值、枚举、数值范围、列列表和无损筛选字面量都由对应类型投影，旧的参数定义 DTO 不再并行返回。
-现有 `apply_graph_edit` 仍使用通用批次请求，具体节点 Schema 由目录发现提供，不把整个目录嵌入
-每次模型请求；后端继续通过 Graph 校验实际实参。连接后的选项使用节点检查的 `includeOptions` 获取。
-无需先创建节点才能查询。未请求时保留有界目录摘要。工具集成测试与真实模型任务验收分别记录。
+具体节点 Schema 由目录发现提供，不把整个目录嵌入每次模型请求；后端继续通过 Graph 校验实际实参。
+`update_nodes.removePins` 按真实地址删除可变 Pin 并保留其他 Pin 身份，与 portCounts 互斥；连接后的选项使用 `inspect_nodes.fields: ["options"]` 获取。
+无需先创建节点、连接或运行才能查询；缺失类型明确返回业务失败。工具集成测试与真实模型任务验收分别记录。
 
-`GraphEditReceipt` 保存图修订、graph hash、`clientKey`、创建元素的身份映射及本次提交的 `changes`。节点、端口、参数、连接和常量与 `inspect_graph` 共用事实结构；新增或改变的节点返回完整信息，包含派生列和端口，连接包含实际顺序。删除节点、连接和常量明确返回 ID；未变化实体省略。`ready` 和 `diagnostics` 是提交时的完整状态，替换此前诊断。所有图编辑操作统一比较提交前后解析投影，覆盖下游连带变化，不根据模型请求猜测结果。
+`inspect_graph` 的初次概览复用同一次捕获的文档和解析投影，先移除编辑器说明、参数选项、列 schema 和无关端口详情，再按实际 UTF-8 JSON 字节数检查 32 KiB 的结构预算；使用共享的计数 writer，不额外生成完整编码缓冲区。`overview.detail=configuration` 提供全部节点、已保存参数及当前可见默认值、字面量覆盖和连接；超限时 `topology` 保留全部节点身份和连接，省略参数及字面量；仍超限时 `counts` 省略结构，保留外层计数、就绪和运行状态，转向定向查询。省略层级明确，不截断 JSON，也不以空数组暗示图中无节点；常量正文和运行数据仍单独读取。项目打开不自动读取所有图，只在任务涉及该图且缺少结构事实时读取一次并复用。
+
+内部 `GraphEditReceipt` 保存图修订、graph hash、`clientKey`、创建元素的身份映射及本次提交的 `changes`。节点、端口、参数、连接和常量与内部检查共用完整事实结构，包含派生列和端口，连接包含实际顺序。删除节点、连接和常量明确返回 ID；未变化实体省略。`ready` 和 `diagnostics` 是提交时的完整状态，替换此前诊断。所有图编辑操作统一比较提交前后解析投影，覆盖下游连带变化，不根据模型请求猜测结果。
+
+模型编辑回执由 Contract 统一投影，实时调用与历史回放使用同一结构。变化节点保留 ID、类型、标签、位置、参数键值及所有端口的地址、方向、类型、孤立状态、连接数和字面量；不重复发送节点编辑器元数据、参数选项或列 schema。连接、移除项、实际创建映射和完整诊断仍返回；需要选项或列时使用 `inspect_nodes` 定向读取，省略不表示空集合。内部完整回执仍用于恢复原提交。
 
 参数事实中的 `options: null` 表示候选尚未知或不适用，`options: []` 表示已知空候选集；固定枚举直接返回选项。`contextHint` 提供来自同一语义投影的输入结构提示。配置提交成功不表示可以执行，模型继续读取 `ready` 与诊断。
 
 内部差分绑定 `fromRevision` / `toRevision` 及语义输入 hash；调用层消费这些字段，模型仅获得实际变化和 ready。已有回执足够时直接继续；缺少业务事实或发生冲突时再读取。保存回执的资源版本由调用层用于下一次编辑。历史重放与幂等重试保留原提交事实，不能覆盖较新证据。
 
-Application 复用打开图时的基线和编辑流程的最终解析投影，在提交前构造并验证完整差分；不在提交后独立查询当前图来补回执。Project 将有界的调用方事实与文档、历史、版本一起提交，恢复时由 Application 解码为 typed changes，不重新解析较新的图。回执超过工具或 Project 字节预算时，在写入前返回 `result_too_large`，调用方可缩小批次；不静默裁剪节点、端口或诊断。回执不暴露内部 Project 操作 ID；Harness 的 session、turn、tool 等编号继续使用独立类型的通用 UUID。
+Application 复用打开图时的基线和编辑流程的最终解析投影，在提交前构造并验证完整差分；不在提交后独立查询当前图来补回执。Project 将有界的调用方事实与文档、历史、版本一起提交，恢复时由 Application 解码为 typed changes，不重新解析较新的图。工具完整回执和 Project 单次 correlation 的预算均为 1 MiB，后者另受每图 2 MiB 的总保留预算约束。回执超过任一预算时，在写入前返回 `result_too_large`，调用方可缩小批次；不静默裁剪节点、端口或诊断。回执不暴露内部 Project 操作 ID；Harness 的 session、turn、tool 等编号继续使用独立类型的通用 UUID。
 
 内部常量检查和编辑差分都包含覆盖完整内容的 `contentHash`；模型投影只返回名称、类型、展示元数据和可展示值。长文本、列表或表格等值即使以 `valueIncluded=false` 只暴露元数据，内容改变也会产生新的事实和差分，不因展示元数据相同而漏报。
 
 `execute_graph` 从本次 `RunGraphReceipt` 取得已发布结果引用，不在运行后重新查询当前图的结果索引。后续编辑、另一次运行或结果失效不会改变原回执。`resultCount` 是成功运行实际发布的结果数，失败时为 null；`resultsComplete` 明确区分完整列表和受能力条目上限约束的部分引用。结果引用不取得新的租约，后续读取仍检查实际可用性；部分列表不能当成该次运行的全部结果。
 
+运行 `timing` 来自 Execution 的单调时钟，分别给出 admissionMs、runningMs、finalizationMs 和 elapsedMs。
+运行阶段包含调度、资源准备及物化，不等同于纯节点计算或工具往返时间；仍在运行时查询给出当前经过时间。
+成功、失败、取消后计时固定；准入前拒绝或运行元数据不再保留时为 null。图概览和按 runId 查询结果复用同一记录。
+
 所有改变状态的模型能力按各自 owner 返回事实：
 
 | 请求                       | 返回的提交或执行事实                                          | 后续读取条件                                                       |
 | -------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `apply_graph_edit`         | 创建 ID、受影响实体、删除 ID、就绪状态和诊断                  | 发生冲突或缺少业务事实                                             |
-| `save_graph`               | 实际 dirty/canUndo/canRedo                                    | 后续状态变化或需要未掌握的图信息                                   |
-| `execute_graph`            | 实际 run 状态、失败位置、带执行会话的结果引用                 | 通过 `inspect_result` 读取所需内容或数据页，无需先重复列举本次结果 |
+| 节点、连接和常量写工具     | 创建 ID、受影响实体、删除 ID、就绪状态和诊断                  | 发生冲突或缺少业务事实                                             |
+| `save_resource`            | 原 owner 确认的资源及 dirty 状态                              | 后续状态变化或需要未掌握的内容                                     |
+| `execute_graph`            | 实际 run 状态、阶段耗时、失败位置及完整结果引用               | 通过 `inspect_result` 读取概览，`read_result_table` 读取所需数据页 |
 | `request_ui_intent`        | 意图身份和实际回执状态                                        | pending/claimed 时查询完成状态，不能把接受当成界面已执行           |
 | `propose_statistical_plan` | Harness 校验且持久化成功后返回 accepted 和实际记录的完整 plan | 计划正文可直接继续使用，不代表分析已经执行                         |
 
-`apply_graph_edit` 默认自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
+节点、连接和常量写工具自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
 它复用 Project 的文件事务，将文件、当前文档、保存指纹、可撤销历史及编辑回执作为一次提交；
 保存失败返回 `persistence_unavailable`，保留调用前的文件、文档和历史，不产生成功回执。
 成功后 dirty 为 false，批次仍可整体撤销；重试读取原回执，不重复修改或保存。
-校验和执行不隐式保存。显式 `save_graph` 用于用户要求单独保存现有编辑，复用正常 Save。
+校验和执行不隐式保存。显式 `save_resource` 用于用户要求单独保存现有编辑，复用正常 Save。
 图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
 
 GraphPortInspection 的 declared/instance 字段统一使用 camelCase，序列化、会话持久化读取与 capability schema 使用同一契约，不接受 snake_case 别名。
@@ -336,6 +448,8 @@ SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护�
 
 ## 5. Session, turn, and events
 
+每次提交携带 `HarnessTurnOptions`：`mode` 为 Ask 或 Write，`reasoningEffort` 为默认（null）、Low、Medium 或 High。Core 在 `TurnStarted` 后持久化 `TurnConfigured`，Manager 和该轮所有 Worker 共享不可变选项。Ask 的 Registry 与 executor 只允许效果为 Inspect 的能力，禁止图计算、资源写入、导出和 UI 意图；委派及恢复旧任务也必须满足只读 scope，不能通过 Worker 绕过。Write 沿用既有角色、任务范围和 Gateway 授权，并不扩大权限。
+
 一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；底层 workflow/session 调用可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel 和 project/session currentness 由 Rust 控制。Session 状态为 `Active` 或 `Stale`：项目绑定失效时标记 `Stale` 并取消正在运行的 turn；重新打开对话时验证归属并恢复为 `Active`。Session store 的 `load_active_sessions` 只返回当前有效的绑定。
 
 Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 写入；Application 持门重验其捕获的项目，门本身不保存当前绑定。普通 session 创建和首次消息的标题写回也使用同一门；submit 在门内读取 session 并核对调用方捕获的项目绑定，失效则返回既有 `SessionNotActive`。会话读取、turn 准入和标题写入后释放门，再创建 turn 和执行模型，因此项目切换仍可取消正在执行的 turn。
@@ -344,7 +458,11 @@ Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 
 
 重新打开项目时，Application 通过既有 RootBinding 获取项目根目录身份，验证对话归属后重新绑定当前运行期 ProjectSessionBinding；历史 receipt 保持原始身份，不恢复旧授权或执行结果。订阅和发送均验证当前项目归属和运行绑定。无已保存项目时使用仅当前激活有效的临时归属。无持久项目归属的记录保持原状，不自动猜测或迁移到某个项目。
 
-`list_graph_results` / `execute_graph` 的每个结果引用携带 executionSessionId；`inspect_result` 必须同时提供它与 resultId。项目重启后的历史结果 ID 不能因为编号重用而读取到新结果，失效引用返回 ResultUnavailable，模型应重新查询当前结果。
+恢复历史后，Core 从已有 ResourceObservations 派生尚需读取的资源标识，在 Manager 首次采样前提供业务提示。
+提示只包含资源标识和读取要求，不包含内部版本、会话绑定或 hash。重新读取后该要求消失；忽略提示的委派仍被拒绝，
+不能把历史依据直接替换为最新版本以放行操作。
+
+`list_graph_results` / `execute_graph` 的每个结果交付完整 `resultRef`，模型原样传回即可。内部解析仍校验原执行会话与结果 ID；项目重启后的历史编号不能读取到新结果，过期引用返回 `ResultUnavailable` 和 `reference_expired`。
 
 Turn 流程是：
 
@@ -374,7 +492,7 @@ Host 在 active-turn 锁内捕获当前 turn 的 cancellation token，释放锁�
 
 Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事实。计划区分 research question、analysis mode、study design、estimands、variable roles、candidate methods、selected workflow、diagnostics、robustness 和 reporting needs。
 
-当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_dataset_schema` 和 `inspect_dataset_profile` 能力执行。通用 Workflow runtime 接收调用方构造的 versioned definition；每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表，compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作；桌面没有手动工作流控制入口。
+当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_database_schema` 和 `profile_database` 能力执行。通用 Workflow runtime 接收调用方构造的 versioned definition；每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表，compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作；桌面没有手动工作流控制入口。
 
 每个 run 的 advance 持有唯一执行租约；并发 advance 返回 `ConcurrentWorkflow`，状态转换使用短时异步互斥，能力调用期间不持有该转换锁。
 运行记录携带 revision；`save_run` 的创建仅允许不存在的记录，更新必须匹配预期 revision，成功返回递增版本，冲突不覆盖当前记录。
@@ -382,7 +500,7 @@ Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事
 暂停阻止新步骤派发，必须显式 resume。已准入步骤可以在重读当前版本并核对执行尝试后收尾，但保持 `Paused` 或恢复后的 `Ready`；再次 advance 才继续派发或确认完成。
 恢复跳过仍有执行所有者的 run。中断的 Inspect 步骤可重新调度，并保留已持久化的暂停状态；其他中断步骤标为 `TerminalFailure`，run 标为 `Failed`，避免重复执行可能已提交的操作，实际提交结果以工具账本和业务回执为准。
 
-统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败也返回具体字段或枚举错误。工具、并发度和输出模式统一由 Core 的角色配置传入 Rig。
+统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败返回字段、枚举、数值/长度范围及对应字段说明，不回显原始参数。`selectedWorkflow` 是不超过 128 UTF-8 字节的短工作流标识，不接收大段分析描述。工具、并发度和输出模式统一由 Core 的角色配置传入 Rig。
 
 Workflow run 绑定 exact definition ID/version 和 Project session。恢复或继续前必须重验 binding/currentness；step output 仍是 typed capability result，不允许 model 自行制造 estimate、p-value、standard error 或 confidence interval。
 
@@ -433,6 +551,12 @@ Hybrid/vector retrieval 和 remote Skill trust 尚未成为 current production c
 
 Application 的 `harness/models.rs` 是 provider/model 配置唯一 owner，保存到 app-data 的 `settings/language-models.json`。每个 provider 拥有稳定 ID、供应商名称 `name`、可选的独立自定义名称 `customName`、协议、Rig adapter、认证方式、API 根地址和模型目录；模型包含 ID、名称、可选上下文/输出容量、Temperature、Top P 与 JSON 扩展参数。采样参数留空时不覆盖供应商默认值；扩展参数使用该协议的原生字段，只配置生成选项，不能替换 Harness 的消息、工具、认证、流式控制或已提供的采样/输出设置。普通调用和上下文摘要共用配置。默认模型与会话选择都是 provider/model ID 对。配置读取失败只影响模型操作，不阻止应用初始化，也不静默重置文件。
 
+模型的可选 `reasoningEfforts` 是用户设置的档位限制，不是启用选择器的前置条件。未填写或留空时，选定模型即可选择 Low、Medium、High，包括手工创建和服务发现的模型；非空时只列出指定档位，并保留已声明的默认档位。前端选择器和目录刷新复用同一选项投影，刷新未配置档位的模型不会清空当前选择。Rig 仅提前拒绝明确列表之外的显式覆盖值，未配置列表时发送用户所选值，由服务验证实际支持，不根据模型名称猜测能力。显式档位由 Rig 分别映射为 Responses 的 `reasoning.effort`、Chat 的 `reasoning_effort`、Anthropic 的 `output_config.effort` 和 Gemini Interactions 的 `generation_config.thinking_level`，保留其他生成参数。需要单独启用思考的模型由用户填写其原生扩展参数，不对同协议下所有模型自动启用。
+
+Rig 复用上述原生字段映射读取模型扩展参数中明确声明的默认强度，由 Application 模型目录以 provider 状态中的只读 `reasoningDefaults`（模型 ID → 档位）交付。它不写入设置文件，前端不另外解析供应商原生参数或维护模型名称推断表。下拉列表不提供独立的“默认”项，而在对应档位标注“（默认）”；选中该档位或点击恢复按钮时，轮次 `reasoningEffort` 保持 null，继续继承模型配置。没有声明可识别默认值时不标记任何档位，未覆盖时显示“默认强度未知”，仍可选择具体强度或恢复继承设置。
+
+Rig 将供应商公开的推理文本流投影为 `ReasoningDelta`，不制造思考过程，不公开签名等内部字段。每次完成的模型调用通过 `UsageReported` 保存 Rig 归一化后的输入、输出、缓存读写和推理 Token 数，并区分普通响应与上下文摘要。缺失值保持 null；输入已经包含缓存、输出已经包含推理，消费方不能重复相加。供应商未返回用量的调用仍记录未知用量，不从文本长度猜测。
+
 API Key 通过 `keyring` 保存到系统凭据库，配置文件仅保存随机凭据引用，IPC 目录仅返回 `hasApiKey`。更换密钥先创建新凭据、原子提交配置，再删除旧凭据；待删除引用随配置持久化，删除失败会在后续读取或提交时重试。前端只保留表单中的临时密钥输入，偏好设置不再保存 AI 凭据。已存密钥以固定星号占位显示，空的密钥输入保留已存密钥，输入新值后保存则替换；设置页不提供单独删除密钥的控件，星号占位不作为密钥提交。配置和凭据不写入项目、对话事件或日志。
 
 OpenAI 兼容协议另支持 `none` 认证，用于无需密钥的本地服务。该模式不读取凭据、不发送 Authorization；从 API Key 切换过去会通过同一持久清理流程删除原密钥。设置页、默认模型和会话选择按认证方式判断可用性，不能仅依据 `hasApiKey` 禁用本地模型。
@@ -453,9 +577,20 @@ Rig adapter 使用 `rig-core`、`rig-agent` 和 `rig-reqwest` 0.43.0，最低 Ru
 
 模型工具签名仅包含 capability identity 与输入 schema。共享 `CapabilityDescriptor` 只保存能力身份、效果和条目上限，并按效果提供调用时限；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现；显式批准执行由 `ApprovalService` 校验并消费精确绑定请求的 grant，不使用声明式审批元数据。
 Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 4 KiB. Core owns identified tool lifecycle events. Worker summaries use the final accepted model response as plain text; Manager finalText retains the public transcript. The Host has no 1 MiB final-response admission limit. Cancellation preserves committed receipts and waits for admitted tools to settle.
+
+工具账本的 `ToolInvocationRequest` 区分已绑定的内部执行请求与执行前被拒绝的模型意图。参数解码失败、授权拒绝和基线绑定失败同样记录调用身份、公开能力名称、失败终态及开始/结束时间；绑定时间计入工具总耗时。成功解码的业务输入保留用于重放，畸形原始参数不落账本，重放该调用使用空参数和原结构化错误。被拒绝的调用不产生业务回执、不推进观察基线，启动恢复也不会把它误判为可能已提交的写入。
+
+委派、续接与统计计划的每次模型调用另由 Core 分配调用 ID，通过同一持久事件流记录 `ControlToolStarted` / `ControlToolFinished`，不新增账本或持久化表。Rig 的 [control.rs](../yss-harness-rig/src/tools/control.rs) 在参数解码前开始记录，成功、参数错误、准入失败、计划策略拒绝、取消及 panic 都经过同一终态路径；计划策略与委派业务仍由原 owner 执行。已准入控制任务加入原清理队列，取消等待其收尾。启动恢复将缺少终态的调用标记为 `outcome_unknown`，不重复执行已发生的委派或计划提交。
+
+`ControlToolFinished` 保存失败码与可选的诊断 details。参数错误保留 category、path 和 expected，策略拒绝保留 reason；Rig 将同一失败交给 Core 记录后再返回模型。缺少诊断的事件不推断或补造原因。
+
+控制调用耗时包含绑定、Worker 排队与执行以及结果交付，不能解释为纯模型或节点计算时间；Worker 本身继续由原 AgentRun 事件记录准入、运行和结算。IPC 将控制调用投影成普通工具生命周期，详情从原事件重建开始/结束时间；任务正文、授权、结果与统计计划沿用各自的任务卡及计划展示，不复制到工具参数摘要中。真实图运行的 admission/running/finalization 时间仍由 Execution owner 提供。
+
 实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
 
 普通工具和统计计划工具共用 Rig adapter 的参数解码器。反序列化失败以现有 CapabilityFailure 的 InvalidRequest 返回 reason、category、path 和 expected；字段路径只保留 schema 已声明的字段及数组索引，动态 map key 脱敏，预期类型、范围和枚举来自工具自身 schema，并限制诊断长度。原始 Serde 文案、错误参数值和凭据不进入反馈。计划策略拒绝继续提供 reason 和 availableMethods。
+
+模型生成当前未注册或不允许调用的工具名时，Rig 的 `tools/feedback` hook 通过原生 Skip 决策向模型返回 `tool_not_available` 和当前允许的工具名称，不把它直接升级为整轮 `invalid_provider_response`。流式响应中尚未准入的同批工具不会执行，已完成的前序工具不重放；不自动猜测工具别名，也不扩张角色权限。未注册调用没有 Core capability 身份，不伪造业务账本；诊断日志仅记录原因和工具名，不记录参数或历史。协议参数字节不可解析时仍保留原有失败分类。
 
 Rig 0.43 hooks implement the delivery check at the tool-free model completion boundary. Core returns authoritative missing-delivery feedback; Rig continues through ModelTurnRetried. An identical check without new committed artifacts stops with DeliveryBlocked instead of looping on repeated reads. Core also marks the Manager run blocked when a declared report task lacks its final save. Fatal tool signals still stop sampling and await admitted tool cleanup. The model-turn hook rejects output truncation and content filtering before admitting tool calls; a partial response cannot become a completed answer. Provider errors use Rig's structured error reports without logging response bodies or source chains.
 
@@ -464,7 +599,7 @@ Transport recovery retries only the latest sampling boundary, at most five conse
 
 ## 9. Tauri transport and frontend projection
 
-`yss-application::ipc` 提供 provider configuration、项目范围的 session 管理与重命名、event subscribe/unsubscribe、turn submit/cancel，以及只读工具详情和引用来源查询。工具详情读取已有 ledger 后只投影目标、操作摘要、资源与结果引用、开始/结束时间，不发送原始完整参数、数据行或文档正文。引用查询匹配来源、版本、hash、chunk 与项目可见性；来源删除或版本改变后返回不可用。模型配置回执返回不含密钥的目录，模型选择回执返回更新后的会话。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准。
+`yss-application::ipc` 提供 provider configuration、项目范围的 session 管理与重命名、event subscribe/unsubscribe、turn submit/cancel，以及只读工具详情和引用来源查询。工具详情读取已有 ledger 或控制调用事件，投影目标、操作摘要、资源与结果引用、开始/结束时间，以及 nullable `failure`（code、details）。失败详情复用 Contract 的公开错误投影；React 显示字段位置、类型要求和已知错误类别，不发送原始完整参数、数据行或文档正文。引用查询匹配来源、版本、hash、chunk 与项目可见性；来源删除或版本改变后返回不可用。模型配置回执返回不含密钥的目录，模型选择回执返回更新后的会话。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准。
 
 有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。
 前端 `src/features/application/assistant/assistantHarnessSession.ts` 协调会话、模型选择与重连；历史回放先归约到未发布候选，在订阅接通后通过内部
@@ -491,7 +626,7 @@ Service 清理后忽略迟到的 Channel 回调；订阅应答前若已被 HMR �
 
 `submit_harness_turn.resources` 只接收 `{kind,id}`。Core 先登记轮次准入和取消令牌，再通过 `HarnessResourceResolverPort` 调用 Application；后者在 blocking pool 复用资源工具的 Project index，检查项目绑定、真实成员和重复项，并补充权威显示名。资源与模型解析不持有会话选择锁；完成后 Core 重新读取和验证会话。解析期间取消立即结束等待，迟到的只读结果不能启动模型或发布 `TurnStarted`。Core 将 `{resource,name}` 随 `TurnStarted` 持久化，当前请求和历史回放使用同一个 user-input 投影。模型得到资源定位信息，按任务需要调用资源工具读取正文或结果；引用不携带 revision/hash/同步状态，也不提前展开完整图或数据行。没有隐式的 active graph 参数。资源在之后被修改或删除时，读取工具仍检查当前事实；历史引用不会跟随编辑器焦点改变。
 
-运行期间可把后续消息、模型和明确选择的资源放入待发送列表，当前会话任务成功结束后顺序提交。切换模型或编辑下一条引用不会改变已排队输入。失败、停止、重开会话后暂停自动发送；这不修改已运行任务。未确认输入保留正文、引用与模型，匹配正文和引用的 `TurnStarted` 才清除其提交草稿；未接纳输入通过 assistant-ui 的 `MessageNotSentError` 恢复，引用也保留。已接纳任务失败时保留真实用户消息和回执，继续操作沿用已有任务上下文，重新连接只修复订阅。
+运行期间可把后续消息、模型、执行选项和明确选择的资源放入待发送列表，当前会话任务成功结束后顺序提交。切换模型、模式、推理档位或编辑下一条引用不会改变已排队输入和正在运行的请求。失败、停止、重开会话后暂停自动发送；这不修改已运行任务。未确认输入保留正文、引用、模型与执行选项，匹配正文和引用的 `TurnStarted` 才清除其提交草稿；未接纳输入通过 assistant-ui 的 `MessageNotSentError` 恢复，引用也保留。恢复草稿时一并恢复选项与模型；新草稿选项不被历史重放覆盖。已接纳任务失败时保留真实用户消息和回执，继续操作沿用已有任务上下文，重新连接只修复订阅。
 
 结构化输入参考 [Codex UserInput](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/user_input.rs) 对文本和显式 mention 的区分，选择入口参考 [Zed Adding Context](https://zed.dev/docs/ai/agent-panel#adding-context)。YssBI 的引用保持项目资源身份，不把任意本地文件路径当作可读取权限。
 
@@ -513,6 +648,10 @@ IPC exposes progress counts without checkpoint text or hashes; the main conversa
 消息投影按事件顺序维护 text/source/data/tool parts，相邻文本片段合并，工具终态更新原位置。完成事件只收尾已有流式内容；仅在没有文本片段时使用 `finalText` 恢复正文。取消、失败和按 sequence 重放不覆盖中间说明或重排工具。
 
 Assistant 面板使用 assistant-ui 的 Thread Viewport、Composer 与 ActionBar。正文和子任务总结共用 Markdown 渲染，支持 GFM、代码和公式。连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先；默认展示本地化名称、目标、状态和耗时，技术标识及摘要 JSON 放进详情。可见的工具卡片按需查询 ledger 摘要，失败原因直接显示，不因缺少原始参数而禁止展开。子任务的阶段、整理进度、重连次数及失败/阻塞原因在折叠区外可见，内部保留各工具调用的状态与时间。
+
+对话采用紧凑标题栏、平铺消息和底部通栏输入区。标题栏提供下一轮只读开关、新建、重命名、最大化/还原及关闭；底部工具栏提供显式资源引用、推理档位、Token 用量、Ask/Write、可搜索模型选择器和发送/停止。输入支持展开及 Ctrl+Enter，窄面板工具栏可换行。控件复用现有 shadcn/Base UI，事件与 runtime 继续使用 assistant-ui ExternalStore，不引入第二套聊天状态。历史回复根据 `TurnConfigured` 显示实际执行模式与档位，公开推理文本单独折叠展示。
+
+用量投影按持久事件 sequence 重放，每轮开始清空本轮累计，累计包括 Manager、Worker 和上下文摘要的已报告消耗。环形图只使用主对话最近普通请求的输入数与该次配置的上下文容量；Worker、摘要用量不会替换这个读数，整理完成后清空旧占用，等待下次真实请求。未配置容量或供应商未报告数值时明确显示未知；部分调用缺失用量时标明累计不完整。切换下一轮模型不会把上一轮用量标成新模型。
 
 整轮回复从 TurnStarted 开始计时，以持久终态事件结束；工具和子任务分别保留自己的开始/结束时间。运行期间局部计时组件每秒刷新，完成、失败或取消后耗时固定，悬浮可查看开始、结束与最近进展时间。同一轮内恢复 Worker 会新增一次执行卡片，保留前次耗时。事件连接失效时显示待同步，不伪造完成时刻或持续展示旧活动；错误、连接恢复和停止状态优先于普通工具阶段。
 

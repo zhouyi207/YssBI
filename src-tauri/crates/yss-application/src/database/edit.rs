@@ -121,7 +121,7 @@ impl ApplicationState {
         expected_revision: ResourceRevision,
         operation_id: OperationId,
         mutation: DatabaseMutation,
-    ) -> Result<DatabaseMutationResult<EditState>, DatabaseUseCaseError> {
+    ) -> Result<DatabaseMutationResult<super::DatabaseEditResult>, DatabaseUseCaseError> {
         let operation = mutation.operation();
         let captured = self.capture_database_session(&project_instance_id)?;
         let declaration = database_declaration(&captured, &id, operation)?;
@@ -135,7 +135,10 @@ impl ApplicationState {
             operation,
         )?;
         Ok(DatabaseMutationResult {
-            data: receipt.edit_state().clone(),
+            data: super::DatabaseEditResult {
+                edit_state: receipt.edit_state().clone(),
+                inserted_row_ids: receipt.inserted_row_ids().to_vec(),
+            },
             mutation: receipt.mutation().clone(),
         })
     }

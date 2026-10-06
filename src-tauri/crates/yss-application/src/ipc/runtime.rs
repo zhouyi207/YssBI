@@ -6,8 +6,9 @@ use std::sync::Arc;
 use tauri::Manager;
 use yss_ipc_channel::HarnessChannelHub;
 
+use crate::harness::ApplicationCapabilityGateway;
 use crate::ipc::activity_panel_sync::ActivityPanelSyncState;
-use crate::ipc::commands::{ApplicationCapabilityGateway, HarnessRuntimeState};
+use crate::ipc::commands::HarnessRuntimeState;
 
 #[derive(Default)]
 pub(crate) struct CommandRuntime {

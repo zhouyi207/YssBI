@@ -14,10 +14,8 @@ use yss_ipc_contract::harness::HarnessSessionDto;
 use yss_ipc_contract::harness::HarnessSubscriptionDto;
 use yss_ipc_contract::harness::HarnessTurnResultDto;
 
-mod gateway;
 mod knowledge;
 mod models;
-pub use gateway::ApplicationCapabilityGateway;
 pub use knowledge::*;
 pub use models::*;
 
@@ -62,13 +60,27 @@ pub async fn inspect_harness_tool(
         .host
         .inspect_tool_invocation(&session_id, &invocation_id)
         .await
-        .map_err(map_harness_error)?
-        .ok_or_else(|| CommandError::expected("harness_tool_unavailable"))?;
+        .map_err(map_harness_error)?;
+    let inspection = match record {
+        Some(record) => record.into(),
+        None => {
+            let events = runtime
+                .host
+                .events_after(&session_id, 0)
+                .await
+                .map_err(map_harness_error)?;
+            yss_ipc_contract::harness::HarnessToolInspectionDto::from_control_events(
+                &events,
+                &invocation_id,
+            )
+            .ok_or_else(|| CommandError::expected("harness_tool_unavailable"))?
+        }
+    };
     application
         .validate_harness_session(&runtime.host, &principal, &session_id)
         .await
         .map_err(map_session_error)?;
-    Ok(record.into())
+    Ok(inspection)
 }
 
 #[tauri::command]
@@ -224,6 +236,7 @@ pub async fn submit_harness_turn(
     message: String,
     resources: Vec<yss_harness_contract::ProjectResourceRef>,
     model: Option<LanguageModelSelection>,
+    options: yss_harness_contract::HarnessTurnOptions,
 ) -> Result<HarnessTurnResultDto, CommandError> {
     let session_id = parse_session_id(session_id)?;
     let principal =
@@ -234,7 +247,14 @@ pub async fn submit_harness_turn(
         .map_err(map_session_error)?;
     runtime
         .host
-        .submit_turn(&session_id, &session.project, message, resources, model)
+        .submit_turn(
+            &session_id,
+            &session.project,
+            message,
+            resources,
+            model,
+            options,
+        )
         .await
         .map(|result| HarnessTurnResultDto {
             final_text: result.final_text,

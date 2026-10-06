@@ -1,4 +1,9 @@
 use super::*;
+use std::collections::BTreeMap;
+mod chart;
+mod database_reads;
+mod document;
+mod mind;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -149,13 +154,7 @@ fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gate
     assert!(
         fixture
             .call(AutomationCapabilityRequest::InspectResource(
-                InspectResourceRequest {
-                    graph_view: GraphInspectionView::Overview,
-                    metadata_only: false,
-                    resource: doc,
-                    offset: 0,
-                    limit: 1
-                }
+                InspectResourceRequest { resource: doc }
             ))
             .is_ok()
     );
@@ -236,22 +235,10 @@ impl Fixture {
             .resource
     }
     fn inspect(&mut self, resource: &ProjectResourceRef) -> ResourceInspection {
-        self.page(resource, 0, 100)
-    }
-    fn page(
-        &mut self,
-        resource: &ProjectResourceRef,
-        offset: usize,
-        limit: usize,
-    ) -> ResourceInspection {
         let AutomationCapabilityResult::ResourceInspection(result) = self
             .call(AutomationCapabilityRequest::InspectResource(
                 InspectResourceRequest {
-                    graph_view: GraphInspectionView::Overview,
-                    metadata_only: false,
                     resource: resource.clone(),
-                    offset,
-                    limit,
                 },
             ))
             .unwrap()
@@ -259,6 +246,54 @@ impl Fixture {
             panic!("resource inspection")
         };
         result
+    }
+    fn graph(&mut self, resource: &ProjectResourceRef) -> GraphInspectionPage {
+        let AutomationCapabilityResult::GraphInspectionPage(value) = self
+            .call(AutomationCapabilityRequest::InspectGraph(
+                InspectGraphRequest::overview(&resource.id),
+            ))
+            .unwrap()
+        else {
+            panic!("graph overview")
+        };
+        value
+    }
+    fn database_schema(&mut self, resource: &ProjectResourceRef) -> Vec<DatasetColumnSchema> {
+        let value = database_reads::read(
+            self,
+            model::DatabaseReadInput::Schema(model::InspectDatabaseSchemaInput {
+                database: model::DatabaseResourceRef::new(resource.id.clone()),
+                columns: vec![],
+                offset: 0,
+                limit: 100,
+            }),
+            None,
+        )
+        .unwrap();
+        let DatabaseReadContent::Schema { columns, .. } = value.content else {
+            panic!("database schema")
+        };
+        columns
+    }
+    fn database_rows(&mut self, resource: &ProjectResourceRef, limit: usize) -> DatabaseReadResult {
+        let columns = self
+            .database_schema(resource)
+            .into_iter()
+            .map(|column| column.name)
+            .collect();
+        database_reads::read(
+            self,
+            model::DatabaseReadInput::Rows(model::ReadDatabaseRowsInput {
+                database: model::DatabaseResourceRef::new(resource.id.clone()),
+                columns,
+                filters: vec![],
+                order: vec![],
+                offset: 0,
+                limit,
+            }),
+            None,
+        )
+        .unwrap()
     }
     fn edit(
         &mut self,
@@ -291,6 +326,7 @@ impl Fixture {
         let csv = self.directory.join("Data.csv");
         std::fs::write(&csv, "x,label\n1,a\n2,b\n3,c\n").unwrap();
         self.create(ResourceCreation::Database {
+            name: None,
             source: DatasetImportSource::Csv {
                 path: csv.to_string_lossy().into(),
                 delimiter: ',',
@@ -335,6 +371,128 @@ fn publication_failure_keeps_the_committed_resource_receipt() {
 }
 
 #[test]
+fn lifecycle_receipts_continue_at_the_committed_identity_without_content_reads() {
+    let mut f = Fixture::new();
+    let created = f.manage(ManageResourceRequest::Create {
+        specification: ResourceCreation::Mind {
+            name: "Ideas".into(),
+        },
+    });
+    let state = created.resources.into_iter().next().unwrap();
+    assert_eq!(state.dirty, Some(false));
+    assert!(state.root_topic_id.is_some());
+    let renamed = f.manage(ManageResourceRequest::Rename {
+        resource: state.resource,
+        version: state.version,
+        name: "Research".into(),
+    });
+    let state = renamed.resources[0].clone();
+    assert_eq!(state.name, "Research");
+    assert_eq!(state.resource.id, "minds/Research.yssbi-mind");
+    let copied = f.manage(ManageResourceRequest::Duplicate {
+        resource: state.resource.clone(),
+        version: state.version.clone(),
+        name: Some("Research copy".into()),
+    });
+    let copy = copied.resources.into_iter().next().unwrap();
+    assert_eq!(copy.name, "Research copy");
+    assert_ne!(state.resource, copy.resource);
+    assert_ne!(state.root_topic_id, copy.root_topic_id);
+    let failed = f
+        .call(AutomationCapabilityRequest::ManageResource(
+            ManageResourceRequest::Duplicate {
+                resource: state.resource.clone(),
+                version: state.version.clone(),
+                name: Some("../invalid".into()),
+            },
+        ))
+        .unwrap_err();
+    assert_eq!(failed.code, CapabilityFailureCode::MutationRejected);
+    let saved = f.manage(ManageResourceRequest::Save {
+        resource: copy.resource,
+        version: copy.version,
+    });
+    let copy = saved.resources.into_iter().next().unwrap();
+    let deleted = f.manage(ManageResourceRequest::Delete {
+        resource: copy.resource.clone(),
+        version: copy.version,
+    });
+    assert!(
+        deleted
+            .changes
+            .iter()
+            .any(|change| change.resource == copy.resource && change.deleted)
+    );
+    assert!(deleted.resources.is_empty());
+    let public =
+        model::capability_result(&AutomationCapabilityResult::ResourceManaged(renamed)).unwrap();
+    assert_eq!(public["payload"]["resources"][0]["name"], "Research");
+    assert!(public["payload"]["resources"][0].get("version").is_none());
+}
+
+#[test]
+fn resource_catalog_pages_filters_and_inspects_without_decoding_bodies() {
+    let mut f = Fixture::new();
+    let a = f.create(ResourceCreation::Doc {
+        name: "Report A".into(),
+    });
+    f.create(ResourceCreation::Doc {
+        name: "Report B".into(),
+    });
+    let graph = f.create(ResourceCreation::EventGraph {
+        name: "Report graph".into(),
+    });
+    let session = f.application.as_ref().unwrap().capture_session().unwrap();
+    let root = session.project().capture_project_session().unwrap().root;
+    // Metadata remains available even when a file body cannot be decoded. Only
+    // subsequent content use owns that validation; discovery must not open it.
+    std::fs::write(root.as_path().join(&graph.id), "invalid graph body").unwrap();
+    std::fs::write(root.as_path().join(&a.id), [0xff, 0xfe]).unwrap();
+    let request = ListResourcesRequest {
+        kinds: vec![ProjectResourceKind::Doc],
+        query: Some("REPORT".into()),
+        limit: 1,
+        ..Default::default()
+    };
+    let AutomationCapabilityResult::ProjectInspection(first) = f
+        .call(AutomationCapabilityRequest::ListResources(request.clone()))
+        .unwrap()
+    else {
+        panic!("resource list");
+    };
+    assert_eq!(first.resources.len(), 1);
+    assert_eq!(first.resources[0].resource, a);
+    assert_eq!(first.page, InspectionPage::known(0, 1, 2));
+    let AutomationCapabilityResult::ProjectInspection(second) = f
+        .call(AutomationCapabilityRequest::ListResources(
+            ListResourcesRequest {
+                offset: first.page.next_offset.unwrap(),
+                ..request
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("resource list");
+    };
+    assert!(!second.page.has_more);
+    assert_ne!(first.resources[0].resource, second.resources[0].resource);
+    for resource in [a, graph] {
+        let AutomationCapabilityResult::ResourceInspection(metadata) = f
+            .call(AutomationCapabilityRequest::InspectResource(
+                InspectResourceRequest {
+                    resource: resource.clone(),
+                },
+            ))
+            .unwrap()
+        else {
+            panic!("resource metadata");
+        };
+        assert_eq!(metadata.resource, resource);
+        assert!(matches!(metadata.content, ResourceContent::Metadata));
+    }
+}
+
+#[test]
 fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() {
     let mut f = Fixture::new();
     let session = f.application.as_ref().unwrap().capture_session().unwrap();
@@ -362,9 +520,11 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
         };
         let result = f
             .call(AutomationCapabilityRequest::RequestUiIntent(
-                yss_ui_contract::RequestUiIntent {
+                RequestUiIntent {
                     client_key: uuid::Uuid::new_v4().to_string(),
-                    intent: intent.clone(),
+                    input: model::RequestUiIntentInput {
+                        intent: model::UiIntentInput::try_from(&intent).unwrap(),
+                    },
                 },
             ))
             .unwrap();
@@ -386,6 +546,7 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
         assert_eq!(target.kind, resource.kind);
         let version = f.inspect(&target).version;
         let copy = f.manage(ManageResourceRequest::Duplicate {
+            name: Some(format!("{} Custom copy", original.name)),
             resource: target.clone(),
             version,
         });
@@ -401,7 +562,10 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
             .resource
             .clone();
         assert_eq!(copied.kind, target.kind);
-        f.inspect(&copied);
+        assert_eq!(
+            f.inspect(&copied).name,
+            format!("{} Custom copy", original.name)
+        );
         f.save(&target);
         for item in [target, copied] {
             let version = f.inspect(&item).version;
@@ -417,13 +581,7 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
             );
             assert_eq!(
                 f.call(AutomationCapabilityRequest::InspectResource(
-                    InspectResourceRequest {
-                        graph_view: GraphInspectionView::Overview,
-                        metadata_only: false,
-                        resource: item,
-                        offset: 0,
-                        limit: 100
-                    }
+                    InspectResourceRequest { resource: item }
                 ))
                 .unwrap_err()
                 .code,
@@ -433,8 +591,8 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
     }
     session.presentation.detach_workbench();
     let AutomationCapabilityResult::ProjectInspection(project) = f
-        .call(AutomationCapabilityRequest::InspectProject(
-            InspectProjectRequest {},
+        .call(AutomationCapabilityRequest::ListResources(
+            ListResourcesRequest::default(),
         ))
         .unwrap()
     else {
@@ -449,246 +607,29 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
 }
 
 #[test]
-fn markdown_pages_and_range_edits_preserve_unseen_unicode_and_reject_stale_versions() {
-    let mut f = Fixture::new();
-    let resource = f.create(ResourceCreation::Doc {
-        name: "Report".into(),
-    });
-    assert!(
-        matches!(f.inspect(&resource).content, ResourceContent::Doc { markdown, .. } if markdown.is_empty())
-    );
-    f.edit(
-        &resource,
-        ResourceEdit::Doc {
-            operations: vec![MarkdownOperation::SetMarkdown {
-                markdown: "A🙂中文Z".into(),
-            }],
-        },
-    );
-    let page = f.page(&resource, 1, 2);
-    assert!(page.dirty);
-    assert!(
-        matches!(&page.content, ResourceContent::Doc { markdown, total_characters: 5, next_offset: Some(3) } if markdown == "🙂中")
-    );
-    f.edit(
-        &resource,
-        ResourceEdit::Doc {
-            operations: vec![MarkdownOperation::ReplaceRange {
-                start: 1,
-                end: 4,
-                markdown: "段落".into(),
-            }],
-        },
-    );
-    let publications = f.publications.len();
-    assert_eq!(
-        f.call(AutomationCapabilityRequest::EditResource(
-            EditResourceRequest {
-                resource: resource.clone(),
-                version: page.version,
-                edit: ResourceEdit::Doc {
-                    operations: vec![MarkdownOperation::SetMarkdown {
-                        markdown: "stale".into()
-                    }]
-                }
-            }
-        ))
-        .unwrap_err()
-        .code,
-        CapabilityFailureCode::RevisionConflict
-    );
-    let current = f.inspect(&resource);
-    assert_eq!(
-        f.call(AutomationCapabilityRequest::EditResource(
-            EditResourceRequest {
-                resource: resource.clone(),
-                version: current.version,
-                edit: ResourceEdit::Doc {
-                    operations: vec![MarkdownOperation::ReplaceRange {
-                        start: 99,
-                        end: 100,
-                        markdown: "invalid".into()
-                    }]
-                }
-            }
-        ))
-        .unwrap_err()
-        .code,
-        CapabilityFailureCode::InvalidRequest
-    );
-    assert_eq!(f.publications.len(), publications);
-    assert_eq!(
-        std::fs::read_to_string(f.directory.join("project").join(&resource.id)).unwrap(),
-        ""
-    );
-    f.save(&resource);
-    assert_eq!(
-        std::fs::read_to_string(f.directory.join("project").join(&resource.id)).unwrap(),
-        "A段落Z"
-    );
-    assert!(!f.inspect(&resource).dirty);
-}
-
-#[test]
-fn mind_batches_resolve_created_ids_and_roll_back_invalid_hierarchy_changes() {
-    let mut f = Fixture::new();
-    let resource = f.create(ResourceCreation::Mind {
-        name: "Plan".into(),
-    });
-    let ResourceContent::Mind { root_id, .. } = f.inspect(&resource).content else {
-        panic!()
-    };
-    let created = f.edit(
-        &resource,
-        ResourceEdit::Mind {
-            operations: vec![
-                MindOperation::AddNode {
-                    client_id: "branch".into(),
-                    parent_id: root_id.clone(),
-                    content: "Branch".into(),
-                },
-                MindOperation::AddNode {
-                    client_id: "leaf".into(),
-                    parent_id: "$branch".into(),
-                    content: "Leaf".into(),
-                },
-                MindOperation::SetReference {
-                    node_id: "$leaf".into(),
-                    reference: Some(MindResourceReference::Resource {
-                        path: "docs/Report.md".into(),
-                    }),
-                },
-            ],
-        },
-    );
-    let branch = &created.created_nodes["branch"];
-    let leaf = &created.created_nodes["leaf"];
-    assert_ne!(branch, "branch");
-    let before = f.inspect(&resource);
-    let published = f.publications.len();
-    let error = f
-        .call(AutomationCapabilityRequest::EditResource(
-            EditResourceRequest {
-                resource: resource.clone(),
-                version: before.version.clone(),
-                edit: ResourceEdit::Mind {
-                    operations: vec![
-                        MindOperation::SetContent {
-                            node_id: root_id.clone(),
-                            content: "must not commit".into(),
-                        },
-                        MindOperation::MoveNode {
-                            node_id: branch.clone(),
-                            parent_id: leaf.clone(),
-                            before_id: None,
-                        },
-                    ],
-                },
-            },
-        ))
-        .unwrap_err();
-    assert_eq!(error.code, CapabilityFailureCode::MutationRejected);
-    assert_eq!(f.publications.len(), published);
-    assert_eq!(f.inspect(&resource), before);
-    f.edit(
-        &resource,
-        ResourceEdit::Mind {
-            operations: vec![
-                MindOperation::MoveNode {
-                    node_id: leaf.clone(),
-                    parent_id: root_id.clone(),
-                    before_id: Some(branch.clone()),
-                },
-                MindOperation::RemoveNode {
-                    node_id: branch.clone(),
-                },
-            ],
-        },
-    );
-    let ResourceContent::Mind {
-        nodes, total_nodes, ..
-    } = f.inspect(&resource).content
-    else {
-        panic!()
-    };
-    assert_eq!(total_nodes, 2);
-    assert_eq!(nodes[1].id, *leaf);
-    assert_eq!(nodes[1].parent_id.as_deref(), Some(root_id.as_str()));
-    assert!(nodes[1].reference.is_some());
-    f.save(&resource);
-    assert!(!f.inspect(&resource).dirty);
-}
-
-#[test]
-fn chart_edits_persist_and_reject_an_old_baseline_at_the_writer_boundary() {
-    let mut f = Fixture::new();
-    let resource = f.create(ResourceCreation::Chart {
-        name: "Plot".into(),
-    });
-    let before = f.inspect(&resource);
-    let settings = ChartSettings {
-        database_id: "sales".into(),
-        chart_type: ChartType::Line,
-        x: Some("time".into()),
-        y: Some("amount".into()),
-    };
-    f.edit(
-        &resource,
-        ResourceEdit::Chart {
-            settings: settings.clone(),
-        },
-    );
-    let after = f.inspect(&resource);
-    assert_eq!(after.content, ResourceContent::Chart { settings });
-    assert!(!after.dirty);
-    let session = f.application.as_ref().unwrap().capture_session().unwrap();
-    let rejected = f.application.as_ref().unwrap().save_chart_resource(
-        session.project_instance_id().clone(),
-        OperationId::new(),
-        chart_path(&resource).unwrap(),
-        yss_chart_document::ChartDocument::new("stale"),
-        Some(ResourceRevision::new(before.version.revision)),
-    );
-    assert!(matches!(
-        rejected,
-        Err(crate::chart::ChartApplicationError::Project(
-            yss_project::ProjectOperationError::ResourceRevisionConflict { .. }
-        ))
-    ));
-    assert_eq!(f.inspect(&resource), after);
-    let disk: yss_chart_document::ChartDocument = serde_json::from_str(
-        &std::fs::read_to_string(f.directory.join("project").join(&resource.id)).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(disk.chart_type, ChartType::Line);
-    assert_eq!(disk.encodings.y.as_deref(), Some("amount"));
-}
-
-#[test]
 fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecycle() {
     let mut f = Fixture::new();
     let resource = f.dataset();
-    let first = f.page(&resource, 0, 2);
-    let ResourceContent::Database {
+    let first = f.database_rows(&resource, 2);
+    let DatabaseReadContent::Rows {
         rows,
         row_ids,
-        next_offset,
+        page,
         ..
     } = &first.content
     else {
         panic!()
     };
     assert_eq!(rows.len(), 2);
-    assert_eq!(*next_offset, Some(2));
+    assert_eq!(page.next_offset, Some(2));
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::EditCell {
-                row: 0,
+        ResourceEdit::UpdateCells {
+            cells: vec![model::DatabaseCellEdit {
+                row_id: row_ids[0],
                 column: "x".into(),
-                value: serde_json::json!(9),
-                row_id: Some(row_ids[0]),
-            },
+                value: yss_data_contract::TabularScalar::Integer(9),
+            }],
         },
     );
     assert_eq!(
@@ -696,11 +637,8 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
             EditResourceRequest {
                 resource: resource.clone(),
                 version: first.version,
-                edit: ResourceEdit::Database {
-                    operation: DatasetOperation::DeleteRows {
-                        indices: vec![0],
-                        row_ids: None
-                    }
+                edit: ResourceEdit::DeleteRows {
+                    row_ids: vec![row_ids[0]],
                 }
             }
         ))
@@ -708,46 +646,59 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
         .code,
         CapabilityFailureCode::RevisionConflict
     );
-    f.edit(
+    let inserted = f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::AddRow { index: Some(1) },
+        ResourceEdit::InsertRows {
+            rows: vec![
+                BTreeMap::new(),
+                [("x".into(), yss_data_contract::TabularScalar::Integer(15))].into(),
+            ],
+            before_row_id: Some(row_ids[1]),
         },
     );
-    let ResourceContent::Database { row_ids, .. } = f.inspect(&resource).content else {
+    let inserted_rows = inserted.database_edit.as_ref().unwrap();
+    assert_eq!(inserted_rows.item_count, 2);
+    assert_eq!(inserted_rows.inserted_row_ids.len(), 2);
+    assert!(inserted_rows.dirty && inserted_rows.can_undo);
+    let visible = model::capability_result(&AutomationCapabilityResult::ResourceEdited(
+        inserted.clone(),
+    ))
+    .unwrap();
+    assert_eq!(
+        visible["payload"]["databaseEdit"]["insertedRowIds"],
+        serde_json::json!(inserted_rows.inserted_row_ids)
+    );
+    let DatabaseReadContent::Rows { row_ids, .. } = f.database_rows(&resource, 100).content else {
         panic!()
     };
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::DeleteRows {
-                indices: vec![1],
-                row_ids: Some(vec![row_ids[1]]),
-            },
+        ResourceEdit::DeleteRows {
+            row_ids: vec![row_ids[1], row_ids[2]],
         },
     );
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::AddColumn {
+        ResourceEdit::CreateColumns {
+            columns: vec![model::DatabaseColumnDeclaration {
                 name: "flag".into(),
                 dtype: "Int64".into(),
-            },
+            }],
         },
     );
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::RenameColumn {
-                old_name: "flag".into(),
-                new_name: "group".into(),
-            },
+        ResourceEdit::RenameColumns {
+            columns: vec![model::DatabaseColumnRename {
+                column: "flag".into(),
+                name: "group".into(),
+            }],
         },
     );
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::SetColumnSemantic {
+        ResourceEdit::SetColumnSemantics {
+            columns: vec![model::DatabaseColumnMeaning {
                 column: "group".into(),
                 semantic: DatasetColumnSemantic {
                     kind: DatasetSemanticKind::Binary,
@@ -764,64 +715,51 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
                     positive_value: Some("1".into()),
                     numeric: None,
                 },
-            },
+            }],
         },
     );
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::DeleteColumn {
-                name: "group".into(),
-            },
+        ResourceEdit::DeleteColumns {
+            columns: vec!["group".into()],
         },
     );
-    f.edit(
-        &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::Undo,
-        },
-    );
+    f.edit(&resource, ResourceEdit::DatabaseHistory { redo: false });
     let restored = f.inspect(&resource);
+    f.edit(&resource, ResourceEdit::DatabaseHistory { redo: true });
+    assert!(f.database_schema(&resource).len() == 2);
+    f.edit(&resource, ResourceEdit::DatabaseHistory { redo: false });
     f.edit(
         &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::Redo,
-        },
-    );
-    assert!(
-        matches!(f.inspect(&resource).content, ResourceContent::Database { schema, .. } if schema.columns.len() == 2)
-    );
-    f.edit(
-        &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::Undo,
-        },
-    );
-    f.edit(
-        &resource,
-        ResourceEdit::Database {
-            operation: DatasetOperation::CastColumn {
+        ResourceEdit::CastColumns {
+            columns: vec![model::DatabaseColumnCast {
                 column: "x".into(),
                 dtype: "Float64".into(),
                 force: false,
-            },
+            }],
         },
     );
     f.save(&resource);
     let current = f.inspect(&resource);
     assert!(!current.dirty);
-    let ResourceContent::Database { schema, rows, .. } = &current.content else {
+    let schema = f.database_schema(&resource);
+    let page = f.database_rows(&resource, 100);
+    let DatabaseReadContent::Rows { rows, .. } = &page.content else {
         panic!()
     };
-    assert_eq!(schema.columns[0].physical_type, "Float64");
-    assert_eq!(rows[0][0], serde_json::json!(9.0));
+    assert_eq!(schema[0].physical_type, "Float64");
+    assert_eq!(
+        serde_json::to_value(&rows[0][0]).unwrap(),
+        serde_json::json!(9.0)
+    );
     assert!(
-        schema.columns[2]
+        schema[2]
             .semantic
             .as_ref()
             .is_some_and(|value| value.kind == DatasetSemanticKind::Binary)
     );
     let duplicate = f.manage(ManageResourceRequest::Duplicate {
+        name: None,
         resource: resource.clone(),
         version: current.version.clone(),
     });
@@ -832,33 +770,32 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
         .unwrap()
         .resource
         .clone();
-    let ResourceContent::Database {
-        schema: copied_schema,
-        rows: copied_rows,
-        ..
-    } = f.inspect(&copy).content
+    let copied_schema = f.database_schema(&copy);
+    let DatabaseReadContent::Rows {
+        rows: copied_rows, ..
+    } = f.database_rows(&copy, 100).content
     else {
         panic!()
     };
     assert_eq!(copied_rows, *rows);
-    assert_eq!(copied_schema.columns, schema.columns);
+    assert_eq!(copied_schema, schema);
     let output = f.directory.join("export.csv");
-    let export = ExportDatasetRequest {
+    let export = ExportDatabaseRequest {
         resource: resource.clone(),
         version: current.version,
         path: output.to_string_lossy().into(),
         format: DatasetExportFormat::Csv,
     };
     assert!(matches!(
-        f.call(AutomationCapabilityRequest::ExportDataset(export))
+        f.call(AutomationCapabilityRequest::ExportDatabase(export))
             .unwrap(),
-        AutomationCapabilityResult::DatasetExported(_)
+        AutomationCapabilityResult::DatabaseExported(_)
     ));
     let exported = std::fs::read_to_string(&output).unwrap();
     assert!(exported.contains("group"));
     assert_eq!(
-        f.call(AutomationCapabilityRequest::ExportDataset(
-            ExportDatasetRequest {
+        f.call(AutomationCapabilityRequest::ExportDatabase(
+            ExportDatabaseRequest {
                 resource: resource.clone(),
                 version: restored.version,
                 path: output.to_string_lossy().into(),
@@ -881,12 +818,14 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
     session.presentation.attach_workbench();
     assert!(
         f.call(AutomationCapabilityRequest::RequestUiIntent(
-            yss_ui_contract::RequestUiIntent {
+            RequestUiIntent {
                 client_key: "database-open".into(),
-                intent: yss_ui_contract::UiIntent::OpenResource {
-                    resource: resource.clone(),
-                    node_id: None
-                }
+                input: model::RequestUiIntentInput {
+                    intent: model::UiIntentInput::OpenResource {
+                        resource: resource.clone(),
+                        node_id: None,
+                    },
+                },
             }
         ))
         .is_ok()
@@ -914,11 +853,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         name: "Compute".into(),
     });
     let initial = f.inspect(&function);
-    let ResourceContent::GraphPage {
-        function: Some(signature),
-        ..
-    } = &initial.content
-    else {
+    let ResourceContent::Function { signature, .. } = &initial.content else {
         panic!()
     };
     let numeric =
@@ -938,11 +873,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         },
     );
     let current = f.inspect(&function);
-    let ResourceContent::GraphPage {
-        function: Some(signature),
-        ..
-    } = &current.content
-    else {
+    let ResourceContent::Function { signature, .. } = &current.content else {
         panic!()
     };
     assert!(
@@ -972,9 +903,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
     let event = f.create(ResourceCreation::EventGraph {
         name: "Main".into(),
     });
-    let ResourceContent::GraphPage { graph, .. } = f.inspect(&event).content else {
-        panic!()
-    };
+    let graph = f.graph(&event);
     f.call(AutomationCapabilityRequest::ApplyGraphEdit(
         ApplyGraphEditRequest {
             graph_path: event.id.clone(),
@@ -992,9 +921,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         },
     ))
     .unwrap();
-    let ResourceContent::GraphPage { graph, .. } = f.inspect(&event).content else {
-        panic!()
-    };
+    let graph = f.graph(&event);
     assert_eq!(graph.counts.nodes, 1);
     f.edit(
         &event,
@@ -1003,9 +930,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
             graph_hash: graph.graph_hash,
         },
     );
-    let ResourceContent::GraphPage { graph, .. } = f.inspect(&event).content else {
-        panic!()
-    };
+    let graph = f.graph(&event);
     assert_eq!(graph.counts.nodes, 0);
     f.edit(
         &event,
@@ -1014,9 +939,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
             graph_hash: graph.graph_hash,
         },
     );
-    assert!(
-        matches!(f.inspect(&event).content, ResourceContent::GraphPage { graph, .. } if graph.counts.nodes == 1)
-    );
+    assert!(f.graph(&event).counts.nodes == 1);
     f.save(&event);
     assert!(!f.inspect(&event).dirty);
 }

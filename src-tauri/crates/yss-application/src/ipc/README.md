@@ -140,7 +140,7 @@ the Summary execution path. Node Kernel and Execution's focused benchmark consum
 SCI runtime; numerical rules remain in `yss-sci` and shared data/control types in
 `yss-sci-contract`.
 
-`ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
+`harness::ApplicationCapabilityGateway` is the shared scheduling adapter for the internal Assistant capability port. IPC injects its committed-event callback; headless measurements reuse the same adapter. It moves the synchronous Application use case to Tokio's blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 
 Desktop Harness commands expose provider configuration, session creation/listing/reopening,
 event subscriptions, turn submission/cancellation and tool/citation inspection. DataAgent uses the
@@ -189,6 +189,13 @@ through drag, click or keyboard selection. AI catalog search continues to return
 available items. Creation descriptors retain their existing shape.
 
 Harness tool start/completion/failure events carry the same invocation ID. Failure events expose only the stable `failureCode`, including cancellation and timeout. Harness channel subscriptions buffer live events until historical replay has been merged, then deliver each sequence once. The frontend consumes this stream as a projection.
+
+Control calls (`delegate_task`, `followup_task`, `propose_statistical_plan`) project
+their Core lifecycle events onto the same tool event wire and localized cards.
+Tool detail reads first use the business ledger, then the existing control events
+for that invocation; both paths retain the session access checks and recorded
+start/end times. Control details do not copy task prompts or plan bodies. The
+original task and plan projections retain those responsibilities.
 
 Wire DTOs are explicit transport types. Internal structs are not exposed merely because they implement serialization. Mapping is owned at this seam; domain/application crates do not depend on Tauri or frontend wire schema.
 

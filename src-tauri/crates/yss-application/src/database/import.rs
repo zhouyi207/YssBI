@@ -57,9 +57,22 @@ pub(super) fn load_database_in_captured_session(
     captured: &Arc<ApplicationSession>,
     operation_id: OperationId,
     source: DatabaseImportSource,
+    name: Option<String>,
 ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
     import_in_captured_session(captured, operation_id, |control| {
-        read_source(source, control)
+        let mut reader = read_source(source, control)?;
+        if let Some(name) = name {
+            if name.trim().is_empty() {
+                return Err(DatabaseUseCaseError::Database(
+                    DatabaseOperationError::InvalidName {
+                        database_id: String::new(),
+                        requested_name: name,
+                    },
+                ));
+            }
+            reader.name = name;
+        }
+        Ok(reader)
     })
 }
 
@@ -69,6 +82,7 @@ pub(super) fn duplicate_database_in_captured_session(
     id: &str,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
+    name: Option<String>,
 ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
     let metadata =
         query_database_metadata_in_captured_session(application, captured, id, expected_revision)?;
@@ -99,7 +113,7 @@ pub(super) fn duplicate_database_in_captured_session(
         let reader = yss_database_io::read_parquet_batches(&temporary.0, 50_000, None)
             .map_err(import_error)?;
         Ok(ImportReader {
-            name: format!("{} Copy", metadata.name),
+            name: name.unwrap_or_else(|| format!("{} Copy", metadata.name)),
             reader: Box::new(reader),
             temporary: Some(temporary),
         })
@@ -317,6 +331,7 @@ impl ApplicationState {
         id: String,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
+        name: Option<String>,
     ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let result = duplicate_database_in_captured_session(
@@ -325,6 +340,7 @@ impl ApplicationState {
             &id,
             expected_revision,
             operation_id,
+            name,
         )?;
         self.refresh_database_session(&captured)?;
         Ok(result)
@@ -335,9 +351,10 @@ impl ApplicationState {
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
         source: DatabaseImportSource,
+        name: Option<String>,
     ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
-        let result = load_database_in_captured_session(&captured, operation_id, source)?;
+        let result = load_database_in_captured_session(&captured, operation_id, source, name)?;
         self.refresh_database_session(&captured)?;
         Ok(result)
     }

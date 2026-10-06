@@ -35,8 +35,10 @@ pub(crate) async fn consume_text_stream_with_activity(
     mut tool_failures: tokio::sync::watch::Receiver<Option<AgentDriverFailure>>,
     final_response_only: bool,
     activity: Arc<crate::recovery::ModelActivity>,
+    context_window: Option<u32>,
 ) -> Result<String, AgentDriverFailure> {
     let mut pending = String::new();
+    let mut reasoning = String::new();
     let mut transcript = String::new();
     let mut final_seen = false;
     let mut final_response = String::new();
@@ -52,6 +54,7 @@ pub(crate) async fn consume_text_stream_with_activity(
             _ = timer.tick() => {
                 if activity.expired() { break Err(AgentDriverFailure::new(AgentDriverFailureCode::ProviderStreamInterrupted)); }
                 flush_text(output.as_ref(), &mut pending).await?;
+                flush_reasoning(output.as_ref(), &mut reasoning).await?;
             },
             item = stream.next() => {
                 let Some(item) = item else {
@@ -76,7 +79,13 @@ pub(crate) async fn consume_text_stream_with_activity(
                     },
                 };
                 match item {
+                    MultiTurnStreamItem::StreamAssistantItem(Item::Event(StreamEvent::Reasoning { text, .. })) => {
+                        flush_text(output.as_ref(), &mut pending).await?;
+                        reasoning.push_str(&text);
+                        if reasoning.len() >= 4096 { flush_reasoning(output.as_ref(), &mut reasoning).await?; }
+                    }
                     MultiTurnStreamItem::StreamAssistantItem(Item::Event(StreamEvent::Text { text, .. })) => {
+                        flush_reasoning(output.as_ref(), &mut reasoning).await?;
                         if text.is_empty() { continue; }
                         let first = transcript.is_empty();
                         if separate_turn { step_start = transcript.len(); }
@@ -91,6 +100,10 @@ pub(crate) async fn consume_text_stream_with_activity(
                     }
                     MultiTurnStreamItem::CompletionCall(call) => {
                         flush_text(output.as_ref(), &mut pending).await?;
+                        flush_reasoning(output.as_ref(), &mut reasoning).await?;
+                        output.emit(crate::run_options::usage_event(
+                            call.usage, context_window, yss_harness_contract::ModelCallPurpose::Response,
+                        )).await.map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::OutputUnavailable))?;
                         let finish_reason = match &call.finish_reason {
                             Some(FinishReason::Stop) => "stop",
                             Some(FinishReason::ToolCalls) => "tool_calls",
@@ -131,6 +144,7 @@ pub(crate) async fn consume_text_stream_with_activity(
                         // Rig yields tool calls before executing them on the next poll. Publish
                         // preceding text now so Gateway tool events cannot overtake it.
                         flush_text(output.as_ref(), &mut pending).await?;
+                        flush_reasoning(output.as_ref(), &mut reasoning).await?;
                     }
                 }
             }
@@ -138,6 +152,7 @@ pub(crate) async fn consume_text_stream_with_activity(
     };
     drop(stream);
     flush_text(output.as_ref(), &mut pending).await?;
+    flush_reasoning(output.as_ref(), &mut reasoning).await?;
     result?;
     Ok(if final_response_only {
         final_response
@@ -175,6 +190,22 @@ pub(crate) async fn consume_text_stream(
         tool_failures,
         final_response_only,
         Arc::new(crate::recovery::ModelActivity::default()),
+        None,
     )
     .await
+}
+
+async fn flush_reasoning(
+    output: &dyn AgentEventOutput,
+    pending: &mut String,
+) -> Result<(), AgentDriverFailure> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    output
+        .emit(AgentEvent::ReasoningDelta {
+            delta: std::mem::take(pending),
+        })
+        .await
+        .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::OutputUnavailable))
 }

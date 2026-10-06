@@ -27,6 +27,16 @@ pub enum AgentControlTool {
     ProposeStatisticalPlan,
 }
 
+impl AgentControlTool {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DelegateTask => "delegate_task",
+            Self::FollowupTask => "followup_task",
+            Self::ProposeStatisticalPlan => "propose_statistical_plan",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentFollowup {
@@ -87,8 +97,7 @@ pub struct AgentResourceAccess {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentResultAccess {
-    pub execution_session_id: String,
-    pub result_id: u64,
+    pub result_ref: crate::ResultRef,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

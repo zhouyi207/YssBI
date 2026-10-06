@@ -1,6 +1,6 @@
 use super::{
-    ensure_project_binding, inspect_port, inspect_result_category, invalid_request,
-    map_session_capture_error, map_session_revalidation_error,
+    ensure_project_binding, inspect_port, inspect_result_category, map_session_capture_error,
+    map_session_revalidation_error,
 };
 use crate::graph::edit::GraphDocumentChange;
 use crate::graph::edit::GraphDocumentEditor;
@@ -21,7 +21,9 @@ use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::PortKey;
 use yss_project_identity::OperationId;
 
+mod constants;
 mod inspection;
+mod validation;
 
 pub fn invoke_graph_capability(
     application: &ApplicationState,
@@ -35,7 +37,21 @@ pub fn invoke_graph_capability(
     }
     request
         .validate()
-        .map_err(|error| invalid_request(request.capability_id(), error))?;
+        .map_err(|error| error.into_failure(request.capability_id()))?;
+    let requested_graph = match &request {
+        AutomationCapabilityRequest::GraphMutation(value) => Some(value.input.graph().clone()),
+        AutomationCapabilityRequest::ValidateGraph(value) => Some(value.graph.clone()),
+        AutomationCapabilityRequest::ExecuteGraph(value) => Some(value.graph.clone()),
+        _ => None,
+    };
+    // Authorization and the ledger use the original public intention. Only this
+    // owner adapter translates it to the existing staged, atomic edit contract.
+    let request = match request {
+        AutomationCapabilityRequest::GraphMutation(value) => {
+            AutomationCapabilityRequest::ApplyGraphEdit(value.edit_request())
+        }
+        request => request,
+    };
     let captured = application
         .capture_session()
         .map_err(map_session_capture_error)?;
@@ -45,6 +61,9 @@ pub fn invoke_graph_capability(
             .ok_or_else(|| graph_failure(CapabilityFailureCode::InvalidRequest))?,
     )
     .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+    if let Some(graph) = requested_graph {
+        inspection::validate_graph_reference(&graph, &path)?;
+    }
     let locale = match &request {
         AutomationCapabilityRequest::ApplyGraphEdit(request) => request.locale.clone(),
         _ => "en-US".into(),
@@ -112,7 +131,26 @@ pub fn invoke_graph_capability(
             .with_detail("reason", "graph_inputs_changed"));
     }
     let read_only = request.capability_id().descriptor().effect == ToolEffect::Inspect;
-    let result = match request {
+    let version = ResourceVersion {
+        revision: current.version.revision.get(),
+        session_id: Some(current.version.session_id.to_string()),
+    };
+    let mut result = match request {
+        AutomationCapabilityRequest::FindConstants(request) => {
+            constants::find(request, &path, document, projection, version, hash)?
+        }
+        AutomationCapabilityRequest::InspectConstants(request) => {
+            constants::inspect(request, &path, document, projection, version, hash)?
+        }
+        AutomationCapabilityRequest::FindNodes(request) => {
+            inspection::find_nodes(request, &path, document, projection, version, hash)?
+        }
+        AutomationCapabilityRequest::InspectNodes(request) => {
+            inspection::inspect_nodes(request, &path, document, projection, version, hash)?
+        }
+        AutomationCapabilityRequest::FindConnections(request) => {
+            inspection::find_connections(request, &path, document, projection, version, hash)?
+        }
         AutomationCapabilityRequest::InspectGraph(request) => inspection::inspect(
             request,
             &path,
@@ -159,6 +197,11 @@ pub fn invoke_graph_capability(
             )?;
             operation
                 .set_edit_correlation(yss_project::GraphEditCorrelation {
+                    created_constants: receipt
+                        .created_constants
+                        .iter()
+                        .map(|(alias, id)| Ok((alias.clone(), constants::parse_id(id)?)))
+                        .collect::<Result<_, CapabilityFailure>>()?,
                     client_key: receipt.client_key.clone(),
                     document_hash: receipt.graph_hash.clone(),
                     created_nodes: receipt
@@ -198,17 +241,8 @@ pub fn invoke_graph_capability(
             receipt.to_revision = committed.to_revision.get();
             AutomationCapabilityResult::GraphEditReceipt(receipt)
         }
-        AutomationCapabilityRequest::ValidateGraph(_) => {
-            AutomationCapabilityResult::GraphValidation(GraphValidation {
-                graph_path: path.as_str().into(),
-                graph_hash: hash,
-                ready: matches!(projection.outcome, EditorResolutionOutcome::Complete)
-                    && !projection
-                        .diagnostics
-                        .iter()
-                        .any(|diagnostic| diagnostic.blocking),
-                diagnostics: diagnostics(projection),
-            })
+        AutomationCapabilityRequest::ValidateGraph(request) => {
+            validation::inspect(request, &path, opened.analysis(), hash)?
         }
         AutomationCapabilityRequest::SaveGraph(_) => {
             let saved = application
@@ -365,12 +399,15 @@ pub fn invoke_graph_capability(
                         CapabilityId::ExecuteGraph.descriptor().maximum_results,
                     ))
                     .map(|result| GraphResultReference {
-                        execution_session_id: receipt
-                            .identity
-                            .execution_session_id()
-                            .as_uuid()
-                            .to_string(),
-                        result_id: result.result_id.get(),
+                        result_ref: ResultRef::new(
+                            receipt
+                                .identity
+                                .execution_session_id()
+                                .as_uuid()
+                                .to_string(),
+                            result.result_id.get(),
+                        ),
+                        validity: ResultValidity::CurrentValid,
                         run_id: receipt.identity.run_id().get(),
                         output: result.output.port().as_str().into(),
                         category: inspect_result_category(result.category),
@@ -382,6 +419,7 @@ pub fn invoke_graph_capability(
                 graph_hash: hash,
                 run_id,
                 status: status.into(),
+                timing: run_id.and_then(|id| inspect_run(&captured, id).map(|(_, timing)| timing)),
                 failure_code,
                 failure_location,
                 result_count,
@@ -391,6 +429,39 @@ pub fn invoke_graph_capability(
         }
         _ => return Err(graph_failure(CapabilityFailureCode::InvalidRequest)),
     };
+    if let AutomationCapabilityResult::GraphInspectionPage(page) = &mut result
+        && page.view == GraphInspectionView::Summary
+    {
+        let mut runs = BTreeMap::new();
+        for event in captured
+            .execution_snapshot()
+            .into_iter()
+            .filter(|event| event.identity().graph_path() == &path)
+        {
+            let status = match event.kind() {
+                RunApplicationEventKind::RunStarted { .. } => "running",
+                RunApplicationEventKind::RunCompleted => "completed",
+                RunApplicationEventKind::RunCancelled => "cancelled",
+                RunApplicationEventKind::RunErrored { .. } => "failed",
+                RunApplicationEventKind::ResultInspectionRequested { .. } => continue,
+            };
+            let run_id = event.identity().run_id().get();
+            let observation = inspect_run(&captured, run_id);
+            runs.insert(
+                run_id,
+                GraphRunInspection {
+                    run_id,
+                    status: observation
+                        .as_ref()
+                        .map_or_else(|| status.into(), |(status, _)| status.clone()),
+                    timing: observation.map(|(_, timing)| timing),
+                    current_inputs: hex(event.identity().semantic_input_hash())
+                        == page.semantic_input_hash,
+                },
+            );
+        }
+        page.runs = Some(runs.into_values().collect());
+    }
     if read_only {
         control.check()?;
         application
@@ -398,6 +469,36 @@ pub fn invoke_graph_capability(
             .map_err(map_session_revalidation_error)?;
     }
     Ok(result)
+}
+
+pub(super) fn inspect_run(
+    captured: &ApplicationSession,
+    run_id: u64,
+) -> Option<(String, GraphRunTiming)> {
+    use yss_graph_execution::run_registry::{RunId, RunState};
+    let snapshot = captured
+        .execution()
+        .runs()
+        .snapshot(RunId::from_existing(run_id))?;
+    let milliseconds =
+        |duration: std::time::Duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
+    let status = match snapshot.state {
+        RunState::Admitted => "admitted",
+        RunState::Running => "running",
+        RunState::Finalizing => "finalizing",
+        RunState::Succeeded => "succeeded",
+        RunState::Cancelled => "cancelled",
+        RunState::Failed => "failed",
+    };
+    Some((
+        status.into(),
+        GraphRunTiming {
+            elapsed_ms: milliseconds(snapshot.timing.elapsed()),
+            admission_ms: milliseconds(snapshot.timing.admission),
+            running_ms: milliseconds(snapshot.timing.running),
+            finalization_ms: milliseconds(snapshot.timing.finalization),
+        },
+    ))
 }
 
 fn graph_edit_identity(
@@ -436,7 +537,7 @@ impl ApplicationState {
     ) -> Result<Option<GraphEditReceipt>, CapabilityFailure> {
         AutomationCapabilityRequest::ApplyGraphEdit(request.clone())
             .validate()
-            .map_err(|error| invalid_request(CapabilityId::ApplyGraphEdit, error))?;
+            .map_err(|error| error.into_failure(CapabilityId::ApplyGraphEdit))?;
         let captured = self.capture_session().map_err(map_session_capture_error)?;
         ensure_project_binding(&captured, &context)?;
         let path = GraphResourcePath::new(&request.graph_path)
@@ -480,6 +581,11 @@ fn graph_edit_replay(
         .correlation
         .ok_or_else(|| graph_failure(CapabilityFailureCode::InvocationConflict))?;
     Ok(GraphEditReceipt {
+        created_constants: correlation
+            .created_constants
+            .into_iter()
+            .map(|(alias, id)| (alias, id.to_string()))
+            .collect(),
         graph_path: request.graph_path.clone(),
         from_revision: receipt.commit.from_revision.get(),
         to_revision: receipt.commit.to_revision.get(),
@@ -502,10 +608,15 @@ fn graph_edit_replay(
 
 fn graph_action_path(request: &AutomationCapabilityRequest) -> Option<&str> {
     match request {
-        AutomationCapabilityRequest::InspectGraph(r) => Some(&r.graph_path),
+        AutomationCapabilityRequest::InspectGraph(r) => Some(&r.graph.id),
+        AutomationCapabilityRequest::FindNodes(r) => Some(&r.graph.id),
+        AutomationCapabilityRequest::FindConstants(r) => Some(&r.graph.id),
+        AutomationCapabilityRequest::InspectConstants(r) => Some(&r.graph.id),
+        AutomationCapabilityRequest::InspectNodes(r) => Some(&r.graph.id),
+        AutomationCapabilityRequest::FindConnections(r) => Some(&r.graph.id),
         AutomationCapabilityRequest::ApplyGraphEdit(r) => Some(&r.graph_path),
-        AutomationCapabilityRequest::ValidateGraph(r) => Some(&r.graph_path),
-        AutomationCapabilityRequest::ExecuteGraph(r) => Some(&r.graph_path),
+        AutomationCapabilityRequest::ValidateGraph(r) => Some(&r.graph.id),
+        AutomationCapabilityRequest::ExecuteGraph(r) => Some(&r.graph.id),
         AutomationCapabilityRequest::SaveGraph(r) => Some(&r.graph_path),
         _ => None,
     }
@@ -526,8 +637,25 @@ fn transform_graph_edit(
     let localized = editor.localized_catalog();
     let mut created_nodes = BTreeMap::new();
     let mut created_ports = BTreeMap::new();
+    let mut created_constants = BTreeMap::new();
     for mut operation in request.operations {
         control.check()?;
+        match &operation {
+            GraphEditOperation::CreateTypedConstant { declaration } => {
+                constants::create(
+                    &mut editor,
+                    declaration.clone(),
+                    &mut created_constants,
+                    &mut created_nodes,
+                )?;
+                continue;
+            }
+            GraphEditOperation::UpdateTypedConstant { update } => {
+                constants::update(&mut editor, update.clone())?;
+                continue;
+            }
+            _ => {}
+        }
         let alias = match &operation {
             GraphEditOperation::CreateNode { client_id, .. }
             | GraphEditOperation::CreateConstant { client_id, .. }
@@ -587,7 +715,7 @@ fn transform_graph_edit(
                     tags: Vec::new(),
                 }),
             };
-            editor.apply(mutation).map_err(map_graph_error)?;
+            let _ = editor.apply(mutation).map_err(map_graph_error)?;
             operation = GraphEditOperation::InsertConstantReference {
                 id: id.to_string(),
                 x,
@@ -609,7 +737,24 @@ fn transform_graph_edit(
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>();
-        editor.apply(mutation).map_err(map_graph_error)?;
+        if let Some(copied) = editor.apply(mutation).map_err(map_graph_error)? {
+            for (source, target) in copied.nodes {
+                if created_nodes
+                    .insert(source.to_string(), target.to_string())
+                    .is_some()
+                {
+                    return Err(invalid_edit_identity("nodeIds"));
+                }
+            }
+            for (source, target) in copied.ports {
+                if created_ports
+                    .insert(source.to_string(), edit_port(&target))
+                    .is_some()
+                {
+                    return Err(invalid_edit_identity("nodeIds"));
+                }
+            }
+        }
         if let Some(alias) = alias {
             if adds_port {
                 let address = editor
@@ -640,10 +785,15 @@ fn transform_graph_edit(
     control.check()?;
     let transformed = editor.finish(application).map_err(map_graph_error)?;
     let staged = &transformed.document;
+    created_constants
+        .retain(|_, id| constants::parse_id(id).is_ok_and(|id| staged.constants.contains_key(&id)));
     created_nodes.retain(|_, id| parse_node_id(id).is_ok_and(|id| staged.nodes.contains_key(&id)));
     created_ports.retain(|_, port| {
-        parse_edit_port(port.clone())
-            .is_ok_and(|address| staged.port_bindings.contains_key(&address))
+        parse_edit_port(port.clone()).is_ok_and(|address| {
+            staged.nodes.contains_key(&address.node_id)
+                && (matches!(address.port, PortRef::Declared { .. })
+                    || staged.port_bindings.contains_key(&address))
+        })
     });
     let graph_hash = graph_hash(staged)?;
     let to_revision = request
@@ -661,6 +811,7 @@ fn transform_graph_edit(
         graph_hash.clone(),
     )?;
     let receipt = GraphEditReceipt {
+        created_constants,
         graph_path: request.graph_path,
         from_revision: request.base_revision,
         to_revision,
@@ -680,6 +831,37 @@ pub(super) fn editor_mutation(
     catalog: &[LocalizedCatalogItem],
 ) -> Result<EditorGraphMutation, CapabilityFailure> {
     match operation {
+        GraphEditOperation::CreateTypedConstant { .. }
+        | GraphEditOperation::UpdateTypedConstant { .. } => Err(invalid_edit_identity("operation")),
+        GraphEditOperation::SetNodeLabel { node_id, label } => {
+            Ok(EditorGraphMutation::SetNodeLabel {
+                node_id: parse_node_id(&node_id)?,
+                label,
+            })
+        }
+        GraphEditOperation::SetPortCounts { node_id, counts } => {
+            Ok(EditorGraphMutation::SetPortCounts {
+                node_id: parse_node_id(&node_id)?,
+                counts: parse_port_counts(counts)?,
+            })
+        }
+        GraphEditOperation::UpdateConnections { connections } => {
+            Ok(EditorGraphMutation::UpdateConnections {
+                connections: connections
+                    .into_iter()
+                    .map(|connection| {
+                        Ok(yss_graph_editor::ConnectionUpdate {
+                            connection_id: uuid::Uuid::parse_str(&connection.connection_id)
+                                .map(ConnectionId::from_uuid)
+                                .map_err(|_| invalid_edit_identity("connectionId"))?,
+                            output: parse_edit_port(connection.output)?,
+                            input: parse_edit_port(connection.input)?,
+                            order: connection.order.map(|order| order.map(OrderKey::new)),
+                        })
+                    })
+                    .collect::<Result<_, CapabilityFailure>>()?,
+            })
+        }
         GraphEditOperation::CreateConstant { .. } => Err(invalid_edit_identity("operation")),
         GraphEditOperation::SetParameters {
             node_id,
@@ -778,14 +960,7 @@ pub(super) fn editor_mutation(
                 descriptor,
                 position: NodePosition { x, y },
                 parameters: parse_edit_parameters(parameters)?,
-                port_counts: port_counts
-                    .into_iter()
-                    .map(|(key, count)| {
-                        PortKey::new(key)
-                            .map(|key| (key, count))
-                            .map_err(|_| invalid_edit_identity("portCounts"))
-                    })
-                    .collect::<Result<_, _>>()?,
+                port_counts: parse_port_counts(port_counts)?,
                 user_label,
                 connect_from: None,
             })
@@ -849,13 +1024,28 @@ fn parse_edit_parameters(
         .collect()
 }
 
+fn parse_port_counts(
+    counts: BTreeMap<String, u16>,
+) -> Result<yss_node_protocol::InitialPortCounts, CapabilityFailure> {
+    counts
+        .into_iter()
+        .map(|(key, count)| {
+            PortKey::new(key)
+                .map(|key| (key, count))
+                .map_err(|_| invalid_edit_identity("portCounts"))
+        })
+        .collect()
+}
+
 fn parse_node_id(value: &str) -> Result<NodeId, CapabilityFailure> {
     uuid::Uuid::parse_str(value)
         .map(NodeId::from_uuid)
-        .map_err(|_| invalid_edit_identity("nodeId"))
+        .map_err(|_| invalid_edit_identity("nodeId")
+            .with_detail("reason", "invalid_node_reference")
+            .with_detail("nextStep", "Use an existing node UUID, or $clientId for a node created in this same batch. Later calls must use the actual UUID from createdNodes."))
 }
 
-fn parse_edit_port(value: GraphEditPortRef) -> Result<PortAddress, CapabilityFailure> {
+pub(super) fn parse_edit_port(value: GraphEditPortRef) -> Result<PortAddress, CapabilityFailure> {
     match value {
         GraphEditPortRef::Declared { node_id, port_key } => Ok(PortAddress::declared(
             parse_node_id(&node_id)?,
@@ -1070,41 +1260,6 @@ fn diagnostics(projection: &EditorProjectionModel) -> Vec<GraphDiagnosticInspect
         .collect()
 }
 
-pub(crate) fn list_graph_results(
-    captured: &ApplicationSession,
-    graph_path: String,
-) -> Result<GraphResults, CapabilityFailure> {
-    let path = GraphResourcePath::new(&graph_path)
-        .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    if !captured
-        .project()
-        .has_resident_graph(&path)
-        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
-    {
-        return Err(graph_failure(CapabilityFailureCode::GraphUnavailable));
-    }
-    let results = crate::graph::results::query_graph_results(captured, &path, 100)
-        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
-        .into_iter()
-        .map(|result| GraphResultReference {
-            execution_session_id: result
-                .provenance()
-                .reference()
-                .execution_session_id
-                .as_uuid()
-                .to_string(),
-            result_id: result.provenance().result_id().get(),
-            run_id: result.provenance().run_id().get(),
-            output: result.output().port().as_str().into(),
-            category: inspect_result_category(result.value().category()),
-        })
-        .collect();
-    Ok(GraphResults {
-        graph_path,
-        results,
-    })
-}
-
 pub fn graph_hash(document: &GraphDocument) -> Result<String, CapabilityFailure> {
     yss_canonical_hash::hash_canonical("yssbi.assistant.graph-draft.v1", document)
         .map(|value| hex(&value))
@@ -1191,7 +1346,9 @@ fn resolve_aliases(
             *value = nodes
                 .get(alias)
                 .cloned()
-                .ok_or_else(|| invalid_edit_identity("nodeId"))?;
+                .ok_or_else(|| invalid_edit_identity("nodeId")
+                    .with_detail("reason", "unknown_node_alias")
+                    .with_detail("nextStep", "Use $clientId only for a node declared earlier in this same batch. For existing nodes, use their actual UUID."))?;
         }
         Ok(())
     }
@@ -1239,11 +1396,19 @@ fn resolve_aliases(
             }
         }
         GraphEditOperation::SetParameters { node_id, .. }
+        | GraphEditOperation::SetNodeLabel { node_id, .. }
+        | GraphEditOperation::SetPortCounts { node_id, .. }
         | GraphEditOperation::AddPortInstance { node_id, .. }
         | GraphEditOperation::DisconnectNode { node_id } => node(node_id, nodes)?,
         GraphEditOperation::Connect { output, input, .. } => {
             port(output, nodes, ports)?;
             port(input, nodes, ports)?;
+        }
+        GraphEditOperation::UpdateConnections { connections } => {
+            for connection in connections {
+                port(&mut connection.output, nodes, ports)?;
+                port(&mut connection.input, nodes, ports)?;
+            }
         }
         GraphEditOperation::SetLiteral { address, .. }
         | GraphEditOperation::RemovePortInstance { address }

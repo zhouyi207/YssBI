@@ -376,6 +376,18 @@ impl State {
                 .map(|entry| {
                     Ok(LanguageModelProviderStatus {
                         config: entry.config.clone(),
+                        reasoning_defaults: entry
+                            .config
+                            .models
+                            .iter()
+                            .filter_map(|model| {
+                                yss_harness_rig::model_default_reasoning_effort(
+                                    model,
+                                    entry.config.protocol,
+                                )
+                                .map(|effort| (model.id.clone(), effort))
+                            })
+                            .collect(),
                         has_api_key: match &entry.credential_key {
                             Some(key) => self.credentials.read(key)?.is_some(),
                             None => false,

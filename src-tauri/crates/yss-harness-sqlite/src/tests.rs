@@ -191,7 +191,8 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         capability_id: yss_harness_contract::CapabilityId::InspectGraph,
         request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
             "events/Main.yssbi-event".to_owned(),
-        )),
+        ))
+        .into(),
         state: ToolInvocationState::Running,
         result: None,
         failure: None,
@@ -219,6 +220,35 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
     ));
     store.finish(&finished).await.unwrap();
     assert!(store.load_running_invocations().await.unwrap().is_empty());
+    for input in [
+        None,
+        Some(yss_harness_contract::model::CapabilityInput::InspectGraph(
+            yss_harness_contract::model::InspectGraphInput {
+                graph: yss_harness_contract::GraphResourceRef::for_path("events/Main.yssbi-event"),
+            },
+        )),
+    ] {
+        let mut rejected = finished.clone();
+        let id = if input.is_some() {
+            "binding-rejected"
+        } else {
+            "decode-rejected"
+        };
+        rejected.id = ToolInvocationId::try_new(id).unwrap();
+        rejected.idempotency_key = IdempotencyKey::try_new(id).unwrap();
+        rejected.request = yss_harness_contract::ToolInvocationRequest::Rejected {
+            capability_id: rejected.capability_id,
+            input,
+        };
+        store.begin(&rejected).await.unwrap();
+        assert_eq!(
+            store
+                .load_invocation(&session.id, &rejected.id)
+                .await
+                .unwrap(),
+            Some(rejected)
+        );
+    }
     let mut turn = HarnessTurnRecord {
         id: invocation.turn_id.clone(),
         session_id: session.id.clone(),

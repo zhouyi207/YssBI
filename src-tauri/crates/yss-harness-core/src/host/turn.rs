@@ -18,6 +18,7 @@ impl HarnessHost {
         user_message: String,
         resources: Vec<yss_harness_contract::ProjectResourceRef>,
         model: Option<yss_harness_contract::LanguageModelSelection>,
+        options: yss_harness_contract::HarnessTurnOptions,
     ) -> Result<AgentTurnResult, HarnessError> {
         validate_user_message(&user_message)?;
         let mut selected = std::collections::BTreeSet::new();
@@ -141,6 +142,17 @@ impl HarnessHost {
             return Err(error);
         }
 
+        if let Err(error) = self
+            .event_writer()
+            .append(
+                session_id,
+                Some(&turn_id),
+                HarnessEvent::TurnConfigured { options },
+            )
+            .await
+        {
+            return self.fail_turn(&mut turn, error).await;
+        }
         let previous = match crate::conversation::history(
             self.ports.events.as_ref(),
             self.ports.tool_ledger.as_ref(),
@@ -163,6 +175,7 @@ impl HarnessHost {
             self.report_writing_skill.clone(),
             cancellation.clone(),
             self.agent_access.clone(),
+            options,
         ) {
             Ok(orchestrator) => orchestrator,
             Err(error) => return self.fail_turn(&mut turn, error.into()).await,
@@ -236,6 +249,7 @@ impl HarnessHost {
             // An interrupted mutation has an unknown effect; do not imply that it rolled back.
             let failure_code = if record.capability_id.descriptor().effect
                 != yss_harness_contract::ToolEffect::Inspect
+                && record.request.bound().is_some()
             {
                 CapabilityFailureCode::OutcomeUnknown
             } else {
@@ -249,6 +263,7 @@ impl HarnessHost {
                 invocation_id: record.id,
                 capability_id: record.capability_id,
                 failure_code,
+                failure_details: None,
             };
             let event = if let Some(run_id) = record.agent_run_id {
                 let manager = self.ports.events.load_events_after(&record.session_id, 0).await?

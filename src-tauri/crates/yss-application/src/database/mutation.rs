@@ -287,6 +287,7 @@ fn coordinate_database_handoff(
         )
         .map_err(HandoffError::DatabasePrepare)?;
     let edit_state = physical.edit_state();
+    let inserted_row_ids = physical.inserted_row_ids().to_vec();
     let prepared_database =
         prepare_database_runtime_change(database, request.into_runtime(), &physical)
             .map_err(HandoffError::DatabasePrepare)?;
@@ -328,6 +329,7 @@ fn coordinate_database_handoff(
     let _ = physical.confirm();
     Ok(DatabaseMutationApplicationReceipt {
         edit_state,
+        inserted_row_ids,
         mutation: project_receipt.mutation().clone(),
     })
 }
@@ -365,10 +367,15 @@ fn compensate_committed_change(
 #[derive(Debug)]
 pub(super) struct DatabaseMutationApplicationReceipt {
     edit_state: EditState,
+    inserted_row_ids: Vec<i64>,
     mutation: CommittedResourceMutation,
 }
 
 impl DatabaseMutationApplicationReceipt {
+    pub(super) fn inserted_row_ids(&self) -> &[i64] {
+        &self.inserted_row_ids
+    }
+
     pub(super) fn edit_state(&self) -> &EditState {
         &self.edit_state
     }

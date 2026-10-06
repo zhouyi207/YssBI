@@ -117,6 +117,9 @@ pub struct StatisticalPlan {
     pub estimands: Vec<Estimand>,
     pub variable_roles: Vec<VariableRoleAssignment>,
     pub candidate_methods: Vec<StatisticalMethodId>,
+    /// A short workflow identifier, e.g. "ols_model_and_diagnostics" (nonblank, at most
+    /// 128 UTF-8 bytes). Put the analysis description in researchQuestion, not in this ID.
+    #[schemars(length(min = 1, max = 128))]
     pub selected_workflow: WorkflowId,
     pub required_diagnostics: Vec<DiagnosticRequirement>,
     pub robustness_checks: Vec<RobustnessCheck>,

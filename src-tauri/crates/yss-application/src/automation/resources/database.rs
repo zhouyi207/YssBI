@@ -1,5 +1,8 @@
 use super::*;
+
+mod read;
 use crate::database::DatabaseMutation;
+pub(in crate::automation) use read::read_database;
 use yss_database_contract::{DatabaseEngineSql, DatabaseId, DatabaseImportSource};
 use yss_database_runtime::session_api;
 
@@ -70,145 +73,152 @@ pub(super) fn import_source(source: DatasetImportSource) -> DatabaseImportSource
         },
     }
 }
-pub(super) fn edit_operation(edit: DatasetOperation) -> DatabaseMutation {
-    match edit {
-        DatasetOperation::EditCell {
-            row,
-            column,
-            value,
-            row_id,
-        } => DatabaseMutation::EditCell {
-            row,
-            column,
-            value,
-            row_id,
+fn semantic_from_contract(semantic: DatasetColumnSemantic) -> yss_data_contract::ColumnSemantic {
+    yss_data_contract::ColumnSemantic {
+        kind: match semantic.kind {
+            DatasetSemanticKind::Numeric => yss_data_contract::SemanticType::Numeric,
+            DatasetSemanticKind::Categorical => yss_data_contract::SemanticType::Categorical,
+            DatasetSemanticKind::Ordinal => yss_data_contract::SemanticType::Ordinal,
+            DatasetSemanticKind::Binary => yss_data_contract::SemanticType::Binary,
+            DatasetSemanticKind::Datetime => yss_data_contract::SemanticType::Datetime,
+            DatasetSemanticKind::Text => yss_data_contract::SemanticType::Text,
+            DatasetSemanticKind::Identifier => yss_data_contract::SemanticType::Identifier,
         },
-        DatasetOperation::AddRow { index } => DatabaseMutation::AddRow { index },
-        DatasetOperation::DeleteRows { indices, row_ids } => {
-            DatabaseMutation::DeleteRows { indices, row_ids }
-        }
-        DatasetOperation::AddColumn { name, dtype } => DatabaseMutation::AddColumn { name, dtype },
-        DatasetOperation::DeleteColumn { name } => DatabaseMutation::DeleteColumn { name },
-        DatasetOperation::CastColumn {
-            column,
-            dtype,
-            force,
-        } => DatabaseMutation::CastColumn {
-            column,
-            dtype,
-            force,
-        },
-        DatasetOperation::RenameColumn { old_name, new_name } => {
-            DatabaseMutation::RenameColumn { old_name, new_name }
-        }
-        DatasetOperation::SetColumnSemantic { column, semantic } => {
-            DatabaseMutation::SetColumnSemantic {
-                column,
-                semantic: yss_data_contract::ColumnSemantic {
-                    kind: match semantic.kind {
-                        DatasetSemanticKind::Numeric => yss_data_contract::SemanticType::Numeric,
-                        DatasetSemanticKind::Categorical => {
-                            yss_data_contract::SemanticType::Categorical
-                        }
-                        DatasetSemanticKind::Ordinal => yss_data_contract::SemanticType::Ordinal,
-                        DatasetSemanticKind::Binary => yss_data_contract::SemanticType::Binary,
-                        DatasetSemanticKind::Datetime => yss_data_contract::SemanticType::Datetime,
-                        DatasetSemanticKind::Text => yss_data_contract::SemanticType::Text,
-                        DatasetSemanticKind::Identifier => {
-                            yss_data_contract::SemanticType::Identifier
-                        }
-                    },
-                    values: semantic
-                        .values
-                        .into_iter()
-                        .map(|value| yss_data_contract::SemanticValue {
-                            value: value.value,
-                            label: value.label,
-                        })
-                        .collect(),
-                    positive_value: semantic.positive_value,
-                    numeric: semantic
-                        .numeric
-                        .map(|value| yss_data_contract::NumericConstraints {
-                            integer: value.integer,
-                            minimum: value.minimum,
-                            maximum: value.maximum,
-                        }),
-                },
-            }
-        }
-        DatasetOperation::Undo => DatabaseMutation::Undo,
-        DatasetOperation::Redo => DatabaseMutation::Redo,
+        values: semantic
+            .values
+            .into_iter()
+            .map(|value| yss_data_contract::SemanticValue {
+                value: value.value,
+                label: value.label,
+            })
+            .collect(),
+        positive_value: semantic.positive_value,
+        numeric: semantic
+            .numeric
+            .map(|value| yss_data_contract::NumericConstraints {
+                integer: value.integer,
+                minimum: value.minimum,
+                maximum: value.maximum,
+            }),
     }
 }
 
-pub(super) fn inspect_database(
-    application: &ApplicationState,
-    session: &ApplicationSession,
-    request: &InspectResourceRequest,
-    expected_revision: ResourceRevision,
-) -> Result<(ResourceContent, bool)> {
-    let id = request.resource.id.clone();
-    let database = DatabaseId::from_existing(id.clone().into_boxed_str());
-    let basis = session
-        .database()
-        .capture_query_basis(&database)
-        .map_err(|_| unavailable())?;
-    let schema = crate::automation::inspect_dataset_schema(
-        session,
-        InspectDatasetSchemaRequest {
-            database_id: id.clone(),
-        },
-    )?;
-    let project = session.project_instance_id().clone();
-    let metadata = application
-        .query_database_meta_for_application(project.clone(), id.clone(), expected_revision)
-        .map_err(database_error)?;
-    let page = application
-        .query_database_rows_for_application(
-            project.clone(),
-            id.clone(),
-            expected_revision,
-            request.offset,
-            request.limit,
-        )
-        .map_err(database_error)?;
-    let state = application
-        .query_database_edit_state_for_application(project, id, expected_revision)
-        .map_err(database_error)?;
-    let rows = (0..page.rows.row_count())
-        .map(|row| {
-            page.rows
-                .columns()
-                .iter()
-                .map(|column| {
-                    serde_json::to_value(&column.values()[row])
-                        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))
-                })
-                .collect::<Result<Vec<_>>>()
-        })
-        .collect::<Result<Vec<_>>>()?;
-    session_api::revalidate_query_basis(session.database(), &basis).map_err(|_| conflict())?;
-    let end = request.offset.saturating_add(rows.len());
-    Ok((
-        ResourceContent::Database {
-            schema,
-            rows,
-            row_ids: page.row_ids,
-            next_offset: (end < metadata.row_count).then_some(end),
-            can_undo: state.can_undo,
-            can_redo: state.can_redo,
-        },
-        state.is_modified,
-    ))
+pub(super) fn edited_columns(edit: &ResourceEdit) -> Vec<String> {
+    match edit {
+        ResourceEdit::CreateColumns { columns } => {
+            columns.iter().map(|column| column.name.clone()).collect()
+        }
+        ResourceEdit::RenameColumns { columns } => {
+            columns.iter().map(|column| column.name.clone()).collect()
+        }
+        ResourceEdit::DeleteColumns { columns } => columns.clone(),
+        ResourceEdit::CastColumns { columns } => {
+            columns.iter().map(|column| column.column.clone()).collect()
+        }
+        ResourceEdit::SetColumnSemantics { columns } => {
+            columns.iter().map(|column| column.column.clone()).collect()
+        }
+        _ => vec![],
+    }
 }
 
-pub(in crate::automation) fn export_dataset(
+pub(super) fn edit_operation(edit: ResourceEdit) -> Result<(DatabaseMutation, usize)> {
+    Ok(match edit {
+        ResourceEdit::InsertRows {
+            rows,
+            before_row_id,
+        } => {
+            let count = rows.len();
+            (
+                DatabaseMutation::InsertRows {
+                    rows,
+                    before_row_id,
+                },
+                count,
+            )
+        }
+        ResourceEdit::UpdateCells { cells } => {
+            let count = cells.len();
+            let updates = cells
+                .into_iter()
+                .map(|cell| session_api::DatabaseCellUpdate {
+                    row_id: cell.row_id,
+                    column: cell.column.into(),
+                    value: cell.value,
+                })
+                .collect();
+            (DatabaseMutation::UpdateCells { updates }, count)
+        }
+        ResourceEdit::DeleteRows { row_ids } => {
+            let count = row_ids.len();
+            (DatabaseMutation::DeleteRowIds { row_ids }, count)
+        }
+        ResourceEdit::CreateColumns { columns } => {
+            let count = columns.len();
+            (
+                DatabaseMutation::CreateColumns {
+                    columns: columns
+                        .into_iter()
+                        .map(|column| (column.name, column.dtype))
+                        .collect(),
+                },
+                count,
+            )
+        }
+        ResourceEdit::RenameColumns { columns } => {
+            let count = columns.len();
+            (
+                DatabaseMutation::RenameColumns {
+                    columns: columns
+                        .into_iter()
+                        .map(|column| (column.column, column.name))
+                        .collect(),
+                },
+                count,
+            )
+        }
+        ResourceEdit::DeleteColumns { columns } => {
+            let count = columns.len();
+            (DatabaseMutation::DeleteColumns { columns }, count)
+        }
+        ResourceEdit::CastColumns { columns } => {
+            let count = columns.len();
+            (
+                DatabaseMutation::CastColumns {
+                    columns: columns
+                        .into_iter()
+                        .map(|column| (column.column, column.dtype, column.force))
+                        .collect(),
+                },
+                count,
+            )
+        }
+        ResourceEdit::SetColumnSemantics { columns } => {
+            let count = columns.len();
+            (
+                DatabaseMutation::SetColumnSemantics {
+                    columns: columns
+                        .into_iter()
+                        .map(|column| (column.column, semantic_from_contract(column.semantic)))
+                        .collect(),
+                },
+                count,
+            )
+        }
+        _ => {
+            return Err(CapabilityFailure::new(
+                CapabilityFailureCode::InvalidRequest,
+            ));
+        }
+    })
+}
+
+pub(in crate::automation) fn export_database(
     application: &ApplicationState,
     session: &ApplicationSession,
-    request: ExportDatasetRequest,
+    request: ExportDatabaseRequest,
     control: &CapabilityControl,
-) -> Result<DatasetExported> {
+) -> Result<DatabaseExported> {
     check_version(session, &request.resource, &request.version)?;
     control.check()?;
     application
@@ -224,7 +234,7 @@ pub(in crate::automation) fn export_dataset(
             Some(ResourceRevision::new(request.version.revision)),
         )
         .map_err(database_error)?;
-    Ok(DatasetExported {
+    Ok(DatabaseExported {
         resource: request.resource,
         path: request.path,
     })

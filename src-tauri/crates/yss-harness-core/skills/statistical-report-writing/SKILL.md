@@ -16,9 +16,9 @@ requested scope, and report structure.
   edit/save permissions and the required evidence references. Derive a suitable
   title from the requested analysis when the user does not supply one. Do not
   treat creating the requested Doc as optional follow-up work.
-- ReportAgent creates or inspects the Doc, writes its Markdown through
-  `edit_resource`, then explicitly saves through `manage_resource` using the
-  current version. Completion requires a successful save after the final edit
+- ReportAgent creates the Doc with `create_resource` or inspects an existing Doc,
+  initializes Markdown with `write_document`, extends it with `append_document`, or revises unique passages with `replace_document_text`, then explicitly calls `save_resource`.
+  The host binds read and committed facts. Completion requires a successful save after the final edit
   for every changed Doc. If blocked, report the blocker instead of claiming
   delivery or pasting the full requested report into chat.
 - After successful delivery, Manager opens the returned Doc resource through
@@ -88,8 +88,9 @@ delimiters, table column counts, literal pipes, currency, and TeX percentages.
 Escape only the syntax needed in its context; never run blanket substitutions over
 the report, code blocks, or formulas.
 
-Use the existing `inspect_resource`, `manage_resource`, and `edit_resource`
-lifecycle with the current resource identity and full version, including
-sessionId. Preserve unrelated content. Claim creation, edits, or saving only
+Use `create_resource`, `inspect_document`, `read_document`, `search_document`,
+`write_document`, `append_document`, `replace_document_text`, and `save_resource`
+with the exact resource identity from successful receipts. Read additional
+contents only as needed. Preserve unrelated content. Claim creation, edits, or saving only
 after the corresponding successful receipt. This skill supplies writing
 instructions; runtime role/task scope and Gateway checks enforce tool authority.

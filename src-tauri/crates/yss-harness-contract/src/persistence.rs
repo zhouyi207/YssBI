@@ -64,6 +64,9 @@ pub struct HarnessTurnRecord {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum HarnessEvent {
+    TurnConfigured {
+        options: crate::HarnessTurnOptions,
+    },
     AgentRunResumed {
         request: crate::AgentFollowup,
         scope: crate::AgentTaskScope,
@@ -213,6 +216,61 @@ pub enum ToolInvocationState {
     Failed,
 }
 
+/// A rejected model intention may never acquire an executable owner request.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "stage",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ToolInvocationRequest {
+    Bound {
+        request: AutomationCapabilityRequest,
+    },
+    Rejected {
+        capability_id: CapabilityId,
+        /// Only typed business input is retained. Malformed provider payloads are not logged.
+        input: Option<crate::model::CapabilityInput>,
+    },
+}
+
+impl From<AutomationCapabilityRequest> for ToolInvocationRequest {
+    fn from(request: AutomationCapabilityRequest) -> Self {
+        Self::Bound { request }
+    }
+}
+impl ToolInvocationRequest {
+    pub fn capability_id(&self) -> CapabilityId {
+        match self {
+            Self::Bound { request } => request.capability_id(),
+            Self::Rejected { capability_id, .. } => *capability_id,
+        }
+    }
+    pub fn bound(&self) -> Option<&AutomationCapabilityRequest> {
+        match self {
+            Self::Bound { request } => Some(request),
+            Self::Rejected { .. } => None,
+        }
+    }
+    pub fn graph_edit(&self) -> Option<crate::ApplyGraphEditRequest> {
+        self.bound()
+            .and_then(AutomationCapabilityRequest::graph_edit)
+    }
+    pub fn model_input(&self) -> Option<crate::model::CapabilityInput> {
+        match self {
+            Self::Bound { request } => Some(request.into()),
+            Self::Rejected { input, .. } => input.clone(),
+        }
+    }
+    pub fn model_arguments(&self) -> Result<serde_json::Value, serde_json::Error> {
+        Ok(match self.model_input() {
+            Some(input) => serde_json::to_value(input)?["payload"].take(),
+            None => serde_json::json!({}),
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolInvocationRecord {
@@ -225,7 +283,7 @@ pub struct ToolInvocationRecord {
     pub workflow_step_id: Option<WorkflowStepId>,
     pub project: ProjectSessionBinding,
     pub capability_id: CapabilityId,
-    pub request: AutomationCapabilityRequest,
+    pub request: ToolInvocationRequest,
     pub state: ToolInvocationState,
     pub result: Option<AutomationCapabilityResult>,
     pub failure: Option<CapabilityFailure>,

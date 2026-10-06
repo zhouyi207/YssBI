@@ -60,6 +60,7 @@ impl TurnOrchestrator {
             .get(&request.run_id)
             .cloned()
             .ok_or_else(|| rejected("worker_not_found"))?;
+        self.check_task_mode(&task.scope)?;
         if !outcomes.contains_key(&request.run_id) {
             return Err(rejected("task_still_running"));
         }
@@ -72,7 +73,6 @@ impl TurnOrchestrator {
         let mut continuation = WorkerContinuation::default();
         let mut compaction_checkpoint = None;
         let mut seen = BTreeSet::new();
-        let mut previous_project_session = false;
         for envelope in events {
             let event = match envelope.event {
                 HarnessEvent::AgentRunResumed {
@@ -126,7 +126,6 @@ impl TurnOrchestrator {
                     if record.agent_run_id.as_ref() != Some(&request.run_id) {
                         return Err(persistence_failure());
                     }
-                    previous_project_session |= record.project != self.session.project;
                     continuation
                         .observations
                         .replay(&record, &self.session.project);
@@ -141,8 +140,9 @@ impl TurnOrchestrator {
                         );
                     }
                     evidence.invocations.push(invocation_id);
-                    if let Some(result) = &record.result {
-                        record_receipt(&record.request, result, &mut evidence, &mut scope);
+                    if let (Some(request), Some(result)) = (record.request.bound(), &record.result)
+                    {
+                        record_receipt(request, result, &mut evidence, &mut scope);
                     }
                     continuation
                         .history
@@ -173,11 +173,14 @@ impl TurnOrchestrator {
                     resource: access.resource.clone(),
                     version,
                 });
-            } else if previous_project_session {
-                return Err(CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
-                    .with_detail("reason", "resource_requires_current_read")
-                    .with_detail("resourceId", &access.resource.id)
-                    .with_detail("nextStep", "Inspect the resource in the current project session before resuming this worker."));
+            } else if access.version.is_some()
+                && continuation.observations.version(&access.resource, true)? != access.version
+            {
+                return Err(
+                    CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+                        .with_detail("reason", "resource_requires_current_read")
+                        .with_detail("resourceId", &access.resource.id),
+                );
             }
         }
         continuation.history.push(AgentMessage::User {

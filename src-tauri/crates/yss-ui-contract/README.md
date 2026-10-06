@@ -11,7 +11,7 @@ Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态由 FlexLa
 
 ## 请求与交付
 
-`request_ui_intent` 提交 `{ clientKey, intent }` 并返回 `UiIntentReceipt`。`inspect_ui_intent` 通过 `{ id }` 查询同一回执。Harness Schema 从 Rust 类型生成；前端 Service 验证收到的意图、结果引用和回执状态。
+桌面 IPC 的 `request_ui_intent` 提交 `{ clientKey, intent }` 并返回 `UiIntentReceipt`。`inspect_ui_intent` 通过 `{ id }` 查询同一回执。Harness 工具参数只包含业务 `intent`，幂等 key 由 Core 生成；其 `openResult` 接收完整 `resultRef`，适配到本协议的内部 `UiSource`。模型返回值和历史回放也使用 `resultRef`，不暴露执行会话标识。Harness Schema 从 Rust 业务类型生成；前端 Service 继续验证本协议的意图、结果引用和回执状态。
 
 `subscribe_ui_intents` 仅允许 `main` 工作台订阅；会话 Channel 交付 `intent`、`resync` 和 `sessionChanged`。前端工作台 hook 拥有该订阅，卸载调用 `unsubscribe_ui_intents`，迟到回复与事件按原项目生命周期隔离。没有页面监听者分流或订阅权限切换。
 

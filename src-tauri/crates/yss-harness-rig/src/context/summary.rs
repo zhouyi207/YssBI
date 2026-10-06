@@ -112,6 +112,12 @@ impl ContextHook {
             }
         }
         let response = stream.finish().await.map_err(map_failure)?;
+        self.emit(crate::run_options::usage_event(
+            response.usage,
+            self.context_window,
+            ModelCallPurpose::Compaction,
+        ))
+        .await?;
         if matches!(
             response.finish_reason(),
             Some(rig_core::completion::FinishReason::ContentFilter)

@@ -4,6 +4,7 @@ use super::*;
 #[derive(Clone, Copy, Debug, Default, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum GraphInspectionView {
+    Summary,
     #[default]
     Overview,
     Nodes,
@@ -17,7 +18,7 @@ pub enum GraphInspectionView {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectGraphRequest {
-    pub graph_path: String,
+    pub graph: GraphResourceRef,
     /// Overview lists node identities only. Read other views only as needed.
     #[serde(default)]
     pub view: GraphInspectionView,
@@ -49,7 +50,7 @@ fn default_graph_page_limit() -> usize {
 impl InspectGraphRequest {
     pub fn overview(graph_path: impl Into<String>) -> Self {
         Self {
-            graph_path: graph_path.into(),
+            graph: GraphResourceRef::for_path(graph_path),
             view: GraphInspectionView::Overview,
             node_ids: vec![],
             port_addresses: vec![],
@@ -61,8 +62,16 @@ impl InspectGraphRequest {
         }
     }
 
+    pub fn summary(graph: GraphResourceRef) -> Self {
+        Self {
+            graph: graph.clone(),
+            view: GraphInspectionView::Summary,
+            ..Self::overview(graph.id)
+        }
+    }
+
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
-        validate_resource_id("graphPath", &self.graph_path)?;
+        validate_resource_id("graph", &self.graph.id)?;
         if self.limit == 0 {
             return Err(CapabilityContractError::InvalidField("limit"));
         }
@@ -160,18 +169,52 @@ pub struct GraphPortDetail {
     /// Only interpret an empty object as an empty schema when schemaKnown is true.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_page: Option<crate::InspectionPage>,
     pub literal: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "items", rename_all = "snake_case")]
 pub enum GraphInspectionItems {
+    Summary,
     Unchanged,
     Nodes(Vec<GraphNodeSummary>),
+    NodeDetails(Vec<GraphNodeDetails>),
     Ports(Vec<GraphPortDetail>),
     Connections(Vec<GraphConnectionInspection>),
     Diagnostics(Vec<GraphDiagnosticInspection>),
     Constants(BTreeMap<String, serde_json::Value>),
+    ConstantSummaries(Vec<ConstantSummary>),
+    ConstantDetails(Vec<ConstantInspection>),
+}
+
+/// How much of the captured graph fits in the bounded initial overview.
+#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphOverviewDetail {
+    /// All nodes, effective parameters, literal overrides and connections.
+    Configuration,
+    /// All nodes and connections; parameters and literals are omitted.
+    Topology,
+    /// Structure omitted; use the enclosing counts and targeted graph queries.
+    Counts,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphOverviewLiteral {
+    pub address: GraphEditPortRef,
+    pub value: serde_json::Value,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphOverview {
+    pub detail: GraphOverviewDetail,
+    pub nodes: Vec<GraphNodeSummary>,
+    pub connections: Vec<GraphConnectionInspection>,
+    pub literals: Vec<GraphOverviewLiteral>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -188,4 +231,18 @@ pub struct GraphInspectionPage {
     pub observation_hash: String,
     pub page: Option<GraphInspectionPagination>,
     pub content: GraphInspectionItems,
+    pub runs: Option<Vec<GraphRunInspection>>,
+    /// Only summary reads include a size-bounded initial graph context.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overview: Option<GraphOverview>,
+}
+
+#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GraphRunInspection {
+    pub run_id: u64,
+    pub status: String,
+    pub timing: Option<super::GraphRunTiming>,
+    /// Whether this run used the inspected graph's current semantic inputs.
+    pub current_inputs: bool,
 }

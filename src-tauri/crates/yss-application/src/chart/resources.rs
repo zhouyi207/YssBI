@@ -44,6 +44,7 @@ impl ApplicationState {
         operation_id: OperationId,
         chart_path: ChartResourcePath,
         expected_revision: ResourceRevision,
+        name: Option<String>,
     ) -> Result<CommittedResourceMutation, ChartApplicationError> {
         let captured = self.capture_chart_session(&project_instance_id)?;
         let result = captured.project().duplicate_chart_resource(
@@ -51,6 +52,7 @@ impl ApplicationState {
             &chart_path,
             expected_revision,
             operation_id,
+            name,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ChartApplicationError::SessionChanged)?;

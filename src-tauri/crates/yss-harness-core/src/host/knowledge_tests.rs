@@ -207,6 +207,7 @@ async fn knowledge_is_requested_by_tools_and_replays_without_internal_fields() {
         "Discuss regression later.".into(),
         vec![],
         None,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -225,6 +226,7 @@ async fn knowledge_is_requested_by_tools_and_replays_without_internal_fields() {
         "Read the regression guidance.".into(),
         vec![],
         None,
+        Default::default(),
     )
     .await
     .unwrap();
@@ -262,6 +264,7 @@ async fn knowledge_is_requested_by_tools_and_replays_without_internal_fields() {
             "Read that passage again.".into(),
             vec![],
             None,
+            Default::default(),
         )
         .await
         .unwrap();
@@ -337,6 +340,7 @@ async fn cancelling_knowledge_search_closes_the_ledger_without_a_late_citation()
                 "Find regression guidance.".into(),
                 vec![],
                 None,
+                Default::default(),
             )
             .await
     });

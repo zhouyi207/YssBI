@@ -98,7 +98,17 @@ fn diagnostic(
     }
     let mut expected = std::collections::BTreeSet::new();
     for node in nodes {
-        for keyword in ["type", "enum", "const", "minimum", "maximum"] {
+        for keyword in [
+            "type",
+            "enum",
+            "const",
+            "minimum",
+            "maximum",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "description",
+        ] {
             if let Some(value) = node.get(keyword) {
                 expected.insert(format!("{keyword}={value}"));
             }
@@ -272,15 +282,15 @@ mod tests {
     #[test]
     fn diagnostics_keep_schema_paths_and_expectations_without_echoing_values_or_map_keys() {
         let schema = serde_json::to_value(
-            ToolDescriptor::for_capability(CapabilityId::SearchNodeCatalog).input_schema,
+            ToolDescriptor::for_capability(CapabilityId::BrowseNodes).input_schema,
         )
         .unwrap();
         for (arguments, category, path, expected) in [
             (
-                serde_json::json!({"query": "secret", "locale": "en-US"}),
+                serde_json::json!({"query": "secret"}),
                 "missing_field",
-                "$.limit",
-                "integer",
+                "$.locale",
+                "string",
             ),
             (
                 serde_json::json!({"query": "secret", "locale": "en-US", "limit": "secret"}),
@@ -290,8 +300,7 @@ mod tests {
             ),
         ] {
             let failure =
-                decode::<yss_harness_contract::SearchNodeCatalogRequest>(arguments, &schema)
-                    .unwrap_err();
+                decode::<yss_harness_contract::BrowseNodesRequest>(arguments, &schema).unwrap_err();
             assert_eq!(failure.details["category"], category);
             assert_eq!(failure.details["path"], path);
             assert!(failure.details["expected"].contains(expected));
@@ -308,18 +317,21 @@ mod tests {
         assert!(!serde_json::to_string(&failure).unwrap().contains("secret"));
 
         let schema = serde_json::to_value(
-            ToolDescriptor::for_capability(CapabilityId::ApplyGraphEdit).input_schema,
+            ToolDescriptor::for_capability(CapabilityId::MoveNodes).input_schema,
         )
         .unwrap();
         for payload in [
-            serde_json::json!({"nodeTypeId": "secret", "x": "secret", "y": 0, "parameters": {}, "portCounts": {}}),
-            serde_json::json!({"nodeTypeId": "secret", "y": 0, "parameters": {}, "portCounts": {}}),
+            serde_json::json!({"nodeId": "secret", "x": "secret", "y": 0}),
+            serde_json::json!({"nodeId": "secret", "y": 0}),
         ] {
-            let failure = decode::<yss_harness_contract::ApplyGraphEditRequest>(serde_json::json!({
-                "graphPath": "secret", "baseRevision": 1, "graphHash": "secret", "clientKey": "secret", "locale": "en-US",
-                "operations": [{"type": "create_node", "payload": payload}]
-            }), &schema).unwrap_err();
-            assert_eq!(failure.details["path"], "$.operations[0].payload.x");
+            let failure = decode::<yss_harness_contract::model::MoveNodesInput>(
+                serde_json::json!({
+                    "graph": {"kind":"event_graph", "id":"secret"}, "positions": [payload]
+                }),
+                &schema,
+            )
+            .unwrap_err();
+            assert_eq!(failure.details["path"], "$.positions[0].x");
             assert!(failure.details["expected"].contains("number"));
             assert!(!serde_json::to_string(&failure).unwrap().contains("secret"));
         }
@@ -333,5 +345,15 @@ mod tests {
         assert_eq!(failure.details["path"], "$.analysisMode");
         assert!(failure.details["expected"].contains("confirmatory"));
         assert!(!serde_json::to_string(&failure).unwrap().contains("secret"));
+        let failure = decode::<StatisticalPlan>(
+            serde_json::json!({
+                "selectedWorkflow": "description instead of identifier".repeat(10),
+            }),
+            &schema,
+        )
+        .unwrap_err();
+        assert_eq!(failure.details["path"], "$.selectedWorkflow");
+        assert!(failure.details["expected"].contains("maxLength=128"));
+        assert!(failure.details["expected"].contains("workflow identifier"));
     }
 }

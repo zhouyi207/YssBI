@@ -11,7 +11,7 @@ use yss_harness_contract::{
     ClockPort, HarnessSessionId, HarnessTurnId, IdGeneratorPort, IdempotencyKey,
     ModelCapabilityOutcome, PrincipalId, ProjectSessionBinding, ToolDescriptor, ToolEffect,
     ToolInvocationBegin, ToolInvocationId, ToolInvocationLedgerPort, ToolInvocationRecord,
-    ToolInvocationState, WorkflowRunId, WorkflowStepId,
+    ToolInvocationRequest, ToolInvocationState, UnixMillis, WorkflowRunId, WorkflowStepId,
 };
 
 #[derive(Clone, Debug)]
@@ -44,6 +44,12 @@ impl ToolRegistry {
             .collect()
     }
 
+    pub(crate) fn with_mode(mut self, mode: yss_harness_contract::HarnessMode) -> Self {
+        self.capabilities
+            .retain(|capability| mode.allows(*capability));
+        self
+    }
+
     pub fn descriptor(
         &self,
         capability_id: CapabilityId,
@@ -74,6 +80,47 @@ pub(crate) struct HarnessToolExecutor {
 }
 
 impl HarnessToolExecutor {
+    pub(crate) async fn begin_control(
+        &self,
+        tool: yss_harness_contract::AgentControlTool,
+    ) -> Result<ToolInvocationId, CapabilityFailure> {
+        let id = self
+            .ids
+            .next_id(AutomationIdKind::ToolInvocation)
+            .map_err(|_| persistence_unavailable())?;
+        let invocation_id = ToolInvocationId::try_new(id).map_err(|_| persistence_unavailable())?;
+        self.emit(AgentEvent::ControlToolStarted {
+            invocation_id: invocation_id.clone(),
+            tool,
+        })
+        .await?;
+        if self.cancellation.is_cancelled() {
+            self.finish_control(
+                invocation_id,
+                tool,
+                Some(CapabilityFailure::new(CapabilityFailureCode::Cancelled)),
+            )
+            .await?;
+            return Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled));
+        }
+        Ok(invocation_id)
+    }
+
+    pub(crate) async fn finish_control(
+        &self,
+        invocation_id: ToolInvocationId,
+        tool: yss_harness_contract::AgentControlTool,
+        failure: Option<CapabilityFailure>,
+    ) -> Result<(), CapabilityFailure> {
+        self.emit(AgentEvent::ControlToolFinished {
+            invocation_id,
+            tool,
+            failure_code: failure.as_ref().map(|failure| failure.code),
+            failure_details: failure.map(|failure| failure.details),
+        })
+        .await
+    }
+
     pub(crate) fn new_call_key(&self) -> Result<String, CapabilityFailure> {
         let id = self
             .ids
@@ -225,22 +272,74 @@ impl HarnessToolExecutor {
         request: AutomationCapabilityRequest,
         graph_observation: Option<String>,
     ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
+        self.execute_started(request, graph_observation, self.now())
+            .await
+    }
+
+    pub(crate) fn now(&self) -> UnixMillis {
+        self.clock.now()
+    }
+
+    pub(crate) async fn execute_started(
+        &self,
+        request: AutomationCapabilityRequest,
+        graph_observation: Option<String>,
+        started_at: UnixMillis,
+    ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
+        self.execute_invocation(request.into(), graph_observation, started_at, None)
+            .await
+    }
+
+    pub(crate) async fn reject(
+        &self,
+        capability_id: CapabilityId,
+        input: Option<yss_harness_contract::model::CapabilityInput>,
+        failure: CapabilityFailure,
+        started_at: UnixMillis,
+    ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
+        self.execute_invocation(
+            ToolInvocationRequest::Rejected {
+                capability_id,
+                input,
+            },
+            None,
+            started_at,
+            Some(failure),
+        )
+        .await
+    }
+
+    async fn execute_invocation(
+        &self,
+        request: ToolInvocationRequest,
+        graph_observation: Option<String>,
+        started_at: UnixMillis,
+        rejection: Option<CapabilityFailure>,
+    ) -> Result<ModelCapabilityOutcome, CapabilityFailure> {
         let agent = self
             .agent
             .as_ref()
             .map(|scope| scope.lock().unwrap_or_else(|e| e.into_inner()).clone());
-        if let Some(scope) = &agent {
-            crate::authorize_agent_capability(scope, &request)?;
-        }
         let capability_id = request.capability_id();
-        let descriptor = self.registry.descriptor(capability_id).ok_or_else(|| {
-            CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
-                .with_detail("capabilityId", capability_id.as_str())
-        })?;
-        request.validate().map_err(|_| {
-            CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
-                .with_detail("capabilityId", capability_id.as_str())
-        })?;
+        let descriptor = capability_id.descriptor();
+        let validation = (|| {
+            if let Some(failure) = rejection {
+                return Err(failure);
+            }
+            let request = request
+                .bound()
+                .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?;
+            self.registry.descriptor(capability_id).ok_or_else(|| {
+                CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
+                    .with_detail("capabilityId", capability_id.as_str())
+            })?;
+            if let Some(scope) = &agent {
+                crate::authorize_agent_capability(scope, request)?;
+            }
+            request
+                .validate()
+                .map_err(|error| error.into_failure(capability_id))
+        })();
 
         let raw_invocation_id = self
             .ids
@@ -248,31 +347,27 @@ impl HarnessToolExecutor {
             .map_err(|_| persistence_unavailable())?;
         let invocation_id = ToolInvocationId::try_new(raw_invocation_id.clone())
             .map_err(|_| persistence_unavailable())?;
-        let idempotency_key =
-            if let yss_harness_contract::AutomationCapabilityRequest::ApplyGraphEdit(edit) =
-                &request
-            {
-                let digest = yss_canonical_hash::hash_canonical(
-                    "yssbi.assistant.graph-edit.idempotency.v1",
-                    &(
-                        &self.session_id,
-                        &self.turn_id,
-                        agent.as_ref().map(|scope| &scope.run_id),
-                        &edit.client_key,
-                    ),
-                )
-                .map_err(|_| persistence_unavailable())?;
-                IdempotencyKey::try_new(
-                    digest
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect::<String>(),
-                )
-                .map_err(|_| persistence_unavailable())?
-            } else {
-                IdempotencyKey::try_new(raw_invocation_id).map_err(|_| persistence_unavailable())?
-            };
-        let started_at = self.clock.now();
+        let idempotency_key = if let Some(edit) = request.graph_edit() {
+            let digest = yss_canonical_hash::hash_canonical(
+                "yssbi.assistant.graph-edit.idempotency.v1",
+                &(
+                    &self.session_id,
+                    &self.turn_id,
+                    agent.as_ref().map(|scope| &scope.run_id),
+                    &edit.client_key,
+                ),
+            )
+            .map_err(|_| persistence_unavailable())?;
+            IdempotencyKey::try_new(
+                digest
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            )
+            .map_err(|_| persistence_unavailable())?
+        } else {
+            IdempotencyKey::try_new(raw_invocation_id).map_err(|_| persistence_unavailable())?
+        };
         let deadline = started_at
             .checked_add(descriptor.timeout_ms())
             .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::DeadlineElapsed))?;
@@ -321,22 +416,25 @@ impl HarnessToolExecutor {
             self.cancellation.clone(),
             Duration::from_millis(deadline.get().saturating_sub(self.clock.now().get())),
         );
-        let started = match control.check() {
-            Err(error) => Err(error),
-            Ok(()) => {
-                self.emit(AgentEvent::ToolInvocationStarted {
-                    invocation_id: invocation_id.clone(),
-                    capability_id,
-                })
-                .await
-            }
-        };
+        let started = self
+            .emit(AgentEvent::ToolInvocationStarted {
+                invocation_id: invocation_id.clone(),
+                capability_id,
+            })
+            .await
+            .and_then(|()| control.check());
         let mut citation = None;
         let mut outcome = match started {
             Err(error) => Err(error),
             Ok(()) => {
                 // Catch adapter panics while polling so the authoritative ledger still closes.
-                let mut invocation = Box::pin(async {
+                let invocation = async {
+                    validation?;
+                    let ToolInvocationRequest::Bound { request } = request else {
+                        return Err(CapabilityFailure::new(
+                            CapabilityFailureCode::InternalFailure,
+                        ));
+                    };
                     match request {
                         request @ (yss_harness_contract::AutomationCapabilityRequest::SearchKnowledge(_)
                         | yss_harness_contract::AutomationCapabilityRequest::ReadKnowledge(_)) => {
@@ -345,20 +443,13 @@ impl HarnessToolExecutor {
                         request => self.gateway.invoke(context.clone(), request, control.clone()).await
                             .map(|result| (result, None)),
                     }
-                });
-                poll_fn(|context| {
-                    match catch_unwind(AssertUnwindSafe(|| invocation.as_mut().poll(context))) {
-                        Ok(result) => result,
-                        Err(_) => Poll::Ready(Err(CapabilityFailure::new(
-                            CapabilityFailureCode::InternalFailure,
-                        ))),
-                    }
-                })
-                .await
-                .map(|(result, observed)| {
-                    citation = observed;
-                    result
-                })
+                };
+                contain_tool_failure(invocation)
+                    .await
+                    .map(|(result, observed)| {
+                        citation = observed;
+                        result
+                    })
             }
         };
         if outcome.as_ref().is_err_and(|failure| {
@@ -366,8 +457,7 @@ impl HarnessToolExecutor {
                 failure.code,
                 CapabilityFailureCode::InternalFailure | CapabilityFailureCode::OutcomeUnknown
             )
-        }) && let yss_harness_contract::AutomationCapabilityRequest::ApplyGraphEdit(edit) =
-            &record.request
+        }) && let Some(edit) = record.request.graph_edit()
             && let Ok(Some(receipt)) = self.gateway.recover_graph_edit(context, edit.clone()).await
         {
             outcome =
@@ -375,7 +465,7 @@ impl HarnessToolExecutor {
         }
         if outcome
             .as_ref()
-            .is_ok_and(|result| result.capability_id() != capability_id)
+            .is_ok_and(|result| !result.accepts_capability(capability_id))
         {
             outcome = Err(CapabilityFailure::new(
                 CapabilityFailureCode::InternalFailure,
@@ -394,11 +484,15 @@ impl HarnessToolExecutor {
                     .with_detail("reason", "graph_inputs_changed"),
             );
         }
-        if outcome.as_ref().is_ok_and(|result| {
-            result
-                .validate_budget(yss_harness_contract::MAX_CAPABILITY_RESULT_BYTES)
-                .is_err()
-        }) {
+        // Owners bound mutation receipts before committing. Never turn an already
+        // committed write into a retryable size failure or drop its created IDs.
+        if descriptor.effect == ToolEffect::Inspect
+            && outcome.as_ref().is_ok_and(|result| {
+                result
+                    .validate_budget(yss_harness_contract::MAX_CAPABILITY_RESULT_BYTES)
+                    .is_err()
+            })
+        {
             outcome = Err(CapabilityFailure::new(
                 CapabilityFailureCode::ResultTooLarge,
             ));
@@ -416,6 +510,17 @@ impl HarnessToolExecutor {
                 ));
             }
         }
+        outcome = outcome.map_err(|mut failure| {
+            if matches!(
+                failure.code,
+                CapabilityFailureCode::RevisionConflict | CapabilityFailureCode::GraphDraftChanged
+            ) && !failure.details.contains_key("resourceId")
+                && let Some(resource) = record.request.bound().and_then(request_resource_id)
+            {
+                failure = failure.with_detail("resourceId", resource);
+            }
+            failure.with_detail("capabilityId", capability_id.as_str())
+        });
         record.finished_at = Some(self.clock.now());
         match &outcome {
             Ok(result) => {
@@ -444,6 +549,7 @@ impl HarnessToolExecutor {
                     invocation_id: invocation_id.clone(),
                     capability_id,
                     failure_code: failure.code,
+                    failure_details: Some(failure.details.clone()),
                 },
             })
             .await;
@@ -503,9 +609,7 @@ impl HarnessToolExecutor {
         {
             return replay_existing(record);
         }
-        if let yss_harness_contract::AutomationCapabilityRequest::ApplyGraphEdit(edit) =
-            &record.request
-        {
+        if let Some(edit) = record.request.graph_edit() {
             let context = self.invocation_context(&record.idempotency_key)?;
             if let Some(receipt) = self
                 .gateway
@@ -550,16 +654,62 @@ fn persistence_unavailable() -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::PersistenceUnavailable)
 }
 
+pub(crate) async fn contain_tool_failure<T>(
+    future: impl Future<Output = Result<T, CapabilityFailure>>,
+) -> Result<T, CapabilityFailure> {
+    let mut future = std::pin::pin!(future);
+    poll_fn(
+        |context| match catch_unwind(AssertUnwindSafe(|| future.as_mut().poll(context))) {
+            Ok(result) => result,
+            Err(_) => Poll::Ready(Err(CapabilityFailure::new(
+                CapabilityFailureCode::InternalFailure,
+            ))),
+        },
+    )
+    .await
+}
+
+fn request_resource_id(request: &AutomationCapabilityRequest) -> Option<&str> {
+    use AutomationCapabilityRequest::*;
+    use yss_harness_contract::ManageResourceRequest as Manage;
+    Some(match request {
+        InspectChart(value) => &value.chart.id,
+        InspectResource(value) => &value.resource.id,
+        ManageResource(
+            Manage::Rename { resource, .. }
+            | Manage::Duplicate { resource, .. }
+            | Manage::Delete { resource, .. }
+            | Manage::Save { resource, .. },
+        ) => &resource.id,
+        EditResource(value) => &value.resource.id,
+        ReadDatabase(value) => &value.input.database().id,
+        ReadMind(value) => &value.input.mind().id,
+        ReadDocument(value) => &value.input.document().id,
+        ExportDatabase(value) => &value.resource.id,
+        InspectDatasetSchema(value) => &value.database_id,
+        InspectDatasetProfile(value) => &value.database_id,
+        InspectGraph(value) => &value.graph.id,
+        FindNodes(value) => &value.graph.id,
+        FindConstants(value) => &value.graph.id,
+        InspectConstants(value) => &value.graph.id,
+
+        InspectNodes(value) => &value.graph.id,
+        FindConnections(value) => &value.graph.id,
+        ApplyGraphEdit(value) => &value.graph_path,
+        GraphMutation(value) => &value.input.graph().id,
+        ValidateGraph(value) => &value.graph.id,
+        ExecuteGraph(value) => &value.graph.id,
+        SaveGraph(value) => &value.graph_path,
+        ListGraphResults(value) => &value.graph.id,
+        _ => return None,
+    })
+}
+
 fn graph_read_inputs(result: &yss_harness_contract::AutomationCapabilityResult) -> Option<&str> {
-    use yss_harness_contract::{AutomationCapabilityResult as Result, ResourceContent};
+    use yss_harness_contract::AutomationCapabilityResult as Result;
     match result {
         Result::GraphInspection(value) => Some(&value.semantic_input_hash),
         Result::GraphInspectionPage(value) => Some(&value.semantic_input_hash),
-        Result::ResourceInspection(value) => match &value.content {
-            ResourceContent::Graph { graph, .. } => Some(&graph.semantic_input_hash),
-            ResourceContent::GraphPage { graph, .. } => Some(&graph.semantic_input_hash),
-            _ => None,
-        },
         _ => None,
     }
 }
@@ -572,7 +722,7 @@ mod tests {
     use std::sync::Mutex;
     use yss_harness_contract::{
         AgentFuture, AgentOutputFailure, AutomationCapabilityRequest, CancellationReason,
-        CapabilityFuture, InspectDatasetProfileRequest,
+        CapabilityFuture, DatabaseReadRequest, model,
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
@@ -587,6 +737,12 @@ mod tests {
             Box::pin(async move {
                 match self.0 {
                     1 => panic!("synthetic adapter panic"),
+                    4 => panic!("invalid arguments must not reach the gateway"),
+                    5 => {
+                        return Err(CapabilityFailure::new(
+                            CapabilityFailureCode::RevisionConflict,
+                        ));
+                    }
                     2 => {
                         control.cancellation().cancel(CancellationReason::User);
                     }
@@ -622,6 +778,10 @@ mod tests {
             (1, CapabilityFailureCode::InternalFailure),
             (2, CapabilityFailureCode::Cancelled),
             (3, CapabilityFailureCode::DeadlineElapsed),
+            (4, CapabilityFailureCode::InvalidRequest),
+            (5, CapabilityFailureCode::RevisionConflict),
+            (6, CapabilityFailureCode::InvalidRequest),
+            (7, CapabilityFailureCode::InvalidRequest),
         ] {
             let store = Arc::new(InMemoryHarnessStore::default());
             let clock = Arc::new(FixedClock::new(1000));
@@ -634,7 +794,7 @@ mod tests {
                     Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
                 )),
                 store.clone(),
-                clock,
+                clock.clone(),
                 Arc::new(SequentialIds::default()),
                 PrincipalId::try_new("user-1").unwrap(),
                 HarnessSessionId::try_new("session-1").unwrap(),
@@ -646,27 +806,98 @@ mod tests {
                 CancellationToken::default(),
             )
             .with_output(output.clone());
-            let result = executor
-                .execute(
-                    AutomationCapabilityRequest::InspectDatasetProfile(
-                        InspectDatasetProfileRequest {
-                            database_id: "data-1".into(),
-                        },
-                    ),
-                    None,
-                )
-                .await;
-            assert_eq!(result.unwrap_err().code, expected);
+            let request = if mode == 4 {
+                AutomationCapabilityRequest::ReadDocument(yss_harness_contract::DocumentReadRequest {
+                    input:model::DocumentReadInput::Text(serde_json::from_value(serde_json::json!({"document":{"kind":"doc","id":"docs/report.md"},"limit":0})).unwrap()),
+                    version:None,
+                })
+            } else {
+                AutomationCapabilityRequest::ReadDatabase(DatabaseReadRequest {
+                    input: model::DatabaseReadInput::Overview(model::InspectDatabaseInput {
+                        database: model::DatabaseResourceRef::new("data-1".into()),
+                    }),
+                    version: None,
+                })
+            };
+            let failure = if mode >= 6 {
+                let started_at = clock.now();
+                clock.advance(37);
+                executor
+                    .reject(
+                        request.capability_id(),
+                        (mode == 7).then(|| (&request).into()),
+                        CapabilityFailure::new(CapabilityFailureCode::InvalidRequest),
+                        started_at,
+                    )
+                    .await
+            } else {
+                executor.execute(request, None).await
+            }
+            .unwrap_err();
+            assert_eq!(failure.code, expected);
+            if mode == 4 {
+                let visible = yss_harness_contract::model::failure(&failure);
+                assert_eq!(visible["details"]["field"], "limit");
+                assert_eq!(visible["details"]["maximumResults"], "16384");
+            } else if mode == 5 {
+                let visible = yss_harness_contract::model::failure(&failure);
+                assert_eq!(visible["code"], "resource_changed");
+                assert_eq!(visible["details"]["resourceId"], "data-1");
+            }
             let records = store.tool_invocations();
             assert_eq!(records.len(), 1);
             assert_eq!(records[0].state, ToolInvocationState::Failed);
             assert_eq!(records[0].failure.as_ref().unwrap().code, expected);
             assert!(records[0].finished_at.is_some());
+            if mode >= 6 {
+                assert!(records[0].request.bound().is_none());
+                assert_eq!(
+                    records[0].finished_at.unwrap().get() - records[0].started_at.get(),
+                    37
+                );
+                assert_eq!(records[0].request.model_input().is_some(), mode == 7);
+                assert_eq!(
+                    records[0].request.capability_id(),
+                    CapabilityId::InspectDatabase
+                );
+            }
             assert!(store.load_running_invocations().await.unwrap().is_empty());
             assert!(matches!(output.0.lock().unwrap().as_slice(), [
                 AgentEvent::ToolInvocationStarted { invocation_id: started, .. },
-                AgentEvent::ToolInvocationFailed { invocation_id: finished, failure_code, .. },
-            ] if started == finished && started == &records[0].id && *failure_code == expected));
+                AgentEvent::ToolInvocationFailed { invocation_id: finished, failure_code, failure_details, .. },
+            ] if started == finished && started == &records[0].id && *failure_code == expected
+                && failure_details.as_ref() == Some(&failure.details)));
+            if mode == 2 {
+                // Work queued before cancellation must not begin a new plan or delegation.
+                let tool = yss_harness_contract::AgentControlTool::ProposeStatisticalPlan;
+                assert_eq!(
+                    executor.begin_control(tool).await.unwrap_err().code,
+                    CapabilityFailureCode::Cancelled
+                );
+                assert!(matches!(&output.0.lock().unwrap()[2..], [
+                    AgentEvent::ControlToolStarted { invocation_id: started, .. },
+                    AgentEvent::ControlToolFinished { invocation_id: finished, failure_code: Some(CapabilityFailureCode::Cancelled), .. },
+                ] if started == finished));
+            } else if mode == 6 {
+                let tool = yss_harness_contract::AgentControlTool::DelegateTask;
+                let id = executor.begin_control(tool).await.unwrap();
+                let failure = CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
+                    .with_detail("category", "missing_field")
+                    .with_detail("path", "$.constraints")
+                    .with_detail("expected", "type=string");
+                executor
+                    .finish_control(id.clone(), tool, Some(failure.clone()))
+                    .await
+                    .unwrap();
+                assert!(matches!(&output.0.lock().unwrap()[2..], [
+                    AgentEvent::ControlToolStarted { invocation_id: started, .. },
+                    AgentEvent::ControlToolFinished {
+                        invocation_id: finished,
+                        failure_code: Some(CapabilityFailureCode::InvalidRequest),
+                        failure_details: Some(details), ..
+                    },
+                ] if started == &id && finished == &id && details == &failure.details));
+            }
         }
     }
 
@@ -676,7 +907,7 @@ mod tests {
 
         assert!(registry.descriptor(CapabilityId::InspectGraph).is_some());
         assert!(registry.descriptor(CapabilityId::InspectResource).is_some());
-        assert!(registry.descriptor(CapabilityId::ManageResource).is_none());
+        assert!(registry.descriptor(CapabilityId::CreateResource).is_none());
         assert!(registry.descriptor(CapabilityId::ApplyGraphEdit).is_none());
         let step = ToolRegistry::for_capability(CapabilityId::InspectDatasetSchema);
         assert!(
@@ -685,14 +916,18 @@ mod tests {
         );
         assert!(step.descriptor(CapabilityId::ApplyGraphEdit).is_none());
         let editor = ToolRegistry::for_agent(yss_harness_contract::AgentRole::Stats);
+        assert!(editor.descriptor(CapabilityId::ApplyGraphEdit).is_none());
+        assert!(editor.descriptor(CapabilityId::SaveGraph).is_none());
         for id in [
             CapabilityId::InspectResource,
-            CapabilityId::ManageResource,
+            CapabilityId::CreateResource,
             CapabilityId::EditResource,
-            CapabilityId::ApplyGraphEdit,
+            CapabilityId::CreateNodes,
+            CapabilityId::UndoResource,
+            CapabilityId::RedoResource,
             CapabilityId::ValidateGraph,
             CapabilityId::ExecuteGraph,
-            CapabilityId::SaveGraph,
+            CapabilityId::SaveResource,
             CapabilityId::ListGraphResults,
         ] {
             assert!(editor.descriptor(id).is_some());
@@ -703,8 +938,8 @@ mod tests {
     async fn graph_edit_retries_reuse_the_receipt_and_reject_changed_requests_with_the_same_key() {
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
         use yss_harness_contract::{
-            ApplyGraphEditRequest, AutomationCapabilityResult, GraphEditOperation,
-            GraphEditPosition, GraphEditReceipt, PersistenceFailure, PersistenceFailureCode,
+            ApplyGraphEditRequest, AutomationCapabilityResult, GraphEditPosition, GraphEditReceipt,
+            GraphMutationRequest, GraphResourceRef, PersistenceFailure, PersistenceFailureCode,
             PersistenceFuture,
         };
         struct Gateway {
@@ -722,12 +957,18 @@ mod tests {
                 Box::pin(async move {
                     self.writes.fetch_add(1, Ordering::SeqCst);
                     let receipt = GraphEditReceipt {
+                        created_constants: Default::default(),
                         graph_path: "events/Main.yssbi-event".into(),
                         from_revision: 0,
                         to_revision: 1,
                         client_key: "batch-1".into(),
                         graph_hash: "1".repeat(64),
-                        created_nodes: BTreeMap::new(),
+                        created_nodes: [(
+                            "large-committed-mapping".into(),
+                            "n".repeat(yss_harness_contract::MAX_CAPABILITY_RESULT_BYTES + 1),
+                        )]
+                        .into_iter()
+                        .collect(),
                         created_ports: BTreeMap::new(),
                         changes: yss_harness_contract::GraphEditChanges {
                             base_semantic_input_hash: "0".repeat(64),
@@ -840,23 +1081,24 @@ mod tests {
             CancellationToken::default(),
         )
         .with_output(Arc::new(ClosedAfterStart));
-        let mut edit = ApplyGraphEditRequest {
-            graph_path: "events/Main.yssbi-event".into(),
+        let mut edit = GraphMutationRequest {
             graph_hash: "0".repeat(64),
             base_revision: 0,
             client_key: "batch-1".into(),
-            locale: "en-US".into(),
-            operations: vec![GraphEditOperation::MoveNodes {
-                positions: vec![GraphEditPosition {
-                    node_id: "node-1".into(),
-                    x: 1.,
-                    y: 2.,
-                }],
-            }],
+            input: yss_harness_contract::model::GraphMutationInput::MoveNodes(
+                yss_harness_contract::model::MoveNodesInput {
+                    graph: GraphResourceRef::for_path("events/Main.yssbi-event"),
+                    positions: vec![GraphEditPosition {
+                        node_id: "node-1".into(),
+                        x: 1.,
+                        y: 2.,
+                    }],
+                },
+            ),
         };
         let first = executor
             .execute(
-                AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
+                AutomationCapabilityRequest::GraphMutation(edit.clone()),
                 None,
             )
             .await
@@ -867,7 +1109,7 @@ mod tests {
         );
         let retry = executor
             .execute(
-                AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
+                AutomationCapabilityRequest::GraphMutation(edit.clone()),
                 None,
             )
             .await
@@ -879,7 +1121,7 @@ mod tests {
         );
         let retained = executor
             .execute(
-                AutomationCapabilityRequest::ApplyGraphEdit(edit.clone()),
+                AutomationCapabilityRequest::GraphMutation(edit.clone()),
                 None,
             )
             .await
@@ -887,7 +1129,7 @@ mod tests {
         assert_eq!(retained, first);
         edit.base_revision = 1;
         let conflict = executor
-            .execute(AutomationCapabilityRequest::ApplyGraphEdit(edit), None)
+            .execute(AutomationCapabilityRequest::GraphMutation(edit), None)
             .await
             .unwrap_err();
         assert_eq!(conflict.code, CapabilityFailureCode::InvocationConflict);

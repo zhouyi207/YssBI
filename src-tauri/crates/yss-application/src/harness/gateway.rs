@@ -46,7 +46,7 @@ impl CapabilityGatewayPort for ApplicationCapabilityGateway {
     > {
         let application = self.application.clone();
         Box::pin(async move {
-            tauri::async_runtime::spawn_blocking(move || {
+            tokio::task::spawn_blocking(move || {
                 application.recover_automation_graph_edit(context, request)
             })
             .await
@@ -78,7 +78,7 @@ async fn run_on_blocking_pool<T: Send + 'static>(
 ) -> Result<T, CapabilityFailure> {
     control.check()?;
     let worker_control = control.clone();
-    let task = tauri::async_runtime::spawn_blocking(move || operation(worker_control));
+    let task = tokio::task::spawn_blocking(move || operation(worker_control));
     // Read-only work can be abandoned after signalling the query. A write must return
     // its actual receipt, even when its deadline passes during commit.
     let outcome = if read_only {
@@ -212,6 +212,7 @@ mod tests {
                     has_header: true,
                     infer_schema_length: Some(10),
                 },
+                None,
             )
             .unwrap()
             .data;

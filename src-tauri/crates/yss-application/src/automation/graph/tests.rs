@@ -2,6 +2,7 @@ use super::*;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::time::Duration;
 
+mod authoring;
 mod inspection;
 
 struct Fixture {
@@ -123,6 +124,7 @@ impl Fixture {
                     has_header: true,
                     infer_schema_length: Some(10),
                 },
+                None,
             )
             .unwrap()
             .data
@@ -243,13 +245,56 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
         .unwrap();
     assert!(!captured.project().has_resident_graph(&path).unwrap());
 
+    for run_id in [None, Some(u64::MAX)] {
+        let AutomationCapabilityResult::GraphResults(results) = f
+            .application
+            .as_ref()
+            .unwrap()
+            .invoke_automation_capability(
+                f.context.clone(),
+                AutomationCapabilityRequest::ListGraphResults(ListGraphResultsRequest {
+                    graph: GraphResourceRef::for_path(&f.path),
+                    run_id,
+                    node_ids: vec![],
+                    outputs: vec![],
+                    offset: 0,
+                    limit: 50,
+                }),
+                &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
+                &mut |_| {},
+            )
+            .unwrap()
+        else {
+            panic!("graph results")
+        };
+        assert!(results.results.is_empty());
+        assert_eq!(results.page.total, Some(0));
+        assert_eq!(results.run_status.as_deref(), run_id.map(|_| "unavailable"));
+    }
+    assert!(!captured.project().has_resident_graph(&path).unwrap());
+    assert_eq!(std::fs::read(&saved_path).unwrap(), saved);
+    assert!(captured.execution_snapshot().is_empty());
+    let missing = super::super::results::list_results(
+        &captured,
+        ListGraphResultsRequest {
+            graph: GraphResourceRef::for_path("events/Missing.yssbi-event"),
+            run_id: None,
+            node_ids: vec![],
+            outputs: vec![],
+            offset: 0,
+            limit: 50,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(missing.code, CapabilityFailureCode::GraphUnavailable);
+
     let AutomationCapabilityResult::ProjectInspection(inspection) = f
         .application
         .as_ref()
         .unwrap()
         .invoke_automation_capability(
             f.context.clone(),
-            AutomationCapabilityRequest::InspectProject(InspectProjectRequest {}),
+            AutomationCapabilityRequest::ListResources(ListResourcesRequest::default()),
             &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
             &mut |_| {},
         )
@@ -474,7 +519,10 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let AutomationCapabilityResult::GraphValidation(blocked) = f
         .action(AutomationCapabilityRequest::ValidateGraph(
             ValidateGraphRequest {
-                graph_path: f.path.clone(),
+                graph: GraphResourceRef::for_path(f.path.clone()),
+                node_ids: vec![],
+                offset: 0,
+                limit: 100,
                 graph_hash: created.graph_hash.clone(),
             },
         ))
@@ -537,7 +585,10 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let AutomationCapabilityResult::GraphValidation(validated) = f
         .action(AutomationCapabilityRequest::ValidateGraph(
             ValidateGraphRequest {
-                graph_path: f.path.clone(),
+                graph: GraphResourceRef::for_path(f.path.clone()),
+                node_ids: vec![],
+                offset: 0,
+                limit: 100,
                 graph_hash: graph_hash(&f.document).unwrap(),
             },
         ))
@@ -550,7 +601,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
                 demand: yss_harness_contract::GraphExecutionDemand::Default,
-                graph_path: f.path.clone(),
+                graph: GraphResourceRef::for_path(f.path.clone()),
                 graph_hash: validated.graph_hash,
             },
         ))
@@ -565,16 +616,17 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         .iter()
         .find(|result| result.output.starts_with(&created.created_nodes["product"]))
         .unwrap();
-    let AutomationCapabilityResult::ResultInspection(result) = f
+    let AutomationCapabilityResult::ResultTablePage(result) = f
         .application
         .as_ref()
         .unwrap()
         .invoke_automation_capability(
             f.context.clone(),
-            AutomationCapabilityRequest::InspectResult(InspectResultRequest {
-                execution_session_id: product.execution_session_id.clone(),
-                part: None,
-                result_id: product.result_id,
+            AutomationCapabilityRequest::ReadResultTable(ReadResultTableRequest {
+                table_ref: TableRef::new(product.result_ref.clone(), None),
+                columns: vec![],
+                column_offset: 0,
+                column_limit: 50,
                 offset: 0,
                 limit: 20,
             }),
@@ -583,11 +635,10 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         )
         .unwrap()
     else {
-        panic!("result")
+        panic!("table");
     };
-    let ResultValueInspection::Table { rows, has_more, .. } = result.value else {
-        panic!("table preview")
-    };
+    let rows = result.rows;
+    let has_more = result.page.has_more;
     assert!(!has_more);
     let actual = rows
         .into_iter()
@@ -604,6 +655,142 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
             serde_json::json!(9)
         ]
     );
+
+    let AutomationCapabilityResult::GraphExecution(source_run) = f
+        .action(AutomationCapabilityRequest::ExecuteGraph(
+            ExecuteGraphRequest {
+                graph: GraphResourceRef::for_path(f.path.clone()),
+                graph_hash: graph_hash(&f.document).unwrap(),
+                demand: GraphExecutionDemand::Node {
+                    node_id: created.created_nodes["source"].clone(),
+                    mode: NodeExecutionMode::Dependencies,
+                },
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("source run");
+    };
+    assert_eq!(source_run.status, "succeeded");
+    let timing = source_run.timing.as_ref().expect("admitted run timing");
+    assert!(timing.elapsed_ms >= timing.running_ms);
+    let public_run = yss_harness_contract::model::capability_result(
+        &AutomationCapabilityResult::GraphExecution(source_run.clone()),
+    )
+    .unwrap();
+    assert_eq!(
+        public_run["payload"]["timing"],
+        serde_json::to_value(timing).unwrap()
+    );
+    let query = ListGraphResultsRequest {
+        graph: GraphResourceRef::for_path(f.path.clone()),
+        run_id: source_run.run_id,
+        node_ids: vec![created.created_nodes["source"].clone()],
+        outputs: vec![],
+        offset: 0,
+        limit: 1,
+    };
+    let AutomationCapabilityResult::GraphResults(list) = f
+        .action(AutomationCapabilityRequest::ListGraphResults(query.clone()))
+        .unwrap()
+    else {
+        panic!("results");
+    };
+    assert_eq!(list.run_status.as_deref(), Some("succeeded"));
+    assert_eq!(list.run_timing, source_run.timing);
+    assert_eq!(list.page.total, Some(1));
+    assert_eq!(list.results[0].validity, ResultValidity::CurrentValid);
+    let table_result = list.results[0].result_ref.clone();
+    let session = f.application.as_ref().unwrap().capture_session().unwrap();
+    session.presentation.attach_workbench();
+    let opened = f
+        .action(AutomationCapabilityRequest::RequestUiIntent(
+            RequestUiIntent {
+                client_key: "open-produced-result".into(),
+                input: model::RequestUiIntentInput {
+                    intent: model::UiIntentInput::OpenResult {
+                        result_ref: table_result.clone(),
+                    },
+                },
+            },
+        ))
+        .unwrap();
+    let visible = model::capability_result(&opened).unwrap();
+    assert_eq!(
+        visible["payload"]["intent"]["resultRef"],
+        serde_json::json!(table_result)
+    );
+    let inspected = f
+        .action(AutomationCapabilityRequest::InspectUiIntent(
+            yss_ui_contract::InspectUiIntentRequest {
+                id: visible["payload"]["id"].as_str().unwrap().into(),
+            },
+        ))
+        .unwrap();
+    assert_eq!(
+        model::capability_result(&inspected).unwrap()["payload"],
+        visible["payload"]
+    );
+    session.presentation.detach_workbench();
+    let AutomationCapabilityResult::ResultInspection(overview) = f
+        .action(AutomationCapabilityRequest::InspectResult(
+            InspectResultRequest {
+                result_ref: table_result.clone(),
+                schema_offset: 1,
+                schema_limit: 1,
+            },
+        ))
+        .unwrap()
+    else {
+        panic!("schema");
+    };
+    let ResultValueInspection::Tabular {
+        table_ref,
+        columns,
+        schema_page,
+        ..
+    } = overview.value
+    else {
+        panic!("tabular");
+    };
+    assert_eq!(columns[0].name, "label");
+    assert_eq!(schema_page.total, Some(2));
+    let table_request = ReadResultTableRequest {
+        table_ref,
+        columns: vec!["label".into()],
+        column_offset: 0,
+        column_limit: 50,
+        offset: 1,
+        limit: 1,
+    };
+    let AutomationCapabilityResult::ResultTablePage(page) = f
+        .action(AutomationCapabilityRequest::ReadResultTable(
+            table_request.clone(),
+        ))
+        .unwrap()
+    else {
+        panic!("selected column");
+    };
+    assert_eq!(page.columns.len(), 1);
+    assert_eq!(page.rows, [serde_json::json!(["b"])]);
+    assert_eq!(page.page.next_offset, Some(2));
+    let mut invalid_column = table_request;
+    invalid_column.columns = vec!["missing".into()];
+    assert_eq!(
+        f.action(AutomationCapabilityRequest::ReadResultTable(invalid_column))
+            .unwrap_err()
+            .code,
+        CapabilityFailureCode::InvalidRequest
+    );
+    let mut next = query;
+    next.offset = 1;
+    let AutomationCapabilityResult::GraphResults(end) = f
+        .action(AutomationCapabilityRequest::ListGraphResults(next))
+        .unwrap()
+    else {
+        panic!("last page");
+    };
+    assert!(end.results.is_empty() && !end.page.has_more);
     assert_eq!(
         std::fs::read_to_string(&saved_path).unwrap(),
         saved_document,
@@ -627,21 +814,19 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let serialized = std::fs::read_to_string(f.directory.join("project").join(&f.path)).unwrap();
     assert!(serialized.contains(&created.created_nodes["product"]));
     let before_form = f.inspect();
-    let AutomationCapabilityResult::NodeCatalogSearch(definitions) = f
-        .action(AutomationCapabilityRequest::SearchNodeCatalog(
-            SearchNodeCatalogRequest {
-                query: "yssbi.statistics.linear.fit".into(),
+    let AutomationCapabilityResult::NodeTypeInspection(definitions) = f
+        .action(AutomationCapabilityRequest::InspectNodeType(
+            InspectNodeTypeRequest {
+                type_ids: vec!["yssbi.statistics.linear.fit".into()],
                 locale: "en-US".into(),
-                limit: 1,
-                include_parameters: true,
             },
         ))
         .unwrap()
     else {
         panic!("node definition");
     };
-    let definition = &definitions.matches[0];
-    let configuration = definition.configuration_schema.as_ref().unwrap();
+    let definition = &definitions.types[0];
+    let configuration = &definition.configuration_schema;
     let configuration_validator = jsonschema::validator_for(configuration).unwrap();
     assert!(configuration_validator.is_valid(&serde_json::json!({
         "parameters": {"method": "OLS"}, "portCounts": {"x": 4}
@@ -653,27 +838,22 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         "parameters": {"method": "OLS"}, "portCounts": {"y": 2}
     })));
     assert!(
-        definition
-            .ports
-            .as_ref()
-            .unwrap()
-            .iter()
-            .any(|port| port.key == "x"
-                && matches!(port.count, NodePortCountPolicy::Configurable { .. }))
+        definition.ports.iter().any(|port| port.key == "x"
+            && matches!(port.count, NodePortCountPolicy::Configurable { .. }))
     );
     let application = f.application.as_ref().unwrap();
     let session = application.capture_session().unwrap();
     let form = application
         .node_creation_form(
             session.project_instance_id(),
-            &definition.node_type_id.parse().unwrap(),
+            &definition.type_id.parse().unwrap(),
             [("method".parse().unwrap(), serde_json::json!("OLS"))].into(),
             [("x".parse().unwrap(), 4)].into(),
             "en-US",
         )
         .unwrap();
     assert_eq!(f.inspect(), before_form);
-    let mut configured = node(&definition.node_type_id, "configured");
+    let mut configured = node(&definition.type_id, "configured");
     if let GraphEditOperation::CreateNode {
         parameters,
         port_counts,
@@ -826,18 +1006,21 @@ fn agent_graph_execution_inherits_dependency_reads_and_preserves_explicit_versio
         let AutomationCapabilityResult::ResourceInspection(value) = fixture
             .action(AutomationCapabilityRequest::InspectResource(
                 InspectResourceRequest {
-                    graph_view: GraphInspectionView::Overview,
-                    metadata_only: true,
                     resource: resource.clone(),
-                    offset: 0,
-                    limit: 1,
                 },
             ))
             .unwrap()
         else {
             panic!("resource")
         };
-        assert!(matches!(value.content, ResourceContent::Metadata));
+        let visible = model::capability_result(&AutomationCapabilityResult::ResourceInspection(
+            value.clone(),
+        ))
+        .unwrap();
+        assert_eq!(
+            visible["payload"]["content"],
+            serde_json::json!({"kind":"metadata"})
+        );
         grants.push(AgentResourceAccess {
             resource,
             version: Some(value.version),
@@ -850,7 +1033,7 @@ fn agent_graph_execution_inherits_dependency_reads_and_preserves_explicit_versio
     let context = fixture.context.clone();
     let run = AutomationCapabilityRequest::ExecuteGraph(ExecuteGraphRequest {
         demand: yss_harness_contract::GraphExecutionDemand::Default,
-        graph_path: fixture.path.clone(),
+        graph: GraphResourceRef::for_path(fixture.path.clone()),
         graph_hash: created.graph_hash,
     });
     fixture.context = context.clone().with_agent(AgentInvocationScope {
@@ -960,6 +1143,37 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
         connect(port("$table", "dataframe"), port("$project", "source")),
     ]);
     assert!(!created.changes.ready);
+    let mut validate = |node_ids: Vec<String>, offset| {
+        let AutomationCapabilityResult::GraphValidation(result) = fixture
+            .action(AutomationCapabilityRequest::ValidateGraph(
+                ValidateGraphRequest {
+                    graph: GraphResourceRef::for_path(fixture.path.clone()),
+                    graph_hash: created.graph_hash.clone(),
+                    node_ids,
+                    offset,
+                    limit: 1,
+                },
+            ))
+            .unwrap()
+        else {
+            panic!("validation")
+        };
+        result
+    };
+    let local = validate(vec![created.created_nodes["product"].clone()], 0);
+    assert!(local.ready);
+    assert_eq!(
+        local.scope_node_count, 2,
+        "validation includes the real dependency closure"
+    );
+    assert!(local.diagnostics.is_empty());
+    let whole = validate(vec![], 0);
+    assert!(!whole.ready);
+    assert!(whole.page.total.unwrap() > 0);
+    assert!(
+        !validate(vec![], whole.page.total.unwrap()).ready,
+        "paging cannot hide blocking diagnostics from readiness"
+    );
     let application = fixture.application.as_ref().unwrap();
     let session = application.capture_session().unwrap();
     let graph = GraphResourcePath::new(&fixture.path).unwrap();
@@ -1056,7 +1270,7 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
     let AutomationCapabilityResult::GraphExecution(executed) = fixture
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
-                graph_path: fixture.path.clone(),
+                graph: GraphResourceRef::for_path(fixture.path.clone()),
                 graph_hash: created.graph_hash.clone(),
                 demand: yss_harness_contract::GraphExecutionDemand::Node {
                     node_id: created.created_nodes["product"].clone(),
@@ -1074,7 +1288,7 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
         let AutomationCapabilityResult::GraphExecution(result) = fixture
             .action(AutomationCapabilityRequest::ExecuteGraph(
                 ExecuteGraphRequest {
-                    graph_path: fixture.path.clone(),
+                    graph: GraphResourceRef::for_path(fixture.path.clone()),
                     graph_hash: created.graph_hash.clone(),
                     demand: yss_harness_contract::GraphExecutionDemand::Node {
                         node_id: created.created_nodes[alias].clone(),
@@ -1364,7 +1578,7 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
                 demand: yss_harness_contract::GraphExecutionDemand::Default,
-                graph_path: f.path.clone(),
+                graph: GraphResourceRef::for_path(f.path.clone()),
                 graph_hash: created.graph_hash,
             },
         ))
@@ -1389,7 +1603,8 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
     assert!(
         run.results
             .iter()
-            .any(|result| result.result_id == requests[0].0 && Some(result.run_id) == run.run_id)
+            .any(|result| result.result_ref.result_id() == requests[0].0
+                && Some(result.run_id) == run.run_id)
     );
     assert_ne!(run.graph_hash, graph_hash(&f.document).unwrap());
 }
@@ -1427,7 +1642,7 @@ fn execute_graph_reports_when_its_result_references_are_bounded() {
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
                 demand: yss_harness_contract::GraphExecutionDemand::Default,
-                graph_path: f.path.clone(),
+                graph: GraphResourceRef::for_path(f.path.clone()),
                 graph_hash: graph_hash(&f.document).unwrap(),
             },
         ))
@@ -1450,14 +1665,31 @@ fn execute_graph_reports_when_its_result_references_are_bounded() {
 }
 
 #[test]
-fn oversized_graph_edit_facts_are_rejected_before_committing() {
+fn graph_edit_receipts_admit_large_batches_and_reject_oversized_facts_before_committing() {
     let mut f = Fixture::new();
+    f.inspect();
+    let batch = f.edit_request(
+        (0..100)
+            .map(|index| node("yssbi.numeric.multiply", &format!("node-{index}")))
+            .collect(),
+    );
+    let committed = f.action(batch.clone()).unwrap();
+    assert!(serde_json::to_vec(&committed).unwrap().len() > 64 * 1024);
+    assert_eq!(f.document.nodes.len(), 100);
+    assert_eq!(f.action(batch).unwrap(), committed);
     let before = f.inspect();
     let saved_path = f.directory.join("project").join(&f.path);
     let before_file = std::fs::read(&saved_path).unwrap();
     let request = f.edit_request(
         (0..100)
-            .map(|index| node("yssbi.numeric.multiply", &format!("node-{index}")))
+            .map(|index| {
+                let mut operation = node("yssbi.statistics.linear.fit", &format!("fit-{index}"));
+                let GraphEditOperation::CreateNode { port_counts, .. } = &mut operation else {
+                    unreachable!()
+                };
+                port_counts.insert("x".into(), 32);
+                operation
+            })
             .collect(),
     );
     assert_eq!(
@@ -1626,8 +1858,9 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             .unwrap()
             .invoke_automation_capability(
                 f.context.clone(),
-                AutomationCapabilityRequest::SearchNodeCatalog(SearchNodeCatalogRequest {
-                    include_parameters: true,
+                AutomationCapabilityRequest::BrowseNodes(BrowseNodesRequest {
+                    category: None,
+                    offset: 0,
                     query: query.into(),
                     locale: "zh-CN".into(),
                     limit: 20,
@@ -1637,10 +1870,10 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             )
             .unwrap();
         assert!(
-            matches!(result, AutomationCapabilityResult::NodeCatalogSearch(ref result) if !result.matches.is_empty()),
+            matches!(result, AutomationCapabilityResult::NodeCatalogPage(ref result) if !result.matches.is_empty()),
             "{query}"
         );
-        if let AutomationCapabilityResult::NodeCatalogSearch(result) = result {
+        if let AutomationCapabilityResult::NodeCatalogPage(result) = result {
             let application = f.application.as_ref().unwrap();
             let session = application.capture_session().unwrap();
             let (_, _, _, catalog) = application
@@ -1653,7 +1886,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
                 .into_fields();
             assert!(result.matches.iter().all(|item| {
                 catalog.items.iter().any(|entry| {
-                    entry.node_type_id.as_ref() == item.node_type_id.as_str() && entry.available
+                    entry.node_type_id.as_ref() == item.type_id.as_str() && entry.available
                 })
             }));
         }

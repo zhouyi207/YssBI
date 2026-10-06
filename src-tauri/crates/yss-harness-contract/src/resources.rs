@@ -1,7 +1,4 @@
-use crate::{
-    CapabilityContractError, DatasetSchemaInspection, GraphInspection, GraphInspectionPage,
-    GraphInspectionView, validate_resource_id,
-};
+use crate::{CapabilityContractError, validate_resource_id};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -43,19 +40,6 @@ pub struct ResourceVersion {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectResourceRequest {
     pub resource: ProjectResourceRef,
-    /// Return identity and dirty state without materializing the content.
-    #[serde(default)]
-    pub metadata_only: bool,
-    /// Graph resources default to a paged overview. Use inspect_graph for filters and details.
-    #[serde(default)]
-    pub graph_view: GraphInspectionView,
-    #[serde(default)]
-    pub offset: usize,
-    #[serde(default = "default_page_size")]
-    pub limit: usize,
-}
-fn default_page_size() -> usize {
-    100
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -77,6 +61,7 @@ pub enum ManageResourceRequest {
     Duplicate {
         resource: ProjectResourceRef,
         version: ResourceVersion,
+        name: Option<String>,
     },
     Delete {
         resource: ProjectResourceRef,
@@ -96,12 +81,26 @@ pub enum ManageResourceRequest {
     deny_unknown_fields
 )]
 pub enum ResourceCreation {
-    EventGraph { name: String },
-    FunctionGraph { name: String },
-    Chart { name: String },
-    Mind { name: String },
-    Doc { name: String },
-    Database { source: DatasetImportSource },
+    EventGraph {
+        name: String,
+    },
+    FunctionGraph {
+        name: String,
+    },
+    Chart {
+        name: String,
+    },
+    Mind {
+        name: String,
+    },
+    Doc {
+        name: String,
+    },
+    Database {
+        source: DatasetImportSource,
+        #[serde(default)]
+        name: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -155,7 +154,7 @@ pub enum DatasetExportFormat {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ExportDatasetRequest {
+pub struct ExportDatabaseRequest {
     pub resource: ProjectResourceRef,
     pub version: ResourceVersion,
     pub path: String,
@@ -178,24 +177,72 @@ pub struct EditResourceRequest {
     deny_unknown_fields
 )]
 pub enum ResourceEdit {
-    Chart {
-        settings: ChartSettings,
+    CreateColumns {
+        columns: Vec<crate::model::DatabaseColumnDeclaration>,
     },
-    Mind {
-        operations: Vec<MindOperation>,
+    RenameColumns {
+        columns: Vec<crate::model::DatabaseColumnRename>,
     },
-    Doc {
-        operations: Vec<MarkdownOperation>,
+    DeleteColumns {
+        columns: Vec<String>,
     },
-    Database {
-        operation: DatasetOperation,
+    CastColumns {
+        columns: Vec<crate::model::DatabaseColumnCast>,
     },
+    SetColumnSemantics {
+        columns: Vec<crate::model::DatabaseColumnMeaning>,
+    },
+
+    InsertRows {
+        rows: Vec<BTreeMap<String, yss_data_contract::TabularScalar>>,
+        before_row_id: Option<i64>,
+    },
+    UpdateCells {
+        cells: Vec<crate::model::DatabaseCellEdit>,
+    },
+    DeleteRows {
+        row_ids: Vec<i64>,
+    },
+    UpdateChart {
+        settings: crate::model::ChartSettingsUpdate,
+    },
+    CreateTopics {
+        topics: Vec<crate::model::TopicCreation>,
+        before_id: Option<String>,
+    },
+    UpdateTopics {
+        topics: Vec<crate::model::TopicUpdate>,
+    },
+    MoveTopics {
+        topics: Vec<crate::model::TopicMove>,
+    },
+    DeleteTopics {
+        topic_ids: Vec<String>,
+    },
+    DuplicateTopics {
+        topic_ids: Vec<String>,
+        parent_id: String,
+        before_id: Option<String>,
+    },
+    ReplaceDocumentText {
+        replacements: Vec<crate::model::DocumentTextReplacement>,
+    },
+    AppendDocument {
+        text: String,
+    },
+    WriteDocument {
+        markdown: String,
+    },
+
     FunctionSignature {
         signature: FunctionSignatureInspection,
     },
     GraphHistory {
         redo: bool,
         graph_hash: String,
+    },
+    DatabaseHistory {
+        redo: bool,
     },
 }
 
@@ -219,111 +266,6 @@ pub enum MindResourceReference {
     GraphNode { path: String, node_id: String },
     Database { database_id: String },
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MindTopic {
-    pub id: String,
-    pub parent_id: Option<String>,
-    pub content: String,
-    pub reference: Option<MindResourceReference>,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "op",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum MindOperation {
-    AddNode {
-        client_id: String,
-        parent_id: String,
-        content: String,
-    },
-    SetContent {
-        node_id: String,
-        content: String,
-    },
-    SetReference {
-        node_id: String,
-        reference: Option<MindResourceReference>,
-    },
-    MoveNode {
-        node_id: String,
-        parent_id: String,
-        before_id: Option<String>,
-    },
-    RemoveNode {
-        node_id: String,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "op",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum MarkdownOperation {
-    SetMarkdown {
-        markdown: String,
-    },
-    /// Replace [start, end) using zero-based Unicode scalar offsets (not UTF-8 bytes or
-    /// UTF-16 units). Ranges apply after preceding operations; start == end inserts.
-    /// Preserve text outside the range, including portions not returned by inspection.
-    ReplaceRange {
-        start: usize,
-        end: usize,
-        markdown: String,
-    },
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "op",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum DatasetOperation {
-    EditCell {
-        row: usize,
-        column: String,
-        value: serde_json::Value,
-        row_id: Option<i64>,
-    },
-    AddRow {
-        index: Option<usize>,
-    },
-    DeleteRows {
-        indices: Vec<usize>,
-        row_ids: Option<Vec<i64>>,
-    },
-    AddColumn {
-        name: String,
-        dtype: String,
-    },
-    DeleteColumn {
-        name: String,
-    },
-    CastColumn {
-        column: String,
-        dtype: String,
-        force: bool,
-    },
-    SetColumnSemantic {
-        column: String,
-        semantic: DatasetColumnSemantic,
-    },
-    RenameColumn {
-        old_name: String,
-        new_name: String,
-    },
-    Undo,
-    Redo,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DatasetColumnSemantic {
@@ -389,39 +331,14 @@ pub struct ResourceInspection {
 )]
 pub enum ResourceContent {
     Metadata,
-    Graph {
-        graph: GraphInspection,
-        function: Option<FunctionSignatureInspection>,
-        can_undo: bool,
-        can_redo: bool,
+    /// Existing function signature capability, without graph node or connection content.
+    Function {
+        signature: FunctionSignatureInspection,
     },
-    GraphPage {
-        graph: GraphInspectionPage,
-        function: Option<FunctionSignatureInspection>,
-        can_undo: bool,
-        can_redo: bool,
-    },
-    Chart {
-        settings: ChartSettings,
-    },
-    Mind {
-        root_id: String,
-        nodes: Vec<MindTopic>,
-        total_nodes: usize,
-        next_offset: Option<usize>,
-    },
-    Doc {
-        markdown: String,
-        total_characters: usize,
-        next_offset: Option<usize>,
-    },
-    Database {
-        schema: DatasetSchemaInspection,
-        rows: Vec<Vec<serde_json::Value>>,
-        row_ids: Vec<i64>,
-        next_offset: Option<usize>,
-        can_undo: bool,
-        can_redo: bool,
+    /// Captured owner counters for binding older dataset observations; never model-visible.
+    DatabaseMetadata {
+        runtime_revision: u64,
+        schema_revision: u64,
     },
 }
 
@@ -451,41 +368,44 @@ pub struct ResourceMutationReceipt {
     pub publication_revision: Option<u64>,
     pub changes: Vec<ResourceChange>,
     pub moves: Vec<ResourceMove>,
-    pub created_nodes: BTreeMap<String, String>,
+    pub mind_edit: Option<crate::MindEditReceipt>,
+    pub document_edit: Option<crate::DocumentEditReceipt>,
+    /// Owner metadata verified at the committed version; absent if a concurrent change won.
+    pub resources: Vec<ResourceMutationState>,
+    pub database_edit: Option<DatabaseEditReceipt>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DatabaseEditReceipt {
+    pub item_count: usize,
+    pub inserted_row_ids: Vec<i64>,
+    /// Committed target names (new names after rename; removed names after delete).
+    pub column_names: Vec<String>,
+    pub dirty: bool,
+    pub can_undo: bool,
+    pub can_redo: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourceMutationState {
+    pub resource: ProjectResourceRef,
+    pub name: String,
+    pub version: ResourceVersion,
+    pub dirty: Option<bool>,
+    pub root_topic_id: Option<String>,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DatasetExported {
+pub struct DatabaseExported {
     pub resource: ProjectResourceRef,
     pub path: String,
 }
 
 impl InspectResourceRequest {
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
-        validate_resource_id("resource.id", &self.resource.id)?;
-        if self.graph_view != GraphInspectionView::Overview
-            && (self.metadata_only
-                || !matches!(
-                    self.resource.kind,
-                    ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph
-                ))
-        {
-            return Err(CapabilityContractError::InvalidField("graphView"));
-        }
-        if self.graph_view == GraphInspectionView::Full && self.offset != 0 {
-            return Err(CapabilityContractError::InvalidField("offset"));
-        }
-        let maximum = match self.resource.kind {
-            ProjectResourceKind::Doc => 16_384,
-            ProjectResourceKind::Mind => 500,
-            _ => 100,
-        };
-        if self.limit == 0 || self.limit > maximum {
-            return Err(CapabilityContractError::InvalidLimit {
-                maximum: maximum as u16,
-            });
-        }
-        Ok(())
+        validate_resource_id("resource.id", &self.resource.id)
     }
 }
 impl ManageResourceRequest {
@@ -497,15 +417,26 @@ impl ManageResourceRequest {
                 | ResourceCreation::Chart { name }
                 | ResourceCreation::Mind { name }
                 | ResourceCreation::Doc { name } => validate_resource_id("name", name),
-                ResourceCreation::Database { source } => source.validate(),
+                ResourceCreation::Database { source, name } => {
+                    if let Some(name) = name {
+                        validate_resource_id("name", name)?;
+                    }
+                    source.validate()
+                }
             },
             Self::Rename { resource, name, .. } => {
                 validate_resource_id("name", name)?;
                 validate_resource_id("resource.id", &resource.id)
             }
-            Self::Duplicate { resource, .. }
-            | Self::Delete { resource, .. }
-            | Self::Save { resource, .. } => validate_resource_id("resource.id", &resource.id),
+            Self::Duplicate { resource, name, .. } => {
+                if let Some(name) = name {
+                    validate_resource_id("name", name)?;
+                }
+                validate_resource_id("resource.id", &resource.id)
+            }
+            Self::Delete { resource, .. } | Self::Save { resource, .. } => {
+                validate_resource_id("resource.id", &resource.id)
+            }
         }
     }
 }
@@ -527,14 +458,69 @@ impl DatasetImportSource {
     }
 }
 impl EditResourceRequest {
+    pub const fn capability_id(&self) -> crate::CapabilityId {
+        match &self.edit {
+            ResourceEdit::UpdateChart { .. } => crate::CapabilityId::UpdateChart,
+            ResourceEdit::ReplaceDocumentText { .. } => crate::CapabilityId::ReplaceDocumentText,
+            ResourceEdit::AppendDocument { .. } => crate::CapabilityId::AppendDocument,
+            ResourceEdit::WriteDocument { .. } => crate::CapabilityId::WriteDocument,
+
+            ResourceEdit::CreateTopics { .. } => crate::CapabilityId::CreateTopics,
+            ResourceEdit::UpdateTopics { .. } => crate::CapabilityId::UpdateTopics,
+            ResourceEdit::MoveTopics { .. } => crate::CapabilityId::MoveTopics,
+            ResourceEdit::DeleteTopics { .. } => crate::CapabilityId::DeleteTopics,
+            ResourceEdit::DuplicateTopics { .. } => crate::CapabilityId::DuplicateTopics,
+
+            ResourceEdit::CreateColumns { .. } => crate::CapabilityId::CreateColumns,
+            ResourceEdit::RenameColumns { .. } => crate::CapabilityId::RenameColumns,
+            ResourceEdit::DeleteColumns { .. } => crate::CapabilityId::DeleteColumns,
+            ResourceEdit::CastColumns { .. } => crate::CapabilityId::CastColumns,
+            ResourceEdit::SetColumnSemantics { .. } => crate::CapabilityId::SetColumnSemantics,
+            ResourceEdit::InsertRows { .. } => crate::CapabilityId::InsertRows,
+            ResourceEdit::UpdateCells { .. } => crate::CapabilityId::UpdateCells,
+            ResourceEdit::DeleteRows { .. } => crate::CapabilityId::DeleteRows,
+            ResourceEdit::GraphHistory { redo: false, .. }
+            | ResourceEdit::DatabaseHistory { redo: false } => crate::CapabilityId::UndoResource,
+            ResourceEdit::GraphHistory { redo: true, .. }
+            | ResourceEdit::DatabaseHistory { redo: true } => crate::CapabilityId::RedoResource,
+            _ => crate::CapabilityId::EditResource,
+        }
+    }
+
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
         validate_resource_id("resource.id", &self.resource.id)?;
         let valid = matches!(
             (&self.resource.kind, &self.edit),
-            (ProjectResourceKind::Chart, ResourceEdit::Chart { .. })
-                | (ProjectResourceKind::Mind, ResourceEdit::Mind { .. })
-                | (ProjectResourceKind::Doc, ResourceEdit::Doc { .. })
-                | (ProjectResourceKind::Database, ResourceEdit::Database { .. })
+            (ProjectResourceKind::Chart, ResourceEdit::UpdateChart { .. })
+                | (
+                    ProjectResourceKind::Mind,
+                    ResourceEdit::CreateTopics { .. }
+                        | ResourceEdit::UpdateTopics { .. }
+                        | ResourceEdit::MoveTopics { .. }
+                        | ResourceEdit::DeleteTopics { .. }
+                        | ResourceEdit::DuplicateTopics { .. }
+                )
+                | (
+                    ProjectResourceKind::Doc,
+                    ResourceEdit::ReplaceDocumentText { .. }
+                        | ResourceEdit::AppendDocument { .. }
+                        | ResourceEdit::WriteDocument { .. }
+                )
+                | (
+                    ProjectResourceKind::Database,
+                    ResourceEdit::InsertRows { .. }
+                        | ResourceEdit::UpdateCells { .. }
+                        | ResourceEdit::DeleteRows { .. }
+                        | ResourceEdit::CreateColumns { .. }
+                        | ResourceEdit::RenameColumns { .. }
+                        | ResourceEdit::DeleteColumns { .. }
+                        | ResourceEdit::CastColumns { .. }
+                        | ResourceEdit::SetColumnSemantics { .. }
+                )
+                | (
+                    ProjectResourceKind::Database,
+                    ResourceEdit::DatabaseHistory { .. }
+                )
                 | (
                     ProjectResourceKind::FunctionGraph,
                     ResourceEdit::FunctionSignature { .. }
@@ -548,18 +534,97 @@ impl EditResourceRequest {
             return Err(CapabilityContractError::InvalidField("edit.kind"));
         }
         let count = match &self.edit {
-            ResourceEdit::Mind { operations } => operations.len(),
-            ResourceEdit::Doc { operations } => operations.len(),
+            ResourceEdit::UpdateChart { settings } => {
+                settings.validate()?;
+                1
+            }
+            ResourceEdit::InsertRows {
+                rows,
+                before_row_id,
+            } => {
+                if before_row_id.is_some_and(|id| id < 0) {
+                    return Err(CapabilityContractError::InvalidField("beforeRowId"));
+                }
+                for row in rows {
+                    for column in row.keys() {
+                        validate_resource_id("rows.column", column)?;
+                    }
+                }
+                rows.len()
+            }
+            ResourceEdit::UpdateCells { cells } => {
+                crate::model::validate_cells(cells)?;
+                cells.len()
+            }
+            ResourceEdit::DeleteRows { row_ids } => {
+                crate::model::validate_row_ids(row_ids)?;
+                row_ids.len()
+            }
+            ResourceEdit::CreateColumns { columns } => {
+                crate::model::validate_column_names(
+                    columns.iter().map(|column| column.name.as_str()),
+                )?;
+                for column in columns {
+                    validate_resource_id("columns.dtype", &column.dtype)?;
+                }
+                columns.len()
+            }
+            ResourceEdit::RenameColumns { columns } => {
+                crate::model::validate_column_names(
+                    columns.iter().map(|column| column.column.as_str()),
+                )?;
+                crate::model::validate_column_names(
+                    columns.iter().map(|column| column.name.as_str()),
+                )?;
+                columns.len()
+            }
+            ResourceEdit::DeleteColumns { columns } => {
+                crate::model::validate_column_names(columns.iter().map(String::as_str))?;
+                columns.len()
+            }
+            ResourceEdit::CastColumns { columns } => {
+                crate::model::validate_column_names(
+                    columns.iter().map(|column| column.column.as_str()),
+                )?;
+                for column in columns {
+                    validate_resource_id("columns.dtype", &column.dtype)?;
+                }
+                columns.len()
+            }
+            ResourceEdit::SetColumnSemantics { columns } => {
+                crate::model::validate_column_names(
+                    columns.iter().map(|column| column.column.as_str()),
+                )?;
+                columns.len()
+            }
+            ResourceEdit::CreateTopics { .. }
+            | ResourceEdit::UpdateTopics { .. }
+            | ResourceEdit::MoveTopics { .. }
+            | ResourceEdit::DeleteTopics { .. }
+            | ResourceEdit::DuplicateTopics { .. } => {
+                crate::model::validate_topic_edits(&self.edit)?
+            }
+            ResourceEdit::ReplaceDocumentText { replacements } => replacements.len(),
             _ => 1,
         };
         if count == 0 || count > 200 {
             return Err(CapabilityContractError::InvalidLimit { maximum: 200 });
         }
-        crate::graph::validate_graph_json(&self.edit)
+        // Markdown body size is enforced by the original Doc owner, not the graph JSON budget.
+        if matches!(
+            self.edit,
+            ResourceEdit::ReplaceDocumentText { .. }
+                | ResourceEdit::AppendDocument { .. }
+                | ResourceEdit::WriteDocument { .. }
+        ) {
+            Ok(())
+        } else {
+            crate::graph::validate_graph_json(&self.edit)
+        }
     }
 }
 
-impl ExportDatasetRequest {
+impl ExportDatabaseRequest {
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
         if self.resource.kind != ProjectResourceKind::Database {
             return Err(CapabilityContractError::InvalidField("resource.kind"));

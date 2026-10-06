@@ -102,15 +102,34 @@ fn with_current_graph_results<T>(
     outcome
 }
 
-pub(crate) fn query_graph_results(
+pub(crate) fn query_graph_result_entries(
     captured: &ApplicationSession,
     graph: &GraphResourcePath,
-    limit: usize,
-) -> Result<Vec<StoredResultSnapshot>, ResultQueryApplicationError> {
+    run: Option<yss_graph_execution::run_registry::RunId>,
+) -> Result<Vec<yss_graph_execution::result::ResultReadSnapshot>, ResultQueryApplicationError> {
     with_current_graph_results(captured, graph, |_| {
         Ok(captured
             .execution()
-            .query_graph_results(graph.as_str(), limit))
+            .query_graph_result_entries(graph.as_str(), run))
+    })
+}
+
+pub(crate) fn query_result_with_validity(
+    captured: &ApplicationSession,
+    reference: ResultReference,
+) -> Result<Option<yss_graph_execution::result::ResultReadSnapshot>, ResultQueryApplicationError> {
+    if reference.execution_session_id != captured.execution_session_id() {
+        return Err(ResultQueryApplicationError::SessionChanged);
+    }
+    let Some(snapshot) = captured.execution().query_result(reference.result_id) else {
+        return Ok(None);
+    };
+    let graph = GraphResourcePath::new(snapshot.output().graph().as_str())
+        .map_err(|_| ResultQueryApplicationError::InvalidPageRequest)?;
+    with_current_graph_results(captured, &graph, |_| {
+        Ok(captured
+            .execution()
+            .query_result_with_validity(reference.result_id))
     })
 }
 
@@ -147,6 +166,14 @@ impl ApplicationState {
     pub fn query_result_projection(
         &self,
         reference: ResultReference,
+    ) -> Result<Option<ResultValueProjection>, ResultQueryApplicationError> {
+        self.query_result_projection_with_tables(reference, &structured::table_marker)
+    }
+
+    pub(crate) fn query_result_projection_with_tables(
+        &self,
+        reference: ResultReference,
+        table: &dyn Fn(&str, usize) -> RuntimeValue,
     ) -> Result<Option<ResultValueProjection>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         if captured.execution_session_id() != reference.execution_session_id {
@@ -187,9 +214,9 @@ impl ApplicationState {
             RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_) => {
                 Err(ResultQueryApplicationError::InvalidPageRequest)
             }
-            value if structured::supports(&snapshot) => {
-                Ok(ResultValueProjection::Value(structured::project(value)?))
-            }
+            value if structured::supports(&snapshot) => Ok(ResultValueProjection::Value(
+                structured::project_with_tables(value, table)?,
+            )),
             value => {
                 let mut remaining = MAX_INLINE_PROJECTION_BYTES;
                 charge_value(value, &mut remaining, 0)?;
@@ -233,6 +260,17 @@ impl ApplicationState {
         limit: usize,
         control: &RelationControl,
     ) -> Result<Option<ResultPageProjection>, ResultQueryApplicationError> {
+        self.query_result_columns_with_control(reference, &[], offset, limit, control)
+    }
+
+    pub(crate) fn query_result_columns_with_control(
+        &self,
+        reference: ResultReference,
+        columns: &[String],
+        offset: usize,
+        limit: usize,
+        control: &RelationControl,
+    ) -> Result<Option<ResultPageProjection>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         if captured.execution_session_id() != reference.execution_session_id {
             return Err(ResultQueryApplicationError::SessionChanged);
@@ -241,7 +279,7 @@ impl ApplicationState {
         let Some(result) = captured.execution().query_result(result_id) else {
             return Ok(None);
         };
-        let page = project_result_page(result.value(), offset, limit, control);
+        let page = project_result_columns(result.value(), columns, offset, limit, control);
         self.revalidate_captured_session(&captured)
             .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
         // A query may outlive its last owner, but it cannot publish after reclamation.
@@ -308,8 +346,19 @@ impl ApplicationState {
     }
 }
 
+#[cfg(test)]
 fn project_result_page(
     result: &StoredResult,
+    offset: usize,
+    limit: usize,
+    control: &RelationControl,
+) -> Result<ResultPageProjection, ResultQueryApplicationError> {
+    project_result_columns(result, &[], offset, limit, control)
+}
+
+fn project_result_columns(
+    result: &StoredResult,
+    columns: &[String],
     offset: usize,
     limit: usize,
     control: &RelationControl,
@@ -318,7 +367,15 @@ fn project_result_page(
         return Err(ResultQueryApplicationError::InvalidPageRequest);
     }
     control.check()?;
-    let structure = ResultStructure::project(result);
+    let mut structure = ResultStructure::project(result);
+    if !columns.is_empty() {
+        let schema = structure
+            .columns
+            .as_ref()
+            .ok_or(ResultQueryApplicationError::InvalidPageRequest)?;
+        let indices = column_indices(schema, columns)?;
+        structure.columns = Some(indices.into_iter().map(|i| schema[i].clone()).collect());
+    }
     let result = result.value().unannotated();
     let relation = match result {
         RuntimeValue::Relation(relation) => Some(relation.clone()),
@@ -326,6 +383,16 @@ fn project_result_page(
         _ => None,
     };
     let page = if let Some(relation) = relation {
+        let relation = if columns.is_empty() {
+            relation
+        } else {
+            relation.project(
+                &columns
+                    .iter()
+                    .map(|name| name.as_str().into())
+                    .collect::<Vec<_>>(),
+            )?
+        };
         let page = relation
             .page(offset, limit, control)
             .map_err(|error| match error {
@@ -488,6 +555,26 @@ fn charge_value(
         .checked_sub(bytes)
         .ok_or(ResultQueryApplicationError::PageTooLarge)?;
     Ok(())
+}
+
+/// The same exact, ordered selection is used for native tables and relation pushdown.
+pub(crate) fn column_indices(
+    schema: &[RelationColumn],
+    columns: &[String],
+) -> Result<Vec<usize>, ResultQueryApplicationError> {
+    let mut seen = std::collections::BTreeSet::new();
+    columns
+        .iter()
+        .map(|name| {
+            if !seen.insert(name) {
+                return Err(ResultQueryApplicationError::InvalidPageRequest);
+            }
+            schema
+                .iter()
+                .position(|column| column.name.as_ref() == name)
+                .ok_or(ResultQueryApplicationError::InvalidPageRequest)
+        })
+        .collect()
 }
 
 #[cfg(test)]

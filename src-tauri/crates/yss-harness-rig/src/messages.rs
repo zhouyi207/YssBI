@@ -136,14 +136,7 @@ pub(crate) fn prepare_messages(
                 request,
             } => {
                 let name = request.capability_id().as_str().to_owned();
-                let mut encoded = serde_json::to_value(
-                    yss_harness_contract::model::CapabilityInput::from(&request),
-                )
-                .map_err(|_| invalid_response())?;
-                let arguments = encoded
-                    .get_mut("payload")
-                    .ok_or_else(invalid_response)?
-                    .take();
+                let arguments = request.model_arguments().map_err(|_| invalid_response())?;
                 let call = ToolCall::new(
                     CallId::from_wire(invocation_id.to_string()),
                     ToolFunction::new(

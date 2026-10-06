@@ -7,6 +7,9 @@ use yss_project::{ProjectOperationError, ProjectState};
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_relational_contract::RelationControl;
 
+mod columns;
+mod rows;
+
 struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {
@@ -59,6 +62,7 @@ fn edit(app: &ApplicationState, id: &str, mutation: DatabaseMutation) -> EditSta
     )
     .unwrap()
     .data
+    .edit_state
 }
 fn rows(app: &ApplicationState, id: &str) -> DatabaseRowsResult {
     let instance = app.capture_session().unwrap().project_instance_id().clone();
@@ -323,6 +327,7 @@ fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budge
                 has_header: true,
                 infer_schema_length: Some(10),
             },
+            None,
         )
         .unwrap()
         .data
@@ -430,6 +435,7 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
                 has_header: true,
                 infer_schema_length: Some(10),
             },
+            None,
         )
         .unwrap()
         .data;
@@ -716,6 +722,7 @@ fn failed_final_project_activation_rebuilds_the_previous_database_session() {
                 has_header: true,
                 infer_schema_length: Some(10),
             },
+            None,
         )
         .unwrap()
         .data;

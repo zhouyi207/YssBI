@@ -152,24 +152,50 @@ impl<'a> GraphDocumentEditor<'a> {
     pub(crate) fn apply(
         &mut self,
         mutation: EditorGraphMutation,
-    ) -> Result<(), ResourceMutationApplicationError> {
+    ) -> Result<Option<yss_graph_editor::SubgraphCopyMap>, ResourceMutationApplicationError> {
         if !mutation.referenced_ports(&self.document).is_empty() {
             self.context
                 .include_functions(self.captured, &self.document)?;
         }
-        let patch = self
-            .captured
-            .graph()
-            .plan_editor_mutation(self.graph, &self.document, mutation, &self.catalog, || {
-                self.context
-                    .resolve(self.captured, self.graph, &self.document, self.locale)
-            })
-            .map_err(ResourceMutationApplicationError::Mutation)?;
+        let (patch, copied) =
+            if let EditorGraphMutation::DuplicateSubgraph { node_ids, offset } = mutation {
+                let duplicated = yss_graph_editor::duplicate_subgraph(
+                    self.graph,
+                    &self.document,
+                    self.captured.graph().registry(),
+                    &self.catalog,
+                    node_ids,
+                    offset,
+                )
+                .map_err(ResourceMutationApplicationError::Mutation)?;
+                (duplicated.patch, Some(duplicated.identities))
+            } else {
+                (
+                    self.captured
+                        .graph()
+                        .plan_editor_mutation(
+                            self.graph,
+                            &self.document,
+                            mutation,
+                            &self.catalog,
+                            || {
+                                self.context.resolve(
+                                    self.captured,
+                                    self.graph,
+                                    &self.document,
+                                    self.locale,
+                                )
+                            },
+                        )
+                        .map_err(ResourceMutationApplicationError::Mutation)?,
+                    None,
+                )
+            };
         apply_graph_document_patch(&mut self.document, &patch).map_err(|error| {
             ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
         })?;
         self.patch.operations.extend(patch.operations);
-        Ok(())
+        Ok(copied)
     }
 
     pub(crate) fn finish(
@@ -307,7 +333,7 @@ impl ApplicationState {
     ) -> Result<GraphDocumentChange, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let mut editor = GraphDocumentEditor::new(&captured, &graph_path, &locale, document)?;
-        editor.apply(mutation)?;
+        let _ = editor.apply(mutation)?;
         let result = editor.finish(self)?;
         captured
             .execution()

@@ -43,7 +43,7 @@ Mind/Markdown 的 Application 用例分别位于 `src/minds.rs` 和 `src/docs.rs
 [Project model](../yss-project-model/README.md) 承担。
 
 `automation/resources` 将六类项目资源的检查、生命周期和内部编辑统一映射到上述既有用例。
-Harness 与界面意图共用 `ProjectResourceRef`；提交通过 IPC gateway 的中立发布回调交付给
+Harness 与界面意图共用 `ProjectResourceRef`；提交通过 Harness gateway 的中立发布回调交付给
 现有 Project 事件流，Application 不依赖事件传输来确定写操作是否成功。
 
 ## 主要职责与源码入口
@@ -62,6 +62,8 @@ Harness 与界面意图共用 `ProjectResourceRef`；提交通过 IPC gateway �
 [initialize(app)](src/runtime.rs) 接收 `&mut tauri::App`，构造内部 `CommandRuntime` 和业务服务，通过 `app.manage()` 注册状态，最后显示主窗口。桌面入口在此之前安装日志平台插件；Application 使用普通 `tracing` 报告结构化运行观测，不持有日志运行时。
 
 节点目录装配或内核绑定失败时，启动错误保留具体原因，供 Tauri setup 的错误输出定位无效配置或不匹配的契约。
+
+Harness 启动恢复的错误同样保留底层持久化错误码。`invalid_record` 表示已有记录不满足当前契约；启动不会跳过不兼容历史、转换旧工具记录或自动清空数据库。开发环境需要重建账本时，先归档应用数据目录中的 `db/statistical-harness.sqlite` 及仍存在的 WAL/SHM 文件，再由正常初始化建立新库；项目文件和模型设置分别由原 owner 保存。
 
 [默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 也在 runtime 内构造。内部 `ipc::CommandRuntime` 提供 Harness 通道端口并安装命令专属上下文，初始化直接调用它。业务路径解析、项目与通用业务插件等服务的安装属于 Application；桌面日志插件单独安装。
 
@@ -167,7 +169,9 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 各用例已有的返回前或提交前重验继续保留。
 数据快照的声明存在性检查复用 Project 的单项读取，并在该读取内核对捕获的项目身份，不复制整份 ProjectData；缺失数据库与过期上下文继续保留各自的错误分类。
 
-[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，Channel 与桌面 capability gateway 由内部 IPC runtime 提供。
+[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，Channel 由内部 IPC runtime 提供。`harness::ApplicationCapabilityGateway` 与 `ApplicationResourceResolver` 使用 Tokio blocking pool 接通同步业务用例，供桌面与无界面测量共用；IPC 只注入提交事件发布回调。
+
+`pnpm measure:harness <configuration.json>` 通过 [独立测量入口](examples/measure_harness/README.md) 运行真实模型任务，使用独立 SQLite 账本及项目，按公开结果投影统计工具调用、体积、失败、重复读取、模型实际 token 和耗时。该入口不操作桌面，也不替代 Assistant 的人工验收。
 
 创建、列出和打开对话先捕获应用会话，再取得 Core 的会话访问门；排队结束、协调旧绑定后及返回前重验原会话。门保持到本次持久化操作收尾，防止旧扫描或写回覆盖后继对话；当前项目仍只由 Application slot 判定，其同步锁不跨越异步等待。提交消息将打开对话时返回的项目绑定交给 Core 准入，不在排队后借用同一对话的后继绑定。
 

@@ -51,6 +51,7 @@ impl Project {
                     .clone(),
                 OperationId::new(),
                 source,
+                None,
             )
             .unwrap()
             .data
@@ -95,7 +96,7 @@ impl Project {
                 OperationId::new(),
                 operation,
             )
-            .map(|result| result.data)
+            .map(|result| result.data.edit_state)
     }
     fn rows(&self, id: &str, offset: usize, limit: usize) -> DatabaseRowsResult {
         self.app

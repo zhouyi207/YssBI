@@ -112,6 +112,7 @@ async fn cancelled_reference_lookup_cannot_start_a_model_or_block_the_next_turn(
                     id: "dataset".into(),
                 }],
                 None,
+                Default::default(),
             )
             .await
         })
@@ -134,6 +135,7 @@ async fn cancelled_reference_lookup_cannot_start_a_model_or_block_the_next_turn(
             "Continue".into(),
             vec![],
             None,
+            Default::default(),
         )
         .await
         .unwrap();

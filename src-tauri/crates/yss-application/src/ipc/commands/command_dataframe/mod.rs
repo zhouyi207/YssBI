@@ -164,7 +164,10 @@ fn mutate_database_from_application(
             mutation,
         )
         .map_err(map_application_database_error)?;
-    let result = database_mutation_to_transport(result);
+    let result = database_mutation_to_transport(crate::database::DatabaseMutationResult {
+        data: result.data.edit_state,
+        mutation: result.mutation,
+    });
     emit_application_database_result(app, &result)?;
     Ok(result)
 }
@@ -180,7 +183,7 @@ pub async fn load_database(
     let application = application.inner().clone();
     run_on_blocking_pool(move || {
         let result = application
-            .load_database_for_application(project_instance_id, operation_id, engine.into())
+            .load_database_for_application(project_instance_id, operation_id, engine.into(), None)
             .map_err(map_application_database_error)?;
         let result = load_database_result_to_transport(result);
         emit_application_database_result(&app, &result)?;
@@ -218,6 +221,7 @@ mod tests {
         use yss_data_contract::{TabularColumn, TabularScalar, TabularSnapshot};
 
         let result = super::DatabaseRowsResult {
+            has_more: false,
             rows: TabularSnapshot::try_from_columns(
                 vec![TabularColumn::new(
                     "value".try_into().unwrap(),

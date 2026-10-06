@@ -43,6 +43,7 @@ fn provider() -> LanguageModelProviderConfig {
         authentication: LanguageModelAuthentication::ApiKey,
         base_url: "http://127.0.0.1:9/v1".into(),
         models: vec![LanguageModelConfig {
+            reasoning_efforts: Vec::new(),
             id: "model-a".into(),
             name: "Model A".into(),
             context_window: None,
@@ -52,6 +53,39 @@ fn provider() -> LanguageModelProviderConfig {
             additional_parameters: Default::default(),
         }],
     }
+}
+
+#[tokio::test]
+async fn catalog_projects_declared_reasoning_defaults_without_guessing_or_saving_a_second_value() {
+    let dir = tempfile::tempdir().unwrap();
+    let credentials = Arc::new(Credentials::default());
+    let service = LanguageModelService::new(dir.path().into(), credentials.clone());
+    let mut config = provider();
+    config.authentication = LanguageModelAuthentication::None;
+    config.models[0]
+        .additional_parameters
+        .insert("reasoning_effort".into(), "high".into());
+    let catalog = service
+        .save_provider(config.clone(), CredentialChange::Keep)
+        .await
+        .unwrap();
+    assert_eq!(
+        catalog.providers[0].reasoning_defaults.get("model-a"),
+        Some(&ReasoningEffort::High)
+    );
+    let saved: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(dir.path().join("settings/language-models.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(saved["providers"][0].get("reasoningDefaults").is_none());
+    let reopened = LanguageModelService::new(dir.path().into(), credentials);
+    assert_eq!(reopened.catalog().await.unwrap(), catalog);
+    config.models[0].additional_parameters.clear();
+    let catalog = service
+        .save_provider(config, CredentialChange::Keep)
+        .await
+        .unwrap();
+    assert!(catalog.providers[0].reasoning_defaults.is_empty());
 }
 
 #[tokio::test]

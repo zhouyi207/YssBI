@@ -75,7 +75,7 @@ pub(super) async fn initialize(
     let host = application
         .initialize_harness(HarnessPorts {
             models: models.clone(),
-            resources: Arc::new(crate::harness::resources::ApplicationResourceResolver(
+            resources: Arc::new(crate::harness::ApplicationResourceResolver(
                 application.clone(),
             )),
             capability_gateway: transport.capability_gateway,

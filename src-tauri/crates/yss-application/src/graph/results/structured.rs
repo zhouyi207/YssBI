@@ -50,9 +50,37 @@ fn child_path(path: &str, key: &str) -> String {
     format!("{path}/{}", key.replace('~', "~0").replace('/', "~1"))
 }
 
+#[cfg(test)]
 pub(crate) fn project(value: &RuntimeValue) -> Result<RuntimeValue, ResultQueryApplicationError> {
+    project_with_tables(value, &table_marker)
+}
+
+pub(crate) fn table_marker(part: &str, row_count: usize) -> RuntimeValue {
+    RuntimeValue::Record(Arc::new(
+        [
+            (
+                "kind".into(),
+                TabularScalar::String("tableRef".into()).into(),
+            ),
+            (
+                "part".into(),
+                TabularScalar::String(part.to_owned().into()).into(),
+            ),
+            (
+                "rowCount".into(),
+                TabularScalar::Unsigned(row_count as u64).into(),
+            ),
+        ]
+        .into(),
+    ))
+}
+
+pub(crate) fn project_with_tables(
+    value: &RuntimeValue,
+    table: &dyn Fn(&str, usize) -> RuntimeValue,
+) -> Result<RuntimeValue, ResultQueryApplicationError> {
     let mut remaining = MAX_INLINE_PROJECTION_BYTES;
-    project_at(value, "", 0, &mut remaining)
+    project_at(value, "", 0, &mut remaining, table)
 }
 
 fn project_at(
@@ -60,6 +88,7 @@ fn project_at(
     path: &str,
     depth: usize,
     remaining: &mut usize,
+    table: &dyn Fn(&str, usize) -> RuntimeValue,
 ) -> Result<RuntimeValue, ResultQueryApplicationError> {
     if depth > 64 || path.len() > 4096 {
         return Err(ResultQueryApplicationError::PageTooLarge);
@@ -68,23 +97,7 @@ fn project_at(
         RuntimeValue::List(values) => {
             // Array contents stay with the immutable result, regardless of their size.
             // Only a page request for this part reads its elements; nested arrays keep refs.
-            let reference = RuntimeValue::Record(Arc::new(
-                [
-                    (
-                        "kind".into(),
-                        TabularScalar::String("tableRef".into()).into(),
-                    ),
-                    (
-                        "part".into(),
-                        TabularScalar::String(format!("structured:{path}").into()).into(),
-                    ),
-                    (
-                        "rowCount".into(),
-                        TabularScalar::Unsigned(values.len() as u64).into(),
-                    ),
-                ]
-                .into(),
-            ));
+            let reference = table(&format!("structured:{path}"), values.len());
             charge_value(&reference, remaining, depth)?;
             Ok(reference)
         }
@@ -99,7 +112,7 @@ fn project_at(
                     .ok_or(ResultQueryApplicationError::PageTooLarge)?;
                 projected.insert(
                     key.clone(),
-                    project_at(value, &child_path(path, key), depth + 1, remaining)?,
+                    project_at(value, &child_path(path, key), depth + 1, remaining, table)?,
                 );
             }
             Ok(RuntimeValue::Record(Arc::new(projected)))
@@ -127,11 +140,22 @@ pub(crate) fn at_path<'a>(root: &'a RuntimeValue, path: &str) -> Option<&'a Runt
     Some(value.unannotated())
 }
 
+#[cfg(test)]
 pub(super) fn page(
     root: &RuntimeValue,
     path: &str,
     offset: usize,
     limit: usize,
+) -> Result<ResultPageProjection, ResultQueryApplicationError> {
+    page_with_tables(root, path, offset, limit, &table_marker)
+}
+
+pub(super) fn page_with_tables(
+    root: &RuntimeValue,
+    path: &str,
+    offset: usize,
+    limit: usize,
+    table: &dyn Fn(&str, usize) -> RuntimeValue,
 ) -> Result<ResultPageProjection, ResultQueryApplicationError> {
     if limit == 0 || limit > MAX_RESULT_PAGE_ROWS || offset.checked_add(limit).is_none() {
         return Err(ResultQueryApplicationError::InvalidPageRequest);
@@ -152,6 +176,7 @@ pub(super) fn page(
             &child_path(path, &index.to_string()),
             tokens.len() + 1,
             &mut remaining,
+            table,
         )?])));
     }
     Ok(ResultPageProjection {

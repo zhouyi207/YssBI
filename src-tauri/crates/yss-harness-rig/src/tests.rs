@@ -1,4 +1,5 @@
 use crate::error::map_prompt_failure;
+mod delegation;
 use crate::provider::RigProviderClient;
 use crate::stream::consume_text_stream;
 use futures_util::StreamExt;
@@ -21,7 +22,7 @@ use rig_agent::completion::message::{ToolCall, ToolFunction, ToolName};
 use rig_core::completion::{AssistantContent, CompletionRequest, Usage};
 use yss_harness_contract::{
     AgentFuture, AgentOutputFailure, AutomationCapabilityResult, CapabilityFailure,
-    DatasetSchemaInspection, ModelCapabilityOutcome, ToolInvocationId,
+    ModelCapabilityOutcome, ToolInvocationId,
 };
 
 fn scripted_events(
@@ -117,6 +118,7 @@ fn configured_driver(config: LanguageModelProviderConfig) -> Arc<dyn AgentDriver
     )
     .unwrap()
     .driver(config.models.first().unwrap_or(&LanguageModelConfig {
+        reasoning_efforts: Vec::new(),
         id: "test-model".into(),
         name: "Test model".into(),
         context_window: None,
@@ -131,6 +133,21 @@ fn configured_driver(config: LanguageModelProviderConfig) -> Arc<dyn AgentDriver
 struct StaticExecutor;
 
 impl ModelCapabilityExecutor for StaticExecutor {
+    fn begin_control<'a>(
+        &'a self,
+        tool: yss_harness_contract::AgentControlTool,
+    ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+        Box::pin(async move { Ok(ToolInvocationId::try_new(tool.as_str()).unwrap()) })
+    }
+    fn finish_control<'a>(
+        &'a self,
+        _: ToolInvocationId,
+        _: yss_harness_contract::AgentControlTool,
+        _: Option<CapabilityFailure>,
+    ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn execute<'a>(
         &'a self,
         request: ModelCapabilityRequest,
@@ -138,18 +155,21 @@ impl ModelCapabilityExecutor for StaticExecutor {
         Box::pin(async move {
             assert!(matches!(
                 request.request,
-                model::CapabilityInput::InspectDatasetSchema(_)
+                model::CapabilityInput::InspectDatabaseSchema(_)
             ));
             Ok(ModelCapabilityOutcome {
                 invocation_id: ToolInvocationId::try_new("tool-1").unwrap(),
-                result: AutomationCapabilityResult::DatasetSchemaInspection(
-                    DatasetSchemaInspection {
-                        database_id: "database-1".to_owned(),
-                        runtime_revision: 1,
-                        schema_revision: 2,
-                        columns: Vec::new(),
+                result: AutomationCapabilityResult::DatabaseRead(DatabaseReadResult {
+                    database: model::DatabaseResourceRef::new("database-1".into()),
+                    version: ResourceVersion {
+                        revision: 2,
+                        session_id: None,
                     },
-                ),
+                    content: DatabaseReadContent::Schema {
+                        columns: vec![],
+                        page: InspectionPage::known(0, 0, 0),
+                    },
+                }),
             })
         })
     }
@@ -174,6 +194,7 @@ impl AgentEventOutput for CollectingOutput {
 
 fn request(tools: Vec<ToolDescriptor>) -> AgentTurnRequest {
     AgentTurnRequest {
+        options: Default::default(),
         role: yss_harness_contract::AgentRole::Stats,
         tool_concurrency: 1,
         control_tools: vec![yss_harness_contract::AgentControlTool::ProposeStatisticalPlan],
@@ -188,6 +209,86 @@ fn request(tools: Vec<ToolDescriptor>) -> AgentTurnRequest {
         ],
         tools,
     }
+}
+
+#[tokio::test]
+async fn delivers_reasoning_and_usage_and_applies_only_explicit_effort_restrictions() {
+    let model = MockCompletionModel::from_stream_turns([vec![
+        MockStreamEvent::reasoning_delta("Checking evidence"),
+        MockStreamEvent::text("Answer"),
+        MockStreamEvent::FinalResponse(Finish {
+            usage: Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(20),
+                total_tokens: Some(120),
+                cached_input_tokens: Some(60),
+                reasoning_tokens: Some(10),
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+    ]]);
+    let driver = RigAgentDriver::new(model.clone());
+    let restricted_driver = RigAgentDriver::new(model.clone()).with_model_config(
+        &LanguageModelConfig {
+            reasoning_efforts: vec![ReasoningEffort::Low],
+            id: "test-model".into(),
+            name: "Test model".into(),
+            context_window: None,
+            max_output_tokens: None,
+            temperature: None,
+            top_p: None,
+            additional_parameters: Default::default(),
+        },
+        LanguageModelProtocol::OpenAiChat,
+    );
+    let output = Arc::new(CollectingOutput::default());
+    let mut input = request(vec![]);
+    input.options.reasoning_effort = Some(ReasoningEffort::High);
+    assert_eq!(
+        restricted_driver
+            .run_turn(
+                input.clone(),
+                Arc::new(StaticExecutor),
+                output.clone(),
+                CancellationToken::default()
+            )
+            .await
+            .unwrap_err()
+            .code,
+        AgentDriverFailureCode::ProviderRequestRejected
+    );
+    assert!(model.requests().is_empty());
+    driver
+        .run_turn(
+            input,
+            Arc::new(StaticExecutor),
+            output.clone(),
+            CancellationToken::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        model.requests()[0].additional_params,
+        Some(serde_json::json!({"reasoning_effort": "high"}))
+    );
+    let events = output.events.lock().unwrap();
+    assert!(
+        matches!(&events[0], AgentEvent::ReasoningDelta { delta } if delta == "Checking evidence")
+    );
+    let usages: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            AgentEvent::UsageReported { usage, .. } => Some(usage),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(usages.len(), 1);
+    assert_eq!(usages[0].input_tokens, Some(100));
+    assert_eq!(usages[0].output_tokens, Some(20));
+    assert_eq!(usages[0].cached_input_tokens, Some(60));
+    assert_eq!(usages[0].reasoning_tokens, Some(10));
+    assert_eq!(usages[0].cache_creation_input_tokens, None);
 }
 
 #[test]
@@ -221,6 +322,21 @@ async fn manager_delegation_round_trips_through_rig_and_workers_do_not_receive_i
     };
     struct Delegate(std::sync::atomic::AtomicUsize);
     impl ModelCapabilityExecutor for Delegate {
+        fn begin_control<'a>(
+            &'a self,
+            tool: yss_harness_contract::AgentControlTool,
+        ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+            Box::pin(async move { Ok(ToolInvocationId::try_new(tool.as_str()).unwrap()) })
+        }
+        fn finish_control<'a>(
+            &'a self,
+            _: ToolInvocationId,
+            _: yss_harness_contract::AgentControlTool,
+            _: Option<CapabilityFailure>,
+        ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+            Box::pin(async { Ok(()) })
+        }
+
         fn execute<'a>(
             &'a self,
             _request: ModelCapabilityRequest,
@@ -336,19 +452,22 @@ fn message_mapping_preserves_complete_history_and_correlated_tool_messages() {
         AgentMessage::ToolCall {
             invocation_id: invocation_id.clone(),
             request: AutomationCapabilityRequest::InspectResult(InspectResultRequest {
-                execution_session_id: "00000000-0000-0000-0000-000000000001".into(),
-                result_id: 17,
-                part: None,
-                offset: 0,
-                limit: 20,
-            }),
+                result_ref: yss_harness_contract::ResultRef::new(
+                    "00000000-0000-0000-0000-000000000001".into(),
+                    17,
+                ),
+                schema_offset: 0,
+                schema_limit: 50,
+            })
+            .into(),
         },
         AgentMessage::ToolResult {
             invocation_id,
             capability_id: CapabilityId::InspectResult,
             outcome: Ok(AutomationCapabilityResult::ResultInspection(
                 yss_harness_contract::ResultInspection {
-                    result_id: 17,
+                    result_ref: yss_harness_contract::ResultRef::new("test".into(), 17),
+                    validity: yss_harness_contract::ResultValidity::Retained,
                     category: yss_harness_contract::ResultCategoryInspection::Value,
                     value: yss_harness_contract::ResultValueInspection::Json(payload.clone()),
                 },
@@ -419,7 +538,8 @@ async fn parallel_history_groups_business_and_delegation_results_before_continui
         invocation_id: ToolInvocationId::try_new(id).unwrap(),
         request: AutomationCapabilityRequest::InspectDatasetSchema(InspectDatasetSchemaRequest {
             database_id: id.into(),
-        }),
+        })
+        .into(),
     };
     let result = |id: &str| AgentMessage::ToolResult {
         invocation_id: ToolInvocationId::try_new(id).unwrap(),
@@ -574,7 +694,8 @@ fn unfinished_or_unmatched_tool_history_is_rejected_before_provider_submission()
                     InspectDatasetSchemaRequest {
                         database_id: "dataset".into(),
                     },
-                ),
+                )
+                .into(),
             },
             user(),
         ],
@@ -684,8 +805,8 @@ async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress
         vec![AssistantContent::ToolCall(ToolCall::from_wire(
             "cut-short",
             ToolFunction::new(
-                ToolName::new("inspect_dataset_schema").unwrap(),
-                serde_json::json!({"databaseId":"database-1"}),
+                ToolName::new("inspect_database_schema").unwrap(),
+                serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
             ),
         ))],
         vec![],
@@ -697,7 +818,7 @@ async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress
         let result = RigAgentDriver::new(model)
             .run_turn(
                 request(vec![ToolDescriptor::for_capability(
-                    CapabilityId::InspectDatasetSchema,
+                    CapabilityId::InspectDatabaseSchema,
                 )]),
                 Arc::new(UnusedExecutor),
                 Arc::new(CollectingOutput::default()),
@@ -743,12 +864,17 @@ async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress
         .await
         .unwrap_err();
         assert_eq!(error.code, expected);
-        assert_eq!(
-            output.events.lock().unwrap().as_slice(),
-            &[AgentEvent::TextDelta {
-                delta: "partial progress".into()
-            }]
-        );
+        let mut expected_events = vec![AgentEvent::TextDelta {
+            delta: "partial progress".into(),
+        }];
+        if expected != AgentDriverFailureCode::ProviderStreamInterrupted {
+            expected_events.push(crate::run_options::usage_event(
+                Usage::default(),
+                None,
+                ModelCallPurpose::Response,
+            ));
+        }
+        assert_eq!(*output.events.lock().unwrap(), expected_events);
     }
     assert_eq!(
         map_prompt_failure(PromptError::CompletionError(ProviderError::Truncated)).code,
@@ -772,6 +898,21 @@ async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
         .unwrap();
     struct ObservingExecutor(Arc<CollectingOutput>);
     impl ModelCapabilityExecutor for ObservingExecutor {
+        fn begin_control<'a>(
+            &'a self,
+            tool: yss_harness_contract::AgentControlTool,
+        ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+            Box::pin(async move { Ok(ToolInvocationId::try_new(tool.as_str()).unwrap()) })
+        }
+        fn finish_control<'a>(
+            &'a self,
+            _: ToolInvocationId,
+            _: yss_harness_contract::AgentControlTool,
+            _: Option<CapabilityFailure>,
+        ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+            Box::pin(async { Ok(()) })
+        }
+
         fn execute<'a>(
             &'a self,
             request: ModelCapabilityRequest,
@@ -799,8 +940,8 @@ async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
             AssistantContent::ToolCall(ToolCall::from_wire(
                 "call-1",
                 ToolFunction::new(
-                    ToolName::new("inspect_dataset_schema").unwrap(),
-                    serde_json::json!({ "databaseId": "database-1" }),
+                    ToolName::new("inspect_database_schema").unwrap(),
+                    serde_json::json!({ "database":{"kind":"database","id":"database-1"} }),
                 ),
             )),
         ],
@@ -822,7 +963,7 @@ async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
     let result = driver
         .run_turn(
             request(vec![ToolDescriptor::for_capability(
-                CapabilityId::InspectDatasetSchema,
+                CapabilityId::InspectDatabaseSchema,
             )]),
             Arc::new(ObservingExecutor(output.clone())),
             output.clone(),
@@ -843,7 +984,7 @@ async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
             .iter()
             .filter_map(|event| match event {
                 AgentEvent::TextDelta { delta } => Some(delta.as_str()),
-                AgentEvent::PlanProposed { .. } => None,
+                AgentEvent::PlanProposed { .. } | AgentEvent::UsageReported { .. } => None,
                 _ => panic!("unexpected event"),
             })
             .collect::<String>(),
@@ -873,7 +1014,149 @@ async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
 }
 
 #[tokio::test]
+async fn unavailable_tools_return_feedback_without_dispatch_or_replaying_completed_work() {
+    #[derive(Default)]
+    struct CountingExecutor(std::sync::atomic::AtomicUsize);
+    impl ModelCapabilityExecutor for CountingExecutor {
+        fn execute<'a>(
+            &'a self,
+            request: ModelCapabilityRequest,
+        ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            StaticExecutor.execute(request)
+        }
+    }
+    let call = |id: &str, name: &str, arguments| {
+        AssistantContent::ToolCall(ToolCall::from_wire(
+            id,
+            ToolFunction::new(ToolName::new(name).unwrap(), arguments),
+        ))
+    };
+    let valid = || {
+        call(
+            "valid",
+            "inspect_database_schema",
+            serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
+        )
+    };
+    let model = scripted_model([
+        vec![valid()],
+        vec![call(
+            "unavailable",
+            "delegate_task",
+            serde_json::json!({"private":"secret"}),
+        )],
+        vec![AssistantContent::text(
+            "The requested worker is not available to this role.",
+        )],
+    ]);
+    let executor = Arc::new(CountingExecutor::default());
+    let result = RigAgentDriver::new(model.clone())
+        .run_turn(
+            request(vec![ToolDescriptor::for_capability(
+                CapabilityId::InspectDatabaseSchema,
+            )]),
+            executor.clone(),
+            Arc::new(CollectingOutput::default()),
+            CancellationToken::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        result.final_text,
+        "The requested worker is not available to this role."
+    );
+    assert_eq!(executor.0.load(Ordering::SeqCst), 1);
+    let requests = model.requests();
+    assert_eq!(requests.len(), 3);
+    let wire = requests[2]
+        .chat_history
+        .clone()
+        .into_iter()
+        .flat_map(|message| {
+            Vec::<rig_core::providers::openai::completion::Message>::try_from(message).unwrap()
+        })
+        .map(|message| serde_json::to_value(message).unwrap())
+        .collect::<Vec<_>>();
+    let feedback = wire
+        .iter()
+        .find(|message| message["tool_call_id"] == "unavailable")
+        .unwrap();
+    let text = feedback["content"].as_str().unwrap();
+    let failure: serde_json::Value = serde_json::from_str(text).unwrap();
+    assert_eq!(
+        failure["failure"]["details"]["reason"],
+        "tool_not_available"
+    );
+    assert!(
+        !failure["failure"]["details"]["allowedTools"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("delegate_task"))
+    );
+    assert!(!text.contains("secret"));
+
+    // A valid-looking sibling in an abandoned streamed response must not execute.
+    let model = scripted_model([
+        vec![
+            valid(),
+            call("missing", "unknown_tool", serde_json::json!({})),
+        ],
+        vec![valid()],
+        vec![AssistantContent::text("Corrected.")],
+    ]);
+    let executor = Arc::new(CountingExecutor::default());
+    let result = RigAgentDriver::new(model)
+        .run_turn(
+            request(vec![ToolDescriptor::for_capability(
+                CapabilityId::InspectDatabaseSchema,
+            )]),
+            executor.clone(),
+            Arc::new(CollectingOutput::default()),
+            CancellationToken::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.final_text, "Corrected.");
+    assert_eq!(executor.0.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn argument_diagnostics_reach_the_model_and_allow_correction() {
+    #[derive(Default)]
+    struct RecordingExecutor(Mutex<Vec<CapabilityId>>);
+    impl ModelCapabilityExecutor for RecordingExecutor {
+        fn begin_control<'a>(
+            &'a self,
+            tool: yss_harness_contract::AgentControlTool,
+        ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+            StaticExecutor.begin_control(tool)
+        }
+        fn finish_control<'a>(
+            &'a self,
+            id: ToolInvocationId,
+            tool: yss_harness_contract::AgentControlTool,
+            failure: Option<CapabilityFailure>,
+        ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+            StaticExecutor.finish_control(id, tool, failure)
+        }
+        fn execute<'a>(
+            &'a self,
+            request: ModelCapabilityRequest,
+        ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+            StaticExecutor.execute(request)
+        }
+        fn reject_arguments<'a>(
+            &'a self,
+            capability_id: CapabilityId,
+            failure: CapabilityFailure,
+        ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+            Box::pin(async move {
+                self.0.lock().unwrap().push(capability_id);
+                Err(failure)
+            })
+        }
+    }
     let call = |id: &str, name: &str, arguments| {
         vec![AssistantContent::ToolCall(ToolCall::from_wire(
             id,
@@ -883,8 +1166,8 @@ async fn argument_diagnostics_reach_the_model_and_allow_correction() {
     let model = scripted_model([
         call(
             "malformed",
-            "inspect_dataset_schema",
-            serde_json::json!({"databaseId": {"secret": "secret"}}),
+            "inspect_database_schema",
+            serde_json::json!({"database":{"kind":"database","id":{"secret":"secret"}}}),
         ),
         call(
             "malformed-plan",
@@ -893,29 +1176,34 @@ async fn argument_diagnostics_reach_the_model_and_allow_correction() {
         ),
         call(
             "corrected",
-            "inspect_dataset_schema",
-            serde_json::json!({"databaseId": "database-1"}),
+            "inspect_database_schema",
+            serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
         ),
         vec![AssistantContent::text("Corrected.")],
     ]);
     let requests = model.clone();
     let driver = RigAgentDriver::new(model);
+    let executor = Arc::new(RecordingExecutor::default());
     let result = driver
         .run_turn(
             request(vec![ToolDescriptor::for_capability(
-                CapabilityId::InspectDatasetSchema,
+                CapabilityId::InspectDatabaseSchema,
             )]),
-            Arc::new(StaticExecutor),
+            executor.clone(),
             Arc::new(CollectingOutput::default()),
             CancellationToken::default(),
         )
         .await
         .unwrap();
     assert_eq!(result.final_text, "Corrected.");
+    assert_eq!(
+        *executor.0.lock().unwrap(),
+        [CapabilityId::InspectDatabaseSchema]
+    );
     let requests = requests.requests();
     assert_eq!(requests.len(), 4);
     for (index, id, path) in [
-        (1, "malformed", "$.databaseId"),
+        (1, "malformed", "$.database.id"),
         (2, "malformed-plan", "$.analysisMode"),
     ] {
         let wire = requests[index]
@@ -949,7 +1237,7 @@ async fn domain_failure_is_structured_feedback_and_the_model_can_correct_its_req
             request: ModelCapabilityRequest,
         ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
             Box::pin(async move {
-                if matches!(&request.request, model::CapabilityInput::InspectDatasetSchema(request) if request.database_id == "missing")
+                if matches!(&request.request, model::CapabilityInput::InspectDatabaseSchema(request) if request.database.id == "missing")
                 {
                     return Err(
                         CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
@@ -964,8 +1252,8 @@ async fn domain_failure_is_structured_feedback_and_the_model_can_correct_its_req
         vec![AssistantContent::ToolCall(ToolCall::from_wire(
             id,
             ToolFunction::new(
-                ToolName::new("inspect_dataset_schema").unwrap(),
-                serde_json::json!({"databaseId": database}),
+                ToolName::new("inspect_database_schema").unwrap(),
+                serde_json::json!({"database":{"kind":"database","id":database}}),
             ),
         ))]
     };
@@ -979,7 +1267,7 @@ async fn domain_failure_is_structured_feedback_and_the_model_can_correct_its_req
     let result = driver
         .run_turn(
             request(vec![ToolDescriptor::for_capability(
-                CapabilityId::InspectDatasetSchema,
+                CapabilityId::InspectDatabaseSchema,
             )]),
             Arc::new(CorrectingExecutor),
             Arc::new(CollectingOutput::default()),
@@ -1068,8 +1356,8 @@ async fn fatal_tool_failures_stop_before_another_model_request_and_settle_admitt
                 AssistantContent::ToolCall(ToolCall::from_wire(
                     "fatal-call",
                     ToolFunction::new(
-                        ToolName::new("inspect_dataset_schema").unwrap(),
-                        serde_json::json!({"databaseId": "database-1"}),
+                        ToolName::new("inspect_database_schema").unwrap(),
+                        serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
                     ),
                 )),
             ],
@@ -1082,7 +1370,7 @@ async fn fatal_tool_failures_stop_before_another_model_request_and_settle_admitt
         let result = driver
             .run_turn(
                 request(vec![ToolDescriptor::for_capability(
-                    CapabilityId::InspectDatasetSchema,
+                    CapabilityId::InspectDatabaseSchema,
                 )]),
                 Arc::new(FatalExecutor(failure, settled.clone())),
                 output.clone(),
@@ -1248,8 +1536,8 @@ async fn cancelling_a_model_turn_waits_for_admitted_tool_cleanup() {
     let model = scripted_model([vec![AssistantContent::ToolCall(ToolCall::from_wire(
         "call-1",
         ToolFunction::new(
-            ToolName::new("inspect_dataset_schema").unwrap(),
-            serde_json::json!({"databaseId": "database-1"}),
+            ToolName::new("inspect_database_schema").unwrap(),
+            serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
         ),
     ))]]);
     let driver = RigAgentDriver::new(model);
@@ -1257,7 +1545,7 @@ async fn cancelling_a_model_turn_waits_for_admitted_tool_cleanup() {
         tokio::join!(
             driver.run_turn(
                 request(vec![ToolDescriptor::for_capability(
-                    CapabilityId::InspectDatasetSchema
+                    CapabilityId::InspectDatabaseSchema
                 )]),
                 executor.clone(),
                 Arc::new(CollectingOutput::default()),
@@ -1356,6 +1644,7 @@ fn native_provider_configuration_rejects_invalid_urls_and_models() {
             (config.authentication == LanguageModelAuthentication::ApiKey).then_some(&credential);
         let client = RigProviderClient::new(&config, key).unwrap();
         let mut model = LanguageModelConfig {
+            reasoning_efforts: Vec::new(),
             id: "model".into(),
             name: "Model".into(),
             context_window: Some(32_000),
@@ -1473,14 +1762,21 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
         config.adapter = adapter.into();
         config.authentication = authentication;
         let parameters = match protocol {
-            LanguageModelProtocol::Gemini => serde_json::json!({"generation_config": {"seed": 7}}),
-            LanguageModelProtocol::Anthropic => serde_json::json!({"stop_sequences": ["HALT"]}),
+            LanguageModelProtocol::Gemini => {
+                serde_json::json!({"generation_config": {"seed": 7, "thinking_level": "medium"}})
+            }
+            LanguageModelProtocol::Anthropic => {
+                serde_json::json!({"stop_sequences": ["HALT"], "output_config": {"effort": "low"}})
+            }
             LanguageModelProtocol::OpenAiResponses => {
                 serde_json::json!({"reasoning": {"effort": "low"}})
             }
-            LanguageModelProtocol::OpenAiChat => serde_json::json!({"seed": 7}),
+            LanguageModelProtocol::OpenAiChat => {
+                serde_json::json!({"seed": 7, "reasoning_effort": "medium"})
+            }
         };
         config.models.push(LanguageModelConfig {
+            reasoning_efforts: Vec::new(),
             id: "test-model".into(),
             name: "Test model".into(),
             context_window: None,
@@ -1489,6 +1785,15 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
             top_p: Some(0.8),
             additional_parameters: parameters.as_object().unwrap().clone(),
         });
+        assert_eq!(
+            crate::model_default_reasoning_effort(&config.models[0], protocol),
+            Some(match protocol {
+                LanguageModelProtocol::Gemini | LanguageModelProtocol::OpenAiChat =>
+                    ReasoningEffort::Medium,
+                LanguageModelProtocol::Anthropic | LanguageModelProtocol::OpenAiResponses =>
+                    ReasoningEffort::Low,
+            })
+        );
         let driver = configured_driver(config);
         let output = Arc::new(CollectingOutput::default());
         let server = async {
@@ -1555,9 +1860,21 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
                     assert_eq!(body["stop_sequences"], parameters["stop_sequences"])
                 }
                 LanguageModelProtocol::OpenAiResponses => {
-                    assert_eq!(body["reasoning"], parameters["reasoning"])
+                    assert_eq!(body["reasoning"]["effort"], "high")
                 }
                 LanguageModelProtocol::OpenAiChat => assert_eq!(body["seed"], 7),
+            }
+            match protocol {
+                LanguageModelProtocol::OpenAiResponses => {
+                    assert_eq!(body["reasoning"]["effort"], "high")
+                }
+                LanguageModelProtocol::OpenAiChat => assert_eq!(body["reasoning_effort"], "high"),
+                LanguageModelProtocol::Anthropic => {
+                    assert_eq!(body["output_config"]["effort"], "high")
+                }
+                LanguageModelProtocol::Gemini => {
+                    assert_eq!(body["generation_config"]["thinking_level"], "high")
+                }
             }
             assert!(
                 body[if matches!(
@@ -1645,12 +1962,16 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
         let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::join!(
                 driver.run_turn(
-                    request(
-                        yss_harness_contract::CAPABILITY_DESCRIPTORS
-                            .iter()
-                            .map(|descriptor| { ToolDescriptor::for_capability(descriptor.id) })
-                            .collect()
-                    ),
+                    {
+                        let mut turn = request(
+                            yss_harness_contract::CAPABILITY_DESCRIPTORS
+                                .iter()
+                                .map(|descriptor| ToolDescriptor::for_capability(descriptor.id))
+                                .collect(),
+                        );
+                        turn.options.reasoning_effort = Some(ReasoningEffort::High);
+                        turn
+                    },
                     Arc::new(StaticExecutor),
                     output.clone(),
                     CancellationToken::default(),
@@ -1661,6 +1982,24 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
         .await
         .expect("local provider request must complete");
         assert_eq!(result.unwrap().final_text, "Hello");
+        let usage = output
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::UsageReported { usage, .. } => Some(usage.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(
+            usage.input_tokens,
+            if protocol == LanguageModelProtocol::OpenAiChat {
+                None
+            } else {
+                Some(4)
+            }
+        );
         assert!(
             output.events.lock().unwrap().iter().any(|event| {
                 matches!(event, AgentEvent::TextDelta { delta } if delta == "Hello")
@@ -1710,12 +2049,13 @@ impl ModelCapabilityExecutor for WritingExecutor {
         Box::pin(async move {
             assert!(matches!(
                 request.request,
-                model::CapabilityInput::ManageResource(model::ManageResourceInput::Create { .. })
+                model::CapabilityInput::CreateResource(_)
             ));
             self.0.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             Ok(ModelCapabilityOutcome {
                 invocation_id: ToolInvocationId::try_new("committed-document").unwrap(),
                 result: AutomationCapabilityResult::ResourceManaged(ResourceMutationReceipt {
+                    database_edit: None,
                     publication_revision: Some(1),
                     changes: vec![ResourceChange {
                         resource: ProjectResourceRef {
@@ -1727,7 +2067,9 @@ impl ModelCapabilityExecutor for WritingExecutor {
                         deleted: false,
                     }],
                     moves: vec![],
-                    created_nodes: Default::default(),
+                    mind_edit: None,
+                    document_edit: None,
+                    resources: Vec::new(),
                 }),
             })
         })
@@ -1740,8 +2082,8 @@ fn document_call() -> AssistantContent {
     AssistantContent::ToolCall(ToolCall::from_wire(
         "write-doc",
         ToolFunction::new(
-            ToolName::new("manage_resource").unwrap(),
-            serde_json::json!({"operation":"create", "specification":{"kind":"doc", "name":"Retry proof"}}),
+            ToolName::new("create_resource").unwrap(),
+            serde_json::json!({"kind":"doc", "name":"Retry proof"}),
         ),
     ))
 }
@@ -1787,7 +2129,7 @@ async fn reconnect_reuses_the_sampling_boundary_without_repeating_a_committed_wr
     let result = RigAgentDriver::new(model)
         .run_turn(
             request(vec![ToolDescriptor::for_capability(
-                CapabilityId::ManageResource,
+                CapabilityId::CreateResource,
             )]),
             executor.clone(),
             output.clone(),
@@ -1850,7 +2192,7 @@ async fn delivery_hook_continues_missing_work_and_stops_when_feedback_has_no_pro
         let result = RigAgentDriver::new(model)
             .run_turn(
                 request(vec![ToolDescriptor::for_capability(
-                    CapabilityId::ManageResource,
+                    CapabilityId::CreateResource,
                 )]),
                 executor.clone(),
                 output.clone(),
@@ -1910,6 +2252,7 @@ async fn compaction_checkpoints_working_context_without_replaying_large_history(
     let result = RigAgentDriver::new(Model::new(MockScript::default(), model))
         .with_model_config(
             &LanguageModelConfig {
+                reasoning_efforts: Vec::new(),
                 id: "model".into(),
                 name: "Model".into(),
                 context_window: None,
@@ -2072,4 +2415,230 @@ async fn interrupted_compaction_resumes_verified_prefix_across_driver_instances(
             }
         );
     }
+}
+
+#[tokio::test]
+async fn control_calls_close_after_decode_admission_and_plan_policy_failures() {
+    use yss_harness_contract::{AgentControlTool, AgentRunId, AgentRunState, AgentTaskOutcome};
+    #[derive(Default)]
+    struct Controls {
+        starts: Mutex<Vec<(ToolInvocationId, AgentControlTool)>>,
+        finishes: Mutex<
+            Vec<(
+                ToolInvocationId,
+                AgentControlTool,
+                Option<CapabilityFailure>,
+            )>,
+        >,
+    }
+    impl ModelCapabilityExecutor for Controls {
+        fn execute<'a>(
+            &'a self,
+            _: ModelCapabilityRequest,
+        ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+            Box::pin(async { panic!("no business calls") })
+        }
+        fn begin_control<'a>(
+            &'a self,
+            tool: AgentControlTool,
+        ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
+            Box::pin(async move {
+                let mut starts = self.starts.lock().unwrap();
+                let id = ToolInvocationId::try_new(format!("control-{}", starts.len())).unwrap();
+                starts.push((id.clone(), tool));
+                Ok(id)
+            })
+        }
+        fn finish_control<'a>(
+            &'a self,
+            id: ToolInvocationId,
+            tool: AgentControlTool,
+            failure: Option<CapabilityFailure>,
+        ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
+            Box::pin(async move {
+                self.finishes.lock().unwrap().push((id, tool, failure));
+                Ok(())
+            })
+        }
+        fn delegate<'a>(
+            &'a self,
+            _: model::AgentTaskInput,
+        ) -> AgentFuture<'a, Result<AgentTaskOutcome, CapabilityFailure>> {
+            Box::pin(async {
+                Err(
+                    CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+                        .with_detail("reason", "resource_requires_current_read")
+                        .with_detail("resourceId", "database-1")
+                        .with_detail("expectedRevision", "9001")
+                        .with_detail("sessionId", "private-session"),
+                )
+            })
+        }
+        fn followup<'a>(
+            &'a self,
+            input: model::AgentFollowupInput,
+        ) -> AgentFuture<'a, Result<AgentTaskOutcome, CapabilityFailure>> {
+            Box::pin(async move {
+                if input.instruction == "cancelled" {
+                    return Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled));
+                }
+                if input.instruction == "missing" {
+                    return Err(CapabilityFailure::new(
+                        CapabilityFailureCode::InvalidRequest,
+                    ));
+                }
+                Ok(AgentTaskOutcome {
+                    run_id: AgentRunId::try_new("worker").unwrap(),
+                    role: yss_harness_contract::AgentRole::Review,
+                    state: AgentRunState::Completed,
+                    report: None,
+                    failure_code: None,
+                    artifacts: vec![],
+                    results: vec![],
+                    evidence: vec![],
+                    plan: None,
+                    invalidated_runs: vec![],
+                })
+            })
+        }
+    }
+    struct RejectPlan;
+    impl AgentEventOutput for RejectPlan {
+        fn emit<'a>(
+            &'a self,
+            event: AgentEvent,
+        ) -> AgentFuture<'a, Result<(), AgentOutputFailure>> {
+            Box::pin(async move {
+                if matches!(event, AgentEvent::PlanProposed { .. }) {
+                    Err(AgentOutputFailure::PolicyRejected {
+                        reason: "missing diagnostics".into(),
+                        available_methods: vec![],
+                    })
+                } else {
+                    Ok(())
+                }
+            })
+        }
+    }
+    let calls = [
+        (
+            "delegate_task",
+            serde_json::json!({
+                "worker": "review", "objective": "Check evidence",
+                "completionCriteria": "Return findings", "dependsOn": [],
+                "scope": {"resources": [], "results": [], "creations": [], "exportPaths": []}
+            }),
+        ),
+        ("followup_task", serde_json::json!({"runId": 42})),
+        (
+            "propose_statistical_plan",
+            serde_json::json!({"method": 42}),
+        ),
+        (
+            "followup_task",
+            serde_json::json!({"runId": "worker", "instruction": "continue"}),
+        ),
+        (
+            "followup_task",
+            serde_json::json!({"runId": "worker", "instruction": "missing"}),
+        ),
+        ("propose_statistical_plan", sample_plan()),
+        (
+            "delegate_task",
+            serde_json::json!({
+                "worker": "review", "objective": "Check evidence", "constraints": "Read only",
+                "completionCriteria": "Return findings", "dependsOn": [],
+                "scope": {"resources": [], "results": [], "creations": [], "exportPaths": []}
+            }),
+        ),
+        (
+            "followup_task",
+            serde_json::json!({"runId": "worker", "instruction": "cancelled"}),
+        ),
+    ];
+    let mut steps = calls
+        .into_iter()
+        .enumerate()
+        .map(|(index, (name, arguments))| {
+            vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                format!("call-{index}"),
+                ToolFunction::new(ToolName::new(name).unwrap(), arguments),
+            ))]
+        })
+        .collect::<Vec<_>>();
+    steps.push(vec![AssistantContent::text("Finished")]);
+    let executor = Arc::new(Controls::default());
+    let mut request = request(vec![]);
+    request.control_tools = vec![
+        AgentControlTool::DelegateTask,
+        AgentControlTool::FollowupTask,
+        AgentControlTool::ProposeStatisticalPlan,
+    ];
+    let model = scripted_model(steps);
+    let failure = RigAgentDriver::new(model.clone())
+        .run_turn(
+            request,
+            executor.clone(),
+            Arc::new(RejectPlan),
+            CancellationToken::default(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(failure.code, AgentDriverFailureCode::Cancelled);
+    let starts = executor.starts.lock().unwrap();
+    let finishes = executor.finishes.lock().unwrap();
+    assert_eq!(starts.len(), 8);
+    assert_eq!(finishes.len(), 8);
+    assert_eq!(
+        finishes[6].2.as_ref().unwrap().code,
+        CapabilityFailureCode::RevisionConflict
+    );
+    let history = serde_json::to_string(&model.requests()[7].chat_history).unwrap();
+    assert!(history.contains("resource_read_required"));
+    for private in [
+        "revision",
+        "Revision",
+        "sessionId",
+        "private-session",
+        "9001",
+    ] {
+        assert!(!history.contains(private), "{history}");
+    }
+    let decode_failure = finishes[0].2.as_ref().unwrap();
+    assert_eq!(decode_failure.details["category"], "missing_field");
+    assert_eq!(decode_failure.details["path"], "$.constraints");
+    assert!(decode_failure.details["expected"].contains("string"));
+    assert_eq!(
+        finishes[5].2.as_ref().unwrap().details["reason"],
+        "missing diagnostics"
+    );
+    for (id, tool) in starts.iter() {
+        assert_eq!(
+            finishes
+                .iter()
+                .filter(|(finished, kind, _)| finished == id && kind == tool)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(
+        finishes
+            .iter()
+            .filter(|(_, _, failure)| failure
+                .as_ref()
+                .is_some_and(|failure| failure.code == CapabilityFailureCode::InvalidRequest))
+            .count(),
+        5
+    );
+    assert_eq!(
+        finishes
+            .iter()
+            .filter(|(_, _, failure)| failure.is_none())
+            .count(),
+        1
+    );
+    assert_eq!(
+        finishes.last().unwrap().2.as_ref().unwrap().code,
+        CapabilityFailureCode::Cancelled
+    );
 }

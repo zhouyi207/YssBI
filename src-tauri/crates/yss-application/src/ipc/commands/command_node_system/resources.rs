@@ -87,6 +87,7 @@ macro_rules! file_lifecycle_commands {
                     parse_file_path(path, $kind)?,
                     expected_revision,
                     operation_id,
+                    None,
                 )
                 .map_err(map_resource_mutation_error)?;
             let result =

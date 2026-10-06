@@ -238,8 +238,15 @@ async fn session_selection_write_tails_and_queued_requests_preserve_current_bind
             let id = first.id.clone();
             let binding = first.project.clone();
             tokio::spawn(async move {
-                host.submit_turn(&id, &binding, "First title".into(), vec![], None)
-                    .await
+                host.submit_turn(
+                    &id,
+                    &binding,
+                    "First title".into(),
+                    vec![],
+                    None,
+                    Default::default(),
+                )
+                .await
             })
         };
         sessions.entered.notified().await;
@@ -404,6 +411,7 @@ async fn queued_turn_submission_preserves_the_opened_project_binding() {
         "Message for the previous binding".into(),
         vec![],
         None,
+        Default::default(),
     ));
     assert!(poll_once(stale.as_mut()).await.is_none());
     drop(access);
@@ -419,6 +427,7 @@ async fn queued_turn_submission_preserves_the_opened_project_binding() {
         "Message for the current binding".into(),
         vec![],
         None,
+        Default::default(),
     )
     .await
     .unwrap();

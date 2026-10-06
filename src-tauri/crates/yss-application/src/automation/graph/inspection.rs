@@ -1,5 +1,8 @@
 //! Query projections over the captured editor snapshot; no separate graph state or cache.
 use super::*;
+mod overview;
+pub(super) mod queries;
+pub(super) use queries::{find_connections, find_nodes, inspect_nodes};
 
 pub(super) fn inspect(
     request: InspectGraphRequest,
@@ -9,6 +12,7 @@ pub(super) fn inspect(
     version: ResourceVersion,
     hash: String,
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
+    validate_graph_reference(&request.graph, path)?;
     if request.view == GraphInspectionView::Full {
         return inspect_projection(path, document, projection, version, hash)
             .map(AutomationCapabilityResult::GraphInspection);
@@ -72,8 +76,15 @@ pub(super) fn inspect(
         observation_hash,
         page: None,
         content: GraphInspectionItems::Unchanged,
+        runs: None,
+        overview: None,
     };
     if request.if_unchanged.as_ref() == Some(&result.observation_hash) {
+        return Ok(AutomationCapabilityResult::GraphInspectionPage(result));
+    }
+    if request.view == GraphInspectionView::Summary {
+        result.content = GraphInspectionItems::Summary;
+        result.overview = Some(overview::project(document, projection));
         return Ok(AutomationCapabilityResult::GraphInspectionPage(result));
     }
     let (total, content) = match request.view {
@@ -84,30 +95,7 @@ pub(super) fn inspect(
                 .take(request.limit)
                 .map(|node| {
                     let details = request.view == GraphInspectionView::Nodes;
-                    GraphNodeSummary {
-                        node_id: node.node_id.to_string(),
-                        node_type_id: node.node_type.as_str().into(),
-                        user_label: node.display.user_label.as_deref().map(str::to_owned),
-                        title: node.display.title.to_string(),
-                        port_count: node.ports.len(),
-                        parameters: details.then(|| {
-                            node.parameter_groups
-                                .iter()
-                                .flat_map(|group| &group.parameters)
-                                .map(|parameter| {
-                                    (parameter.key.as_str().into(), parameter.value.clone())
-                                })
-                                .collect()
-                        }),
-                        parameter_options: request.include_options.then(|| {
-                            node.parameter_groups
-                                .iter()
-                                .flat_map(|group| &group.parameters)
-                                .map(super::parameter)
-                                .collect()
-                        }),
-                        port_templates: details.then(|| port_templates(node)),
-                    }
+                    node_summary(node, details, request.include_options)
                 })
                 .collect();
             (nodes.len(), GraphInspectionItems::Nodes(items))
@@ -163,7 +151,9 @@ pub(super) fn inspect(
             document.constants.len(),
             GraphInspectionItems::Constants(constants(document, request.offset, request.limit)?),
         ),
-        GraphInspectionView::Full => unreachable!("full inspection returned above"),
+        GraphInspectionView::Summary | GraphInspectionView::Full => {
+            unreachable!("inspection returned above")
+        }
     };
     let end = request.offset.saturating_add(request.limit).min(total);
     result.page = Some(GraphInspectionPagination {
@@ -173,6 +163,21 @@ pub(super) fn inspect(
     });
     result.content = content;
     Ok(AutomationCapabilityResult::GraphInspectionPage(result))
+}
+
+pub(super) fn validate_graph_reference(
+    graph: &GraphResourceRef,
+    path: &GraphResourcePath,
+) -> Result<(), CapabilityFailure> {
+    let expected = match graph.kind {
+        GraphResourceKind::EventGraph => yss_graph_document::GraphResourceKind::EventGraph,
+        GraphResourceKind::FunctionGraph => yss_graph_document::GraphResourceKind::FunctionGraph,
+    };
+    if path.kind() == expected {
+        Ok(())
+    } else {
+        Err(invalid_edit_identity("graph"))
+    }
 }
 
 fn port_detail(port: &EditorPortModel, include_schema: bool) -> GraphPortDetail {
@@ -208,6 +213,7 @@ fn port_detail(port: &EditorPortModel, include_schema: bool) -> GraphPortDetail 
                 })
                 .unwrap_or_default()
         }),
+        schema_page: None,
         literal: port.input.as_ref().and_then(|input| {
             input
                 .literal_override
@@ -259,4 +265,33 @@ pub(super) fn constants(
         if primitive { value["dataValue"] = serde_json::to_value(&constant.data_value).map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?; }
         Ok((id.to_string(), value))
     }).collect()
+}
+
+fn node_summary(
+    node: &EditorNodeModel,
+    include_parameters: bool,
+    include_options: bool,
+) -> GraphNodeSummary {
+    GraphNodeSummary {
+        node_id: node.node_id.to_string(),
+        node_type_id: node.node_type.as_str().into(),
+        user_label: node.display.user_label.as_deref().map(str::to_owned),
+        title: node.display.title.to_string(),
+        port_count: node.ports.len(),
+        parameters: include_parameters.then(|| {
+            node.parameter_groups
+                .iter()
+                .flat_map(|group| &group.parameters)
+                .map(|parameter| (parameter.key.as_str().into(), parameter.value.clone()))
+                .collect()
+        }),
+        parameter_options: include_options.then(|| {
+            node.parameter_groups
+                .iter()
+                .flat_map(|group| &group.parameters)
+                .map(super::parameter)
+                .collect()
+        }),
+        port_templates: include_parameters.then(|| port_templates(node)),
+    }
 }
