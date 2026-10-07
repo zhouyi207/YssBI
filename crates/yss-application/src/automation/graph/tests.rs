@@ -1930,10 +1930,17 @@ fn gui_and_harness_retries_recover_original_commits_without_overwriting_later_ed
         .edit_graph(gui_request.clone(), create.clone())
         .unwrap();
     assert_eq!(created.update.document.nodes.len(), 2);
-    let commit = application
-        .graph_edit_receipt(&project, &path, version, gui_request.operation_id)
+    let commit = captured
+        .project()
+        .graph_edit_command_receipt(
+            &project,
+            &path,
+            version.session_id,
+            gui_request.operation_id,
+        )
         .unwrap()
         .unwrap();
+    assert_eq!(commit.request_version, version);
     assert_eq!(commit.commit.editing, created.editing);
     let save_request = GraphEditRequest {
         version: created.editing.version,

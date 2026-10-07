@@ -1,7 +1,7 @@
 # Graph application
 
 > Status: Current
-> Scope: 图用例编排、当前文档、投影同步、保存及模块调用关系
+> Scope: 图用例编排、当前文档、类型化投影、保存及模块调用关系
 > Canonical owners: Application graph 用例与 Project 图编辑状态；解析、执行和呈现契约分别由对应模块维护
 > Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
 
@@ -47,7 +47,9 @@ Decompose 端口，不改写图文档或编辑 revision；已引用但消失的�
 
 资源复制接受可选名称，由原 Project 事务一次分配名称、路径及新元素身份；GUI 未指定时保留默认命名。Harness 轻量目录和元信息查询不打开图，实际编辑与执行才建立所需编辑/语义依据。
 
-GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，编辑 revision 跨 JS 边界使用十进制字符串。前端 sessionId、projectionGeneration 只控制视图和请求生命周期。Project instance/session、图路径、语义输入 hash、run/result、panel/group 身份继续分别校验。
+GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，原生调用直接持有这些 Rust 类型。
+视图的生命周期与异步读取代次只控制回调接纳；Project instance/session、图路径、编辑版本、
+语义输入 hash、run/result 和 panel/group 身份继续分别校验。
 
 资源 revision 同时服务文件事务和执行资源校验，语义内容由独立的 semanticInputHash 表达，见 [Project authority](../../../yss-project/README.md#graph-resource-revisions)。
 
@@ -125,7 +127,9 @@ Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码�
 
 创建目录、编辑校验与剪贴板导出共用 `ProjectCatalogResources` 中已验证的项目声明。
 编辑目录将资源 revision 与已有 `FunctionSignature` 绑定，不再另建字符串函数签名或在连接时重新解析
-类型名。剪贴板导出只捕获声明，不读取数据库 Schema。目录查询与创建并连接共用声明端口及函数动态
+类型名。`export_graph_subgraph` 按项目、图路径和 `GraphEditVersion` 读取 Project 当前文档，
+导出只捕获声明，不读取数据库 Schema；返回前重验项目索引、应用会话和编辑版本。
+目录查询与创建并连接共用声明端口及函数动态
 成员的候选构造，保留成员身份、顺序、类型和回退标签。既有端口优先消费语义快照；同一原子补丁中新建
 的端口及无快照的纯 Editor 调用，仍由协议、文档常量和捕获资源进行校验。
 `CreateNode` 必须携带 `parameters`（快速创建为空映射）。Graph Editor 将其与资源绑定参数合并，
@@ -176,28 +180,46 @@ GUI / Harness typed command
   → Graph Document Editor 准备可逆补丁与完整语义投影
   → Project 原子提交当前文档、revision、历史和请求回执
   → Execution 更新结果有效性，发布图变更通知
-  → 命令返回 snapshot/delta，React 安装只读投影
+  → 命令返回类型化回执，GPUI 安装只读投影
 ```
 
-普通编辑、undo/redo 与 Save 使用同一后端图身份。GUI 队列保留请求与显示顺序，最终版本校验和写入顺序由 Rust 决定。按图协调只持有操作预约；Resolve、文件 I/O 和交付期间不持有 Project 数据锁，独立图的编辑不共享一个长临界区。
+普通编辑、undo/redo 与 Save 使用同一 Project 编辑身份。原生宿主在 worker 中调用这些用例，
+最终版本校验和写入顺序由 Application / Project 决定。按图协调只持有操作预约；Resolve、
+文件 I/O 和交付期间不持有 Project 数据锁，独立图的编辑不共享一个长临界区。
 
-GUI 的 saving 标志在保存入队时关闭新编辑与历史请求的准入；此前已接受的任务继续执行和安装结果，保存到达队首后读取最新版本。saving 不用于取消已接受的任务，项目与视图身份校验仍独立生效。
+原生画布在编辑、历史或保存调用期间阻止并行命令，已启动的业务调用由原 owner 结算。
+投影刷新若与命令交错，会在命令收尾后重读；迟到的刷新按图身份与捕获的编辑版本接纳。
+项目与视图生命周期校验仍独立生效，具体原生交互属于 [GPUI host](../../../yss-desktop-gpui/README.md)。
 
-前端通过 `installGraphSession` 将会话、画布实体与结果有效性摘要一次安装到统一的图只读 Store，先用 `canAcceptGraphSession` 拒绝同一后端编辑会话的旧 revision。项目快照在最终同步提交前复用该接纳规则，并重新检查 dirty/saving；同一批图快照同样一次发布。未变化的节点、端口、连线和结果条目保留引用，完整快照也遵守此规则。
+`ApplicationState::open_graph` 返回 `OpenGraphApplicationReceipt`，包含同次捕获的只读文档、
+解析结果、`EditorProjectionModel`、编辑状态、函数投影与结果摘要。驻留图的重新读取复用
+同一入口，不另建编辑器查询或传输同步用例。编辑和历史调用返回 `GraphEditResponse`，
+Save 返回包含图响应的 `GraphSaveResponse`。原生 `OpenedGraph` 安装这些只读值，文档与
+历史仍由 Project 持有；它不持有另一份可写 GraphDocument。
 
-GUI 与 Rust 的每图队列均有容量限制，过载返回 `graph_edit_busy`。每个成功接受的编辑、历史或保存命令推进 revision，包括文档未变化的命令；dirty 仍由内容指纹判断。Project 在同一次提交内保存 operation ID、请求指纹、原始编辑版本及实际回执，最近回执同时限制条目数和序列化预算。重复的相同请求复用原提交，不再修改文档或历史；复用 ID 改写请求会被拒绝。回执淘汰后，旧请求的版本不能再次授权写入。
+Application 的每图协调队列有容量限制，过载返回类型化 `EditingBusy`。每个成功接受的编辑、
+历史或保存命令推进 revision，包括文档未变化的命令；dirty 仍由内容指纹判断。Project 在
+同一次提交内保存 operation ID、请求指纹、原始编辑版本及实际回执，最近回执同时限制条目数
+和序列化预算。重复的相同请求复用原提交，不再修改文档或历史；复用 ID 改写请求会被拒绝。
+回执淘汰后，旧请求的版本不能再次授权写入。
 
-`get_graph_edit_receipt` 按项目、图、编辑会话、请求版本与 operation ID 查询，等待该图在途提交完成。空结果表示没有保留的回执，不证明操作从未发生。GUI 在传输或响应解析失败时先查询原提交，再读取最新投影；旧保存回执只证明原修订已保存，不能清除后续编辑的 dirty。回执随驻留编辑会话结束而释放，不提供跨进程提交恢复。
+原始提交回执由 `ProjectState::graph_edit_command_receipt` 按项目、图、编辑会话及 operation ID
+查询。Application 的重试与 Harness 恢复复用这个 owner，并核对原始请求版本和指纹；不维护
+另一份回执索引或桌面查询命令。空结果表示没有保留的回执，不证明操作从未发生。原生调用
+失败后重读当前图状态；旧保存回执只证明原修订已保存，不能清除后续编辑的 dirty。回执随
+驻留编辑会话结束而释放，不提供跨进程提交恢复。
 
 GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操作或 Harness 批次对应一个事务。历史按条目数和序列化字节数限制，阈值由 [graph_editing.rs](../../../yss-project/src/project_state/graph_editing.rs) 拥有。Undo/redo 恢复文档意图后重新 Resolve，不能恢复历史中的类型、诊断或结果 payload。结构有效但暂时不能运行的图仍可编辑，阻断诊断由 Graph Problems 展示。
 
-普通编辑、撤销、运行、兼容节点查询或复制导出不上传完整图文档，而是携带图身份和后端 version。导入或粘贴等本身包含新内容的操作仍交付真实输入。过期版本被拒绝，不自动合并并行修改。
+原生普通编辑、撤销、保存和连接候选查询使用明确图身份与编辑版本。运行或复制导出需要
+文档时，从匹配版本的 Project 读取 Rust 快照；新建、导入或粘贴等操作仍携带自身的真实输入。
+过期版本被拒绝，不自动合并并行修改。
 
-编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove/splice 路径批次，客户端在候选上应用补丁、冻结并完成结构与引用一致性检查后发布。校验可以复用未变化且已验证的不可变对象，图身份、实体引用和跨字段约束仍针对当前候选检查，失败时不接纳该基线。未变化的节点、端口及连线复用引用；[前端投影 Store](../../../../react/src/features/README.md)按变化实体更新索引并原子安装。该协议只交付读投影，不代替 Graph typed 编辑操作。
-
-`GraphEditorSessionDto.resultState` 与文档、语义投影来自同一次图操作。ResultStore 在更新输入依据的同一锁内捕获结果摘要，携带执行会话内的结果 revision；运行发布、运行准入和依赖重验推进该顺序，独立于图编辑 revision。前端要求摘要与投影的 semanticInputHash 一致，保留已安装的更高结果 revision，防止迟到的编辑/读取回执回退运行结果。
-
-两端基线均限制为 32 条、32 MiB 序列化预算，单条超过 16 MiB 时只读而不缓存。交付中的 `snapshotBytes` 由 Rust 在编码时计算，前端据此计量，避免主线程为了缓存预算重新编码完整图。增量最多 512 个操作；字节预算与条目限制不代替真实桌面的安装耗时、长任务及帧率验收。
+读取和写入回执直接交付类型化完整投影，不经过 JSON 路径补丁、窗口传输基线或 React Store。
+`OpenGraphApplicationReceipt::result_state` 与 `GraphEditResponse::result_state` 都来自对应的
+图读取或提交。ResultStore 在更新输入依据的同一锁内捕获结果摘要，携带执行会话内的
+结果 revision；运行发布、运行准入和依赖重验推进该顺序，独立于图编辑 revision。
+原生 `OpenedGraph` 对同一执行会话与语义输入保留更高的结果 revision，避免迟到回执回退结果。
 
 公共运行路径在提交执行状态后统一发布图活动，GUI、Harness 与内部调用遵循同一规则；调用者的专属 sink 不负责公共发布。GPUI 直接消费同一类型化运行通知。
 Application 的 `RunIdentity` 包含执行会话、图路径、RunId 与本次准入已验证的 semantic input hash；所有通知、执行回执和恢复快照保留这份身份。宿主只转交该 hash，前端不能用通知到达时的当前图替换它。加载图的运行与失败展示按该依据筛选，已保留结果的查看仍按完整结果引用处理。
@@ -205,17 +227,18 @@ Application 的 `RunIdentity` 包含执行会话、图路径、RunId 与本次�
 `RunApplicationEvent` 另携带产生事件时从 ResultStore 捕获的 `result_revision`：开始通知在输出失效后捕获，成功终态在结果发布后捕获。失败和取消也读取已提交的结果顺序；版本不属于整次运行不变的身份。公共通知、专属 sink 和恢复保存同一事件值。前端按摘要是否覆盖这一版本派生输出等待状态，不在查询完成时另写确认标记。
 `run_graph_with_sink` 成功时返回 `RunGraphReceipt`，包含运行身份和本次 handoff 实际发布的结果引用、输出与类别。回执在交付结果查看意图和终态之前捕获，不通过随后可能已变化的当前结果索引重建，也不复制结果 payload。Harness 对这些引用执行响应条目预算并明确报告总数和完整性；只需要 RunId 的内部调用继续使用 `run_graph`。
 Application 按结果 ID 与完整 requester 身份检查观察请求重复；多个 View 节点可以查看同一结果，同一 requester 对同一结果的重复请求仍被拒绝。
-Application 保存运行事实的恢复投影：每个活动运行的开始身份与输出，以及每张图最新运行的终态和失败详情；不保存操作事件历史。`get_execution_snapshot` 按项目会话返回这些当前投影，初始订阅和 Resync 不再依赖前端曾收到的 RunId。
-通知与命令回执在既有 Graph FIFO 中协调。前端恢复期间有界暂存后续事件，先安装快照再处理通知；公共订阅、专属 sink 和恢复共享按执行会话、RunId 与终态去重的安装规则。结果打开意图只由公共观察路径处理，不在恢复时重放。
+Application 保存运行事实的恢复投影：每个活动运行的开始身份与输出，以及每张图最新运行的终态和失败详情；不保存操作事件历史。`ApplicationState::execution_snapshot` 按项目会话返回这些当前投影，原生恢复不依赖视图曾收到的 RunId。
+原生宿主通过有界事件队列交付通知；交付中断后重读当前执行投影。公共订阅、专属 sink 和
+恢复按执行会话、RunId 与终态接纳运行事实。结果打开意图由公共观察路径处理，不在恢复时重放。
 执行提交中、后端运行状态与同步中断分别处理。只有 RunErrored 或权威恢复中的失败事实才写入 Output；Command 拒绝不等于计算失败。交付中断后先查询当前执行投影，无法确认时保留“运行状态未知”，不自动重跑。成功结果始终先提交再通知。
 运行事件由统一安装器直接写入运行投影。Pin 查看查询当前输出结果，不另行提交运行；执行需求统一使用默认需求或显式输出集合。前端恢复统一查询当前执行快照，运行注册表内部仍按 RunId 管理准入、取消和终态。
 
-关闭视图、HMR、窗口销毁和 Project replacement 释放订阅或使旧回调失效。最后一个编辑器关闭并完成既有保存/放弃流程后可卸载驻留数据，再次打开生成新的编辑身份。Harness 可直接打开已关闭的图，内部读取使用后端分配的 lifecycle token。
+关闭视图、窗口销毁和 Project replacement 释放订阅或使旧回调失效。最后一个编辑器关闭并完成既有保存/放弃流程后可卸载驻留数据，再次打开生成新的编辑身份。Harness 可直接打开已关闭的图，内部读取使用后端分配的 lifecycle token。
 
 关闭最后一个 Graph 标签页前先经过该图 FIFO 屏障，再读取 dirty 和编辑版本决定保存/丢弃。普通缓存释放也进入同一队列，Rust 在提交边界拒绝释放 dirty 文档；明确丢弃携带用户确认时的 GraphEditVersion，版本变化则拒绝丢弃。卸载返回是否允许释放（已经不驻留也视为成功），只有后端确认且 lifecycle 仍有效时才清除前端文档、投影和资源状态；保留或失败时恢复缓存可用标记。清理后的迟到回执不能覆盖重新打开的会话。
 
-Graph Service 在 IPC 边界仅接纳布尔卸载确认；函数签名修改的回复复用资源回执 parser，
-Application 继续核对请求关联、签名版本和项目发布身份，组件不重复解析这些已验证回复。
+图卸载返回是否允许释放的布尔结果；函数签名修改直接返回类型化资源回执。
+Application 核对请求关联、签名版本和项目发布身份，原生组件消费已验证的 Rust 值。
 
 Project watcher 保留未保存的当前文档。资源重命名和函数签名事务只持久化其负责的变更，不顺带保存图正文；重命名同步更新历史中的资源引用及保存指纹。节点目录和资源索引仍由现有 Project publication owner 安装。
 
@@ -258,7 +281,7 @@ Application 使用 Analysis 的范围就绪检查与资源引用准备授权，�
 
 执行能力检查新增阻断诊断时，同步将完整解析的 snapshot 标为 Incomplete，投影为 `analysisBlocked`；`success` 不得同时携带阻断诊断。已有 InternalFailure 保留原故障信息。
 
-`semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。manifest 记录所用函数签名/正文、变量类型、数据库 Schema 以及 absent lookup；basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
+`semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。图常量属于语义文档；manifest 记录所用函数签名/正文、数据库 Schema 以及 absent lookup，basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
 
 函数正文捕获与 Analysis 调用图校验共同使用 `yss_graph_analysis::direct_function_dependencies`
 及同一会话的冻结 Registry 识别直接调用目标，包括扩展角色和适用的默认引用；Application 继续遍历传递依赖、从捕获的 Project 会话读取正文并重验身份。
@@ -273,7 +296,7 @@ Application 使用 Analysis 的范围就绪检查与资源引用准备授权，�
 
 ### Save
 
-Save 接收当前编辑 version 与 operation ID，由 Rust 读取匹配的当前文档并通过文件事务持久化。它不接收前端 authored document，也不把版本不匹配的请求自动覆盖到新内容上。投影在事务前准备，成功后通过同一回执交付；视图增量恢复只执行读取，不能重放写操作。
+Save 接收当前编辑 version 与 operation ID，由 Rust 读取匹配的当前文档并通过文件事务持久化。它不接收前端 authored document，也不把版本不匹配的请求自动覆盖到新内容上。投影在事务前准备，成功后通过同一回执交付；视图恢复只执行读取，不能重放写操作。
 
 成功后更新保存指纹并清理图历史，失败保留当前内存编辑与历史。前端 saving 只用于交互反馈，后端按图协调及版本校验保护真正的提交。保存后的视图恢复读取最新状态，不能把较新的内存编辑误标为已保存。
 
@@ -295,8 +318,9 @@ Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；
 | 操作拒绝 | 类型化 Application 错误 |
 | 用户反馈 | 原生宿主本地化 |
 
-详见 [Runtime Signals](../../../../react/src/features/application/observability/README.md)、[Application](../../README.md)、[GPUI host](../../../yss-desktop-gpui/README.md) 与 [Rust workspace 验证](../../../../README.md)。
+详见 [Application](../../README.md)、[Logging](../../../yss-logging/README.md)、
+[GPUI host](../../../yss-desktop-gpui/README.md) 与 [Rust workspace 验证](../../../../README.md)。
 
 ## 相关模块
 
-[语义解析](../../../yss-graph-analysis/README.md) · [解析缓存](../../../yss-graph-runtime/README.md) · [执行与 ResultStore](../../../yss-graph-execution/README.md) · [数据契约](../../../yss-data-contract/README.md) · [Node Kernel](../../../yss-node-kernel/README.md) · [Results 查询](../../../../react/src/features/application/results/README.md) · [画布](../../../../react/src/modules/graph-editor/README.md) · [Problems](../../../../react/src/modules/problems/README.md) · [Output](../../../../react/src/modules/output/README.md)
+[语义解析](../../../yss-graph-analysis/README.md) · [解析缓存](../../../yss-graph-runtime/README.md) · [执行与 ResultStore](../../../yss-graph-execution/README.md) · [数据契约](../../../yss-data-contract/README.md) · [Node Kernel](../../../yss-node-kernel/README.md) · [原生画布、Problems 与 Output](../../../yss-desktop-gpui/README.md)

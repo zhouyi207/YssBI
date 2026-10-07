@@ -1761,7 +1761,8 @@ fn clipboard_export_uses_project_declarations_without_database_schema_capture() 
             },
         );
     }
-    project.graphs.get_mut(&graph).unwrap().document = document.clone();
+    let node_ids = document.nodes.keys().copied().collect();
+    project.graphs.get_mut(&graph).unwrap().document = document;
     let staged = staged_session(
         project,
         "clipboard-declarations",
@@ -1774,14 +1775,16 @@ fn clipboard_export_uses_project_declarations_without_database_schema_capture() 
         Err(CatalogQueryApplicationError::Database(error))
             if error.code() == yss_database_runtime::error::DatabaseErrorCode::Conflict
     ));
+    let version = staged
+        .session
+        .project()
+        .read_graph_editing(&instance, &graph)
+        .unwrap()
+        .state
+        .version;
     let exported = staged
         .application
-        .export_graph_subgraph(
-            instance,
-            graph,
-            document.clone(),
-            document.nodes.keys().copied().collect(),
-        )
+        .export_graph_subgraph(&instance, &graph, version, node_ids)
         .unwrap();
     let paths = exported
         .nodes
@@ -1796,6 +1799,67 @@ fn clipboard_export_uses_project_declarations_without_database_schema_capture() 
         })
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(paths, [function.as_str(), "databases/sales"].into());
+}
+
+#[test]
+fn clipboard_export_rejects_a_snapshot_from_before_a_committed_edit() {
+    use crate::graph::editing::GraphEditRequest;
+    use crate::graph::resources::ResourceMutationApplicationError;
+    use yss_graph_editor::EditorGraphMutation;
+    use yss_project::ProjectGraphOperationError;
+    use yss_project_identity::OperationId;
+
+    let graph = GraphResourcePath::new("events/Clipboard.yssbi-event").unwrap();
+    let node = NodeId::new();
+    let document = compatible_draft(node);
+    let mut project = compatible_project(&graph);
+    project.graphs.get_mut(&graph).unwrap().document = document;
+    let staged = staged_session(
+        project,
+        "clipboard-current-document",
+        GraphRuntimeTestControl::default(),
+    );
+    let instance = staged.session.project_instance_id().clone();
+    let before = staged
+        .session
+        .project()
+        .read_graph_editing(&instance, &graph)
+        .unwrap();
+    let edited = staged
+        .application
+        .edit_graph(
+            GraphEditRequest {
+                project_instance_id: instance.clone(),
+                graph_path: graph.clone(),
+                version: before.state.version,
+                operation_id: OperationId::new(),
+                locale: "en-US".into(),
+            },
+            EditorGraphMutation::SetNodeLabel {
+                node_id: node,
+                label: Some("Updated".into()),
+            },
+        )
+        .unwrap();
+
+    let stale = staged.application.export_graph_subgraph(
+        &instance,
+        &graph,
+        before.state.version,
+        vec![node],
+    );
+    assert!(matches!(
+        stale,
+        Err(ResourceMutationApplicationError::GraphOperation(
+            ProjectGraphOperationError::RevisionConflict { .. }
+        ))
+    ));
+    let current = staged
+        .application
+        .export_graph_subgraph(&instance, &graph, edited.editing.version, vec![node])
+        .unwrap();
+    assert_eq!(current.nodes.len(), 1);
+    assert_eq!(current.nodes[0].user_label.as_deref(), Some("Updated"));
 }
 
 #[test]

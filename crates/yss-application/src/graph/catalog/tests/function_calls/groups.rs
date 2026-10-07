@@ -59,16 +59,12 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
     let captured = &session.session;
     let instance = captured.project_instance_id().clone();
     let resolve = || {
-        let state = captured
-            .project()
-            .read_graph_editing(&instance, &graph)
-            .unwrap();
-        app.resolve_editor_graph(
+        app.open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            state.state.version,
-            "en-US".into(),
-        )
+            0,
+            "en-US",
+        ))
         .unwrap()
     };
     let run = |node_id, mode| {
@@ -79,13 +75,8 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
             RunGraphRequest::new(
                 instance.clone(),
                 graph.clone(),
-                before.update.document,
-                before
-                    .update
-                    .projection_replacement
-                    .projection
-                    .basis
-                    .semantic_input_hash,
+                before.document().clone(),
+                before.projection().basis.semantic_input_hash,
             )
             .with_demand(RunDemand::Node { node_id, mode }),
             |event| {
@@ -169,11 +160,9 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
         retained.provenance().result_id()
     );
     let after = resolve();
-    assert_eq!(after.update.document, saved_root);
+    assert_eq!(after.document(), &saved_root);
     let columns = &after
-        .update
-        .projection_replacement
-        .projection
+        .projection()
         .nodes
         .iter()
         .find(|node| node.node_id == decompose)
@@ -224,7 +213,7 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
     for node in [apply, transform] {
         assert!(matches!(
             changed
-                .result_state
+                .result_state()
                 .outputs
                 .get(&output_ref(node, "result")),
             Some(ResultCacheState::Stale { .. })

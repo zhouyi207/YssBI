@@ -272,29 +272,6 @@ fn existing_command(
 }
 
 impl ApplicationState {
-    pub fn graph_edit_receipt(
-        &self,
-        project: &ProjectInstanceId,
-        path: &GraphResourcePath,
-        version: GraphEditVersion,
-        operation_id: OperationId,
-    ) -> Result<Option<yss_project::GraphEditCommandReceipt>, ResourceMutationApplicationError>
-    {
-        let captured = self.capture_resource_session(project)?;
-        let _editing = captured
-            .coordinate_graph_edit(path)
-            .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
-        let receipt = captured.project().graph_edit_command_receipt(
-            project,
-            path,
-            version.session_id,
-            operation_id,
-        )?;
-        self.revalidate_captured_session(&captured)
-            .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        Ok(receipt.filter(|receipt| receipt.request_version == version))
-    }
-
     fn current_graph_response(
         &self,
         captured: &Arc<ApplicationSession>,
@@ -396,42 +373,6 @@ impl ApplicationState {
             result_state,
             update,
             editing: receipt.editing,
-        })
-    }
-
-    pub fn resolve_editor_graph(
-        &self,
-        project: ProjectInstanceId,
-        path: GraphResourcePath,
-        version: GraphEditVersion,
-        locale: String,
-    ) -> Result<GraphEditResponse, ResourceMutationApplicationError> {
-        let captured = self.capture_resource_session(&project)?;
-        let _editing = captured
-            .coordinate_graph_edit(&path)
-            .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
-        let snapshot = captured.project().read_graph_editing(&project, &path)?;
-        if snapshot.state.version != version {
-            return Err(ResourceMutationApplicationError::GraphOperation(
-                yss_project::ProjectGraphOperationError::RevisionConflict {
-                    graph: path,
-                    expected: version.revision,
-                    current: snapshot.state.version.revision,
-                },
-            ));
-        }
-        let editor =
-            GraphDocumentEditor::new(&captured, &path, &locale, (*snapshot.document).clone())?;
-        let update = editor.finish(self)?;
-        let result_state = super::results::observe_graph_result_inputs(
-            &captured,
-            path.as_str(),
-            update.result_inputs.clone(),
-        );
-        Ok(GraphEditResponse {
-            result_state,
-            update,
-            editing: snapshot.state,
         })
     }
 

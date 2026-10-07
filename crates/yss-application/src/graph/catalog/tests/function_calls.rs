@@ -171,16 +171,12 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
     let captured = &session.session;
     let instance = captured.project_instance_id().clone();
     let resolve = || {
-        let state = captured
-            .project()
-            .read_graph_editing(&instance, &graph)
-            .unwrap();
-        app.resolve_editor_graph(
+        app.open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            state.state.version,
-            "en-US".into(),
-        )
+            0,
+            "en-US",
+        ))
         .unwrap()
     };
     let before = resolve();
@@ -190,13 +186,8 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
         RunGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            before.update.document,
-            before
-                .update
-                .projection_replacement
-                .projection
-                .basis
-                .semantic_input_hash,
+            before.document().clone(),
+            before.projection().basis.semantic_input_hash,
         ),
         |event| {
             events.push(event);
@@ -214,7 +205,7 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
             .all(|event| event.identity().run_id() == receipt.identity.run_id())
     );
     let after = resolve();
-    assert_eq!(after.update.document, saved_root);
+    assert_eq!(after.document(), &saved_root);
     assert_eq!(
         captured
             .project()
@@ -252,9 +243,7 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
         assert_eq!(page.data.columns()[0].name().as_str(), "sales");
         assert_eq!(page.data.columns()[0].values(), expected);
         let columns = after
-            .update
-            .projection_replacement
-            .projection
+            .projection()
             .nodes
             .iter()
             .find(|node| node.node_id == *decompose)
@@ -297,7 +286,7 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
     let changed = resolve();
     assert!(
         changed
-            .result_state
+            .result_state()
             .outputs
             .iter()
             .filter(|(output, _)| outputs
@@ -314,13 +303,8 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
         RunGraphRequest::new(
             instance,
             graph,
-            changed.update.document,
-            changed
-                .update
-                .projection_replacement
-                .projection
-                .basis
-                .semantic_input_hash,
+            changed.document().clone(),
+            changed.projection().basis.semantic_input_hash,
         ),
         |event| {
             events.push(event);

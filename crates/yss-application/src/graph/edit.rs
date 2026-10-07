@@ -279,12 +279,13 @@ impl ApplicationState {
 
     pub fn export_graph_subgraph(
         &self,
-        project_instance_id: ProjectInstanceId,
-        graph_path: GraphResourcePath,
-        document: GraphDocument,
+        project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+        version: yss_project::GraphEditVersion,
         node_ids: Vec<yss_graph_document::NodeId>,
     ) -> Result<ClipboardSubgraph, ResourceMutationApplicationError> {
-        let captured = self.capture_resource_session(&project_instance_id)?;
+        let captured = self.capture_resource_session(project_instance_id)?;
+        let document = self.current_graph_document(project_instance_id, graph_path, version)?;
         let index = captured
             .project()
             .read_project_index(captured.project_instance_id())?;
@@ -296,18 +297,6 @@ impl ApplicationState {
             .resources()
             .mutation_validation_snapshot()
             .map_err(ResourceMutationApplicationError::Catalog)?;
-        if !captured
-            .project()
-            .has_resident_graph(&graph_path)
-            .map_err(ResourceMutationApplicationError::Project)?
-        {
-            return Err(ResourceMutationApplicationError::GraphUnavailable {
-                graph: graph_path.clone(),
-            });
-        }
-        validate_graph_document(&document).map_err(|error| {
-            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-        })?;
         let result = captured
             .graph()
             .export_subgraph(&document, &catalog, node_ids)
@@ -319,6 +308,7 @@ impl ApplicationState {
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        self.current_graph_document(project_instance_id, graph_path, version)?;
         Ok(result)
     }
 

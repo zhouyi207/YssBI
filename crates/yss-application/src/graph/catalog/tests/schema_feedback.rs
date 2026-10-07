@@ -88,13 +88,12 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             .version,
     };
     let resolve = || {
-        let request = edit_request();
-        app.resolve_editor_graph(
+        app.open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            request.version,
-            "en-US".into(),
-        )
+            0,
+            "en-US",
+        ))
         .unwrap()
     };
     let output_columns = |projection: &yss_graph_editor::projection::EditorProjectionModel| {
@@ -112,7 +111,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             .collect::<Vec<_>>()
     };
     let before = resolve();
-    assert!(output_columns(&before.update.projection_replacement.projection).is_empty());
+    assert!(output_columns(before.projection()).is_empty());
     let changes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counter = Arc::clone(&changes);
     let _subscription = app
@@ -125,19 +124,14 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             }),
         )
         .unwrap();
-    let run_drop = |response: &crate::graph::editing::GraphEditResponse| {
+    let run_drop = |document, projection: &yss_graph_editor::projection::EditorProjectionModel| {
         run_graph(
             app,
             RunGraphRequest::new(
                 instance.clone(),
                 graph.clone(),
-                response.update.document.clone(),
-                response
-                    .update
-                    .projection_replacement
-                    .projection
-                    .basis
-                    .semantic_input_hash,
+                document,
+                projection.basis.semantic_input_hash,
             )
             .with_demand(RunDemand::Node {
                 node_id: drop_columns,
@@ -146,15 +140,15 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         )
         .unwrap();
     };
-    run_drop(&before);
+    run_drop(before.document().clone(), before.projection());
     assert_eq!(
         changes.load(std::sync::atomic::Ordering::Relaxed),
         1,
         "run requests projection refresh without editing the document"
     );
     let evaluated = resolve();
-    assert_eq!(before.editing, evaluated.editing);
-    let columns = output_columns(&evaluated.update.projection_replacement.projection);
+    assert_eq!(before.editing(), evaluated.editing());
+    let columns = output_columns(evaluated.projection());
     assert_eq!(
         columns
             .iter()
@@ -163,7 +157,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         ["kept"]
     );
     let result = evaluated
-        .result_state
+        .result_state()
         .outputs
         .iter()
         .find(|(output, _)| output.port().as_str() == port(drop_columns, "result").to_string())
@@ -173,10 +167,10 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         matches!(result, ResultCacheState::Valid { .. }),
         "Schema feedback must retain a valid producer result"
     );
-    run_drop(&evaluated);
+    run_drop(evaluated.document().clone(), evaluated.projection());
     let rerun = resolve();
     assert_eq!(
-        output_columns(&rerun.update.projection_replacement.projection),
+        output_columns(rerun.projection()),
         columns,
         "field identity survives a new result ID"
     );
@@ -230,35 +224,25 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             )
             .unwrap();
         let cold_resolve = || {
-            let editing = cold
-                .session
-                .project()
-                .read_graph_editing(&cold_instance, &graph)
-                .unwrap();
             cold.application
-                .resolve_editor_graph(
+                .open_graph(crate::graph::open::OpenGraphRequest::new(
                     cold_instance.clone(),
                     graph.clone(),
-                    editing.state.version,
-                    "en-US".into(),
-                )
+                    0,
+                    "en-US",
+                ))
                 .unwrap()
         };
         let initial = cold_resolve();
-        assert!(output_columns(&initial.update.projection_replacement.projection).is_empty());
+        assert!(output_columns(initial.projection()).is_empty());
         let mut events = Vec::new();
         let replay = crate::graph::run::run_graph_with_sink(
             &cold.application,
             RunGraphRequest::new(
                 cold_instance.clone(),
                 graph.clone(),
-                initial.update.document.clone(),
-                initial
-                    .update
-                    .projection_replacement
-                    .projection
-                    .basis
-                    .semantic_input_hash,
+                initial.document().clone(),
+                initial.projection().basis.semantic_input_hash,
             )
             .with_demand(demand.clone()),
             |event| {
@@ -307,11 +291,8 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
                 .any(|result| result.output.port().as_str() == columns[0].1.to_string())
         );
         let after = cold_resolve();
-        assert_eq!(
-            output_columns(&after.update.projection_replacement.projection),
-            columns
-        );
-        assert_eq!(after.editing, initial.editing);
+        assert_eq!(output_columns(after.projection()), columns);
+        assert_eq!(after.editing(), initial.editing());
         assert_eq!(
             cold.session
                 .execution()
@@ -326,13 +307,8 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
                 RunGraphRequest::new(
                     cold_instance,
                     graph.clone(),
-                    after.update.document,
-                    after
-                        .update
-                        .projection_replacement
-                        .projection
-                        .basis
-                        .semantic_input_hash,
+                    after.document().clone(),
+                    after.projection().basis.semantic_input_hash,
                 ),
                 |event| {
                     if matches!(
@@ -369,7 +345,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
     .unwrap();
     assert!(
         resolve()
-            .result_state
+            .result_state()
             .outputs
             .iter()
             .any(
@@ -400,19 +376,20 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         "undo may reuse a retained result with matching inputs"
     );
     let changed = app.change_graph_history(edit_request(), true).unwrap();
-    run_drop(&changed);
+    run_drop(
+        changed.update.document.clone(),
+        &changed.update.projection_replacement.projection,
+    );
     let updated = resolve();
     assert_eq!(
-        output_columns(&updated.update.projection_replacement.projection)
+        output_columns(updated.projection())
             .iter()
             .map(|(name, _)| name.as_str())
             .collect::<Vec<_>>(),
         ["maybe"]
     );
     let retained = updated
-        .update
-        .projection_replacement
-        .projection
+        .projection()
         .nodes
         .iter()
         .find(|node| node.node_id == decompose)
@@ -424,7 +401,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             .any(|port| port.address == columns[0].1 && port.orphan),
         "removed connected fields remain repairable"
     );
-    assert_eq!(updated.update.document.connections.len(), 3);
+    assert_eq!(updated.document().connections.len(), 3);
     let fresh = staged_session(
         compatible_project(&graph),
         "schema-fresh-session",
@@ -435,7 +412,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         .resolve_graph_document(
             fresh.session.project_instance_id().clone(),
             graph.clone(),
-            updated.update.document.clone(),
+            updated.document().clone(),
             "en-US".into(),
         )
         .unwrap();
@@ -458,7 +435,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         .project()
         .commit_graph_candidate(
             overwrite.into_authority(),
-            Arc::new(updated.update.document.clone()),
+            Arc::new(updated.document().clone()),
         )
         .unwrap();
     let mut events = Vec::new();
@@ -467,7 +444,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         RunGraphRequest::new(
             instance,
             graph.clone(),
-            updated.update.document,
+            updated.document().clone(),
             reopened.basis.semantic_input_hash,
         ),
         |event| {
