@@ -9,6 +9,7 @@ impl Workbench {
         self.event_task = None;
         self.graph_subscription = None;
         self.ui_binding = None;
+        self.ui_delivery = None;
         self.intent_queue.clear();
         self.intent_busy = false;
         self.intent_resync = false;
@@ -23,8 +24,12 @@ impl Workbench {
                 "Native graph activity attachment failed"
             ),
         }
-        match self.services.workbench_binding(&project.identity) {
-            Ok(binding) => self.ui_binding = Some(binding),
+        let delivery = uuid::Uuid::new_v4();
+        match self.services.workbench_binding(&project.identity, delivery) {
+            Ok(binding) => {
+                self.ui_binding = Some(binding);
+                self.ui_delivery = Some(delivery);
+            }
             Err(_error) => tracing::error!(
                 code = "native_workbench_attachment_failed",
                 "Native workbench attachment failed"
@@ -46,6 +51,8 @@ impl Workbench {
                             .update_in(cx, |view, window, cx| {
                                 view.refresh_project(window, cx);
                                 view.refresh_graphs(cx);
+                                view.refresh_documents(window, cx);
+                                view.refresh_minds(window, cx);
                                 for graph in
                                     view.graphs.values().filter_map(gpui::WeakEntity::upgrade)
                                 {
@@ -95,19 +102,31 @@ impl Workbench {
             {
                 self.refresh_project(window, cx);
                 self.refresh_graphs(cx);
+                self.refresh_documents(window, cx);
+                self.refresh_minds(window, cx);
             }
             NativeEvent::Resource(mutation) if mutation.project_instance_id == project.identity => {
                 self.refresh_project(window, cx);
                 self.refresh_graphs(cx);
+                for delta in &mutation.deltas {
+                    if let yss_project_history::ResourceKey::Doc(path) = &delta.resource
+                        && let Some(document) = self.documents.get(path.0.as_ref()).and_then(gpui::WeakEntity::upgrade) {
+                        document.update(cx, |document, cx| document.refresh(window, cx));
+                    }
+                    if let yss_project_history::ResourceKey::Mind(path) = &delta.resource
+                        && let Some(mind) = self.minds.get(path.0.as_ref()).and_then(gpui::WeakEntity::upgrade) {
+                        mind.update(cx, |mind, cx| mind.refresh(window, cx));
+                    }
+                }
             }
-            NativeEvent::Ui(identity, event) if identity == project.identity => match event {
+            NativeEvent::Ui(identity, delivery, event)
+                if identity == project.identity && self.ui_delivery == Some(delivery) => match event {
                 yss_ui_contract::UiEvent::Intent { receipt } => {
                     self.enqueue_intent(receipt, window, cx)
                 }
                 yss_ui_contract::UiEvent::Resync => self.resync_intents(window, cx),
                 yss_ui_contract::UiEvent::SessionChanged => {
-                    self.ui_binding = None;
-                    self.intent_queue.clear();
+                    self.rebind_session(window, cx);
                 }
             },
             NativeEvent::Harness(event) => {
@@ -117,10 +136,60 @@ impl Workbench {
         }
     }
 
-    fn refresh_graphs(&self, cx: &mut Context<Self>) {
+    pub(super) fn refresh_graphs(&self, cx: &mut Context<Self>) {
         for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
             graph.update(cx, |graph, cx| graph.refresh(cx));
         }
+    }
+
+    pub(super) fn rebind_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.refresh_assistant_directory(false, window, cx);
+        for conversation in self.conversations.values() {
+            conversation.update(cx, |view, cx| view.reload(false, window, cx));
+        }
+        self.connect_events(window, cx);
+        self.refresh_project(window, cx);
+        self.refresh_graphs(cx);
+        for chart in self.charts.values().filter_map(gpui::WeakEntity::upgrade) {
+            chart.update(cx, |chart, cx| chart.refresh(window, cx));
+        }
+        for editor in self
+            .databases
+            .values()
+            .filter_map(gpui::WeakEntity::upgrade)
+        {
+            editor.update(cx, |editor, cx| editor.reload(false, window, cx));
+        }
+        for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
+            graph.update(cx, |graph, cx| graph.resync_execution(cx));
+        }
+    }
+
+    pub(super) fn install_project_index(
+        &mut self,
+        project: DesktopProject,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.index_generation = self.index_generation.wrapping_add(1);
+        self.refreshing_index = false;
+        for document in &project.panels {
+            if let Some(panel) = self
+                .activities
+                .get(document.panel_id)
+                .and_then(gpui::WeakEntity::upgrade)
+            {
+                panel.update(cx, |panel, cx| panel.replace_document(document.clone(), cx));
+            }
+            if document.panel_id == "nodes" {
+                for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
+                    graph.update(cx, |graph, cx| graph.set_catalog(document.clone(), cx));
+                }
+            }
+        }
+        self.project = Some(project);
+        self.refresh_databases(window, cx);
+        self.refresh_charts(window, cx);
     }
 
     pub(super) fn refresh_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -132,6 +201,8 @@ impl Workbench {
             return;
         };
         self.refreshing_index = true;
+        self.index_generation = self.index_generation.wrapping_add(1);
+        let generation = self.index_generation;
         self.index_again = false;
         let identity = project.identity.clone();
         let lifecycle = self.lifecycle;
@@ -151,6 +222,7 @@ impl Workbench {
                 .and_then(|result| result);
             let _ = view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
+                    || view.index_generation != generation
                     || view
                         .project
                         .as_ref()
@@ -160,29 +232,7 @@ impl Workbench {
                 }
                 view.refreshing_index = false;
                 match result {
-                    Ok(project) => {
-                        for document in &project.panels {
-                            if let Some(panel) = view
-                                .activities
-                                .get(document.panel_id)
-                                .and_then(gpui::WeakEntity::upgrade)
-                            {
-                                panel.update(cx, |panel, cx| {
-                                    panel.replace_document(document.clone(), cx)
-                                });
-                            }
-                            if document.panel_id == "nodes" {
-                                for graph in
-                                    view.graphs.values().filter_map(gpui::WeakEntity::upgrade)
-                                {
-                                    graph.update(cx, |graph, cx| {
-                                        graph.set_catalog(document.clone(), cx)
-                                    });
-                                }
-                            }
-                        }
-                        view.project = Some(project);
-                    }
+                    Ok(project) => view.install_project_index(project, window, cx),
                     Err(_error) => tracing::warn!(
                         code = "native_activity_refresh_failed",
                         "Native activity refresh failed"

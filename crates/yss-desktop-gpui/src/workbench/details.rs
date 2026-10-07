@@ -33,6 +33,10 @@ pub struct DetailsPanel {
     _properties_observer: gpui::Subscription,
     focus: FocusHandle,
     graph: Option<WeakEntity<GraphCanvas>>,
+    document: Option<WeakEntity<crate::documents::DocumentEditor>>,
+    mind: Option<WeakEntity<crate::minds::MindCanvas>>,
+    database: Option<WeakEntity<crate::databases::DatabaseEditor>>,
+    chart: Option<WeakEntity<crate::charts::ChartEditor>>,
     projection: Option<Arc<EditorProjectionModel>>,
     selected: Vec<NodeId>,
     version: Option<GraphEditVersion>,
@@ -52,6 +56,10 @@ impl DetailsPanel {
             _properties_observer: properties_observer,
             focus: cx.focus_handle(),
             graph: None,
+            document: None,
+            mind: None,
+            database: None,
+            chart: None,
             projection: None,
             selected: vec![],
             version: None,
@@ -69,6 +77,10 @@ impl DetailsPanel {
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
         self.graph = None;
+        self.document = None;
+        self.mind = None;
+        self.database = None;
+        self.chart = None;
         self.projection = None;
         self.selected.clear();
         self.version = None;
@@ -81,6 +93,53 @@ impl DetailsPanel {
         cx.notify();
     }
 
+    pub fn document(&self) -> Option<Entity<crate::documents::DocumentEditor>> {
+        self.document.as_ref().and_then(WeakEntity::upgrade)
+    }
+
+    pub fn set_document(
+        &mut self,
+        document: WeakEntity<crate::documents::DocumentEditor>,
+        cx: &mut Context<Self>,
+    ) {
+        self.clear(cx);
+        self.document = Some(document);
+        cx.notify();
+    }
+
+    pub fn mind(&self) -> Option<Entity<crate::minds::MindCanvas>> {
+        self.mind.as_ref().and_then(WeakEntity::upgrade)
+    }
+    pub fn database(&self) -> Option<Entity<crate::databases::DatabaseEditor>> {
+        self.database.as_ref().and_then(WeakEntity::upgrade)
+    }
+    pub fn chart(&self) -> Option<Entity<crate::charts::ChartEditor>> {
+        self.chart.as_ref().and_then(WeakEntity::upgrade)
+    }
+    pub fn set_chart(
+        &mut self,
+        chart: WeakEntity<crate::charts::ChartEditor>,
+        cx: &mut Context<Self>,
+    ) {
+        self.clear(cx);
+        self.chart = Some(chart);
+        cx.notify();
+    }
+    pub fn set_database(
+        &mut self,
+        database: WeakEntity<crate::databases::DatabaseEditor>,
+        cx: &mut Context<Self>,
+    ) {
+        self.clear(cx);
+        self.database = Some(database);
+        cx.notify();
+    }
+    pub fn set_mind(&mut self, mind: WeakEntity<crate::minds::MindCanvas>, cx: &mut Context<Self>) {
+        self.clear(cx);
+        self.mind = Some(mind);
+        cx.notify();
+    }
+
     pub fn set_selection(
         &mut self,
         graph: WeakEntity<GraphCanvas>,
@@ -90,6 +149,10 @@ impl DetailsPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.document = None;
+        self.mind = None;
+        self.database = None;
+        self.chart = None;
         if self.selected == nodes
             && self.version == Some(version)
             && self
@@ -315,7 +378,7 @@ impl DetailsPanel {
     }
 }
 impl Render for DetailsPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let node = self.node().cloned();
         div()
             .id("details")
@@ -329,8 +392,57 @@ impl Render for DetailsPanel {
             .when(self.selected.is_empty() && self.graph.is_some(), |view| {
                 view.child(self.properties.clone())
             })
+            .when_some(self.document(), |view, document| {
+                let document = document.read(cx);
+                view.child(
+                    div()
+                        .p_4()
+                        .flex()
+                        .flex_col()
+                        .gap_3()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .child(document.snapshot.path.name().to_owned()),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Markdown 文档"),
+                        )
+                        .child(div().text_sm().child(document.path().to_owned()))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(if document.busy() {
+                                    "正在读取或保存…"
+                                } else if document.dirty() {
+                                    "有未保存的更改"
+                                } else {
+                                    "已保存"
+                                }),
+                        ),
+                )
+            })
+            .when_some(self.mind(), |view, mind| {
+                view.child(mind.update(cx, |mind, cx| mind.render_details(window, cx)))
+            })
+            .when_some(self.database(), |view, editor| {
+                view.child(editor.update(cx, |editor, cx| editor.render_details(cx)))
+            })
+            .when_some(self.chart(), |view, chart| {
+                view.child(chart.update(cx, |chart, cx| chart.render_details(cx)))
+            })
             .when(
-                self.selected.len() != 1 && !(self.selected.is_empty() && self.graph.is_some()),
+                self.document.is_none()
+                    && self.mind.is_none()
+                    && self.database.is_none()
+                    && self.chart.is_none()
+                    && self.selected.len() != 1
+                    && !(self.selected.is_empty() && self.graph.is_some()),
                 |view| {
                     view.child(appearance::empty_state(
                         IconName::Inspector,

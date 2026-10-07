@@ -54,15 +54,12 @@ impl Workbench {
             let applied = graph.update(cx, |graph, cx| {
                 graph.focus_node(node.as_deref(), window, cx)
             });
-            self.dock.update(cx, |dock, cx| {
-                dock.add_panel_view(
-                    gpui_component::dock::panel_handle(graph),
-                    DockPlacement::Center,
-                    None,
-                    window,
-                    cx,
-                )
-            });
+            self.present_panel(
+                gpui_component::dock::panel_handle(graph),
+                DockPlacement::Center,
+                window,
+                cx,
+            );
             if let Some(id) = intent {
                 self.finish_intent(&id, applied, window, cx);
             }
@@ -174,7 +171,7 @@ impl Workbench {
                         .values()
                         .filter_map(gpui::WeakEntity::upgrade)
                     {
-                        panel.update(cx, |panel, cx| panel.set_active_graph(Some(&path), cx));
+                        panel.update(cx, |panel, cx| panel.set_active_resource(Some(&path), cx));
                     }
                     view.details.update(cx, |details, cx| {
                         details.set_selection(
@@ -212,29 +209,23 @@ impl Workbench {
                     cx.notify();
                 }
                 CanvasEvent::ShowResults => {
-                    view.dock.update(cx, |dock, cx| {
-                        dock.add_panel_view(
-                            gpui_component::dock::panel_handle(view.results.clone()),
-                            DockPlacement::Bottom,
-                            None,
-                            window,
-                            cx,
-                        )
-                    });
+                    view.present_panel(
+                        gpui_component::dock::panel_handle(view.results.clone()),
+                        DockPlacement::Bottom,
+                        window,
+                        cx,
+                    );
                 }
                 CanvasEvent::Edited => cx.notify(),
             },
         ));
         self.graphs.insert(path, canvas.downgrade());
-        self.dock.update(cx, |dock, cx| {
-            dock.add_panel_view(
-                gpui_component::dock::panel_handle(canvas.clone()),
-                DockPlacement::Center,
-                None,
-                window,
-                cx,
-            )
-        });
+        self.present_panel(
+            gpui_component::dock::panel_handle(canvas.clone()),
+            DockPlacement::Center,
+            window,
+            cx,
+        );
         Some(canvas)
     }
 }

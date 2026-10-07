@@ -9,8 +9,8 @@ use gpui_component::{
     dock::{BasePanel, Panel, PanelEvent},
 };
 use std::{collections::VecDeque, sync::Arc};
-use tauri_plugin_tracing::{LogBatchDto, LogLevel, LogRecordDto, LogRuntime, LogStreamFailure};
 use tokio::sync::mpsc;
+use yss_logging::{LogBatchDto, LogLevel, LogRecordDto, LogRuntime, LogStreamFailure};
 
 const VIEW_CAPACITY: usize = 1_000;
 
@@ -82,7 +82,7 @@ impl LogsPanel {
                 id: snapshot.subscription_id.clone(),
                 executor,
             };
-            Ok::<_, tauri_plugin_tracing::LogsUnavailable>((snapshot, lease))
+            Ok::<_, yss_logging::LogsUnavailable>((snapshot, lease))
         });
         self.task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = task

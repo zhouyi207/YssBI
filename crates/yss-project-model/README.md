@@ -68,4 +68,4 @@ near the requested page end. Long blocks continue across pages. Literal, case-se
 includes overlapping matches and returns exact character ranges and source-preserving context.
 No Markdown AST or secondary document state is persisted.
 
-Focused validation: `pnpm test:rs:package -p yss-project-model --lib`.
+Focused validation: `cargo test -p yss-project-model --lib`.

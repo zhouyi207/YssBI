@@ -56,7 +56,10 @@ struct Task {
 async fn main() -> Result<(), Error> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     let [config_path] = args.as_slice() else {
-        return Err("usage: pnpm measure:harness <configuration.json>".into());
+        return Err(
+            "usage: cargo run -p yss-application --example measure_harness -- <configuration.json>"
+                .into(),
+        );
     };
     let config_path = fs::canonicalize(config_path)?;
     let base = config_path.parent().ok_or("configuration has no parent")?;

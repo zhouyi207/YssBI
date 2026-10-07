@@ -16,6 +16,7 @@ use yss_harness_contract::{
 
 #[derive(Clone)]
 pub enum NativeEvent {
+    ModelsChanged,
     Resource(CommittedResourceMutation),
     Harness(HarnessEventEnvelope),
     Graph(
@@ -25,6 +26,7 @@ pub enum NativeEvent {
     Index(yss_project::ProjectIndexInvalidation),
     Ui(
         yss_project_identity::ProjectInstanceId,
+        uuid::Uuid,
         yss_ui_contract::UiEvent,
     ),
 }
@@ -48,7 +50,7 @@ pub struct NativeServices {
     pub application: ApplicationServices,
     pub executor: Handle,
     events: broadcast::Sender<NativeEvent>,
-    pub logging: tauri_plugin_tracing::LogCollection,
+    pub logging: yss_logging::LogCollection,
     pub layouts: Arc<layout_store::LayoutStore>,
 }
 
@@ -58,7 +60,7 @@ impl NativeServices {
         let layouts = Arc::new(layout_store::LayoutStore::new(
             &paths.application.app_data_dir,
         ));
-        let logging = tauri_plugin_tracing::LogCollection::initialize(Some(paths.logs))?;
+        let logging = yss_logging::LogCollection::initialize(Some(paths.logs))?;
         let (events, _) = broadcast::channel(512);
         let publisher = events.clone();
         let application = ApplicationServices::initialize(paths.application, move |application| {
@@ -91,6 +93,10 @@ impl NativeServices {
         let _ = self.events.send(NativeEvent::Resource(mutation));
     }
 
+    pub fn models_changed(&self) {
+        let _ = self.events.send(NativeEvent::ModelsChanged);
+    }
+
     pub fn graph_subscription(
         &self,
         project: &yss_project_identity::ProjectInstanceId,
@@ -108,6 +114,7 @@ impl NativeServices {
     pub fn workbench_binding(
         &self,
         project: &yss_project_identity::ProjectInstanceId,
+        delivery: uuid::Uuid,
     ) -> Result<yss_application::presentation::WorkbenchBinding> {
         let events = self.events.clone();
         let identity = project.clone();
@@ -115,7 +122,7 @@ impl NativeServices {
             project,
             "main".into(),
             Arc::new(move |event| {
-                let _ = events.send(NativeEvent::Ui(identity.clone(), event));
+                let _ = events.send(NativeEvent::Ui(identity.clone(), delivery, event));
             }),
         )?)
     }

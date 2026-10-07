@@ -1,6 +1,6 @@
 # Harness task measurement
 
-Run `pnpm measure:harness <configuration.json>` from the repository root. This is an
+Run `cargo run -p yss-application --example measure_harness -- <configuration.json>` from the repository root. This is an
 Application example that calls the configured model through the ordinary Harness,
 Rig, SQLite and Application owners. It does not start or control a desktop window.
 

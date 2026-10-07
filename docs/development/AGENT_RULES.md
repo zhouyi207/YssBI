@@ -90,19 +90,15 @@ add or commit them unless explicitly requested.
   input and cancellation contracts and do not depend on host SCI crates.
 - Native desktop composition consumes platform-neutral Application services and
   typed use cases directly. Domain/application use cases must not depend on GPUI.
-  During migration, Tauri commands and application-specific channel adapters belong to
-  `yss-application::ipc`. Its command module owns the application invoke registry and
-  consumes `yss-ipc-event`, neutral `yss-ipc-channel` adapters, and shared
-  `yss-ipc-contract`. Event/Channel never depend on Application; Contract has no
-  Tauri or runtime dependency. Platform plugins own their namespaced commands;
-  `tauri-plugin-tracing` owns structured runtime observations, log persistence and
-  subscriptions. Rust producers use tracing; frontend producers use the log service.
-  Logging implementation belongs inside the plugin. Graph Problems, model diagnostics,
-  run state and results remain domain-owned facts, independent of log delivery.
-  Commands remain thin adapters; business workflows
-  belong to application use cases or domain owners.
-- Command failures use the exact Rust-owned `{ code, details, incidentId }`
-  wire. Rust does not send user-facing error prose; React localizes stable codes.
+  `yss-logging` owns structured observations, log collection, persistence and
+  subscriptions. Rust producers use tracing; the native host owns delivery and
+  localized feedback. Graph Problems, diagnostics, run state and results remain
+  domain-owned facts, independent of log delivery. Business workflows belong to
+  application use cases or domain owners. `yss-ipc-contract` retains platform-neutral
+  shared values; it has no GUI or runtime dependency.
+- Serialized command failures use the exact Rust-owned `{ code, details, incidentId }`
+  shape. The native host consumes typed Application errors and localizes stable
+  codes; business crates do not produce user-facing prose.
 - `GraphSemanticSnapshot` is the only authority for resolved graph types,
   schemas, lineage, diagnostics, coercions, and kernel specialization.
 - Analysis Graphs model data ports and data dependencies only. Control flow,
@@ -111,8 +107,7 @@ add or commit them unless explicitly requested.
   current graph independently. Execute captures its document and semantic identity,
   prepares a matching immutable plan internally, and never implicitly saves.
   Plan caches are backend implementation details, not a separate frontend lifecycle.
-- Each desktop host has one native workbench topology owner: GPUI uses its root
-  DockArea, and the transitional React host uses its root FlexLayout Model.
+- The native workbench has one topology owner: the root GPUI DockArea.
   Placement, ordering, selected panels/groups, edge sizes, and collapse state
   come from that owner; do not mirror them in another application layout model.
 - Graph Problems, operational Logs, Results, and run state/failures are distinct data
@@ -122,7 +117,7 @@ add or commit them unless explicitly requested.
 
 Validation levels, scope selection and delivery evidence are owned by the root
 [`.rules`](../../.rules). Concrete commands and module-specific prerequisites
-belong to the corresponding module README; `package.json` owns executable scripts.
+belong to the corresponding module README; root `Cargo.toml` owns the native entry and workspace.
 
 ## Documentation routing
 
@@ -130,21 +125,18 @@ Before changing a subsystem, read its local README and applicable `.rules`.
 Use `docs/README.md` for the module index. Representative owners are:
 
 - Graph, projection, plan preparation, execution, Results, and run state/failures:
-  `src-tauri/crates/yss-application/src/graph/README.md`
-- Workbench layout and panel lifecycle:
-  `src/modules/workbench/README.md`
-- Logging delivery and storage: `src-tauri/crates/tauri-plugin-tracing/README.md`
-- Operational observations, feedback, and signal boundaries:
-  `src/features/application/observability/README.md`
-- Statistical Harness current implementation:
-  `src-tauri/crates/yss-harness-core/README.md`
-- Workbench UI intents: `src-tauri/crates/yss-ui-contract/README.md`
-- Plugin target contract: `plugins/README.md`; current behavior remains documented
-  by each plugin and the host protocol/runtime READMEs.
-- Tauri/IPC transport contracts: `src-tauri/crates/yss-application/src/ipc/README.md`
+  `crates/yss-application/src/graph/README.md`
+- Native workbench layout, panel lifecycle and visual presentation:
+  `crates/yss-desktop-gpui/README.md`
+- Logging delivery and storage: `crates/yss-logging/README.md`
+- Statistical Harness current implementation: `crates/yss-harness-core/README.md`
+- Workbench UI intents: `crates/yss-ui-contract/README.md`
+- Plugin protocol/runtime: `crates/yss-plugin-protocol/README.md` and
+  `crates/yss-plugin-runtime/README.md`
+- Shared transport values: `crates/yss-ipc-contract/README.md`
 - Architecture review and documentation checks: `docs/development/ARCHITECTURE_GATES.md`
-- Validation discipline: root `.rules`; command usage: root `README.md`,
-  `src/README.md`, `src-tauri/README.md` and the affected module README.
+- Validation discipline: root `.rules`; command usage: root `README.md`
+  and the affected module README.
 - Feature, fix, refactor, and behavior changes:
   `docs/development/CHANGE_PROCESS.md`
 

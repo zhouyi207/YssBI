@@ -5,17 +5,17 @@
 > Canonical owners: [Cargo.toml](Cargo.toml) 与 [src/](src) 拥有依赖和实现事实；本文说明本 crate 的用途与调用关系；跨阶段契约由 [Graph 与 Execution](src/graph/README.md) 维护
 > Update when: Application 的依赖、公开入口、会话组合或职责归属改变时
 
-`yss-application` 组织跨 Project、Graph、Database 和 Graph Execution 的业务用例，并协调它们的会话、资源版本和提交结果。它拥有应用初始会话、会话替换、项目管理任务、Harness 启动协调、操作顺序、失败分类和应用事件事实；具体图编辑、解析、计划准备、执行、存储和统计算法由对应子系统实现。`runtime` 另外承担平台中立运行服务的具体组装，公开 `ApplicationServices::initialize`；Tauri setup 的 `initialize(app)` 由 `ipc::runtime` 适配。
+`yss-application` 组织跨 Project、Graph、Database 和 Graph Execution 的业务用例，并协调它们的会话、资源版本和提交结果。它拥有应用初始会话、会话替换、项目管理任务、Harness 启动协调、操作顺序、失败分类和应用事件事实；具体图编辑、解析、计划准备、执行、存储和统计算法由对应子系统实现。`runtime` 另外承担平台中立运行服务的具体组装，公开 `ApplicationServices::initialize`。
 
 ## 调用方与依赖方向
 
-桌面根包 `yssbi` 直接调用 Application 的 `initialize(app)` 和 `invoke_handler()`。命令处理与应用专属通道适配位于本 crate 的 `ipc` 模块，业务用例仍由各 Application 模块提供。
+原生宿主 `yss-desktop-gpui` 直接调用 `ApplicationServices::initialize` 和类型化用例；阻塞调用在宿主 worker 中完成。界面和业务之间不再经过 Tauri 命令注册表。
 
 下图展示主要直接依赖方向；Project、Graph、Database 和契约节点各自代表一组 crate，不是完整的 workspace 依赖图。
 
 ```mermaid
 flowchart TD
-    ROOT["yssbi：构造与注入"] --> APP["yss-application"]
+    ROOT["yss-desktop-gpui：构造与注入"] --> APP["yss-application"]
     APP --> PROJECT["Project：项目与资源"]
     APP --> GRAPH["Graph：编辑与解析"]
     APP --> EXEC["yss-graph-execution"]
@@ -26,17 +26,16 @@ flowchart TD
     APP --> CONTRACT["共享契约与通用类型"]
     APP --> HARNESS["yss-harness-core"]
     APP --> ADAPTERS["SQLite / Rig / notify / Plugin Manager"]
-    APP --> TAURI["Tauri：runtime 与 IPC 模块使用"]
-    APP --> IPC["Event / 中立 Channel / Contract"]
+    APP --> WIRE["平台中立共享契约"]
 ```
 
-Application 的 `runtime` 只消费中立路径和 Harness 端口，`ipc` 模块使用 Tauri；`ipc` 消费 Event、Channel 和 Contract crates。Channel 不反向依赖 Application；依赖应用事件和图动作的通道适配器已归入 `ipc/channel`。普通用例模块保持原有分层约束，Application 不依赖桌面根包或 GPUI。GPUI 宿主以 `default-features = false` 使用中立服务；默认 `tauri-host` feature 仅启用 Tauri 初始化、命令与 Channel/Event 适配，迁移期间保持现有 Tauri 调用方可用。
+Application 的 `runtime` 消费中立路径和 Harness 端口。普通用例模块保持分层约束，Application 不依赖 GPUI、窗口或 WebView。宿主注入同一 gateway 的资源发布回调与事件 sink，业务事实仍归原 owner。
 
 ## 依赖与模块入口
 
-直接依赖、features 与开发依赖以 [Cargo.toml](Cargo.toml) 为准；完整 crate 清单见[模块索引](../../../docs/reference/MODULE_MAP.md)，不在 README 中复制计数或依赖清单。
+直接依赖、features 与开发依赖以 [Cargo.toml](Cargo.toml) 为准；完整 crate 清单见[模块索引](../../docs/reference/MODULE_MAP.md)，不在 README 中复制计数或依赖清单。
 
-项目生命周期见 [project](src/project/README.md)，数据用例见 [database](src/database/README.md)，图用例见 [graph](src/graph/README.md)，IPC 见 [ipc](src/ipc/README.md)。
+项目生命周期见 [project](src/project/README.md)，数据用例见 [database](src/database/README.md)，图用例见 [graph](src/graph/README.md)。
 
 Mind/Markdown 的 Application 用例分别位于 `src/minds.rs` 和 `src/docs.rs`，负责捕获和重验应用会话；
 正文编辑、路径校验和文件事务由 [Project](../yss-project/README.md) 与
@@ -61,15 +60,11 @@ Harness 与界面意图共用 `ProjectResourceRef`；提交通过 Harness gatewa
 
 [ApplicationServices::initialize](src/runtime.rs) 接收 `ApplicationPaths`（应用数据目录与示例目录）和 Harness 端口组装回调，返回拥有 ApplicationState、项目登记、Harness、Plugin Manager 和 watcher 的服务集合。它不访问窗口或 Tauri。宿主保持这些服务和异步执行器存活，并在 UI 线程以外执行阻塞业务调用。
 
-[initialize(app)](src/ipc/runtime.rs) 接收 `&mut tauri::App`，构造内部 `CommandRuntime`，把 Tauri 路径和传输端口交给同一中立初始化，再通过 `app.manage()` 安装返回的服务，最后显示主窗口。桌面入口在此之前安装日志平台插件；Application 使用普通 `tracing` 报告结构化运行观测，不持有日志运行时。
-
-节点目录装配或内核绑定失败时，启动错误保留具体原因，供 Tauri setup 的错误输出定位无效配置或不匹配的契约。
+GPUI 宿主先初始化 `yss-logging::LogCollection`，再组装 Application 和原生窗口。节点目录装配或内核绑定失败时保留具体启动原因；Application 使用普通 `tracing` 报告运行观测，不持有日志运行时。
 
 Harness 启动恢复的错误同样保留底层持久化错误码。`invalid_record` 表示已有记录不满足当前契约；启动不会跳过不兼容历史、转换旧工具记录或自动清空数据库。开发环境需要重建账本时，先归档应用数据目录中的 `db/statistical-harness.sqlite` 及仍存在的 WAL/SHM 文件，再由正常初始化建立新库；项目文件和模型设置分别由原 owner 保存。
 
-[默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 也在 runtime 内构造。内部 `ipc::CommandRuntime` 提供 Harness 通道端口并安装命令专属上下文，Tauri 初始化提供这些端口；GPUI 提供同一 gateway 的中立资源发布回调及原生事件 sink。业务路径解析、项目与通用业务插件等服务的安装属于 Application；桌面日志插件单独安装。
-
-`runtime.rs`、`runtime/harness.rs` 和 IPC runtime 按具体文件划分为 Composition Root；IPC 命令与 wire 适配分别按 Commands 和 Transport 检查。普通用例模块没有 Tauri 或具体 provider 构造权限。桌面入口注册 Application 与本地日志平台插件；[数据库集成测试](tests/database_test.rs) 归 Application。
+[默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 在 runtime 内构造。`runtime.rs` 与 `runtime/harness.rs` 是业务 Composition Root，原生宿主提供中立资源发布和事件回调。普通用例模块不构造窗口或具体 provider。
 
 ### 应用会话
 
@@ -118,9 +113,12 @@ Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子�
 
 例如，项目 A 的计算尚未结束时用户切换到项目 B，Application 协调准入关闭、旧任务收尾与会话替换。相关用例在关键提交或返回位置重验捕获的会话、资源版本和结果身份，防止旧会话的迟到结果进入新项目。
 
-### 桌面 IPC
+### 原生宿主交付
 
-[ipc](src/ipc/README.md) 拥有唯一命令注册表、私有 handler/schema/error 和活动面板响应缓存。其 `channel` 子模块编码执行事件与图活动，编辑器响应使用有界 snapshot/delta 缓存；中立的 Harness 订阅、项目进度和诊断交付复用 `yss-ipc-channel`。统计报告通过结果引用查询 Graph Execution 已保留的模型与分析结果；数值计算由 Node Kernel 调用 `yss-sci-runtime`，Application 不直接依赖 SCI runtime。
+GPUI 直接调用类型化查询和 mutation，订阅中立图活动、项目提交与 UI intent。
+业务用例返回原投影和提交回执，线程调度、暂态缓冲及本地化归宿主。
+统计报告通过结果引用查询 Graph Execution 已保留的模型与分析结果；数值计算由
+Node Kernel 调用 `yss-sci-runtime`，Application 不直接依赖 SCI runtime。
 
 ### 项目管理服务
 
@@ -128,7 +126,7 @@ Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子�
 
 [ProjectManagement](src/project/registry.rs) 持有进程级 `ProjectRegistry` 和项目选择器任务取消注册表，接收注入的 `ProjectRegistryStore`。扫描和清理在应用层登记任务，完成或 future 被丢弃时释放登记；旧任务结束不能清除较新任务的取消入口。注册表规则仍由 `yss-project-registry` 实现，进度编码和通道排空仍由 IPC 负责。
 
-ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。项目切换不重建注册存储和模型 provider；Harness 在启动和创建会话时按当前项目绑定协调旧会话。SQLite、Rig 和文件监听器由 Application runtime 选择，Tauri Channel 由内部 IPC 模块提供。
+ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。项目切换不重建注册存储和模型 provider；Harness 在启动和创建会话时按当前项目绑定协调旧会话。SQLite、Rig 和文件监听器由 Application runtime 选择，事件由调用方注入的中立 sink 交付。
 
 ### 图编辑解析与运行
 
@@ -143,7 +141,7 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 3. 调用 Execution 从解析结果直接准备计划，并建立资源绑定。
 4. 调用 Graph Execution 执行计划，由节点 kernel 完成具体计算。
 5. 协调 Project finalization 与 Graph Execution 的结果发布，生成应用运行事件。
-6. 由调用方提供的 sink 交付事件；Tauri Channel 编码与发送归 IPC 层。
+6. 由调用方提供的 sink 交付事件；原生线程调度与事件缓冲归宿主。
 
 `yss-graph-runtime` 负责编辑解析，`yss-graph-execution` 负责计划构建与缓存、调度、运行状态和结果生命周期；`yss-node-kernel` 持有具体节点适配和中立调用契约。运行准备仅消费 Graph Analysis 的只读事实，Execution 将计划转换成不含图地址的 kernel 输入。Application 的 `graph/` 聚合图用例、运行和结果查询，完整应用会话独立归 `session/`。编辑、Save、Execute 及 Results 的完整契约见 [Graph 与 Execution](src/graph/README.md)。
 
@@ -171,9 +169,9 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 各用例已有的返回前或提交前重验继续保留。
 数据快照的声明存在性检查复用 Project 的单项读取，并在该读取内核对捕获的项目身份，不复制整份 ProjectData；缺失数据库与过期上下文继续保留各自的错误分类。
 
-[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，Channel 由内部 IPC runtime 提供。`harness::ApplicationCapabilityGateway` 与 `ApplicationResourceResolver` 使用 Tokio blocking pool 接通同步业务用例，供桌面与无界面测量共用；IPC 只注入提交事件发布回调。
+[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，事件交付由宿主注入的中立端口提供。`harness::ApplicationCapabilityGateway` 与 `ApplicationResourceResolver` 使用 Tokio blocking pool 接通同步业务用例，供桌面与无界面测量共用；宿主只注入提交事件发布回调。
 
-`pnpm measure:harness <configuration.json>` 通过 [独立测量入口](examples/measure_harness/README.md) 运行真实模型任务，使用独立 SQLite 账本及项目，按公开结果投影统计工具调用、体积、失败、重复读取、模型实际 token 和耗时。该入口不操作桌面，也不替代 Assistant 的人工验收。
+`cargo run -p yss-application --example measure_harness -- <configuration.json>` 通过 [独立测量入口](examples/measure_harness/README.md) 运行真实模型任务，使用独立 SQLite 账本及项目，按公开结果投影统计工具调用、体积、失败、重复读取、模型实际 token 和耗时。该入口不操作桌面，也不替代 Assistant 的人工验收。
 
 创建、列出和打开对话先捕获应用会话，再取得 Core 的会话访问门；排队结束、协调旧绑定后及返回前重验原会话。门保持到本次持久化操作收尾，防止旧扫描或写回覆盖后继对话；当前项目仍只由 Application slot 判定，其同步锁不跨越异步等待。提交消息将打开对话时返回的项目绑定交给 Core 准入，不在排队后借用同一对话的后继绑定。
 
@@ -195,8 +193,8 @@ Application 保留跨系统业务流程，依赖数量同时反映其使用的�
 ## Bundled samples
 
 `database::samples::SampleCatalog` owns the installed sample catalog. The Application desktop
-runtime injects a Tauri-resolved resource path; the sample use cases do not access
-Tauri or the process working directory. Only a successfully parsed,
+runtime receives the native host's resource path; the sample use cases do not access
+windowing APIs or the process working directory. Only a successfully parsed,
 bounded catalog is cached. Listing does not open any dataset payload.
 
 Sample imports accept a sample ID and exact version together with the ordinary
@@ -213,6 +211,11 @@ Each explicit import creates a new editable dataset. Sample origin and source ha
 persist in `yssbi.sample.origin` schema metadata; no separate sample history store
 or project schema migration is needed. Reopening a project uses its managed datasets
 and has no dependency on the installed sample catalog. Source definitions, preparation
-and versioning are described in the [resource notes](../../resources/samples/README.md).
+and versioning are owned by [build_samples.rs](examples/build_samples.rs) and the
+[sample assets](../../resources/samples/README.md). The preparation manifest pins
+source URLs and hashes. `build_samples --check` verifies shipped payloads even
+when the raw CSV cache is absent; present CSV inputs must match their pinned hash.
+`--check --stage <directory>` installs the verified Parquet files, provenance and
+catalog at a native host resource path without requiring a GUI framework or network.
 
 Graph 写入用例位于 [graph/editing.rs](src/graph/editing.rs)：普通编辑和 Harness 直接修改 Project 当前文档，按图协调候选准备、版本重验、提交、结果有效性及通知。文档与可逆历史由 Project 持有；Application 协调器不保存另一份可写文档。

@@ -1,17 +1,11 @@
 //! Graph resource commands capture the existing Project version before a menu/dialog is used.
 use super::super::Workbench;
-use gpui::{ClipboardItem, Context, PromptLevel, Window};
+use super::ResourceAction;
+use gpui::{ClipboardItem, Context, Window};
+use gpui_component::{WindowExt, button::ButtonVariant};
 use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
-
-#[derive(Clone, Copy)]
-pub(crate) enum GraphResourceAction {
-    Rename,
-    Duplicate,
-    Delete,
-    CopyPath,
-}
 
 #[derive(Clone)]
 pub(super) struct GraphTarget {
@@ -26,7 +20,7 @@ impl Workbench {
     pub(in crate::workbench) fn graph_resource_action(
         &mut self,
         path: String,
-        action: GraphResourceAction,
+        action: ResourceAction,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -56,10 +50,7 @@ impl Workbench {
         if let Some(graph) = self.graphs.get(&path).and_then(gpui::WeakEntity::upgrade) {
             let graph = graph.read(cx);
             if graph.is_running()
-                && matches!(
-                    action,
-                    GraphResourceAction::Rename | GraphResourceAction::Delete
-                )
+                && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
             {
                 self.error = Some("请先停止该图的运行，再修改图资源。".into());
                 cx.notify();
@@ -78,29 +69,34 @@ impl Workbench {
             name,
         };
         match action {
-            GraphResourceAction::Rename => self.rename_graph_dialog(target, window, cx),
-            GraphResourceAction::Duplicate => {
+            ResourceAction::Rename => self.rename_graph_dialog(target, window, cx),
+            ResourceAction::Duplicate => {
                 self.mutate_graph_resource(target, action, None, window, cx)
             }
-            GraphResourceAction::CopyPath => {
+            ResourceAction::CopyPath => {
                 cx.write_to_clipboard(ClipboardItem::new_string(target.path.as_str().into()))
             }
-            GraphResourceAction::Delete => {
-                let prompt = window.prompt(
-                    PromptLevel::Warning,
-                    &format!("删除“{}”？", target.name),
-                    Some("图文件和未保存的更改将被删除，调用或引用该图的节点需要重新配置。"),
-                    &["删除", "取消"],
-                    cx,
-                );
-                cx.spawn_in(window, async move |view, cx| {
-                    if matches!(prompt.await, Ok(0)) {
-                        let _ = view.update_in(cx, |view, window, cx| {
-                            view.mutate_graph_resource(target, action, None, window, cx)
-                        });
-                    }
-                })
-                .detach();
+            ResourceAction::Delete => {
+                let owner = cx.entity().downgrade();
+                window.open_alert_dialog(cx, move |alert, _, _| {
+                    let owner = owner.clone();
+                    let target = target.clone();
+                    alert
+                        .title(format!("删除“{}”？", target.name))
+                        .description(
+                            "图文件和未保存的更改将被删除，调用或引用该图的节点需要重新配置。",
+                        )
+                        .confirm()
+                        .ok_text("删除")
+                        .ok_variant(ButtonVariant::Danger)
+                        .cancel_text("取消")
+                        .on_ok(move |_, window, cx| {
+                            let _ = owner.update(cx, |view, cx| {
+                                view.mutate_graph_resource(target.clone(), action, None, window, cx)
+                            });
+                            true
+                        })
+                });
             }
         }
     }
@@ -108,7 +104,7 @@ impl Workbench {
     pub(super) fn mutate_graph_resource(
         &mut self,
         target: GraphTarget,
-        action: GraphResourceAction,
+        action: ResourceAction,
         name: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -127,10 +123,7 @@ impl Workbench {
             .get(target.path.as_str())
             .and_then(gpui::WeakEntity::upgrade)
             && graph.read(cx).is_running()
-            && matches!(
-                action,
-                GraphResourceAction::Rename | GraphResourceAction::Delete
-            )
+            && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
         {
             self.error = Some("请先停止该图的运行，再修改图资源。".into());
             cx.notify();
@@ -144,7 +137,7 @@ impl Workbench {
         let job = self.services.run(move |services| {
             let application = &services.application;
             let receipt = match action {
-                GraphResourceAction::Rename => application.rename_graph_resource(
+                ResourceAction::Rename => application.rename_graph_resource(
                     request.project.clone(),
                     request.path.clone(),
                     request.revision,
@@ -152,26 +145,30 @@ impl Workbench {
                     request.lifecycle,
                     OperationId::new(),
                 )?,
-                GraphResourceAction::Duplicate => application.duplicate_graph_resource(
+                ResourceAction::Duplicate => application.duplicate_graph_resource(
                     request.project.clone(),
                     request.path.clone(),
                     request.revision,
                     OperationId::new(),
                     None,
                 )?,
-                GraphResourceAction::Delete => application.remove_graph_resource(
+                ResourceAction::Delete => application.remove_graph_resource(
                     request.project.clone(),
                     request.path.clone(),
                     request.revision,
                     OperationId::new(),
                 )?,
-                GraphResourceAction::CopyPath => unreachable!(),
+                ResourceAction::CopyPath => unreachable!(),
             };
             let path = receipt.deltas.iter().find_map(|delta| {
-                if let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(patch) = &delta.payload
+                if let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(patch) =
+                    &delta.payload
                     && match action {
-                        GraphResourceAction::Rename => patch.before.as_ref().is_some_and(|before| before.path.as_ref() == request.path.as_str()),
-                        GraphResourceAction::Duplicate => patch.before.is_none(),
+                        ResourceAction::Rename => patch
+                            .before
+                            .as_ref()
+                            .is_some_and(|before| before.path.as_ref() == request.path.as_str()),
+                        ResourceAction::Duplicate => patch.before.is_none(),
                         _ => false,
                     }
                 {
@@ -185,7 +182,7 @@ impl Workbench {
                 }
             });
             publisher.publish_resource(receipt);
-            let projection = if matches!(action, GraphResourceAction::Rename) {
+            let projection = if matches!(action, ResourceAction::Rename) {
                 path.as_ref()
                     .map(|path| {
                         application
@@ -222,7 +219,7 @@ impl Workbench {
                 view.busy = false;
                 match result {
                     Ok((path, projection)) => match action {
-                        GraphResourceAction::Rename => {
+                        ResourceAction::Rename => {
                             let canvas = view
                                 .graphs
                                 .remove(target.path.as_str())
@@ -251,12 +248,12 @@ impl Workbench {
                                 }
                             }
                         }
-                        GraphResourceAction::Duplicate => {
+                        ResourceAction::Duplicate => {
                             if let Some(path) = path {
                                 view.open_graph(path, window, cx);
                             }
                         }
-                        GraphResourceAction::Delete => {
+                        ResourceAction::Delete => {
                             if let Some(canvas) = view
                                 .graphs
                                 .remove(target.path.as_str())
@@ -265,7 +262,7 @@ impl Workbench {
                                 view.retire_graph(canvas, window, cx);
                             }
                         }
-                        GraphResourceAction::CopyPath => {}
+                        ResourceAction::CopyPath => {}
                     },
                     Err(_) => {
                         view.error =

@@ -13,19 +13,17 @@
 
 注册存储由 Application runtime 注入 SQLite adapter；adapter 将原生文件路径直接交给 SQLx，不把应用数据目录中的百分号等文件名字符解释为 URL 编码。
 
-已有项目路径由 Rust `dunce::canonicalize` 解析，默认父目录与资源显示路径使用不访问文件系统的 `dunce::simplified`。Windows 仅在安全时简化扩展前缀，长路径、UNC 和特殊文件名所需的前缀保留；非 Windows 的展示路径原样保留。重新注册已有项目时刷新规范路径，项目身份仍由根身份校验决定。React 原样保存和展示 Rust 路径投影，项目选择器精确匹配规范路径，不再自行剥离前缀、替换分隔符或忽略大小写来判断项目身份。
+已有项目路径由 Rust `dunce::canonicalize` 解析，默认父目录与资源显示路径使用不访问文件系统的 `dunce::simplified`。Windows 仅在安全时简化扩展前缀，长路径、UNC 和特殊文件名所需的前缀保留；非 Windows 的展示路径原样保留。重新注册已有项目时刷新规范路径，项目身份仍由根身份校验决定。原生项目导航原样展示 Rust 路径投影，精确匹配规范入口路径，不剥离前缀、替换分隔符或忽略大小写来判断项目身份。
 
 扫描与清理在返回成功前重查取消状态；取消不回滚已经完成的注册或清理。注册列表按收藏状态、数值化的 Unix 秒时间和名称排序，已有记录的名称与收藏状态不会被重复扫描覆盖。
 
-前端命令回复与项目事件共用 `services/project/projectWireParser` 中的激活、注册记录和生命周期回执 parser，
-在 Services 边界完成结构校验。路径与注册时间字符串原样保留；生命周期的部分提交结果仍交给原协调器结算。
-注册记录严格对应 Rust `ProjectRecord` 的八个字段，包括必填的 `rootIdentityState`（`valid` 或 `invalid`）。
-`rootIdentity` 是原样传递的字符串，允许为空；记录解析不代表删除授权，后者仍由 Rust 核对状态与非空身份。
-Rust 序列化和前端命令解析的既有契约测试共用 `src/tests/fixtures/project-event-wire/project-record.json`，
-避免两端各自手写不同形状的样本而漏掉真实回执拒绝。
-扫描结果核对发现数量、返回记录数量及新增注册数量；清理结果和进度均要求非负安全整数，当前进度不能超过总数。
-进度是辅助通知：非法消息通过既有 logger 记录并过滤，已完成的注册/清理结果仍按命令回复交付。
-扫描和清理在成功或失败结束时清除 Channel 消息处理器并退出原 HMR 登记，迟到进度不再修改已结束的界面任务。
+原生宿主直接消费类型化激活、注册记录和生命周期回执，路径与注册时间字符串原样保留。
+`ProjectRecord` 由 [Registry contract](../../../yss-project-registry-contract/src/lib.rs) 拥有，
+包括根身份及其有效状态；读到记录不代表删除授权，后者仍由 Rust 核对状态与非空身份。
+生命周期的部分提交结果必须按其实际 phase/outcome 结算，不能当作完整失败后重新创建目标。
+扫描与清理的进度是辅助通知，命令返回后仍需重新读取实际登记列表；取消不会撤销已完成的登记或清理。
+原生呈现与输入、进度交付和后续项目导航由 [GPUI host](../../../yss-desktop-gpui/README.md) 拥有。
+`react/` 保留原 parser 与共享 fixture 作为契约参考，不参与原生调用链。
 
 活动项目以一个 application session 为边界：
 
@@ -46,14 +44,15 @@ Project replacement 先关闭旧 session 的新任务准入并 drain 或取消�
 
 Application 的 watcher 适配将当前项目检查与监听源启动/停止放在同一串行边界：打开和另存为的迟到尾部只有在回执项目仍为当前项目时才能启动，关闭尾部只有在当前已无加载项目时才能停止。该边界不持有 session slot 锁执行 FS 排空；后继项目的监听源不能被旧命令替换或关闭。FS 仍只负责路径、epoch 与源会话排空，不接收项目身份。
 
-`watch_project_changes` 与 `stop_project_watcher` 是平台中立的公开宿主入口；GPUI 和 Tauri
-都传入 runtime 拥有的同一个 watcher。宿主的 `ChangeSink` 把 FS change 交给
+`watch_project_changes` 与 `stop_project_watcher` 是平台中立的公开宿主入口；GPUI
+传入 runtime 拥有的同一个 watcher。宿主的 `ChangeSink` 把 FS change 交给
 `reconcile_project_change`，再投递其返回的索引失效事实；宿主不自行解释文件后缀或修改资源版本。
 
-单窗口仍保留项目生命周期隔离：`projectInstanceId` 标识一次 Rust 项目激活并随 IPC 请求传递；前端 `epoch` 在本地生命周期启动或清理时递增，拒绝取消或重新加载之前的回调；`activationRevision` 为激活回执排序并去重，清理投影时仍保留其水位。三个值不可互换。节点目录读取通过 `projectIOStore.captureProjectReadContext` 捕获请求上下文，统一校验生命周期与已安装投影的身份；调用方用 `isCurrent()` 判断是否接收异步结果，不自行拼装 epoch 或重复读取项目 store。
-前端生命周期 owner 在发布同步通知前捕获本次开始或取消产生的身份，并通过快照提交回执交回。
-后续清理、资源安装和回执结算逐步核对该身份；监听器重入或 await 期间产生的后继，即使项目 ID 相同，
-也不能被旧流程继续覆盖。直接回复与事件的项目失效共用已有回执账本，成功结算只重置一次 Results。
+单窗口仍保留项目生命周期隔离：`ProjectInstanceId` 标识一次 Rust 项目激活并用于类型化请求；
+原生宿主的本地 lifecycle 拒绝切换前的目录选择、读取和界面安装，工作台交付标识拒绝同一项目旧 binding 的通知。
+激活回执中的 activation revision 仍是后端事实，不能用宿主查询代次代替。
+原生切换在后台提交后查询实际激活与索引，再安装对应投影；失败且项目身份未变时保留当前编辑输入。
+Project 替换、宿主生命周期与每个资源自身的版本校验分别由原 owner 负责，不能相互替代。
 
 打开项目先通过 Project 的 activation preparation 检查目标文件，再进入 replacement。
 旧格式、损坏文件或无效路径在这一阶段拒绝时，当前 Application session、准入、当前文档和 Results 保持不变。
@@ -78,8 +77,8 @@ GUI 的数据库列表请求还必须携带项目身份与已取得索引的 pub
 
 ```mermaid
 sequenceDiagram
-  participant UI as React
-  participant API as yss-application::ipc
+  participant UI as GPUI
+  participant API as Native services
   participant APP as Application
   participant P as Project
   participant G as Graph runtime

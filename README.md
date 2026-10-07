@@ -2,14 +2,12 @@
 
 # YssBI
 
-**基于 Tauri 的桌面端数据分析与可视化应用**
+**基于 GPUI 与 Rust 的原生桌面数据分析应用**
 
 以**节点图编辑器**为核心交互形态，通过拖拽和连接节点构建统计分析与计量经济学工作流。
 
 <p>
-  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri" alt="Tauri 2" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React 19" />
-  <img src="https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript" alt="TypeScript 7.0" />
+  <img src="https://img.shields.io/badge/GPUI-native-5B82F6" alt="GPUI" />
   <img src="https://img.shields.io/badge/Rust-2024-000000?logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/status-开发中-orange" alt="status" />
 </p>
@@ -68,37 +66,46 @@
 
 ## 快速开始
 
-从仓库根目录运行命令。Node.js 与 pnpm 版本以 [package.json](package.json) 的 `engines` / `packageManager` 为准，Rust 使用 [rust-toolchain.toml](rust-toolchain.toml) 固定的工具链。Julia 仅在使用或验证 [Julia 插件](plugins/julia/README.md)时需要。
+从仓库根目录运行 Cargo 命令。Rust 最低版本由 [Cargo.toml](Cargo.toml) 的
+`workspace.package.rust-version` 定义。根目录是纯 Rust workspace，默认成员为
+`yss-desktop-gpui`；启动和构建不需要 Node.js、pnpm 或 Tauri 配置。
 
 ```bash
-# 安装依赖
-pnpm install
+# 启动 GPUI 工作台
+cargo run
 
-# 开发
-pnpm dev
+# 打开项目及指定图
+cargo run -- "/absolute/path/to/project" events/example.yssbi-event
 
 # 构建
-pnpm build
+cargo build --release
+
+# 为独立运行的可执行文件准备示例资源（将目录与程序一起分发）
+cargo run -p yss-application --example build_samples -- --check --stage target/release/resources/samples
 ```
 
-GPUI 迁移分支提供独立的原生桌面入口 `pnpm dev:gpui [项目目录] [图相对路径]`，当前能力和限制见 [GPUI host](src-tauri/crates/yss-desktop-gpui/README.md)。
+原生宿主、已实现交互与待验收范围见 [GPUI host](crates/yss-desktop-gpui/README.md)。
+普通 `cargo run` 对桌面宿主及渲染、曲线细分和布局依赖启用定向开发优化；首次构建这些依赖会更慢。
+帧率验收使用 `cargo run --release`，并在相同图规模、窗口大小和显示器刷新率下比较。
+`react/` 保留原界面源码和契约样本作为开发参考，不参与原生应用构建。
+示例 Parquet 已随源码提供，开发启动可离线读取；更新来源和资源校验见
+[示例资产](resources/samples/README.md)。
 
 ## 开发与验证入口
 
-[package.json](package.json) 是命令定义的唯一来源。前端检查见 [src/README.md](src/README.md)，Rust workspace、桌面构建及按 crate 验证见 [src-tauri/README.md](src-tauri/README.md)；插件、生成器与示例数据见[开发与交付入口](docs/README.md#开发与交付)。
+[Cargo.toml](Cargo.toml) 拥有 workspace、默认入口和共享依赖。修改库时明确选择
+package 和 target，并检查受影响的原生调用方。界面使用人工验收，不编写 UI 单元测试。
 
-| 全仓任务       | 根命令              |
-| -------------- | ------------------- |
-| 类型与编译检查 | `pnpm check`        |
-| 静态检查       | `pnpm lint`         |
-| 测试           | `pnpm test`         |
-| 只读格式检查   | `pnpm format:check` |
-| 写入格式化     | `pnpm format`       |
-| 完整交付检查   | `pnpm run ci`       |
+| 任务 | 根命令 |
+| --- | --- |
+| 原生编译检查 | `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` |
+| 原生静态检查 | `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` |
+| 库的聚焦测试 | `cargo test -p <package> --lib <case>` |
+| 包格式检查 | `cargo fmt -p <package> -- --check` |
+| workspace 模块索引 | `node scripts/generate-crate-dependencies.mjs --check` |
 
-日常改动按[验证规则](.rules)选择受影响范围。全仓写入格式化会改动无关文件，局部修改使用对应 README 中的命令。
-
-`pnpm run ci` 依次执行格式检查、TypeScript/Rust 检查、lint 和测试，不启动应用或构建安装包。必须写 `pnpm run ci`；裸 `pnpm ci` 是包管理器的 frozen install 命令。
+日常改动按[验证规则](.rules)选择受影响范围，不将 workspace 全量检查作为局部改动的默认收尾。
+索引生成器仅维护文档；运行桌面应用不依赖 Node.js。
 
 <!-- ## 致谢
 

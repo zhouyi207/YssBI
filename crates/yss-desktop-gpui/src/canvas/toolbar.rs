@@ -1,7 +1,7 @@
 //! Compact graph controls live outside the pointer-interaction surface.
 use super::{GraphCanvas, commands::*};
-use crate::assets::NativeIcon;
-use gpui::{Context, IntoElement, div, prelude::*, px};
+use crate::{appearance, assets::NativeIcon};
+use gpui::{Context, IntoElement, div, prelude::*, px, rgb};
 use gpui_component::{
     ActiveTheme, Disableable, IconName, Sizable,
     button::{Button, ButtonVariants},
@@ -14,13 +14,13 @@ impl GraphCanvas {
         let running = self.is_running();
         let focus = self.focus.clone();
         div()
-            .h(px(40.))
+            .h(px(32.))
             .flex_shrink_0()
             .px_2()
             .flex()
             .items_center()
             .gap_1()
-            .bg(cx.theme().background)
+            .bg(rgb(appearance::CANVAS))
             .border_b_1()
             .border_color(cx.theme().border)
             .child(

@@ -1,10 +1,12 @@
 use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window, div,
-    prelude::*, px,
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
+    Window, div, prelude::*, px,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName,
+    ActiveTheme, Icon, IconName, Sizable,
+    button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
+    input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenuItem},
 };
 use std::{collections::BTreeSet, sync::Arc};
@@ -15,15 +17,27 @@ use crate::{appearance, assets::NativeIcon, text::activity_text};
 
 pub enum ActivityEvent {
     OpenGraph(String),
+    OpenDocument(String),
+    OpenMind(String),
+    OpenDatabase(String),
+    OpenChart(String),
+    ChartResource(String, super::resources::ResourceAction),
     CreateNode(NodeCreation),
-    GraphResource(String, super::resources::GraphResourceAction),
+    GraphResource(String, super::resources::ResourceAction),
+    DatabaseResource(String, super::resources::ResourceAction),
+    ImportData,
+    OpenConversation(String),
+    RenameConversation(String, String),
+    Tool(String),
 }
 
 pub struct ActivityPanel {
     document: Arc<ActivityPanelDocument>,
     collapsed: BTreeSet<String>,
     focus: FocusHandle,
-    active_graph: Option<String>,
+    active_resource: Option<String>,
+    search: Option<Entity<InputState>>,
+    search_subscription: Option<gpui::Subscription>,
 }
 
 impl ActivityPanel {
@@ -51,23 +65,46 @@ impl ActivityPanel {
             document,
             collapsed,
             focus: cx.focus_handle(),
-            active_graph: None,
+            active_resource: None,
+            search: None,
+            search_subscription: None,
         }
+    }
+
+    pub fn with_search(
+        document: Arc<ActivityPanelDocument>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut panel = Self::new(document, cx);
+        let search = cx.new(|cx| InputState::new(window, cx).placeholder("搜索会话"));
+        panel.search_subscription = Some(cx.subscribe(&search, |_, _, event, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        }));
+        panel.search = Some(search);
+        panel
     }
 }
 
 impl ActivityPanel {
-    pub fn set_active_graph(&mut self, path: Option<&str>, cx: &mut Context<Self>) {
-        if self.active_graph.as_deref() == path {
+    pub fn set_active_resource(&mut self, path: Option<&str>, cx: &mut Context<Self>) {
+        if self.active_resource.as_deref() == path {
             return;
         }
-        self.active_graph = path.map(str::to_owned);
+        self.active_resource = path.map(str::to_owned);
         cx.notify();
     }
 }
 
 impl Render for ActivityPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let query = self
+            .search
+            .as_ref()
+            .map(|search| search.read(cx).value().to_lowercase())
+            .unwrap_or_default();
         let mut hidden_depth = None;
         let mut rows = Vec::new();
         for row in &self.document.rows {
@@ -78,21 +115,71 @@ impl Render for ActivityPanel {
             let id = row.id.clone();
             let item = div()
                 .id(gpui::SharedString::from(id.clone()))
-                .pl(px(8. + row.depth as f32 * 12.))
+                .pl(px(8. + row.depth as f32 * 14.))
                 .pr_2()
-                .h(px(30.))
+                .h(px(26.))
                 .rounded_sm()
                 .flex()
                 .items_center()
-                .gap_2()
+                .gap_1p5()
                 .text_size(px(13.));
             let item = match &row.content {
+                ActivityRowContent::Item(ActivityItem::Conversation {
+                    session_id, title, ..
+                }) => {
+                    if !title.to_lowercase().contains(&query)
+                        && !session_id.to_lowercase().contains(&query)
+                    {
+                        continue;
+                    }
+                    let active = self.active_resource.as_deref() == Some(session_id.as_str());
+                    let open_id = session_id.clone();
+                    let rename_id = session_id.clone();
+                    let title = title.clone();
+                    let expected = self.document.clone();
+                    let owner = cx.entity().downgrade();
+                    item.child(Icon::new(NativeIcon::Chat).size_3())
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .child(if title.is_empty() {
+                                    "新对话".to_owned()
+                                } else {
+                                    title.clone()
+                                }),
+                        )
+                        .cursor_pointer()
+                        .when(active, |view| view.bg(cx.theme().sidebar_accent))
+                        .hover(|view| view.bg(cx.theme().muted))
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(ActivityEvent::OpenConversation(open_id.clone()))
+                        }))
+                        .context_menu(move |menu, _, _| {
+                            let owner = owner.clone();
+                            let expected = expected.clone();
+                            let id = rename_id.clone();
+                            let title = title.clone();
+                            menu.item(PopupMenuItem::new("重命名").on_click(move |_, _, cx| {
+                                let _ = owner.update(cx, |view, cx| {
+                                    if Arc::ptr_eq(&view.document, &expected) {
+                                        cx.emit(ActivityEvent::RenameConversation(
+                                            id.clone(),
+                                            title.clone(),
+                                        ));
+                                    }
+                                });
+                            }))
+                        })
+                        .into_any_element()
+                }
                 ActivityRowContent::Category { label, count, .. } => {
                     let collapsed = self.collapsed.contains(&id);
                     if collapsed {
                         hidden_depth = Some(row.depth);
                     }
-                    item.font_weight(gpui::FontWeight::SEMIBOLD)
+                    item.font_weight(gpui::FontWeight::MEDIUM)
                         .cursor_pointer()
                         .text_color(cx.theme().muted_foreground)
                         .hover(|style| style.bg(cx.theme().muted))
@@ -130,7 +217,7 @@ impl Render for ActivityPanel {
                     let menu_path = path.clone();
                     let menu_owner = cx.entity().downgrade();
                     let expected_document = self.document.clone();
-                    let active = self.active_graph.as_deref() == Some(&path);
+                    let active = self.active_resource.as_deref() == Some(&path);
                     item.child(
                         Icon::new(NativeIcon::Graph)
                             .size_3()
@@ -144,12 +231,12 @@ impl Render for ActivityPanel {
                         cx.emit(ActivityEvent::OpenGraph(path.clone()))
                     }))
                     .context_menu(move |mut menu, _, _| {
-                        use super::resources::GraphResourceAction;
+                        use super::resources::ResourceAction;
                         for (label, action) in [
-                            ("重命名", GraphResourceAction::Rename),
-                            ("创建副本", GraphResourceAction::Duplicate),
-                            ("复制相对路径", GraphResourceAction::CopyPath),
-                            ("删除图", GraphResourceAction::Delete),
+                            ("重命名", ResourceAction::Rename),
+                            ("创建副本", ResourceAction::Duplicate),
+                            ("复制相对路径", ResourceAction::CopyPath),
+                            ("删除图", ResourceAction::Delete),
                         ] {
                             let owner = menu_owner.clone();
                             let path = menu_path.clone();
@@ -196,26 +283,111 @@ impl Render for ActivityPanel {
                     })
                     .into_any_element()
                 }
-                ActivityRowContent::Item(ActivityItem::Database { name, .. }) => item
-                    .child(
-                        Icon::new(NativeIcon::Database)
+                ActivityRowContent::Item(ActivityItem::Doc { path, name }) => {
+                    let active = self.active_resource.as_deref() == Some(path.as_str());
+                    let path = path.clone();
+                    item.child(Icon::new(IconName::File).size_3())
+                        .child(div().flex_1().min_w_0().truncate().child(name.clone()))
+                        .cursor_pointer()
+                        .when(active, |view| view.bg(cx.theme().sidebar_accent))
+                        .hover(|style| style.bg(cx.theme().muted))
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(ActivityEvent::OpenDocument(path.clone()))
+                        }))
+                        .into_any_element()
+                }
+                ActivityRowContent::Item(ActivityItem::Database { id, name, .. }) => {
+                    let active = self.active_resource.as_deref() == Some(id.as_str());
+                    let id = id.clone();
+                    let menu_id = id.clone();
+                    let owner = cx.entity().downgrade();
+                    let expected = self.document.clone();
+                    item.child(Icon::new(NativeIcon::Database).size_3())
+                        .child(div().flex_1().min_w_0().truncate().child(name.clone()))
+                        .cursor_pointer()
+                        .when(active, |view| view.bg(cx.theme().sidebar_accent))
+                        .hover(|style| style.bg(cx.theme().muted))
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(ActivityEvent::OpenDatabase(id.clone()))
+                        }))
+                        .context_menu(move |mut menu, _, _| {
+                            use super::resources::ResourceAction;
+                            for (label, action) in [
+                                ("重命名", ResourceAction::Rename),
+                                ("创建副本", ResourceAction::Duplicate),
+                                ("复制资源路径", ResourceAction::CopyPath),
+                                ("删除数据库", ResourceAction::Delete),
+                            ] {
+                                let owner = owner.clone();
+                                let id = menu_id.clone();
+                                let expected = expected.clone();
+                                menu = menu.item(PopupMenuItem::new(label).on_click(
+                                    move |_, _, cx| {
+                                        let _ = owner.update(cx, |view, cx| {
+                                            if Arc::ptr_eq(&view.document, &expected) {
+                                                cx.emit(ActivityEvent::DatabaseResource(
+                                                    id.clone(),
+                                                    action,
+                                                ));
+                                            }
+                                        });
+                                    },
+                                ));
+                            }
+                            menu
+                        })
+                        .into_any_element()
+                }
+                ActivityRowContent::Item(ActivityItem::Mind { path, name }) => {
+                    let active = self.active_resource.as_deref() == Some(path.as_str());
+                    let path = path.clone();
+                    item.child(Icon::new(IconName::File).size_3())
+                        .child(div().flex_1().min_w_0().truncate().child(name.clone()))
+                        .cursor_pointer()
+                        .when(active, |view| view.bg(cx.theme().sidebar_accent))
+                        .hover(|style| style.bg(cx.theme().muted))
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(ActivityEvent::OpenMind(path.clone()))
+                        }))
+                        .into_any_element()
+                }
+                ActivityRowContent::Item(ActivityItem::Chart { path, name, .. }) => {
+                    let path = path.clone();
+                    let menu_path = path.clone();
+                    let owner = cx.entity().downgrade();
+                    let active = self.active_resource.as_deref() == Some(path.as_str());
+                    item.child(
+                        Icon::new(NativeIcon::Chart)
                             .size_3()
                             .text_color(cx.theme().muted_foreground),
                     )
                     .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                    .into_any_element(),
-                ActivityRowContent::Item(
-                    ActivityItem::Chart { name, .. }
-                    | ActivityItem::Mind { name, .. }
-                    | ActivityItem::Doc { name, .. },
-                ) => item
-                    .child(
-                        Icon::new(IconName::File)
-                            .size_3()
-                            .text_color(cx.theme().muted_foreground),
-                    )
-                    .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                    .into_any_element(),
+                    .cursor_pointer()
+                    .when(active, |view| view.bg(cx.theme().sidebar_accent))
+                    .hover(|style| style.bg(cx.theme().muted))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(ActivityEvent::OpenChart(path.clone()))
+                    }))
+                    .context_menu(move |mut menu, _, _| {
+                        for (title, action) in [
+                            ("重命名…", super::resources::ResourceAction::Rename),
+                            ("复制图表", super::resources::ResourceAction::Duplicate),
+                            ("复制资源路径", super::resources::ResourceAction::CopyPath),
+                            ("删除…", super::resources::ResourceAction::Delete),
+                        ] {
+                            let owner = owner.clone();
+                            let path = menu_path.clone();
+                            menu =
+                                menu.item(PopupMenuItem::new(title).on_click(move |_, _, cx| {
+                                    let _ = owner.update(cx, |_, cx| {
+                                        cx.emit(ActivityEvent::ChartResource(path.clone(), action))
+                                    });
+                                }));
+                        }
+                        menu
+                    })
+                    .into_any_element()
+                }
                 ActivityRowContent::Message { label, .. } => item
                     .text_color(cx.theme().muted_foreground)
                     .child(activity_text(label))
@@ -231,8 +403,43 @@ impl Render for ActivityPanel {
             .min_h_0()
             .overflow_y_scroll()
             .bg(cx.theme().sidebar)
-            .p_2()
+            .px_1()
+            .py_1()
+            .when_some(self.search.as_ref(), |view, search| {
+                view.child(div().px_1().pb_1().child(Input::new(search).small()))
+            })
+            .children(self.document.tools.iter().map(|tool| {
+                let id = tool.id.to_owned();
+                Button::new(gpui::SharedString::from(format!("activity-tool-{id}")))
+                    .small()
+                    .ghost()
+                    .label(activity_text(&tool.label))
+                    .on_click(
+                        cx.listener(move |_, _, _, cx| cx.emit(ActivityEvent::Tool(id.clone()))),
+                    )
+            }))
+            .when(self.document.panel_id == "project", |view| {
+                view.child(
+                    Button::new("activity-import")
+                        .small()
+                        .ghost()
+                        .icon(NativeIcon::Database)
+                        .label("导入数据…")
+                        .on_click(cx.listener(|_, _, _, cx| cx.emit(ActivityEvent::ImportData))),
+                )
+            })
             .children(rows)
+            .when(self.document.rows.is_empty(), |view| {
+                view.when_some(self.document.empty_state.as_ref(), |view, (_, message)| {
+                    view.child(
+                        div()
+                            .p_3()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(activity_text(message)),
+                    )
+                })
+            })
     }
 }
 

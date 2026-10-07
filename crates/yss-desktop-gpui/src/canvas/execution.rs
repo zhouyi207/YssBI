@@ -176,6 +176,7 @@ impl GraphCanvas {
             cancellation.store(true, Ordering::Release);
         }
         let Some(identity) = self.execution.active().cloned() else {
+            cx.emit(CanvasEvent::Execution);
             cx.notify();
             return;
         };
@@ -198,10 +199,12 @@ impl GraphCanvas {
                     view.error = Some("取消请求未完成，请刷新运行状态。".into());
                 }
                 view.resync_execution(cx);
+                cx.emit(CanvasEvent::Execution);
                 cx.notify();
             });
         })
         .detach();
+        cx.emit(CanvasEvent::Execution);
         cx.notify();
     }
 
@@ -272,6 +275,7 @@ impl GraphCanvas {
             });
         })
         .detach();
+        cx.emit(CanvasEvent::Execution);
         cx.notify();
     }
 

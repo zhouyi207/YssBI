@@ -2,6 +2,7 @@ use gpui::AppContext;
 mod authoring;
 mod catalog;
 mod commands;
+mod connections;
 mod constant_drag;
 mod execution;
 mod geometry;
@@ -9,7 +10,7 @@ mod render;
 mod toolbar;
 
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::Arc,
@@ -89,6 +90,7 @@ pub struct GraphCanvas {
     zoom: f32,
     gesture: Option<Gesture>,
     preview: BTreeMap<NodeId, NodePosition>,
+    connection_layer: Rc<RefCell<connections::ConnectionLayer>>,
     selected: BTreeSet<NodeId>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     palette: Option<Palette>,
@@ -96,7 +98,8 @@ pub struct GraphCanvas {
     busy: bool,
     refreshing: bool,
     refresh_pending: bool,
-    connection_candidates: Option<yss_graph_editor::projection::ConnectionCandidates>,
+    connection_candidates:
+        Option<BTreeMap<PortAddress, yss_graph_editor::projection::ConnectionDecision>>,
     error: Option<String>,
     execution: execution::ExecutionView,
     _subscriptions: Vec<gpui::Subscription>,
@@ -115,6 +118,9 @@ impl GraphCanvas {
             &search,
             |_, _, _: &gpui_component::input::InputEvent, cx| cx.notify(),
         );
+        let connection_layer = Rc::new(RefCell::new(connections::ConnectionLayer::new(
+            &graph.projection,
+        )));
         let mut view = Self {
             graph,
             services,
@@ -124,6 +130,7 @@ impl GraphCanvas {
             zoom: 1.,
             gesture: None,
             preview: BTreeMap::new(),
+            connection_layer,
             selected: BTreeSet::new(),
             bounds: Rc::new(Cell::new(Bounds::default())),
             palette: None,
@@ -438,7 +445,7 @@ impl GraphCanvas {
                 *current = event.position;
                 let a = self.world(*press);
                 let b = self.world(*current);
-                self.selected = self
+                let mut selected = self
                     .graph
                     .projection
                     .nodes
@@ -451,11 +458,14 @@ impl GraphCanvas {
                             && rect.top() <= px(a.y.max(b.y) as f32)
                     })
                     .map(|node| node.node_id)
-                    .collect();
+                    .collect::<BTreeSet<_>>();
                 if *additive {
-                    self.selected.extend(previous.iter().copied());
+                    selected.extend(previous.iter().copied());
                 }
-                self.emit_selection(cx);
+                if self.selected != selected {
+                    self.selected = selected;
+                    self.emit_selection(cx);
+                }
             }
             Gesture::Connection { current, .. } => *current = event.position,
         }

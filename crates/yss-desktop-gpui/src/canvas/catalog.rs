@@ -36,7 +36,7 @@ impl GraphCanvas {
             let _=view.update(cx,|view,cx| {
                 if view.graph.editing.version!=version || !matches!(&view.gesture,Some(Gesture::Connection{source:current,..}) if current==&source){return;}
                 match result {
-                    Ok(candidates)=>view.connection_candidates=Some(candidates),
+                    Ok(candidates)=>view.connection_candidates=Some(candidates.candidates.into_iter().map(|candidate|(candidate.port,candidate.decision)).collect()),
                     Err(_error)=>tracing::debug!(code="native_connection_candidates_rejected","Native connection candidates rejected"),
                 }
                 cx.notify();

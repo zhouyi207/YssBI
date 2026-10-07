@@ -23,7 +23,7 @@ Cox baselines are centered Breslow estimates; AFT covariance includes log(scale)
 `tests/survival_category.rs` checks independently generated statsmodels/SciPy
 references and risk-set, interval, prediction and cancellation conventions.
 Regenerate production plot payloads for parser checks and manual previews with
-`pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-sci --example survival -- src/tests/fixtures/node-system-contracts/survival-payloads.json`.
+`cargo run -p yss-sci --example survival -- react/src/tests/fixtures/node-system-contracts/survival-payloads.json`.
 
 ## Domain organization
 

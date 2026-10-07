@@ -29,11 +29,11 @@
 专项 owner：
 
 - [系统总览](../architecture/ARCHITECTURE.md)
-- [Graph / Execution / Results / Run failures](../../src-tauri/crates/yss-application/src/graph/README.md)
-- [Workbench layout](../../src/modules/workbench/README.md)
-- [Runtime signals / feedback](../../src/features/application/observability/README.md)
-- [Statistical Harness](../../src-tauri/crates/yss-harness-core/README.md)
-- [Tauri / IPC transport](../../src-tauri/crates/yss-application/src/ipc/README.md)
+- [Graph / Execution / Results / Run failures](../../crates/yss-application/src/graph/README.md)
+- [Workbench layout](../../crates/yss-desktop-gpui/README.md)
+- [Runtime signals / feedback](../../react/src/features/application/observability/README.md)
+- [Statistical Harness](../../crates/yss-harness-core/README.md)
+- [Native application services](../../crates/yss-application/README.md)
 
 ## 3. Scale, safety, and errors
 
@@ -56,7 +56,7 @@
 
 ## 5. Delivery
 
-- [ ] 根据[根验证规则](../../.rules)选择受影响范围；命令以根 `package.json` 为准，通过[开发入口](../README.md#开发与交付)定位对应模块 README。
+- [ ] 根据[根验证规则](../../.rules)选择受影响范围；原生入口和 workspace 以根 `Cargo.toml` 为准，通过[开发入口](../../README.md#开发与验证入口)定位对应模块 README。
 - [ ] 保存并报告新鲜验证输出；未运行的相关检查说明原因。
 - [ ] 运行 `git diff --check`，复核未跟踪文件、生成文件 drift 和 unrelated user changes。
 - [ ] 确认 acceptance criteria 已满足，roadmap/TODO 只保留真正未完成的工作。

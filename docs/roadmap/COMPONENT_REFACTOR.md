@@ -67,16 +67,16 @@
 
 | 检查入口                                                                                                                                               | 当前事实与迁移意义                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| [Application 说明](../../src-tauri/crates/yss-application/README.md)、[manifest](../../src-tauri/crates/yss-application/Cargo.toml)                    | Application 同时组织业务用例、会话、IPC 和桌面组装；依赖应按用途收口，不能只按数量判断 |
-| [应用会话](../../src-tauri/crates/yss-application/src/session/slot.rs)                                                                                 | 会话绑定 Project、Database、Graph 和 Execution，但位于 execution 目录                  |
-| [运行准备](../../src-tauri/crates/yss-application/src/graph/run.rs)、[草稿编辑](../../src-tauri/crates/yss-application/src/graph/edit.rs)              | 多个图用例组织相似事实；已有 DraftResolutionContext 可整理复用                         |
-| [Graph Runtime](../../src-tauri/crates/yss-graph-runtime/src/lib.rs)                                                                                   | 已有解析、语义缓存和编辑规划入口，无需再建立逐方法转发的组件包装                       |
-| [图相关转换](../../src-tauri/crates/yss-graph-execution/src/graph_preparation.rs)                                                                      | 同时承担函数依赖捕获、资源目录构造和执行包转换，需要按职责归位                         |
-| [Chart 用例](../../src-tauri/crates/yss-application/src/chart/resources.rs)、[图表数据查询](../../src-tauri/crates/yss-application/src/chart/query.rs) | 独立图表使用 Project 和 Database，不要求运行 Graph                                     |
-| [Execution](../../src-tauri/crates/yss-graph-execution/src/state.rs)                                                                                   | 运行和结果由执行运行态持有；kernel 注册与执行能力检查使用固定的内置表                  |
-| [数据库变更协调](../../src-tauri/crates/yss-application/src/database/mutation.rs)                                                                      | 已有准备、提交、最终确认和补偿边界，应保留并整理                                       |
+| [Application 说明](../../crates/yss-application/README.md)、[manifest](../../crates/yss-application/Cargo.toml)                    | Application 同时组织业务用例、会话、IPC 和桌面组装；依赖应按用途收口，不能只按数量判断 |
+| [应用会话](../../crates/yss-application/src/session/slot.rs)                                                                                 | 会话绑定 Project、Database、Graph 和 Execution，但位于 execution 目录                  |
+| [运行准备](../../crates/yss-application/src/graph/run.rs)、[草稿编辑](../../crates/yss-application/src/graph/edit.rs)              | 多个图用例组织相似事实；已有 DraftResolutionContext 可整理复用                         |
+| [Graph Runtime](../../crates/yss-graph-runtime/src/lib.rs)                                                                                   | 已有解析、语义缓存和编辑规划入口，无需再建立逐方法转发的组件包装                       |
+| [图相关转换](../../crates/yss-graph-execution/src/graph_preparation.rs)                                                                      | 同时承担函数依赖捕获、资源目录构造和执行包转换，需要按职责归位                         |
+| [Chart 用例](../../crates/yss-application/src/chart/resources.rs)、[图表数据查询](../../crates/yss-application/src/chart/query.rs) | 独立图表使用 Project 和 Database，不要求运行 Graph                                     |
+| [Execution](../../crates/yss-graph-execution/src/state.rs)                                                                                   | 运行和结果由执行运行态持有；kernel 注册与执行能力检查使用固定的内置表                  |
+| [数据库变更协调](../../crates/yss-application/src/database/mutation.rs)                                                                      | 已有准备、提交、最终确认和补偿边界，应保留并整理                                       |
 
-当前架构以 [系统总览](../architecture/ARCHITECTURE.md)、[Graph 与 Execution](../../src-tauri/crates/yss-application/src/graph/README.md)、[IPC 契约](../../src-tauri/crates/yss-application/src/ipc/README.md) 为准。
+当前架构以 [系统总览](../architecture/ARCHITECTURE.md)、[Graph 与 Execution](../../crates/yss-application/src/graph/README.md)、[IPC 契约](../../crates/yss-application/README.md) 为准。
 
 ## 3. 目标业务组件
 
@@ -131,7 +131,7 @@ Chart 是跨前后端的逻辑能力：Rust 负责权威数据及相关规则，
 
 ### 3.3 必须保持的状态边界
 
-沿用 [Graph 与 Execution](../../src-tauri/crates/yss-application/src/graph/README.md) 的契约：已保存图文档属于 Project；未保存草稿及撤销历史属于前端 GraphDraftSession；解析后的类型、Schema、血缘和诊断由 GraphSemanticSnapshot 唯一拥有。
+沿用 [Graph 与 Execution](../../crates/yss-application/src/graph/README.md) 的契约：已保存图文档属于 Project；未保存草稿及撤销历史属于前端 GraphDraftSession；解析后的类型、Schema、血缘和诊断由 GraphSemanticSnapshot 唯一拥有。
 
 按 2026-09-15 用户补充，按编辑与执行划分职责：编辑时完成解析、执行能力诊断和缓存有效性更新，运行时内部生成或复用匹配计划。Save 与 Execute 保持独立，运行不隐式保存。Graph Problems、运行日志、运行状态/失败和 Results 保持不同事实与生命周期。目标中移除无生产者的 Graph stdout/stderr 流；Output 面板保留运行失败摘要，不将错误改写成日志或结果值。
 
@@ -250,7 +250,7 @@ Runtime 继续选择 SQLite、Rig、文件监听器及通用插件管理实现�
 
 保留 ResultStore 作为唯一结果 owner，继续使用 `{ executionSessionId, resultId }`。当前输出缓存和显式报告租约持有同一份不可变结果；最后一个持有者释放后移除记录，正在读取的临时 `Arc` 在查询结束后释放实际数据。保留分页、原生 OLS 数据与分析、跨窗口租约交接、窗口关闭清理、会话隔离及迟到请求检查。报告不会因图编辑、重跑而自动切换到另一份数据。
 
-为满足“修改连线后下游变旧，撤销后恢复”，需要调整失效策略：**缓存是否还被持有，与缓存是否适用于当前图分开判断**。实施前 [ResultStore](../../src-tauri/crates/yss-graph-execution/src/result_store.rs) 的 `observe_graph_inputs` 在整图语义 hash 改变时解除全部输出绑定；本阶段必须替换这一行为，不能仅恢复前端颜色。
+为满足“修改连线后下游变旧，撤销后恢复”，需要调整失效策略：**缓存是否还被持有，与缓存是否适用于当前图分开判断**。实施前 [ResultStore](../../crates/yss-graph-execution/src/result_store.rs) 的 `observe_graph_inputs` 在整图语义 hash 改变时解除全部输出绑定；本阶段必须替换这一行为，不能仅恢复前端颜色。
 
 目标采用每个现存稳定输出地址一份最近成功缓存的方式。语义编辑只使受影响缓存变旧，缓存槽仍持有原结果及计算依据；它不再作为有效当前结果参与 Pin 预览、搜索或执行输入。`get_pin_result` 仍只交付有效当前结果，过期缓存信息由状态投影表达；报告通过完整结果引用读取被持有的数据。缓存由本输出重算准入、替换、显式清理、输出删除、图卸载或会话结束时释放；报告租约独立。一个输出不维护按运行次数增长的版本列表，也不把结果 payload 放入 Draft undo/redo 栈。
 
@@ -269,9 +269,9 @@ Runtime 继续选择 SQLite、Rig、文件监听器及通用插件管理实现�
 
 #### 撤销与运行准备
 
-复用现有 [historyCoordinator](../../src/features/application/graphEditing/historyCoordinator.ts)：撤销恢复文档后由 Rust 重新 Resolve，再计算缓存适用性。仅当语义依据、资源版本、实际输入版本和会话均匹配且结果仍存活时，恢复 Pin、连线和 Node 状态；重做再次按同一规则失效。撤销历史不保存颜色、动画播放位置或另一份执行结果。
+复用现有 [historyCoordinator](../../react/src/features/application/graphEditing/historyCoordinator.ts)：撤销恢复文档后由 Rust 重新 Resolve，再计算缓存适用性。仅当语义依据、资源版本、实际输入版本和会话均匹配且结果仍存活时，恢复 Pin、连线和 Node 状态；重做再次按同一规则失效。撤销历史不保存颜色、动画播放位置或另一份执行结果。
 
-前端不维护独立计划状态或计划引用。[Execution](../../src-tauri/crates/yss-graph-execution/src/graph_preparation.rs) 的计划缓存是运行准备的内部优化；撤销只重新解析文档与结果有效性，下次运行自动准备匹配计划。Undo 不隐式保存或执行。
+前端不维护独立计划状态或计划引用。[Execution](../../crates/yss-graph-execution/src/graph_preparation.rs) 的计划缓存是运行准备的内部优化；撤销只重新解析文档与结果有效性，下次运行自动准备匹配计划。Undo 不隐式保存或执行。
 
 当前解析中的阻断诊断可以阻止 Execute，但不能据此统一清除未受影响子图的缓存状态。恢复结果缓存与构建执行计划分别由各自 owner 负责。
 
@@ -295,10 +295,10 @@ Runtime 继续选择 SQLite、Rig、文件监听器及通用插件管理实现�
 
 ### 6.6 已确认遗留的删除边界
 
-- **录制与旧动画**：执行入口、回放 hook、旧 live event 队列、执行 store、工具栏、Node/Edge renderer 及主题样式已一起迁移；回放模块已删除。共享的真实运行终态、取消、Pin 预览和渲染几何继续保留，新呈现见 [graphPresentation](../../src/features/application/results/graphPresentation.ts)；真实界面验收仍待完成。
-- **重复值类型**：[StoredResult](../../src-tauri/crates/yss-graph-execution/src/result.rs) 的正常生产路径统一到 `RuntimeValue`，同步清理 Application 结果查询、分页、IPC DTO 与 Automation 检查中的旧分支。测试数据改用真实生产类型，保留空值、有限数检查、输出类别及报告投影含义。
+- **录制与旧动画**：执行入口、回放 hook、旧 live event 队列、执行 store、工具栏、Node/Edge renderer 及主题样式已一起迁移；回放模块已删除。共享的真实运行终态、取消、Pin 预览和渲染几何继续保留，新呈现见 [graphPresentation](../../react/src/features/application/results/graphPresentation.ts)；真实界面验收仍待完成。
+- **重复值类型**：[StoredResult](../../crates/yss-graph-execution/src/result.rs) 的正常生产路径统一到 `RuntimeValue`，同步清理 Application 结果查询、分页、IPC DTO 与 Automation 检查中的旧分支。测试数据改用真实生产类型，保留空值、有限数检查、输出类别及报告投影含义。
 - **stdout/stderr**：删除 Execution `run_output` 消息、无生产者回调、Application/IPC 映射、共享 DTO/parser、ProjectService `onOutput`、专用前端投影、sequence/loss 展示与对应空 UI。保留 RunStarted/Completed/Errored/Cancelled、结果通知、Channel 终态排空及错误收尾顺序；Output 面板保留运行失败摘要和节点定位，清除该摘要不清除 Results。
-- **校验控制**：保留 [PlanValidationControl](../../src-tauri/crates/yss-graph-execution/src/plan/validation/control.rs)，继续标明尚未接入。Harness 拥有 turn/tool/workflow 的预算策略，Application 可以把取消和 deadline 转换后交给 Graph Execution；计划校验以及是否在校验步骤检查预算属于后者。当前不得据此声称计划校验超时已经生效，也不新增通用控制框架。
+- **校验控制**：保留 [PlanValidationControl](../../crates/yss-graph-execution/src/plan/validation/control.rs)，继续标明尚未接入。Harness 拥有 turn/tool/workflow 的预算策略，Application 可以把取消和 deadline 转换后交给 Graph Execution；计划校验以及是否在校验步骤检查预算属于后者。当前不得据此声称计划校验超时已经生效，也不新增通用控制框架。
 
 删除涉及的测试、示例、文档及精确架构权限随实际实现更新。日志插件、Harness 事件与插件 worker 的进程 stdout/stderr 不因同名一起删除。
 
@@ -383,7 +383,7 @@ Node 通过 Registry 注册定义，Catalog 组织内置定义及其目录呈现
 | 新模型 provider 或存储实现 | 已有窄端口与 Runtime 组装      | 业务用例不出现实现选择分支                 |
 | 独立安装的插件             | 现有 Plugin 协议和宿主能力接口 | 保留身份、授权、预算、产物提交及失效语义   |
 
-插件扩展沿用 [Plugin 目标契约](../../plugins/README.md) 和 [当前 Plugin Runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)。本计划不把协议文档中尚未实现的能力视为已具备，也不承诺任意插件已经能动态注册 Graph 节点。
+插件扩展沿用 [Plugin 目标契约](../../crates/yss-plugin-runtime/README.md) 和 [当前 Plugin Runtime](../../crates/yss-plugin-runtime/README.md)。本计划不把协议文档中尚未实现的能力视为已具备，也不承诺任意插件已经能动态注册 Graph 节点。
 
 ## 9. 分阶段实施
 
@@ -416,7 +416,7 @@ P0 建立第 1.2 节的审计清单，P1–P5 在各自迁移范围内持续检�
 | 新状态查询跨过命令层直接映射 Execution 状态                                      | 映射归入现有 IPC schema，命令只调用用例并转换回执                                               | Rust 真实依赖审计及禁止 Transport 访问应用状态的权限回归通过；不增加整层或整目录授权 |
 | 文档门禁发现元数据、模块索引及工作台样式权限存在未决项                           | P6 已修正架构入口、文档归属、生成索引和实际 owner 的精确样式权限                                | 文档、前端依赖、语义和状态权威门禁共 33 项通过；最终文档变动后再复验                 |
 
-P6 已补齐架构入口与 Agent 规则索引，并通过原生成入口更新模块索引。报告呈现与剩余人工验收由 [Results views](../../src/modules/results/README.md) 维护；React / Harness 共用入口的整体目标见 [motion 计划](motion.md)。该方案不因本次组件迁移或局部实现而标记完成。工作台样式仅为实际 owner 添加精确资产权限，架构模型测试样本已同步并通过复验。
+P6 已补齐架构入口与 Agent 规则索引，并通过原生成入口更新模块索引。报告呈现与剩余人工验收由 [Results views](../../react/src/modules/results/README.md) 维护；React / Harness 共用入口的整体目标见 [motion 计划](motion.md)。该方案不因本次组件迁移或局部实现而标记完成。工作台样式仅为实际 owner 添加精确资产权限，架构模型测试样本已同步并通过复验。
 
 2026-09-15：Rust 已将目标 Pin 的实际消费绑定纳入缓存依据，状态查询同时返回输出与连线状态；新绑定、过期绑定及撤销恢复有 ResultStore 回归。前端按当前解析、实际 demand 和缓存投影呈现，删除录制、回放及命令类型驱动的重复失效逻辑。正常运行、Pin 预览和 Harness 的迟到回执继续隔离，报告租约回归通过。用户已接手后续真实界面验收，本次不再依赖电脑控制连接；此项仍未验收，不以自动检查替代。
 
@@ -545,7 +545,7 @@ Graph Runtime、运行准备、Editor、Database Runtime 及 Chart/Results 的�
 **计划准备归位与诊断统一（2026-09-15）**
 
 - 编辑阶段由 Graph Analysis／Runtime 更新端口、类型、Schema、诊断及结果输入依据；执行能力问题在编辑时阻断运行。
-- 计划构建与缓存归入 [Execution graph_preparation](../../src-tauri/crates/yss-graph-execution/src/graph_preparation.rs)。运行读取当前语义，直接构建已有执行计划和参数契约；缓存命中前重验就绪状态与能力指纹，每次准备重新绑定资源授权依据。原独立构建包、重复的中间执行包和 Application 二次映射已删除。
+- 计划构建与缓存归入 [Execution graph_preparation](../../crates/yss-graph-execution/src/graph_preparation.rs)。运行读取当前语义，直接构建已有执行计划和参数契约；缓存命中前重验就绪状态与能力指纹，每次准备重新绑定资源授权依据。原独立构建包、重复的中间执行包和 Application 二次映射已删除。
 - 诊断由 `yss-graph-diagnostics` 统一拥有，代码与模板键使用 `graph.*`／`diagnostics.graph.*`。公开契约使用 `GraphAnalysisBasis`、`PlanBasis`、`PlanId`、`ExecutionPlanPackage` 和 `ResolutionOutcomeDto`；节点帮助、自动化提示、界面文案、架构规则和生成索引已同步。
 - SQLite schema version 3 迁移已有图诊断记录；旧标识仅作为历史记录的解码输入保留，不作为当前 API 或诊断命名。迁移保留用户文本、结果和幂等身份。
 
@@ -569,7 +569,7 @@ Graph Runtime、运行准备、Editor、Database Runtime 及 Chart/Results 的�
 
 ### 10.1 验证范围
 
-遵循[根验证规则](../../.rules)中的 L1/L2 范围选择，具体命令见[前端 README](../../src/README.md)与 [Rust workspace README](../../src-tauri/README.md)。行为保持重构优先复用现有测试；新增测试必须对应明确缺口，不编写仅断言旧路径被删除的测试。
+遵循[根验证规则](../../.rules)中的 L1/L2 范围选择，具体命令见[前端 README](../../react/src/README.md)与 [Rust workspace README](../../README.md)。行为保持重构优先复用现有测试；新增测试必须对应明确缺口，不编写仅断言旧路径被删除的测试。
 
 | 阶段 | 需要保护的行为                                                      | 可复用的当前验证入口                                                                                    |
 | ---- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -653,11 +653,11 @@ pnpm test:rs:package -p yss-graph-execution --lib <实际回归用例名称>
 各阶段完成时同步对应 Current owner：
 
 - [系统架构](../architecture/ARCHITECTURE.md)：组件关系与应用协调。
-- [Graph 与 Execution](../../src-tauri/crates/yss-application/src/graph/README.md)：Graph 内部执行分组、阶段契约、结果和能力版本。
-- [Runtime Signals](../../src/features/application/observability/README.md)：移除 Graph stdout/stderr 后的信号边界，保留运行失败与技术日志的区别。
-- [Application 说明](../../src-tauri/crates/yss-application/README.md)：实际目录、入口、依赖与会话。
-- [IPC 说明](../../src-tauri/crates/yss-application/src/ipc/README.md)：被实际改变的调用与交付契约。
-- [Node 说明](../../src-tauri/crates/yss-node-catalog/README.md)、[Database 说明](../../src-tauri/crates/yss-database-runtime/README.md) 和 [Project 说明](../../src-tauri/crates/yss-project/README.md)：各自变化的组件契约。
+- [Graph 与 Execution](../../crates/yss-application/src/graph/README.md)：Graph 内部执行分组、阶段契约、结果和能力版本。
+- [Runtime Signals](../../react/src/features/application/observability/README.md)：移除 Graph stdout/stderr 后的信号边界，保留运行失败与技术日志的区别。
+- [Application 说明](../../crates/yss-application/README.md)：实际目录、入口、依赖与会话。
+- [IPC 说明](../../crates/yss-application/README.md)：被实际改变的调用与交付契约。
+- [Node 说明](../../crates/yss-node-catalog/README.md)、[Database 说明](../../crates/yss-database-runtime/README.md) 和 [Project 说明](../../crates/yss-project/README.md)：各自变化的组件契约。
 - [架构门禁说明](../development/ARCHITECTURE_GATES.md)：实际改变的分类或精确权限；保留 Graph 与 Execution 的底层隔离。
 
 实施状态以第 9 节为准，未完成的呈现与验收不因底层接口已接入而视为完成。最终验收要求：Chart 归属明确，图执行与图结果在业务上内聚，应用会话保持独立；执行遗留已清理，结果持有机制保留，连线/Pin/Node 状态由真实解析和缓存依据驱动，局部失效与撤销恢复得到验证；新增能力通过约定入口扩展且没有引入第二状态权威；各阶段审计及清理满足第 10.3 节，不遗留影响目标行为的未决项。

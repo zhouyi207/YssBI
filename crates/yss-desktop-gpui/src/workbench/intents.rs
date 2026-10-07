@@ -1,6 +1,5 @@
 use super::Workbench;
 use gpui::{Context, Window};
-use gpui_component::dock::DockPlacement;
 use yss_project_identity::ProjectResourceKind;
 use yss_ui_contract::{UiIntent, UiIntentReceipt, UiIntentStatus, UiPanel};
 
@@ -38,6 +37,7 @@ impl Workbench {
                     self.enqueue_intent(receipt, window, cx);
                 }
             }
+            Err(yss_application::presentation::UiError::Session) => self.rebind_session(window, cx),
             Err(_error) => tracing::debug!(
                 code = "native_ui_intent_recovery_rejected",
                 "Native UI intent recovery rejected"
@@ -74,81 +74,48 @@ impl Workbench {
             {
                 self.open_graph_intent(resource.id, node_id, receipt.id, window, cx);
             }
+            UiIntent::OpenResource {
+                resource,
+                node_id: None,
+            } if resource.kind == ProjectResourceKind::Doc => {
+                self.open_document(resource.id, Some(receipt.id), window, cx);
+            }
+            UiIntent::OpenResource {
+                resource,
+                node_id: None,
+            } if resource.kind == ProjectResourceKind::Mind => {
+                self.open_mind(resource.id, Some(receipt.id), window, cx);
+            }
+            UiIntent::OpenResource {
+                resource,
+                node_id: None,
+            } if resource.kind == ProjectResourceKind::Database => {
+                self.open_database(resource.id, Some(receipt.id), window, cx);
+            }
+            UiIntent::OpenResource {
+                resource,
+                node_id: None,
+            } if resource.kind == ProjectResourceKind::Chart => {
+                self.open_chart(resource.id, Some(receipt.id), window, cx);
+            }
+            UiIntent::ShowPanel {
+                panel: UiPanel::Assistant,
+            } => {
+                self.assistant_intent = Some(receipt.id);
+                self.show_assistant(window, cx);
+            }
             UiIntent::ShowPanel { panel } => {
-                let applied = match panel {
-                    UiPanel::Project | UiPanel::Nodes => {
-                        let key = if panel == UiPanel::Project {
-                            "project"
-                        } else {
-                            "nodes"
-                        };
-                        if let Some(panel) =
-                            self.activities.get(key).and_then(gpui::WeakEntity::upgrade)
-                        {
-                            self.dock.update(cx, |dock, cx| {
-                                dock.add_panel_view(
-                                    gpui_component::dock::panel_handle(panel),
-                                    DockPlacement::Left,
-                                    None,
-                                    window,
-                                    cx,
-                                )
-                            });
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    UiPanel::Details => {
-                        self.dock.update(cx, |dock, cx| {
-                            dock.add_panel_view(
-                                gpui_component::dock::panel_handle(self.details.clone()),
-                                DockPlacement::Right,
-                                None,
-                                window,
-                                cx,
-                            )
-                        });
-                        true
-                    }
-                    UiPanel::Problems => {
-                        self.dock.update(cx, |dock, cx| {
-                            dock.add_panel_view(
-                                gpui_component::dock::panel_handle(self.problems.clone()),
-                                DockPlacement::Bottom,
-                                None,
-                                window,
-                                cx,
-                            )
-                        });
-                        true
-                    }
-                    UiPanel::Logs => {
-                        self.dock.update(cx, |dock, cx| {
-                            dock.add_panel_view(
-                                gpui_component::dock::panel_handle(self.logs.clone()),
-                                DockPlacement::Bottom,
-                                None,
-                                window,
-                                cx,
-                            )
-                        });
-                        true
-                    }
-                    UiPanel::Output => {
-                        self.dock.update(cx, |dock, cx| {
-                            dock.add_panel_view(
-                                gpui_component::dock::panel_handle(self.output.clone()),
-                                DockPlacement::Bottom,
-                                None,
-                                window,
-                                cx,
-                            )
-                        });
-                        true
-                    }
-                    _ => false,
+                let target = match panel {
+                    UiPanel::Project => Some(super::menus::WorkbenchPanel::Project),
+                    UiPanel::Nodes => Some(super::menus::WorkbenchPanel::Nodes),
+                    UiPanel::Details => Some(super::menus::WorkbenchPanel::Details),
+                    UiPanel::Problems => Some(super::menus::WorkbenchPanel::Problems),
+                    UiPanel::Output => Some(super::menus::WorkbenchPanel::Output),
+                    UiPanel::Logs => Some(super::menus::WorkbenchPanel::Logs),
+                    UiPanel::Assistant => Some(super::menus::WorkbenchPanel::Assistant),
+                    _ => None,
                 };
+                let applied = target.is_some_and(|panel| self.show_panel(panel, window, cx));
                 self.finish_intent(&receipt.id, applied, window, cx);
             }
             UiIntent::OpenResult { source } => {

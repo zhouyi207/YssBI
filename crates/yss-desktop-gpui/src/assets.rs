@@ -8,6 +8,14 @@ pub struct Assets;
 
 const ICONS: &[(&str, &[u8])] = &[
     (
+        "icons/yssbi/chat.svg",
+        include_bytes!("../assets/icons/chat.svg"),
+    ),
+    (
+        "icons/yssbi/chart.svg",
+        include_bytes!("../assets/icons/chart.svg"),
+    ),
+    (
         "icons/yssbi/save.svg",
         include_bytes!("../assets/icons/save.svg"),
     ),
@@ -54,6 +62,8 @@ impl AssetSource for Assets {
 
 #[derive(Clone, Copy)]
 pub enum NativeIcon {
+    Chat,
+    Chart,
     Save,
     Play,
     Stop,
@@ -64,6 +74,8 @@ pub enum NativeIcon {
 impl IconNamed for NativeIcon {
     fn path(self) -> SharedString {
         match self {
+            Self::Chat => "icons/yssbi/chat.svg",
+            Self::Chart => "icons/yssbi/chart.svg",
             Self::Save => "icons/yssbi/save.svg",
             Self::Play => "icons/yssbi/play.svg",
             Self::Stop => "icons/yssbi/stop.svg",

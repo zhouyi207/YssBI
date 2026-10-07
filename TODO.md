@@ -15,11 +15,11 @@
 - [ ] 核对并修正线性回归配置对 Newey lag=0 的限制：`yss-node-catalog/src/statistics/mod.rs` 当前使用最小值为 1 的正整数参数，应与 SCI 支持的非负滞后范围一致。
 
 - [ ] clippy::too_many_arguments 需要处理
-- [ ] 按 [Node Kernel 当前边界](src-tauri/crates/yss-node-kernel/README.md) 测量完整静态调度缓存、紧凑数值缓冲及目录重复装配的收益；矩阵分解中途取消与工作区硬限额需在 SCI/Linalg 所有者内另行设计。
+- [ ] 按 [Node Kernel 当前边界](crates/yss-node-kernel/README.md) 测量完整静态调度缓存、紧凑数值缓冲及目录重复装配的收益；矩阵分解中途取消与工作区硬限额需在 SCI/Linalg 所有者内另行设计。
 - [ ] 核对兼容节点目录对 Union 类型的保守匹配与 `function_signature_resolves_stable_projected_call_ports` 断言；旧审查在 `a8f3b74c` 复现了目录保留 `yssbi.logic.not` 的失败，继续处理前需按当前代码重新核实。
 - [ ] 按产品需求补齐 DataFrame Series 的 `length`、`count`、`sum`、`mean` 执行实现；当前仅有定义，不进入 GUI 创建目录与 AI 节点搜索，已有图通过缺少内核诊断阻断执行。
-- [ ] 按 [SCI](src-tauri/crates/yss-sci/README.md) 与 [Linalg](src-tauri/crates/yss-sci-linalg/README.md) 当前契约继续核对其余模型的秩不足策略、模型参数与报告，并评估 SVD 重复计算。
-- [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`，`yss-application::ipc` 也有既有诊断。数值循环/模型参数重构需结合 SCI golden tests；传输参数和 wire 枚举须保持 IPC 契约，不能为消除 lint 随意改协议。
+- [ ] 按 [SCI](crates/yss-sci/README.md) 与 [Linalg](crates/yss-sci-linalg/README.md) 当前契约继续核对其余模型的秩不足策略、模型参数与报告，并评估 SVD 重复计算。
+- [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`。数值循环/模型参数重构需结合 SCI golden tests；共享序列化值须保持现有契约，不能为消除 lint 随意改协议。
 - [ ] 评估前端既有的 14 条 Oxlint 警告；涉及遍历集合副本和测试 observer 的条目应先确认快照/回调语义，再决定简化或注明必要原因。
 - [ ] immer, zod, zustand, json patch 前端可以充分利用这些库来实现优化
 - [ ] codex resume 01a0f185-385c-7531-b9f2-bc5013a7078b

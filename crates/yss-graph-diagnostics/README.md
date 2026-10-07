@@ -17,10 +17,10 @@ GPUI 原生宿主直接消费 `GRAPH_DIAGNOSTIC_DEFINITIONS` 的本地化模板�
 修改 Rust 中的诊断词汇、模板键或参数后，从仓库根目录运行：
 
 ```sh
-pnpm generate:diagnostics
-pnpm generate:diagnostics:check
+node crates/yss-graph-diagnostics/scripts/generate-graph-diagnostics.mjs
+node crates/yss-graph-diagnostics/scripts/generate-graph-diagnostics.mjs --check
 ```
 
 生成器是 [scripts/generate-graph-diagnostics.mjs](scripts/generate-graph-diagnostics.mjs)；生成表以 Rust 定义为来源，不维护另一套前端词汇。
 
-按实际改动选择 `pnpm test:rs:package -p yss-graph-diagnostics --lib`；跨 wire 的消费方随契约变化一起检查，范围遵循[根规则](../../../.rules)。
+按实际改动选择 `cargo test -p yss-graph-diagnostics --lib`；跨 wire 的消费方随契约变化一起检查，范围遵循[根规则](../../.rules)。

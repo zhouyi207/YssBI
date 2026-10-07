@@ -14,7 +14,7 @@ use yss_graph_execution::{
     plan::PlanSourceIdentity,
 };
 
-use crate::canvas::GraphCanvas;
+use crate::canvas::{CanvasEvent, GraphCanvas};
 
 pub enum OutputEvent {
     Locate(PlanSourceIdentity),
@@ -48,10 +48,16 @@ impl OutputPanel {
         {
             return;
         }
-        self.observation = graph
-            .as_ref()
-            .and_then(WeakEntity::upgrade)
-            .map(|graph| cx.observe(&graph, |_, _, cx| cx.notify()));
+        self.observation = graph.as_ref().and_then(WeakEntity::upgrade).map(|graph| {
+            cx.subscribe(&graph, |_, _, event, cx| {
+                if matches!(
+                    event,
+                    CanvasEvent::Projection { .. } | CanvasEvent::Execution
+                ) {
+                    cx.notify();
+                }
+            })
+        });
         self.graph = graph;
         cx.notify();
     }

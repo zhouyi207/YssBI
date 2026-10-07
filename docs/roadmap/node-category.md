@@ -33,7 +33,7 @@
 
 > Status: Planned
 > Scope: 节点分类、目录层级与筛选方式的待评估方案
-> Canonical owners: 当前分类由 [Node Catalog](../../src-tauri/crates/yss-node-catalog/README.md) 与源码拥有；本文记录调整建议
+> Canonical owners: 当前分类由 [Node Catalog](../../crates/yss-node-catalog/README.md) 与源码拥有；本文记录调整建议
 > Update when: 分类方案、实施范围或验收条件改变时
 
 ```

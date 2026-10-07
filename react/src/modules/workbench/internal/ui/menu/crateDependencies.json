@@ -1,12 +1,7 @@
 [
   {
-    "name": "tauri-plugin-tracing",
-    "manifest": "src-tauri/crates/tauri-plugin-tracing/Cargo.toml",
-    "dependencies": []
-  },
-  {
     "name": "yss-application",
-    "manifest": "src-tauri/crates/yss-application/Cargo.toml",
+    "manifest": "crates/yss-application/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -171,21 +166,9 @@
         "target": null
       },
       {
-        "name": "yss-ipc-channel",
-        "kind": "normal",
-        "optional": true,
-        "target": null
-      },
-      {
         "name": "yss-ipc-contract",
         "kind": "normal",
         "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-event",
-        "kind": "normal",
-        "optional": true,
         "target": null
       },
       {
@@ -299,138 +282,13 @@
     ]
   },
   {
-    "name": "yss-bayes-artifact-contract",
-    "manifest": "plugins/julia/native/crates/yss-bayes-artifact-contract/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-bayes-artifact-datafusion",
-    "manifest": "plugins/julia/native/crates/yss-bayes-artifact-datafusion/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-bayes-artifact-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-bayes-model",
-    "manifest": "plugins/julia/native/crates/yss-bayes-model/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-math-expr",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-bayes-result",
-    "manifest": "plugins/julia/native/crates/yss-bayes-result/Cargo.toml",
-    "dependencies": []
-  },
-  {
-    "name": "yss-bayes-runtime",
-    "manifest": "plugins/julia/native/crates/yss-bayes-runtime/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-bayes-artifact-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-model",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-worker",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-bayes-worker",
-    "manifest": "plugins/julia/native/crates/yss-bayes-worker/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-bayes-model",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-bayes-worker-julia",
-    "manifest": "plugins/julia/native/crates/yss-bayes-worker-julia/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-bayes-model",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-worker",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-julia-worker",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
     "name": "yss-canonical-hash",
-    "manifest": "src-tauri/crates/yss-canonical-hash/Cargo.toml",
+    "manifest": "crates/yss-canonical-hash/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-chart-document",
-    "manifest": "src-tauri/crates/yss-chart-document/Cargo.toml",
+    "manifest": "crates/yss-chart-document/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-project-layout",
@@ -448,12 +306,12 @@
   },
   {
     "name": "yss-data-contract",
-    "manifest": "src-tauri/crates/yss-data-contract/Cargo.toml",
+    "manifest": "crates/yss-data-contract/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-database-arrow",
-    "manifest": "src-tauri/crates/yss-database-arrow/Cargo.toml",
+    "manifest": "crates/yss-database-arrow/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -477,12 +335,12 @@
   },
   {
     "name": "yss-database-contract",
-    "manifest": "src-tauri/crates/yss-database-contract/Cargo.toml",
+    "manifest": "crates/yss-database-contract/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-database-engine",
-    "manifest": "src-tauri/crates/yss-database-engine/Cargo.toml",
+    "manifest": "crates/yss-database-engine/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -512,7 +370,7 @@
   },
   {
     "name": "yss-database-io",
-    "manifest": "src-tauri/crates/yss-database-io/Cargo.toml",
+    "manifest": "crates/yss-database-io/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-database-arrow",
@@ -524,7 +382,7 @@
   },
   {
     "name": "yss-database-runtime",
-    "manifest": "src-tauri/crates/yss-database-runtime/Cargo.toml",
+    "manifest": "crates/yss-database-runtime/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -584,7 +442,7 @@
   },
   {
     "name": "yss-database-schema",
-    "manifest": "src-tauri/crates/yss-database-schema/Cargo.toml",
+    "manifest": "crates/yss-database-schema/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -602,7 +460,7 @@
   },
   {
     "name": "yss-database-source",
-    "manifest": "src-tauri/crates/yss-database-source/Cargo.toml",
+    "manifest": "crates/yss-database-source/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-database-contract",
@@ -620,7 +478,7 @@
   },
   {
     "name": "yss-database-store",
-    "manifest": "src-tauri/crates/yss-database-store/Cargo.toml",
+    "manifest": "crates/yss-database-store/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -668,19 +526,13 @@
   },
   {
     "name": "yss-dataset-profile",
-    "manifest": "src-tauri/crates/yss-dataset-profile/Cargo.toml",
+    "manifest": "crates/yss-dataset-profile/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-desktop-gpui",
-    "manifest": "src-tauri/crates/yss-desktop-gpui/Cargo.toml",
+    "manifest": "crates/yss-desktop-gpui/Cargo.toml",
     "dependencies": [
-      {
-        "name": "tauri-plugin-tracing",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
       {
         "name": "yss-application",
         "kind": "normal",
@@ -694,7 +546,31 @@
         "target": null
       },
       {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-schema",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-dataset-profile",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -736,6 +612,24 @@
         "target": null
       },
       {
+        "name": "yss-harness-core",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-ipc-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-logging",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-node-catalog",
         "kind": "normal",
         "optional": false,
@@ -754,6 +648,12 @@
         "target": null
       },
       {
+        "name": "yss-plugin-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-project-history",
         "kind": "normal",
         "optional": false,
@@ -761,6 +661,24 @@
       },
       {
         "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -781,17 +699,17 @@
   },
   {
     "name": "yss-display-naming",
-    "manifest": "src-tauri/crates/yss-display-naming/Cargo.toml",
+    "manifest": "crates/yss-display-naming/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-filesystem",
-    "manifest": "src-tauri/crates/yss-filesystem/Cargo.toml",
+    "manifest": "crates/yss-filesystem/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-function-editor-projection",
-    "manifest": "src-tauri/crates/yss-function-editor-projection/Cargo.toml",
+    "manifest": "crates/yss-function-editor-projection/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -815,7 +733,7 @@
   },
   {
     "name": "yss-graph-analysis",
-    "manifest": "src-tauri/crates/yss-graph-analysis/Cargo.toml",
+    "manifest": "crates/yss-graph-analysis/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -881,7 +799,7 @@
   },
   {
     "name": "yss-graph-analysis-contract",
-    "manifest": "src-tauri/crates/yss-graph-analysis-contract/Cargo.toml",
+    "manifest": "crates/yss-graph-analysis-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-node-protocol",
@@ -899,7 +817,7 @@
   },
   {
     "name": "yss-graph-diagnostics",
-    "manifest": "src-tauri/crates/yss-graph-diagnostics/Cargo.toml",
+    "manifest": "crates/yss-graph-diagnostics/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-graph-analysis-contract",
@@ -911,7 +829,7 @@
   },
   {
     "name": "yss-graph-document",
-    "manifest": "src-tauri/crates/yss-graph-document/Cargo.toml",
+    "manifest": "crates/yss-graph-document/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -947,7 +865,7 @@
   },
   {
     "name": "yss-graph-document-edit",
-    "manifest": "src-tauri/crates/yss-graph-document-edit/Cargo.toml",
+    "manifest": "crates/yss-graph-document-edit/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-graph-document",
@@ -965,7 +883,7 @@
   },
   {
     "name": "yss-graph-editor",
-    "manifest": "src-tauri/crates/yss-graph-editor/Cargo.toml",
+    "manifest": "crates/yss-graph-editor/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -1031,7 +949,7 @@
   },
   {
     "name": "yss-graph-execution",
-    "manifest": "src-tauri/crates/yss-graph-execution/Cargo.toml",
+    "manifest": "crates/yss-graph-execution/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1103,7 +1021,7 @@
   },
   {
     "name": "yss-graph-resource-contract",
-    "manifest": "src-tauri/crates/yss-graph-resource-contract/Cargo.toml",
+    "manifest": "crates/yss-graph-resource-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1127,7 +1045,7 @@
   },
   {
     "name": "yss-graph-runtime",
-    "manifest": "src-tauri/crates/yss-graph-runtime/Cargo.toml",
+    "manifest": "crates/yss-graph-runtime/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1199,7 +1117,7 @@
   },
   {
     "name": "yss-graph-type-mapping",
-    "manifest": "src-tauri/crates/yss-graph-type-mapping/Cargo.toml",
+    "manifest": "crates/yss-graph-type-mapping/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -1217,7 +1135,7 @@
   },
   {
     "name": "yss-harness-contract",
-    "manifest": "src-tauri/crates/yss-harness-contract/Cargo.toml",
+    "manifest": "crates/yss-harness-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-chart-document",
@@ -1247,7 +1165,7 @@
   },
   {
     "name": "yss-harness-core",
-    "manifest": "src-tauri/crates/yss-harness-core/Cargo.toml",
+    "manifest": "crates/yss-harness-core/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1265,7 +1183,7 @@
   },
   {
     "name": "yss-harness-rig",
-    "manifest": "src-tauri/crates/yss-harness-rig/Cargo.toml",
+    "manifest": "crates/yss-harness-rig/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1283,7 +1201,7 @@
   },
   {
     "name": "yss-harness-sqlite",
-    "manifest": "src-tauri/crates/yss-harness-sqlite/Cargo.toml",
+    "manifest": "crates/yss-harness-sqlite/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-harness-contract",
@@ -1295,34 +1213,10 @@
   },
   {
     "name": "yss-harness-tantivy",
-    "manifest": "src-tauri/crates/yss-harness-tantivy/Cargo.toml",
+    "manifest": "crates/yss-harness-tantivy/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-ipc-channel",
-    "manifest": "src-tauri/crates/yss-ipc-channel/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-progress",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1331,7 +1225,7 @@
   },
   {
     "name": "yss-ipc-contract",
-    "manifest": "src-tauri/crates/yss-ipc-contract/Cargo.toml",
+    "manifest": "crates/yss-ipc-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -1396,108 +1290,18 @@
     ]
   },
   {
-    "name": "yss-ipc-event",
-    "manifest": "src-tauri/crates/yss-ipc-event/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-ipc-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-julia-extension",
-    "manifest": "plugins/julia/native/crates/yss-julia-extension/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-bayes-artifact-datafusion",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-model",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-worker-julia",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-bayes-worker",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-julia-worker",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-math-expr",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-plugin-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-plugin-sdk",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-julia-runtime",
-    "manifest": "plugins/julia/native/crates/yss-julia-runtime/Cargo.toml",
+    "name": "yss-logging",
+    "manifest": "crates/yss-logging/Cargo.toml",
     "dependencies": []
   },
   {
-    "name": "yss-julia-worker",
-    "manifest": "plugins/julia/native/crates/yss-julia-worker/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-julia-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
     "name": "yss-math-expr",
-    "manifest": "src-tauri/crates/yss-math-expr/Cargo.toml",
+    "manifest": "crates/yss-math-expr/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-node-catalog",
-    "manifest": "src-tauri/crates/yss-node-catalog/Cargo.toml",
+    "manifest": "crates/yss-node-catalog/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -1527,7 +1331,7 @@
   },
   {
     "name": "yss-node-kernel",
-    "manifest": "src-tauri/crates/yss-node-kernel/Cargo.toml",
+    "manifest": "crates/yss-node-kernel/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1569,7 +1373,7 @@
   },
   {
     "name": "yss-node-protocol",
-    "manifest": "src-tauri/crates/yss-node-protocol/Cargo.toml",
+    "manifest": "crates/yss-node-protocol/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -1581,7 +1385,7 @@
   },
   {
     "name": "yss-node-registry",
-    "manifest": "src-tauri/crates/yss-node-registry/Cargo.toml",
+    "manifest": "crates/yss-node-registry/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1599,12 +1403,12 @@
   },
   {
     "name": "yss-plugin-protocol",
-    "manifest": "src-tauri/crates/yss-plugin-protocol/Cargo.toml",
+    "manifest": "crates/yss-plugin-protocol/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-plugin-runtime",
-    "manifest": "src-tauri/crates/yss-plugin-runtime/Cargo.toml",
+    "manifest": "crates/yss-plugin-runtime/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-plugin-protocol",
@@ -1622,7 +1426,7 @@
   },
   {
     "name": "yss-plugin-sdk",
-    "manifest": "src-tauri/crates/yss-plugin-sdk/Cargo.toml",
+    "manifest": "crates/yss-plugin-sdk/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-plugin-protocol",
@@ -1634,7 +1438,7 @@
   },
   {
     "name": "yss-project",
-    "manifest": "src-tauri/crates/yss-project/Cargo.toml",
+    "manifest": "crates/yss-project/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1748,7 +1552,7 @@
   },
   {
     "name": "yss-project-history",
-    "manifest": "src-tauri/crates/yss-project-history/Cargo.toml",
+    "manifest": "crates/yss-project-history/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-chart-document",
@@ -1778,17 +1582,17 @@
   },
   {
     "name": "yss-project-identity",
-    "manifest": "src-tauri/crates/yss-project-identity/Cargo.toml",
+    "manifest": "crates/yss-project-identity/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-project-layout",
-    "manifest": "src-tauri/crates/yss-project-layout/Cargo.toml",
+    "manifest": "crates/yss-project-layout/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-project-model",
-    "manifest": "src-tauri/crates/yss-project-model/Cargo.toml",
+    "manifest": "crates/yss-project-model/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-canonical-hash",
@@ -1842,7 +1646,7 @@
   },
   {
     "name": "yss-project-operation",
-    "manifest": "src-tauri/crates/yss-project-operation/Cargo.toml",
+    "manifest": "crates/yss-project-operation/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-project-identity",
@@ -1854,12 +1658,12 @@
   },
   {
     "name": "yss-project-progress",
-    "manifest": "src-tauri/crates/yss-project-progress/Cargo.toml",
+    "manifest": "crates/yss-project-progress/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-project-registry",
-    "manifest": "src-tauri/crates/yss-project-registry/Cargo.toml",
+    "manifest": "crates/yss-project-registry/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-filesystem",
@@ -1901,7 +1705,7 @@
   },
   {
     "name": "yss-project-registry-contract",
-    "manifest": "src-tauri/crates/yss-project-registry-contract/Cargo.toml",
+    "manifest": "crates/yss-project-registry-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-project-identity",
@@ -1913,7 +1717,7 @@
   },
   {
     "name": "yss-project-registry-sqlite",
-    "manifest": "src-tauri/crates/yss-project-registry-sqlite/Cargo.toml",
+    "manifest": "crates/yss-project-registry-sqlite/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-project-identity",
@@ -1931,7 +1735,7 @@
   },
   {
     "name": "yss-relational-contract",
-    "manifest": "src-tauri/crates/yss-relational-contract/Cargo.toml",
+    "manifest": "crates/yss-relational-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-data-contract",
@@ -1949,7 +1753,7 @@
   },
   {
     "name": "yss-resource-lifecycle",
-    "manifest": "src-tauri/crates/yss-resource-lifecycle/Cargo.toml",
+    "manifest": "crates/yss-resource-lifecycle/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-chart-document",
@@ -1973,12 +1777,12 @@
   },
   {
     "name": "yss-resource-naming",
-    "manifest": "src-tauri/crates/yss-resource-naming/Cargo.toml",
+    "manifest": "crates/yss-resource-naming/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-sci",
-    "manifest": "src-tauri/crates/yss-sci/Cargo.toml",
+    "manifest": "crates/yss-sci/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-math-expr",
@@ -2002,17 +1806,17 @@
   },
   {
     "name": "yss-sci-contract",
-    "manifest": "src-tauri/crates/yss-sci-contract/Cargo.toml",
+    "manifest": "crates/yss-sci-contract/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-sci-linalg",
-    "manifest": "src-tauri/crates/yss-sci-linalg/Cargo.toml",
+    "manifest": "crates/yss-sci-linalg/Cargo.toml",
     "dependencies": []
   },
   {
     "name": "yss-sci-runtime",
-    "manifest": "src-tauri/crates/yss-sci-runtime/Cargo.toml",
+    "manifest": "crates/yss-sci-runtime/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-sci-contract",
@@ -2030,28 +1834,10 @@
   },
   {
     "name": "yss-ui-contract",
-    "manifest": "src-tauri/crates/yss-ui-contract/Cargo.toml",
+    "manifest": "crates/yss-ui-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-project-identity",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yssbi",
-    "manifest": "src-tauri/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "tauri-plugin-tracing",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-application",
         "kind": "normal",
         "optional": false,
         "target": null

@@ -200,15 +200,12 @@ impl Workbench {
             .and_then(gpui::WeakEntity::upgrade)
             && panel.read(cx).available()
         {
-            self.dock.update(cx, |dock, cx| {
-                dock.add_panel_view(
-                    gpui_component::dock::panel_handle(panel.clone()),
-                    DockPlacement::Center,
-                    None,
-                    window,
-                    cx,
-                )
-            });
+            self.present_panel(
+                gpui_component::dock::panel_handle(panel.clone()),
+                DockPlacement::Center,
+                window,
+                cx,
+            );
             if let Some(id) = intent {
                 if panel.read(cx).loaded() {
                     self.finish_intent(&id, true, window, cx);
@@ -235,15 +232,12 @@ impl Workbench {
             }),
         );
         self.result_panels.insert(key, panel.downgrade());
-        self.dock.update(cx, |dock, cx| {
-            dock.add_panel_view(
-                gpui_component::dock::panel_handle(panel.clone()),
-                DockPlacement::Center,
-                None,
-                window,
-                cx,
-            )
-        });
+        self.present_panel(
+            gpui_component::dock::panel_handle(panel.clone()),
+            DockPlacement::Center,
+            window,
+            cx,
+        );
         if let Some(id) = intent {
             self.observe_result_intent(&panel, id, window, cx);
         }
@@ -277,13 +271,13 @@ impl Workbench {
         ));
     }
 
-    fn clear_graph_context(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn clear_graph_context(&mut self, cx: &mut Context<Self>) {
         for panel in self
             .activities
             .values()
             .filter_map(gpui::WeakEntity::upgrade)
         {
-            panel.update(cx, |panel, cx| panel.set_active_graph(None, cx));
+            panel.update(cx, |panel, cx| panel.set_active_resource(None, cx));
         }
         self.details.update(cx, |panel, cx| panel.clear(cx));
         self.problems.update(cx, |panel, cx| panel.clear(cx));

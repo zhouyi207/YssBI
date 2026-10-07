@@ -1,0 +1,91 @@
+//! Native model settings consume Application's catalog; only unsubmitted forms live here.
+pub(crate) mod commands;
+mod models;
+mod render;
+
+use crate::services::NativeServices;
+use gpui::{App, Context, FocusHandle, Focusable, Subscription, actions};
+use std::sync::Arc;
+use yss_harness_contract::LanguageModelCatalog;
+
+actions!(native_settings, [SaveSettings]);
+
+#[derive(Clone, Copy, PartialEq)]
+enum Page {
+    Overview,
+    Providers,
+    Provider,
+}
+
+pub(crate) struct SettingsPanel {
+    services: Arc<NativeServices>,
+    focus: FocusHandle,
+    catalog: Option<Arc<LanguageModelCatalog>>,
+    page: Page,
+    editor: Option<models::ProviderDraft>,
+    model: Option<models::ModelDraft>,
+    provider_subscriptions: Vec<Subscription>,
+    model_subscriptions: Vec<Subscription>,
+    epoch: u64,
+    generation: u64,
+    task: Option<&'static str>,
+    error: Option<String>,
+    load_failed: bool,
+    feedback: Option<String>,
+    discovered: Vec<yss_harness_contract::LanguageModelConfig>,
+}
+
+impl SettingsPanel {
+    pub(crate) fn new(services: Arc<NativeServices>, cx: &mut Context<Self>) -> Self {
+        Self {
+            services,
+            focus: cx.focus_handle(),
+            catalog: None,
+            page: Page::Overview,
+            editor: None,
+            model: None,
+            provider_subscriptions: vec![],
+            model_subscriptions: vec![],
+            epoch: 0,
+            generation: 0,
+            task: None,
+            error: None,
+            load_failed: false,
+            feedback: None,
+            discovered: vec![],
+        }
+    }
+
+    pub(crate) fn busy(&self) -> bool {
+        self.task.is_some()
+    }
+
+    pub(crate) fn dirty(&self) -> bool {
+        self.editor.as_ref().is_some_and(|draft| draft.changed)
+            || self.model.as_ref().is_some_and(|draft| draft.changed)
+    }
+
+    fn install_catalog(&mut self, catalog: LanguageModelCatalog) {
+        self.generation = self.generation.wrapping_add(1);
+        self.catalog = Some(Arc::new(catalog));
+    }
+
+    pub(crate) fn discard(&mut self, cx: &mut Context<Self>) {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.editor = None;
+        self.model = None;
+        self.provider_subscriptions.clear();
+        self.model_subscriptions.clear();
+        self.discovered.clear();
+        self.page = Page::Providers;
+        self.error = None;
+        self.feedback = None;
+        cx.notify();
+    }
+}
+
+impl Focusable for SettingsPanel {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus.clone()
+    }
+}

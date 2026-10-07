@@ -1,7 +1,42 @@
 [
-  { "id": "iris", "name": "Iris", "version": 1, "sourceFile": "iris.csv" },
-  { "id": "diamonds", "name": "Diamonds", "version": 1, "sourceFile": "diamonds.csv" },
-  { "id": "flights", "name": "Flights", "version": 2, "sourceFile": "flights.csv" },
-  { "id": "data-car", "name": "dataCar", "version": 1, "sourceFile": "dataCar.csv" },
-  { "id": "vic-elec", "name": "vic_elec", "version": 2, "sourceFile": "vic_elec.csv" }
+  {
+    "id": "iris",
+    "name": "Iris",
+    "version": 1,
+    "sourceFile": "iris.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/mwaskom/seaborn-data/71e2436a092d714350de0fc409ca8a8714e7e78f/iris.csv",
+    "sourceSha256": "9cc1c345c71bcc9b486b74cbf6063fa66f4bb5e0f603a4b3c3471ec2e5e8e355"
+  },
+  {
+    "id": "diamonds",
+    "name": "Diamonds",
+    "version": 1,
+    "sourceFile": "diamonds.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/mwaskom/seaborn-data/71e2436a092d714350de0fc409ca8a8714e7e78f/diamonds.csv",
+    "sourceSha256": "9574730b03aba241d899c4a97511c5061b19358fab89510774fb6c24168345c4"
+  },
+  {
+    "id": "flights",
+    "name": "Flights",
+    "version": 2,
+    "sourceFile": "flights.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/vincentarelbundock/Rdatasets/1dcc2bf5f955cc1224a3e1307256e1fe86b68dae/csv/nycflights13/flights.csv",
+    "sourceSha256": "b791a2590c9167aa0bd3cb45af3f64101180878cf088c183eae4011e3a654f42"
+  },
+  {
+    "id": "data-car",
+    "name": "dataCar",
+    "version": 1,
+    "sourceFile": "dataCar.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/vincentarelbundock/Rdatasets/1dcc2bf5f955cc1224a3e1307256e1fe86b68dae/csv/insuranceData/dataCar.csv",
+    "sourceSha256": "62709d9e060c12bc8321a3afd9ae5e47a8a6dde6c52c3a245caa8186f3ae187b"
+  },
+  {
+    "id": "vic-elec",
+    "name": "vic_elec",
+    "version": 2,
+    "sourceFile": "vic_elec.csv",
+    "sourceUrl": "https://raw.githubusercontent.com/vincentarelbundock/Rdatasets/1dcc2bf5f955cc1224a3e1307256e1fe86b68dae/csv/tsibbledata/vic_elec.csv",
+    "sourceSha256": "21727117d26cf16384cbc9bfd895bb437cc797155646a39d1cc3feeff14da452"
+  }
 ]

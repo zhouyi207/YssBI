@@ -20,34 +20,34 @@
 | `reference/`     | 生成索引与更多源码旁说明                       | [实现参考](reference/README.md)           |
 | `benchmark/`     | 测量方法、样本与结果                           | [基准索引](benchmark/README.md)           |
 
-GPUI 原生宿主见 [GPUI host](../src-tauri/crates/yss-desktop-gpui/README.md)，开放工作见 [GPUI 迁移](roadmap/GPUI_MIGRATION.md)。
+GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，开放工作见 [GPUI 迁移](roadmap/GPUI_MIGRATION.md)。
 
 ## 模块契约入口
 
 | 范围                         | 对应 README                                                                                                                                                                                                                            |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Application 组装与用例       | [Application](../src-tauri/crates/yss-application/README.md)                                                                                                                                                                           |
-| 项目生命周期与数据用例       | [Project application](../src-tauri/crates/yss-application/src/project/README.md)、[Database application](../src-tauri/crates/yss-application/src/database/README.md)                                                                   |
-| 图编辑、保存和投影编排       | [Graph application](../src-tauri/crates/yss-application/src/graph/README.md)                                                                                                                                                           |
-| 图表资源、预览与保存         | [Chart application](../src-tauri/crates/yss-application/src/chart/README.md)                                                                                                                                                           |
-| Mind / Markdown 文件和编辑器 | [Project model](../src-tauri/crates/yss-project-model/README.md)、[Document editors](../src/modules/document-editor/README.md)                                                                                                         |
-| 图语义与解析缓存             | [Graph analysis](../src-tauri/crates/yss-graph-analysis/README.md)、[Graph runtime](../src-tauri/crates/yss-graph-runtime/README.md)                                                                                                   |
-| 执行、运行状态和 ResultStore | [Graph execution](../src-tauri/crates/yss-graph-execution/README.md)                                                                                                                                                                   |
-| 共享语义与内核适配           | [Data contracts](../src-tauri/crates/yss-data-contract/README.md)、[Node kernel](../src-tauri/crates/yss-node-kernel/README.md)                                                                                                        |
-| 科学计算入口                 | [SCI runtime](../src-tauri/crates/yss-sci-runtime/README.md)                                                                                                                                                                           |
-| 工作台和图画布               | [Workbench](../src/modules/workbench/README.md)、[Graph editor](../src/modules/graph-editor/README.md)                                                                                                                                 |
-| 结果查询与报告               | [Results application](../src/features/application/results/README.md)、[Results views](../src/modules/results/README.md)                                                                                                                |
-| 图诊断与运行失败             | [Problems](../src/modules/problems/README.md)、[Output](../src/modules/output/README.md)                                                                                                                                               |
-| 工作台界面意图               | [UI contract](../src-tauri/crates/yss-ui-contract/README.md)                                                                                                                                                                           |
-| Harness / Assistant          | [Harness Core](../src-tauri/crates/yss-harness-core/README.md)                                                                                                                                                                         |
-| 运行观测和用户反馈           | [Observability](../src/features/application/observability/README.md)                                                                                                                                                                   |
-| 日志存储与呈现               | [Tracing plugin](../src-tauri/crates/tauri-plugin-tracing/README.md)、[Logs](../src/modules/logs/README.md)                                                                                                                            |
-| Tauri / IPC                  | [Application IPC](../src-tauri/crates/yss-application/src/ipc/README.md)                                                                                                                                                               |
-| 插件体系                     | [插件目标契约](../plugins/README.md)；当前实现另见 [Plugin runtime](../src-tauri/crates/yss-plugin-runtime/README.md)、[Plugin protocol](../src-tauri/crates/yss-plugin-protocol/README.md)与 [Julia 插件](../plugins/julia/README.md) |
+| Application 组装与用例       | [Application](../crates/yss-application/README.md)                                                                                                                                                                           |
+| 项目生命周期与数据用例       | [Project application](../crates/yss-application/src/project/README.md)、[Database application](../crates/yss-application/src/database/README.md)                                                                   |
+| 图编辑、保存和投影编排       | [Graph application](../crates/yss-application/src/graph/README.md)                                                                                                                                                           |
+| 图表资源、预览与保存         | [Chart application](../crates/yss-application/src/chart/README.md)                                                                                                                                                           |
+| Mind / Markdown 文件和编辑器 | [Project model](../crates/yss-project-model/README.md)、[Document editors](../react/src/modules/document-editor/README.md)                                                                                                         |
+| 图语义与解析缓存             | [Graph analysis](../crates/yss-graph-analysis/README.md)、[Graph runtime](../crates/yss-graph-runtime/README.md)                                                                                                   |
+| 执行、运行状态和 ResultStore | [Graph execution](../crates/yss-graph-execution/README.md)                                                                                                                                                                   |
+| 共享语义与内核适配           | [Data contracts](../crates/yss-data-contract/README.md)、[Node kernel](../crates/yss-node-kernel/README.md)                                                                                                        |
+| 科学计算入口                 | [SCI runtime](../crates/yss-sci-runtime/README.md)                                                                                                                                                                           |
+| 工作台和图画布               | [GPUI host](../crates/yss-desktop-gpui/README.md)                                                                                                                                 |
+| 结果查询与报告               | [Results application](../react/src/features/application/results/README.md)、[Results views](../react/src/modules/results/README.md)                                                                                                                |
+| 图诊断与运行失败             | [Problems](../react/src/modules/problems/README.md)、[Output](../react/src/modules/output/README.md)                                                                                                                                               |
+| 工作台界面意图               | [UI contract](../crates/yss-ui-contract/README.md)                                                                                                                                                                           |
+| Harness / Assistant          | [Harness Core](../crates/yss-harness-core/README.md)                                                                                                                                                                         |
+| 运行观测和用户反馈           | [Observability](../react/src/features/application/observability/README.md)                                                                                                                                                                   |
+| 日志存储与呈现               | [Logging runtime](../crates/yss-logging/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md)                                                                                                                            |
+| 中立共享值 | [Shared contracts](../crates/yss-ipc-contract/README.md) |
+| 插件体系 | [Plugin runtime](../crates/yss-plugin-runtime/README.md)、[Plugin protocol](../crates/yss-plugin-protocol/README.md) |
 
 更多 Project、Database、SCI 与插件内部模块见[实现参考](reference/README.md)和[生成的模块索引](reference/MODULE_MAP.md)。
 
-项目文件类型、各类型处理器与菜单/侧栏的共同入口见 [File operations](../src/features/application/resource/README.md)。
+项目文件类型、各类型处理器与菜单/侧栏的共同入口见 [File operations](../react/src/features/application/resource/README.md)。
 
 ## 开发与交付
 
@@ -56,7 +56,7 @@ GPUI 原生宿主见 [GPUI host](../src-tauri/crates/yss-desktop-gpui/README.md)
 - [变更流程](development/CHANGE_PROCESS.md)：实现与自审要求。
 - [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：人工边界复核及独立文档契约。
 
-开发命令直接查阅[前端](../src/README.md)、[Rust workspace](../src-tauri/README.md)、[诊断生成器](../src-tauri/crates/yss-graph-diagnostics/README.md)和[示例数据](../src-tauri/resources/samples/README.md) README。插件构建与进程测试见 [Julia 插件](../plugins/julia/README.md)，源码测试的环境说明在 [worker README](../plugins/julia/runtime/julia/README.md)；schema 生成见 [Plugin protocol](../src-tauri/crates/yss-plugin-protocol/README.md)，索引生成见[实现参考](reference/README.md)。
+原生启动和 Cargo 验证见[根 README](../README.md)与 [GPUI host](../crates/yss-desktop-gpui/README.md)。生成索引见[实现参考](reference/README.md)，类型化插件 schema 由 [Plugin protocol](../crates/yss-plugin-protocol/README.md) 的 Rust 入口生成。`react/` 中的模块说明保留为参考契约，不构成原生功能的完成证据。
 
 ## 维护约定
 

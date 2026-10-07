@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Scope: 项目资源、图、节点、连接、数据库、思维导图、Markdown 文档、图表和运行结果的模型工具设计、实施顺序与验收
-> Canonical owners: 本文拥有计划；当前 Harness 契约由 [Harness Core](../../src-tauri/crates/yss-harness-core/README.md) 和各资源模块的源码、README 维护
+> Canonical owners: 本文拥有计划；当前 Harness 契约由 [Harness Core](../../crates/yss-harness-core/README.md) 和各资源模块的源码、README 维护
 > Update when: 工具边界、阶段范围、实施进度或验收条件改变时
 
 本文是目标方案与实施记录，工具目录不表示已经全部验收。P0–P5、P6 的图表工具及代表性任务测量已完成下文记录的聚焦验证，剩余工作为 P6 的 Assistant 人工界面验收，具体操作与通过标准见 14.4。后台测量与契约检查不能替代该验收。
@@ -43,13 +43,13 @@
 
 当前实现入口：
 
-- [Harness Core](../../src-tauri/crates/yss-harness-core/README.md)：会话、授权、能力执行、账本、结果和上下文。
-- [Project](../../src-tauri/crates/yss-project/README.md)：资源身份、生命周期与持久化。
-- [Graph application](../../src-tauri/crates/yss-application/src/graph/README.md)：图查询、编辑、保存和执行编排。
-- [Database application](../../src-tauri/crates/yss-application/src/database/README.md)：数据库数据、编辑、历史与保存。
-- [Project model](../../src-tauri/crates/yss-project-model/README.md)：Mind 和 Markdown 文档。
-- [Chart application](../../src-tauri/crates/yss-application/src/chart/README.md)：图表配置。
-- [Results application](../../src/features/application/results/README.md)：结果引用、生命周期与展示。
+- [Harness Core](../../crates/yss-harness-core/README.md)：会话、授权、能力执行、账本、结果和上下文。
+- [Project](../../crates/yss-project/README.md)：资源身份、生命周期与持久化。
+- [Graph application](../../crates/yss-application/src/graph/README.md)：图查询、编辑、保存和执行编排。
+- [Database application](../../crates/yss-application/src/database/README.md)：数据库数据、编辑、历史与保存。
+- [Project model](../../crates/yss-project-model/README.md)：Mind 和 Markdown 文档。
+- [Chart application](../../crates/yss-application/src/chart/README.md)：图表配置。
+- [Results application](../../react/src/features/application/results/README.md)：结果引用、生命周期与展示。
 
 ## 3. 模块职责、数据流和依赖
 
@@ -478,7 +478,7 @@ Chart 资源与图中的绘图节点分开。当前支持的图表类型和参�
 
 #### 2026-10-06 实测记录
 
-入口为根脚本 `pnpm measure:harness <configuration.json>`，配置、场景 Markdown、计数口径和合成数据生成方式见 [Application 测量说明](../../src-tauri/crates/yss-application/examples/measure_harness/README.md)。独立项目复用生产 Core/Rig/Application/SQLite 及配置的真实模型，不启动或操作桌面。数据为 5,000 行、6 列的合成回归数据；图包含 205 个节点、5 个 X Pin、9 条连接和一个有无关阻塞诊断的分支。使用配置模型 `deepseek-flash`（显示名 `DeepSeek-V4.1-Flash`），Write 模式，未覆盖 reasoning effort；统计为单次任务观察，不是模型性能排名或旧工具基线对照。
+入口为根脚本 `pnpm measure:harness <configuration.json>`，配置、场景 Markdown、计数口径和合成数据生成方式见 [Application 测量说明](../../crates/yss-application/examples/measure_harness/README.md)。独立项目复用生产 Core/Rig/Application/SQLite 及配置的真实模型，不启动或操作桌面。数据为 5,000 行、6 列的合成回归数据；图包含 205 个节点、5 个 X Pin、9 条连接和一个有无关阻塞诊断的分支。使用配置模型 `deepseek-flash`（显示名 `DeepSeek-V4.1-Flash`），Write 模式，未覆盖 reasoning effort；统计为单次任务观察，不是模型性能排名或旧工具基线对照。
 
 下表调用数、返回体积、重复读取和重试来自模型执行器边界，排除 Core 自动补齐的基线读取；另列原业务账本调用数。返回体积为公开成功/失败投影，排除供应商信封与控制工具结果。同参重试只比较可解码的业务参数；畸形原始参数不保留，无法推断其重复次数。
 
@@ -524,7 +524,7 @@ Chart 资源与图中的绘图节点分开。当前支持的图表类型和参�
 
 ### 14.4 Assistant 人工界面验收
 
-以下各项均待验收；用户已要求暂不操作桌面。恢复桌面操作后，在独立测试项目和新对话中通过真实 Harness 调用执行，不改写 14.2 留存的测量样本。当前显示契约归 [Harness Core](../../src-tauri/crates/yss-harness-core/README.md)；这里仅记录本轮尚待确认的界面行为。
+以下各项均待验收；用户已要求暂不操作桌面。恢复桌面操作后，在独立测试项目和新对话中通过真实 Harness 调用执行，不改写 14.2 留存的测量样本。当前显示契约归 [Harness Core](../../crates/yss-harness-core/README.md)；这里仅记录本轮尚待确认的界面行为。
 
 | 场景               | 操作                                                                                                   | 通过标准                                                                                                                         |
 | ------------------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |

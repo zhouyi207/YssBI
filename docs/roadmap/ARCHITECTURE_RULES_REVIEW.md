@@ -5,8 +5,8 @@
 > Canonical owners: 源码和模块 README 拥有当前实现；本文记录本次复核进度，基准源码和原始输出拥有测量事实
 > Update when: 本次复核结论、用户验收或明确跳过的测量范围需要更正时
 
-目标是让当前项目全部模块符合 [前端规则](../../src/.rules) 和
-[Rust 组织规则](../../src-tauri/crates/.rules)，可通用的职责、分层和所有权要求同时用于两端。
+目标是让当前项目全部模块符合 [前端规则](../../react/src/.rules) 和
+[Rust 组织规则](../../crates/.rules)，可通用的职责、分层和所有权要求同时用于两端。
 规则本身允许的局部状态、框架状态及边界拷贝不算例外；确需偏离默认方案时，必须在本文提供
 同语义 benchmark、行为验证和保留理由。**项目管理及七组功能人工验收已由用户确认通过；
 用户明确要求本轮跳过画布 Performance 录制及量化分析，按用户确认的验收范围完成本轮复核。**
@@ -63,16 +63,16 @@
 | Graph 当前结果     | 当前 Pin 与搜索使用图摘要和查询缓存的只读投影；失效绑定立即隐藏，报告租约保留；接纳、读取及清理共用有效性判断与输出索引       | 两个纯应用回归先失败再通过；25 份结果、图、执行、项目发布和生命周期测试共 106 个用例通过                     |
 | Graph 与资源发布   | 图会话、实体和结果摘要并入 ResourceStore；回执、项目快照、卸载及重置与资源标记同步发布；删除独立 Graph Store                  | 两个纯应用回归先失败再通过；59 份受影响消费者测试共 271 个用例通过；现有解析/安装与批量发布基准已复跑        |
 
-当前契约分别见 [Features](../../src/features/README.md)、
-[文件操作](../../src/features/application/resource/README.md)、[Logs](../../src/modules/logs/README.md)、
-[Harness](../../src-tauri/crates/yss-harness-core/README.md)、
-[Plugin runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)、
-[Graph Analysis](../../src-tauri/crates/yss-graph-analysis/README.md) 和
-[Graph Execution](../../src-tauri/crates/yss-graph-execution/README.md)、
-[文件事务](../../src-tauri/crates/yss-filesystem/README.md)、
-[Results 查询](../../src/features/application/results/README.md)、
-[Application 会话](../../src-tauri/crates/yss-application/README.md#应用会话)及
-[数据库用例](../../src-tauri/crates/yss-application/src/database/README.md)。
+当前契约分别见 [Features](../../react/src/features/README.md)、
+[文件操作](../../react/src/features/application/resource/README.md)、[Logs](../../react/src/modules/logs/README.md)、
+[Harness](../../crates/yss-harness-core/README.md)、
+[Plugin runtime](../../crates/yss-plugin-runtime/README.md)、
+[Graph Analysis](../../crates/yss-graph-analysis/README.md) 和
+[Graph Execution](../../crates/yss-graph-execution/README.md)、
+[文件事务](../../crates/yss-filesystem/README.md)、
+[Results 查询](../../react/src/features/application/results/README.md)、
+[Application 会话](../../crates/yss-application/README.md#应用会话)及
+[数据库用例](../../crates/yss-application/src/database/README.md)。
 
 Execution 的问题有实际行为差异：原先通知回调 unwind 后保留取消对象，
 `cancel_and_drain` 不发送取消，Finalizing 期间的取消请求也无法触达原控制对象。
@@ -206,7 +206,7 @@ Node v24.19.0、Vitest v4.1.10。共享开发环境未隔离其他进程；这�
 pnpm bench:project:publication --outputJson docs/benchmark/probes/project-snapshot-results.json
 ```
 
-[基准源码](../../src/tests/benchmarks/projectSnapshot.bench.ts)使用 100、1,000、5,000 个已加载图表，
+[基准源码](../../react/src/tests/benchmarks/projectSnapshot.bench.ts)使用 100、1,000、5,000 个已加载图表，
 包含资源元数据、文档状态及图表配置。输入在计时外建立并冻结；每例预热 100 ms，
 正式测量至少 500 ms 且至少 20 次。两组调用同一个生产候选构建函数，对照组只多做一次
 `structuredClone(current)`。它测量**已有状态额外深拷贝的成本**，不等同于历史实现整体前后对比。
@@ -1133,7 +1133,7 @@ console 抑制工具。各层直接调用同一个 logger，旧两套实现删�
 `frontendLogTransport` 在既有启动入口绑定单一发送回调并创建原 batcher；重复安装复用同一
 清理函数，释放/HMR 同时解除两个入口并丢弃未发送队列，旧清理按回调身份和安装身份拒绝干扰
 新安装。传输失败继续独立于业务结果。未安装时保留 console，不另加早期记录缓冲或事件总线。
-当前契约同步更新在 [Observability README](../../src/features/application/observability/README.md)。
+当前契约同步更新在 [Observability README](../../react/src/features/application/observability/README.md)。
 
 受影响消费者验证还发现数据库删除的旧夹具不完整：测试要求保留 `other` 选择，返回的完整索引
 却不包含该数据库。单独运行仍失败；补齐删除前后实际存在的资源和修订后，保留原断言。
@@ -1167,9 +1167,9 @@ Project 激活前的锁外重验与开始替换之间也存在同样的时间窗
 
 新增回归在修复后确认迟到刷新失败、新会话仍是原 Arc，且 Execution 与 Database 仍可接收任务。
 刷新失败不撤销已提交的存储结果；持久化提交与恢复继续由 Database 原协议拥有。
-当前契约已同步到 [Application 会话](../../src-tauri/crates/yss-application/README.md)、
-[Database 用例](../../src-tauri/crates/yss-application/src/database/README.md)和
-[Project 生命周期](../../src-tauri/crates/yss-application/src/project/README.md)。
+当前契约已同步到 [Application 会话](../../crates/yss-application/README.md)、
+[Database 用例](../../crates/yss-application/src/database/README.md)和
+[Project 生命周期](../../crates/yss-application/src/project/README.md)。
 
 | 验证                                                                                                                                          | 当前结果                                                                                      |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -1193,7 +1193,7 @@ Project 激活前的锁外重验与开始替换之间也存在同样的时间窗
 先实际失败：Project 已发布而当前 runtime 尚未绑定的声明被作为正常查询返回；数据库删除在
 publication 版本耗尽后返回错误，却已经移除了声明。
 
-本批由既有 Project database authority 的 [read.rs](../../src-tauri/crates/yss-project/src/database_authority/read.rs)
+本批由既有 Project database authority 的 [read.rs](../../crates/yss-project/src/database_authority/read.rs)
 提供只含声明所需事实的快照。项目实例、项目会话、根目录、authority generation、声明及其
 revision/fingerprint observations 在同一 publication 锁内读取；返回前或候选构造结束前按
 捕获依据重验。缺失修订直接拒绝。该快照是只读结果，不新增版本计数器、缓存或可写权威。
@@ -1208,9 +1208,9 @@ Application 列表查询与会话工厂共用该 Project 入口。工厂不再�
 PluginHostServices 每次调用只捕获一个 Application session，该捕获同时用于上下文身份校验和
 实际读取。`data.list` 调用共享的捕获会话查询，消除“检查一次会话，再重新捕获另一个会话”的窗口；
 Arrow 快照与结果提交继续执行既有最终重验。既有插件用例补充了正常列表及项目关闭后的旧上下文拒绝。
-当前契约同步在 [Project](../../src-tauri/crates/yss-project/README.md)、
-[Application](../../src-tauri/crates/yss-application/README.md)和
-[Project 用例](../../src-tauri/crates/yss-application/src/project/README.md)。
+当前契约同步在 [Project](../../crates/yss-project/README.md)、
+[Application](../../crates/yss-application/README.md)和
+[Project 用例](../../crates/yss-application/src/project/README.md)。
 
 | 验证                                                                                                                                          | 当前结果                                                                                          |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -1242,9 +1242,9 @@ Runtime 的 `DatabasePageSnapshot::into_parts` 移交已有表数据与行 ID，
 Contract 的 `DatabaseDeclarationObservationSet::get` 直接暴露已有索引的借用查询，准备、
 提交、补偿与 Application 修改入口共同使用，删除旧线性查找 helper。没有新增缓存、索引、
 版本计数器、锁或可写事实源。行数限制、错误映射及原提交/恢复协议继续由原 owner 拥有。
-当前契约同步到 [Project](../../src-tauri/crates/yss-project/README.md)、
-[Application Database](../../src-tauri/crates/yss-application/src/database/README.md)和
-[Database Runtime](../../src-tauri/crates/yss-database-runtime/README.md)。
+当前契约同步到 [Project](../../crates/yss-project/README.md)、
+[Application Database](../../crates/yss-application/src/database/README.md)和
+[Database Runtime](../../crates/yss-database-runtime/README.md)。
 
 本批新增两个非 UI 回归：同一数据库 ID 在项目重新激活后，旧项目身份不能读到新声明；
 查询取得数据之后若原 Application 会话被替换，不能返回旧结果或继续用旧捕获发起读取，
@@ -1294,7 +1294,7 @@ patch、未使用的 `updateDataFrame` 和导入回执的第二套声明构造�
 首次修复后的聚焦验证进一步揭示旧缺失资源规则把数据库 `loaded` 当作文档缓冲，删除后留下
 资源条目。该保留规则现仅适用于文件文档；数据库从权威索引消失时，声明和资源在同一次发布中
 移除。已有文件缺失、dirty、stale 和冲突行为的回归仍通过。当前契约已同步到
-[Features README](../../src/features/README.md)。
+[Features README](../../react/src/features/README.md)。
 
 新增两个非 UI 用例分别覆盖发布可见性，以及元数据写入范围、同值通知、引用共享与原子清空。
 已有声明候选测试补充首次加载时索引名称与 revision 的接纳；现有 UI 测试只迁移 owner、夹具和
@@ -1324,7 +1324,7 @@ Chart 与 Details、侧栏、日志及文档契约。本批没有修改 Rust 或
 初始载入等待元数据后重新分配分页序号，可能取得本应属于较新请求的所有权。
 
 本批把有副作用的读取从声明转换文件移到
-[databaseRead.ts](../../src/features/application/dataManagement/databaseRead.ts)，`databaseRecords` 仅保留纯数据转换。
+[databaseRead.ts](../../react/src/features/application/dataManagement/databaseRead.ts)，`databaseRecords` 仅保留纯数据转换。
 读取依据捕获原项目身份与现有资源 revision，查询前和接纳前检查资源存在性、revision 和调用方有效性；
 同项目已发布的版本变化、删除、项目切换或取消均拒绝旧结果。没有新版本计数器、索引、缓存或可写状态。
 分页范围统一按当前已知行数约束，表数据与 row ID 继续共享服务返回的数组。
@@ -1337,7 +1337,7 @@ Chart 与 Details、侧栏、日志及文档契约。本批没有修改 Rust 或
 
 编辑器按资源 revision 重新载入第一页并清理选择，不再在渲染中序列化列 schema 作为刷新指纹；
 补全元数据本身不再触发另一次初始载入。Details 调用新读取入口，保留已有组件取消标记。
-当前契约同步在 [Features README](../../src/features/README.md)。
+当前契约同步在 [Features README](../../react/src/features/README.md)。
 
 本批新增两个非 UI 用例，分别验证迟到元数据拒绝、迟到分页拒绝及失效读取不能重启，后者同时确认
 新读取仍有效、页码受边界约束且数组不复制。现有编辑器/详情用例仅补齐真实资源 revision、迁移入口及
@@ -7623,11 +7623,11 @@ git -c core.safecrlf=false diff --check
 | 9. 目录表达职责      | SCI/Runtime/Contract 按领域组织；Kernel statistics/common 仅承担输入、模型、表格、有限值及错误适配，README 明确边界                         |
 | 10. 修改与旧路径清理 | SCI/Runtime 共用输入违反类型；重复计算在原 owner 删除，行为变化沿已有 Kernel revision 注册，最新 IV Summary 8、Hausman 5                    |
 
-相关当前契约见 [Graph Analysis](../../src-tauri/crates/yss-graph-analysis/README.md)、
-[Graph Execution](../../src-tauri/crates/yss-graph-execution/README.md)、
-[Kernel](../../src-tauri/crates/yss-node-kernel/README.md)、[SCI](../../src-tauri/crates/yss-sci/README.md)、
-[SCI Runtime](../../src-tauri/crates/yss-sci-runtime/README.md)和
-[Harness](../../src-tauri/crates/yss-harness-core/README.md)。
+相关当前契约见 [Graph Analysis](../../crates/yss-graph-analysis/README.md)、
+[Graph Execution](../../crates/yss-graph-execution/README.md)、
+[Kernel](../../crates/yss-node-kernel/README.md)、[SCI](../../crates/yss-sci/README.md)、
+[SCI Runtime](../../crates/yss-sci-runtime/README.md)和
+[Harness](../../crates/yss-harness-core/README.md)。
 EventWriter 的串行 append→publish 是顺序契约，不重新标成死锁待办。
 历史候选中的 Meta、对比检验、HAC、ADF、White/IM、IV 按后续批次核销；
 Panel null likelihood、非平衡 TWFE、任意溢出及一般精度探索尚无已证架构违规，不据此追加无界数值矩阵。
@@ -7643,13 +7643,13 @@ Panel null likelihood、非平衡 TWFE、任意溢出及一般精度探索尚无
 
 | 验收组                 | 受影响的实际流程                                                                                                                                        | 当前入口                                                                                                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 画布与高频绘制         | Graph 平移/缩放、单多节点拖动与连接反馈；Escape、隐藏/保存中断、松键一次提交；Mind 树布局/测量/选择；分屏浮窗交互（绘制量化按用户要求跳过）             | [Graph Editor](../../src/modules/graph-editor/README.md)、[Document Editor](../../src/modules/document-editor/README.md)、[Workbench](../../src/modules/workbench/README.md) |
-| 工作台、窗口与设置     | 拖动/分屏/停靠/折叠/恢复和面板状态保留；dirty 关闭取消、确认期间换项目、同路径图重开；独立窗口恢复、主题/语言与确认焦点                                 | [Workbench](../../src/modules/workbench/README.md)、[Features](../../src/features/README.md)                                                                                 |
-| 资源编辑与目标身份     | 创建/重命名/删除弹窗关闭重开及换项目；Graph/Mind/Doc/Chart 保存/放弃；Details 切换、删除回退及草稿保留；目录搜索/拖入、菜单快捷键、Problems/Output 定位 | [资源操作](../../src/features/application/resource/README.md)、[Features](../../src/features/README.md)                                                                      |
-| 导入、表格、图表与结果 | 导入选择/取消；分页、拖选、复制、全选及失焦；切换后的迟到响应；结果报告切换/补选、快速关闭及独立窗口租约；PDF/外链打开                                  | [Results](../../src/modules/results/README.md)、[结果应用层](../../src/features/application/results/README.md)及覆盖表对应呈现入口                                           |
-| Logs 持续呈现          | 持续追加、领域切换/分屏、筛选、Details、自动滚动、主/独立窗口及恢复/终止状态反馈                                                                        | [Logs](../../src/modules/logs/README.md)                                                                                                                                     |
+| 画布与高频绘制         | Graph 平移/缩放、单多节点拖动与连接反馈；Escape、隐藏/保存中断、松键一次提交；Mind 树布局/测量/选择；分屏浮窗交互（绘制量化按用户要求跳过）             | [Graph Editor](../../react/src/modules/graph-editor/README.md)、[Document Editor](../../react/src/modules/document-editor/README.md)、[Workbench](../../react/src/modules/workbench/README.md) |
+| 工作台、窗口与设置     | 拖动/分屏/停靠/折叠/恢复和面板状态保留；dirty 关闭取消、确认期间换项目、同路径图重开；独立窗口恢复、主题/语言与确认焦点                                 | [Workbench](../../react/src/modules/workbench/README.md)、[Features](../../react/src/features/README.md)                                                                                 |
+| 资源编辑与目标身份     | 创建/重命名/删除弹窗关闭重开及换项目；Graph/Mind/Doc/Chart 保存/放弃；Details 切换、删除回退及草稿保留；目录搜索/拖入、菜单快捷键、Problems/Output 定位 | [资源操作](../../react/src/features/application/resource/README.md)、[Features](../../react/src/features/README.md)                                                                      |
+| 导入、表格、图表与结果 | 导入选择/取消；分页、拖选、复制、全选及失焦；切换后的迟到响应；结果报告切换/补选、快速关闭及独立窗口租约；PDF/外链打开                                  | [Results](../../react/src/modules/results/README.md)、[结果应用层](../../react/src/features/application/results/README.md)及覆盖表对应呈现入口                                           |
+| Logs 持续呈现          | 持续追加、领域切换/分屏、筛选、Details、自动滚动、主/独立窗口及恢复/终止状态反馈                                                                        | [Logs](../../react/src/modules/logs/README.md)                                                                                                                                     |
 | Assistant 流式会话     | 真实流式回复及工具/链接呈现，期间切换会话、关闭重开或失败恢复；HMR 后旧订阅不再续写                                                                     | 既有 assistantHarnessRuntime、assistantHarnessSession 与 AssistantThread 入口                                                                                                |
-| 插件页面与任务交互     | UI 安装/维护/卸载后的列表和面板；iframe 重载/关闭重开的 MessagePort 撤销；运行中取消与后继状态；公式展示及 Exponential 中英文 Rate 标签                 | [Julia 插件](../../plugins/julia/README.md)、PluginViewFrame 与 PluginsPanel 入口                                                                                            |
+| 插件页面与任务交互     | UI 安装/维护/卸载后的列表和面板；iframe 重载/关闭重开的 MessagePort 撤销；运行中取消与后继状态；公式展示及 Exponential 中英文 Rate 标签                 | [Julia 插件](../../crates/yss-plugin-runtime/README.md)、PluginViewFrame 与 PluginsPanel 入口                                                                                            |
 
 前几组直接覆盖面板暂态、窄订阅、一次发布、身份准入和高频绘制，其他组验证这些规则在已修改消费者上的呈现。
 Logs 已有积压/存储失败回归，不要求手工制造全部磁盘故障；Assistant 验证实际会话归属，

@@ -6,8 +6,6 @@ rust-version.workspace = true
 publish = false
 
 [features]
-default = ["tauri-host"]
-tauri-host = ["dep:tauri", "dep:yss-ipc-event", "dep:yss-ipc-channel"]
 test-support = [
   "yss-graph-execution/test-support",
   "yss-graph-runtime/test-support",
@@ -20,10 +18,7 @@ test-support = [
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-node-kernel = { path = "../yss-node-kernel" }
 yss-ipc-contract = { path = "../yss-ipc-contract" }
-yss-ipc-event = { path = "../yss-ipc-event", optional = true }
-yss-ipc-channel = { path = "../yss-ipc-channel", optional = true }
 tokio = { workspace = true, features = ["sync", "time"] }
-tauri = { workspace = true, optional = true }
 yss-harness-sqlite = { path = "../yss-harness-sqlite" }
 yss-harness-tantivy = { path = "../yss-harness-tantivy" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }

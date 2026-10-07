@@ -60,6 +60,8 @@ impl Panel for MissingPanel {
             "先前的结果".to_owned()
         } else if let gpui_component::dock::PanelInfo::Panel(info) = &self.state.info {
             info.get("graphPath")
+                .or_else(|| info.get("documentPath"))
+                .or_else(|| info.get("mindPath"))
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("资源暂不可用")
                 .to_owned()

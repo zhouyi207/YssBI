@@ -164,6 +164,8 @@ impl GraphCanvas {
             self.error = Some("无法更新图状态，请重新打开图。".into());
             return;
         }
+        *self.connection_layer.borrow_mut() =
+            super::connections::ConnectionLayer::new(&self.graph.projection);
         self.selected.retain(|id| {
             self.graph
                 .projection
@@ -241,6 +243,8 @@ impl GraphCanvas {
         cx: &mut Context<Self>,
     ) {
         self.graph.replace(graph);
+        *self.connection_layer.borrow_mut() =
+            super::connections::ConnectionLayer::new(&self.graph.projection);
         self.cancel_gesture();
         self.selected.retain(|id| {
             self.graph

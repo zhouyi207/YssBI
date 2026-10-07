@@ -5,7 +5,7 @@
 > Canonical owners: 本文维护覆盖矩阵与进度；当前 Graph、Presentation、Harness、Project 和 IPC 文档拥有稳定契约
 > Update when: 操作覆盖、同步协议、界面意图或验收状态改变时
 
-React 和 Harness 都是 Application 能力的客户端。业务状态继续归既有领域；Rust 管理打开/聚焦意图，FlexLayout 继续作为工作台物理布局的唯一权威。当前界面意图实现见 [Presentation](../../src-tauri/crates/yss-ui-contract/README.md)。
+React 和 Harness 都是 Application 能力的客户端。业务状态继续归既有领域；Rust 管理打开/聚焦意图，FlexLayout 继续作为工作台物理布局的唯一权威。当前界面意图实现见 [Presentation](../../crates/yss-ui-contract/README.md)。
 
 ## 当前覆盖
 
@@ -37,6 +37,6 @@ Graph 的 GUI 显式 Save 与 Harness 原子保存编辑批次继续保持既定
 - [ ] 在有需求时增加界面意图取消、更多资源打开方式或多工作台目标；超时只表示没有完成证据，不宣称已取消正在执行的界面操作。
 - [ ] CLI / MCP 后续客户端按 [Harness 路线图](STATISTICAL_HARNESS.md) 接入，不从当前内部工具存在推导生产 MCP 已完成。
 
-业务协议、报告查询、Graph 编辑和 Graph 投影保持独立。报告验收见 [Results views](../../src/modules/results/README.md#剩余人工验收)。
+业务协议、报告查询、Graph 编辑和 Graph 投影保持独立。报告验收见 [Results views](../../react/src/modules/results/README.md#剩余人工验收)。
 
 [返回专项计划](README.md)

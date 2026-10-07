@@ -77,7 +77,8 @@ Failure details reuse the Contract's public failure projection, retaining schema
 expectations while excluding internal version fields. Raw request payloads, credentials,
 rows and document bodies are excluded. This projection does not alter model messages or stored receipts.
 
-The complete wire and delivery contract is maintained in [Desktop IPC](../yss-application/src/ipc/README.md).
+GPUI consumes the shared values directly through [Application](../yss-application/README.md);
+subscription tasks and UI delivery belong to the [native host](../yss-desktop-gpui/README.md).
 
 Harness model configuration uses the provider-neutral model contracts from `yss-harness-contract`.
 `SaveHarnessProviderRequestDto.apiKey` is input-only: null retains the saved key, empty text clears it,

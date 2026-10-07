@@ -1,18 +1,18 @@
 # Statistical Harness 当前架构
 
 > Status: Current
-> Scope: 当前生产 Harness、typed capability gateway、persistence、Rig、Tauri channel 和 Assistant projection
-> Canonical owners: Harness/Application/API/Frontend 源码与测试拥有可执行事实；本文拥有当前跨模块 contract
+> Scope: 当前 Harness、typed capability gateway、persistence、Rig、原生事件交付与保留的 Assistant 参考
+> Canonical owners: Harness/Application/GPUI 源码与测试拥有可执行事实；本文拥有当前跨模块 contract
 > Update when: Harness authority、已注册 capabilities、持久化、事件流或生产接入状态改变时
 
-Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime。它不是一个 frontend chat store，也不把 Tauri commands 或 MCP 当作内部业务总线。设计理由见 [Decision 0001](../../../docs/decisions/0001-statistical-harness.md)，未完成能力见 [Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
+Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime。会话与工具流程归 Rust，通过类型化 Application 端口调用业务 owner。设计理由见 [Decision 0001](../../docs/decisions/0001-statistical-harness.md)，未完成能力见 [Harness roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md)。
 
-## 1. Current production path
+## 1. Current runtime path
 
 ```text
-Assistant UI
-    ↓ strict frontend Harness contract
-yss-application::ipc commands + yss-ipc-channel ordered/replayable delivery
+GPUI NativeServices
+    ↓ ApplicationServices / typed Harness calls
+yss-application::harness + host-owned HarnessEventSinkPort
     ↓
 yss-harness-core
     ├─ session / turn
@@ -29,7 +29,7 @@ yss-harness-core
     └─ persistence ports → yss-harness-sqlite
 ```
 
-`yss-application::runtime` 接收 Tauri app 并拥有桌面初始化；其中 `runtime/harness.rs` 构造 SQLite store、Application 模型配置服务、时钟和 ID 实现。Application 直接构造内部 `ipc::CommandRuntime`，提供 capability gateway 和 `HarnessChannelHub` 的中立端口，再组成已有 `HarnessPorts`。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。Application 安装业务服务后直接安装 IPC 上下文，Host/models 与订阅方共享同一组 Channel hubs。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
+`yss-application::runtime` 接收平台中立的 ApplicationPaths 与端口组装回调；其中 `runtime/harness.rs` 构造 SQLite store、模型配置服务、时钟和 ID 实现。GPUI 宿主组装 BlockingHarnessGateway 与 HarnessEventSinkPort，再交给已有 HarnessPorts。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。原生宿主将已持久化事件投递到有界 NativeEvent 流；持久序列及重放仍归 Harness。共享序列化值归 `yss-ipc-contract`。Harness Core 不依赖 GPUI、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。原生 Assistant 基本界面已接入上述类型化边界；布局、草稿持久化及完整验收仍在迁移中，React 实现保留在 `react/` 作为参考。
 
 ## Manager–Worker roles and task lifecycle
 
@@ -106,7 +106,7 @@ Manager/Worker 的模型循环持续到模型完成、用户取消或真实执�
 取消向所有已准入 Worker 传播并等待业务操作收尾。启动恢复将未结束的 runs 记为
 interrupted，保留已经提交的工具证据，不自动重做可能已提交的操作。前端从相同事件流恢复
 任务卡片和运行状态，统计计划继续复用现有展示。真实模型与桌面人工验收见
-[Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
+[Harness roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md)。
 
 `followup_task(runId, instruction)` resumes the same durable run ID, including across user turns and after restart. Core rebuilds scope from the original grant and successful receipts, restores the latest context checkpoint plus subsequent history, and binds any fresh Manager observations only to resources already in that scope. It never adds resources or operations. Without a fresh Manager observation, each granted resource must match the worker's current-project read or commit receipt; older session records do not invalidate a later verified receipt. Another project rebind requires current reads again before that baseline can be reused. Dependencies and input versions are rechecked under the existing execution gate. Unknown commit outcomes block continuation until reconciled; committed graph edits retain their owner-level idempotency. Startup recovery closes unfinished resumed runs as interrupted and never automatically repeats their writes.
 
@@ -454,7 +454,7 @@ SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护�
 
 Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 写入；Application 持门重验其捕获的项目，门本身不保存当前绑定。普通 session 创建和首次消息的标题写回也使用同一门；submit 在门内读取 session 并核对调用方捕获的项目绑定，失效则返回既有 `SessionNotActive`。会话读取、turn 准入和标题写入后释放门，再创建 turn 和执行模型，因此项目切换仍可取消正在执行的 turn。
 
-对话及其完整事件/工具账本继续保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。左侧 Assistant 只查询、搜索、新建和重命名当前用户及项目的对话，显示最近打开时间；打开列表不隐式创建或订阅会话。点击条目在 sidebar 右侧、top 工作区左侧的 AI 专用分组打开对应会话面板，该组不显示顶部标签栏，选择和切换由左侧列表驱动，再次点击当前可见条目关闭对应面板。各面板拥有独立的事件投影和 runtime，重新连接始终恢复该面板的明确 `sessionId`。重命名通过 Rust Session owner 更新标题，并与运行准入互斥。执行期间可以切换查看其他会话，关闭面板或切换侧栏不取消后台任务；旧订阅和迟到回调不能混入其他对话。普通草稿、尚未确认提交的原文和待发送消息按会话保存在本地输入存储中，不充当已提交聊天历史。布局与面板开关由 [Workbench](../../../src/modules/workbench/README.md) 拥有。
+对话及其完整事件/工具账本继续保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。左侧 Assistant 只查询、搜索、新建和重命名当前用户及项目的对话，显示最近打开时间；打开列表不隐式创建或订阅会话。点击条目在 sidebar 右侧、top 工作区左侧的 AI 专用分组打开对应会话面板，该组不显示顶部标签栏，选择和切换由左侧列表驱动，再次点击当前可见条目关闭对应面板。各面板拥有独立的事件投影和 runtime，重新连接始终恢复该面板的明确 `sessionId`。重命名通过 Rust Session owner 更新标题，并与运行准入互斥。执行期间可以切换查看其他会话，关闭面板或切换侧栏不取消后台任务；旧订阅和迟到回调不能混入其他对话。普通草稿、尚未确认提交的原文和待发送消息按会话保存在本地输入存储中，不充当已提交聊天历史。原生布局与面板开关由 [GPUI Workbench](../yss-desktop-gpui/README.md) 拥有；上述独立无标签分组和跨重启输入保留仍是 [React 参考](../../react/src/modules/workbench/README.md) 中待补齐的交互。
 
 重新打开项目时，Application 通过既有 RootBinding 获取项目根目录身份，验证对话归属后重新绑定当前运行期 ProjectSessionBinding；历史 receipt 保持原始身份，不恢复旧授权或执行结果。订阅和发送均验证当前项目归属和运行绑定。无已保存项目时使用仅当前激活有效的临时归属。无持久项目归属的记录保持原状，不自动猜测或迁移到某个项目。
 
@@ -597,11 +597,17 @@ Rig 0.43 hooks implement the delivery check at the tool-free model completion bo
 Transport recovery retries only the latest sampling boundary, at most five consecutive attempts without an accepted model call. Cancellable exponential backoff respects numeric Retry-After seconds; 402, authentication failures, output truncation and content filtering are not retried. A 300-second idle detector runs only while waiting for model traffic, not during tools. TextRetracted removes an interrupted attempt from live/replayed text before reconnecting; earlier tool receipts and model-call context are retained. No model-call quota or whole-worker deadline is imposed.
 `providerConfigured` 由当前模型目录、会话选择、认证方式与凭据存在状态派生；它不代表网络可达或认证成功。认证、限流、请求拒绝、服务不可用、连接与协议错误继续使用稳定错误码。
 
-## 9. Tauri transport and frontend projection
+## 9. Native host boundary and retained frontend reference
 
-`yss-application::ipc` 提供 provider configuration、项目范围的 session 管理与重命名、event subscribe/unsubscribe、turn submit/cancel，以及只读工具详情和引用来源查询。工具详情读取已有 ledger 或控制调用事件，投影目标、操作摘要、资源与结果引用、开始/结束时间，以及 nullable `failure`（code、details）。失败详情复用 Contract 的公开错误投影；React 显示字段位置、类型要求和已知错误类别，不发送原始完整参数、数据行或文档正文。引用查询匹配来源、版本、hash、chunk 与项目可见性；来源删除或版本改变后返回不可用。模型配置回执返回不含密钥的目录，模型选择回执返回更新后的会话。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准。
+原生宿主直接调用 Application 的 HarnessHost、LanguageModelService 和知识服务。它负责订阅已提交事件、按持久序列补齐缺口、释放订阅和本地化类型化错误；会话、轮次与工具状态继续由 Harness 持有。工具详情读取已有 ledger 或控制调用事件，引用查询匹配来源、版本、hash、chunk 与项目可见性；来源删除或版本改变后返回不可用。模型目录不包含密钥。
 
-有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。
+原生供应商/模型设置已在 [GPUI settings](../yss-desktop-gpui/README.md) 接入 LanguageModelService：
+配置草稿、遮蔽密钥输入、模型发现、默认模型和保存全部均留在宿主边界，当前配置与凭据 owner 未变化。
+原生会话目录、消息/工具/任务/引用投影与模型目录失效交付已接入；独立会话分组、草稿持久化、完整卡片、项目知识库及外观偏好仍需继续迁移与人工验收。
+
+以下 Assistant 投影和样式说明记录 `react/` 中保留的参考实现，不表示原生 Assistant 已完成迁移。旧 Tauri 命令、Channel hubs 与 IPC 注册表已移除，原生界面应使用上面的类型化服务和事件边界。
+
+参考前端的 `src/services/assistant/harnessService.ts` 曾负责有序事件交付，`harnessContract.ts` 负责严格解析。
 前端 `src/features/application/assistant/assistantHarnessSession.ts` 协调会话、模型选择与重连；历史回放先归约到未发布候选，在订阅接通后通过内部
 Zustand store 一次发布完整回放投影。实时事件继续顺序接纳。`assistantHarnessProjection.ts` 归约消息、工具、引用和计划；
 消息内容是呈现事实的唯一来源，不另外保留按 turn 索引的可写工具、引用或计划副本。
@@ -673,11 +679,11 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 
 ## 10. MCP status
 
-当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md)。
+当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md)。
 
 ## 11. Error, safety, and observability
 
-- Core、Gateway 和 adapters 使用 typed failures；Tauri seam 再映射为 stable error wire；
+- Core、Gateway 和 adapters 使用 typed failures；宿主按稳定 code 本地化，序列化值保留共享错误契约；
 - prompt、transcript、Memory、tool request/result、数据行、SQL、credential 和 model output 不写入 logging/diagnostics；
 - Assistant text 只进入 Harness event stream，不进入 Graph 执行事件或 Output 失败摘要；
 - capability result 和 knowledge hit 保留各自 size/depth 契约，模型最终回复没有额外字节配额；
@@ -685,7 +691,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - Rig 区分供应商输出截断、响应流中断、内容过滤、HTTP 402、认证、限流与协议格式错误。仅记录安全错误码、HTTP 状态、JSON 错误类别与位置；模型调用记录序号、归一化结束原因和供应商报告的 token 用量，不记录原始异常、响应正文、供应商任意 reason 文本或工具参数。截断与缺少终态的流不能成为成功回复；已完成工具的真实回执继续保留；
 - operational ledger 是 durable业务记录，不等同于 lossy diagnostics log。
 
-通用 transport contract 见 [`yss-application::ipc` README](../yss-application/src/ipc/README.md)，技术信号边界见 [Runtime Signals](../../../src/features/application/observability/README.md)。
+原生服务入口见 [Application README](../yss-application/README.md)，原生通知与日志边界见 [GPUI host](../yss-desktop-gpui/README.md)。
 
 ## 12. Current limits
 
@@ -698,9 +704,9 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - remote Skill install/signing；
 - Worker 递归委派、后台自主执行或重启后自动续跑子 Agent。
 
-这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../../../docs/roadmap/STATISTICAL_HARNESS.md) 维护。
+这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md) 维护。
 
-图工具直接通过 Application 操作 Project 当前驻留文档，不经过 Webview prepare/claim/adopt 握手。图活动 Channel 负责 UI 通知及执行事件，编辑数据和历史不依赖客户端存活。图编辑 snapshot/delta 和保存语义见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
+图工具直接通过 Application 操作 Project 当前驻留文档。图活动流负责 UI 通知及执行事件，编辑数据和历史不依赖客户端存活。图编辑 snapshot/delta 和保存语义见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
 
 ## 相关模块
 

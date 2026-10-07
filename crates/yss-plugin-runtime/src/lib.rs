@@ -9,6 +9,7 @@ mod storage;
 mod tasks;
 pub use activation::PluginLease;
 use activation::ProcessStart;
+pub use package::current_target;
 use process::PluginProcess;
 use serde::{Deserialize, Serialize};
 use std::{

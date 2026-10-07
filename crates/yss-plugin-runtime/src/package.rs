@@ -12,14 +12,17 @@ use yss_plugin_protocol::{
     PluginFailure, PluginManifest, valid_relative_path,
 };
 
-pub fn current_target() -> &'static str {
-    #[cfg(all(windows, target_arch = "x86_64"))]
-    {
-        "x86_64-pc-windows-msvc"
-    }
-    #[cfg(not(all(windows, target_arch = "x86_64")))]
-    {
-        "unsupported"
+pub fn current_target() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") if cfg!(target_env = "msvc") => Some("x86_64-pc-windows-msvc"),
+        ("windows", "aarch64") if cfg!(target_env = "msvc") => Some("aarch64-pc-windows-msvc"),
+        ("linux", "x86_64") if cfg!(target_env = "gnu") => Some("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64") if cfg!(target_env = "gnu") => Some("aarch64-unknown-linux-gnu"),
+        ("linux", "x86_64") if cfg!(target_env = "musl") => Some("x86_64-unknown-linux-musl"),
+        ("linux", "aarch64") if cfg!(target_env = "musl") => Some("aarch64-unknown-linux-musl"),
+        ("macos", "x86_64") => Some("x86_64-apple-darwin"),
+        ("macos", "aarch64") => Some("aarch64-apple-darwin"),
+        _ => None,
     }
 }
 pub(crate) fn hash(bytes: &[u8]) -> String {
@@ -69,7 +72,7 @@ pub(crate) fn inspect(path: &Path) -> Result<InspectedPackage, PluginFailure> {
     let manifest: PluginManifest =
         serde_json::from_slice(&read("plugin.json", 128 * 1024)?).map_err(|_| invalid())?;
     manifest.validate()?;
-    if manifest.target != current_target() {
+    if Some(manifest.target.as_str()) != current_target() {
         return Err(PluginFailure::new("plugin_platform_incompatible"));
     }
     if manifest.execution != ExecutionMode::TrustedNative {
@@ -199,6 +202,14 @@ pub(crate) fn extract(
         != serde_jcs::to_vec(&inspected.description.manifest).map_err(|_| invalid())?
     {
         return Err(invalid());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Only the signed manifest entry gains execute permission; ignore ZIP mode bits.
+        let executable = resolve_data_file(staging, &staged_manifest.executable)?;
+        fs::set_permissions(executable, fs::Permissions::from_mode(0o700))
+            .map_err(|_| invalid())?;
     }
     Ok(())
 }

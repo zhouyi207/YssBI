@@ -2,7 +2,7 @@
 
 > Status: Planned
 > Scope: 工作台布局能力的后续评估与设置、导入、float 的人工验收
-> Canonical owners: [Workbench README](../../src/modules/workbench/README.md) 拥有当前布局和窗口契约；本文记录候选方向与待验收事项
+> Canonical owners: [Workbench README](../../react/src/modules/workbench/README.md) 拥有当前布局和窗口契约；本文记录候选方向与待验收事项
 > Update when: 候选功能的优先级或人工验收状态改变时
 
 设置与导入统一使用应用级 Dialog，普通工作台 tab/group 使用非模态窗口内 float。

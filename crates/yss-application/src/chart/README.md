@@ -11,7 +11,11 @@
 
 复制的可选名称直接交给 Project writer，在同一次文件事务中分配实际名称和新路径；GUI 未指定时沿用默认副本命名。
 
-独立图表的 `ChartPreview` 与图结果的 `PlotResultView` 复用现有 `ChartRenderer`。图表预览按项目、路径、声明和 Rust 投影的数据库 revision 缓存；配置变更或视图离开后，旧请求不再更新该视图。图结果仍由 ResultStore 和报告租约管理。真实界面的切换、编辑与迟到回执验收见[组件计划](../../../../../docs/roadmap/COMPONENT_REFACTOR.md)。
+[原生宿主](../../../yss-desktop-gpui/README.md)直接消费本模块的完整图表文档、原数据库分布和有界列对，
+使用 GPUI 绘制独立直方图、散点与折线。配置草稿及绘图坐标由原生视图拥有，保存、资源版本、分布和数值投影仍由 Rust 原 owner 拥有。
+预览绑定项目、配置与数据库资源 revision；旧查询不能安装到新配置，目录重命名/删除继续校验资源版本。
+原生操作与验收范围见宿主 README，完整图结果图形仍待迁移；不能以独立图表通过替代结果租约与报告验收。
+保留的 React 参考实现中，`ChartPreview` 与 `PlotResultView` 复用 `ChartRenderer`，不参与当前原生构建。
 
 直方图列分布与散点/折线列对读取都携带前端捕获的数据库资源 revision；没有该版本时不发出查询。
 列对查询按数据库 ID 复用 Project 授权校验，检查 Runtime 列对的声明版本，并在投影完成后重验，
@@ -34,4 +38,4 @@ Harness 的 `inspect_chart` 返回当前类型化配置；`update_chart` 只合�
 列对响应的坐标必须是有限数值，轴格式为 number/date/datetime，两个轴标签必填且可为 null；
 显式传入点数上限时，响应不能超过该上限。模型转换只将 null 标签转为呈现层的缺省值，不重复校验。
 
-资源持久化见 [Project](../../../yss-project/README.md)，结果持有与读取见 [Results](../../../../../src/features/application/results/README.md)。
+资源持久化见 [Project](../../../yss-project/README.md)，结果持有与读取见 [Results](../../../../react/src/features/application/results/README.md)。

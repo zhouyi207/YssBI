@@ -2,19 +2,20 @@
 
 > Status: Current
 > Scope: 插件清单、协议类型、预算、任务身份与 schema 生成
-> Canonical owners: 本 crate 类型与生成器拥有当前 wire；插件体系目标见[插件 README](../../../plugins/README.md)
+> Canonical owners: 本 crate 类型与生成器拥有当前 wire
 > Update when: 协议、清单、schema 或生成入口改变时
 
 Version 0.2 of the shared contract implements wire protocol major 2. The package owns manifests,
 budgets, task states, diagnostics and operation identity validation; it has no host implementation
-dependency. Rust schemas generate host transport types, while the Web SDK carries the same protocol.
+dependency. The `plugin-schema` binary derives JSON Schema directly from the same Rust types.
 
 Manifest validation rejects duplicate IDs within each view, command and task-type collection.
 A task ID therefore selects one artifact-production rule before the host applies project and
 result-write admission checks; declaration order cannot select between conflicting rules.
 
-`scripts/generate-plugin-contract.mjs` owns frontend type/schema generation beside this crate.
-Run `pnpm generate:plugins` or `pnpm generate:plugins:check` from the repository root.
+Run `cargo run -p yss-plugin-protocol --bin plugin-schema` from the repository root for schema output.
+`scripts/generate-plugin-contract.mjs` retains generation for the archived React contract reference;
+it is outside the native build.
 
 Operations use a creation timestamp and a nonce. Reuse the identifier and parameters for retries;
 the host retains receipts for 30 days and rejects expired identifiers instead of executing them again.

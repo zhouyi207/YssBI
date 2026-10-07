@@ -57,7 +57,7 @@ fn resource_identity_reads_and_domain_page_limits_have_distinct_schemas() {
 #[test]
 fn model_catalog_preserves_shared_provider_and_generation_configuration() {
     let wire: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../src/tests/fixtures/node-system-contracts/harness-models.json"
+        "../../../react/src/tests/fixtures/node-system-contracts/harness-models.json"
     ))
     .unwrap();
     let catalog: LanguageModelCatalog = serde_json::from_value(wire.clone()).unwrap();

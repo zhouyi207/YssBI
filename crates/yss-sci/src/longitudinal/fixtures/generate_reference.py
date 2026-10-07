@@ -1,5 +1,4 @@
 """Independent statsmodels/SciPy references. Run directly to regenerate reference.json.
-Then format the generated file with the repository-root pnpm format:ts script.
 
 GEE: statsmodels.org/stable/gee.html; LMM: statsmodels MixedLM.
 GLMM: lme4.github.io/lme4/reference/glmer.html, one-dimensional Laplace ML;

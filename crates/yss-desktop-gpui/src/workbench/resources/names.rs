@@ -1,8 +1,5 @@
 //! Name input is a dialog draft; only the captured Project command commits a rename.
-use super::{
-    super::Workbench,
-    operations::{GraphResourceAction, GraphTarget},
-};
+use super::{super::Workbench, ResourceAction, operations::GraphTarget};
 use gpui::{Context, Window, prelude::*};
 use gpui_component::{
     WindowExt,
@@ -41,7 +38,7 @@ impl Workbench {
                     let _ = owner.update(cx, |view, cx| {
                         view.mutate_graph_resource(
                             target.clone(),
-                            GraphResourceAction::Rename,
+                            ResourceAction::Rename,
                             Some(name),
                             window,
                             cx,

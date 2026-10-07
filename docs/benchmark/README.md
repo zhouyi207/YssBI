@@ -10,9 +10,9 @@
 | 测量           | 源码与方法                                                                                                                           | 结果                                                                                                         |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | 数据引擎       | [查询、编辑、压实与 OLS 测量说明](DATA_ENGINE_BENCHMARK.md)                                                                          | [原始 JSON](DATA_ENGINE_BENCHMARK_RESULTS.json)                                                              |
-| Graph 编辑同步 | [同步基准](../../src/tests/benchmarks/graphEditorSync.bench.ts)：完整快照与增量的 JSON 解码、投影安装和 Store 采纳，IPC 使用内存模拟 | [原始 JSON](probes/graph-editor-sync-results.json)                                                           |
-| Graph 实时解析 | [Rust 基准](../../src-tauri/crates/yss-graph-runtime/src/resolution_tests.rs)：标量和 DataFrame 合成图的语义快照复用与投影生成       | [原始 JSON](probes/graph-resolution-results.json)                                                            |
-| 项目快照准备   | [资源候选基准](../../src/tests/benchmarks/projectSnapshot.bench.ts)：共享当前状态与额外深拷贝的成本                                  | [测量及架构复核](../roadmap/ARCHITECTURE_RULES_REVIEW.md)、[原始 JSON](probes/project-snapshot-results.json) |
+| Graph 编辑同步 | [同步基准](../../react/src/tests/benchmarks/graphEditorSync.bench.ts)：完整快照与增量的 JSON 解码、投影安装和 Store 采纳，IPC 使用内存模拟 | [原始 JSON](probes/graph-editor-sync-results.json)                                                           |
+| Graph 实时解析 | [Rust 基准](../../crates/yss-graph-runtime/src/resolution_tests.rs)：标量和 DataFrame 合成图的语义快照复用与投影生成       | [原始 JSON](probes/graph-resolution-results.json)                                                            |
+| 项目快照准备   | [资源候选基准](../../react/src/tests/benchmarks/projectSnapshot.bench.ts)：共享当前状态与额外深拷贝的成本                                  | [测量及架构复核](../roadmap/ARCHITECTURE_RULES_REVIEW.md)、[原始 JSON](probes/project-snapshot-results.json) |
 
 ## Graph 编辑同步
 
@@ -48,7 +48,7 @@ document 镜像后，同筛选的三组 adoption（每组 30 样本）。会话�
 同步整体或桌面性能，也不是保留通用递归共享的默认方案对照或规则例外依据。
 
 同日的 [非空常量边界参考测量](probes/graph-constants-immer-2026-10-02.txt) 在同一进程中比较
-现有共享实现与 [一次 Immer 参考](../../src/tests/benchmarks/graphConstantSharingReference.ts)。
+现有共享实现与 [一次 Immer 参考](../../react/src/tests/benchmarks/graphConstantSharingReference.ts)。
 样本含 500 条常量，每条包含两个 16 项 List、嵌套元数据、说明和标签；分别测同值、仅改名称、
 一个嵌套值改变。六组各 30 样本，计时包含共享和统一发布冻结步骤，JSON 物化、输入冻结、
 完整文档校验及身份断言在计时外。文件总耗时 16,577 ms，完整命令、环境、源码 hash 和输出见原始记录。
@@ -145,6 +145,6 @@ pnpm test:rs:package -p yss-graph-runtime --release --lib benchmark_repeated_res
 
 该比较只说明完整语义快照复用的局部收益，不包含 Project 提交、结果有效性、Tauri 传输或 React 绘制，也不是所有优化相对旧版本的总体收益。
 
-当前图与报告契约见 [Graph 与 Execution](../../src-tauri/crates/yss-application/src/graph/README.md)，完成记录与待验收事项见 [v0.3](../roadmap/v0_3.md)。
+当前图与报告契约见 [Graph 与 Execution](../../crates/yss-application/src/graph/README.md)，完成记录与待验收事项见 [v0.3](../roadmap/v0_3.md)。
 
 [返回文档索引](../README.md)

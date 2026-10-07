@@ -1,9 +1,19 @@
 //! Native resource creation consumes the existing application receipt and publication.
+mod authored;
+mod charts;
+mod databases;
 mod names;
 mod operations;
 use super::Workbench;
+pub(super) use authored::AuthoredKind;
 use gpui::{Context, Window};
-pub(crate) use operations::GraphResourceAction;
+#[derive(Clone, Copy)]
+pub(crate) enum ResourceAction {
+    Rename,
+    Duplicate,
+    Delete,
+    CopyPath,
+}
 use yss_graph_document::GraphResourceKind;
 use yss_project_history::ResourceDocumentPatch;
 use yss_project_identity::OperationId;

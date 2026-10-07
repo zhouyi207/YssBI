@@ -1,10 +1,8 @@
-use gpui_component::{Icon, IconName, Sizable};
-use std::collections::BTreeMap;
-
 use gpui::{
-    Bounds, Context, IntoElement, MouseButton, PathBuilder, Pixels, Point, Render, Window, canvas,
-    div, point, prelude::*, px, rgb,
+    Bounds, Context, IntoElement, MouseButton, Pixels, Render, Window, canvas, div, point,
+    prelude::*, px, rgb,
 };
+use gpui_component::{Icon, IconName, Sizable};
 use gpui_component::{
     button::{Button, ButtonVariants},
     input::Input,
@@ -24,24 +22,15 @@ impl Render for GraphCanvas {
         let zoom = self.zoom;
         let offset = self.offset;
         let bounds_cell = self.bounds.clone();
-        let anchors = self
-            .graph
-            .projection
-            .nodes
-            .iter()
-            .flat_map(|node| {
-                let position = geometry::position(node, &self.preview);
-                node.ports.iter().filter_map(move |port| {
-                    geometry::port_point(node, &port.address, position)
-                        .map(|p| (port.address.clone(), offset + p * zoom))
-                })
-            })
-            .collect::<BTreeMap<_, _>>();
-        let connections = self.graph.projection.clone();
+        let connection_layer = self.connection_layer.clone();
+        let preview = self.preview.clone();
         let pending = match &self.gesture {
             Some(Gesture::Connection {
                 source, current, ..
-            }) => anchors.get(source).map(|start| (*start, *current)),
+            }) => connection_layer
+                .borrow()
+                .port_position(source, &self.preview)
+                .map(|start| (offset + start * zoom, *current)),
             _ => None,
         };
         let projection = self.graph.projection.clone();
@@ -186,27 +175,10 @@ impl Render for GraphCanvas {
                         bounds_cell.set(bounds);
                     },
                     move |bounds, _, window, _| {
-                        paint_grid(bounds, offset, zoom, window);
-                        for connection in connections.connections.iter() {
-                            if let (Some(a), Some(b)) = (
-                                anchors.get(&connection.output),
-                                anchors.get(&connection.input),
-                            ) {
-                                paint_connection(
-                                    bounds.origin + *a,
-                                    bounds.origin + *b,
-                                    rgb(0x7b95bc),
-                                    window,
-                                );
-                            }
-                        }
+                        let mut layer = connection_layer.borrow_mut();
+                        layer.paint(bounds, offset, zoom, &preview, window);
                         if let Some((start, current)) = pending {
-                            paint_connection(
-                                bounds.origin + start,
-                                current,
-                                rgb(appearance::AMBER),
-                                window,
-                            );
+                            layer.paint_pending(bounds.origin + start, current, window);
                         }
                     },
                 )
@@ -223,8 +195,8 @@ impl Render for GraphCanvas {
                         .w(rect.size.width)
                         .h(rect.size.height)
                         .border_1()
-                        .border_color(rgb(0x7aa2f7))
-                        .bg(gpui::rgba(0x7aa2f718)),
+                        .border_color(rgb(appearance::BLUE))
+                        .bg(gpui::rgba((appearance::BLUE << 8) | 0x18)),
                 )
             })
             .child(
@@ -269,7 +241,8 @@ impl Render for GraphCanvas {
                         .right_2()
                         .p_2()
                         .rounded_md()
-                        .bg(rgb(0x4b2630))
+                        .bg(gpui::rgba((appearance::RED << 8) | 0x26))
+                        .text_color(rgb(appearance::RED))
                         .text_sm()
                         .child(error),
                 )
@@ -296,11 +269,11 @@ impl GraphCanvas {
         let position = geometry::position(node, &self.preview);
         let origin = self.offset + point(px(position.x as f32), px(position.y as f32)) * self.zoom;
         let border = if self.selected.contains(&id) {
-            0x7aa2f7
+            appearance::BLUE
         } else if !node.diagnostics.is_empty() {
-            0xe0af68
+            appearance::AMBER
         } else {
-            0x3b4252
+            appearance::BORDER_STRONG
         };
         let inputs = node
             .ports
@@ -319,7 +292,7 @@ impl GraphCanvas {
             .top(origin.y)
             .w(px(geometry::NODE_WIDTH * self.zoom))
             .h(px(geometry::node_height(node) * self.zoom))
-            .rounded(px(7. * self.zoom))
+            .rounded(px(4. * self.zoom))
             .border_1()
             .border_color(rgb(border))
             .bg(rgb(appearance::SURFACE))
@@ -334,12 +307,12 @@ impl GraphCanvas {
                     .flex()
                     .items_center()
                     .gap(px(8. * self.zoom))
-                    .rounded_t(px(7. * self.zoom))
+                    .rounded_t(px(4. * self.zoom))
                     .bg(rgb(appearance::SURFACE_RAISED))
                     .border_b_1()
                     .border_color(rgb(appearance::BORDER))
                     .text_size(px(13. * self.zoom))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui::FontWeight::MEDIUM)
                     .child(
                         Icon::new(if node.node_type.as_str().contains("source.") {
                             NativeIcon::Database
@@ -411,13 +384,8 @@ impl GraphCanvas {
         } else if matches!(self.gesture, Some(Gesture::Connection { .. })) {
             self.connection_candidates
                 .as_ref()
-                .and_then(|candidates| {
-                    candidates
-                        .candidates
-                        .iter()
-                        .find(|candidate| candidate.port == port.address)
-                })
-                .map_or(0x536079, |candidate| match candidate.decision {
+                .and_then(|candidates| candidates.get(&port.address))
+                .map_or(0x536079, |decision| match decision {
                     yss_graph_editor::projection::ConnectionDecision::Append => 0x9ece6a,
                     yss_graph_editor::projection::ConnectionDecision::Replace { .. } => 0xe0af68,
                     yss_graph_editor::projection::ConnectionDecision::Invalid { .. } => 0x536079,
@@ -449,7 +417,7 @@ impl GraphCanvas {
             .w_full()
             .min_w_0()
             .text_size(px(12. * self.zoom))
-            .text_color(rgb(0xb6c1d1))
+            .text_color(rgb(appearance::MUTED))
             .cursor_crosshair()
             .on_mouse_down(
                 MouseButton::Left,
@@ -552,42 +520,12 @@ impl GraphCanvas {
                             .rounded_sm()
                             .text_sm()
                             .cursor_pointer()
-                            .hover(|style| style.bg(rgb(0x303b4d)))
+                            .hover(|style| style.bg(rgb(appearance::SELECTED)))
                             .child(title)
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 view.create_node(creation.clone(), cx)
                             }))
                     })),
             )
-    }
-}
-
-fn paint_connection(a: Point<Pixels>, b: Point<Pixels>, color: gpui::Rgba, window: &mut Window) {
-    let bend = ((b.x - a.x).abs() * 0.45).max(px(45.));
-    let mut path = PathBuilder::stroke(px(1.8));
-    path.move_to(a);
-    path.cubic_bezier_to(b, a + point(bend, px(0.)), b - point(bend, px(0.)));
-    if let Ok(path) = path.build() {
-        window.paint_path(path, color);
-    }
-}
-
-fn paint_grid(bounds: Bounds<Pixels>, offset: Point<Pixels>, zoom: f32, window: &mut Window) {
-    let spacing = px((32. * zoom).max(12.));
-    let mut path = PathBuilder::stroke(px(0.5));
-    let mut x = offset.x % spacing;
-    while x < bounds.size.width {
-        path.move_to(bounds.origin + point(x, px(0.)));
-        path.line_to(bounds.origin + point(x, bounds.size.height));
-        x += spacing;
-    }
-    let mut y = offset.y % spacing;
-    while y < bounds.size.height {
-        path.move_to(bounds.origin + point(px(0.), y));
-        path.line_to(bounds.origin + point(bounds.size.width, y));
-        y += spacing;
-    }
-    if let Ok(path) = path.build() {
-        window.paint_path(path, rgb(0x222a36));
     }
 }

@@ -2,12 +2,13 @@
 
 > Status: Current
 > Scope: 宿主插件安装、授权、进程、任务与结果交接的当前实现
-> Canonical owners: 本 crate 的 Plugin Manager 与适配器；体系目标另由[插件 README](../../../plugins/README.md)维护
+> Canonical owners: 本 crate 的 Plugin Manager 与适配器
 > Update when: 安装、任务、权限、清理或恢复契约改变时
 
 The host owns installation, grants, process supervision, task admission and result handoff. It
-does not link Julia/Bayes implementations. The existing `yss-plugin-protocol` and `yss-plugin-sdk` crates remain under `src-tauri/crates`; plugin
-implementations, runtime scripts and system-test fixtures live under `plugins/julia`.
+does not link Julia/Bayes implementations. The shared `yss-plugin-protocol` and `yss-plugin-sdk` crates live in the root workspace.
+External plugin implementations are installed separately; this repository no longer registers
+a test target from a deleted Julia plugin directory.
 
 ## Module responsibilities
 
@@ -74,14 +75,36 @@ bound to the previous fingerprint and inspected new digest, including after unin
 with equal SemVer precedence cannot replace a release with different content. Release versions
 come from the source manifest, separately from the complete signed package digest.
 
+`current_target()` returns the exact supported build target or `None`: Windows MSVC, Linux GNU/musl,
+and macOS on x86_64/aarch64. Inspection rejects packages for any other target. This selector does
+not establish platform execution acceptance. On Unix, extraction grants mode `0700` only to the
+signed manifest executable after all signed files and the staged manifest have been verified;
+archive mode bits do not grant execute permission to other assets.
+
+The [native desktop](../yss-desktop-gpui/README.md) consumes this manager directly for installation,
+enable/disable, uninstall, storage maintenance, task history and diagnostics. Manager-owned facts
+and receipts remain authoritative. Custom view attachment still loads the manifest's HTML entry
+and returns an HTML `ViewSession`; the GPUI host does not open it. A native custom-view contract
+and plugin implementations remain migration work.
+
 ## Cancellation and diagnostics
 
 A task cancellation first goes to its plugin task. If cancellation fails, exceeds its grace
 period or the process is lost, the host treats it as a process-level fault: all nonterminal tasks
-of that exact plugin instance become `outcomeUnknown`, contexts are revoked, and the process tree
-is stopped. Late results cannot change those terminal records. Other instances are unaffected.
+of that exact plugin instance become `outcomeUnknown` and contexts are revoked. Windows stops the
+process tree through its job object. Unix currently creates a process group but stops only its
+leader; group termination and execution acceptance remain open platform work. Late results cannot
+change those terminal records. Other instances are unaffected.
 
 Stdout remains protocol-only. Stderr is drained into a 64 KiB ring per process, tagged with plugin,
 instance and the task identities active at emission. The host retains four recent instances per
 plugin and at most 64 buffers globally. Diagnostics are local, capacity-limited and queried
 separately from task results; they are not sent to external logging services.
+
+Focused installation validation uses:
+
+```sh
+cargo test -p yss-plugin-runtime --test installation
+cargo clippy -p yss-plugin-runtime --lib --test installation --no-deps -- -D warnings
+cargo fmt -p yss-plugin-runtime -- --check
+```

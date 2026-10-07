@@ -2,9 +2,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const diagnosticSource = readFileSync(
-  resolve(root, "src-tauri/crates/yss-graph-diagnostics/src/lib.rs"),
+  resolve(root, "crates/yss-graph-diagnostics/src/lib.rs"),
   "utf8",
 );
 const start = diagnosticSource.indexOf("define_graph_diagnostics! {");
@@ -35,12 +35,12 @@ if (Object.keys(messages).length !== definitionCount) {
 }
 const output = resolve(
   root,
-  "src/features/domain/graphDiagnostics/diagnosticTemplates.generated.json",
+  "react/src/features/domain/graphDiagnostics/diagnosticTemplates.generated.json",
 );
 const content = `${JSON.stringify(messages, null, 2)}\n`;
 if (process.argv.includes("--check")) {
   if (JSON.stringify(JSON.parse(readFileSync(output, "utf8"))) !== JSON.stringify(messages)) {
-    throw new Error("Graph diagnostic templates are stale; run pnpm generate:diagnostics");
+    throw new Error("Graph diagnostic templates are stale; run node crates/yss-graph-diagnostics/scripts/generate-graph-diagnostics.mjs");
   }
 } else {
   writeFileSync(output, content);

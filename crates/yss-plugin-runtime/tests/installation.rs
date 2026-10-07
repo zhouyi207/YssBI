@@ -60,7 +60,9 @@ fn package_variant(path: &Path, escape: bool, version: &str, key_seed: u8, budge
             max_minor: 0,
             required_features: vec![],
         },
-        target: "x86_64-pc-windows-msvc".into(),
+        target: yss_plugin_runtime::current_target()
+            .expect("supported test host")
+            .into(),
         executable: "bin/plugin.exe".into(),
         execution: ExecutionMode::TrustedNative,
         contributes: Contributions {
@@ -79,6 +81,9 @@ fn package_variant(path: &Path, escape: bool, version: &str, key_seed: u8, budge
         resource_budget: budget,
         cache_directories: vec!["cache".into()],
     };
+    signed_package(path, escape, manifest, key_seed);
+}
+fn signed_package(path: &Path, escape: bool, manifest: PluginManifest, key_seed: u8) {
     let content = [
         ("bin/plugin.exe", b"test-executable".as_slice()),
         ("web/index.html", b"<p>Fixture</p>".as_slice()),
@@ -127,6 +132,29 @@ fn package_variant(path: &Path, escape: bool, version: &str, key_seed: u8, budge
     archive.finish().unwrap();
 }
 #[test]
+fn packages_for_a_different_target_are_rejected_before_installation() {
+    let root = Root::new();
+    let path = root.0.join("foreign.yssplugin");
+    package(&path, false);
+    let mut manifest: PluginManifest = {
+        let mut archive = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        serde_json::from_reader(archive.by_name("plugin.json").unwrap()).unwrap()
+    };
+    manifest.target = if manifest.target == "x86_64-pc-windows-msvc" {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        "x86_64-pc-windows-msvc"
+    }
+    .into();
+    signed_package(&path, false, manifest, 7);
+    let manager = PluginManager::new(&root.0, Arc::new(Host)).unwrap();
+    assert_eq!(
+        manager.inspect(&path).unwrap_err().code,
+        "plugin_platform_incompatible"
+    );
+    assert!(manager.list().unwrap().is_empty());
+}
+#[test]
 fn installation_is_digest_bound_idempotent_and_preserves_private_data_on_uninstall() {
     let install = operation("install");
     let root = Root::new();
@@ -152,6 +180,30 @@ fn installation_is_digest_bound_idempotent_and_preserves_private_data_on_uninsta
         installed.installation_generation
     );
     assert_eq!(manager.list().unwrap().len(), 1);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let package = root
+            .0
+            .join("extensions/packages")
+            .join(&inspected.package_digest);
+        assert_eq!(
+            fs::metadata(package.join("bin/plugin.exe"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(package.join("web/index.html"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o111,
+            0
+        );
+    }
     let reopened = PluginManager::new(&root.0, Arc::new(Host)).unwrap();
     assert_eq!(
         reopened

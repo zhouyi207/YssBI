@@ -122,7 +122,7 @@ GEE/GLMM 按组计算，不计入未使用的全样本平方矩阵。保留 SCI 
 
 `KernelInvocation` 接收已求值输入、固定端口或重复组的局部键、有序输出类型/字段、已解析参数、`KernelControl` 和中立 `RelationFactory`。参数可以借用现有 literal 和已授权的资源运行值。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`；注册表在调用前检查输入布局，在返回后检查输出数量和外层载体，不重新推导 Graph 的元素语义。
 
-运行值的标量载荷统一为 `TabularScalar`，有限浮点表示为 `Float64(FiniteFloat64)`；没有内核自定义 Decimal 算术类型。文档的 `DecimalLiteral` 是精确数字文本，在求值时转换。列表和记录通过不可变 `Arc` 共享。调度槽、下游输入和结果发布不再逐元素复制；统计拟合值和残差只在转换成运行值时分配一次，不先复制原数值向量。紧凑数值缓冲仍属于[后续评估](../../../TODO.md)，当前模型向量与通用运行值列表保持不同表示。
+运行值的标量载荷统一为 `TabularScalar`，有限浮点表示为 `Float64(FiniteFloat64)`；没有内核自定义 Decimal 算术类型。文档的 `DecimalLiteral` 是精确数字文本，在求值时转换。列表和记录通过不可变 `Arc` 共享。调度槽、下游输入和结果发布不再逐元素复制；统计拟合值和残差只在转换成运行值时分配一次，不先复制原数值向量。紧凑数值缓冲仍属于[后续评估](../../TODO.md)，当前模型向量与通用运行值列表保持不同表示。
 
 DataFrame 常量和内存列组合统一通过调用方注入的 `RelationFactory` 进入共享查询引擎，后续选列、筛选、拆列和分页均使用 `RelationHandle`。`Record` 承载配置、结构化统计模型和检验结果。字面量关系不声明数据集绑定，不能据此获得外部资源授权；组合仍检查实际数据集的会话、快照及执行环境。
 
@@ -240,7 +240,7 @@ Panel Fit/Compare 使用 revision 7：双向随机效应 MLE 的似然计算按�
 
 ## 验证
 
-独立调用测试检查输入顺序、输出载体和资源控制；Application 集成测试检查内存表的组合、拆列顺序、关系计算与分页。扩展注册、配置、数值执行和结果查询测试继续覆盖跨边界行为。运行命令见 [Rust workspace README](../../README.md)，范围选择见[根规则](../../../.rules)。
+独立调用测试检查输入顺序、输出载体和资源控制；Application 集成测试检查内存表的组合、拆列顺序、关系计算与分页。扩展注册、配置、数值执行和结果查询测试继续覆盖跨边界行为。运行命令见 [Rust workspace README](../../README.md)，范围选择见[根规则](../../.rules)。
 
 ## 内置节点语义与转换
 
@@ -364,7 +364,7 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 固定 Parquet 链路与真实项目的 CSV 导入 → Graph Execute → OLS → Results 分页均已通过集成验证。
 最终提交使用准备时捕获的同一组资源授权，Project 在发布前再次检查版本；不以空授权跳过数据集依赖。
 关系候选 Results 持有懒句柄，不保存所有中间批次；计划准备不表示全部行已经成功扫描，分页扫描失败通过结果读取错误交付。
-数据存储与查询边界见 [Dataset store](../yss-database-store/README.md)，局部性能测量见[数据引擎基准](../../../docs/benchmark/DATA_ENGINE_BENCHMARK.md)。
+数据存储与查询边界见 [Dataset store](../yss-database-store/README.md)，局部性能测量见[数据引擎基准](../../docs/benchmark/DATA_ENGINE_BENCHMARK.md)。
 
 The built-in classical hypothesis-test adapters live in `builtins/statistics/classical.rs`. They translate node inputs into neutral `yss-sci-contract::hypothesis` requests, invoke stateless SCI runtime functions, and expose one structured `result` output. The catalog owns localized node definitions and help; kernels do not duplicate formulas.
 

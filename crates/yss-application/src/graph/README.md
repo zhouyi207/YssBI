@@ -97,9 +97,9 @@ Application 将这些映射与常量创建映射一起写入 Project 原提交�
 | yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
 | yss-graph-execution                                                       | 计划构建与缓存、demand/DAG、内核调用适配、ResultStore、运行事件                  |
 | yss-node-kernel                                                           | 中立内核调用契约、运行值、冻结 KernelRegistry 与内置执行适配                     |
-| yss-application::ipc / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
+| yss-desktop-gpui / yss-ipc-contract | 原生界面调度、类型化投影消费与平台中立共享值 |
 
-完整清单见 [Module Map](../../../../../docs/reference/MODULE_MAP.md)。
+完整清单见 [Module Map](../../../../docs/reference/MODULE_MAP.md)。
 
 Node 描述一种节点的端口、参数、类型约束及执行语义，不拥有某张图的节点实例或解析结果。
 节点编辑投影的 `capabilities` 仅携带 `managed`；复制、创建副本、删除和剪切在前端统一要求存在明确的非受管理节点投影。Rust 继续按节点协议拒绝受管理节点的非法修改与子图导出。参数和内联字面量编辑直接消费各自投影，不另传节点级汇总开关。
@@ -109,7 +109,7 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 
 `yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
-IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。
+原生宿主直接消费模型；共享协议只负责值的编码。投影不依赖 Application，也不构成第二份语义 authority。
 资源成员是否为 orphan 由当前语义快照决定；持久化端口绑定中的 Resolved/Orphan 标记不覆盖资源丢失或恢复后的解析结果。投影仍核对节点、端点地址、绑定来源及连接数量，不改写文档。
 迁移连线检查起点与终点，插入转接点检查原连线两端；这些地址统一经过 Graph Runtime 现有语义准入。已恢复成员的绑定调整随可逆编辑补丁提交，当前仍失效的成员继续拒绝操作，不在查询时改写文档。
 
@@ -193,21 +193,21 @@ GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操�
 
 普通编辑、撤销、运行、兼容节点查询或复制导出不上传完整图文档，而是携带图身份和后端 version。导入或粘贴等本身包含新内容的操作仍交付真实输入。过期版本被拒绝，不自动合并并行修改。
 
-编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove/splice 路径批次，客户端在候选上应用补丁、冻结并完成结构与引用一致性检查后发布。校验可以复用未变化且已验证的不可变对象，图身份、实体引用和跨字段约束仍针对当前候选检查，失败时不接纳该基线。未变化的节点、端口及连线复用引用；[前端投影 Store](../../../../../src/features/README.md)按变化实体更新索引并原子安装。该协议只交付读投影，不代替 Graph typed 编辑操作。
+编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove/splice 路径批次，客户端在候选上应用补丁、冻结并完成结构与引用一致性检查后发布。校验可以复用未变化且已验证的不可变对象，图身份、实体引用和跨字段约束仍针对当前候选检查，失败时不接纳该基线。未变化的节点、端口及连线复用引用；[前端投影 Store](../../../../react/src/features/README.md)按变化实体更新索引并原子安装。该协议只交付读投影，不代替 Graph typed 编辑操作。
 
 `GraphEditorSessionDto.resultState` 与文档、语义投影来自同一次图操作。ResultStore 在更新输入依据的同一锁内捕获结果摘要，携带执行会话内的结果 revision；运行发布、运行准入和依赖重验推进该顺序，独立于图编辑 revision。前端要求摘要与投影的 semanticInputHash 一致，保留已安装的更高结果 revision，防止迟到的编辑/读取回执回退运行结果。
 
 两端基线均限制为 32 条、32 MiB 序列化预算，单条超过 16 MiB 时只读而不缓存。交付中的 `snapshotBytes` 由 Rust 在编码时计算，前端据此计量，避免主线程为了缓存预算重新编码完整图。增量最多 512 个操作；字节预算与条目限制不代替真实桌面的安装耗时、长任务及帧率验收。
 
-公共运行路径在提交执行状态后统一发布图活动，GUI、Harness 与内部调用遵循同一规则；调用者的专属 sink 不负责公共发布。GUI 仍保留 RunEvent Channel 和终态排空。
-Application 的 `RunIdentity` 包含执行会话、图路径、RunId 与本次准入已验证的 semantic input hash；所有通知、执行回执和恢复快照保留这份身份。IPC 只编码该 hash，前端不能用通知到达时的当前图替换它。加载图的运行与失败展示按该依据筛选，已保留结果的查看仍按完整结果引用处理。
+公共运行路径在提交执行状态后统一发布图活动，GUI、Harness 与内部调用遵循同一规则；调用者的专属 sink 不负责公共发布。GPUI 直接消费同一类型化运行通知。
+Application 的 `RunIdentity` 包含执行会话、图路径、RunId 与本次准入已验证的 semantic input hash；所有通知、执行回执和恢复快照保留这份身份。宿主只转交该 hash，前端不能用通知到达时的当前图替换它。加载图的运行与失败展示按该依据筛选，已保留结果的查看仍按完整结果引用处理。
 取消请求携带开始事件的 executionSessionId 与 RunId，Application 核对捕获的执行会话后才取消其中的运行，拒绝旧会话对后继同编号运行的请求。前端运行状态保存完整 run 身份，终态同时匹配会话与 RunId；取消不依赖输出绑定，因此 outputs 为空的运行同样可取消。
-`RunApplicationEvent` 另携带产生事件时从 ResultStore 捕获的 `result_revision`：开始通知在输出失效后捕获，成功终态在结果发布后捕获。失败和取消也读取已提交的结果顺序；版本不属于整次运行不变的身份。公共通知、专属 Channel 和恢复保存同一事件值。前端按摘要是否覆盖这一版本派生输出等待状态，不在查询完成时另写确认标记。
+`RunApplicationEvent` 另携带产生事件时从 ResultStore 捕获的 `result_revision`：开始通知在输出失效后捕获，成功终态在结果发布后捕获。失败和取消也读取已提交的结果顺序；版本不属于整次运行不变的身份。公共通知、专属 sink 和恢复保存同一事件值。前端按摘要是否覆盖这一版本派生输出等待状态，不在查询完成时另写确认标记。
 `run_graph_with_sink` 成功时返回 `RunGraphReceipt`，包含运行身份和本次 handoff 实际发布的结果引用、输出与类别。回执在交付结果查看意图和终态之前捕获，不通过随后可能已变化的当前结果索引重建，也不复制结果 payload。Harness 对这些引用执行响应条目预算并明确报告总数和完整性；只需要 RunId 的内部调用继续使用 `run_graph`。
 Application 按结果 ID 与完整 requester 身份检查观察请求重复；多个 View 节点可以查看同一结果，同一 requester 对同一结果的重复请求仍被拒绝。
 Application 保存运行事实的恢复投影：每个活动运行的开始身份与输出，以及每张图最新运行的终态和失败详情；不保存操作事件历史。`get_execution_snapshot` 按项目会话返回这些当前投影，初始订阅和 Resync 不再依赖前端曾收到的 RunId。
-通知与命令回执在既有 Graph FIFO 中协调。前端恢复期间有界暂存后续事件，先安装快照再处理通知；公共订阅、专属 Channel 和恢复共享按执行会话、RunId 与终态去重的安装规则。结果打开意图只由公共观察路径处理，不在恢复时重放。
-执行提交中、后端运行状态与同步中断分别处理。只有 RunErrored 或权威恢复中的失败事实才写入 Output；Command 拒绝不等于计算失败。Channel 失败先查询当前执行投影，无法确认时保留“运行状态未知”，不自动重跑。成功结果始终先提交再通知。
+通知与命令回执在既有 Graph FIFO 中协调。前端恢复期间有界暂存后续事件，先安装快照再处理通知；公共订阅、专属 sink 和恢复共享按执行会话、RunId 与终态去重的安装规则。结果打开意图只由公共观察路径处理，不在恢复时重放。
+执行提交中、后端运行状态与同步中断分别处理。只有 RunErrored 或权威恢复中的失败事实才写入 Output；Command 拒绝不等于计算失败。交付中断后先查询当前执行投影，无法确认时保留“运行状态未知”，不自动重跑。成功结果始终先提交再通知。
 运行事件由统一安装器直接写入运行投影。Pin 查看查询当前输出结果，不另行提交运行；执行需求统一使用默认需求或显式输出集合。前端恢复统一查询当前执行快照，运行注册表内部仍按 RunId 管理准入、取消和终态。
 
 关闭视图、HMR、窗口销毁和 Project replacement 释放订阅或使旧回调失效。最后一个编辑器关闭并完成既有保存/放弃流程后可卸载驻留数据，再次打开生成新的编辑身份。Harness 可直接打开已关闭的图，内部读取使用后端分配的 lifecycle token。
@@ -292,11 +292,11 @@ Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；
 | 计算结果                        | ResultStore + typed query              |
 | 图运行失败                      | RunErrored + Output panel 失败摘要     |
 | 内部技术故障                    | sanitized tracing / incident           |
-| command rejection               | yss-application::ipc stable error wire |
-| 用户反馈                        | React localization / UI                |
+| 操作拒绝 | 类型化 Application 错误 |
+| 用户反馈 | 原生宿主本地化 |
 
-详见 [Runtime Signals](../../../../../src/features/application/observability/README.md)、[API contract](../ipc/README.md)、[Workbench](../../../../../src/modules/workbench/README.md) 与 [Rust workspace 验证](../../../../README.md)。
+详见 [Runtime Signals](../../../../react/src/features/application/observability/README.md)、[Application](../../README.md)、[GPUI host](../../../yss-desktop-gpui/README.md) 与 [Rust workspace 验证](../../../../README.md)。
 
 ## 相关模块
 
-[语义解析](../../../yss-graph-analysis/README.md) · [解析缓存](../../../yss-graph-runtime/README.md) · [执行与 ResultStore](../../../yss-graph-execution/README.md) · [数据契约](../../../yss-data-contract/README.md) · [Node Kernel](../../../yss-node-kernel/README.md) · [Results 查询](../../../../../src/features/application/results/README.md) · [画布](../../../../../src/modules/graph-editor/README.md) · [Problems](../../../../../src/modules/problems/README.md) · [Output](../../../../../src/modules/output/README.md)
+[语义解析](../../../yss-graph-analysis/README.md) · [解析缓存](../../../yss-graph-runtime/README.md) · [执行与 ResultStore](../../../yss-graph-execution/README.md) · [数据契约](../../../yss-data-contract/README.md) · [Node Kernel](../../../yss-node-kernel/README.md) · [Results 查询](../../../../react/src/features/application/results/README.md) · [画布](../../../../react/src/modules/graph-editor/README.md) · [Problems](../../../../react/src/modules/problems/README.md) · [Output](../../../../react/src/modules/output/README.md)

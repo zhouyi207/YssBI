@@ -30,24 +30,17 @@ pub fn node_bounds(node: &EditorNodeModel, position: NodePosition) -> Bounds<Pix
     )
 }
 
-pub fn port_point(
-    node: &EditorNodeModel,
-    address: &PortAddress,
-    position: NodePosition,
-) -> Option<Point<Pixels>> {
-    let port = node.ports.iter().find(|p| &p.address == address)?;
-    let index = node
-        .ports
-        .iter()
-        .filter(|p| p.direction == port.direction)
-        .position(|p| &p.address == address)?;
-    Some(point(
-        px(position.x as f32
-            + if port.direction == PortDirection::Output {
-                NODE_WIDTH
-            } else {
-                0.
-            }),
-        px(position.y as f32 + TITLE_HEIGHT + (index as f32 + 0.5) * PORT_HEIGHT),
-    ))
+pub fn port_offsets(node: &EditorNodeModel) -> impl Iterator<Item = (PortAddress, Point<Pixels>)> {
+    let mut inputs = 0;
+    let mut outputs = 0;
+    node.ports.iter().map(move |port| {
+        let output = port.direction == PortDirection::Output;
+        let index = if output { &mut outputs } else { &mut inputs };
+        let offset = point(
+            px(if output { NODE_WIDTH } else { 0. }),
+            px(TITLE_HEIGHT + (*index as f32 + 0.5) * PORT_HEIGHT),
+        );
+        *index += 1;
+        (port.address.clone(), offset)
+    })
 }

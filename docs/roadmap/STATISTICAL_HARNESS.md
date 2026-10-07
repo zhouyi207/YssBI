@@ -2,10 +2,10 @@
 
 > Status: Planned
 > Scope: Statistical Harness 尚未成为当前生产能力的 gated work
-> Canonical owners: 本文拥有未完成项；当前实现由 [Harness Core README](../../src-tauri/crates/yss-harness-core/README.md) 维护
+> Canonical owners: 本文拥有未完成项；当前实现由 [Harness Core README](../../crates/yss-harness-core/README.md) 维护
 > Update when: roadmap item 开始、完成、取消或改变 gate/验收条件时
 
-本文件只记录未来工作，不描述当前产品能力。已实现边界见 [Statistical Harness 当前架构](../../src-tauri/crates/yss-harness-core/README.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。
+本文件只记录未来工作，不描述当前产品能力。已实现边界见 [Statistical Harness 当前架构](../../crates/yss-harness-core/README.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。
 
 模型可见工具按业务领域拆分、内部自动处理同步信息的专项设计与实施顺序见 [AI Harness 领域工具重构计划](HARNESS_TOOL_ARCHITECTURE.md)。
 
@@ -17,7 +17,7 @@
 
 ## 1. External and background write capabilities
 
-桌面已有资源写入与报告交付契约见 [Harness Core 的能力目录](../../src-tauri/crates/yss-harness-core/README.md#4-registered-capabilities)。将这些能力扩展到外部客户端、无桌面会话或后台任务之前，必须同时满足：
+桌面已有资源写入与报告交付契约见 [Harness Core 的能力目录](../../crates/yss-harness-core/README.md#4-registered-capabilities)。将这些能力扩展到外部客户端、无桌面会话或后台任务之前，必须同时满足：
 
 - closed typed request/result 和 bounded batch；
 - exact principal/project/session/revision binding；
@@ -127,7 +127,7 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 
 ### Manager–Worker 桌面验收
 
-当前扁平六角色实现和执行契约见 [Harness Core](../../src-tauri/crates/yss-harness-core/README.md)。
+当前扁平六角色实现和执行契约见 [Harness Core](../../crates/yss-harness-core/README.md)。
 以下为真实模型与桌面人工验收，自动化契约测试不能替代：
 
 - [ ] 简单改图样式、续写报告只委派必要角色；Worker 不互相调用。
@@ -158,7 +158,7 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 4. 定义 approval、idempotency、deadline、cancel 和 receipt；
 5. 定义 bounded payload、隐私与 network policy；
 6. 通过 focused contract/behavior/recovery tests 和 architecture gates；
-7. 更新 [Statistical Harness 当前架构](../../src-tauri/crates/yss-harness-core/README.md)；
+7. 更新 [Statistical Harness 当前架构](../../crates/yss-harness-core/README.md)；
 8. 从本文件删除已完成项，并在 release history 中记录结果。
 
 ## Deferred decisions

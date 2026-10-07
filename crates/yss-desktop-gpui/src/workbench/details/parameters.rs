@@ -105,17 +105,17 @@ impl ParameterField {
             };
             ParameterDraft::Text {
                 input: TextField::new(
-                        model
-                            .value
-                            .as_ref()
-                            .map(|value| match format {
-                                TextFormat::Json => value.to_string(),
-                                _ => display(value),
-                            })
-                            .unwrap_or_default(),
-                        model.multiline,
-                        window,
-                        cx,
+                    model
+                        .value
+                        .as_ref()
+                        .map(|value| match format {
+                            TextFormat::Json => value.to_string(),
+                            _ => display(value),
+                        })
+                        .unwrap_or_default(),
+                    model.multiline,
+                    window,
+                    cx,
                 ),
                 format,
             }

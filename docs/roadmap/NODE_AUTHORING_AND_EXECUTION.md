@@ -31,14 +31,14 @@
 
 | 当前行为                                                                            | 实现依据                                                                                                                                                                                        | 需要解决的问题                                         |
 | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 参数声明已有类型、默认值、约束和条件显隐                                            | [Node Protocol 参数](../../src-tauri/crates/yss-node-protocol/src/parameter.rs)                                                                                                                 | 复用声明提供未连接表单和创建前查询，避免另建参数定义   |
-| 列列表及筛选编辑器依赖 `schema.is_some()`；不可用时界面只展示提示                   | [参数投影](../../src-tauri/crates/yss-graph-analysis/src/parameter_projection.rs)、[关系参数编辑器](../../src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 无有效 Schema 时仍应有可用的基础输入形式               |
-| 普通创建从空参数集合开始；资源节点由创建描述生成绑定参数                            | [Graph Editor mutation](../../src-tauri/crates/yss-graph-editor/src/mutation.rs)                                                                                                                | 将用户初始参数纳入同一次创建与校验                     |
-| AI 的 `CreateNode` 没有参数字段，`SetParameters` 是单独操作；批量编辑已支持临时身份 | [Harness 图契约](../../src-tauri/crates/yss-harness-contract/src/graph.rs)、[Application 图编辑](../../src-tauri/crates/yss-application/src/automation/graph.rs)                                | 减少构造操作和未配置中间态，复用现有批量事务           |
-| AI 目录搜索只返回节点身份、标题、分类等摘要                                         | [Harness 查询契约](../../src-tauri/crates/yss-harness-contract/src/inspection.rs)                                                                                                               | 创建前提供参数定义，避免 AI 必须先创建节点才能获知参数 |
-| 计划准备先要求整图 Ready，之后才选择执行需求；已有输入结果复用                      | [计划准备](../../src-tauri/crates/yss-graph-execution/src/graph_preparation.rs)、[执行选择](../../src-tauri/crates/yss-graph-execution/src/state/scheduler/selection.rs)                        | 后续将准入与计划范围收敛到请求的节点及必要依赖         |
-| Decompose 按编辑期 Schema 展开列，部分运行结果仍是惰性句柄                          | [Schema 解析](../../src-tauri/crates/yss-graph-analysis/src/schema_resolution.rs)、[列内核](../../src-tauri/crates/yss-node-kernel/src/builtins/relational.rs)                                  | 区分结构提示、待执行表达式与稳定运行结果               |
-| GroupBy 只有固定聚合；函数调用尚未接入执行                                          | [聚合内核](../../src-tauri/crates/yss-node-kernel/src/builtins/aggregation.rs)、[Graph Execution](../../src-tauri/crates/yss-graph-execution/README.md)                                         | 后续补齐函数实参绑定、调用隔离和按组调用               |
+| 参数声明已有类型、默认值、约束和条件显隐                                            | [Node Protocol 参数](../../crates/yss-node-protocol/src/parameter.rs)                                                                                                                 | 复用声明提供未连接表单和创建前查询，避免另建参数定义   |
+| 列列表及筛选编辑器依赖 `schema.is_some()`；不可用时界面只展示提示                   | [参数投影](../../crates/yss-graph-analysis/src/parameter_projection.rs)、[关系参数编辑器](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 无有效 Schema 时仍应有可用的基础输入形式               |
+| 普通创建从空参数集合开始；资源节点由创建描述生成绑定参数                            | [Graph Editor mutation](../../crates/yss-graph-editor/src/mutation.rs)                                                                                                                | 将用户初始参数纳入同一次创建与校验                     |
+| AI 的 `CreateNode` 没有参数字段，`SetParameters` 是单独操作；批量编辑已支持临时身份 | [Harness 图契约](../../crates/yss-harness-contract/src/graph.rs)、[Application 图编辑](../../crates/yss-application/src/automation/graph.rs)                                | 减少构造操作和未配置中间态，复用现有批量事务           |
+| AI 目录搜索只返回节点身份、标题、分类等摘要                                         | [Harness 查询契约](../../crates/yss-harness-contract/src/inspection.rs)                                                                                                               | 创建前提供参数定义，避免 AI 必须先创建节点才能获知参数 |
+| 计划准备先要求整图 Ready，之后才选择执行需求；已有输入结果复用                      | [计划准备](../../crates/yss-graph-execution/src/graph_preparation.rs)、[执行选择](../../crates/yss-graph-execution/src/state/scheduler/selection.rs)                        | 后续将准入与计划范围收敛到请求的节点及必要依赖         |
+| Decompose 按编辑期 Schema 展开列，部分运行结果仍是惰性句柄                          | [Schema 解析](../../crates/yss-graph-analysis/src/schema_resolution.rs)、[列内核](../../crates/yss-node-kernel/src/builtins/relational.rs)                                  | 区分结构提示、待执行表达式与稳定运行结果               |
+| GroupBy 只有固定聚合；函数调用尚未接入执行                                          | [聚合内核](../../crates/yss-node-kernel/src/builtins/aggregation.rs)、[Graph Execution](../../crates/yss-graph-execution/README.md)                                         | 后续补齐函数实参绑定、调用隔离和按组调用               |
 
 ## 目录与模块职责
 
@@ -58,7 +58,7 @@
 | `src-tauri/crates/yss-graph-execution`                                        | P5 起负责局部执行、结果版本、复用、取消和发布                                    |
 | `yss-graph-resource-contract`、`yss-relational-contract` 与 `yss-node-kernel` | P6 至 P7 按现有边界承接函数输入契约、分组数据操作与叶节点计算                    |
 
-相关模块契约：[Node Catalog](../../src-tauri/crates/yss-node-catalog/README.md)、[Graph Analysis](../../src-tauri/crates/yss-graph-analysis/README.md)、[Graph Application](../../src-tauri/crates/yss-application/src/graph/README.md)、[Editor Application](../../src/features/application/editor/README.md)、[IPC Contract](../../src-tauri/crates/yss-ipc-contract/README.md)、[Harness](../../src-tauri/crates/yss-harness-core/README.md)。
+相关模块契约：[Node Catalog](../../crates/yss-node-catalog/README.md)、[Graph Analysis](../../crates/yss-graph-analysis/README.md)、[Graph Application](../../crates/yss-application/src/graph/README.md)、[Editor Application](../../react/src/features/application/editor/README.md)、[IPC Contract](../../crates/yss-ipc-contract/README.md)、[Harness](../../crates/yss-harness-core/README.md)。
 
 ## 核心数据流与依赖关系
 
@@ -311,7 +311,7 @@ GUI 保留直接创建，同时增加创建前配置入口。局部表单取消�
 | AI 创建前看不到定义，或批量别名及回执丢失参数                | Harness 契约与 Application automation 集成测试，复用版本拒绝、回滚及幂等覆盖 |
 | wire 变更未覆盖桌面消费者，或投影结构共享丢字段              | IPC 转换及既有非 UI service/parser 测试；类型检查相关前端消费者              |
 
-实现时从仓库根目录选择真实用例名称运行，命令入口见 [Rust 验证](../../src-tauri/README.md)与[前端验证](../../src/README.md)。首批 Rust 影响评估至少覆盖 Protocol、Registry/Catalog、Analysis、Editor、Runtime、IPC/Harness Contract、Application 与 Project 的直接消费者；后续阶段再加入 Execution、Kernel 和关系后端。
+实现时从仓库根目录选择真实用例名称运行，命令入口见 [Rust 验证](../../README.md)与[前端验证](../../react/src/README.md)。首批 Rust 影响评估至少覆盖 Protocol、Registry/Catalog、Analysis、Editor、Runtime、IPC/Harness Contract、Application 与 Project 的直接消费者；后续阶段再加入 Execution、Kernel 和关系后端。
 
 P5 至 P7 分别补充局部范围准入与结果版本、函数调用隔离、分组组合与行对齐的业务验证，不用首批表单验收替代。AI 效果对比使用相同模型、任务与输入，记录成功率、工具调用次数和无效重跑；未做对比前不宣称效率提升幅度。
 

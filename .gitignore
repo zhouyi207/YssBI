@@ -4,8 +4,8 @@ docs/superpowers/
 
 # Logs
 logs
-!src/modules/logs/
-!src/modules/logs/**
+!react/src/modules/logs/
+!react/src/modules/logs/**
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -36,3 +36,6 @@ target/
 # Python bytecode caches
 __pycache__/
 *.py[cod]
+
+# Pinned sample inputs are fetched only when regenerating the bundled Parquet files.
+resources/samples/*.csv

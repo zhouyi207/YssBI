@@ -39,7 +39,9 @@ impl LayoutStore {
     }
 
     pub fn read(&self, project_root: &str) -> Result<Option<DockAreaState>> {
-        if !self.directory.exists() { return Ok(None); }
+        if !self.directory.exists() {
+            return Ok(None);
+        }
         let binding = RootBinding::for_existing(&self.directory)?;
         let _lease = self.coordinator.acquire(binding.normalized().clone())?;
         let path = self.directory.join(Self::file_name(project_root)?);

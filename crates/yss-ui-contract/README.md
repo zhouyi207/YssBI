@@ -5,22 +5,20 @@
 > Canonical owners: `yss-ui-contract` 拥有共享协议；Application presentation 验证目标并管理意图；本文维护跨端契约
 > Update when: 意图类型、会话边界、交付或回执改变时
 
-Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态由各宿主的原生布局 owner 拥有：GPUI 使用 DockArea，迁移期间的 React 使用 FlexLayout Model。Application 接收打开资源、定位图节点、打开结果和显示登记面板的请求，界面调用已有工作台入口并确认执行结果。
+Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态由各宿主的原生布局 owner 拥有：GPUI 使用根 DockArea。Application 接收打开资源、定位图节点、打开结果和显示登记面板的请求，界面调用已有工作台入口并确认执行结果。
 
-协议见 [UI contract](src/lib.rs)，用例见 [presentation](../yss-application/src/presentation.rs)。报告组件直接消费 [Results](../../../src/modules/results/README.md) 的已解析结果，不经过本模块。
+协议见 [UI contract](src/lib.rs)，用例见 [presentation](../yss-application/src/presentation.rs)。报告组件直接消费 [Results](../../react/src/modules/results/README.md) 的已解析结果，不经过本模块。
 
 ## 请求与交付
 
 原生宿主通过 `ApplicationState::attach_workbench` 获取 `WorkbenchBinding`，直接订阅同一 `UiEvent`，
 使用 binding 的 `pending` 恢复待处理请求、`settle` 认领和结算。Binding 持有原应用会话，
-读取及结算重验该会话；Drop 释放工作台登记及 observer。Tauri 的 Channel 适配也使用此绑定，
-不另维护业务回执或另一套工作台可用性计数。原生宿主未实现的目标结算为 failed，不能回传 applied。
+读取及结算重验该会话；Drop 释放工作台登记及 observer。宿主不另维护业务回执或另一套工作台可用性计数。原生宿主未实现的目标结算为 failed，不能回传 applied。
 
-桌面 IPC 的 `request_ui_intent` 提交 `{ clientKey, intent }` 并返回 `UiIntentReceipt`。`inspect_ui_intent` 通过 `{ id }` 查询同一回执。Harness 工具参数只包含业务 `intent`，幂等 key 由 Core 生成；其 `openResult` 接收完整 `resultRef`，适配到本协议的内部 `UiSource`。模型返回值和历史回放也使用 `resultRef`，不暴露执行会话标识。Harness Schema 从 Rust 业务类型生成；前端 Service 继续验证本协议的意图、结果引用和回执状态。
-
-`subscribe_ui_intents` 仅允许 `main` 工作台订阅；会话 Channel 交付 `intent`、`resync` 和 `sessionChanged`。前端工作台 hook 拥有该订阅，卸载调用 `unsubscribe_ui_intents`，迟到回复与事件按原项目生命周期隔离。没有页面监听者分流或订阅权限切换。
-
-后端 Channel 使用 128 条有界广播缓冲；慢消费产生 `resync`，前端恢复待处理意图。Application 发布中立 observer 通知，Tokio 缓冲与任务归 IPC。取消订阅在注册表锁内移除 observer，锁外释放回调，允许资源析构重入订阅管理。会话替换后旧流发出 `sessionChanged` 并结束，前端重新订阅。
+GUI 与 Harness 通过原 Application 请求、检查和结算同一回执；Harness 工具只包含业务
+`intent`，幂等 key 由 Core 生成。结果引用和模型 schema 继续由 Rust 当前契约导出。
+原生宿主在自己拥有的有界事件队列中串行消费，缺口通过 binding 的 `pending` 恢复；
+事件和迟到回复按项目与宿主 lifecycle 隔离。项目替换后的旧请求不能作用于后继工作台。
 
 ## 意图与回执
 

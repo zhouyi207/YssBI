@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const schemas = JSON.parse(
   execFileSync(
     "cargo",
@@ -12,7 +12,7 @@ const schemas = JSON.parse(
       "run",
       "--quiet",
       "--manifest-path",
-      "src-tauri/Cargo.toml",
+      "Cargo.toml",
       "-p",
       "yss-plugin-protocol",
       "--bin",
@@ -61,7 +61,7 @@ function type(schema) {
       return "unknown";
   }
 }
-const directory = resolve(root, "src/shared/types/plugins");
+const directory = resolve(root, "react/src/shared/types/plugins");
 mkdirSync(directory, { recursive: true });
 const outputs = {
   "generated.ts":

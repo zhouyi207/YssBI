@@ -1,15 +1,15 @@
-//! Shared result protocol mapping for desktop IPC and Harness adapters.
+//! Harness result mapping and bounded inline projections used by result contract tests.
 use crate::graph::results::ResultQueryApplicationError;
-#[cfg(any(feature = "tauri-host", test))]
+#[cfg(test)]
 use crate::graph::results::ResultValueProjection;
 use crate::graph::results::report::LinearRegressionReportProjection;
-#[cfg(any(feature = "tauri-host", test))]
+#[cfg(test)]
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
 
 pub(crate) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 
-#[cfg(any(feature = "tauri-host", test))]
+#[cfg(test)]
 pub(crate) fn report_to_json(projection: LinearRegressionReportProjection) -> serde_json::Value {
     let reference = serde_json::json!({
         "executionSessionId": projection.reference.execution_session_id.as_uuid().to_string(),
@@ -39,7 +39,7 @@ pub(crate) fn report_to_json_with_refs(
     })
 }
 
-#[cfg(any(feature = "tauri-host", test))]
+#[cfg(test)]
 pub(crate) fn query_result_json(
     application: &crate::ApplicationState,
     reference: ResultReference,
@@ -54,7 +54,7 @@ pub(crate) fn query_result_json(
     encoded
 }
 
-#[cfg(any(feature = "tauri-host", test))]
+#[cfg(test)]
 fn encode_inline_projection(
     projection: ResultValueProjection,
 ) -> Result<serde_json::Value, ResultQueryApplicationError> {
