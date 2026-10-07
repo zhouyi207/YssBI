@@ -93,38 +93,7 @@ pub(in crate::builtins) fn value(
     }
     inv.control
         .check_bytes(charge(&data).and_then(|n| n.checked_mul(STRUCTURED_VALUE_COPIES)))?;
-    fn convert(
-        v: serde_json::Value,
-        inv: &KernelInvocation<'_>,
-    ) -> Result<RuntimeValue, KernelError> {
-        inv.check_control()?;
-        Ok(match v {
-            serde_json::Value::Null => TabularScalar::Null.into(),
-            serde_json::Value::Bool(v) => TabularScalar::Bool(v).into(),
-            serde_json::Value::String(v) => TabularScalar::String(v.into()).into(),
-            serde_json::Value::Number(v) => {
-                if let Some(n) = v.as_i64() {
-                    TabularScalar::Integer(n).into()
-                } else if let Some(n) = v.as_u64() {
-                    TabularScalar::Unsigned(n).into()
-                } else {
-                    RuntimeValue::float64(v.as_f64().ok_or(KernelError::NonFiniteResult)?)
-                        .map_err(|_| KernelError::NonFiniteResult)?
-                }
-            }
-            serde_json::Value::Array(v) => RuntimeValue::List(
-                v.into_iter()
-                    .map(|v| convert(v, inv))
-                    .collect::<Result<_, _>>()?,
-            ),
-            serde_json::Value::Object(v) => RuntimeValue::Record(std::sync::Arc::new(
-                v.into_iter()
-                    .map(|(k, v)| Ok((k.into_boxed_str(), convert(v, inv)?)))
-                    .collect::<Result<_, KernelError>>()?,
-            )),
-        })
-    }
-    convert(data, inv)
+    RuntimeValue::from_json_checked(data, &mut || inv.check_control())
 }
 pub(super) fn field<'a>(
     model: &'a RuntimeValue,

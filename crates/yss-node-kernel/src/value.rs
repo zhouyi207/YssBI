@@ -83,7 +83,54 @@ impl TryFrom<&DataValue> for RuntimeValue {
     }
 }
 
+impl TryFrom<serde_json::Value> for RuntimeValue {
+    type Error = RuntimeValueError;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        Self::from_json_checked(value, &mut || Ok(())).map_err(|error| match error {
+            crate::KernelError::NonFiniteResult => RuntimeValueError::NonFinite,
+            _ => RuntimeValueError::Unrepresentable,
+        })
+    }
+}
+
 impl RuntimeValue {
+    pub(crate) fn from_json_checked(
+        value: serde_json::Value,
+        check: &mut impl FnMut() -> Result<(), crate::KernelError>,
+    ) -> Result<Self, crate::KernelError> {
+        check()?;
+        Ok(match value {
+            serde_json::Value::Null => TabularScalar::Null.into(),
+            serde_json::Value::Bool(value) => TabularScalar::Bool(value).into(),
+            serde_json::Value::String(value) => TabularScalar::String(value.into()).into(),
+            serde_json::Value::Number(value) => {
+                if let Some(number) = value.as_i64() {
+                    TabularScalar::Integer(number).into()
+                } else if let Some(number) = value.as_u64() {
+                    TabularScalar::Unsigned(number).into()
+                } else {
+                    Self::float64(value.as_f64().ok_or(crate::KernelError::NonFiniteResult)?)
+                        .map_err(|_| crate::KernelError::NonFiniteResult)?
+                }
+            }
+            serde_json::Value::Array(values) => Self::List(
+                values
+                    .into_iter()
+                    .map(|value| Self::from_json_checked(value, check))
+                    .collect::<Result<_, _>>()?,
+            ),
+            serde_json::Value::Object(values) => Self::Record(Arc::new(
+                values
+                    .into_iter()
+                    .map(|(key, value)| {
+                        Ok((key.into_boxed_str(), Self::from_json_checked(value, check)?))
+                    })
+                    .collect::<Result<_, crate::KernelError>>()?,
+            )),
+        })
+    }
+
     /// Whether the value contains only computed values, without relational expressions.
     pub fn is_immediate(&self) -> bool {
         match self {

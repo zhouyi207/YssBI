@@ -9,6 +9,46 @@ use crate::{
 };
 
 #[test]
+fn plain_json_runtime_values_preserve_nested_scalars_and_cancellation() {
+    let json = serde_json::json!({
+        "unsigned": u64::MAX,
+        "samples": [i64::MIN, 1.25, true, null, "text"],
+        "record": {"count": 3},
+    });
+    let RuntimeValue::Record(record) = RuntimeValue::try_from(json.clone()).unwrap() else {
+        panic!("plain JSON object must become a record");
+    };
+    assert_eq!(record["unsigned"], TabularScalar::Unsigned(u64::MAX).into());
+    assert_eq!(
+        record["samples"],
+        RuntimeValue::List(
+            vec![
+                TabularScalar::Integer(i64::MIN).into(),
+                RuntimeValue::float64(1.25).unwrap(),
+                TabularScalar::Bool(true).into(),
+                TabularScalar::Null.into(),
+                TabularScalar::String("text".into()).into(),
+            ]
+            .into()
+        )
+    );
+    assert!(matches!(&record["record"], RuntimeValue::Record(fields)
+        if fields["count"] == TabularScalar::Integer(3).into()));
+
+    let mut visited = 0;
+    let cancelled = RuntimeValue::from_json_checked(json, &mut || {
+        visited += 1;
+        if visited == 3 {
+            Err(crate::KernelError::Cancelled)
+        } else {
+            Ok(())
+        }
+    });
+    assert!(matches!(cancelled, Err(crate::KernelError::Cancelled)));
+    assert_eq!(visited, 3);
+}
+
+#[test]
 fn semantic_annotations_only_contain_materialized_scalar_values() {
     use yss_data_contract::{ColumnSemantic, ConversionMetadata, SemanticType};
     let metadata = ConversionMetadata {

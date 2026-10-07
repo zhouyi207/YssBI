@@ -201,6 +201,9 @@ CCA 的 X/Y 轴组合成一张得分表以支持相互比较。观测数据不�
 
 统计结果进入 `common::value` 时保留原有数值类型；转换入口在 JSON 编码前遍历并拒绝
 非有限浮点数，返回 `NonFiniteResult`，合法 `Option::None` 仍转换为空值。
+普通 JSON 的标量、列表和记录统一由 `RuntimeValue::try_from` 转为运行值，保留有符号整数、
+无符号宽整数及浮点载体。内核报告复用同一转换，并在每个嵌套值检查执行控制；
+编码前有限性校验和整体内存限额继续由统计适配入口执行。
 ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误抹成 Null。
 已经构造的 JSON 无法恢复被抹去的数值类型，生成这类报告的 owner 必须在编码前完成检查。
 
