@@ -149,7 +149,12 @@ function GraphFlowRuntime({
   modelRef.current = model;
   const { interaction, commands, workspace } = canvas;
   const pan = useRef<GestureLease | null>(null);
-  const contextMenuPress = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const contextMenuPress = useRef<{
+    x: number;
+    y: number;
+    moved: boolean;
+    released: boolean;
+  } | null>(null);
   const selectionGesture = useRef<GestureLease | null>(null);
   const selectionPointer = useRef<SelectionPointerSnapshot | null>(null);
   const suppressClick = useRef(false);
@@ -416,10 +421,6 @@ function GraphFlowRuntime({
       if (pan.current?.isCurrent())
         viewport.setViewport({ x: next.x, y: next.y, scale: next.zoom });
       else synchronizeViewport(viewport.getViewport());
-      const press = contextMenuPress.current;
-      if (press && "clientX" in event && (event.buttons & 2) !== 0) {
-        press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
-      }
     },
     [viewport, synchronizeViewport],
   );
@@ -579,6 +580,7 @@ function GraphFlowRuntime({
             selectionPointer.current = null;
           }}
           onPointerCancel={() => {
+            if (contextMenuPress.current) contextMenuPress.current.moved = true;
             const current = selectionGesture.current;
             const snapshot = current?.isCurrent() ? selectionPointer.current : null;
             current?.finish();
@@ -596,14 +598,14 @@ function GraphFlowRuntime({
           onContextMenuCapture={(event) => {
             const target = event.target instanceof Element ? event.target : null;
             if (!target?.classList.contains("react-flow__pane")) return;
-            // Right-button panning consumes React Flow's pane context-menu callback.
-            // Handle the native event once, allowing click jitter but not a completed drag.
+            // Linux may dispatch contextmenu on press, before a pan can be detected.
+            // Pointer right-clicks open on release; consume native events in either order.
             event.preventDefault();
             event.stopPropagation();
             if (
               !interactive ||
               !interaction.isInteractive() ||
-              contextMenuPress.current?.moved ||
+              (event.button === 2 && contextMenuPress.current !== null) ||
               (pan.current && !pan.current.isCurrent())
             )
               return;
@@ -614,8 +616,11 @@ function GraphFlowRuntime({
           onEdgeDoubleClick={onEdgeDoubleClick}
           onEdgeContextMenu={onEdgeContextMenu}
           onPointerDownCapture={(event) => {
+            const target = event.target instanceof Element ? event.target : null;
             contextMenuPress.current =
-              event.button === 2 ? { x: event.clientX, y: event.clientY, moved: false } : null;
+              event.button === 2 && target?.classList.contains("react-flow__pane")
+                ? { x: event.clientX, y: event.clientY, moved: false, released: false }
+                : null;
             suppressClick.current = false;
             // A new press also recovers an aborted gesture whose release happened outside the view.
             if (selectionGesture.current && !selectionGesture.current.isCurrent()) {
@@ -628,7 +633,6 @@ function GraphFlowRuntime({
               pan.current = null;
               synchronizeViewport(viewport.getViewport());
             }
-            const target = event.target instanceof Element ? event.target : null;
             // Snapshot before React Flow clears its selection on the first rectangle movement.
             selectionPointer.current =
               event.button === 0 && target?.classList.contains("react-flow__pane")
@@ -666,8 +670,27 @@ function GraphFlowRuntime({
               }
             }
           }}
+          onPointerMoveCapture={(event) => {
+            const press = contextMenuPress.current;
+            if (press && !press.released && (event.buttons & 2) !== 0)
+              press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
+          }}
           onPointerUpCapture={(event) => {
             const target = event.target instanceof Element ? event.target : null;
+            const press = contextMenuPress.current;
+            if (event.button === 2 && press && !press.released) {
+              press.released = true;
+              if (
+                interactive &&
+                interaction.isInteractive() &&
+                target?.classList.contains("react-flow__pane") &&
+                !press.moved &&
+                Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 3 &&
+                (!pan.current || pan.current.isCurrent())
+              )
+                onContextMenu(event);
+              return;
+            }
             const current = selectionGesture.current;
             const snapshot = selectionPointer.current;
             const cancelled = current !== null && !current.isCurrent();
