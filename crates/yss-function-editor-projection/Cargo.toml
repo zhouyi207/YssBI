@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 serde.workspace = true
-thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }

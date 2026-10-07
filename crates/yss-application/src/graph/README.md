@@ -127,7 +127,8 @@ Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码�
 
 创建目录、编辑校验与剪贴板导出共用 `ProjectCatalogResources` 中已验证的项目声明。
 编辑目录将资源 revision 与已有 `FunctionSignature` 绑定，不再另建字符串函数签名或在连接时重新解析
-类型名。`export_graph_subgraph` 按项目、图路径和 `GraphEditVersion` 读取 Project 当前文档，
+类型名。函数声明统一通过 Data Contract 的 `ValueType` 解析；目录不依赖编辑器投影的类型校验。
+`export_graph_subgraph` 按项目、图路径和 `GraphEditVersion` 读取 Project 当前文档，
 导出只捕获声明，不读取数据库 Schema；返回前重验项目索引、应用会话和编辑版本。
 目录查询与创建并连接共用声明端口及函数动态
 成员的候选构造，保留成员身份、顺序、类型和回退标签。既有端口优先消费语义快照；同一原子补丁中新建

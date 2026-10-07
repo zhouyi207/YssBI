@@ -26,16 +26,8 @@ pub struct FunctionEditorProjection {
     pub outputs: Box<[FunctionEditorPin]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum FunctionEditorProjectionError {
-    #[error("function editor projection type is invalid")]
-    InvalidType(#[source] ValueTypeParseError),
-    #[error("function editor projection Struct type key is empty")]
-    EmptyStructType,
-}
-
 impl TryFrom<&FunctionDocument> for FunctionEditorProjection {
-    type Error = FunctionEditorProjectionError;
+    type Error = ValueTypeParseError;
 
     fn try_from(document: &FunctionDocument) -> Result<Self, Self::Error> {
         let inputs = document
@@ -46,10 +38,10 @@ impl TryFrom<&FunctionDocument> for FunctionEditorProjection {
                 Ok(FunctionEditorPin {
                     id: parameter.id.as_str().into(),
                     name: parameter.name.as_str().into(),
-                    data_type: parse_function_data_type(&parameter.type_name)?,
+                    data_type: parameter.type_name.parse()?,
                 })
             })
-            .collect::<Result<Vec<_>, FunctionEditorProjectionError>>()?
+            .collect::<Result<Vec<_>, ValueTypeParseError>>()?
             .into_boxed_slice();
         let outputs = document
             .signature
@@ -59,11 +51,11 @@ impl TryFrom<&FunctionDocument> for FunctionEditorProjection {
                 Ok(FunctionEditorPin {
                     id: "return".into(),
                     name: return_type.into(),
-                    data_type: parse_function_data_type(return_type)?,
+                    data_type: return_type.parse()?,
                 })
             })
             .into_iter()
-            .collect::<Result<Vec<_>, FunctionEditorProjectionError>>()?
+            .collect::<Result<Vec<_>, ValueTypeParseError>>()?
             .into_boxed_slice();
 
         Ok(Self {
@@ -71,29 +63,6 @@ impl TryFrom<&FunctionDocument> for FunctionEditorProjection {
             inputs,
             outputs,
         })
-    }
-}
-
-pub fn parse_function_data_type(
-    type_name: &str,
-) -> Result<ValueType, FunctionEditorProjectionError> {
-    let data_type = type_name
-        .parse()
-        .map_err(|error: ValueTypeParseError| FunctionEditorProjectionError::InvalidType(error))?;
-    validate_function_data_type(&data_type)?;
-    Ok(data_type)
-}
-
-fn validate_function_data_type(data_type: &ValueType) -> Result<(), FunctionEditorProjectionError> {
-    match data_type {
-        ValueType::Struct(key) if key.trim().is_empty() => {
-            Err(FunctionEditorProjectionError::EmptyStructType)
-        }
-        ValueType::Array(inner) | ValueType::DataSeries(inner) => {
-            validate_function_data_type(inner)
-        }
-        ValueType::OneOf(inner) => inner.iter().try_for_each(validate_function_data_type),
-        _ => Ok(()),
     }
 }
 
@@ -152,7 +121,7 @@ mod tests {
         assert_eq!(
             FunctionEditorProjection::try_from(&function_document("Array<Struct<   >>", None))
                 .unwrap_err(),
-            FunctionEditorProjectionError::InvalidType(ValueTypeParseError::MalformedComposite)
+            ValueTypeParseError::MalformedComposite
         );
     }
 

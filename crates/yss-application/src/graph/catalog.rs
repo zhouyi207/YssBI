@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use yss_data_contract::ValueType;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
 };
-use yss_function_editor_projection::parse_function_data_type;
 use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
 use yss_graph_editor::{CatalogMutationResource, CatalogMutationValidationSnapshot};
@@ -678,7 +678,9 @@ fn graph_signature(
         .parameters
         .iter()
         .map(|parameter| {
-            parse_function_data_type(&parameter.type_name)
+            parameter
+                .type_name
+                .parse::<ValueType>()
                 .map(|data_type| {
                     FunctionParameterContract::new(
                         parameter.id.clone(),
@@ -692,7 +694,7 @@ fn graph_signature(
     let result = signature
         .return_type
         .as_deref()
-        .map(parse_function_data_type)
+        .map(str::parse::<ValueType>)
         .transpose()
         .map_err(|_| ())?;
     Ok(FunctionSignature::new(parameters, result))
