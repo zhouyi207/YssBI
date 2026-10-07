@@ -68,7 +68,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-project-registry-sqlite` | `crates/yss-project-registry-sqlite` | [Cargo.toml](../../crates/yss-project-registry-sqlite/Cargo.toml) | — |
 | `yss-relational-contract` | `crates/yss-relational-contract` | [Cargo.toml](../../crates/yss-relational-contract/Cargo.toml) | — |
 | `yss-resource-lifecycle` | `crates/yss-resource-lifecycle` | [Cargo.toml](../../crates/yss-resource-lifecycle/Cargo.toml) | — |
-| `yss-resource-naming` | `crates/yss-resource-naming` | [Cargo.toml](../../crates/yss-resource-naming/Cargo.toml) | — |
+| `yss-resource-naming` | `crates/yss-resource-naming` | [Cargo.toml](../../crates/yss-resource-naming/Cargo.toml) | [README](../../crates/yss-resource-naming/README.md) |
 | `yss-sci` | `crates/yss-sci` | [Cargo.toml](../../crates/yss-sci/Cargo.toml) | [README](../../crates/yss-sci/README.md) |
 | `yss-sci-contract` | `crates/yss-sci-contract` | [Cargo.toml](../../crates/yss-sci-contract/Cargo.toml) | [README](../../crates/yss-sci-contract/README.md) |
 | `yss-sci-linalg` | `crates/yss-sci-linalg` | [Cargo.toml](../../crates/yss-sci-linalg/Cargo.toml) | [README](../../crates/yss-sci-linalg/README.md) |

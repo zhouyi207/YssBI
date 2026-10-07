@@ -36,9 +36,10 @@ impl fmt::Display for ResourceNameValidationError {
             Self::InvalidSpacing => formatter
                 .write_str("resource name cannot have leading, trailing, or consecutive spaces"),
             Self::Reserved => formatter.write_str("resource name is reserved"),
-            Self::TooLong => {
-                formatter.write_str("resource name cannot exceed 80 Unicode characters")
-            }
+            Self::TooLong => write!(
+                formatter,
+                "resource name cannot exceed {MAX_RESOURCE_NAME_CHARACTERS} Unicode characters"
+            ),
         }
     }
 }
@@ -136,9 +137,12 @@ fn is_reserved(input: &str) -> bool {
 }
 
 fn reserved_numbered_name(value: &str, prefix: &str) -> bool {
-    value
-        .strip_prefix(prefix)
-        .is_some_and(|number| matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
+    value.strip_prefix(prefix).is_some_and(|number| {
+        matches!(
+            number,
+            "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+        )
+    })
 }
 
 #[cfg(test)]
@@ -181,6 +185,20 @@ mod tests {
 
         assert_eq!(mixed_case.portable_key(), uppercase.portable_key());
         assert_eq!(mixed_case.portable_key(), "strasse");
+    }
+
+    #[test]
+    fn windows_superscript_device_names_are_reserved() {
+        for name in ["COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³", "com¹"] {
+            assert_eq!(
+                ResourceName::parse(name),
+                Err(ResourceNameValidationError::Reserved),
+                "{name}"
+            );
+        }
+        for name in ["COM⁴", "COM¹ Report"] {
+            assert!(ResourceName::parse(name).is_ok(), "{name}");
+        }
     }
 
     #[test]
