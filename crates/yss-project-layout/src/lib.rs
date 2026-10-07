@@ -3,6 +3,7 @@
 //! This crate owns names and path classification only. Project I/O, watcher
 //! delivery, and document schemas remain in their respective owners.
 
+use std::ffi::OsStr;
 use std::path::{Component, Path};
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
@@ -36,29 +37,24 @@ pub const PROJECT_CONTENT_DIRECTORIES: [&str; 6] = [
 
 /// Returns whether a safe project-relative path can change the project index.
 pub fn is_project_index_input_path(path: &Path) -> bool {
-    if path.as_os_str().is_empty()
-        || path.is_absolute()
-        || path.components().any(|component| {
-            matches!(
-                component,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        })
+    let mut components = path.components();
+    let Some(Component::Normal(first)) = components.next() else {
+        return false;
+    };
+    if components
+        .clone()
+        .any(|component| !matches!(component, Component::Normal(_)))
     {
         return false;
     }
 
-    let normalized = path.to_string_lossy().replace('\\', "/");
-    normalized == PROJECT_METADATA_FILE
-        || PROJECT_CONTENT_DIRECTORIES
-            .into_iter()
-            .any(|directory| normalized == directory || is_descendant(&normalized, directory))
-}
+    if first == OsStr::new(PROJECT_METADATA_FILE) {
+        return components.next().is_none();
+    }
 
-fn is_descendant(path: &str, directory: &str) -> bool {
-    path.strip_prefix(directory)
-        .and_then(|suffix| suffix.strip_prefix('/'))
-        .is_some_and(|suffix| !suffix.is_empty())
+    PROJECT_CONTENT_DIRECTORIES
+        .into_iter()
+        .any(|directory| first == OsStr::new(directory))
 }
 
 #[cfg(test)]
@@ -74,13 +70,14 @@ mod tests {
             CHARTS_DIR,
             DATABASE_DIR,
             "events/Main.yssbi-event",
-            r"events\Main.yssbi-event",
             "functions/Mean.yssbi-function",
             "charts/Sales.yssbi-chart",
             "database/catalog.sqlite",
         ] {
             assert!(is_project_index_input_path(Path::new(path)), "{path}");
         }
+        let native = Path::new(EVENT_GRAPHS_DIR).join("Main.yssbi-event");
+        assert!(is_project_index_input_path(&native));
 
         for path in [
             "",
@@ -95,5 +92,17 @@ mod tests {
 
         let absolute = std::env::current_dir().unwrap().join(PROJECT_METADATA_FILE);
         assert!(!is_project_index_input_path(&absolute));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_backslash_names_do_not_count_as_project_directories() {
+        for path in [
+            r"events\Main.yssbi-event",
+            r"events\..\README.md",
+            r"events\folder/Main.yssbi-event",
+        ] {
+            assert!(!is_project_index_input_path(Path::new(path)), "{path}");
+        }
     }
 }
