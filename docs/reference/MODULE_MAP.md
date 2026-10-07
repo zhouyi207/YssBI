@@ -58,7 +58,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-plugin-sdk` | `crates/yss-plugin-sdk` | [Cargo.toml](../../crates/yss-plugin-sdk/Cargo.toml) | [README](../../crates/yss-plugin-sdk/README.md) |
 | `yss-project` | `crates/yss-project` | [Cargo.toml](../../crates/yss-project/Cargo.toml) | [README](../../crates/yss-project/README.md) |
 | `yss-project-history` | `crates/yss-project-history` | [Cargo.toml](../../crates/yss-project-history/Cargo.toml) | — |
-| `yss-project-identity` | `crates/yss-project-identity` | [Cargo.toml](../../crates/yss-project-identity/Cargo.toml) | — |
+| `yss-project-identity` | `crates/yss-project-identity` | [Cargo.toml](../../crates/yss-project-identity/Cargo.toml) | [README](../../crates/yss-project-identity/README.md) |
 | `yss-project-layout` | `crates/yss-project-layout` | [Cargo.toml](../../crates/yss-project-layout/Cargo.toml) | [README](../../crates/yss-project-layout/README.md) |
 | `yss-project-model` | `crates/yss-project-model` | [Cargo.toml](../../crates/yss-project-model/Cargo.toml) | [README](../../crates/yss-project-model/README.md) |
 | `yss-project-operation` | `crates/yss-project-operation` | [Cargo.toml](../../crates/yss-project-operation/Cargo.toml) | — |

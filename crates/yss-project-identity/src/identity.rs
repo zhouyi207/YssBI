@@ -98,23 +98,6 @@ impl ResourceRevision {
     }
 }
 
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
-#[serde(transparent)]
-pub struct ProjectRevision(u64);
-
-impl ProjectRevision {
-    pub const INITIAL: Self = Self(0);
-
-    pub const fn checked_next(self) -> Result<Self, RevisionExhausted> {
-        match self.0.checked_add(1) {
-            Some(next) => Ok(Self(next)),
-            None => Err(RevisionExhausted { retained: self.0 }),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RevisionExhausted {
     pub retained: u64,
