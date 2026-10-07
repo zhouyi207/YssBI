@@ -20,6 +20,8 @@
 | `reference/`     | 生成索引与更多源码旁说明                       | [实现参考](reference/README.md)           |
 | `benchmark/`     | 测量方法、样本与结果                           | [基准索引](benchmark/README.md)           |
 
+GPUI 原生宿主见 [GPUI host](../src-tauri/crates/yss-desktop-gpui/README.md)，开放工作见 [GPUI 迁移](roadmap/GPUI_MIGRATION.md)。
+
 ## 模块契约入口
 
 | 范围                         | 对应 README                                                                                                                                                                                                                            |

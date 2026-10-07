@@ -1,0 +1,86 @@
+use std::sync::OnceLock;
+use yss_application::activity_panel::ActivityText;
+use yss_graph_editor::projection::EditorDiagnosticModel;
+
+pub fn translate(key: &str) -> String {
+    static LOCALE: OnceLock<serde_json::Value> = OnceLock::new();
+    let mut value = LOCALE.get_or_init(|| {
+        serde_json::from_str(include_str!("../assets/zh-CN.json"))
+            .expect("bundled locale is valid JSON")
+    });
+    for part in key.split('.') {
+        let Some(next) = value.get(part) else {
+            return key.to_owned();
+        };
+        value = next;
+    }
+    value.as_str().unwrap_or(key).to_owned()
+}
+
+pub fn activity_text(text: &ActivityText) -> String {
+    match text {
+        ActivityText::Literal(value) => value.clone(),
+        ActivityText::Key(key) => translate(key),
+    }
+}
+
+pub fn graph_diagnostic(diagnostic: &EditorDiagnosticModel) -> String {
+    let fallback = || {
+        let code = diagnostic.code.as_ref();
+        if code.len() <= 128
+            && code.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+            && code.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_.".contains(&byte)
+            })
+        {
+            format!("图问题（{code}）。")
+        } else {
+            "图中存在需要检查的问题。".into()
+        }
+    };
+    let Some(definition) = yss_graph_diagnostics::GRAPH_DIAGNOSTIC_DEFINITIONS
+        .iter()
+        .find(|definition| {
+            definition.code == diagnostic.code.as_ref()
+                && definition.message_key == diagnostic.message_key.as_ref()
+        })
+    else {
+        return fallback();
+    };
+    if definition
+        .argument_names
+        .iter()
+        .any(|name| !diagnostic.arguments.contains_key(*name))
+    {
+        return fallback();
+    }
+    let Some(template) = definition
+        .templates
+        .iter()
+        .find(|template| template.locale == "zh-CN")
+    else {
+        return fallback();
+    };
+    let mut rest = template.text;
+    let mut text = String::new();
+    while let Some(open) = rest.find('{') {
+        text.push_str(&rest[..open]);
+        let Some(close) = rest[open..].find('}').map(|close| open + close) else {
+            return fallback();
+        };
+        let Some(argument) = diagnostic.arguments.get(&rest[open + 1..close]) else {
+            return fallback();
+        };
+        // Substitute once so a user label containing another placeholder stays literal.
+        text.extend(argument.chars().take(512).map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        }));
+        rest = &rest[close + 1..];
+    }
+    text.push_str(rest);
+    text
+}

@@ -1,0 +1,358 @@
+//! Read projections of Application run facts and native command lifecycle.
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use gpui::Context;
+use yss_application::graph::run::{
+    ExecutionApplicationError, RunApplicationEvent, RunApplicationEventKind, RunDemand,
+    RunGraphRequest, RunIdentity, cancel_run, run_graph_with_sink,
+};
+use yss_graph_execution::plan::PlanOutputRef;
+use yss_graph_execution::run_registry::RunId;
+
+use super::{CanvasEvent, GraphCanvas};
+
+#[derive(Default)]
+pub(super) struct ExecutionView {
+    runs: BTreeMap<RunId, RunProjection>,
+    submitting: Option<Arc<AtomicBool>>,
+    cancelling: bool,
+    recovery: Option<Vec<RunApplicationEvent>>,
+    recover_again: bool,
+    unknown: bool,
+    cleared: Option<RunIdentity>,
+}
+
+struct RunProjection {
+    event: RunApplicationEvent,
+    outputs: Box<[PlanOutputRef]>,
+}
+
+impl ExecutionView {
+    pub fn running(&self) -> bool {
+        self.submitting.is_some() || self.active().is_some()
+    }
+
+    fn active(&self) -> Option<&RunIdentity> {
+        self.runs.values().rev().find_map(|projection| {
+            let event = &projection.event;
+            matches!(event.kind(), RunApplicationEventKind::RunStarted { .. })
+                .then_some(event.identity())
+        })
+    }
+
+    fn install(&mut self, event: RunApplicationEvent) -> bool {
+        let id = event.identity().run_id();
+        if let Some(previous) = self.runs.get(&id).map(|projection| &projection.event)
+            && (!matches!(previous.kind(), RunApplicationEventKind::RunStarted { .. })
+                || previous == &event)
+        {
+            return false;
+        }
+        let outputs = match event.kind() {
+            RunApplicationEventKind::RunStarted { outputs } => outputs.clone(),
+            _ => self
+                .runs
+                .get(&id)
+                .map(|projection| projection.outputs.clone())
+                .unwrap_or_default(),
+        };
+        self.runs.insert(id, RunProjection { event, outputs });
+        let newest = self.runs.last_key_value().map(|(id, _)| *id);
+        self.runs.retain(|id, projection| {
+            Some(*id) == newest
+                || matches!(
+                    projection.event.kind(),
+                    RunApplicationEventKind::RunStarted { .. }
+                )
+        });
+        true
+    }
+}
+
+impl GraphCanvas {
+    pub(crate) fn can_run(&self) -> bool {
+        !self.busy
+            && !self.execution.running()
+            && !self.execution.unknown
+            && self.execution.recovery.is_none()
+    }
+
+    pub(crate) fn run_status(&self) -> &'static str {
+        if self.execution.cancelling
+            || self
+                .execution
+                .submitting
+                .as_ref()
+                .is_some_and(|cancellation| cancellation.load(Ordering::Acquire))
+        {
+            "正在取消…"
+        } else if self.execution.running() {
+            "正在运行…"
+        } else if self.execution.unknown {
+            "运行状态未知，请刷新状态"
+        } else if self.execution.recovery.is_some() {
+            "正在同步运行状态…"
+        } else {
+            match self
+                .execution
+                .runs
+                .last_key_value()
+                .map(|(_, projection)| &projection.event)
+                .filter(|event| {
+                    event.identity().semantic_input_hash()
+                        == &self.graph.projection.basis.semantic_input_hash
+                })
+                .map(RunApplicationEvent::kind)
+            {
+                Some(RunApplicationEventKind::RunCompleted) => "运行完成",
+                Some(RunApplicationEventKind::RunCancelled) => "已取消",
+                Some(RunApplicationEventKind::RunErrored { .. }) => "运行失败",
+                _ => "",
+            }
+        }
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.execution.running()
+    }
+
+    pub(crate) fn run_graph(&mut self, demand: RunDemand, cx: &mut Context<Self>) {
+        if !self.can_run() {
+            return;
+        }
+        let project = self.graph.project.clone();
+        let path = self.graph.projection.graph_path.clone();
+        let version = self.graph.editing.version;
+        let hash = self.graph.projection.basis.semantic_input_hash;
+        let cancellation = Arc::new(AtomicBool::new(false));
+        self.execution.submitting = Some(cancellation.clone());
+        self.execution.cleared = None;
+        self.error = None;
+        let task = self.services.run(move |services| {
+            let application = &services.application;
+            // Capture the document matching the displayed projection, never a later revision.
+            let document = application.current_graph_document(&project, &path, version)?;
+            let request = RunGraphRequest::new(project, path, (*document).clone(), hash)
+                .with_demand(demand)
+                .with_cancellation(cancellation);
+            Ok(run_graph_with_sink(application, request, |_| true)?)
+        });
+        cx.spawn(async move |view, cx| {
+            let result = task
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result);
+            let _ = view.update(cx, |view, cx| {
+                view.execution.submitting = None;
+                if let Err(error) = result {
+                    tracing::warn!(
+                        code = "native_run_request_rejected",
+                        "Native run request rejected"
+                    );
+                    // A command rejection is feedback, not an Execution failure fact in Output.
+                    view.error = Some(run_rejection(&error));
+                }
+                view.resync_execution(cx);
+                cx.emit(CanvasEvent::Execution);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.emit(CanvasEvent::Execution);
+        cx.notify();
+    }
+
+    pub(crate) fn cancel_run(&mut self, cx: &mut Context<Self>) {
+        if self.execution.cancelling {
+            return;
+        }
+        if let Some(cancellation) = &self.execution.submitting {
+            cancellation.store(true, Ordering::Release);
+        }
+        let Some(identity) = self.execution.active().cloned() else {
+            cx.notify();
+            return;
+        };
+        self.execution.cancelling = true;
+        let task = self.services.run(move |services| {
+            Ok(cancel_run(
+                &services.application,
+                *identity.execution_session_id(),
+                identity.run_id(),
+            )?)
+        });
+        cx.spawn(async move |view, cx| {
+            let result = task
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result);
+            let _ = view.update(cx, |view, cx| {
+                view.execution.cancelling = false;
+                if result.is_err() {
+                    view.error = Some("取消请求未完成，请刷新运行状态。".into());
+                }
+                view.resync_execution(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub(crate) fn accept_execution(&mut self, event: RunApplicationEvent, cx: &mut Context<Self>) {
+        if event.identity().graph_path() != &self.graph.projection.graph_path
+            || event.identity().execution_session_id() != &self.graph.results.execution_session_id
+            || matches!(
+                event.kind(),
+                RunApplicationEventKind::ResultInspectionRequested { .. }
+            )
+        {
+            return;
+        }
+        if let Some(buffer) = &mut self.execution.recovery {
+            if buffer.len() >= 256 {
+                buffer.clear();
+                self.execution.recover_again = true;
+            }
+            buffer.push(event);
+            return;
+        }
+        if self.execution.install(event) {
+            self.refresh(cx);
+            cx.emit(CanvasEvent::Execution);
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn resync_execution(&mut self, cx: &mut Context<Self>) {
+        if self.execution.recovery.is_some() {
+            self.execution.recover_again = true;
+            return;
+        }
+        self.execution.recovery = Some(Vec::new());
+        self.execution.recover_again = false;
+        let project = self.graph.project.clone();
+        let task = self
+            .services
+            .run(move |services| Ok(services.application.execution_snapshot(&project)?));
+        cx.spawn(async move |view, cx| {
+            let result = task
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result);
+            let _ = view.update(cx, |view, cx| {
+                let buffered = view.execution.recovery.take().unwrap_or_default();
+                if view.execution.recover_again {
+                    view.resync_execution(cx);
+                    return;
+                }
+                match result {
+                    Ok(events) => {
+                        view.execution.unknown = false;
+                        view.execution.runs.clear();
+                        for event in events.into_iter().chain(buffered) {
+                            view.accept_execution(event, cx);
+                        }
+                    }
+                    Err(_) => {
+                        view.execution.unknown = true;
+                        for event in buffered {
+                            view.accept_execution(event, cx);
+                        }
+                    }
+                }
+                cx.emit(CanvasEvent::Execution);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub(crate) fn run_failure(&self) -> Option<RunApplicationEvent> {
+        let (_, projection) = self.execution.runs.last_key_value()?;
+        let event = &projection.event;
+        (event.identity().semantic_input_hash() == &self.graph.projection.basis.semantic_input_hash
+            && self.execution.cleared.as_ref() != Some(event.identity())
+            && matches!(event.kind(), RunApplicationEventKind::RunErrored { .. }))
+        .then(|| event.clone())
+    }
+
+    pub(crate) fn clear_run_failure(&mut self, cx: &mut Context<Self>) {
+        self.execution.cleared = self
+            .execution
+            .runs
+            .last_key_value()
+            .map(|(_, projection)| projection.event.identity().clone());
+        cx.emit(CanvasEvent::Execution);
+        cx.notify();
+    }
+
+    pub(crate) fn inspect_results(&self, cx: &mut Context<Self>) {
+        cx.emit(CanvasEvent::ShowResults);
+    }
+
+    pub(crate) fn result_waiting(&self, output: &PlanOutputRef) -> bool {
+        self.execution.runs.values().any(|projection| {
+            projection.event.identity().semantic_input_hash()
+                == &self.graph.projection.basis.semantic_input_hash
+                && projection.event.result_revision() > self.graph.results.revision
+                && projection.outputs.contains(output)
+        })
+    }
+}
+
+impl Drop for GraphCanvas {
+    fn drop(&mut self) {
+        if let Some(cancellation) = &self.execution.submitting {
+            cancellation.store(true, Ordering::Release);
+        }
+        let active: Vec<_> = self
+            .execution
+            .runs
+            .values()
+            .filter(|projection| {
+                matches!(
+                    projection.event.kind(),
+                    RunApplicationEventKind::RunStarted { .. }
+                )
+            })
+            .map(|projection| projection.event.identity().clone())
+            .collect();
+        if !active.is_empty() {
+            self.services.run(move |services| {
+                for identity in active {
+                    let _ = cancel_run(
+                        &services.application,
+                        *identity.execution_session_id(),
+                        identity.run_id(),
+                    );
+                }
+                Ok(())
+            });
+        }
+    }
+}
+
+fn run_rejection(error: &anyhow::Error) -> String {
+    let cause = match error.downcast_ref::<ExecutionApplicationError>() {
+        Some(ExecutionApplicationError::DraftChanged) => "graph_draft_changed",
+        Some(ExecutionApplicationError::GraphNotReady) => "graph_not_ready",
+        Some(ExecutionApplicationError::GraphResolutionFailed { .. }) => "graph_resolution_failed",
+        Some(ExecutionApplicationError::GraphPlan(_)) => "graph_plan_failed",
+        Some(
+            ExecutionApplicationError::SessionCapture(_)
+            | ExecutionApplicationError::StaleSession(_),
+        ) => "stale_project_lifecycle",
+        Some(ExecutionApplicationError::Cancelled) => return "运行已取消".into(),
+        Some(ExecutionApplicationError::DeadlineExceeded) => "deadlineExceeded",
+        _ => return "运行请求未完成，请检查图状态和日志。".into(),
+    };
+    crate::text::translate(&format!("runFailure.causes.{cause}"))
+}

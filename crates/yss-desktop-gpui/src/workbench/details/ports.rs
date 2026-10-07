@@ -1,0 +1,414 @@
+//! Input literals and instance operations share the graph's existing typed edit transaction.
+use super::{DetailsPanel, controls};
+use crate::{appearance, canvas::GraphCommand};
+use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
+use gpui_component::{
+    ActiveTheme, Disableable, IconName, Sizable,
+    button::{Button, ButtonVariants},
+    checkbox::Checkbox,
+    input::{Input, InputState},
+};
+use serde_json::Value;
+use yss_data_contract::{SemanticType, ValueType};
+use yss_graph_document::PortRef;
+use yss_graph_editor::{
+    EditorGraphMutation, PortPlacement,
+    projection::{EditorEffectiveInputBinding, EditorPortModel, EditorPortTypeState},
+};
+use yss_node_protocol::PortDirection;
+
+pub(super) struct PortField {
+    pub model: EditorPortModel,
+    input: Option<(SemanticType, Entity<InputState>)>,
+    error: Option<String>,
+}
+
+impl PortField {
+    pub fn new(
+        model: EditorPortModel,
+        window: &mut Window,
+        cx: &mut Context<DetailsPanel>,
+    ) -> Self {
+        let input = if model.direction == PortDirection::Input
+            && !model.orphan
+            && let EditorPortTypeState::Exact {
+                data_type: Some(ValueType::Scalar(kind)),
+                ..
+            } = &model.type_state
+            && matches!(
+                kind,
+                SemanticType::Numeric | SemanticType::Binary | SemanticType::Text
+            ) {
+            let value = model.input.as_ref().and_then(|input| {
+                input
+                    .literal_override
+                    .as_ref()
+                    .or(input.protocol_default.as_ref())
+            });
+            let text = value
+                .map(|value| match value {
+                    Value::String(value) => value.clone(),
+                    _ => value.to_string(),
+                })
+                .unwrap_or_default();
+            Some((
+                *kind,
+                cx.new(|cx| InputState::new(window, cx).default_value(text)),
+            ))
+        } else {
+            None
+        };
+        Self {
+            model,
+            input,
+            error: None,
+        }
+    }
+}
+
+impl DetailsPanel {
+    fn apply_literal(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some((kind, input)) = &self.ports[index].input else {
+            return;
+        };
+        let text = input.read(cx).value();
+        let value = match kind {
+            SemanticType::Text => Ok(Value::String(text.to_string())),
+            SemanticType::Numeric => controls::number(&text),
+            SemanticType::Binary => Ok(Value::Bool(text == "true")),
+            _ => return,
+        };
+        match value {
+            Ok(value) => self.submit(
+                GraphCommand::Edit(EditorGraphMutation::SetLiteral {
+                    address: self.ports[index].model.address.clone(),
+                    literal: Some(value),
+                }),
+                cx,
+            ),
+            Err(error) => self.ports[index].error = Some(error),
+        }
+        cx.notify();
+    }
+
+    pub(super) fn render_ports(&self, busy: bool, cx: &mut Context<Self>) -> AnyElement {
+        let Some(node) = self.node() else {
+            return div().into_any_element();
+        };
+        let epoch = self.epoch;
+        div()
+            .p_4()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .text_xs()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(cx.theme().muted_foreground)
+                    .child("连接端口"),
+            )
+            .children(
+                self.ports
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field)| self.render_port_field(index, field, busy, cx)),
+            )
+            .children(
+                node.port_instance_additions
+                    .iter()
+                    .enumerate()
+                    .map(|(index, addition)| {
+                        let node_id = node.node_id;
+                        let template_key = addition.template_key.clone();
+                        Button::new(("add-port", index))
+                            .small()
+                            .ghost()
+                            .icon(IconName::Plus)
+                            .label(format!(
+                                "添加{} · {}",
+                                if addition.direction == PortDirection::Input {
+                                    "输入"
+                                } else {
+                                    "输出"
+                                },
+                                addition.label
+                            ))
+                            .disabled(busy || !addition.can_add)
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                if view.accepts_input(epoch, cx) {
+                                    view.submit(
+                                        GraphCommand::Edit(EditorGraphMutation::AddPortInstance {
+                                            node_id,
+                                            template_key: template_key.clone(),
+                                            placement: PortPlacement::Append,
+                                        }),
+                                        cx,
+                                    );
+                                }
+                            }))
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn render_port_field(
+        &self,
+        index: usize,
+        field: &PortField,
+        busy: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let port = &field.model;
+        let epoch = self.epoch;
+        let input = port.direction == PortDirection::Input;
+        let address = port.address.clone();
+        let disconnect = address.clone();
+        let remove = address.clone();
+        let mut content = div()
+            .py_2()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .size(px(6.))
+                            .flex_shrink_0()
+                            .rounded_full()
+                            .bg(gpui::rgb(if input {
+                                appearance::BLUE
+                            } else {
+                                appearance::GREEN
+                            })),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div().text_sm().truncate().child(
+                                    port.display
+                                        .instance_label
+                                        .as_deref()
+                                        .unwrap_or(&port.display.label)
+                                        .to_owned(),
+                                ),
+                            )
+                            .child(controls::hint(port.accepted_type.to_string(), cx)),
+                    )
+                    .child(controls::hint(if input { "输入" } else { "输出" }, cx)),
+            );
+        if port.orphan {
+            content = content.child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().danger)
+                    .child("来源已失效，可移除此端口并重新连接"),
+            );
+        }
+        if let Some((kind, state)) = &field.input {
+            let disabled = busy || port.connections.current > 0;
+            let editor = if *kind == SemanticType::Binary {
+                Checkbox::new(("literal-toggle", index))
+                    .label("真")
+                    .checked(state.read(cx).value() == "true")
+                    .disabled(disabled)
+                    .on_click(cx.listener(move |view, value: &bool, window, cx| {
+                        if !view.accepts_input(epoch, cx) {
+                            return;
+                        }
+                        if let Some((_, input)) = &view.ports[index].input {
+                            input.update(cx, |input, cx| {
+                                input.set_value(value.to_string(), window, cx)
+                            });
+                        }
+                        view.apply_literal(index, cx);
+                    }))
+                    .into_any_element()
+            } else {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        Input::new(state)
+                            .small()
+                            .flex_1()
+                            .min_w_0()
+                            .disabled(disabled),
+                    )
+                    .child(
+                        controls::apply(("literal-apply", index), disabled).on_click(cx.listener(
+                            move |view, _, _, cx| {
+                                if view.accepts_input(epoch, cx) {
+                                    view.apply_literal(index, cx)
+                                }
+                            },
+                        )),
+                    )
+                    .into_any_element()
+            };
+            content = content.child(editor).child(controls::hint(
+                match port.input.as_ref().map(|input| input.effective) {
+                    Some(EditorEffectiveInputBinding::Connections) => {
+                        "使用连接值；字面量覆盖保留但暂不生效"
+                    }
+                    Some(EditorEffectiveInputBinding::Literal) => "使用字面量覆盖",
+                    Some(EditorEffectiveInputBinding::ProtocolDefault) => "使用节点默认值",
+                    _ => "未绑定输入，可填写字面量",
+                },
+                cx,
+            ));
+        }
+        let mut actions = div().flex().items_center().gap_1();
+        if port
+            .input
+            .as_ref()
+            .is_some_and(|input| input.literal_override.is_some())
+        {
+            actions = actions.child(
+                Button::new(("clear-literal", index))
+                    .small()
+                    .ghost()
+                    .icon(IconName::Undo2)
+                    .tooltip("清除覆盖，恢复默认值")
+                    .disabled(busy || port.orphan)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if view.accepts_input(epoch, cx) {
+                            view.submit(
+                                GraphCommand::Edit(EditorGraphMutation::SetLiteral {
+                                    address: address.clone(),
+                                    literal: None,
+                                }),
+                                cx,
+                            )
+                        }
+                    })),
+            );
+        }
+        if port.connections.current > 0 {
+            actions = actions.child(
+                Button::new(("disconnect-port", index))
+                    .small()
+                    .ghost()
+                    .icon(IconName::Minus)
+                    .label(format!("断开 {} 条连接", port.connections.current))
+                    .disabled(busy)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if view.accepts_input(epoch, cx) {
+                            view.submit(
+                                GraphCommand::Edit(EditorGraphMutation::DisconnectPort {
+                                    address: disconnect.clone(),
+                                }),
+                                cx,
+                            )
+                        }
+                    })),
+            );
+        }
+        if port.can_remove {
+            actions = actions.child(
+                Button::new(("remove-port", index))
+                    .small()
+                    .ghost()
+                    .icon(IconName::Close)
+                    .tooltip("移除此端口及相关连接")
+                    .disabled(busy)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if view.accepts_input(epoch, cx) {
+                            view.submit(
+                                GraphCommand::Edit(EditorGraphMutation::RemovePortInstance {
+                                    address: remove.clone(),
+                                }),
+                                cx,
+                            )
+                        }
+                    })),
+            );
+        }
+        if port.can_remove
+            && !port.orphan
+            && let PortRef::Instance { template, .. } = &port.address.port
+        {
+            let siblings = self.ports.iter().filter(|field| matches!(&field.model.address.port, PortRef::Instance { template: key, .. } if key == template) && field.model.direction == port.direction).collect::<Vec<_>>();
+            if let Some(position) = siblings
+                .iter()
+                .position(|field| field.model.address == port.address)
+            {
+                for (direction, neighbor) in [
+                    (-1, position.checked_sub(1)),
+                    (1, (position + 1 < siblings.len()).then_some(position + 1)),
+                ] {
+                    if let Some(neighbor) = neighbor
+                        && let PortRef::Instance { instance_id, .. } =
+                            siblings[neighbor].model.address.port
+                    {
+                        let address = port.address.clone();
+                        let placement = if direction < 0 {
+                            PortPlacement::Before(instance_id)
+                        } else {
+                            PortPlacement::After(instance_id)
+                        };
+                        actions = actions.child(
+                            Button::new((
+                                if direction < 0 {
+                                    "port-up"
+                                } else {
+                                    "port-down"
+                                },
+                                index,
+                            ))
+                            .small()
+                            .ghost()
+                            .icon(if direction < 0 {
+                                IconName::ChevronUp
+                            } else {
+                                IconName::ChevronDown
+                            })
+                            .tooltip(if direction < 0 {
+                                "上移端口"
+                            } else {
+                                "下移端口"
+                            })
+                            .disabled(busy)
+                            .on_click(cx.listener(
+                                move |view, _, _, cx| {
+                                    if view.accepts_input(epoch, cx) {
+                                        view.submit(
+                                            GraphCommand::Edit(
+                                                EditorGraphMutation::MovePortInstance {
+                                                    address: address.clone(),
+                                                    placement: placement.clone(),
+                                                },
+                                            ),
+                                            cx,
+                                        )
+                                    }
+                                },
+                            )),
+                        );
+                    }
+                }
+            }
+        }
+        content
+            .child(actions)
+            .children(field.error.as_ref().map(|error| {
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().danger)
+                    .child(error.clone())
+            }))
+            .into_any_element()
+    }
+}

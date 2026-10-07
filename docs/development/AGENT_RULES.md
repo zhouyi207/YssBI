@@ -63,10 +63,10 @@ add or commit them unless explicitly requested.
 - Project calendar values and user-facing timestamps are timezone-free. Removing
   an input timezone must preserve its original calendar and wall-clock fields.
 - Rust Project owns the current GraphDocument, graph undo/redo and saved-content
-  identity. React keeps graph read projections and transient interaction state;
+  identity. Desktop views keep graph read projections and transient interaction state;
   do not introduce a separate Graph draft authority. Other resource-specific
   frontend drafts retain their explicitly documented owner.
-- Do not merge or reconcile parallel committed Rust and React models. Replace
+- Do not merge or reconcile parallel committed domain and UI models. Replace
   graph projections in one direction. GUI edits, history navigation and execution
   do not implicitly save the graph body. Explicit Save persists the current graph;
   Assistant edit batches persist their complete current graph atomically and retain
@@ -88,7 +88,9 @@ add or commit them unless explicitly requested.
   `yss-sci-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;
   runtime uses neutral inputs/results. Julia plugin crates own their Bayes
   input and cancellation contracts and do not depend on host SCI crates.
-- Desktop commands and application-specific channel adapters belong to
+- Native desktop composition consumes platform-neutral Application services and
+  typed use cases directly. Domain/application use cases must not depend on GPUI.
+  During migration, Tauri commands and application-specific channel adapters belong to
   `yss-application::ipc`. Its command module owns the application invoke registry and
   consumes `yss-ipc-event`, neutral `yss-ipc-channel` adapters, and shared
   `yss-ipc-contract`. Event/Channel never depend on Application; Contract has no
@@ -109,8 +111,10 @@ add or commit them unless explicitly requested.
   current graph independently. Execute captures its document and semantic identity,
   prepares a matching immutable plan internally, and never implicitly saves.
   Plan caches are backend implementation details, not a separate frontend lifecycle.
-- The root FlexLayout Model instance is the sole authority for workbench topology,
-  placement, ordering, active panels/groups, edge sizes, and collapse state.
+- Each desktop host has one native workbench topology owner: GPUI uses its root
+  DockArea, and the transitional React host uses its root FlexLayout Model.
+  Placement, ordering, selected panels/groups, edge sizes, and collapse state
+  come from that owner; do not mirror them in another application layout model.
 - Graph Problems, operational Logs, Results, and run state/failures are distinct data
   flows. None may be used to reconstruct or substitute for another.
 

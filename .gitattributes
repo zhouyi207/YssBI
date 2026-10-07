@@ -1,3 +1,0 @@
-* text=auto eol=lf
-# Unified diff context prefixes tab-indented source lines with one space.
-patches/*.patch whitespace=-space-before-tab

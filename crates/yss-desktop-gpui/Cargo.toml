@@ -1,0 +1,35 @@
+[package]
+name = "yss-desktop-gpui"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1"
+gpui = { package = "gpui-pre", version = "=0.3.8" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "wayland", "x11"] }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-project = { path = "../yss-project" }
+gpui-component = "=0.7.1"
+gpui-kit-assets = "=0.7.1"
+yss-application = { path = "../yss-application", default-features = false }
+yss-graph-editor = { path = "../yss-graph-editor" }
+yss-graph-diagnostics = { path = "../yss-graph-diagnostics" }
+yss-graph-execution = { path = "../yss-graph-execution" }
+yss-node-kernel = { path = "../yss-node-kernel" }
+yss-data-contract = { path = "../yss-data-contract" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-history = { path = "../yss-project-history" }
+yss-canonical-hash = { path = "../yss-canonical-hash" }
+yss-node-protocol = { path = "../yss-node-protocol" }
+yss-node-catalog = { path = "../yss-node-catalog" }
+yss-harness-contract = { path = "../yss-harness-contract" }
+yss-ui-contract = { path = "../yss-ui-contract" }
+yss-filesystem = { path = "../yss-filesystem" }
+tokio = { workspace = true, features = ["sync", "time"] }
+serde_json.workspace = true
+uuid.workspace = true
+directories = "6"
+tracing.workspace = true
+tauri-plugin-tracing = {path="../tauri-plugin-tracing",default-features=false}

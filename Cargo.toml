@@ -1,0 +1,165 @@
+[package]
+name = "yssbi"
+version = "0.4.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2024"
+rust-version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+resolver = "3"
+members = [
+  ".",
+  "crates/yss-plugin-protocol",
+  "crates/yss-plugin-sdk",
+  "crates/yss-plugin-runtime",
+  "../plugins/julia/native/crates/yss-bayes-runtime",
+  "../plugins/julia/native/crates/yss-julia-extension",
+  "../plugins/julia/native/crates/yss-bayes-artifact-contract",
+  "../plugins/julia/native/crates/yss-bayes-artifact-datafusion",
+  "../plugins/julia/native/crates/yss-bayes-model",
+  "../plugins/julia/native/crates/yss-bayes-result",
+  "../plugins/julia/native/crates/yss-bayes-worker",
+  "../plugins/julia/native/crates/yss-bayes-worker-julia",
+  "../plugins/julia/native/crates/yss-julia-runtime",
+  "../plugins/julia/native/crates/yss-julia-worker",
+
+  "crates/yss-ipc-contract",
+  "crates/yss-ipc-event",
+  "crates/yss-ipc-channel",
+  "crates/yss-harness-rig",
+  "crates/yss-application",
+  "crates/yss-desktop-gpui",
+  "crates/yss-harness-contract",
+  "crates/yss-ui-contract",
+  "crates/yss-harness-core",
+  "crates/yss-harness-sqlite",
+  "crates/yss-harness-tantivy",
+  "crates/yss-canonical-hash",
+  "crates/yss-data-contract",
+  "crates/yss-database-engine",
+  "crates/yss-relational-contract",
+  "crates/yss-database-contract",
+  "crates/yss-database-runtime",
+  "crates/yss-database-schema",
+  "crates/yss-dataset-profile",
+  "crates/yss-database-store",
+  "crates/yss-display-naming",
+  "crates/yss-graph-execution",
+  "crates/yss-function-editor-projection",
+  "crates/yss-graph-analysis",
+  "crates/yss-graph-analysis-contract",
+  "crates/yss-node-catalog",
+  "crates/yss-graph-diagnostics",
+  "crates/yss-graph-document",
+  "crates/yss-graph-document-edit",
+  "crates/yss-graph-editor",
+  "crates/yss-node-protocol",
+  "crates/yss-graph-resource-contract",
+  "crates/yss-node-registry",
+  "crates/yss-node-kernel",
+  "crates/yss-graph-runtime",
+  "crates/yss-graph-type-mapping",
+  "crates/yss-sci-linalg",
+  "crates/yss-math-expr",
+  "crates/yss-project",
+  "crates/yss-filesystem",
+  "crates/yss-project-history",
+  "crates/yss-project-identity",
+  "crates/yss-project-layout",
+  "crates/yss-project-model",
+  "crates/yss-project-operation",
+  "crates/yss-project-progress",
+  "crates/yss-project-registry",
+  "crates/yss-project-registry-contract",
+  "crates/yss-project-registry-sqlite",
+  "crates/yss-resource-lifecycle",
+  "crates/yss-resource-naming",
+  "crates/yss-sci",
+  "crates/yss-sci-contract",
+  "crates/yss-sci-runtime",
+  "crates/yss-database-source",
+  "crates/yss-database-arrow",
+  "crates/yss-database-io",
+  "crates/tauri-plugin-tracing",
+  "crates/yss-chart-document",
+]
+
+[workspace.package]
+rust-version = "1.95"
+
+[workspace.dependencies]
+dunce = "1.0.5"
+atomicwrites = { version = "=0.4.4", default-features = false }
+semver = "1"
+arrow-array = "=59.3.0"
+arrow-select = "=59.3.0"
+futures-core = "0.3"
+futures-util = "0.3"
+url = "2.5"
+arrow = { version = "=59.3.0", default-features = false, features = ["ipc", "csv", "chrono-tz"] }
+arrow-schema = { version = "=59.3.0", features = ["serde"] }
+parquet = { version = "=59.3.0", default-features = false, features = ["arrow", "snap", "zstd"] }
+datafusion = { version = "=55.0.0", default-features = false, features = ["parquet", "sql", "datetime_expressions", "string_expressions", "unicode_expressions", "nested_expressions"] }
+chrono = "0.4.41"
+mathlex = "=0.4.2"
+faer = "0.24.0"
+notify = "8.2.0"
+walkdir = "2.5.0"
+num-traits = "0.2.19"
+rand = "0.10"
+rig-agent = { version = "=0.43.0", default-features = false }
+rig-core = { version = "=0.43.0", default-features = false, features = ["reqwest", "rustls"] }
+rig-reqwest = { version = "=0.43.0", default-features = false, features = ["rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+pulldown-cmark = { version = "0.13.4", default-features = false }
+schemars = "=1.2.2"
+jsonschema = { version = "=0.58.5", default-features = false }
+tantivy = { version = "=0.26.2", default-features = false, features = ["lz4-compression"] }
+sha2 = "0.10.9"
+statrs = { version = "0.19", default-features = false, features = ["std", "rand"] }
+tauri = { version = "2.11", features = [] }
+thiserror = "2.0.18"
+regex = "1"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+sqlx = { version = "0.9", default-features = false, features = [
+  "runtime-tokio",
+  "macros",
+  "sqlite",
+  "postgres",
+  "mysql",
+] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+unicode-normalization = "0.1.24"
+unicode-casefold = "0.2.0"
+uuid = { version = "1.20.0", features = ["v4", "serde"] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Storage_FileSystem",
+] }
+
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "yssbi_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri-plugin-tracing = { path = "./crates/tauri-plugin-tracing" }
+tauri.workspace = true
+tauri-plugin-opener = "2.5.4"
+tauri-plugin-dialog = "2.7"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-window-state = "=2.4.1"
+yss-application = { path = "./crates/yss-application" }
+tracing.workspace = true

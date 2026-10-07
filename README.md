@@ -81,6 +81,8 @@ pnpm dev
 pnpm build
 ```
 
+GPUI 迁移分支提供独立的原生桌面入口 `pnpm dev:gpui [项目目录] [图相对路径]`，当前能力和限制见 [GPUI host](src-tauri/crates/yss-desktop-gpui/README.md)。
+
 ## 开发与验证入口
 
 [package.json](package.json) 是命令定义的唯一来源。前端检查见 [src/README.md](src/README.md)，Rust workspace、桌面构建及按 crate 验证见 [src-tauri/README.md](src-tauri/README.md)；插件、生成器与示例数据见[开发与交付入口](docs/README.md#开发与交付)。

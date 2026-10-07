@@ -43,6 +43,8 @@ flowchart LR
 Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用例。图运行准备、执行交接和 Results 用例收入 `graph`；底层 Graph 与 Execution crates 继续独立。`session` 负责应用会话装配和替换；不可变 `NodeComponents` 组合节点定义与实际 kernel registry，校验绑定后供新会话复用。Chart 使用数据库查询及纯投影，共享图表呈现组件，不另建执行器或结果仓库。实际入口见 [Application 说明](../../src-tauri/crates/yss-application/README.md)。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
+
+`gpui` 迁移分支新增独立的原生预览宿主 `yss-desktop-gpui`，直接消费 Project 的只读 GraphDocument 快照。首阶段只迁移绘制与视口输入，不初始化 Tauri Application 服务，也不承担图编辑、运行或工作台布局；当前能力由 [GPUI host](../../src-tauri/crates/yss-desktop-gpui/README.md) 拥有。
 窗口关闭与 FlexLayout 布局的分工见 [Workbench 窗口契约](../../src/modules/workbench/README.md#81-原生窗口几何与关闭)。
 
 ## Authority model

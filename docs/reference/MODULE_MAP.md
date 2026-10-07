@@ -36,6 +36,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-database-source` | `src-tauri/crates/yss-database-source` | [Cargo.toml](../../src-tauri/crates/yss-database-source/Cargo.toml) | — |
 | `yss-database-store` | `src-tauri/crates/yss-database-store` | [Cargo.toml](../../src-tauri/crates/yss-database-store/Cargo.toml) | [README](../../src-tauri/crates/yss-database-store/README.md) |
 | `yss-dataset-profile` | `src-tauri/crates/yss-dataset-profile` | [Cargo.toml](../../src-tauri/crates/yss-dataset-profile/Cargo.toml) | — |
+| `yss-desktop-gpui` | `src-tauri/crates/yss-desktop-gpui` | [Cargo.toml](../../src-tauri/crates/yss-desktop-gpui/Cargo.toml) | [README](../../src-tauri/crates/yss-desktop-gpui/README.md) |
 | `yss-display-naming` | `src-tauri/crates/yss-display-naming` | [Cargo.toml](../../src-tauri/crates/yss-display-naming/Cargo.toml) | — |
 | `yss-filesystem` | `src-tauri/crates/yss-filesystem` | [Cargo.toml](../../src-tauri/crates/yss-filesystem/Cargo.toml) | [README](../../src-tauri/crates/yss-filesystem/README.md) |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |

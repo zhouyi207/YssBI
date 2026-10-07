@@ -1,0 +1,593 @@
+use gpui_component::{Icon, IconName, Sizable};
+use std::collections::BTreeMap;
+
+use gpui::{
+    Bounds, Context, IntoElement, MouseButton, PathBuilder, Pixels, Point, Render, Window, canvas,
+    div, point, prelude::*, px, rgb,
+};
+use gpui_component::{
+    button::{Button, ButtonVariants},
+    input::Input,
+};
+use yss_application::activity_panel::{ActivityItem, ActivityRowContent};
+use yss_graph_editor::{
+    EditorGraphMutation,
+    projection::{EditorNodeModel, EditorPortModel},
+};
+use yss_node_protocol::PortDirection;
+
+use super::{Gesture, GraphCanvas, commands::*, geometry};
+use crate::{appearance, assets::NativeIcon};
+
+impl Render for GraphCanvas {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let zoom = self.zoom;
+        let offset = self.offset;
+        let bounds_cell = self.bounds.clone();
+        let anchors = self
+            .graph
+            .projection
+            .nodes
+            .iter()
+            .flat_map(|node| {
+                let position = geometry::position(node, &self.preview);
+                node.ports.iter().filter_map(move |port| {
+                    geometry::port_point(node, &port.address, position)
+                        .map(|p| (port.address.clone(), offset + p * zoom))
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
+        let connections = self.graph.projection.clone();
+        let pending = match &self.gesture {
+            Some(Gesture::Connection {
+                source, current, ..
+            }) => anchors.get(source).map(|start| (*start, *current)),
+            _ => None,
+        };
+        let projection = self.graph.projection.clone();
+        let visible = self.bounds.get().size;
+        let nodes = projection
+            .nodes
+            .iter()
+            .filter(|node| {
+                let pos = geometry::position(node, &self.preview);
+                let rect = geometry::node_bounds(node, pos);
+                let top_left = offset + rect.origin * zoom;
+                top_left.x + rect.size.width * zoom >= px(0.)
+                    && top_left.y + rect.size.height * zoom >= px(0.)
+                    && (visible.width == px(0.) || top_left.x <= visible.width)
+                    && (visible.height == px(0.) || top_left.y <= visible.height)
+            })
+            .map(|node| self.render_node(node, cx))
+            .collect::<Vec<_>>();
+
+        let surface = div()
+            .id("graph-canvas")
+            .key_context("GraphCanvas")
+            .track_focus(&self.focus)
+            .w_full()
+            .flex_1()
+            .min_h_0()
+            .relative()
+            .overflow_hidden()
+            .bg(rgb(appearance::CANVAS))
+            .text_color(rgb(appearance::TEXT))
+            .on_action(
+                cx.listener(|view, _: &SaveGraph, _, cx| view.submit(GraphCommand::Save, None, cx)),
+            )
+            .on_action(cx.listener(|view, _: &UndoGraph, _, cx| {
+                if view.graph.editing.can_undo {
+                    view.submit(GraphCommand::Undo, None, cx);
+                }
+            }))
+            .on_action(cx.listener(|view, _: &RedoGraph, _, cx| {
+                if view.graph.editing.can_redo {
+                    view.submit(GraphCommand::Redo, None, cx);
+                }
+            }))
+            .on_action(cx.listener(|view, _: &DeleteSelection, _, cx| {
+                let node_ids = view
+                    .graph
+                    .projection
+                    .nodes
+                    .iter()
+                    .filter(|node| {
+                        view.selected.contains(&node.node_id) && !node.capabilities.managed
+                    })
+                    .map(|node| node.node_id)
+                    .collect::<Vec<_>>();
+                if !node_ids.is_empty() {
+                    view.submit(
+                        GraphCommand::Edit(EditorGraphMutation::DeleteNodes { node_ids }),
+                        None,
+                        cx,
+                    );
+                }
+            }))
+            .on_action(cx.listener(|view, _: &SelectAll, _, cx| {
+                view.selected = view
+                    .graph
+                    .projection
+                    .nodes
+                    .iter()
+                    .map(|node| node.node_id)
+                    .collect();
+                view.emit_selection(cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|view, _: &CancelGesture, _, cx| {
+                view.cancel_gesture();
+                view.palette = None;
+                view.emit_selection(cx);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|view, _: &FrameGraph, _, cx| {
+                view.reset_view();
+                cx.notify();
+            }))
+            .on_action(cx.listener(|view, _: &RunWholeGraph, _, cx| {
+                view.run_graph(yss_application::graph::run::RunDemand::Default, cx);
+            }))
+            .on_action(cx.listener(|view, _: &CancelRun, _, cx| view.cancel_run(cx)))
+            .on_action(cx.listener(|view, _: &RefreshRunState, _, cx| view.resync_execution(cx)))
+            .on_action(cx.listener(|view, _: &RunCurrentNode, _, cx| {
+                if view.selected.len() == 1
+                    && let Some(node_id) = view.selected.iter().next().copied()
+                {
+                    view.run_graph(
+                        yss_application::graph::run::RunDemand::Node {
+                            node_id,
+                            mode: yss_graph_execution::plan::NodeExecutionMode::CurrentInputs,
+                        },
+                        cx,
+                    );
+                }
+            }))
+            .on_action(cx.listener(|view, _: &RunToNode, _, cx| {
+                if view.selected.len() == 1
+                    && let Some(node_id) = view.selected.iter().next().copied()
+                {
+                    view.run_graph(
+                        yss_application::graph::run::RunDemand::Node {
+                            node_id,
+                            mode: yss_graph_execution::plan::NodeExecutionMode::Dependencies,
+                        },
+                        cx,
+                    );
+                }
+            }))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::begin_pane))
+            .on_mouse_down(MouseButton::Right, cx.listener(Self::begin_pane))
+            .on_mouse_down(MouseButton::Middle, cx.listener(Self::begin_pane))
+            .on_drop(cx.listener(|view, drag: &super::ConstantDrag, window, cx| {
+                if view.busy
+                    || view.graph.project != drag.project
+                    || view.graph.projection.graph_path != drag.path
+                {
+                    return;
+                }
+                view.submit(
+                    GraphCommand::Edit(EditorGraphMutation::InsertConstantReference {
+                        id: drag.id,
+                        position: view.world(window.mouse_position()),
+                    }),
+                    Some(drag.version),
+                    cx,
+                );
+            }))
+            .on_mouse_move(cx.listener(Self::pointer_move))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::pointer_up))
+            .on_mouse_up(MouseButton::Right, cx.listener(Self::pointer_up))
+            .on_mouse_up(MouseButton::Middle, cx.listener(Self::pointer_up))
+            .on_scroll_wheel(cx.listener(Self::zoom_at_pointer))
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        bounds_cell.set(bounds);
+                    },
+                    move |bounds, _, window, _| {
+                        paint_grid(bounds, offset, zoom, window);
+                        for connection in connections.connections.iter() {
+                            if let (Some(a), Some(b)) = (
+                                anchors.get(&connection.output),
+                                anchors.get(&connection.input),
+                            ) {
+                                paint_connection(
+                                    bounds.origin + *a,
+                                    bounds.origin + *b,
+                                    rgb(0x7b95bc),
+                                    window,
+                                );
+                            }
+                        }
+                        if let Some((start, current)) = pending {
+                            paint_connection(
+                                bounds.origin + start,
+                                current,
+                                rgb(appearance::AMBER),
+                                window,
+                            );
+                        }
+                    },
+                )
+                .absolute()
+                .size_full(),
+            )
+            .children(nodes)
+            .when_some(self.selection_bounds(), |view, rect| {
+                view.child(
+                    div()
+                        .absolute()
+                        .left(rect.origin.x)
+                        .top(rect.origin.y)
+                        .w(rect.size.width)
+                        .h(rect.size.height)
+                        .border_1()
+                        .border_color(rgb(0x7aa2f7))
+                        .bg(gpui::rgba(0x7aa2f718)),
+                )
+            })
+            .child(
+                div()
+                    .absolute()
+                    .bottom_2()
+                    .left_2()
+                    .text_xs()
+                    .text_color(rgb(appearance::MUTED))
+                    .child(format!(
+                        "{} 个节点 · {} 条连线 · {:.0}%{}{}",
+                        self.graph.projection.nodes.len(),
+                        self.graph.projection.connections.len(),
+                        self.zoom * 100.,
+                        if self.busy { " · 正在提交…" } else { "" },
+                        if self.run_status().is_empty() {
+                            String::new()
+                        } else {
+                            format!(" · {}", self.run_status())
+                        }
+                    )),
+            )
+            .child(
+                div().absolute().bottom_2().right_2().child(
+                    Button::new("reset-view")
+                        .small()
+                        .ghost()
+                        .icon(IconName::Frame)
+                        .tooltip("重置视图 · Home")
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.reset_view();
+                            cx.notify();
+                        })),
+                ),
+            )
+            .when_some(self.error.clone(), |view, error| {
+                view.child(
+                    div()
+                        .absolute()
+                        .bottom_8()
+                        .left_2()
+                        .right_2()
+                        .p_2()
+                        .rounded_md()
+                        .bg(rgb(0x4b2630))
+                        .text_sm()
+                        .child(error),
+                )
+            })
+            .when(self.palette.is_some(), |view| {
+                view.child(self.render_palette(cx))
+            });
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(self.render_toolbar(cx))
+            .child(surface)
+    }
+}
+
+impl GraphCanvas {
+    fn render_node(
+        &self,
+        node: &EditorNodeModel,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let id = node.node_id;
+        let position = geometry::position(node, &self.preview);
+        let origin = self.offset + point(px(position.x as f32), px(position.y as f32)) * self.zoom;
+        let border = if self.selected.contains(&id) {
+            0x7aa2f7
+        } else if !node.diagnostics.is_empty() {
+            0xe0af68
+        } else {
+            0x3b4252
+        };
+        let inputs = node
+            .ports
+            .iter()
+            .filter(|p| p.direction == PortDirection::Input)
+            .collect::<Vec<_>>();
+        let outputs = node
+            .ports
+            .iter()
+            .filter(|p| p.direction == PortDirection::Output)
+            .collect::<Vec<_>>();
+        div()
+            .id(gpui::SharedString::from(format!("node-{id}")))
+            .absolute()
+            .left(origin.x)
+            .top(origin.y)
+            .w(px(geometry::NODE_WIDTH * self.zoom))
+            .h(px(geometry::node_height(node) * self.zoom))
+            .rounded(px(7. * self.zoom))
+            .border_1()
+            .border_color(rgb(border))
+            .bg(rgb(appearance::SURFACE))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |view, event, window, cx| view.begin_node(id, event, window, cx)),
+            )
+            .child(
+                div()
+                    .h(px(geometry::TITLE_HEIGHT * self.zoom))
+                    .px(px(12. * self.zoom))
+                    .flex()
+                    .items_center()
+                    .gap(px(8. * self.zoom))
+                    .rounded_t(px(7. * self.zoom))
+                    .bg(rgb(appearance::SURFACE_RAISED))
+                    .border_b_1()
+                    .border_color(rgb(appearance::BORDER))
+                    .text_size(px(13. * self.zoom))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(
+                        Icon::new(if node.node_type.as_str().contains("source.") {
+                            NativeIcon::Database
+                        } else {
+                            NativeIcon::Graph
+                        })
+                        .size(px(15. * self.zoom))
+                        .text_color(rgb(appearance::BLUE)),
+                    )
+                    .child(
+                        div().flex_1().min_w_0().truncate().child(
+                            node.display
+                                .user_label
+                                .as_deref()
+                                .unwrap_or(&node.display.title)
+                                .to_owned(),
+                        ),
+                    ),
+            )
+            .children((0..inputs.len().max(outputs.len())).map(|index| {
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .top(px((geometry::TITLE_HEIGHT
+                        + index as f32 * geometry::PORT_HEIGHT)
+                        * self.zoom))
+                    .h(px(geometry::PORT_HEIGHT * self.zoom))
+                    .flex()
+                    .items_center()
+                    .child(
+                        div()
+                            .w_1_2()
+                            .min_w_0()
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .children(inputs.get(index).map(|port| self.render_port(port, cx))),
+                    )
+                    .child(
+                        div()
+                            .w_1_2()
+                            .min_w_0()
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .children(outputs.get(index).map(|port| self.render_port(port, cx))),
+                    )
+            }))
+    }
+
+    fn render_port(
+        &self,
+        port: &EditorPortModel,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let start = port.address.clone();
+        let end = start.clone();
+        let output = port.direction == PortDirection::Output;
+        let label = port
+            .display
+            .instance_label
+            .as_deref()
+            .unwrap_or(&port.display.label)
+            .to_owned();
+        let color = if port.orphan {
+            0xf7768e
+        } else if matches!(self.gesture, Some(Gesture::Connection { .. })) {
+            self.connection_candidates
+                .as_ref()
+                .and_then(|candidates| {
+                    candidates
+                        .candidates
+                        .iter()
+                        .find(|candidate| candidate.port == port.address)
+                })
+                .map_or(0x536079, |candidate| match candidate.decision {
+                    yss_graph_editor::projection::ConnectionDecision::Append => 0x9ece6a,
+                    yss_graph_editor::projection::ConnectionDecision::Replace { .. } => 0xe0af68,
+                    yss_graph_editor::projection::ConnectionDecision::Invalid { .. } => 0x536079,
+                })
+        } else {
+            if output {
+                appearance::GREEN
+            } else {
+                appearance::BLUE
+            }
+        };
+        let dot = || {
+            div()
+                .size(px(10. * self.zoom))
+                .flex_shrink_0()
+                .rounded_full()
+                .bg(rgb(color))
+                .border_1()
+                .border_color(rgb(appearance::CANVAS))
+        };
+        div()
+            .id(gpui::SharedString::from(format!(
+                "port-{}-{:?}",
+                port.address.node_id, port.address.port
+            )))
+            .flex()
+            .items_center()
+            .gap(px(6. * self.zoom))
+            .w_full()
+            .min_w_0()
+            .text_size(px(12. * self.zoom))
+            .text_color(rgb(0xb6c1d1))
+            .cursor_crosshair()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |view, event, window, cx| {
+                    view.begin_port(start.clone(), event, window, cx)
+                }),
+            )
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |view, _, _, cx| view.end_port(end.clone(), cx)),
+            )
+            .when(!output, |view| {
+                view.ml(px(-5. * self.zoom))
+                    .child(dot())
+                    .child(div().min_w_0().flex_1().truncate().child(label.clone()))
+            })
+            .when(output, |view| {
+                view.mr(px(-5. * self.zoom))
+                    .justify_end()
+                    .child(div().min_w_0().truncate().child(label))
+                    .child(dot())
+            })
+    }
+
+    fn selection_bounds(&self) -> Option<Bounds<Pixels>> {
+        if let Some(Gesture::Selection { press, current, .. }) = &self.gesture {
+            let a = *press - self.bounds.get().origin;
+            let b = *current - self.bounds.get().origin;
+            Some(Bounds::from_corners(
+                point(a.x.min(b.x), a.y.min(b.y)),
+                point(a.x.max(b.x), a.y.max(b.y)),
+            ))
+        } else {
+            None
+        }
+    }
+
+    fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let palette = self.palette.as_ref().expect("palette is open");
+        let size = self.bounds.get().size;
+        let x = palette
+            .point
+            .x
+            .min((size.width - px(300.)).max(px(0.)))
+            .max(px(0.));
+        let y = palette
+            .point
+            .y
+            .min((size.height - px(360.)).max(px(0.)))
+            .max(px(0.));
+        let query = self.search.read(cx).value().to_lowercase();
+        let items = palette
+            .catalog
+            .iter()
+            .flat_map(|catalog| catalog.rows.iter())
+            .filter_map(|row| match &row.content {
+                ActivityRowContent::Item(ActivityItem::Node {
+                    available: true,
+                    key,
+                    title,
+                    creation,
+                }) if title.to_lowercase().contains(&query) => {
+                    Some((key.clone(), title.clone(), creation.clone()))
+                }
+                _ => None,
+            });
+        div()
+            .id("node-palette")
+            .absolute()
+            .left(x)
+            .top(y)
+            .w(px(300.))
+            .h(px(360.))
+            .p_2()
+            .rounded_md()
+            .bg(rgb(appearance::SURFACE_RAISED))
+            .border_1()
+            .border_color(rgb(appearance::BORDER))
+            .shadow_lg()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .child(Input::new(&self.search).small())
+            .when(palette.catalog.is_none(), |view| {
+                view.child("加载兼容节点…")
+            })
+            .child(
+                div()
+                    .id("node-palette-items")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .children(items.map(|(key, title, creation)| {
+                        div()
+                            .id(gpui::SharedString::from(key))
+                            .p_2()
+                            .rounded_sm()
+                            .text_sm()
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(0x303b4d)))
+                            .child(title)
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.create_node(creation.clone(), cx)
+                            }))
+                    })),
+            )
+    }
+}
+
+fn paint_connection(a: Point<Pixels>, b: Point<Pixels>, color: gpui::Rgba, window: &mut Window) {
+    let bend = ((b.x - a.x).abs() * 0.45).max(px(45.));
+    let mut path = PathBuilder::stroke(px(1.8));
+    path.move_to(a);
+    path.cubic_bezier_to(b, a + point(bend, px(0.)), b - point(bend, px(0.)));
+    if let Ok(path) = path.build() {
+        window.paint_path(path, color);
+    }
+}
+
+fn paint_grid(bounds: Bounds<Pixels>, offset: Point<Pixels>, zoom: f32, window: &mut Window) {
+    let spacing = px((32. * zoom).max(12.));
+    let mut path = PathBuilder::stroke(px(0.5));
+    let mut x = offset.x % spacing;
+    while x < bounds.size.width {
+        path.move_to(bounds.origin + point(x, px(0.)));
+        path.line_to(bounds.origin + point(x, bounds.size.height));
+        x += spacing;
+    }
+    let mut y = offset.y % spacing;
+    while y < bounds.size.height {
+        path.move_to(bounds.origin + point(px(0.), y));
+        path.line_to(bounds.origin + point(bounds.size.width, y));
+        y += spacing;
+    }
+    if let Ok(path) = path.build() {
+        window.paint_path(path, rgb(0x222a36));
+    }
+}

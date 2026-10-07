@@ -1,9 +1,0 @@
-diff --git a/style/combined.css b/style/combined.css
---- a/style/combined.css
-+++ b/style/combined.css
-@@ -2025,5 +2025,3 @@
- .flexlayout__theme_aria .flexlayout__popup_menu_item:hover {
-   background-color: var(--fl-color-1);
- }
--
--/*# sourceMappingURL=combined.css.map */

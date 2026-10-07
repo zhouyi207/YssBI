@@ -1,0 +1,111 @@
+//! Compact graph controls live outside the pointer-interaction surface.
+use super::{GraphCanvas, commands::*};
+use crate::assets::NativeIcon;
+use gpui::{Context, IntoElement, div, prelude::*, px};
+use gpui_component::{
+    ActiveTheme, Disableable, IconName, Sizable,
+    button::{Button, ButtonVariants},
+    menu::DropdownMenu,
+};
+
+impl GraphCanvas {
+    pub(super) fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let run_node = self.can_run() && self.selected.len() == 1;
+        let running = self.is_running();
+        let focus = self.focus.clone();
+        div()
+            .h(px(40.))
+            .flex_shrink_0()
+            .px_2()
+            .flex()
+            .items_center()
+            .gap_1()
+            .bg(cx.theme().background)
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(
+                Button::new("save-graph")
+                    .small()
+                    .ghost()
+                    .icon(NativeIcon::Save)
+                    .tooltip("保存 · Ctrl+S")
+                    .disabled(self.busy || !self.dirty())
+                    .on_click(
+                        cx.listener(|view, _, _, cx| view.submit(GraphCommand::Save, None, cx)),
+                    ),
+            )
+            .child(div().h_4().w(px(1.)).mx_1().bg(cx.theme().border))
+            .child(
+                Button::new("undo-graph")
+                    .small()
+                    .ghost()
+                    .icon(IconName::Undo2)
+                    .tooltip("撤销 · Ctrl+Z")
+                    .disabled(self.busy || !self.graph.editing.can_undo)
+                    .on_click(
+                        cx.listener(|view, _, _, cx| view.submit(GraphCommand::Undo, None, cx)),
+                    ),
+            )
+            .child(
+                Button::new("redo-graph")
+                    .small()
+                    .ghost()
+                    .icon(IconName::Redo2)
+                    .tooltip("重做 · Ctrl+Shift+Z")
+                    .disabled(self.busy || !self.graph.editing.can_redo)
+                    .on_click(
+                        cx.listener(|view, _, _, cx| view.submit(GraphCommand::Redo, None, cx)),
+                    ),
+            )
+            .child(div().flex_1().min_w_0())
+            .child(
+                Button::new("inspect-results")
+                    .small()
+                    .ghost()
+                    .icon(NativeIcon::Table)
+                    .tooltip("查看结果")
+                    .disabled(self.graph.results.outputs.is_empty())
+                    .on_click(cx.listener(|view, _, _, cx| view.inspect_results(cx))),
+            )
+            .child(
+                Button::new("graph-options")
+                    .small()
+                    .ghost()
+                    .icon(IconName::Ellipsis)
+                    .tooltip("更多图操作")
+                    .dropdown_menu(move |menu, _, _| {
+                        menu.action_context(focus.clone())
+                            .menu_with_enable("运行此节点", Box::new(RunCurrentNode), run_node)
+                            .menu_with_enable("运行至此节点", Box::new(RunToNode), run_node)
+                            .separator()
+                            .menu("刷新运行状态", Box::new(RefreshRunState))
+                            .menu("重置视图", Box::new(FrameGraph))
+                    }),
+            )
+            .child(
+                Button::new("run-graph")
+                    .small()
+                    .when(!running, |button| button.primary())
+                    .when(running, |button| button.ghost())
+                    .icon(if running {
+                        NativeIcon::Stop
+                    } else {
+                        NativeIcon::Play
+                    })
+                    .label(if running { "取消" } else { "运行" })
+                    .tooltip(if running {
+                        "取消运行 · Shift+F5"
+                    } else {
+                        "运行当前图 · F5"
+                    })
+                    .disabled(!running && !self.can_run())
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        if view.is_running() {
+                            view.cancel_run(cx);
+                        } else {
+                            view.run_graph(yss_application::graph::run::RunDemand::Default, cx);
+                        }
+                    })),
+            )
+    }
+}
