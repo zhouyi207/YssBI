@@ -152,7 +152,7 @@ mod tests {
         assert_eq!(
             FunctionEditorProjection::try_from(&function_document("Array<Struct<   >>", None))
                 .unwrap_err(),
-            FunctionEditorProjectionError::EmptyStructType
+            FunctionEditorProjectionError::InvalidType(ValueTypeParseError::MalformedComposite)
         );
     }
 

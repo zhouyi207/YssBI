@@ -36,3 +36,23 @@ fn literal_wire_preserves_wide_integers_and_rejects_noncanonical_spellings() {
         Err(ValueTypeParseError::UnknownKind)
     );
 }
+
+#[test]
+fn named_struct_types_require_a_key_before_union_normalization() {
+    for source in [
+        "Any | Struct<>",
+        "Struct<>",
+        "Struct<   >",
+        "Array<Struct<>>",
+    ] {
+        assert_eq!(
+            source.parse::<ValueType>(),
+            Err(ValueTypeParseError::MalformedComposite),
+            "{source}"
+        );
+    }
+    assert_eq!(
+        "Any | Struct<tabular.grouped_dataframe>".parse::<ValueType>(),
+        Ok(ValueType::Any)
+    );
+}

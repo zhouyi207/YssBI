@@ -134,6 +134,9 @@ fn parse_composite(source: &str) -> Result<ValueType, ValueTypeParseError> {
         return Ok(ValueType::DataSeries(Box::new(data_type)));
     }
     if let Some(key) = delimited_inner(source, "Struct")? {
+        if key.trim().is_empty() {
+            return Err(ValueTypeParseError::MalformedComposite);
+        }
         return Ok(ValueType::Struct(key.to_owned()));
     }
     if source.contains(['<', '>']) {
