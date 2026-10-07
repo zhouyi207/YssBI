@@ -17,7 +17,6 @@ test-support = [
 [dependencies]
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-node-kernel = { path = "../yss-node-kernel" }
-yss-ipc-contract = { path = "../yss-ipc-contract" }
 tokio = { workspace = true, features = ["sync", "time"] }
 yss-harness-sqlite = { path = "../yss-harness-sqlite" }
 yss-harness-tantivy = { path = "../yss-harness-tantivy" }

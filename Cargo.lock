@@ -12297,7 +12297,6 @@ dependencies = [
  "yss-harness-rig",
  "yss-harness-sqlite",
  "yss-harness-tantivy",
- "yss-ipc-contract",
  "yss-node-catalog",
  "yss-node-kernel",
  "yss-node-protocol",
@@ -12768,18 +12767,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "yss-data-contract",
- "yss-function-editor-projection",
- "yss-graph-analysis-contract",
- "yss-graph-document",
  "yss-harness-contract",
- "yss-node-protocol",
- "yss-node-registry",
- "yss-project-history",
- "yss-project-identity",
- "yss-project-registry-contract",
 ]
 
 [[package]]

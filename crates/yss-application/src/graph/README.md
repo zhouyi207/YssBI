@@ -97,7 +97,7 @@ Application 将这些映射与常量创建映射一起写入 Project 原提交�
 | yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
 | yss-graph-execution                                                       | 计划构建与缓存、demand/DAG、内核调用适配、ResultStore、运行事件                  |
 | yss-node-kernel                                                           | 中立内核调用契约、运行值、冻结 KernelRegistry 与内置执行适配                     |
-| yss-desktop-gpui / yss-ipc-contract | 原生界面调度、类型化投影消费与平台中立共享值 |
+| yss-desktop-gpui | 原生界面调度与类型化图投影消费 |
 
 完整清单见 [Module Map](../../../../docs/reference/MODULE_MAP.md)。
 
@@ -109,7 +109,7 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 
 `yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
-原生宿主直接消费模型；共享协议只负责值的编码。投影不依赖 Application，也不构成第二份语义 authority。
+原生宿主直接消费模型。投影不依赖 Application，也不构成第二份语义 authority。
 资源成员是否为 orphan 由当前语义快照决定；持久化端口绑定中的 Resolved/Orphan 标记不覆盖资源丢失或恢复后的解析结果。投影仍核对节点、端点地址、绑定来源及连接数量，不改写文档。
 迁移连线检查起点与终点，插入转接点检查原连线两端；这些地址统一经过 Graph Runtime 现有语义准入。已恢复成员的绑定调整随可逆编辑补丁提交，当前仍失效的成员继续拒绝操作，不在查询时改写文档。
 

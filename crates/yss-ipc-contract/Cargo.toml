@@ -8,15 +8,4 @@ publish = false
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
-uuid.workspace = true
 yss-harness-contract = { path = "../yss-harness-contract" }
-yss-data-contract = { path = "../yss-data-contract" }
-yss-function-editor-projection = { path = "../yss-function-editor-projection" }
-yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
-yss-graph-document = { path = "../yss-graph-document" }
-yss-node-protocol = { path = "../yss-node-protocol" }
-yss-node-registry = { path = "../yss-node-registry" }
-yss-project-history = { path = "../yss-project-history" }
-yss-project-identity = { path = "../yss-project-identity" }
-yss-project-registry-contract = { path = "../yss-project-registry-contract" }

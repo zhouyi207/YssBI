@@ -186,7 +186,7 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 | 计划准备、图运行与结果   | `yss-graph-execution`                          | 准备资源、协调提交、组织有界查询与应用投影                       |
 | 科学计算                 | `yss-sci-runtime`、`yss-sci`                   | Node Kernel 执行所选分析；Application 查询已存结果与中性契约类型 |
 | 已提交项目与持久化数据   | Project、Database 与各存储 owner               | 协调会话、跨系统提交及补偿                                       |
-| IPC wire、事件和通道发送 | IPC crates                                     | 返回类型化应用事实，提供应用事件                                 |
+| 原生事件订阅与界面交付   | GPUI host                                      | 返回类型化应用事实，提供应用事件                                 |
 
 Application 保留跨系统业务流程，依赖数量同时反映其使用的类型契约和运行时能力。判断一段逻辑的归属时，重点检查它是否仅涉及单个子系统、是否重复实现该子系统的规则；独立的领域规则应由已有 owner 承接。
 

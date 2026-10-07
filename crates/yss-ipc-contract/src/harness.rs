@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 mod inspection;
 pub use inspection::{HarnessResultReferenceDto, HarnessToolInspectionDto};
 use yss_harness_contract::{
-    AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, HarnessSessionRecord,
-    KnowledgeCitation, StatisticalPlan,
+    AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, KnowledgeCitation,
+    StatisticalPlan,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -17,78 +17,6 @@ impl From<CapabilityId> for HarnessToolIdentityDto {
     fn from(value: CapabilityId) -> Self {
         Self::Capability(value)
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct HarnessCitationDetailDto {
-    pub text: String,
-    pub resource: Option<yss_harness_contract::ProjectResourceRef>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SaveHarnessProviderRequestDto {
-    pub config: yss_harness_contract::LanguageModelProviderConfig,
-    /// Missing keeps the stored credential; an empty value explicitly clears it.
-    pub api_key: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DiscoverHarnessModelsRequestDto {
-    /// Connection draft only; model definitions do not participate in discovery.
-    pub config: yss_harness_contract::LanguageModelProviderConfig,
-    /// Input-only temporary key. Missing reuses the credential stored for config.id.
-    pub api_key: Option<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessSessionDto {
-    pub session_id: String,
-    pub project_instance_id: String,
-    pub project_session_id: String,
-    pub title: String,
-    pub last_opened_at: u64,
-    pub model: Option<yss_harness_contract::LanguageModelSelection>,
-}
-
-impl From<HarnessSessionRecord> for HarnessSessionDto {
-    fn from(record: HarnessSessionRecord) -> Self {
-        Self {
-            model: record
-                .conversation
-                .as_ref()
-                .and_then(|value| value.model.clone()),
-            title: record
-                .conversation
-                .as_ref()
-                .map(|value| value.title.clone())
-                .unwrap_or_default(),
-            last_opened_at: record
-                .conversation
-                .as_ref()
-                .map(|value| value.last_opened_at)
-                .unwrap_or(record.created_at)
-                .get(),
-            session_id: record.id.to_string(),
-            project_instance_id: record.project.project_instance_id().as_str().to_owned(),
-            project_session_id: record.project.project_session_id().as_str().to_owned(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessTurnResultDto {
-    pub final_text: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessSubscriptionDto {
-    pub subscription_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -645,19 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn harness_events_match_the_frontend_wire_fixture() {
-        let knowledge: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../react/src/tests/fixtures/node-system-contracts/harness-knowledge.json"
-        ))
-        .unwrap();
-        let sources: Vec<yss_harness_contract::ProjectKnowledgeSourceSummary> =
-            serde_json::from_value(knowledge["sources"].clone()).unwrap();
-        assert_eq!(serde_json::to_value(sources).unwrap(), knowledge["sources"]);
-        for key in ["citation", "builtin"] {
-            let detail: HarnessCitationDetailDto =
-                serde_json::from_value(knowledge[key].clone()).unwrap();
-            assert_eq!(serde_json::to_value(detail).unwrap(), knowledge[key]);
-        }
+    fn harness_event_serialization_preserves_public_facts_and_hides_checkpoints() {
         let events = [
             HarnessEventKindDto::SessionCreated,
             HarnessEventKindDto::TurnStarted {
@@ -754,10 +670,8 @@ mod tests {
             event,
         })
         .collect::<Vec<_>>();
-        let fixture: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../react/src/tests/fixtures/node-system-contracts/harness-events.json"
-        ))
-        .unwrap();
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("harness/fixtures/events.json")).unwrap();
         assert_eq!(serde_json::to_value(events).unwrap(), fixture);
         let progress = AgentEvent::ContextCompactionProgress {
             completed_bytes: 50,
