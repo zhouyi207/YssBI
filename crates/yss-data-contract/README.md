@@ -13,17 +13,18 @@
 DataSeries、DataFrame 及内部结构/专用产物描述保留各自职责，Physical 不进入端口类型层级。
 `GROUPED_DATAFRAME_TYPE_ID` 声明 `tabular.grouped_dataframe`，使用既有 `ValueType::Struct` 表达。
 它表示源表与分组键；运行句柄、分组遍历和行对应证明归 Relational Contract/Engine，不进入持久化值树。
-旧 `DataType` 枚举已删除，Graph 不再将 Int64、Float64、Boolean、String、Date、Time 注册为基础语义。
+Graph 的基础语义来自 `SemanticType`，精确物理表示归数据载体和字段元数据。
 分解 DataFrame 或选列得到 `DataSeries<Numeric>`、`DataSeries<Identifier>` 等精确语义；类别、等级、
 二元映射及精确 Physical 保留在数据元数据中，并参与捕获资源的依赖身份。
 NumericFold 只推导语义与标量/数列结构，整数/浮点选择、广播和精度校验由执行适配与内核根据实际
 输入完成。非 Numeric 语义不能因底层为整数或浮点数进入数值计算。节点不改写用户设置，数据视图
 保持原始值；Schema revision 和完整元数据的依赖身份负责解析与结果失效。
 
-常量、函数签名、编辑器投影和前端解析器共享该契约。标量类型 wire 为
+常量、函数签名和原生编辑器投影共享该契约。标量类型 wire 为
 `{ "kind": "Scalar", "inner": "Numeric" }`，数列在 `DataSeries.inner` 中引用它。
 类型声明字符串由 `ValueType::from_str` 统一解析。`Struct` 的名称必须非空且不能全为空白；
 嵌套和联合类型先验证各分支，再规范化联合，`Any` 不能掩盖非法名称。
+`ValueType::one_of` 展开全部嵌套联合，按首次出现的顺序去重；任意层级的 `Any` 都归并为 `Any`。
 `yss-data-contract::DataValue` 是常量、端口字面量及节点默认值共用的持久化值树。`TypedValue` 附加协议 `TypeExpr`；参数不再定义另一份相同的 typed value。整数使用带标签的十进制字符串传输，避免 JavaScript 舍入 `i64/u64`。`DecimalLiteral` 保存规范数字文本，支持精确的 Arrow Decimal 筛选输入，不代表内核定点算术。
 
 `RuntimeValue` 负责运行期列表、记录、资源及模型的容器。其 `Scalar(TabularScalar)` 复用中立标量；`Float64(FiniteFloat64)` 明确表示有限二进制浮点数，所有入口共用有限性校验。Arrow `DataType`、数组及 `RecordBatch` 负责列的物理表示。这些载体不定义第二套基础语义。

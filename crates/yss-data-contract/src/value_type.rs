@@ -20,21 +20,13 @@ pub enum ValueType {
 
 impl ValueType {
     /// Constructs a flattened union while preserving the first occurrence order.
-    pub fn one_of(types: Vec<ValueType>) -> ValueType {
+    pub fn one_of(mut types: Vec<ValueType>) -> ValueType {
         let mut flat = Vec::new();
-        for data_type in types {
+        types.reverse();
+        while let Some(data_type) = types.pop() {
             match data_type {
                 ValueType::Any => return ValueType::Any,
-                ValueType::OneOf(inner) => {
-                    for item in inner {
-                        if item == ValueType::Any {
-                            return ValueType::Any;
-                        }
-                        if !flat.contains(&item) {
-                            flat.push(item);
-                        }
-                    }
-                }
+                ValueType::OneOf(inner) => types.extend(inner.into_iter().rev()),
                 other => {
                     if !flat.contains(&other) {
                         flat.push(other);

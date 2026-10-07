@@ -56,3 +56,26 @@ fn named_struct_types_require_a_key_before_union_normalization() {
         Ok(ValueType::Any)
     );
 }
+
+#[test]
+fn unions_flatten_nested_branches_and_preserve_first_occurrence() {
+    let numeric = ValueType::number();
+    let text = ValueType::Scalar(yss_data_contract::SemanticType::Text);
+    assert_eq!(
+        ValueType::one_of(vec![
+            ValueType::OneOf(vec![
+                numeric.clone(),
+                ValueType::OneOf(vec![text.clone(), numeric.clone()]),
+            ]),
+            text.clone(),
+        ]),
+        ValueType::OneOf(vec![numeric.clone(), text])
+    );
+    assert_eq!(
+        ValueType::one_of(vec![
+            numeric,
+            ValueType::OneOf(vec![ValueType::OneOf(vec![ValueType::Any])]),
+        ]),
+        ValueType::Any
+    );
+}
