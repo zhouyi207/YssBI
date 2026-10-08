@@ -1,4 +1,5 @@
 use super::*;
+use crate::mutations::EditorMutationPlanner;
 use yss_graph_editor::projection::{
     ConnectionCandidate, ConnectionCandidates, ConnectionDecision, ConnectionIntent,
 };
@@ -32,6 +33,8 @@ impl GraphRuntimeState {
         } else {
             Vec::new()
         };
+        let mut planner =
+            EditorMutationPlanner::new(graph, document, self.registry(), catalog, Some(analysis));
         let candidates = semantics
             .nodes()
             .iter()
@@ -55,13 +58,7 @@ impl GraphRuntimeState {
                         target: target.address.clone(),
                     },
                 };
-                let decision = match self.plan_editor_mutation_with_analysis(
-                    graph,
-                    document,
-                    mutation,
-                    catalog,
-                    Some(analysis),
-                ) {
+                let decision = match planner.plan(mutation) {
                     Ok(patch) => ConnectionDecision::from_patch(&patch, &moving),
                     Err(error) => ConnectionDecision::Invalid {
                         reason: error.code(),

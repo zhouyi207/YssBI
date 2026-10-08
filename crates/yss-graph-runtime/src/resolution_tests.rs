@@ -607,6 +607,29 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
         }
     );
     assert_eq!(document, original, "a preview cannot mutate or claim ports");
+    let input_candidates = runtime
+        .connection_candidates(
+            &graph(),
+            &document,
+            &port(target, "right"),
+            ConnectionIntent::Connect,
+            &catalog,
+            &analysis,
+        )
+        .unwrap();
+    for output in [port(source, "value"), port(incumbent, "value")] {
+        assert_eq!(
+            input_candidates
+                .candidates
+                .iter()
+                .find(|candidate| candidate.port == output)
+                .unwrap()
+                .decision,
+            ConnectionDecision::Append,
+            "each preview must restore the single input before planning another output"
+        );
+    }
+    assert_eq!(document, original);
     for input in [port(target, "right"), port(target, "left")] {
         let patch = runtime
             .plan_editor_mutation(

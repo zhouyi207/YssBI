@@ -20,7 +20,7 @@ use yss_graph_document::{
 use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
 #[cfg(test)]
 use yss_graph_document_edit::apply_graph_document_patch;
-use yss_graph_document_edit::{prepare_graph_document_patch, validate_graph_document};
+use yss_graph_document_edit::validate_graph_document;
 use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation,
     EditorMutationContext, MutationConflict, SourcePort, export_subgraph,
@@ -32,6 +32,7 @@ use yss_node_protocol::PortDirection;
 use yss_node_registry::{NodeRegistry, RegistryFingerprint};
 
 mod connections;
+mod mutations;
 mod parameters;
 mod semantic_cache;
 pub use parameters::NodeCreationForm;
@@ -226,109 +227,14 @@ impl GraphRuntimeState {
         catalog: &CatalogMutationValidationSnapshot,
         analysis: Option<&GraphAnalysis>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
-        let mut candidate = std::borrow::Cow::Borrowed(document);
-        let mut operations = Vec::new();
-        let referenced_ports = mutation.referenced_ports(document);
-        for address in referenced_ports {
-            let semantics = analysis
-                .expect("referenced ports require analysis")
-                .semantic_snapshot();
-            let Some(port) = semantics.concrete_interface().port(address) else {
-                continue;
-            };
-            if port.orphan {
-                return Err(MutationConflict::Editor(
-                    yss_graph_editor::EditorMutationError {
-                        code: yss_graph_editor::EditorMutationErrorCode::GraphPortOrphan,
-                        detail: "resource-derived port is orphaned".into(),
-                    },
-                ));
-            }
-            if let Some(previous) = candidate.port_bindings.get(address) {
-                if let DynamicPortBinding::Orphan { origin, order, .. } = previous {
-                    let binding = DynamicPortBinding::Resolved {
-                        origin: origin.clone(),
-                        order: order.clone(),
-                        last_known: LastKnownPortMetadata {
-                            label: port.label.to_string(),
-                            value_type: Some(port.accepted_type.clone()),
-                        },
-                    };
-                    let previous = previous.clone();
-                    candidate
-                        .to_mut()
-                        .port_bindings
-                        .insert(address.clone(), binding.clone());
-                    operations.push(GraphDocumentOperation::RemovePortBinding {
-                        address: address.clone(),
-                        binding: previous,
-                    });
-                    operations.push(GraphDocumentOperation::InsertPortBinding {
-                        address: address.clone(),
-                        binding,
-                    });
-                }
-                continue;
-            }
-            let yss_graph_analysis::GraphPortBacking::ProjectedDerived { origin } = &port.backing
-            else {
-                continue;
-            };
-            let binding = DynamicPortBinding::Resolved {
-                origin: origin.clone(),
-                order: OrderKey::new(format!(
-                    "{:010}",
-                    semantics
-                        .node(address.node_id)
-                        .and_then(|node| node
-                            .ports
-                            .iter()
-                            .position(|port| &port.address == address))
-                        .unwrap_or(0)
-                )),
-                last_known: LastKnownPortMetadata {
-                    label: port.label.to_string(),
-                    value_type: Some(port.accepted_type.clone()),
-                },
-            };
-            candidate
-                .to_mut()
-                .port_bindings
-                .insert(address.clone(), binding.clone());
-            operations.push(GraphDocumentOperation::InsertPortBinding {
-                address: address.clone(),
-                binding,
-            });
-        }
-        let mutation_patch = mutation.into_patch_with_context(
+        mutations::EditorMutationPlanner::new(
             graph_path,
-            &candidate,
+            document,
             self.registry(),
-            EditorMutationContext {
-                catalog: Some(catalog),
-                semantics: analysis.map(GraphAnalysis::semantic_snapshot),
-            },
-        )?;
-        let candidate = prepare_graph_document_patch(candidate.into_owned(), &mutation_patch)?;
-        operations.extend(mutation_patch.operations);
-        let referenced_ports = candidate
-            .connections
-            .values()
-            .flat_map(|connection| [&connection.output, &connection.input])
-            .chain(candidate.input_states.keys())
-            .collect::<std::collections::BTreeSet<_>>();
-        for (address, binding) in &candidate.port_bindings {
-            if matches!(binding, DynamicPortBinding::UserCreated { .. }) {
-                continue;
-            }
-            if !referenced_ports.contains(address) {
-                operations.push(GraphDocumentOperation::RemovePortBinding {
-                    address: address.clone(),
-                    binding: binding.clone(),
-                });
-            }
-        }
-        Ok(GraphDocumentPatch::new(operations))
+            catalog,
+            analysis,
+        )
+        .plan(mutation)
     }
 
     pub fn export_subgraph(
