@@ -36,26 +36,17 @@ fn parse_expression_with_budget(
             "数学表达式不能为空",
         ));
     }
-    if options.format == MathInputFormat::Latex {
-        if let Some(identifier) = exact_mathrm_identifier(input)? {
-            budget.add_node()?;
-            return Ok(MathExpr::Symbol(identifier.to_string()));
-        }
-        if let Some(call) = parse_latex_operator_call(input, options, depth, budget)? {
-            return Ok(call);
-        }
-    }
     let normalized_latex;
-    let mut protected_symbols = ProtectedLatexSymbols {
+    let mut protected_input = ProtectedLatexInput {
         text: String::new(),
         names: HashMap::new(),
     };
     let parser_input = match options.format {
         MathInputFormat::Plain => input,
         MathInputFormat::Latex => {
-            normalized_latex = normalize_latex(input)?;
-            protected_symbols = prepare_latex_symbols(&normalized_latex, options.known_symbols)?;
-            &protected_symbols.text
+            normalized_latex = normalize_latex(input);
+            protected_input = prepare_latex_input(&normalized_latex, options.known_symbols)?;
+            &protected_input.text
         }
     };
     ensure_parser_depth(parser_input, options.format, depth)?;
@@ -64,7 +55,7 @@ fn parse_expression_with_budget(
         MathInputFormat::Latex => mathlex::parse_latex(parser_input),
     }
     .map_err(parser_error)?;
-    convert(&parsed, options, depth, budget, &protected_symbols.names)
+    convert(&parsed, options, depth, budget, &protected_input.names)
 }
 
 pub(super) fn parse_relations(
@@ -261,7 +252,9 @@ fn check_parser_depth(
                 let opening = direction.unwrap_or(expects_operand);
                 if opening {
                     groups.push(depth);
-                    ensure_depth(initial_depth + groups.len())?;
+                    // This invocation's group stack is separate from outer call
+                    // conversion depth, including groups around temporary atoms.
+                    ensure_depth(1 + groups.len())?;
                     depth += 1;
                 } else {
                     depth = groups.pop().unwrap_or(initial_depth);
@@ -294,17 +287,22 @@ fn convert(
     options: ParseOptions<'_>,
     depth: usize,
     budget: &mut ParseBudget,
-    protected_names: &HashMap<String, String>,
+    protected_names: &HashMap<String, ProtectedLatexAtom<'_>>,
 ) -> Result<MathExpr, MathError> {
     ensure_depth(depth)?;
+    if let ExprKind::Variable(name) = &expression.kind
+        && let Some(ProtectedLatexAtom::Call(input)) = protected_names.get(name)
+    {
+        return parse_latex_operator_call(input, options, depth, budget);
+    }
     budget.add_node()?;
 
     match &expression.kind {
         ExprKind::Integer(value) => number(*value as f64),
         ExprKind::Float(value) => number(value.value()),
         ExprKind::Variable(name) => {
-            if let Some(original) = protected_names.get(name) {
-                Ok(MathExpr::Symbol(original.clone()))
+            if let Some(ProtectedLatexAtom::Symbol(original)) = protected_names.get(name) {
+                Ok(MathExpr::Symbol((*original).to_owned()))
             } else {
                 resolve_symbol(name, options, depth, budget)
             }
@@ -342,7 +340,6 @@ fn convert(
             })
         }
         ExprKind::Function { name, args } => {
-            let name = protected_names.get(name).unwrap_or(name);
             if !is_allowed_call(name) {
                 return Err(MathError::new(
                     MathErrorKind::UnknownFunction,
@@ -350,7 +347,7 @@ fn convert(
                 ));
             }
             Ok(MathExpr::Call {
-                name: name.clone(),
+                name: name.to_owned(),
                 args: args
                     .iter()
                     .map(|arg| convert(arg, options, depth + 1, budget, protected_names))
@@ -366,10 +363,10 @@ fn parse_latex_operator_call(
     options: ParseOptions<'_>,
     depth: usize,
     budget: &mut ParseBudget,
-) -> Result<Option<MathExpr>, MathError> {
-    let Some(rest) = input.strip_prefix("\\operatorname{") else {
-        return Ok(None);
-    };
+) -> Result<MathExpr, MathError> {
+    let rest = input
+        .strip_prefix("\\operatorname{")
+        .expect("captured operator call");
     let name_end = rest
         .find('}')
         .ok_or_else(|| MathError::new(MathErrorKind::Parse, "\\operatorname 的花括号不匹配"))?;
@@ -391,7 +388,6 @@ fn parse_latex_operator_call(
         ));
     }
     let call = rest[name_end + 1..].trim();
-    let call = call.strip_prefix("\\left").unwrap_or(call).trim();
     let Some(arguments) = call.strip_prefix('(') else {
         return Err(MathError::new(
             MathErrorKind::Parse,
@@ -399,8 +395,7 @@ fn parse_latex_operator_call(
         ));
     };
     let arguments = arguments
-        .strip_suffix("\\right)")
-        .or_else(|| arguments.strip_suffix(')'))
+        .strip_suffix(')')
         .ok_or_else(|| MathError::new(MathErrorKind::Parse, "函数参数括号不匹配"))?;
     let args = if arguments.trim().is_empty() {
         Vec::new()
@@ -411,10 +406,10 @@ fn parse_latex_operator_call(
             .collect::<Result<Vec<_>, _>>()?
     };
     budget.add_node()?;
-    Ok(Some(MathExpr::Call {
+    Ok(MathExpr::Call {
         name: name.to_string(),
         args,
-    }))
+    })
 }
 
 fn is_allowed_call(name: &str) -> bool {
@@ -436,28 +431,33 @@ fn is_allowed_call(name: &str) -> bool {
     )
 }
 
-struct ProtectedLatexSymbols {
-    text: String,
-    names: HashMap<String, String>,
+enum ProtectedLatexAtom<'a> {
+    Symbol(&'a str),
+    Call(&'a str),
 }
 
-fn prepare_latex_symbols(
-    input: &str,
-    known: &[String],
-) -> Result<ProtectedLatexSymbols, MathError> {
+struct ProtectedLatexInput<'a> {
+    text: String,
+    names: HashMap<String, ProtectedLatexAtom<'a>>,
+}
+
+fn prepare_latex_input<'a>(
+    input: &'a str,
+    known: &'a [String],
+) -> Result<ProtectedLatexInput<'a>, MathError> {
     let mut candidates = known
         .iter()
         .filter(|name| name.chars().count() > 1)
         .collect::<Vec<_>>();
     candidates.sort_by_key(|name| std::cmp::Reverse(name.len()));
     let mut text = String::with_capacity(input.len());
-    let mut names: HashMap<String, String> = HashMap::new();
+    let mut names = HashMap::new();
     let input_digits = input
         .chars()
         .filter(char::is_ascii_digit)
         .collect::<String>();
     let mut next_placeholder = 900_000;
-    let mut protect = |name: &str| loop {
+    let mut protect = |atom| loop {
         let suffix = next_placeholder.to_string();
         next_placeholder += 1;
         // A fresh numeric subscript cannot alias a user spelling, including braces.
@@ -465,12 +465,29 @@ fn prepare_latex_symbols(
             continue;
         }
         let placeholder = format!("q_{suffix}");
-        names.insert(placeholder.clone(), name.to_owned());
-        return placeholder;
+        names.insert(placeholder.clone(), atom);
+        // Group a subscripted placeholder so subsequent powers apply to the atom.
+        return format!("{{{placeholder}}}");
     };
     let mut index = 0;
     while index < input.len() {
         let rest = &input[index..];
+        if rest.starts_with("\\operatorname{") {
+            let end = latex_operator_call_end(rest)?;
+            text.push_str(&protect(ProtectedLatexAtom::Call(&rest[..end])));
+            index += end;
+            continue;
+        }
+        if rest.starts_with("\\mathrm{") {
+            let end = rest
+                .find('}')
+                .ok_or_else(|| MathError::new(MathErrorKind::Parse, "\\mathrm 的花括号不匹配"))?
+                + 1;
+            let identifier = parse_mathrm_identifier(&rest[..end])?;
+            text.push_str(&protect(ProtectedLatexAtom::Symbol(identifier)));
+            index += end;
+            continue;
+        }
         let matched = candidates.iter().find(|name| {
             rest.starts_with(name.as_str())
                 && input[..index]
@@ -483,7 +500,7 @@ fn prepare_latex_symbols(
                     .is_none_or(|ch| !ch.is_alphanumeric() && ch != '_')
         });
         if let Some(name) = matched {
-            text.push_str(&protect(name));
+            text.push_str(&protect(ProtectedLatexAtom::Symbol(name)));
             index += name.len();
             continue;
         }
@@ -504,7 +521,7 @@ fn prepare_latex_symbols(
             let run = &rest[..run_len];
             let followed_by_call = rest[run_len..].trim_start().starts_with('(');
             if run.chars().count() > 1 && followed_by_call {
-                text.push_str(&protect(run));
+                text.push_str(&protect(ProtectedLatexAtom::Symbol(run)));
                 index += run_len;
                 continue;
             }
@@ -528,16 +545,42 @@ fn prepare_latex_symbols(
         text.push(ch);
         index += ch.len_utf8();
     }
-    Ok(ProtectedLatexSymbols { text, names })
+    Ok(ProtectedLatexInput { text, names })
 }
 
-fn exact_mathrm_identifier(input: &str) -> Result<Option<&str>, MathError> {
-    let Some(content) = input
+fn latex_operator_call_end(input: &str) -> Result<usize, MathError> {
+    let name_end = input
+        .find('}')
+        .ok_or_else(|| MathError::new(MathErrorKind::Parse, "\\operatorname 的花括号不匹配"))?;
+    let arguments = input[name_end + 1..].trim_start();
+    if !arguments.starts_with('(') {
+        return Err(MathError::new(
+            MathErrorKind::Parse,
+            "函数或分布名称后需要参数列表",
+        ));
+    }
+    let start = input.len() - arguments.len();
+    let mut nesting = 0;
+    for (index, character) in arguments.char_indices() {
+        match character {
+            '(' => nesting += 1,
+            ')' => {
+                nesting -= 1;
+                if nesting == 0 {
+                    return Ok(start + index + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(MathError::new(MathErrorKind::Parse, "函数参数括号不匹配"))
+}
+
+fn parse_mathrm_identifier(input: &str) -> Result<&str, MathError> {
+    let content = input
         .strip_prefix("\\mathrm{")
         .and_then(|value| value.strip_suffix('}'))
-    else {
-        return Ok(None);
-    };
+        .expect("captured mathrm identifier");
     if content.is_empty()
         || !content
             .chars()
@@ -548,10 +591,10 @@ fn exact_mathrm_identifier(input: &str) -> Result<Option<&str>, MathError> {
             "\\mathrm 仅支持标识符",
         ));
     }
-    Ok(Some(content))
+    Ok(content)
 }
 
-fn normalize_latex(input: &str) -> Result<String, MathError> {
+fn normalize_latex(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut rest = input;
     while let Some(index) = rest.find('\\') {
@@ -561,39 +604,11 @@ fn normalize_latex(input: &str) -> Result<String, MathError> {
             rest = after_sizing;
             continue;
         }
-        let (prefix, label) = if command.starts_with("\\mathrm{") {
-            ("\\mathrm{", "\\mathrm")
-        } else if command.starts_with("\\operatorname{") {
-            ("\\operatorname{", "\\operatorname")
-        } else {
-            let ch = command
-                .chars()
-                .next()
-                .expect("command starts with backslash");
-            output.push(ch);
-            rest = &command[ch.len_utf8()..];
-            continue;
-        };
-        let after_start = &command[prefix.len()..];
-        let end = after_start.find('}').ok_or_else(|| {
-            MathError::new(MathErrorKind::Parse, format!("{label} 的花括号不匹配"))
-        })?;
-        let content = &after_start[..end];
-        if content.is_empty()
-            || !content
-                .chars()
-                .all(|character| character.is_alphanumeric() || character == '_')
-        {
-            return Err(MathError::new(
-                MathErrorKind::Unsupported,
-                format!("{label} 仅支持标识符"),
-            ));
-        }
-        output.push_str(content);
-        rest = &after_start[end + 1..];
+        output.push('\\');
+        rest = &command[1..];
     }
     output.push_str(rest);
-    Ok(output)
+    output
 }
 
 fn strip_delimiter_sizing(command: &str) -> Option<&str> {
@@ -949,6 +964,101 @@ mod tests {
             relations[0].right,
             MathExpr::Call { ref name, ref args } if name == "Normal" && args.len() == 2
         ));
+    }
+
+    #[test]
+    fn parses_explicit_latex_calls_in_binary_expressions() {
+        let known = symbols(&["x"]);
+        let call = MathExpr::Call {
+            name: "exp".into(),
+            args: vec![MathExpr::Symbol("x".into())],
+        };
+        for (input, left, right) in [
+            (
+                r"\operatorname{exp}(x)+1",
+                call.clone(),
+                MathExpr::Number(1.0),
+            ),
+            (
+                r"x+\operatorname{exp}(x)",
+                MathExpr::Symbol("x".into()),
+                call.clone(),
+            ),
+        ] {
+            assert_eq!(
+                parse_expression(input, ParseOptions::latex(&known)).unwrap(),
+                MathExpr::Binary {
+                    op: BinaryOp::Add,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }
+            );
+        }
+        assert_eq!(
+            parse_expression(r"\operatorname{exp}(x)^2", ParseOptions::latex(&known)).unwrap(),
+            MathExpr::Binary {
+                op: BinaryOp::Pow,
+                left: Box::new(call),
+                right: Box::new(MathExpr::Number(2.0))
+            }
+        );
+        assert_eq!(
+            parse_expression(
+                r"2+\operatorname{min}(x,\operatorname{exp}(1))",
+                ParseOptions::latex(&known)
+            )
+            .unwrap(),
+            MathExpr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(MathExpr::Number(2.0)),
+                right: Box::new(MathExpr::Call {
+                    name: "min".into(),
+                    args: vec![
+                        MathExpr::Symbol("x".into()),
+                        MathExpr::Call {
+                            name: "exp".into(),
+                            args: vec![MathExpr::Number(1.0)]
+                        }
+                    ],
+                })
+            }
+        );
+        let error =
+            parse_expression(r"x+\operatorname{frob}(x)", ParseOptions::latex(&known)).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::UnknownFunction);
+    }
+
+    #[test]
+    fn explicit_latex_calls_charge_actual_nodes_to_the_shared_budget() {
+        let relations = |count| {
+            std::iter::repeat_n(r"0 = \operatorname{exp}(1)+\operatorname{exp}(1)", count)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        assert_eq!(
+            parse_relations(&relations(42), ParseOptions::latex(&[]))
+                .unwrap()
+                .len(),
+            42
+        );
+        let error = parse_relations(&relations(43), ParseOptions::latex(&[])).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::NodeLimit);
+    }
+
+    #[test]
+    fn protected_latex_atoms_preserve_the_expression_depth_boundary() {
+        let known = symbols(&["age"]);
+        let nested = |count| {
+            format!(
+                "{}{}{}",
+                r"\operatorname{exp}(".repeat(count),
+                r"\mathrm{age}",
+                ")".repeat(count)
+            )
+        };
+        assert!(parse_expression(&nested(MAX_DEPTH - 1), ParseOptions::latex(&known)).is_ok());
+        let error = parse_expression(&nested(MAX_DEPTH), ParseOptions::latex(&known)).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::DepthLimit);
     }
 
     #[test]
