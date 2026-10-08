@@ -119,7 +119,7 @@ pub(in crate::automation) fn read_database(
                     page.rows
                         .columns()
                         .iter()
-                        .map(|column| column.values()[row].clone())
+                        .map(|column| column.values()[row].display_value())
                         .collect()
                 })
                 .collect::<Vec<_>>();

@@ -95,7 +95,7 @@ fn selected_database_tools_page_schema_and_rows_without_losing_identity_or_read_
     assert!(!page.has_more);
     f.call(AutomationCapabilityRequest::EditResource(
         EditResourceRequest {
-            resource,
+            resource: resource.clone(),
             version: overview.version.clone(),
             edit: ResourceEdit::UpdateCells {
                 cells: vec![DatabaseCellEdit {
@@ -132,6 +132,24 @@ fn selected_database_tools_page_schema_and_rows_without_losing_identity_or_read_
     assert_eq!(
         error.details.get("column").map(String::as_str),
         Some("missing")
+    );
+
+    f.edit(
+        &resource,
+        ResourceEdit::UpdateCells {
+            cells: vec![DatabaseCellEdit {
+                row_id: 0,
+                column: "x".into(),
+                value: yss_data_contract::TabularScalar::Integer(i64::MAX),
+            }],
+        },
+    );
+    let page = f.database_rows(&resource, 3);
+    let visible =
+        model::capability_result(&AutomationCapabilityResult::DatabaseRead(page)).unwrap();
+    assert_eq!(
+        visible["payload"]["content"]["rows"][0][0],
+        json!(i64::MAX.to_string())
     );
 }
 

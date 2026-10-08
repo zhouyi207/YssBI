@@ -428,7 +428,7 @@ fn project_result_columns(
                     page.data
                         .columns()
                         .iter()
-                        .map(|column| scalar_value(&column.values()[row]))
+                        .map(|column| RuntimeValue::Scalar(column.values()[row].clone()))
                         .collect(),
                 )
             })
@@ -494,10 +494,6 @@ fn project_result_columns(
     }
     control.check()?;
     Ok(page)
-}
-
-fn scalar_value(value: &TabularScalar) -> RuntimeValue {
-    RuntimeValue::Scalar(value.display_value())
 }
 
 fn charge_value(
@@ -734,6 +730,13 @@ mod tests {
                     assert_eq!(expected.data_type, actual.data_type);
                 }
                 if offset == 0 && columns.len() == 3 {
+                    let RuntimeValue::List(cells) = &page.values[0] else {
+                        panic!("relation rows must use native list values");
+                    };
+                    assert_eq!(
+                        cells[2],
+                        RuntimeValue::Scalar(TabularScalar::Unsigned(u64::MAX))
+                    );
                     let row = runtime_value_to_json(&page.values[0]).unwrap();
                     assert_eq!(row[0], "a");
                     assert_eq!(row[2], u64::MAX.to_string());
