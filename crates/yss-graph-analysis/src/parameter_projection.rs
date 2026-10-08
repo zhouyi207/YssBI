@@ -97,27 +97,24 @@ fn project_parameter_context(
         prepare_project_columns_json,
     };
     for parameter in parameters {
-        let schema = parameter_schema(ports, parameter.key.as_str());
+        let schema_state = parameter_schema_state(ports, parameter.key.as_str());
+        let schema = schema_state.and_then(GraphSchemaState::exact);
         let fields = schema.map_or(&[][..], |schema| schema.fields.as_slice());
-        let context_hint: Option<Box<str>> =
-            match parameter_schema_state(ports, parameter.key.as_str()) {
-                Some(GraphSchemaState::Exact(_) | GraphSchemaState::Observed { .. }) => None,
-                Some(GraphSchemaState::Deferred) => {
-                    Some("editors.dataframe.deferred_columns".into())
-                }
-                Some(
-                    GraphSchemaState::Unavailable(_)
-                    | GraphSchemaState::Conflict(_)
-                    | GraphSchemaState::InternalFailure(_),
-                ) => Some("editors.dataframe.schema_error".into()),
-                Some(GraphSchemaState::Pending(issue))
-                    if *issue != crate::GraphSchemaIssue::UnconnectedInput =>
-                {
-                    Some("editors.dataframe.pending_columns".into())
-                }
-                _ => Some("editors.dataframe.connect_source".into()),
-            };
-        let value = parameter_literal_value(parameter);
+        let context_hint: Option<Box<str>> = match schema_state {
+            Some(GraphSchemaState::Exact(_) | GraphSchemaState::Observed { .. }) => None,
+            Some(GraphSchemaState::Deferred) => Some("editors.dataframe.deferred_columns".into()),
+            Some(
+                GraphSchemaState::Unavailable(_)
+                | GraphSchemaState::Conflict(_)
+                | GraphSchemaState::InternalFailure(_),
+            ) => Some("editors.dataframe.schema_error".into()),
+            Some(GraphSchemaState::Pending(issue))
+                if *issue != crate::GraphSchemaIssue::UnconnectedInput =>
+            {
+                Some("editors.dataframe.pending_columns".into())
+            }
+            _ => Some("editors.dataframe.connect_source".into()),
+        };
         if (parameter.key.as_str() == "subset"
             && matches!(
                 node_type,
@@ -130,10 +127,11 @@ fn project_parameter_context(
             )
             .is_some()
         {
+            let value = parameter_literal_value(parameter);
             parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
                 allow_empty: true,
                 schema_known: schema.is_some(),
-                context_hint: context_hint.clone(),
+                context_hint,
                 options: fields
                     .iter()
                     .filter(|field| {
@@ -167,10 +165,11 @@ fn project_parameter_context(
         };
         match type_id.as_str() {
             PROJECT_COLUMNS_TYPE_ID => {
+                let value = parameter_literal_value(parameter);
                 parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
                     allow_empty: false,
                     schema_known: schema.is_some(),
-                    context_hint: context_hint.clone(),
+                    context_hint,
                     options: fields
                         .iter()
                         .map(|field| GraphColumnFact {
@@ -186,6 +185,7 @@ fn project_parameter_context(
                 });
             }
             FILTER_PREDICATE_TYPE_ID => {
+                let value = parameter_literal_value(parameter);
                 let literals = [
                     (
                         GraphFilterLiteralType::Boolean,
@@ -215,7 +215,7 @@ fn project_parameter_context(
                 ];
                 parameter.configuration = Some(GraphParameterConfigurationFact::FilterPredicate {
                     schema_known: schema.is_some(),
-                    context_hint: context_hint.clone(),
+                    context_hint,
                     columns: fields
                         .iter()
                         .map(|field| GraphFilterColumnFact {
@@ -502,27 +502,35 @@ fn project_parameter_values(
             parameter_fact(
                 &group.key,
                 parameter,
-                values
-                    .get(&parameter.key)
-                    .map(Cow::Borrowed)
-                    .or_else(|| parameter.default_json().map(Cow::Owned))
-                    .map(|value| match (&parameter.editor, value.as_str()) {
-                        (ParameterEditorSpec::Resource { .. }, Some(identity)) => {
-                            GraphResolvedParameterValue::Resource(GraphResourceId::new(identity))
-                        }
-                        _ if !values.contains_key(&parameter.key) => {
-                            GraphResolvedParameterValue::DefaultLiteral(
-                                parameter
-                                    .default_value
-                                    .as_ref()
-                                    .expect("effective default exists")
-                                    .value
-                                    .clone(),
-                            )
-                        }
-                        _ => GraphResolvedParameterValue::Literal(value.into_owned()),
-                    }),
+                project_parameter_value(parameter, values),
             )
         })
         .collect()
+}
+
+fn project_parameter_value(
+    parameter: &yss_node_protocol::Parameter,
+    values: &yss_node_protocol::ParameterValues,
+) -> Option<GraphResolvedParameterValue> {
+    if let Some(value) = values.get(&parameter.key) {
+        return Some(match (&parameter.editor, value.as_str()) {
+            (ParameterEditorSpec::Resource { .. }, Some(identity)) => {
+                GraphResolvedParameterValue::Resource(GraphResourceId::new(identity))
+            }
+            _ => GraphResolvedParameterValue::Literal(value.clone()),
+        });
+    }
+
+    let default = parameter.default_value.as_ref()?;
+    if matches!(parameter.editor, ParameterEditorSpec::Resource { .. })
+        && let Some(value) = parameter.default_json()
+        && let Some(identity) = value.as_str()
+    {
+        return Some(GraphResolvedParameterValue::Resource(GraphResourceId::new(
+            identity,
+        )));
+    }
+    Some(GraphResolvedParameterValue::DefaultLiteral(
+        default.value.clone(),
+    ))
 }
