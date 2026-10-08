@@ -50,6 +50,7 @@ pub struct DatabaseEditor {
     grid: Entity<TableState<DatabaseGrid>>,
     selection_preview: Entity<TextareaState>,
     selection_preview_open: bool,
+    details: details::DetailsState,
     _grid_subscription: Subscription,
     selection_cursor_sync: Option<TableSelection>,
     generation: u64,
@@ -94,6 +95,7 @@ impl DatabaseEditor {
             grid,
             selection_preview: cx.new(|cx| TextareaState::new(window, cx).rows(5)),
             selection_preview_open: false,
+            details: details::DetailsState::default(),
             _grid_subscription: subscription,
             selection_cursor_sync: None,
             generation: 0,
@@ -127,6 +129,7 @@ impl DatabaseEditor {
     ) {
         self.name = read.meta.name.clone();
         let meta = Arc::new(read.meta);
+        self.details.retain_columns(&meta);
         self.meta = Some(meta.clone());
         self.edit = Some(read.edit);
         self.ready = true;

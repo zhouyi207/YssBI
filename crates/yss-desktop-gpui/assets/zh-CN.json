@@ -2631,7 +2631,10 @@
       "copySelection": "复制选区",
       "selectionSize": "已选 {{count}} 个单元格",
       "selectionHint": "已选 {{value0}} 行 × {{value1}} 列 · {{value2}} 个单元格；Ctrl/Cmd+C 复制当前页选区。",
-      "size": "{{rows}} 行 · {{columns}} 列"
+      "size": "{{rows}} 行 · {{columns}} 列",
+      "storageType": "存储类型",
+      "semantics": "数据语义",
+      "unset": "未设置"
     }
   }
 }

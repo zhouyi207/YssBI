@@ -1,37 +1,33 @@
+mod columns;
 use super::DatabaseEditor;
-use gpui::{Context, IntoElement, PromptLevel, Window, div, prelude::*, px};
+use std::collections::HashSet;
+
+use gpui::{Context, IntoElement, Window, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     input::Textarea,
-    menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit_assets::IconName;
-use yss_application::database::DatabaseMutation;
-use yss_database_schema::DatabaseColumnFact;
 
-const PHYSICAL_TYPES: [&str; 19] = [
-    "Bool",
-    "Int8",
-    "Int16",
-    "Int32",
-    "Int64",
-    "UInt8",
-    "UInt16",
-    "UInt32",
-    "UInt64",
-    "Float32",
-    "Float64",
-    "Utf8",
-    "Date",
-    "Datetime(s)",
-    "Datetime(ms)",
-    "Datetime(us)",
-    "Datetime(ns)",
-    "Time",
-    "Dictionary(Int32, Utf8)",
-];
+pub(super) struct DetailsState {
+    info_open: bool,
+    columns_open: bool,
+    columns_page: usize,
+    expanded: HashSet<String>,
+}
+impl Default for DetailsState {
+    fn default() -> Self {
+        Self {
+            info_open: true,
+            columns_open: true,
+            columns_page: 0,
+            expanded: HashSet::new(),
+        }
+    }
+}
+
 impl DatabaseEditor {
     pub fn render_details(
         &mut self,
@@ -55,17 +51,72 @@ impl DatabaseEditor {
                     .text_color(cx.theme().muted_foreground)
                     .child("数据"),
             );
-        let Some(meta) = &self.meta else {
+        if let Some(error) = &self.error {
+            view = view
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().danger)
+                        .child(error.clone()),
+                )
+                .child(
+                    Button::new("database-details-retry")
+                        .small()
+                        .ghost()
+                        .label(crate::text::translate("common.retry"))
+                        .disabled(self.busy())
+                        .on_click(cx.listener(|view, _, window, cx| view.reload(true, window, cx))),
+                );
+        }
+        let Some(meta) = self.meta.clone() else {
             return view
                 .child(div().text_xs().child("正在读取元数据…"))
                 .into_any_element();
         };
         view = view.child(
-            div()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .child(format!("{} 行 · {} 列", meta.row_count, meta.column_count)),
+            Collapsible::new()
+                .open(self.details.info_open)
+                .child(
+                    Button::new("database-info")
+                        .small()
+                        .ghost()
+                        .w_full()
+                        .label(crate::text::translate("detail.sections.info"))
+                        .icon(if self.details.info_open {
+                            IconName::ChevronDown
+                        } else {
+                            IconName::ChevronRight
+                        })
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.details.info_open = !view.details.info_open;
+                            view.changed(cx);
+                        })),
+                )
+                .content(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .text_xs()
+                        .child(
+                            div()
+                                .flex()
+                                .justify_between()
+                                .gap_2()
+                                .child(crate::text::translate("detail.fields.columns"))
+                                .child(meta.column_count.to_string()),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .justify_between()
+                                .gap_2()
+                                .child(crate::text::translate("detail.fields.rows"))
+                                .child(meta.row_count.to_string()),
+                        ),
+                ),
         );
+        view = view.child(self.render_columns(&meta, cx));
         if self.dirty() {
             view = view.child(
                 div()
@@ -157,7 +208,6 @@ impl DatabaseEditor {
                 )
                 .content(preview_content),
         );
-        let column = selection.single_column();
         let placeholder = crate::text::translate(
             match primary.and_then(|(row, column)| page.value(row, column)) {
                 None => "databaseEditor.cellPreviewPlaceholder",
@@ -179,150 +229,6 @@ impl DatabaseEditor {
                 input.set_placeholder(placeholder, window, cx)
             });
         }
-        if let Some(column) = column.and_then(|index| meta.columns.get(index)).cloned() {
-            view = view.child(self.column_settings(column, cx));
-        } else {
-            for column in meta.columns.iter().take(100) {
-                view = view.child(
-                    div()
-                        .flex()
-                        .justify_between()
-                        .gap_2()
-                        .text_xs()
-                        .child(column.name().as_str().to_owned())
-                        .child(column.display_type().to_owned()),
-                );
-            }
-        }
         view.into_any_element()
-    }
-    fn column_settings(
-        &self,
-        column: DatabaseColumnFact,
-        cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
-        let owner = cx.entity().downgrade();
-        let semantic_owner = owner.clone();
-        let revision = self.revision;
-        let name = column.name().as_str().to_owned();
-        let current = column.physical_type().to_owned();
-        let physical_name = name.clone();
-        let supported = column.supported_semantic_types().to_vec();
-        let semantic = column
-            .semantic()
-            .map(|semantic| semantic.kind.as_str())
-            .unwrap_or("未设置");
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .border_t_1()
-            .border_color(cx.theme().border)
-            .pt_3()
-            .child(div().text_sm().child(name))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("存储类型"),
-            )
-            .child(
-                Button::new("column-physical")
-                    .small()
-                    .ghost()
-                    .label(current.clone())
-                    .disabled(self.busy() || !self.ready)
-                    .dropdown_menu(move |mut menu, _, _| {
-                        for dtype in PHYSICAL_TYPES {
-                            let owner = owner.clone();
-                            let name = physical_name.clone();
-                            let before = current.clone();
-                            menu = menu.item(PopupMenuItem::new(dtype).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.confirm_physical(
-                                            name.clone(),
-                                            before.clone(),
-                                            dtype.into(),
-                                            revision,
-                                            window,
-                                            cx,
-                                        )
-                                    });
-                                },
-                            ));
-                        }
-                        menu
-                    }),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("数据语义"),
-            )
-            .child(
-                Button::new("column-semantic")
-                    .small()
-                    .ghost()
-                    .label(semantic)
-                    .disabled(self.busy() || !self.ready || supported.is_empty())
-                    .dropdown_menu(move |mut menu, _, _| {
-                        for kind in &supported {
-                            let kind = *kind;
-                            let owner = semantic_owner.clone();
-                            let column = column.clone();
-                            menu = menu.item(PopupMenuItem::new(kind.as_str()).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if view.revision == revision && view.ready && !view.busy() {
-                                            view.semantic_dialog(column.clone(), kind, window, cx);
-                                        }
-                                    });
-                                },
-                            ));
-                        }
-                        menu
-                    }),
-            )
-            .into_any_element()
-    }
-    fn confirm_physical(
-        &mut self,
-        column: String,
-        before: String,
-        dtype: String,
-        revision: yss_project_identity::ResourceRevision,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.busy() || !self.ready || self.revision != revision || before == dtype {
-            return;
-        }
-        let message = format!("将“{column}”从 {before} 转换为 {dtype}。无法转换的值会使操作失败。");
-        let prompt = window.prompt(
-            PromptLevel::Warning,
-            "转换列类型",
-            Some(&message),
-            &["转换", "取消"],
-            cx,
-        );
-        cx.spawn_in(window, async move |view, cx| {
-            if let Ok(0) = prompt.await {
-                let _ = view.update_in(cx, |view, window, cx| {
-                    view.mutate(
-                        DatabaseMutation::CastColumn {
-                            column,
-                            dtype,
-                            force: false,
-                        },
-                        revision,
-                        window,
-                        cx,
-                    )
-                });
-            }
-        })
-        .detach();
     }
 }

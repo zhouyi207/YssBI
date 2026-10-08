@@ -65,6 +65,17 @@
 - 原生 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 与 `cargo build -p yss-desktop-gpui --bin yss-desktop-gpui` 通过，独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。
 - 使用临时 `YSSBI_APP_DATA_DIR` 启动 Linux/X11 窗口并确认主窗口渲染；当前显示环境的模拟输入未能驱动控件，未据此宣称交互验收通过。短表补位行越界与取消当前多选项后的组件光标已经按组件调用契约修复，完整操作路径仍保留在 GPUI README。
 
+
+### 数据列详情与语义表单
+
+- 已逐项阅读 DataDetailPanel、DataColumnSettings、DataColumnSemanticDialog、DataColumnSemanticFields，以及语义草稿读取、修改入口和已有参考行为测试。
+- Details 使用原生 Collapsible 提供信息与分页列目录，空表和超过 100 列仍可访问全部字段；只展开当前页需要的设置。列设置使用明确列名，表格选区继续独立提供内容预览。
+- 物理类型菜单保留当前自定义类型与确认步骤；语义选项直接消费后端支持列表，补齐编辑映射/约束入口。菜单按资源版本校验并在点击时读取列，去掉逐帧与菜单项间的整份映射复制。
+- 语义草稿切换类别类型保留原声明域、未出现类别、标签和顺序，再合并整列非空取值。只为当前 50 项创建输入，补齐值和标签编辑、增删、跨页排序与二元正值清除/联动。
+- 读取失败可重试，提交校验重复值、二元数量和共享映射上限；其余兼容性和精度校验沿用原业务 owner。未修改时直接关闭，失败及过期保留输入；物理确认期间阻止重复操作并继续处理排队刷新。
+- `cargo test -p yss-database-arrow --lib tests::column_semantics_enforce_explicit_domains_and_numeric_constraints -- --exact` 一项通过；`cargo test -p yss-application --lib database::tests::project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots -- --exact` 一项通过，分别保护显式域/精度约束和应用修改/历史/持久化流程。
+- `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 已通过；独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。集成工作区后续检查遇到并行插件视图与 Runtime 接口未对齐，未据此修改其他会话内容。人工验收操作见 GPUI README，本批不添加 UI 单元测试，UI 验收仍开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -241,10 +252,10 @@
 | [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/ConstantValueFields.tsx](../../react/src/modules/details/internal/ui/panels/ConstantValueFields.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/DataColumnSemanticFields.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticFields.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/DataColumnSettings.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSettings.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/DataDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/DataDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx) | 迁移/优化：复用当前对话框宿主与类型化提交，视图只拥有未提交草稿 | `semantic` 补齐类别切换保留映射、失败重试、重复/数量校验、未修改直接关闭与过期保护 | 代码已覆盖；人工验收待完成 |
+| [modules/details/internal/ui/panels/DataColumnSemanticFields.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticFields.tsx) | 迁移：复用原生 Input、Checkbox 与图标按钮；控件数量限定在当前页 | `semantic/fields` 与 `semantic/inputs` 补齐值/标签编辑、增删、跨页排序、正值清除和精确数值输入 | 代码已覆盖；人工验收待完成 |
+| [modules/details/internal/ui/panels/DataColumnSettings.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSettings.tsx) | 优化：只挂载当前页展开项，设置目标来自列名和捕获版本 | `details/columns` 复用原类型转换/语义用例；补齐直接编辑映射入口，菜单点击时借用权威元数据 | 代码已覆盖；人工验收待完成 |
+| [modules/details/internal/ui/panels/DataDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/DataDetailPanel.tsx) | 迁移/优化：元数据沿用编辑器同一投影，局部折叠与分页只属于 Details | `details` 信息与 `details/columns` 分页目录；移除 100 列截断，空表可独立配置列，失败可重试 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataSelectionPreview.tsx](../../react/src/modules/details/internal/ui/panels/DataSelectionPreview.tsx) | 迁移/优化：从当前数据库面板的同一选区派生主要单元格，不新增全局面板状态 | `databases/details` 补齐默认收起的预览、行号、列名与可选择的只读内容，区分 NULL/空字符串/未选择；覆盖行列与全页选择 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/EventDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/EventDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

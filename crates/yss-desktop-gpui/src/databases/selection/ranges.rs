@@ -67,17 +67,6 @@ impl PageSelection {
         matches!(&self.highlight, Highlight::Columns(indices) if indices.contains(&column))
             || matches!(self.highlight, Highlight::All)
     }
-    pub fn single_column(&self) -> Option<usize> {
-        match &self.highlight {
-            Highlight::Columns(indices) if indices.len() == 1 => indices.first().copied(),
-            Highlight::Cells(ranges) => {
-                let first = &ranges.first()?.columns;
-                (first.len() == 1 && ranges.iter().all(|range| range.columns == *first))
-                    .then_some(first.start)
-            }
-            _ => None,
-        }
-    }
     pub fn primary_cell(&self, cursor: TableSelection) -> Option<(usize, usize)> {
         match &self.highlight {
             Highlight::Cells(ranges) => {
