@@ -6,7 +6,8 @@
 use thiserror::Error;
 use yss_data_contract::ValueType;
 use yss_node_protocol::{
-    InvalidSemanticId, RelationalScalarType, ResolvedType, TypeConstructorId, TypeExpr, TypeId,
+    DATA_SERIES_CONSTRUCTOR_ID, InvalidSemanticId, RelationalScalarType, ResolvedType,
+    TypeConstructorId, TypeExpr, TypeId,
 };
 
 #[derive(Debug, Error)]
@@ -22,7 +23,7 @@ pub fn type_expr_from_data_type(data_type: &ValueType) -> Result<TypeExpr, Graph
         ValueType::DataFrame => concrete_type("tabular.dataframe"),
         ValueType::Struct(semantic_id) => concrete_type(semantic_id),
         ValueType::Array(element) => applied_type("core.array", element),
-        ValueType::DataSeries(element) => applied_type("core.data_series", element),
+        ValueType::DataSeries(element) => applied_type(DATA_SERIES_CONSTRUCTOR_ID, element),
         ValueType::OneOf(values) => values
             .iter()
             .map(type_expr_from_data_type)
@@ -55,7 +56,7 @@ pub fn data_type_from_resolved_type(value: &ResolvedType) -> Option<ValueType> {
         ResolvedType::Applied {
             constructor,
             arguments,
-        } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
+        } if constructor.as_str() == DATA_SERIES_CONSTRUCTOR_ID && arguments.len() == 1 => {
             data_type_from_resolved_type(&arguments[0])
                 .map(|element| ValueType::DataSeries(Box::new(element)))
         }
@@ -103,20 +104,16 @@ mod tests {
                 "core.numeric",
             ),
             (
-                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                "core.numeric",
-            ),
-            (
                 ValueType::Scalar(yss_data_contract::SemanticType::Text),
                 "core.text",
             ),
             (
-                ValueType::Scalar(yss_data_contract::SemanticType::Datetime),
-                "core.datetime",
+                ValueType::Scalar(yss_data_contract::SemanticType::Ordinal),
+                "core.ordinal",
             ),
             (
-                ValueType::Scalar(yss_data_contract::SemanticType::Datetime),
-                "core.datetime",
+                ValueType::Scalar(yss_data_contract::SemanticType::Identifier),
+                "core.identifier",
             ),
             (
                 ValueType::Scalar(yss_data_contract::SemanticType::Datetime),

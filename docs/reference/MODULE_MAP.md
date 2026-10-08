@@ -40,7 +40,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-graph-execution` | `crates/yss-graph-execution` | [Cargo.toml](../../crates/yss-graph-execution/Cargo.toml) | [README](../../crates/yss-graph-execution/README.md) |
 | `yss-graph-resource-contract` | `crates/yss-graph-resource-contract` | [Cargo.toml](../../crates/yss-graph-resource-contract/Cargo.toml) | — |
 | `yss-graph-runtime` | `crates/yss-graph-runtime` | [Cargo.toml](../../crates/yss-graph-runtime/Cargo.toml) | [README](../../crates/yss-graph-runtime/README.md) |
-| `yss-graph-type-mapping` | `crates/yss-graph-type-mapping` | [Cargo.toml](../../crates/yss-graph-type-mapping/Cargo.toml) | — |
+| `yss-graph-type-mapping` | `crates/yss-graph-type-mapping` | [Cargo.toml](../../crates/yss-graph-type-mapping/Cargo.toml) | [README](../../crates/yss-graph-type-mapping/README.md) |
 | `yss-harness-contract` | `crates/yss-harness-contract` | [Cargo.toml](../../crates/yss-harness-contract/Cargo.toml) | — |
 | `yss-harness-core` | `crates/yss-harness-core` | [Cargo.toml](../../crates/yss-harness-core/Cargo.toml) | [README](../../crates/yss-harness-core/README.md) |
 | `yss-harness-rig` | `crates/yss-harness-rig` | [Cargo.toml](../../crates/yss-harness-rig/Cargo.toml) | — |
