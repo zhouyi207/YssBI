@@ -387,7 +387,7 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-appl
 
 明确的节点、连接和常量写工具转换为内部 `ApplyGraphEditRequest`；调用层补齐 `baseRevision`、`graphHash` 和幂等身份，Owner 拒绝过期请求。创建节点的参数、Pin 总数和初始连接可一次提交，常量可连同初始引用节点创建。每批只添加一次图历史变更；任一操作失败都不安装部分候选。调用层按业务参数与实际读取依据生成内部 `clientKey`，在 session/turn/run 内幂等；同一依据的重复请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
-Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复服务所有明确图编辑工具的共同提交内核，不提供执行和保存的跨进程重放。
+Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。工具账本从已绑定请求借用 `clientKey` 来生成 session/turn/run 范围的幂等键，不为读取该字段展开操作列表或复制常量值；回执恢复直接移交所构造的编辑请求。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复服务所有明确图编辑工具的共同提交内核，不提供执行和保存的跨进程重放。
 
 `create_node` 的 `parameters` 和 `portCounts` 均为必需映射，快速创建传空映射；可直接提交列名列表及可变端口总数。
 声明 `clientId` 后，初始用户端口按模板顺序获得 `$clientId.templateKey[0]` 形式的批次内实例别名；

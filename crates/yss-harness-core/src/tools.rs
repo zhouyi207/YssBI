@@ -347,14 +347,19 @@ impl HarnessToolExecutor {
             .map_err(|_| persistence_unavailable())?;
         let invocation_id = ToolInvocationId::try_new(raw_invocation_id.clone())
             .map_err(|_| persistence_unavailable())?;
-        let idempotency_key = if let Some(edit) = request.graph_edit() {
+        let client_key = request.bound().and_then(|request| match request {
+            AutomationCapabilityRequest::ApplyGraphEdit(edit) => Some(edit.client_key.as_str()),
+            AutomationCapabilityRequest::GraphMutation(edit) => Some(edit.client_key.as_str()),
+            _ => None,
+        });
+        let idempotency_key = if let Some(client_key) = client_key {
             let digest = yss_canonical_hash::hash_canonical(
                 "yssbi.assistant.graph-edit.idempotency.v1",
                 &(
                     &self.session_id,
                     &self.turn_id,
                     agent.as_ref().map(|scope| &scope.run_id),
-                    &edit.client_key,
+                    client_key,
                 ),
             )
             .map_err(|_| persistence_unavailable())?;
@@ -458,7 +463,7 @@ impl HarnessToolExecutor {
                 CapabilityFailureCode::InternalFailure | CapabilityFailureCode::OutcomeUnknown
             )
         }) && let Some(edit) = record.request.graph_edit()
-            && let Ok(Some(receipt)) = self.gateway.recover_graph_edit(context, edit.clone()).await
+            && let Ok(Some(receipt)) = self.gateway.recover_graph_edit(context, edit).await
         {
             outcome =
                 Ok(yss_harness_contract::AutomationCapabilityResult::GraphEditReceipt(receipt));
@@ -611,11 +616,7 @@ impl HarnessToolExecutor {
         }
         if let Some(edit) = record.request.graph_edit() {
             let context = self.invocation_context(&record.idempotency_key)?;
-            if let Some(receipt) = self
-                .gateway
-                .recover_graph_edit(context, edit.clone())
-                .await?
-            {
+            if let Some(receipt) = self.gateway.recover_graph_edit(context, edit).await? {
                 record.result = Some(
                     yss_harness_contract::AutomationCapabilityResult::GraphEditReceipt(receipt),
                 );
