@@ -309,8 +309,7 @@ impl GraphRuntimeState {
                 semantics: analysis.map(GraphAnalysis::semantic_snapshot),
             },
         )?;
-        candidate =
-            std::borrow::Cow::Owned(prepare_graph_document_patch(&candidate, &mutation_patch)?);
+        let candidate = prepare_graph_document_patch(candidate.into_owned(), &mutation_patch)?;
         operations.extend(mutation_patch.operations);
         let referenced_ports = candidate
             .connections

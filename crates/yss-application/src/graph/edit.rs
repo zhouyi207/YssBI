@@ -193,9 +193,13 @@ impl<'a> GraphDocumentEditor<'a> {
             };
         if !patch.is_empty() {
             self.document = Arc::new(
-                prepare_graph_document_patch(&self.document, &patch).map_err(|error| {
-                    ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-                })?,
+                prepare_graph_document_patch(self.document.as_ref().clone(), &patch).map_err(
+                    |error| {
+                        ResourceMutationApplicationError::Mutation(MutationConflict::Document(
+                            error,
+                        ))
+                    },
+                )?,
             );
         }
         self.patch.operations.extend(patch.operations);

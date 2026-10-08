@@ -72,7 +72,7 @@ pub(super) fn instantiate_with_identities(
         anchor,
         &ids,
     )?;
-    yss_graph_document_edit::prepare_graph_document_patch(document, &patch)
+    yss_graph_document_edit::prepare_graph_document_patch(document.clone(), &patch)
         .map_err(|error| invalid_clipboard(format!("subgraph patch validation failed: {error}")))?;
     let mut addresses = snapshot
         .port_bindings
@@ -781,7 +781,7 @@ fn plan_instantiation(
     }
 
     let mut staged = yss_graph_document_edit::prepare_graph_document_patch(
-        document,
+        document.clone(),
         &GraphDocumentPatch::new(operations.clone()),
     )
     .map_err(|error| invalid_clipboard(format!("node and port staging failed: {error}")))?;
@@ -812,8 +812,8 @@ fn plan_instantiation(
             address,
             after: Some(entry.state.clone()),
         };
-        yss_graph_document_edit::apply_graph_document_patch(
-            &mut staged,
+        staged = yss_graph_document_edit::prepare_graph_document_patch(
+            staged,
             &GraphDocumentPatch::new(vec![operation.clone()]),
         )
         .map_err(|error| invalid_clipboard(format!("input state staging failed: {error}")))?;
@@ -835,8 +835,8 @@ fn plan_instantiation(
                 order: entry.order.clone(),
             },
         };
-        yss_graph_document_edit::apply_graph_document_patch(
-            &mut staged,
+        staged = yss_graph_document_edit::prepare_graph_document_patch(
+            staged,
             &GraphDocumentPatch::new(vec![operation.clone()]),
         )
         .map_err(|error| invalid_clipboard(format!("connection staging failed: {error}")))?;

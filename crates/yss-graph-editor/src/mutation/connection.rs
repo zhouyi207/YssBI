@@ -34,8 +34,10 @@ pub(super) fn update_connection_operations(
     }
     // Free the whole selection first so swapping occupied endpoints is atomic.
     let mut operations = disconnect_connection_operations(document, selected.iter().copied())?;
-    let mut staged =
-        prepare_graph_document_patch(document, &GraphDocumentPatch::new(operations.clone()))?;
+    let mut staged = prepare_graph_document_patch(
+        document.clone(),
+        &GraphDocumentPatch::new(operations.clone()),
+    )?;
     for proposal in proposals {
         let mut next = connect_operations(
             &staged,
@@ -61,7 +63,7 @@ pub(super) fn update_connection_operations(
             }
         }
         let patch = GraphDocumentPatch::new(next);
-        apply_graph_document_patch(&mut staged, &patch)?;
+        staged = prepare_graph_document_patch(staged, &patch)?;
         operations.extend(patch.operations);
     }
     Ok(operations)
@@ -135,7 +137,7 @@ pub(crate) fn move_connection_operations(
         .map(|connection| (connection.id, connection))
         .collect::<BTreeMap<_, _>>();
     let mut staged = prepare_graph_document_patch(
-        document,
+        document.clone(),
         &GraphDocumentPatch::new(
             removals
                 .values()
@@ -147,6 +149,14 @@ pub(crate) fn move_connection_operations(
     match endpoint_capacity(&staged, &target, target_port.spec.connections)? {
         EndpointCapacity::Append => {}
         EndpointCapacity::Replace(incumbents) => {
+            let patch = GraphDocumentPatch::new(
+                incumbents
+                    .iter()
+                    .cloned()
+                    .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
+                    .collect::<Vec<_>>(),
+            );
+            staged = prepare_graph_document_patch(staged, &patch)?;
             for connection in incumbents {
                 removals.insert(connection.id, connection);
             }
@@ -158,10 +168,6 @@ pub(crate) fn move_connection_operations(
         .cloned()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
-    staged = prepare_graph_document_patch(
-        document,
-        &GraphDocumentPatch::new(removal_operations.clone()),
-    )?;
     for proposal in &proposals {
         if staged.connections.values().any(|connection| {
             connection.output == proposal.output && connection.input == proposal.input
@@ -176,8 +182,8 @@ pub(crate) fn move_connection_operations(
         validate_connection_order(input.spec.connections, proposal.order.as_ref())?;
         validate_connection_capacity(&staged, &proposal.output, output.spec.connections)?;
         validate_connection_capacity(&staged, &proposal.input, input.spec.connections)?;
-        apply_graph_document_patch(
-            &mut staged,
+        staged = prepare_graph_document_patch(
+            staged,
             &GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertConnection {
                 connection: proposal.clone(),
             }]),
@@ -420,8 +426,10 @@ fn plan_connection_operations_after_type_validation(
         .into_values()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
-    let staged =
-        prepare_graph_document_patch(document, &GraphDocumentPatch::new(operations.clone()))?;
+    let staged = prepare_graph_document_patch(
+        document.clone(),
+        &GraphDocumentPatch::new(operations.clone()),
+    )?;
     validate_connection_capacity(&staged, &output, output_connections)?;
     validate_connection_capacity(&staged, &input, input_connections)?;
     operations.push(GraphDocumentOperation::InsertConnection {

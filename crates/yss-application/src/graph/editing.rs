@@ -409,11 +409,15 @@ impl ApplicationState {
         )?;
         let mut document = Arc::clone(&operation.document);
         if let Some(patch) = &patch {
-            document = Arc::new(prepare_graph_document_patch(&document, patch).map_err(
-                |error| {
-                    ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-                },
-            )?);
+            document = Arc::new(
+                prepare_graph_document_patch(document.as_ref().clone(), patch).map_err(
+                    |error| {
+                        ResourceMutationApplicationError::Mutation(MutationConflict::Document(
+                            error,
+                        ))
+                    },
+                )?,
+            );
         }
         let editor =
             GraphDocumentEditor::new(&captured, &request.graph_path, &request.locale, document)?;

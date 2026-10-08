@@ -64,7 +64,7 @@ pub(super) fn set_port_counts(
                 registry,
                 PortAddress::instance(node_id, template.clone(), *member),
             )?);
-            apply_graph_document_patch(&mut staged, &patch)?;
+            staged = prepare_graph_document_patch(staged, &patch)?;
             operations.extend(patch.operations);
         }
         for _ in members.len()..target {
@@ -75,7 +75,7 @@ pub(super) fn set_port_counts(
                 template.clone(),
                 PortPlacement::Append,
             )?);
-            apply_graph_document_patch(&mut staged, &patch)?;
+            staged = prepare_graph_document_patch(staged, &patch)?;
             operations.extend(patch.operations);
         }
     }

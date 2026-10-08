@@ -168,23 +168,23 @@ fn set_input_state(
     Ok(())
 }
 
+/// Consume a private candidate; callers fork shared source documents before preparing edits.
 pub fn prepare_graph_document_patch(
-    document: &GraphDocument,
+    mut document: GraphDocument,
     patch: &GraphDocumentPatch,
 ) -> Result<GraphDocument, DocumentError> {
-    let mut staged = document.clone();
     for operation in &patch.operations {
-        apply_operation(operation, &mut staged)?;
+        apply_operation(operation, &mut document)?;
     }
-    validate_graph_document(&staged)?;
-    Ok(staged)
+    validate_graph_document(&document)?;
+    Ok(document)
 }
 
 pub fn apply_graph_document_patch(
     document: &mut GraphDocument,
     patch: &GraphDocumentPatch,
 ) -> Result<(), DocumentError> {
-    *document = prepare_graph_document_patch(document, patch)?;
+    *document = prepare_graph_document_patch(document.clone(), patch)?;
     Ok(())
 }
 
@@ -218,14 +218,16 @@ mod tests {
             before: before.clone(),
             after: after.clone(),
         };
-        let prepared =
-            prepare_graph_document_patch(&document, &GraphDocumentPatch::new([update.clone()]))
-                .unwrap();
+        let prepared = prepare_graph_document_patch(
+            document.clone(),
+            &GraphDocumentPatch::new([update.clone()]),
+        )
+        .unwrap();
         assert_eq!(document.nodes[&id], before);
         assert_eq!(prepared.nodes[&id], after);
 
         let failed = prepare_graph_document_patch(
-            &document,
+            document.clone(),
             &GraphDocumentPatch::new([
                 update,
                 GraphDocumentOperation::RemoveNode {

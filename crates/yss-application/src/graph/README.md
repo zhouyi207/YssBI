@@ -220,10 +220,11 @@ GraphDocumentChange 交付同一候选 `Arc`，Project 提交与响应复用它�
 解析缓存的指纹复用与弱引用生命周期由 [Graph Runtime](../../../yss-graph-runtime/README.md) 拥有；
 Application 仍在捕获、资源授权和交付边界重验当前项目、编辑及执行身份。
 
-Document Edit 的补丁准备入口借用原正文，复制一次后逐项校验 before-state、应用操作，并在返回前
-校验完整文档。失败不改动原正文；`apply_graph_document_patch` 复用同一准备步骤，成功后才替换
-调用方的可写文档。Application、Runtime 预览及 Editor 规划可直接读取返回的候选，避免先复制
-原正文再进入原子应用时重复复制；最终提交仍核对 Project 的当前版本和修改权威。
+Document Edit 的补丁准备入口接收拥有所有权的候选，逐项校验 before-state、应用操作，并在返回前
+校验完整文档。需要保留共享原文时由调用方显式复制；私有候选的后续补丁直接移交同一正文，
+端口数量调整、批量重接及子图导入不逐项复制整图。失败不改动共享原文；
+`apply_graph_document_patch` 为可写文档准备独立候选，成功后才替换调用方的文档。
+Runtime 的认领候选移交给同一入口；最终提交仍核对 Project 的当前版本和修改权威。
 
 GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操作或 Harness 批次对应一个事务。历史按条目数和序列化字节数限制，阈值由 [graph_editing.rs](../../../yss-project/src/project_state/graph_editing.rs) 拥有。Undo/redo 恢复文档意图后重新 Resolve，不能恢复历史中的类型、诊断或结果 payload。结构有效但暂时不能运行的图仍可编辑，阻断诊断由 Graph Problems 展示。
 
