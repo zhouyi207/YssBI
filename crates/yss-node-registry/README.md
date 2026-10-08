@@ -29,7 +29,7 @@ Registry 不解释引用中的项目路径。四个函数 interface resolver ID 
 
 协议指纹保留执行相关声明及参数验证/规范化契约，忽略普通显示信息。
 注册表指纹组合提供者、类型/构造器/类型类、解析器 ID、协议指纹、执行角色/实现身份和
-nominal 验证器身份/版本。序列化与规范编码使用 [Canonical Hash](../yss-canonical-hash/src/lib.rs)。
+nominal 验证器身份/版本。序列化与规范编码使用 [Canonical Hash](../yss-canonical-hash/README.md)。
 注册失败通过 `NodeRegistrationError` 区分一致性校验和规范编码错误；
 `InvalidNodeProtocol` 保留节点身份与原始 `ProtocolError` 来源。
 

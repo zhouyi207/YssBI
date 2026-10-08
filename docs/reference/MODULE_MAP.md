@@ -15,7 +15,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | Package | Directory | Manifest | Owner README |
 | --- | --- | --- | --- |
 | `yss-application` | `crates/yss-application` | [Cargo.toml](../../crates/yss-application/Cargo.toml) | [README](../../crates/yss-application/README.md) |
-| `yss-canonical-hash` | `crates/yss-canonical-hash` | [Cargo.toml](../../crates/yss-canonical-hash/Cargo.toml) | — |
+| `yss-canonical-hash` | `crates/yss-canonical-hash` | [Cargo.toml](../../crates/yss-canonical-hash/Cargo.toml) | [README](../../crates/yss-canonical-hash/README.md) |
 | `yss-chart-document` | `crates/yss-chart-document` | [Cargo.toml](../../crates/yss-chart-document/Cargo.toml) | — |
 | `yss-data-contract` | `crates/yss-data-contract` | [Cargo.toml](../../crates/yss-data-contract/Cargo.toml) | [README](../../crates/yss-data-contract/README.md) |
 | `yss-database-arrow` | `crates/yss-database-arrow` | [Cargo.toml](../../crates/yss-database-arrow/Cargo.toml) | [README](../../crates/yss-database-arrow/README.md) |

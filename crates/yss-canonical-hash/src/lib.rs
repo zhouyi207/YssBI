@@ -48,12 +48,53 @@ pub fn hash_canonical<T: Serialize + ?Sized>(
     domain: &str,
     value: &T,
 ) -> Result<[u8; 32], CanonicalEncodingError> {
-    let encoded = serde_json::to_vec(value).map_err(CanonicalEncodingError::from_serde)?;
+    let serialized = serde_json::to_vec(value).map_err(CanonicalEncodingError::from_serde)?;
+    let raw = serde_json::from_slice(&serialized).map_err(CanonicalEncodingError::from_serde)?;
+    let mut encoded = Vec::with_capacity(serialized.len());
+    encode_canonical(raw, &mut encoded).map_err(CanonicalEncodingError::from_serde)?;
     let mut digest = Sha256::new();
     digest.update((domain.len() as u64).to_be_bytes());
     digest.update(domain.as_bytes());
     digest.update(&encoded);
     Ok(digest.finalize().into())
+}
+
+fn encode_canonical(
+    value: &serde_json::value::RawValue,
+    encoded: &mut Vec<u8>,
+) -> Result<(), serde_json::Error> {
+    // Borrow encoded values instead of converting numbers through Value, which
+    // cannot represent every integer accepted by Serde JSON's serializer.
+    let raw = value.get().trim();
+    match raw.as_bytes()[0] {
+        b'{' => {
+            let members: std::collections::BTreeMap<String, &serde_json::value::RawValue> =
+                serde_json::from_str(raw)?;
+            encoded.push(b'{');
+            for (index, (key, value)) in members.into_iter().enumerate() {
+                if index != 0 {
+                    encoded.push(b',');
+                }
+                serde_json::to_writer(&mut *encoded, &key)?;
+                encoded.push(b':');
+                encode_canonical(value, encoded)?;
+            }
+            encoded.push(b'}');
+        }
+        b'[' => {
+            let values: Vec<&serde_json::value::RawValue> = serde_json::from_str(raw)?;
+            encoded.push(b'[');
+            for (index, value) in values.into_iter().enumerate() {
+                if index != 0 {
+                    encoded.push(b',');
+                }
+                encode_canonical(value, encoded)?;
+            }
+            encoded.push(b']');
+        }
+        _ => encoded.extend_from_slice(raw.as_bytes()),
+    }
+    Ok(())
 }
 
 /// SHA-256 of an artifact's exact bytes, independent of JSON/domain encoding.
@@ -77,6 +118,59 @@ pub fn content_sha256_reader(mut reader: impl std::io::Read) -> std::io::Result<
 #[cfg(test)]
 mod tests {
     use super::hash_canonical;
+    use serde::Serialize;
+
+    #[test]
+    fn object_member_order_does_not_change_struct_or_nested_json_identity() {
+        #[derive(Serialize)]
+        struct Fields {
+            z: Vec<serde_json::Value>,
+            a: u32,
+        }
+        let nested = |reverse| {
+            let mut object = serde_json::Map::new();
+            for (key, value) in if reverse {
+                [("z", 2), ("a", 1)]
+            } else {
+                [("a", 1), ("z", 2)]
+            } {
+                object.insert(key.into(), serde_json::json!(value));
+            }
+            serde_json::Value::Object(object)
+        };
+        let fields = Fields {
+            z: vec![nested(true)],
+            a: 7,
+        };
+        let equivalent = serde_json::json!({"a": 7, "z": [nested(false)]});
+        assert_eq!(
+            hash_canonical("test.object", &fields).unwrap(),
+            hash_canonical("test.object", &equivalent).unwrap()
+        );
+    }
+
+    #[test]
+    fn array_order_remains_part_of_canonical_identity() {
+        let first = serde_json::json!({"items": [1, 2]});
+        let reversed = serde_json::json!({"items": [2, 1]});
+        assert_ne!(
+            hash_canonical("test.array", &first).unwrap(),
+            hash_canonical("test.array", &reversed).unwrap()
+        );
+    }
+
+    #[test]
+    fn wide_integer_encoding_keeps_every_digit() {
+        let digest = hash_canonical("test.wide", &u128::MAX).unwrap();
+        let actual = digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(
+            actual,
+            "f03bc9b1e8f353b88604b5cb77e515180361520a3f972868767322e34eb0a2b9"
+        );
+    }
 
     #[test]
     fn streaming_hash_covers_every_buffer_and_propagates_io_failures() {
