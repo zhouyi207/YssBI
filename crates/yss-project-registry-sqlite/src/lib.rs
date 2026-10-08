@@ -3,13 +3,15 @@
 use std::path::PathBuf;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, QueryBuilder, Sqlite, SqlitePool};
 
 use yss_project_identity::{ProjectRegistrationId, ProjectRootIdentity};
 use yss_project_registry_contract::{
     ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
     ProjectRootIdentityState,
 };
+
+const SELECT_RECORD: &str = "SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state FROM projects";
 
 /// The only concrete SQLx/SQLite implementation of the Project registry port.
 pub struct SqliteProjectRegistryStore {
@@ -57,6 +59,25 @@ impl SqliteProjectRegistryStore {
         &self.path
     }
 
+    async fn find_record(
+        &self,
+        condition: &'static str,
+        value: String,
+    ) -> Result<Option<ProjectRecord>, ProjectRegistryStoreError> {
+        let mut query = QueryBuilder::<Sqlite>::new(SELECT_RECORD);
+        query.push(condition).push_bind(value);
+        query
+            .build_query_as::<ProjectRegistryRow>()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| {
+                tracing::warn!(target: "yss_project_registry_sqlite", log_domain = "system", log_event = "projectRegistryReadFailed", error = %error, "Project registry read failed");
+                ProjectRegistryStoreError::StorageFailed
+            })?
+            .map(row_to_record)
+            .transpose()
+    }
+
     async fn ensure_schema(&self) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -79,26 +100,40 @@ impl SqliteProjectRegistryStore {
 }
 
 impl ProjectRegistryStore for SqliteProjectRegistryStore {
+    fn get_by_id(
+        &self,
+        registration: &ProjectRegistrationId,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+    {
+        Box::pin(self.find_record(" WHERE id = ", registration.as_str().to_owned()))
+    }
+
+    fn get_by_path(
+        &self,
+        path: &str,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+    {
+        Box::pin(self.find_record(" WHERE path = ", path.to_owned()))
+    }
+
     fn load(
         &self,
     ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>
     {
         Box::pin(async move {
-            let rows = sqlx::query_as::<_, ProjectRegistryRow>(
-                "SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state FROM projects",
-            )
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|error| {
-                tracing::warn!(
-                    target: "yss_project_registry_sqlite",
-                    log_domain = "system",
-                    log_event = "projectRegistryLoadFailed",
-                    error = %error,
-                    "Project registry load failed"
-                );
-                ProjectRegistryStoreError::StorageFailed
-            })?;
+            let rows = sqlx::query_as::<_, ProjectRegistryRow>(SELECT_RECORD)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|error| {
+                    tracing::warn!(
+                        target: "yss_project_registry_sqlite",
+                        log_domain = "system",
+                        log_event = "projectRegistryLoadFailed",
+                        error = %error,
+                        "Project registry load failed"
+                    );
+                    ProjectRegistryStoreError::StorageFailed
+                })?;
             rows.into_iter()
                 .map(row_to_record)
                 .collect::<Result<Vec<_>, _>>()

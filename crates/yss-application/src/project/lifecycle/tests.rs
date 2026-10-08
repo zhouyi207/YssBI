@@ -22,6 +22,22 @@ struct FailingRemoveProjectRegistryStore {
 }
 
 impl ProjectRegistryStore for FailingRemoveProjectRegistryStore {
+    fn get_by_id(
+        &self,
+        registration: &yss_project_identity::ProjectRegistrationId,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+    {
+        self.inner.get_by_id(registration)
+    }
+
+    fn get_by_path(
+        &self,
+        path: &str,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+    {
+        self.inner.get_by_path(path)
+    }
+
     fn load(
         &self,
     ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>

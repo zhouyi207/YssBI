@@ -13,7 +13,7 @@ use thiserror::Error;
 use discovery::{
     ProjectDiscoveryError, discover_project_metadata_files, project_name_from_metadata_path,
 };
-use yss_filesystem::{NormalizedRoot, RootBinding};
+use yss_filesystem::RootBinding;
 use yss_project_identity::ProjectRegistrationId;
 use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_model::normalize_project_name;
@@ -127,34 +127,28 @@ impl ProjectRegistry {
         &self,
         id: &str,
     ) -> Result<Option<ProjectRecord>, ProjectRegistryError> {
-        Ok(self
-            .store
-            .load()
+        self.store
+            .get_by_id(&ProjectRegistrationId::from_existing(id.to_owned()))
             .await
-            .map_err(ProjectRegistryError::Store)?
-            .into_iter()
-            .find(|record| record.id.as_str() == id))
+            .map_err(ProjectRegistryError::Store)
     }
 
     async fn fetch_by_root(
         &self,
         binding: &RootBinding,
+        path: &str,
     ) -> Result<Option<ProjectRecord>, ProjectRegistryError> {
         let identity = binding
             .identity()
             .ok_or(ProjectRegistryError::RootIdentityMissing)?;
-        let records = self
+        let record = self
             .store
-            .load()
+            .get_by_path(path)
             .await
             .map_err(ProjectRegistryError::Store)?;
         binding
             .revalidate()
             .map_err(|_| ProjectRegistryError::IdentityChanged)?;
-        let record = records.into_iter().find(|record| {
-            NormalizedRoot::from_path(project_root_path(&record.path))
-                .is_ok_and(|root| &root == binding.normalized())
-        });
         if record.as_ref().is_some_and(|record| {
             record.deletion_identity().map(|value| value.as_str()) != Some(identity.as_str())
         }) {
@@ -180,7 +174,7 @@ impl ProjectRegistry {
             .ok_or(ProjectRegistryError::RootIdentityMissing)?;
         let path = normalize_existing_path(path)?;
 
-        if let Some(existing) = self.fetch_by_root(&binding).await? {
+        if let Some(existing) = self.fetch_by_root(&binding, &path).await? {
             let updated = ProjectRecord {
                 last_opened_at: Some(now_string()),
                 path,
@@ -327,7 +321,7 @@ impl ProjectRegistry {
                 normalize_existing_path(&path).map_err(|_| ProjectRegistryError::ScanFailed)?;
             let binding = RootBinding::for_existing(project_root_path(metadata_path))
                 .map_err(|_| ProjectRegistryError::ScanFailed)?;
-            let existing = self.fetch_by_root(&binding).await?;
+            let existing = self.fetch_by_root(&binding, &normalized).await?;
             let (record, is_new) = match existing {
                 Some(record) => (record, false),
                 None => (
@@ -486,6 +480,40 @@ mod tests {
     }
 
     impl ProjectRegistryStore for MemoryProjectRegistryStore {
+        fn get_by_id(
+            &self,
+            registration: &ProjectRegistrationId,
+        ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+        {
+            let registration = registration.clone();
+            Box::pin(async move {
+                Ok(self
+                    .records
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .iter()
+                    .find(|record| record.id == registration)
+                    .cloned())
+            })
+        }
+
+        fn get_by_path(
+            &self,
+            path: &str,
+        ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+        {
+            let path = path.to_owned();
+            Box::pin(async move {
+                Ok(self
+                    .records
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .iter()
+                    .find(|record| record.path == path)
+                    .cloned())
+            })
+        }
+
         fn load(
             &self,
         ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>

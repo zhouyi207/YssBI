@@ -18,9 +18,12 @@ records and leaves project files with their lifecycle owner.
 Path normalization returns `ProjectRegistryError::InvalidPath`; default parent lookup returns
 the standard environment error. Host adapters own localized messages. Listing sorts favorites,
 numeric Unix timestamps and names; individual lookups do not invoke the presentation sort.
+Single-record reads use the store's registration-ID or canonical-path lookup. Registration
+and discovery revalidate the captured root after the asynchronous lookup before comparing
+its identity with the persisted record.
 
 Records and the storage port belong to
-[Registry Contract](../yss-project-registry-contract/src/lib.rs). Application owns project
+[Registry Contract](../yss-project-registry-contract/README.md). Application owns project
 activation and deletion; Filesystem owns directory identity and generic file access.
 
 ```sh

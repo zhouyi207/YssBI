@@ -61,17 +61,46 @@ async fn sqlite_store_round_trips_updates_and_removes_canonical_records() {
         store.load().await.expect("load records").as_ref(),
         &[expected.clone()]
     );
+    assert_eq!(
+        store.get_by_id(&expected.id).await.unwrap(),
+        Some(expected.clone())
+    );
+    assert_eq!(
+        store.get_by_path(&expected.path).await.unwrap(),
+        Some(expected.clone())
+    );
+    assert_eq!(
+        store
+            .get_by_id(&ProjectRegistrationId::from_existing("missing".into()))
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(store.get_by_path("' OR 1 = 1 --").await.unwrap(), None);
 
+    let old_path = expected.path.clone();
     expected.name = "Renamed".into();
+    expected.path = "C:/projects/renamed/metadata.yssbi".into();
     expected.is_favorite = true;
     store.upsert(&expected).await.expect("update record");
     assert_eq!(
         store.load().await.expect("load update").as_ref(),
         &[expected.clone()]
     );
+    assert_eq!(
+        store.get_by_id(&expected.id).await.unwrap(),
+        Some(expected.clone())
+    );
+    assert_eq!(
+        store.get_by_path(&expected.path).await.unwrap(),
+        Some(expected.clone())
+    );
+    assert_eq!(store.get_by_path(&old_path).await.unwrap(), None);
 
     store.remove(&expected.id).await.expect("remove record");
     assert!(store.load().await.expect("load empty").is_empty());
+    assert_eq!(store.get_by_id(&expected.id).await.unwrap(), None);
+    assert_eq!(store.get_by_path(&expected.path).await.unwrap(), None);
     assert_eq!(
         store.remove(&expected.id).await,
         Err(ProjectRegistryStoreError::Unavailable)
@@ -96,6 +125,10 @@ async fn corrupt_persisted_discriminants_fail_closed() {
         store.load().await,
         Err(ProjectRegistryStoreError::StorageFailed)
     );
+    assert_eq!(
+        store.get_by_id(&expected.id).await,
+        Err(ProjectRegistryStoreError::StorageFailed)
+    );
 
     sqlx::query("UPDATE projects SET root_identity_state = 'valid', is_favorite = 2")
         .execute(&store.pool)
@@ -103,6 +136,10 @@ async fn corrupt_persisted_discriminants_fail_closed() {
         .expect("corrupt favorite state");
     assert_eq!(
         store.load().await,
+        Err(ProjectRegistryStoreError::StorageFailed)
+    );
+    assert_eq!(
+        store.get_by_path(&expected.path).await,
         Err(ProjectRegistryStoreError::StorageFailed)
     );
     store.pool.close().await;

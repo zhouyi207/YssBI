@@ -108,6 +108,22 @@ mod tests {
     struct PausedStore(AtomicBool);
 
     impl ProjectRegistryStore for PausedStore {
+        fn get_by_id(
+            &self,
+            _: &ProjectRegistrationId,
+        ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+        {
+            unreachable!("this test only reads the complete registry")
+        }
+
+        fn get_by_path(
+            &self,
+            _: &str,
+        ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
+        {
+            unreachable!("this test only reads the complete registry")
+        }
+
         fn load(
             &self,
         ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>

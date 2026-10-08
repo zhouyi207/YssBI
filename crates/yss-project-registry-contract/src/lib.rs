@@ -49,6 +49,17 @@ pub enum ProjectRegistryStoreError {
 }
 
 pub trait ProjectRegistryStore: Send + Sync {
+    fn get_by_id(
+        &self,
+        registration: &ProjectRegistrationId,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>;
+
+    /// Paths use the canonical metadata path admitted by the Registry workflow.
+    fn get_by_path(
+        &self,
+        path: &str,
+    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>;
+
     fn load(
         &self,
     ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>;
