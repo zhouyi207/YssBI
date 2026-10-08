@@ -16,8 +16,13 @@ impl AgentHook for ToolCallFeedback {
             InvalidToolCallReason::MalformedArguments { .. } => "malformed_tool_arguments",
         };
         // Arguments/history may contain user data; record only structural diagnostics.
-        tracing::warn!(domain = "Application", event = "harness_invalid_tool_call",
-            reason, tool_name = %event.tool_name, "Harness rejected a provider tool call");
+        tracing::warn!(
+            domain = "Application",
+            event = "harness_invalid_tool_call",
+            reason,
+            available_tools = event.allowed_tools.len(),
+            "Harness rejected a provider tool call"
+        );
         if !matches!(event.reason, InvalidToolCallReason::UnknownTool) {
             return None;
         }

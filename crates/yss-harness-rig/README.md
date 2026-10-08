@@ -23,6 +23,8 @@ Tools enter Core's existing admission and receipt lifecycle. The adapter retains
 admitted tasks until their outcomes settle, including after cancellation; stopping
 sampling does not discard a committed operation's receipt. Ordinary tool failures
 return model feedback. Fatal lifecycle or persistence failures stop sampling.
+Failure observations use fixed categories and structural counts. Unknown tool
+names supplied by the provider are not included in logs.
 
 Recovery reissues only a sampling request from a boundary whose preceding tool
 results have settled. The boundary owns the necessary native message copy; size
