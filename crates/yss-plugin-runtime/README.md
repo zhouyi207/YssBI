@@ -56,7 +56,9 @@ after host snapshot writes and during active tasks. This is an application soft 
 `trustedNative`, not an OS sandbox or protection against arbitrary native filesystem access.
 
 View-state writes reuse one serialized buffer for the 64 KiB state limit, private
-storage admission and atomic file publication.
+storage admission and atomic file publication. State path preparation reuses the
+storage owner's redirect checks before and after directory creation. Existing
+directory/file redirects are rejected before state access.
 
 View attachment rechecks the captured process instance under the runtime-state lock before
 publishing its context. Export grants recheck that the context still exists and its process

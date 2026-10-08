@@ -65,6 +65,20 @@ pub(super) fn directory_bytes(path: &Path) -> Result<u64, PluginFailure> {
 }
 
 impl PluginManager {
+    pub(super) fn view_state_path(
+        &self,
+        plugin: &str,
+        view: &str,
+        scope: &str,
+    ) -> Result<PathBuf, PluginFailure> {
+        let directory = self.inner.root.join("data").join(plugin).join("view-state");
+        let path = directory.join(format!("{view}-{scope}.json"));
+        validate_path(&self.inner.root, &path)?;
+        fs::create_dir_all(&directory).map_err(|_| fail("plugin_storage_failed"))?;
+        validate_path(&self.inner.root, &path)?;
+        Ok(path)
+    }
+
     pub fn storage_usage(&self, plugin: &str) -> Result<PluginStorageUsage, PluginFailure> {
         let entry = self.registration(plugin)?;
         let root = self.inner.root.join("data").join(plugin);
@@ -218,4 +232,79 @@ pub fn resolve_data_file(root: &Path, relative: &str) -> Result<PathBuf, PluginF
         return Err(fail("plugin_path_invalid"));
     }
     Ok(path)
+}
+
+#[cfg(all(test, unix))]
+mod state_path_tests {
+    use super::*;
+    use std::{os::unix::fs::symlink, sync::Arc};
+    use yss_plugin_protocol::{CallContext, HostServices, ProjectContext};
+
+    struct Host;
+    impl HostServices for Host {
+        fn current_project(&self) -> Result<Option<ProjectContext>, PluginFailure> {
+            Ok(None)
+        }
+        fn invoke(
+            &self,
+            _: &CallContext,
+            _: &str,
+            _: serde_json::Value,
+            _: &Path,
+        ) -> Result<serde_json::Value, PluginFailure> {
+            Err(fail("plugin_permission_denied"))
+        }
+    }
+
+    struct Root(PathBuf);
+    impl Root {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("yssbi-state-path-{}", uuid::Uuid::new_v4()));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for Root {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn state_directory_redirect_is_rejected_before_creation_outside_plugin_storage() {
+        let root = Root::new();
+        let manager = PluginManager::new(&root.0, Arc::new(Host)).unwrap();
+        let outside = root.0.join("outside");
+        fs::create_dir(&outside).unwrap();
+        let plugin = manager.inner.root.join("data/example.statistics");
+        fs::create_dir(&plugin).unwrap();
+        symlink(&outside, plugin.join("view-state")).unwrap();
+
+        let error = manager
+            .view_state_path("example.statistics", "main", "scope")
+            .unwrap_err();
+        assert_eq!(error.code, "plugin_path_invalid");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn state_file_redirect_is_rejected_without_reading_or_overwriting_its_target() {
+        let root = Root::new();
+        let manager = PluginManager::new(&root.0, Arc::new(Host)).unwrap();
+        let path = manager
+            .view_state_path("example.statistics", "main", "scope")
+            .unwrap();
+        assert!(path.parent().unwrap().is_dir());
+        assert!(!path.exists());
+        let outside = root.0.join("outside.json");
+        fs::write(&outside, b"private content").unwrap();
+        symlink(&outside, &path).unwrap();
+
+        let error = manager
+            .view_state_path("example.statistics", "main", "scope")
+            .unwrap_err();
+        assert_eq!(error.code, "plugin_path_invalid");
+        assert_eq!(fs::read(&outside).unwrap(), b"private content");
+    }
 }

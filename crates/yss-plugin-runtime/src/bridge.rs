@@ -320,9 +320,7 @@ impl PluginManager {
                     &serde_json::to_vec(&binding.context.project)
                         .map_err(|_| fail("plugin_state_unavailable"))?,
                 );
-                let directory = self.inner.root.join("data").join(id).join("view-state");
-                fs::create_dir_all(&directory).map_err(|_| fail("plugin_storage_failed"))?;
-                let path = directory.join(format!("{}-{scope}.json", binding.view_id));
+                let path = self.view_state_path(id, &binding.view_id, &scope)?;
                 if method == "views.get_state" {
                     return if path.exists() {
                         serde_json::from_slice(&read_bounded(&path, 64 * 1024)?)
