@@ -1,5 +1,6 @@
 use super::common::field;
 mod causal_models;
+mod descriptive;
 mod diagnostics;
 mod meta;
 mod panel_models;

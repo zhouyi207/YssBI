@@ -1,4 +1,4 @@
-use super::common::{columns, group, text, value};
+use super::common::{categories, columns, group, materialize, numeric, text, value};
 use super::{Input, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
@@ -57,55 +57,10 @@ fn gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
 }
 
 fn dagum_gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
-    use super::super::series;
-    let mut inputs = series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, true)?;
-    let groups = inputs.pop().ok_or(KernelError::ShapeMismatch)?.values;
-    let values = inputs.pop().ok_or(KernelError::ShapeMismatch)?.values;
-    if values.len() != groups.len() {
-        return Err(KernelError::ShapeMismatch);
-    }
-    // Include retained scalars, numeric workspaces, group IDs and sorting buffers together.
-    let mut bytes = inv
-        .control
-        .check_bytes(values.len().checked_mul(size_of::<RuntimeValue>() * 8))?;
-    for (index, group) in groups.iter().enumerate() {
-        if index % 1024 == 0 {
-            inv.check_control()?;
-        }
-        if let TabularScalar::String(label) = group {
-            bytes = inv.control.check_bytes(
-                label
-                    .len()
-                    .checked_mul(4)
-                    .and_then(|n| bytes.checked_add(n)),
-            )?;
-        }
-    }
-    let mut numeric = inv.control.reserve(values.len())?;
-    let mut group_ids = inv.control.reserve(groups.len())?;
-    let mut labels = Vec::<TabularScalar>::new();
-    for (i, (number, group)) in values.into_iter().zip(groups).enumerate() {
-        if i % 1024 == 0 {
-            inv.check_control()?;
-        }
-        numeric.push(super::super::numeric_input(Some(&RuntimeValue::Scalar(
-            number,
-        )))?);
-        if matches!(group, TabularScalar::Null) {
-            return Err(KernelError::InvalidNumericInput);
-        }
-        let index = match labels
-            .iter()
-            .position(|label| label.compare(&group) == Some(std::cmp::Ordering::Equal))
-        {
-            Some(index) => index,
-            None => {
-                labels.push(group);
-                labels.len() - 1
-            }
-        };
-        group_ids.push(index);
-    }
+    let (inputs, bytes) = materialize(inv)?;
+    let numeric = numeric(&inputs[0], false, inv)?;
+    let (group_ids, labels) = categories(&inputs[1], false, inv)?;
+    drop(inputs);
     let label_bytes = labels.iter().try_fold(0usize, |bytes, label| {
         bytes.checked_add(match label {
             TabularScalar::String(label) => label.len(),
@@ -119,7 +74,8 @@ fn dagum_gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelErr
             .and_then(|pairs| pairs.checked_mul(8192))
             .and_then(|output| {
                 label_bytes?
-                    .checked_mul(labels.len() * 4)?
+                    .checked_mul(labels.len())?
+                    .checked_mul(4)?
                     .checked_add(output)
             })
             .and_then(|output| output.checked_add(bytes)),
