@@ -331,19 +331,15 @@ impl PluginManager {
                         Ok(Value::Null)
                     };
                 }
-                if serde_json::to_vec(&input)
-                    .map_err(|_| fail("plugin_state_invalid"))?
-                    .len()
-                    > 64 * 1024
-                {
+                let encoded =
+                    serde_json::to_vec(&input).map_err(|_| fail("plugin_state_invalid"))?;
+                if encoded.len() > 64 * 1024 {
                     return Err(fail("plugin_resource_exhausted"));
                 }
-                let incoming = serde_json::to_vec(&input)
-                    .map_err(|_| fail("plugin_state_invalid"))?
-                    .len() as u64;
+                let incoming = encoded.len() as u64;
                 let previous = fs::metadata(&path).map_or(0, |metadata| metadata.len());
                 self.enforce_private_budget(id, incoming.saturating_sub(previous))?;
-                package::atomic_json(&path, &input)?;
+                package::atomic_bytes(&path, &encoded)?;
                 Ok(Value::Null)
             }
             "system.save_file" => {

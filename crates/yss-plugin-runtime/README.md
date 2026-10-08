@@ -55,6 +55,9 @@ limits use this context at the actual data boundary. Private storage is measured
 after host snapshot writes and during active tasks. This is an application soft limit for
 `trustedNative`, not an OS sandbox or protection against arbitrary native filesystem access.
 
+View-state writes reuse one serialized buffer for the 64 KiB state limit, private
+storage admission and atomic file publication.
+
 View attachment rechecks the captured process instance under the runtime-state lock before
 publishing its context. Export grants recheck that the context still exists and its process
 instance is active under the same lock used by detach and process-fault revocation. A view

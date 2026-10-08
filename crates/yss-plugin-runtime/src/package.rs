@@ -233,7 +233,7 @@ pub(crate) fn verify_file(root: &Path, entry: &FileEntry) -> Result<(), PluginFa
     }
     Ok(())
 }
-pub(crate) fn atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<(), PluginFailure> {
+pub(crate) fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<(), PluginFailure> {
     let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
     let operation = (|| {
         let mut file = fs::OpenOptions::new()
@@ -241,7 +241,7 @@ pub(crate) fn atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<
             .write(true)
             .open(&temporary)
             .map_err(|_| invalid())?;
-        serde_json::to_writer(&mut file, value).map_err(|_| invalid())?;
+        file.write_all(bytes).map_err(|_| invalid())?;
         file.sync_all().map_err(|_| invalid())?;
         drop(file);
         Ok(())
@@ -302,7 +302,8 @@ mod publication_tests {
         }
         // Exercise the real publisher as well: a completed JSON write replaces
         // the existing file and can be read back by views.get_state.
-        atomic_json(&destination, &serde_json::json!({ "saved": true })).unwrap();
+        let encoded = serde_json::to_vec(&serde_json::json!({ "saved": true })).unwrap();
+        atomic_bytes(&destination, &encoded).unwrap();
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&fs::read(&destination).unwrap()).unwrap(),
             serde_json::json!({ "saved": true })
