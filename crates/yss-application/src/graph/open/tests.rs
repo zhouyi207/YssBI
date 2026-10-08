@@ -295,6 +295,113 @@ fn open_graph_preserves_referenced_declared_orphans_for_repair() {
 }
 
 #[test]
+fn open_graph_allows_removing_unavailable_nodes_with_exact_history() {
+    use yss_graph_document::{
+        ConnectionId, DocumentConnection, DocumentNode, InputState, NodeId, NodePosition,
+        PortAddress,
+    };
+    let path = GraphResourcePath::new("events/UnavailableNode.yssbi-event").unwrap();
+    let mut project = graph_project(&path);
+    let document = Arc::make_mut(&mut project.graphs.get_mut(&path).unwrap().document);
+    let unavailable = NodeId::new();
+    let survivor = NodeId::new();
+    for (id, node_type) in [
+        (unavailable, "tests.unavailable.node"),
+        (survivor, "yssbi.logic.not"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: node_type.parse().unwrap(),
+                position: NodePosition { x: 200.0, y: 10.0 },
+                parameters: Default::default(),
+                user_label: Some("authored label".into()),
+            },
+        );
+    }
+    document
+        .nodes
+        .get_mut(&unavailable)
+        .unwrap()
+        .parameters
+        .insert(
+            "setting".parse().unwrap(),
+            serde_json::json!({"nested": [1, 2]}),
+        );
+    let connection = ConnectionId::new();
+    document.connections.insert(
+        connection,
+        DocumentConnection {
+            id: connection,
+            output: PortAddress::declared(unavailable, "output".parse().unwrap()),
+            input: PortAddress::declared(survivor, "input".parse().unwrap()),
+            order: None,
+        },
+    );
+    document.input_states.insert(
+        PortAddress::declared(unavailable, "input".parse().unwrap()),
+        InputState {
+            literal_override: Some(yss_node_protocol::TypedValue {
+                value_type: yss_node_protocol::TypeExpr::Concrete("core.binary".parse().unwrap()),
+                value: yss_data_contract::DataValue::Bool(true),
+            }),
+        },
+    );
+    let session = staged_session(
+        TestProject::unloaded("unavailable-node-delete", project),
+        GraphRuntimeTestControl::default(),
+    );
+    let receipt = session
+        .application
+        .open_graph(open_request(&session, &path))
+        .unwrap();
+    assert!(receipt.projection().diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_ref() == "graph.node.unknown" && diagnostic.blocking
+    }));
+    let request = |version| crate::graph::editing::GraphEditRequest {
+        project_instance_id: session.session.project_instance_id().clone(),
+        graph_path: path.clone(),
+        version,
+        operation_id: yss_project_identity::OperationId::new(),
+        locale: "en-US".into(),
+    };
+    let removed = session
+        .application
+        .edit_graph(
+            request(receipt.editing().version),
+            yss_graph_editor::EditorGraphMutation::DeleteNodes {
+                node_ids: vec![unavailable],
+            },
+        )
+        .expect("an unavailable node can be removed with its authored input state and connections");
+    assert_eq!(removed.update.document.nodes.len(), 1);
+    assert!(removed.update.document.nodes.contains_key(&survivor));
+    assert!(removed.update.document.connections.is_empty());
+    assert!(removed.update.document.input_states.is_empty());
+    let restored = session
+        .application
+        .change_graph_history(request(removed.editing.version), false)
+        .unwrap();
+    assert_eq!(restored.update.document, *receipt.document());
+    let redone = session
+        .application
+        .change_graph_history(request(restored.editing.version), true)
+        .unwrap();
+    assert_eq!(redone.update.document, removed.update.document);
+
+    let mut guarded = receipt.document().as_ref().clone();
+    guarded.nodes.get_mut(&survivor).unwrap().node_type =
+        "yssbi.project.function.entry".parse().unwrap();
+    assert!(matches!(
+        yss_graph_editor::EditorGraphMutation::DeleteNodes { node_ids: vec![unavailable, survivor] }
+            .into_patch(&path, &guarded, session.session.graph().registry()),
+        Err(yss_graph_editor::MutationConflict::Editor(error))
+            if error.code == yss_graph_editor::EditorMutationErrorCode::GraphManagedNodeDeleteForbidden
+    ));
+}
+
+#[test]
 fn materialization_failure_preserves_loaded_residency_and_skips_projection() {
     let path = GraphResourcePath::new("events/MaterializationFailure.yssbi-event").unwrap();
     let control = GraphRuntimeTestControl::default();

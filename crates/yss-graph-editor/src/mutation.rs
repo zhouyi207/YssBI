@@ -716,10 +716,10 @@ fn delete_editor_node_operations(
                 format!("node '{node_id}' does not exist"),
             )
         })?;
-        let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
-            invalid_editor_mutation(format!("unknown node type '{}'", node.node_type))
-        })?;
-        if protocol.managed_role.is_some() {
+        if registry
+            .protocol(&node.node_type)
+            .is_some_and(|protocol| protocol.managed_role.is_some())
+        {
             return Err(editor_error(
                 EditorMutationErrorCode::GraphManagedNodeDeleteForbidden,
                 format!(
