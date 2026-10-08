@@ -1,11 +1,11 @@
 //! Tool-ledger read projections with explicit field filtering and exact result identities.
-use serde::Serialize;
-use serde_json::{Value, json};
-use std::collections::BTreeMap;
 use crate::{
     AutomationCapabilityRequest as Request, AutomationCapabilityResult as Result,
     GraphResultReference, ManageResourceRequest, ResourceChange, ToolInvocationRecord,
 };
+use serde::Serialize;
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 /// Presentation reads the existing ledger and control events; row values, document bodies and credentials
 /// never become tool-card parameters or a second copy of the model's context.
@@ -19,6 +19,8 @@ pub struct AssistantToolInspection {
     pub started_at: u64,
     pub finished_at: Option<u64>,
     pub failure: Option<Value>,
+    /// The same explicit result projection delivered to the model, read on demand.
+    pub output: Option<Value>,
 }
 
 impl AssistantToolInspection {
@@ -43,6 +45,7 @@ impl AssistantToolInspection {
                         started_at: envelope.occurred_at.get(),
                         finished_at: None,
                         failure: None,
+                        output: None,
                     });
                 }
                 AgentEvent::ControlToolFinished {
@@ -54,12 +57,10 @@ impl AssistantToolInspection {
                     if let Some(value) = &mut inspection {
                         value.finished_at = Some(envelope.occurred_at.get());
                         value.failure = failure_code.map(|code| {
-                            crate::model::failure(
-                                &crate::CapabilityFailure {
-                                    code,
-                                    details: failure_details.clone().unwrap_or_default(),
-                                },
-                            )
+                            crate::model::failure(&crate::CapabilityFailure {
+                                code,
+                                details: failure_details.clone().unwrap_or_default(),
+                            })
                         });
                     }
                 }
@@ -79,10 +80,11 @@ impl From<ToolInvocationRecord> for AssistantToolInspection {
             results: Vec::new(),
             started_at: record.started_at.get(),
             finished_at: record.finished_at.map(|time| time.get()),
-            failure: record
-                .failure
-                .as_ref()
-                .map(crate::model::failure),
+            failure: record.failure.as_ref().map(crate::model::failure),
+            output: record.result.as_ref().map(|result| {
+                crate::model::capability_result(result)
+                    .unwrap_or_else(|_| json!({"error": "tool_output_unavailable"}))
+            }),
         };
         if let Some(request) = record.request.bound() {
             match request {
@@ -169,9 +171,7 @@ impl From<ToolInvocationRecord> for AssistantToolInspection {
                         crate::CapabilityId::RenameColumns => "rename_columns",
                         crate::CapabilityId::DeleteColumns => "delete_columns",
                         crate::CapabilityId::CastColumns => "cast_columns",
-                        crate::CapabilityId::SetColumnSemantics => {
-                            "set_column_semantics"
-                        }
+                        crate::CapabilityId::SetColumnSemantics => "set_column_semantics",
                         _ => "edit",
                     };
                     dto.parameters.insert("operation".into(), json!(operation));
@@ -542,17 +542,49 @@ mod tests {
                 },
             },
         });
-        let record: ToolInvocationRecord = serde_json::from_value(json!({
+        let mut record: ToolInvocationRecord = serde_json::from_value(json!({
             "id": "tool-1", "idempotencyKey": "operation-1", "sessionId": "session-1", "turnId": "turn-1",
             "agentRunId": null, "workflowRunId": null, "workflowStepId": null,
             "project": { "projectInstanceId": "00000000-0000-0000-0000-000000000001", "projectSessionId": "00000000-0000-0000-0000-000000000002" },
             "capabilityId": "import_database", "request": ToolInvocationRequest::from(request), "state": "running", "result": null, "failure": null,
             "startedAt": 1000, "deadline": 31000, "finishedAt": null,
         })).unwrap();
-        let dto = serde_json::to_value(AssistantToolInspection::from(record)).unwrap();
+        let dto = serde_json::to_value(AssistantToolInspection::from(record.clone())).unwrap();
         assert_eq!(dto["parameters"], json!({ "operation": "create" }));
         assert_eq!(dto["startedAt"], 1000);
         assert!(!dto.to_string().contains("private"));
+        record.result = Some(Result::ResourceManaged(ResourceMutationReceipt {
+            publication_revision: Some(17),
+            changes: vec![],
+            moves: vec![],
+            mind_edit: None,
+            document_edit: None,
+            resources: vec![],
+            database_edit: Some(DatabaseEditReceipt {
+                item_count: 2,
+                inserted_row_ids: vec![41, 42],
+                column_names: vec!["age".into()],
+                dirty: true,
+                can_undo: true,
+                can_redo: false,
+            }),
+        }));
+        record.state = ToolInvocationState::Succeeded;
+        record.finished_at = Some(UnixMillis::from_existing(1100));
+        let expected = model::capability_result(record.result.as_ref().unwrap()).unwrap();
+        let detail = AssistantToolInspection::from(record);
+        assert_eq!(detail.output.as_ref(), Some(&expected));
+        assert_eq!(
+            detail.output.as_ref().unwrap()["payload"]["databaseEdit"]["insertedRowIds"],
+            json!([41, 42])
+        );
+        assert!(
+            !detail
+                .output
+                .unwrap()
+                .to_string()
+                .contains("publicationRevision")
+        );
         let result = AssistantResultReference::from(GraphResultReference {
             result_ref: crate::ResultRef::new("execution-1".into(), u64::MAX),
             validity: crate::ResultValidity::Retained,

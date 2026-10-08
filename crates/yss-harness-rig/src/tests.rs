@@ -2101,6 +2101,9 @@ impl Transport<MockScript> for InterruptedModel {
         };
         if interrupt {
             return Opening::ready(Opened::new(futures_util::stream::iter([
+                Ok(MockFrame::Event(MockStreamEvent::reasoning_delta(
+                    "Partial reasoning before interruption",
+                ))),
                 Ok(MockFrame::Event(MockStreamEvent::text(
                     "Interrupted partial response",
                 ))),
@@ -2229,7 +2232,23 @@ impl Transport<MockScript> for CompactingModel {
             assert!(!serialized.contains("unneeded detail unneeded detail"));
         }
         self.0.lock().unwrap().push(request.clone());
-        scripted_model([vec![AssistantContent::text(if summary { "Goal: finish docs/exact-report.md. Existing edit receipt is committed; save remains pending. Preserve real group labels." } else { "Continued from the checkpoint." })]]).transport.send(request, exchange)
+        let mut events = scripted_events(
+            vec![AssistantContent::text(if summary {
+                "Goal: finish docs/exact-report.md. Existing edit receipt is committed; save remains pending. Preserve real group labels."
+            } else {
+                "Continued from the checkpoint."
+            })],
+            None,
+        );
+        if summary {
+            events.insert(
+                0,
+                MockStreamEvent::reasoning_delta("Preserve the committed evidence."),
+            );
+        }
+        MockCompletionModel::from_stream_turns([events])
+            .transport
+            .send(request, exchange)
     }
 }
 #[tokio::test]
@@ -2276,6 +2295,35 @@ async fn compaction_checkpoints_working_context_without_replaying_large_history(
         .unwrap();
     assert_eq!(result.final_text, "Continued from the checkpoint.");
     assert!(output.events.lock().unwrap().iter().any(|event| matches!(event, AgentEvent::ContextCompacted { summary } if summary.contains("docs/exact-report.md"))));
+    let mut summary_text = String::new();
+    let mut summary_reasoning = String::new();
+    let mut summary_calls = 0;
+    for event in output.events.lock().unwrap().iter() {
+        match event {
+            AgentEvent::ContextCompactionDelta { delta, reasoning } => {
+                if *reasoning {
+                    summary_reasoning.push_str(delta);
+                } else {
+                    summary_text.push_str(delta);
+                }
+            }
+            AgentEvent::UsageReported {
+                purpose: ModelCallPurpose::Compaction,
+                ..
+            } => {
+                assert_eq!(summary_reasoning, "Preserve the committed evidence.");
+                assert!(summary_text.contains("docs/exact-report.md"));
+                summary_calls += 1;
+                summary_text.clear();
+                summary_reasoning.clear();
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(
+        summary_calls, 2,
+        "each summary delivers its reasoning and text before usage"
+    );
     let requests = requests.lock().unwrap();
     for request in requests.iter() {
         assert_eq!(request.temperature, Some(0.3));
@@ -2349,6 +2397,32 @@ async fn interrupted_compaction_resumes_verified_prefix_across_driver_instances(
             "the completed first fragment must not be requested again"
         );
         assert_eq!(requests[1].chat_history, requests[2].chat_history);
+    }
+    {
+        let events = output.events.lock().unwrap();
+        let partial = events
+            .iter()
+            .position(|event| {
+                matches!(event,
+                    AgentEvent::ContextCompactionDelta { delta, reasoning: false }
+                    if delta == "Interrupted partial response"
+                )
+            })
+            .expect("interrupted summary text must remain visible");
+        assert!(events[..partial].iter().any(|event| matches!(event,
+            AgentEvent::ContextCompactionDelta { delta, reasoning: true }
+            if delta == "Partial reasoning before interruption"
+        )));
+        assert!(
+            events[partial + 1..].iter().any(|event| matches!(
+                event,
+                AgentEvent::RuntimeStatus {
+                    phase: AgentRuntimePhase::Reconnecting,
+                    ..
+                }
+            )),
+            "received summary output must be flushed before retrying"
+        );
     }
     let checkpoint = output
         .events

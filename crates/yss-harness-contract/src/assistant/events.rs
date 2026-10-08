@@ -1,10 +1,10 @@
 //! Public event facts for Assistant delivery and replay; consistency metadata stays internal.
-use serde::Serialize;
 use super::AssistantResultReference;
 use crate::{
     AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, KnowledgeCitation,
     StatisticalPlan,
 };
+use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
@@ -53,6 +53,10 @@ pub enum AssistantEventKind {
         completed_bytes: usize,
         total_bytes: usize,
     },
+    ContextCompactionDelta {
+        delta: String,
+        reasoning: bool,
+    },
     GraphExecutionFinished {
         invocation_id: String,
         status: String,
@@ -66,7 +70,9 @@ pub enum AssistantEventKind {
     TextRetracted {
         characters: usize,
     },
-    ContextCompacted,
+    ContextCompacted {
+        summary: String,
+    },
     RuntimeStatus {
         phase: crate::AgentRuntimePhase,
         attempt: u32,
@@ -326,8 +332,15 @@ impl From<&AgentEvent> for AssistantEventKind {
             AgentEvent::TextRetracted { characters } => Self::TextRetracted {
                 characters: *characters,
             },
-            // Checkpoint text belongs to model context, not the user's transcript.
-            AgentEvent::ContextCompacted { .. } => Self::ContextCompacted,
+            AgentEvent::ContextCompacted { summary } => Self::ContextCompacted {
+                summary: summary.clone(),
+            },
+            AgentEvent::ContextCompactionDelta { delta, reasoning } => {
+                Self::ContextCompactionDelta {
+                    delta: delta.clone(),
+                    reasoning: *reasoning,
+                }
+            }
             AgentEvent::ContextCompactionProgress {
                 completed_bytes,
                 total_bytes,
@@ -366,12 +379,10 @@ impl From<&AgentEvent> for AssistantEventKind {
                     Some(failure_code) => Self::ToolInvocationFailed {
                         invocation_id,
                         capability_id,
-                        failure_code: crate::model::failure_code(
-                            &crate::CapabilityFailure {
-                                code: *failure_code,
-                                details: failure_details.clone().unwrap_or_default(),
-                            },
-                        ),
+                        failure_code: crate::model::failure_code(&crate::CapabilityFailure {
+                            code: *failure_code,
+                            details: failure_details.clone().unwrap_or_default(),
+                        }),
                     },
                     None => Self::ToolInvocationCompleted {
                         invocation_id,
@@ -401,12 +412,10 @@ impl From<&AgentEvent> for AssistantEventKind {
             } => Self::ToolInvocationFailed {
                 invocation_id: invocation_id.to_string(),
                 capability_id: (*capability_id).into(),
-                failure_code: crate::model::failure_code(
-                    &crate::CapabilityFailure {
-                        code: *failure_code,
-                        details: failure_details.clone().unwrap_or_default(),
-                    },
-                ),
+                failure_code: crate::model::failure_code(&crate::CapabilityFailure {
+                    code: *failure_code,
+                    details: failure_details.clone().unwrap_or_default(),
+                }),
             },
         }
     }
@@ -416,6 +425,56 @@ impl From<&AgentEvent> for AssistantEventKind {
 mod tests {
     use super::*;
     use crate::AssistantToolInspection;
+
+    #[test]
+    fn worker_outputs_survive_persistence_and_public_projection() {
+        let outputs = [
+            AgentEvent::ReasoningDelta {
+                delta: "检查子任务证据".into(),
+            },
+            AgentEvent::TextDelta {
+                delta: "发现分组差异".into(),
+            },
+            AgentEvent::ContextCompactionDelta {
+                delta: "整理已有证据".into(),
+                reasoning: true,
+            },
+            AgentEvent::ContextCompactionDelta {
+                delta: "继续保存报告".into(),
+                reasoning: false,
+            },
+            AgentEvent::ContextCompacted {
+                summary: "继续保存报告".into(),
+            },
+        ];
+        for output in outputs {
+            let event = HarnessEvent::AgentRunOutput {
+                run_id: crate::AgentRunId::try_new("worker-1").unwrap(),
+                event: output.clone(),
+            };
+            let stored = serde_json::to_vec(&event).unwrap();
+            let restored: HarnessEvent = serde_json::from_slice(&stored).unwrap();
+            let AssistantEventKind::AgentRunOutput { run_id, event } =
+                AssistantEventKind::from(&restored)
+            else {
+                panic!("worker identity was lost");
+            };
+            assert_eq!(run_id, "worker-1");
+            assert_eq!(*event, AssistantEventKind::from(&output));
+            let value = serde_json::to_value(event).unwrap();
+            match output {
+                AgentEvent::ContextCompacted { summary } => {
+                    assert_eq!(value["payload"]["summary"], summary)
+                }
+                AgentEvent::ReasoningDelta { delta }
+                | AgentEvent::TextDelta { delta }
+                | AgentEvent::ContextCompactionDelta { delta, .. } => {
+                    assert_eq!(value["payload"]["delta"], delta)
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
 
     #[test]
     fn tool_failures_share_public_codes_in_events_and_inspection() {
@@ -574,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn harness_event_serialization_preserves_public_facts_and_hides_checkpoints() {
+    fn harness_event_serialization_preserves_public_facts_and_hides_checkpoint_metadata() {
         let events = [
             AssistantEventKind::SessionCreated,
             AssistantEventKind::TurnStarted {
@@ -604,8 +663,7 @@ mod tests {
             AssistantEventKind::ToolInvocationFailed {
                 invocation_id: "tool-2".into(),
                 capability_id: CapabilityId::InspectDatasetProfile.into(),
-                failure_code: crate::CapabilityFailureCode::DeadlineElapsed
-                    .to_string(),
+                failure_code: crate::CapabilityFailureCode::DeadlineElapsed.to_string(),
             },
             AssistantEventKind::AgentRunResumed {
                 run_id: "worker-1".into(),
@@ -616,7 +674,9 @@ mod tests {
                 phase: crate::AgentRuntimePhase::Reconnecting,
                 attempt: 1,
             },
-            AssistantEventKind::ContextCompacted,
+            AssistantEventKind::ContextCompacted {
+                summary: "Continue saving the report.".into(),
+            },
             AssistantEventKind::TextRetracted { characters: 7 },
             AssistantEventKind::GraphExecutionFinished {
                 invocation_id: "tool-3".into(),
@@ -630,9 +690,7 @@ mod tests {
                 run_id: "worker-1".into(),
                 role: crate::AgentRole::Report,
                 state: crate::AgentRunState::Failed,
-                failure_code: Some(
-                    crate::AgentDriverFailureCode::ProviderPaymentRequired,
-                ),
+                failure_code: Some(crate::AgentDriverFailureCode::ProviderPaymentRequired),
                 summary: None,
                 blocked_reason: None,
                 warnings: vec![],

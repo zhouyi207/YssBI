@@ -27,8 +27,10 @@ to [Harness Core](../yss-harness-core/README.md).
 live delivery and replay. They retain sequence, session and turn identity,
 turn options, model identity, resource references, tool lifecycle, workflow
 facts, reasoning and token usage. Nested agent events use the same projection.
-Context compaction exposes progress and lifecycle facts. Checkpoint text,
-prefix hashes and verification metadata stay inside Harness.
+Context compaction exposes progress, streamed reasoning/text and the completed
+summary. Checkpoint prefix hashes and verification metadata stay inside Harness.
+`ContextCompactionDelta` keeps summary-model output separate from the ordinary
+reply, including partial output before cancellation or a provider failure.
 
 `AssistantToolIdentity` distinguishes capability tools from agent control tools.
 Event failure codes and inspection failures reuse `model`'s public failure
@@ -37,8 +39,10 @@ project-binding details.
 
 `AssistantToolInspection` reads the existing tool ledger or control lifecycle
 events. It contains selected operation parameters, target identity, recorded
-timing, committed resource changes and results. Raw request payloads, row values, document bodies and credentials do not
-become tool-card parameters.
+timing, committed resource changes and results. Its on-demand `output` uses the
+same explicit `model::capability_result` projection as the model, rather than
+serializing the internal receipt. Raw request payloads, row values, document
+bodies and credentials do not become tool-card parameters.
 `AssistantResultReference` preserves result IDs as decimal strings when copied
 to JSON, including the full u64 range.
 

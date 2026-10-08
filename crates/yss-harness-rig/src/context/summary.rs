@@ -100,18 +100,48 @@ impl ContextHook {
         request.additional_params = Some(self.additional_parameters.clone());
         let mut stream = self.model.stream(request).map_err(map_failure)?;
         let mut text = String::new();
-        loop {
-            let item = tokio::select! {
-                result = tokio::time::timeout(STREAM_IDLE, stream.next()) => result.map_err(|_| interrupted())?,
-                _ = self.cancellation.cancelled() => return Err(crate::error::cancelled()),
-            };
-            let Some(item) = item else {
-                break;
-            };
-            if let Item::Event(StreamEvent::Text { text: delta, .. }) = item.map_err(map_failure)? {
-                text.push_str(&delta);
+        let mut pending = String::new();
+        let mut reasoning = false;
+        let mut deadline = tokio::time::Instant::now() + STREAM_IDLE;
+        let mut timer = tokio::time::interval(std::time::Duration::from_millis(40));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let result = async {
+            loop {
+                let item = tokio::select! {
+                    biased;
+                    _ = self.cancellation.cancelled() => return Err(crate::error::cancelled()),
+                    _ = tokio::time::sleep_until(deadline) => return Err(interrupted()),
+                    _ = timer.tick() => {
+                        self.flush_compaction(&mut pending, reasoning).await?;
+                        continue;
+                    }
+                    item = stream.next() => item,
+                };
+                let Some(item) = item else { break };
+                deadline = tokio::time::Instant::now() + STREAM_IDLE;
+                let (delta, is_reasoning) = match item.map_err(map_failure)? {
+                    Item::Event(StreamEvent::Text { text: delta, .. }) => {
+                        text.push_str(&delta);
+                        (delta, false)
+                    }
+                    Item::Event(StreamEvent::Reasoning { text, .. }) => (text, true),
+                    _ => continue,
+                };
+                if reasoning != is_reasoning {
+                    self.flush_compaction(&mut pending, reasoning).await?;
+                    reasoning = is_reasoning;
+                }
+                pending.push_str(&delta);
+                if pending.len() >= 4096 {
+                    self.flush_compaction(&mut pending, reasoning).await?;
+                }
             }
+            Ok(())
         }
+        .await;
+        // Preserve received output even if this summary is interrupted or retried.
+        self.flush_compaction(&mut pending, reasoning).await?;
+        result?;
         let response = stream.finish().await.map_err(map_failure)?;
         self.emit(crate::run_options::usage_event(
             response.usage,
@@ -139,6 +169,21 @@ impl ContextHook {
             return Err(interrupted());
         }
         Ok(text)
+    }
+
+    async fn flush_compaction(
+        &self,
+        pending: &mut String,
+        reasoning: bool,
+    ) -> Result<(), AgentDriverFailure> {
+        if pending.is_empty() {
+            return Ok(());
+        }
+        self.emit(AgentEvent::ContextCompactionDelta {
+            delta: std::mem::take(pending),
+            reasoning,
+        })
+        .await
     }
 }
 

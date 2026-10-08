@@ -237,6 +237,10 @@ pub enum AgentEvent {
         total_bytes: usize,
         checkpoint: Option<ContextCompactionCheckpoint>,
     },
+    ContextCompactionDelta {
+        delta: String,
+        reasoning: bool,
+    },
     GraphExecutionFinished {
         invocation_id: ToolInvocationId,
         status: String,

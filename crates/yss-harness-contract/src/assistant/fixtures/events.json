@@ -98,7 +98,10 @@
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
-    "type": "context_compacted"
+    "type": "context_compacted",
+    "payload": {
+      "summary": "Continue saving the report."
+    }
   },
   {
     "sequence": 10,

@@ -153,7 +153,7 @@ impl Turn {
                 completed_bytes,
                 total_bytes,
             } => self.activity = Some(format!("压缩上下文 · {completed_bytes}/{total_bytes}")),
-            Event::ContextCompacted => self.activity = None,
+            Event::ContextCompacted { .. } => self.activity = None,
             Event::DeliveryBlocked { reason } => self.error = Some(reason),
             Event::AgentRunStarted {
                 run_id,

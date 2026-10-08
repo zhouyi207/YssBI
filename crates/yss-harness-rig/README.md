@@ -45,6 +45,13 @@ working context with a continuation checkpoint and keeps calls/results together.
 The model receives business identities and outcomes; resource versions and other
 consistency controls remain with the host.
 
+Summary calls deliver their reasoning and text as ordered
+`ContextCompactionDelta` events, batching at 40 ms or 4096 bytes and flushing
+before a content-kind switch, completion or interruption. Their usage retains
+the `Compaction` purpose. This output is persisted and displayed alongside each
+agent's activity without entering its ordinary reply text. The completed summary
+still uses the existing `ContextCompacted` event and checkpoint authority.
+
 The summary prompt lives in [context/summary.md](src/context/summary.md), is loaded
 as raw text with `include_str!`, and supplies no Markdown parser or prompt engine.
 
