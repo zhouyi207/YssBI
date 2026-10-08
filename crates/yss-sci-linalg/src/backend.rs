@@ -9,6 +9,14 @@ fn square(matrix: MatRef<'_, f64>) -> Result<(), LinalgError> {
     }
 }
 
+pub(crate) fn ensure_finite(matrix: MatRef<'_, f64>) -> Result<(), LinalgError> {
+    if (0..matrix.ncols()).any(|j| (0..matrix.nrows()).any(|i| !matrix[(i, j)].is_finite())) {
+        Err(LinalgError::DecompositionFailed)
+    } else {
+        Ok(())
+    }
+}
+
 pub struct Cholesky {
     factor: faer::linalg::solvers::Llt<f64>,
 }
@@ -45,6 +53,7 @@ pub struct Lu {
 impl Lu {
     pub fn factor(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
         square(matrix)?;
+        ensure_finite(matrix)?;
         let factor = matrix.0.partial_piv_lu();
         if factor
             .U()
@@ -55,6 +64,8 @@ impl Lu {
         {
             return Err(LinalgError::Singular);
         }
+        ensure_finite(MatRef(factor.L()))?;
+        ensure_finite(MatRef(factor.U()))?;
         Ok(Self { factor })
     }
 

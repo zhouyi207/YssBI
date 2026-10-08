@@ -74,6 +74,25 @@ fn decompositions_reuse_factors_for_vectors_and_multiple_rhs() {
 }
 
 #[test]
+fn lu_rejects_nonfinite_entries_without_a_rank_threshold() {
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(matches!(
+            mat![[1., value], [0., 1.]].checked_lu(),
+            Err(LinalgError::DecompositionFailed)
+        ));
+    }
+    assert!(mat![[1., 0.], [0., 1e-17]].checked_lu().is_ok());
+}
+
+#[test]
+fn lu_rejects_nonfinite_factors_from_finite_inputs() {
+    assert!(matches!(
+        mat![[1e308, 1e308], [-1e308, 1e308]].checked_lu(),
+        Err(LinalgError::DecompositionFailed)
+    ));
+}
+
+#[test]
 fn svd_orientation_rank_and_empty_matrix_conventions_are_stable() {
     for matrix in [
         mat![[1., 2., 3.], [4., 5., 6.]],

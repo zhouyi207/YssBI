@@ -1,5 +1,10 @@
 # yss-sci-linalg
 
+> Status: Current
+> Scope: Opaque dense arrays, factorizations and numerical rank conventions
+> Canonical owners: Cargo.toml and src/ own the API, dependency and numerical behavior
+> Update when: Array, factorization, failure or rank contracts change
+
 Owns opaque `Mat`, `Col`, row and borrowed-view types, matrix arithmetic, checked
 factorizations, stable numerical errors and the rank/conditioning convention.
 faer is an implementation dependency of this crate alone. Public APIs and macros
@@ -22,8 +27,9 @@ let reconstructed = &a * &x;
   internally. Statistical formulas and elementwise operations stay in SCI.
 - `MatrixExt::checked_cholesky` and `checked_lu` preserve project error semantics.
   Factors are reusable; `Solve` accepts owned or borrowed matrix/vector RHS values.
-  Cholesky reads the lower triangle. LU rejects an exactly zero pivot without
-  applying an additional rank tolerance.
+  Cholesky reads the lower triangle. LU rejects nonfinite input or factors with
+  `DecompositionFailed` and an exactly zero pivot with `Singular`, without
+  applying an additional rank tolerance. LU and rank reuse one internal finite-input check.
 - `Svd::factor` returns full left/right vectors and descending singular values.
   `Svd::factor_thin` retains only `min(rows, cols)` vectors on each side; design
   diagnostics use it to avoid squaring condition numbers or allocating an

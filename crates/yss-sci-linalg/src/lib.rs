@@ -61,9 +61,7 @@ pub fn matrix_rank(matrix: MatRef<'_, f64>) -> Result<(usize, f64), LinalgError>
     if rows == 0 || cols == 0 {
         return Ok((0, 1.0));
     }
-    if (0..cols).any(|j| (0..rows).any(|i| !matrix[(i, j)].is_finite())) {
-        return Err(LinalgError::DecompositionFailed);
-    }
+    backend::ensure_finite(matrix)?;
     let values = matrix
         .singular_values()
         .map_err(|_| LinalgError::DecompositionFailed)?;
