@@ -19,6 +19,12 @@ incidence, Efron/Breslow Cox (including counting-process and stratified subgroup
 designs), four right-censored AFT distributions, calibration, decision curves and
 Cox nomogram scales. It reuses regression design/optimization/inference helpers
 and Linalg decompositions. Times are positive; no rows are silently dropped.
+Observation arrays preserve shape, nonfinite and data-domain violations, including
+binary events/treatments, counting-process intervals, group identifiability and
+predicted probabilities. Supplied Cox model layout and numeric fields retain the
+same input roles. Invalid horizons, bin/tick counts, thresholds and iteration
+settings remain parameter violations; numerical breakdown remains computation failure.
+Event/treatment, interval, group and prediction scans check execution control in chunks.
 Cox baselines are centered Breslow estimates; AFT covariance includes log(scale).
 `tests/survival_category.rs` checks independently generated statsmodels/SciPy
 references and risk-set, interval, prediction and cancellation conventions.

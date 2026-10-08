@@ -78,7 +78,7 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 不归为参数错误。`inference.cluster_robust` 使用 revision 5。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
 直接使用该准备的回归模型内核采用 revision 4，逐步回归采用 revision 5；五个参数生存拟合内核
-（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 5。
+（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 6。
 复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图及
 中介 bootstrap 采用 revision 6，能力指纹涵盖共享输入错误契约。
 
@@ -165,6 +165,9 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 `statistics/survival` 适配 15 个生存分析节点，复用统计输入的联合物化、精确分类标签、
 预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
+观测时间、事件/治疗编码、计数过程区间、分组可辨识性和预测概率保持为数值输入错误；
+数组或模型布局不符保持为形状错误。预测期限、分箱/刻度数及迭代设置仍为参数错误。
+五个参数生存拟合节点使用 revision 6，其余生存节点及 Cox PH 诊断使用 revision 5。
 静态 Cox 和 AFT 将原行序的时间、事件和风险一起物化为 `predictions` 关系，供下游
 评估节点选列；不把无血缘的内存预测向量与数据表按相同行数强行对齐。
 列线图只解码静态 Cox 类型，并由 SCI 计算刻度；Graph 负责图形类别。

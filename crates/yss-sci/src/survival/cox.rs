@@ -132,7 +132,7 @@ pub fn proportional_hazards(
     times.sort_by(f64::total_cmp);
     times.dedup();
     if times.len() < 2 {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let mut sorted = time.to_vec();
     sorted.sort_by(f64::total_cmp);
@@ -155,8 +155,11 @@ pub fn proportional_hazards(
         .iter()
         .map(|&t| (g(t) - mean).abs())
         .fold(0.0, f64::max);
-    if scale <= 0.0 || !scale.is_finite() {
-        return Err(parameter());
+    if !scale.is_finite() {
+        return Err(failed());
+    }
+    if scale <= 0.0 {
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let start = vec![0.0; n];
     let risk = RiskData {
@@ -254,19 +257,14 @@ fn fit_stratified(
 ) -> Result<CoxResult> {
     data(time, event, predictors, control)?;
     check_iteration(options.iteration)?;
-    if predictors.is_empty()
-        || start.len() != time.len()
-        || start
-            .iter()
-            .zip(time)
-            .any(|(&s, &t)| !s.is_finite() || s < 0.0 || s >= t)
-    {
-        return Err(parameter());
+    if predictors.is_empty() {
+        return Err(invalid(Violation::ShapeMismatch));
     }
-    let levels = groups(strata, time.len())?;
+    intervals(start, time, control)?;
+    let levels = groups(strata, time.len(), control)?;
     let events = event.iter().filter(|&&v| v == 1.0).count();
     if events == 0 {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let design = Design::new(predictors, time.len(), true, true, false, control)?;
     let p = predictors.len();
@@ -419,20 +417,16 @@ pub fn time_dependent(
     control: &Control,
 ) -> Result<CoxResult> {
     data(stop, event, predictors, control)?;
-    if start.len() != stop.len() {
-        return Err(parameter());
-    }
-    for subject in groups(subjects, stop.len())? {
+    intervals(start, stop, control)?;
+    for subject in groups(subjects, stop.len(), control)? {
         control.check()?;
         let mut indices = (0..stop.len())
             .filter(|&i| subjects[i] == subject)
             .collect::<Vec<_>>();
         indices.sort_by(|&a, &b| start[a].total_cmp(&start[b]));
         for (j, &i) in indices.iter().enumerate() {
-            if (j + 1 < indices.len() && (event[i] == 1.0 || stop[i] > start[indices[j + 1]]))
-                || !start[i].is_finite()
-            {
-                return Err(parameter());
+            if j + 1 < indices.len() && (event[i] == 1.0 || stop[i] > start[indices[j + 1]]) {
+                return Err(invalid(Violation::DataOutOfRange));
             }
         }
     }
@@ -450,7 +444,7 @@ pub fn time_dependent(
 pub(super) fn baseline_at(model: &CoxResult, horizon: f64) -> Result<f64> {
     positive_horizon(horizon)?;
     if model.baselines.len() != 1 {
-        return Err(parameter());
+        return Err(invalid(Violation::ShapeMismatch));
     }
     let baseline = &model.baselines[0];
     if horizon > baseline.maximum_followup {
@@ -489,13 +483,11 @@ pub fn subgroup(
     control: &Control,
 ) -> Result<SubgroupResult> {
     data(time, event, predictors, control)?;
-    if treatment.len() != time.len() || treatment.iter().any(|&v| v != 0.0 && v != 1.0) {
-        return Err(parameter());
-    }
-    let levels = groups(group, time.len())?;
+    binary(treatment, time.len(), control)?;
+    let levels = groups(group, time.len(), control)?;
     let k = levels.len();
     if k < 2 {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let mut xs = Vec::new();
     let mut group_observations = Vec::new();
@@ -507,7 +499,7 @@ pub fn subgroup(
             .collect::<Vec<_>>();
         let treated = indices.iter().filter(|&&i| treatment[i] == 1.0).count();
         if treated == 0 || treated == indices.len() {
-            return Err(parameter());
+            return Err(invalid(Violation::DataOutOfRange));
         }
         group_observations.push(indices.len());
         group_events.push(indices.iter().filter(|&&i| event[i] == 1.0).count());

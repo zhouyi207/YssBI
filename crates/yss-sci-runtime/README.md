@@ -2,6 +2,8 @@
 
 `survival` exposes stateless `nonparametric`, `cox`, `parametric` and `evaluation`
 entries from SCI. It does not own result storage, input alignment or chart layout.
+Survival admission and its shape/nonfinite/data-domain errors come directly from
+SCI; Runtime does not recategorize observations as analysis options.
 
 > Status: Current
 > Scope: 同步科学计算入口、中立数值输入与 SCI 调用边界

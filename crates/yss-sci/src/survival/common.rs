@@ -1,35 +1,73 @@
 pub(super) use crate::regression::models::common::{
-    Design, Result, check_iteration, coefficient_table, failed, finite, fitted, hessian, inverse,
-    least_squares, minimize, names, normal_log_cdf, parameter, validate,
+    Design, Result, check_iteration, coefficient_table, failed, finite, fitted, hessian, invalid,
+    inverse, least_squares, minimize, names, normal_log_cdf, parameter, validate,
 };
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 pub(super) use yss_sci_contract::execution::ScientificExecutionControl as Control;
+pub(super) use yss_sci_contract::execution::ScientificInputViolation as Violation;
 use yss_sci_contract::{regression::models::RegressionCoefficient, survival::*};
 pub(super) use yss_sci_linalg::Mat;
 
 pub(super) const Z95: f64 = 1.959963984540054;
 pub(super) fn data(time: &[f64], event: &[f64], x: &[Vec<f64>], control: &Control) -> Result<()> {
     validate(time, x, control)?;
-    if event.len() != time.len() {
-        return Err(crate::regression::models::common::invalid(
-            yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
-        ));
-    }
-    if time.iter().any(|&v| v <= 0.0) || event.iter().any(|&v| v != 0.0 && v != 1.0) {
-        return Err(parameter());
+    binary(event, time.len(), control)?;
+    for (i, &value) in time.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        if value <= 0.0 {
+            return Err(invalid(Violation::DataOutOfRange));
+        }
     }
     Ok(())
 }
-pub(super) fn groups(group: &[usize], n: usize) -> Result<Vec<usize>> {
-    if group.len() != n {
-        return Err(parameter());
+pub(super) fn binary(values: &[f64], n: usize, control: &Control) -> Result<()> {
+    if values.len() != n {
+        return Err(invalid(Violation::ShapeMismatch));
     }
-    Ok(group
-        .iter()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect())
+    for (i, &value) in values.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        if !value.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if value != 0.0 && value != 1.0 {
+            return Err(invalid(Violation::DataOutOfRange));
+        }
+    }
+    Ok(())
+}
+pub(super) fn intervals(start: &[f64], stop: &[f64], control: &Control) -> Result<()> {
+    if start.len() != stop.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    for (i, (&start, &stop)) in start.iter().zip(stop).enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        if !start.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if start < 0.0 || start >= stop {
+            return Err(invalid(Violation::DataOutOfRange));
+        }
+    }
+    Ok(())
+}
+pub(super) fn groups(group: &[usize], n: usize, control: &Control) -> Result<Vec<usize>> {
+    if group.len() != n {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    let mut levels = std::collections::BTreeSet::new();
+    for (i, &value) in group.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        levels.insert(value);
+    }
+    Ok(levels.into_iter().collect())
 }
 pub(super) fn rows(m: &Mat<f64>) -> Vec<Vec<f64>> {
     (0..m.nrows())

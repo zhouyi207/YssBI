@@ -1,6 +1,47 @@
 use super::*;
 
 #[test]
+fn survival_admission_distinguishes_observations_from_options() {
+    let error = run(
+        "yssbi.statistics.survival.kaplan_meier",
+        &[("time", series(&[0., 2.])), ("event", series(&[1., 0.]))],
+        &[],
+        1,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, KernelError::InvalidNumericInput),
+        "{error:?}"
+    );
+    for (predicted, bins, parameter_error) in
+        [(vec![0.2, 1.2], 2, false), (vec![0.2, 0.8], 1, true)]
+    {
+        let error = run(
+            "yssbi.statistics.plot.calibration",
+            &[
+                ("time", series(&[1., 2.])),
+                ("event", series(&[1., 0.])),
+                ("predicted_risk", series(&predicted)),
+            ],
+            &[
+                ("survival_horizon", number(1.)),
+                ("calibration_bins", int(bins)),
+            ],
+            1,
+        )
+        .unwrap_err();
+        if parameter_error {
+            assert!(matches!(error, KernelError::InvalidParameter), "{error:?}");
+        } else {
+            assert!(
+                matches!(error, KernelError::InvalidNumericInput),
+                "{error:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn survival_adapters_preserve_binary_events_exact_groups_and_cause_codes() {
     let inputs = [
         ("time", series(&[1.0, 2.0, 3.0, 4.0])),

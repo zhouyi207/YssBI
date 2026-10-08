@@ -27,7 +27,7 @@ pub fn fit(
     check_iteration(options.iteration)?;
     let events = event.iter().filter(|&&v| v == 1.0).count();
     if events == 0 {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let n = time.len();
     let design = Design::new(predictors, n, true, true, true, control)?;

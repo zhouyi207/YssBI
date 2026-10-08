@@ -21,6 +21,43 @@ fn control() -> ScientificExecutionControl {
         deadline: Instant::now() + Duration::from_secs(60),
     }
 }
+
+#[test]
+fn survival_observation_failures_retain_data_and_shape_roles() {
+    for (time, event, groups, violation) in [
+        (
+            vec![0., 2.],
+            vec![1., 0.],
+            vec![0, 0],
+            ScientificInputViolation::DataOutOfRange,
+        ),
+        (
+            vec![1., 2.],
+            vec![1., 2.],
+            vec![0, 0],
+            ScientificInputViolation::DataOutOfRange,
+        ),
+        (
+            vec![1., 2.],
+            vec![1., f64::NAN],
+            vec![0, 0],
+            ScientificInputViolation::NonFiniteInput,
+        ),
+        (
+            vec![1., 2.],
+            vec![1., 0.],
+            vec![0],
+            ScientificInputViolation::ShapeMismatch,
+        ),
+    ] {
+        assert_eq!(
+            nonparametric::curves(&time, &event, &groups, CurveMethod::KaplanMeier, &control())
+                .unwrap_err(),
+            ScientificComputationError::InvalidInput { violation },
+        );
+    }
+}
+
 fn close(a: f64, b: f64, tol: f64) {
     assert!((a - b).abs() <= tol * (1.0 + b.abs()), "{a} != {b}");
 }
@@ -303,6 +340,22 @@ fn calibration_decision_curves_and_nomogram_use_the_same_horizon() {
     let time = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
     let event = [1.0; 6];
     let risk = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+    for (predicted, violation) in [
+        (vec![0.2], ScientificInputViolation::ShapeMismatch),
+        (vec![f64::NAN; 6], ScientificInputViolation::NonFiniteInput),
+        (vec![1.2; 6], ScientificInputViolation::DataOutOfRange),
+    ] {
+        assert_eq!(
+            evaluation::calibration(&time, &event, &predicted, 2.0, 2, &control()).unwrap_err(),
+            ScientificComputationError::InvalidInput { violation },
+        );
+    }
+    assert_eq!(
+        evaluation::calibration(&time, &event, &risk, 2.0, 1, &control()).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::ParameterOutOfRange,
+        },
+    );
     let r = evaluation::calibration(&time, &event, &risk, 2.0, 2, &control()).unwrap();
     assert_eq!(r.bins.len(), 2);
     close(r.bins[0].observed_risk, 2.0 / 3.0, 1e-12);
@@ -357,34 +410,53 @@ fn calibration_decision_curves_and_nomogram_use_the_same_horizon() {
         (-plot.baseline_cumulative_hazard * origin.exp()).exp(),
         5e-5,
     );
-    assert!(evaluation::nomogram(&model, 100.0, 5, &control()).is_err());
+    for (horizon, ticks) in [(100.0, 5), (2.0, 1), (0.1, 5)] {
+        assert_eq!(
+            evaluation::nomogram(&model, horizon, ticks, &control()).unwrap_err(),
+            ScientificComputationError::InvalidInput {
+                violation: ScientificInputViolation::ParameterOutOfRange,
+            },
+        );
+    }
+    let mut malformed = model.clone();
+    malformed.predictor_means.clear();
+    assert_eq!(
+        evaluation::nomogram(&malformed, 2.0, 5, &control()).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::ShapeMismatch,
+        },
+    );
+    let mut malformed = model.clone();
+    malformed.coefficients[0].estimate = f64::NAN;
+    assert_eq!(
+        evaluation::nomogram(&malformed, 2.0, 5, &control()).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::NonFiniteInput,
+        },
+    );
+    let mut malformed = model.clone();
+    malformed.predictor_ranges[0] = [2.0, 1.0];
+    assert_eq!(
+        evaluation::nomogram(&malformed, 2.0, 5, &control()).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::DataOutOfRange,
+        },
+    );
+    let mut malformed = model;
+    malformed.baselines.clear();
+    assert_eq!(
+        cox::event_probabilities(&malformed, 2.0).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::ShapeMismatch,
+        },
+    );
 }
 
 #[test]
 fn invalid_censoring_intervals_identification_and_execution_controls_are_rejected() {
     let c = control();
-    assert!(
-        nonparametric::curves(
-            &[0.0, 1.0],
-            &[1.0, 0.0],
-            &[0, 0],
-            CurveMethod::KaplanMeier,
-            &c
-        )
-        .is_err()
-    );
-    assert!(
-        nonparametric::curves(
-            &[1.0, 2.0],
-            &[1.0, 2.0],
-            &[0, 0],
-            CurveMethod::KaplanMeier,
-            &c
-        )
-        .is_err()
-    );
     assert!(nonparametric::logrank(&[1.0, 2.0], &[0.0, 0.0], &[0, 1], &c).is_err());
-    assert!(
+    assert_eq!(
         cox::fit(
             &[1.0, 2.0, 3.0],
             &[1.0; 3],
@@ -392,33 +464,144 @@ fn invalid_censoring_intervals_identification_and_execution_controls_are_rejecte
             CoxOptions::default(),
             &c
         )
-        .is_err()
+        .unwrap_err(),
+        ScientificComputationError::ComputationFailed,
     );
-    assert!(
-        cox::time_dependent(
-            &[0.0, 0.5],
+    for (start, event, subjects, violation) in [
+        (
+            vec![0.0],
+            vec![0.0, 1.0],
+            vec![7, 7],
+            ScientificInputViolation::ShapeMismatch,
+        ),
+        (
+            vec![0.0, 1.0],
+            vec![0.0, 1.0],
+            vec![7],
+            ScientificInputViolation::ShapeMismatch,
+        ),
+        (
+            vec![0.0, f64::NAN],
+            vec![0.0, 1.0],
+            vec![7, 7],
+            ScientificInputViolation::NonFiniteInput,
+        ),
+        (
+            vec![0.0, 0.5],
+            vec![0.0, 1.0],
+            vec![7, 7],
+            ScientificInputViolation::DataOutOfRange,
+        ),
+        (
+            vec![0.0, 1.0],
+            vec![1.0, 1.0],
+            vec![7, 7],
+            ScientificInputViolation::DataOutOfRange,
+        ),
+        (
+            vec![0.0, 2.0],
+            vec![0.0, 1.0],
+            vec![7, 8],
+            ScientificInputViolation::DataOutOfRange,
+        ),
+    ] {
+        assert_eq!(
+            cox::time_dependent(
+                &start,
+                &[1.0, 2.0],
+                &event,
+                &subjects,
+                &[vec![0.0, 1.0]],
+                CoxOptions::default(),
+                &c,
+            )
+            .unwrap_err(),
+            ScientificComputationError::InvalidInput { violation }
+        );
+    }
+    for (treatment, violation) in [
+        (vec![0.0], ScientificInputViolation::ShapeMismatch),
+        (
+            vec![0.0, f64::NAN],
+            ScientificInputViolation::NonFiniteInput,
+        ),
+        (vec![0.0, 2.0], ScientificInputViolation::DataOutOfRange),
+    ] {
+        assert_eq!(
+            cox::subgroup(
+                &[1.0, 2.0],
+                &[1.0, 0.0],
+                &treatment,
+                &[0, 1],
+                &[],
+                CoxOptions::default(),
+                &c
+            )
+            .unwrap_err(),
+            ScientificComputationError::InvalidInput { violation },
+        );
+    }
+    let data_error = ScientificComputationError::InvalidInput {
+        violation: ScientificInputViolation::DataOutOfRange,
+    };
+    assert_eq!(
+        nonparametric::logrank(&[1.0, 2.0], &[1.0, 0.0], &[0, 0], &c).unwrap_err(),
+        data_error
+    );
+    assert_eq!(
+        nonparametric::competing_risks(&[1.0, 2.0], &[0, 0], &c).unwrap_err(),
+        data_error
+    );
+    assert_eq!(
+        cox::fit(
             &[1.0, 2.0],
-            &[0.0, 1.0],
-            &[7, 7],
+            &[0.0, 0.0],
             &[vec![0.0, 1.0]],
             CoxOptions::default(),
             &c
         )
-        .is_err()
+        .unwrap_err(),
+        data_error
     );
-    assert!(
-        cox::time_dependent(
-            &[0.0, 1.0],
+    assert_eq!(
+        parametric::fit(
             &[1.0, 2.0],
-            &[1.0, 1.0],
-            &[7, 7],
-            &[vec![0.0, 1.0]],
-            CoxOptions::default(),
+            &[0.0, 0.0],
+            &[],
+            AftOptions {
+                distribution: AftDistribution::Exponential,
+                horizon: 1.0,
+                iteration: IterationOptions::default()
+            },
             &c
         )
-        .is_err()
+        .unwrap_err(),
+        data_error
     );
-    assert!(evaluation::calibration(&[1.0, 2.0], &[0.0, 0.0], &[0.2, 0.3], 3.0, 2, &c).is_err());
+    assert_eq!(
+        cox::proportional_hazards(
+            &[1.0; 3],
+            &[1.0; 3],
+            &[vec![0.0, 1.0, 2.0]],
+            CoxOptions::default(),
+            PhTimeTransform::Identity,
+            &c
+        )
+        .unwrap_err(),
+        data_error
+    );
+    assert_eq!(
+        cox::fit(&[1.0, 2.0], &[1.0, 0.0], &[], CoxOptions::default(), &c).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::ShapeMismatch
+        }
+    );
+    assert_eq!(
+        evaluation::calibration(&[1.0, 2.0], &[0.0, 0.0], &[0.2, 0.3], 3.0, 2, &c).unwrap_err(),
+        ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::ParameterOutOfRange
+        }
+    );
     c.cancellation.cancel();
     assert_eq!(
         nonparametric::curves(&[1.0], &[1.0], &[0], CurveMethod::KaplanMeier, &c).unwrap_err(),

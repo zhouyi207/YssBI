@@ -10,12 +10,19 @@ fn predictions(
 ) -> Result<()> {
     data(time, event, &[], control)?;
     positive_horizon(horizon)?;
-    if predicted.len() != time.len()
-        || predicted
-            .iter()
-            .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
-    {
-        return Err(parameter());
+    if predicted.len() != time.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    for (i, value) in predicted.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        if !value.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if !(0.0..=1.0).contains(value) {
+            return Err(invalid(Violation::DataOutOfRange));
+        }
     }
     Ok(())
 }
@@ -186,13 +193,16 @@ pub fn nomogram(
     control.check()?;
     let hazard = baseline_at(model, horizon)?;
     let p = model.coefficients.len();
-    if ticks < 2
-        || p == 0
-        || model.predictor_ranges.len() != p
-        || model.predictor_means.len() != p
-        || !hazard.is_finite()
-        || hazard <= 0.0
-    {
+    if ticks < 2 {
+        return Err(parameter());
+    }
+    if p == 0 || model.predictor_ranges.len() != p || model.predictor_means.len() != p {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if !hazard.is_finite() {
+        return Err(invalid(Violation::NonFiniteInput));
+    }
+    if hazard <= 0.0 {
         return Err(parameter());
     }
     let mut spans = Vec::with_capacity(p);
@@ -201,16 +211,18 @@ pub fn nomogram(
         let beta = model.coefficients[j].estimate;
         let [lo, hi] = model.predictor_ranges[j];
         let center = model.predictor_means[j];
-        if !lo.is_finite() || !hi.is_finite() || !center.is_finite() || lo > hi || !beta.is_finite()
-        {
-            return Err(parameter());
+        if !lo.is_finite() || !hi.is_finite() || !center.is_finite() || !beta.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if lo > hi {
+            return Err(invalid(Violation::DataOutOfRange));
         }
         spans.push(finite(beta.abs() * (hi - lo))?);
         lower.push(finite((beta * (lo - center)).min(beta * (hi - center)))?);
     }
     let maximum = spans.iter().copied().fold(0.0, f64::max);
     if maximum <= 0.0 {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let points_per_log_hazard = finite(100.0 / maximum)?;
     let maximum_total_points = finite(spans.iter().sum::<f64>() * points_per_log_hazard)?;

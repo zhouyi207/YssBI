@@ -9,7 +9,7 @@ pub fn curves(
     control: &Control,
 ) -> Result<CurveResult> {
     data(time, event, &[], control)?;
-    let levels = groups(group, time.len())?;
+    let levels = groups(group, time.len(), control)?;
     let mut curves = Vec::with_capacity(levels.len());
     for level in levels {
         control.check()?;
@@ -121,10 +121,10 @@ pub fn logrank(
     control: &Control,
 ) -> Result<LogrankResult> {
     data(time, event, &[], control)?;
-    let levels = groups(group, time.len())?;
+    let levels = groups(group, time.len(), control)?;
     let k = levels.len();
     if k < 2 {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let codes = group
         .iter()
@@ -204,7 +204,7 @@ pub fn competing_risks(
         .into_iter()
         .collect::<Vec<_>>();
     if causes.is_empty() {
-        return Err(parameter());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let mut ordered = (0..time.len()).collect::<Vec<_>>();
     ordered.sort_by(|&a, &b| time[a].total_cmp(&time[b]));
@@ -255,7 +255,7 @@ pub(super) fn risk_at(
     control: &Control,
 ) -> Result<(f64, [f64; 2])> {
     if indices.is_empty() {
-        return Err(parameter());
+        return Err(invalid(Violation::EmptyInput));
     }
     let curve = curve(time, event, indices, 0, CurveMethod::KaplanMeier, control)?;
     let last = curve.points.iter().rev().find(|p| p.time <= horizon);
