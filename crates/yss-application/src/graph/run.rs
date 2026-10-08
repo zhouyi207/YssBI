@@ -63,7 +63,7 @@ pub struct RunGraphRequest {
     inherit_graph_reads: bool,
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
-    document: GraphDocument,
+    document: Arc<GraphDocument>,
     semantic_input_hash: [u8; 32],
 }
 
@@ -78,7 +78,7 @@ impl RunGraphRequest {
     pub fn new(
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        document: GraphDocument,
+        document: Arc<GraphDocument>,
         semantic_input_hash: [u8; 32],
     ) -> Self {
         Self {
@@ -882,7 +882,7 @@ mod tests {
         let request = RunGraphRequest::new(
             active.project_instance_id().clone(),
             GraphResourcePath::new("events/cancel.yssbi-event").expect("valid graph path"),
-            GraphDocument::default(),
+            Arc::new(GraphDocument::default()),
             [1; 32],
         )
         .with_cancellation(cancellation);
@@ -897,7 +897,7 @@ mod tests {
         let request = RunGraphRequest::new(
             active.project_instance_id().clone(),
             GraphResourcePath::new("events/admission.yssbi-event").expect("valid graph path"),
-            GraphDocument::default(),
+            Arc::new(GraphDocument::default()),
             [1; 32],
         );
         assert!(matches!(

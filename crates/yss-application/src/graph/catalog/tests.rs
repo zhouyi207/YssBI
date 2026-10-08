@@ -631,12 +631,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     assert_eq!(saved.document.input_states, document.input_states);
     let projection = session
         .application
-        .resolve_graph_document(
-            instance,
-            caller,
-            saved.document.as_ref().clone(),
-            "en-US".into(),
-        )
+        .resolve_graph_document(instance, caller, saved.document.clone(), "en-US".into())
         .unwrap();
     let projected = projection
         .nodes
@@ -1291,7 +1286,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
         app.resolve_graph_document(
             instance.clone(),
             graph.clone(),
-            document.clone(),
+            Arc::new(document.clone()),
             "en-US".into(),
         )
         .unwrap()
@@ -1372,7 +1367,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
         RunGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            document.clone(),
+            Arc::new(document.clone()),
             semantic_input_hash,
         ),
     )
@@ -1433,7 +1428,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
             RunGraphRequest::new(
                 instance.clone(),
                 graph.clone(),
-                original.clone(),
+                Arc::new(original.clone()),
                 semantic_input_hash
             )
         ),
@@ -1548,7 +1543,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
         .resolve_graph_document(
             instance.clone(),
             graph.clone(),
-            document.clone(),
+            Arc::new(document.clone()),
             "en-US".into(),
         )
         .unwrap();

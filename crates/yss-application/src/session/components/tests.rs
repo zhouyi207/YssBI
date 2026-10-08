@@ -208,7 +208,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
     let resolve = |basis: &GraphAnalysisBasis, kernels: &yss_node_kernel::KernelRegistry| {
         let analysis = session.graph().resolve_graph_document(
             &graph,
-            &document,
+            &Arc::new(document.clone()),
             basis,
             &resources,
             &[],

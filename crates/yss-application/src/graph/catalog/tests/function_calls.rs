@@ -205,7 +205,7 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
             .all(|event| event.identity().run_id() == receipt.identity.run_id())
     );
     let after = resolve();
-    assert_eq!(after.document(), &saved_root);
+    assert_eq!(after.document().as_ref(), &saved_root);
     assert_eq!(
         captured
             .project()

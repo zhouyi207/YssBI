@@ -217,7 +217,7 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   编辑期间仅保存暂态位置，松键才提交，预览保持到回执返回。
 - `canvas/authoring`：签名提交保留原始 before-state 与版本，常量输入在 worker 中解析后进入原编辑事务。
   `canvas/constant_drag` 只持有拖动预览和捕获的图身份；画布接收时拒绝跨图拖动及过期版本。
-- `canvas/execution`：捕获与当前编辑投影匹配的后端文档，提交原 RunGraphRequest；公共图活动拥有运行事实，
+- `canvas/execution`：捕获与当前编辑投影匹配的后端文档，将同一不可变 `Arc` 直接交给 RunGraphRequest；公共图活动拥有运行事实，
   命令拒绝仅为本地反馈。原生运行读投影按执行会话与 RunId 安装，恢复期间有界暂存通知后重放。
   单节点可选择当前输入或补算依赖，取消复用完整运行身份；退出时请求取消仍在运行的计算。
 - `workbench/output`：只展示当前图语义与执行会话匹配的失败原因、阶段和分组上下文；定位使用原 PlanSourceIdentity。

@@ -231,7 +231,7 @@ fn variable_pin_titles_match_catalog_without_renaming_other_inputs() {
     for locale in ["zh-CN", "en-US"] {
         let analysis = runtime.resolve_graph_document(
             &graph(),
-            &document,
+            &Arc::new(document.clone()),
             &super::tests::basis(&runtime),
             &resources(),
             &[],
@@ -389,7 +389,7 @@ fn resource_titles_use_the_declared_resolved_parameter() {
         }
         let analysis = runtime.resolve_graph_document(
             &graph(),
-            &document,
+            &Arc::new(document.clone()),
             &super::tests::basis(&runtime),
             &resources,
             &entries,
@@ -467,7 +467,7 @@ fn resolve(
 ) -> GraphAnalysis {
     runtime.resolve_graph_document(
         &graph(),
-        document,
+        &Arc::new(document.clone()),
         &super::tests::basis(runtime),
         resources,
         &[],
@@ -495,6 +495,49 @@ fn assert_reused(before: &GraphAnalysis, after: &GraphAnalysis, node: NodeId, ex
         ),
         expected
     );
+}
+
+#[test]
+fn shared_document_resolution_rechecks_mutations_without_retaining_the_body() {
+    let runtime = runtime();
+    let (document, node, constant) = constant_document();
+    let document = Arc::new(document);
+    let graph = graph();
+    let basis = super::tests::basis(&runtime);
+    let resources = resources();
+    let resolve = |document: &Arc<GraphDocument>| {
+        runtime.resolve_graph_document(&graph, document, &basis, &resources, &[], "en-US")
+    };
+    let initial = resolve(&document);
+    assert_reused(&initial, &resolve(&document), node, true);
+    assert_eq!(Arc::strong_count(&document), 1);
+
+    let original = Arc::downgrade(&document);
+    let mut replacement = Arc::new((*document).clone());
+    assert_reused(&initial, &resolve(&replacement), node, true);
+    drop(document);
+    assert!(original.upgrade().is_none());
+
+    Arc::make_mut(&mut replacement)
+        .constants
+        .get_mut(&constant)
+        .unwrap()
+        .data_value = DataValue::Integer(2);
+    let edited = resolve(&replacement);
+    assert_ne!(edited.semantic_input_hash(), initial.semantic_input_hash());
+    assert_eq!(
+        edited,
+        self::runtime().resolve_graph_document(
+            &graph,
+            &replacement,
+            &basis,
+            &resources,
+            &[],
+            "en-US"
+        )
+    );
+    assert_reused(&edited, &resolve(&replacement), node, true);
+    assert_eq!(Arc::strong_count(&replacement), 1);
 }
 
 #[test]
@@ -824,7 +867,7 @@ fn function_catalog_creation_preserves_authoritative_member_metadata() {
         let compatible = runtime
             .compatible_catalog_with_resources(
                 &graph(),
-                &document,
+                &Arc::new(document.clone()),
                 &source,
                 &catalog,
                 &entries,
@@ -1081,6 +1124,19 @@ fn snapshot_rechecks_used_and_absent_resources_without_invalidating_unread_catal
         "yssbi.dataframe.source.get",
         &[("dataframe", serde_json::json!("databases/used"))],
     );
+    let document = Arc::new(document);
+    let resolve = |runtime: &GraphRuntimeState,
+                   document: &Arc<GraphDocument>,
+                   resources: &ResourceCatalogSnapshot| {
+        runtime.resolve_graph_document(
+            &graph(),
+            document,
+            &super::tests::basis(runtime),
+            resources,
+            &[],
+            "en-US",
+        )
+    };
     let catalog = |entries: &[(&str, ValueType)]| {
         ResourceCatalogSnapshot::new(
             BTreeMap::new(),
@@ -1200,8 +1256,10 @@ fn function_labels_and_bodies_refresh_even_when_execution_identity_is_unchanged(
 fn kernel_capability_identity_invalidates_cached_analysis() {
     let runtime = runtime();
     let (document, node, _) = constant_document();
-    let initial = resolve(&runtime, &document, &resources());
+    let document = Arc::new(document);
     let mut basis = super::tests::basis(&runtime);
+    let initial =
+        runtime.resolve_graph_document(&graph(), &document, &basis, &resources(), &[], "en-US");
     basis.kernel_fingerprint = [9; 32];
     let changed =
         runtime.resolve_graph_document(&graph(), &document, &basis, &resources(), &[], "en-US");
@@ -1350,7 +1408,7 @@ fn resolution_cache_evicts_old_graphs_without_changing_their_results() {
     for index in 0..20 {
         runtime.resolve_graph_document(
             &GraphResourcePath::new(format!("events/Other{index}.yssbi-event")).unwrap(),
-            &document,
+            &Arc::new(document.clone()),
             &super::tests::basis(&runtime),
             &resources(),
             &[],
@@ -1422,6 +1480,7 @@ fn benchmark_repeated_resolution_and_projection() {
                 previous = Some(PortAddress::declared(consumer, "result".parse().unwrap()));
             }
         }
+        let document = Arc::new(document);
         // Warm type/Schema caches in both modes. Discard only the whole
         // snapshot to measure the additional benefit of snapshot reuse.
         runtime.resolve_graph_document(&graph, &document, &basis, &resources, &[], "en-US");

@@ -215,6 +215,10 @@ Application 的每图协调队列有容量限制，过载返回类型化 `Editin
 有实际补丁时复用 Document Edit 的 `prepare_graph_document_patch` 准备独立候选，再直接安装候选 `Arc`；
 读取响应、空补丁和 Save 不为编辑器准备复制正文。
 GraphDocumentChange 交付同一候选 `Arc`，Project 提交与响应复用它，自动化批次也沿用该路径。
+打开回执、候选解析及 `RunGraphRequest` 同样传递不可变正文的 `Arc`；普通运行和动态 Schema
+分阶段解析复用匹配编辑版本的同一捕获，不从共享正文复制整图。
+解析缓存的指纹复用与弱引用生命周期由 [Graph Runtime](../../../yss-graph-runtime/README.md) 拥有；
+Application 仍在捕获、资源授权和交付边界重验当前项目、编辑及执行身份。
 
 Document Edit 的补丁准备入口借用原正文，复制一次后逐项校验 before-state、应用操作，并在返回前
 校验完整文档。失败不改动原正文；`apply_graph_document_patch` 复用同一准备步骤，成功后才替换

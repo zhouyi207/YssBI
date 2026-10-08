@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
+use std::sync::Weak;
 use yss_graph_analysis::{GraphAnalysis, GraphSemanticCache};
-use yss_graph_document::GraphResourcePath;
+use yss_graph_document::{GraphDocument, GraphResourcePath};
 
 // One latest snapshot per graph; cache residency never keeps every opened graph
 // alive for the lifetime of a project. A concurrent miss may recompute, but no
@@ -8,6 +9,7 @@ use yss_graph_document::GraphResourcePath;
 const MAX_CACHED_GRAPHS: usize = 16;
 
 pub(super) struct CachedGraphAnalysis {
+    pub document_identity: Weak<GraphDocument>,
     pub document_fingerprint: [u8; 32],
     pub dependency_fingerprint: [u8; 32],
     pub observation_fingerprint: [u8; 32],

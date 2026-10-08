@@ -1179,12 +1179,17 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
     let graph = GraphResourcePath::new(&fixture.path).unwrap();
     let context =
         crate::graph::inputs::GraphResolutionContext::capture(&session, &fixture.document).unwrap();
-    let analysis = context.resolve(&session, &graph, &fixture.document, "en-US");
+    let analysis = context.resolve(
+        &session,
+        &graph,
+        &Arc::new(fixture.document.clone()),
+        "en-US",
+    );
     let request = |demand| {
         RunGraphRequest::new(
             session.project_instance_id().clone(),
             graph.clone(),
-            fixture.document.clone(),
+            Arc::new(fixture.document.clone()),
             *analysis.semantic_input_hash(),
         )
         .with_demand(demand)

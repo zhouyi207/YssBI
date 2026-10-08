@@ -424,7 +424,7 @@ impl DraftGraphCatalogFacts {
         &self.path
     }
 
-    pub(crate) fn document(&self) -> &GraphDocument {
+    pub(crate) fn document(&self) -> &Arc<GraphDocument> {
         &self.document
     }
 }

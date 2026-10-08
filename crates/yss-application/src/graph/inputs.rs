@@ -423,7 +423,7 @@ impl GraphResolutionContext {
         &self,
         captured: &ApplicationSession,
         graph_path: &GraphResourcePath,
-        document: &GraphDocument,
+        document: &std::sync::Arc<GraphDocument>,
         locale: &str,
     ) -> yss_graph_analysis::GraphAnalysis {
         let mut observations =

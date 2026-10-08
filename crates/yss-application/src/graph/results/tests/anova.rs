@@ -177,7 +177,7 @@ fn anova_nodes_execute_graph_defaults_with_mixed_factor_labels_and_interactions(
     let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let analysis = captured.graph().resolve_graph_document(
         &graph,
-        &document,
+        &Arc::new(document.clone()),
         &yss_graph_analysis_contract::GraphAnalysisBasis {
             registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
                 captured.graph().registry_fingerprint(),

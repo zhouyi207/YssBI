@@ -348,7 +348,7 @@ impl GraphRuntimeState {
     pub fn resolve_graph_document(
         &self,
         graph_path: &GraphResourcePath,
-        document: &GraphDocument,
+        document: &Arc<GraphDocument>,
         basis: &GraphAnalysisBasis,
         resource_catalog: &ResourceCatalogSnapshot,
         resources: &[CatalogResourceEntry],
@@ -369,7 +369,7 @@ impl GraphRuntimeState {
     pub fn resolve_graph_document_with_observations(
         &self,
         graph_path: &GraphResourcePath,
-        document: &GraphDocument,
+        document: &Arc<GraphDocument>,
         basis: &GraphAnalysisBasis,
         resource_catalog: &ResourceCatalogSnapshot,
         resources: &[CatalogResourceEntry],
@@ -384,7 +384,7 @@ impl GraphRuntimeState {
     fn analyze_neutral(
         &self,
         graph_path: &GraphResourcePath,
-        document: &GraphDocument,
+        document: &Arc<GraphDocument>,
         basis: &GraphAnalysisBasis,
         resource_catalog: &ResourceCatalogSnapshot,
         observations: &yss_graph_analysis::GraphSchemaObservations,
@@ -394,14 +394,25 @@ impl GraphRuntimeState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take(graph_path);
-        let document_fingerprint = yss_graph_document::resolution_document_fingerprint(document)
-            .expect("validated resolution inputs are serializable");
+        let document_identity = Arc::downgrade(document);
+        // A retained Weak prevents this allocation from being reused; Arc mutation
+        // detaches it before writing, so matching identities still describe the
+        // same immutable body without retaining another resident document.
+        let document_fingerprint = cache
+            .analysis
+            .as_ref()
+            .filter(|cached| cached.document_identity.ptr_eq(&document_identity))
+            .map(|cached| cached.document_fingerprint)
+            .unwrap_or_else(|| {
+                yss_graph_document::resolution_document_fingerprint(document)
+                    .expect("validated resolution inputs are serializable")
+            });
         let observation_fingerprint = yss_canonical_hash::hash_canonical(
             "yssbi.graph-schema-observations.v1",
             &observations.iter().collect::<Vec<_>>(),
         )
         .expect("schema observations are serializable");
-        if let Some(cached) = cache.analysis.as_ref().filter(|cached| {
+        if let Some(cached) = cache.analysis.as_mut().filter(|cached| {
             cached.document_fingerprint == document_fingerprint
                 && cached.observation_fingerprint == observation_fingerprint
                 && cached.analysis.registry_fingerprint() == basis.registry_fingerprint.as_bytes()
@@ -411,6 +422,7 @@ impl GraphRuntimeState {
                         cached.analysis.semantic_snapshot().dependencies(),
                     )
         }) {
+            cached.document_identity = document_identity;
             let analysis = cached.analysis.clone();
             self.retain_semantic_cache(graph_path, cache);
             return analysis;
@@ -457,6 +469,7 @@ impl GraphRuntimeState {
             .with_semantic_input_hash(hash)
             .with_observed_semantic_input_hash(observed_hash);
         cache.analysis = Some(CachedGraphAnalysis {
+            document_identity,
             document_fingerprint,
             dependency_fingerprint,
             observation_fingerprint,
@@ -549,7 +562,7 @@ impl GraphRuntimeState {
     pub fn compatible_catalog_with_resources(
         &self,
         graph_path: &GraphResourcePath,
-        document: &GraphDocument,
+        document: &Arc<GraphDocument>,
         source: &PortAddress,
         catalog: &ResourceCatalogSnapshot,
         resources: &[CatalogResourceEntry],
@@ -846,6 +859,7 @@ mod tests {
         );
 
         let graph = GraphResourcePath::new("events/Call.yssbi-event").unwrap();
+        let document = Arc::new(document);
         let resolved = runtime.resolve_graph_document(
             &graph,
             &document,

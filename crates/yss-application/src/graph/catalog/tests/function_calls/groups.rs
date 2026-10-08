@@ -160,7 +160,7 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
         retained.provenance().result_id()
     );
     let after = resolve();
-    assert_eq!(after.document(), &saved_root);
+    assert_eq!(after.document().as_ref(), &saved_root);
     let columns = &after
         .projection()
         .nodes

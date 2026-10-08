@@ -146,8 +146,14 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
         ),
     };
     let execute = |document: &GraphDocument| {
-        let analysis =
-            runtime.resolve_graph_document(&graph, document, &basis, &catalog, &[], "en-US");
+        let analysis = runtime.resolve_graph_document(
+            &graph,
+            &Arc::new(document.clone()),
+            &basis,
+            &catalog,
+            &[],
+            "en-US",
+        );
         let projection = yss_graph_editor::projection::build_editor_projection(
             yss_graph_editor::projection::EditorProjectionInput {
                 graph_path: &graph,
@@ -353,7 +359,14 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
         .insert("scale".parse().unwrap(), "2".into());
     assert!(
         runtime
-            .resolve_graph_document(&graph, &document, &basis, &catalog, &[], "en-US")
+            .resolve_graph_document(
+                &graph,
+                &Arc::new(document.clone()),
+                &basis,
+                &catalog,
+                &[],
+                "en-US"
+            )
             .semantic_snapshot()
             .ready()
             .is_none()
@@ -386,7 +399,13 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
         .unwrap()
         .parameters
         .insert("covariance".parse().unwrap(), serde_json::json!("invalid"));
-    let analysis =
-        runtime.resolve_graph_document(&graph, &document, &basis, &catalog, &[], "en-US");
+    let analysis = runtime.resolve_graph_document(
+        &graph,
+        &Arc::new(document.clone()),
+        &basis,
+        &catalog,
+        &[],
+        "en-US",
+    );
     assert!(analysis.semantic_snapshot().ready().is_none());
 }

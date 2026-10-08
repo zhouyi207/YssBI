@@ -51,7 +51,7 @@ fn build_graph_projection_replacement(
     captured: &ApplicationSession,
     context: &mut GraphResolutionContext,
     graph_path: &GraphResourcePath,
-    document: &yss_graph_document::GraphDocument,
+    document: &Arc<GraphDocument>,
     locale: &str,
 ) -> Result<
     (
@@ -259,7 +259,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        document: GraphDocument,
+        document: Arc<GraphDocument>,
         locale: String,
     ) -> Result<yss_graph_editor::projection::EditorProjectionModel, ResourceMutationApplicationError>
     {

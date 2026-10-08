@@ -158,7 +158,7 @@ impl OpenGraphApplicationReceipt {
         &self.graph_path
     }
 
-    pub fn document(&self) -> &GraphDocument {
+    pub fn document(&self) -> &Arc<GraphDocument> {
         &self.document
     }
 

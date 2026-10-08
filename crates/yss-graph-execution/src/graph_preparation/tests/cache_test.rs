@@ -72,7 +72,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         |document: &GraphDocument, resources: &ResourceCatalogSnapshot, supported: bool| {
             let analysis = runtime.resolve_graph_document(
                 &graph,
-                document,
+                &Arc::new(document.clone()),
                 &analysis_basis,
                 resources,
                 &[],
@@ -242,7 +242,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     )]);
     let original = runtime.resolve_graph_document(
         &function,
-        &document,
+        &Arc::new(document.clone()),
         &analysis_basis,
         &resources("Before"),
         &[],
@@ -258,7 +258,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         .unwrap();
     let renamed = runtime.resolve_graph_document(
         &function,
-        &document,
+        &Arc::new(document.clone()),
         &analysis_basis,
         &resources("After"),
         &[],

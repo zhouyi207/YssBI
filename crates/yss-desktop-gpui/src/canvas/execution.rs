@@ -138,7 +138,7 @@ impl GraphCanvas {
             let application = &services.application;
             // Capture the document matching the displayed projection, never a later revision.
             let document = application.current_graph_document(&project, &path, version)?;
-            let request = RunGraphRequest::new(project, path, (*document).clone(), hash)
+            let request = RunGraphRequest::new(project, path, document, hash)
                 .with_demand(demand)
                 .with_cancellation(cancellation);
             Ok(run_graph_with_sink(application, request, |_| true)?)

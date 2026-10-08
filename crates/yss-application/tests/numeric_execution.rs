@@ -887,7 +887,7 @@ fn analyze_document(
     .unwrap();
     graph_runtime.resolve_graph_document(
         graph,
-        document,
+        &Arc::new(document.clone()),
         &yss_graph_analysis_contract::GraphAnalysisBasis {
             registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
                 graph_runtime.registry_fingerprint(),
