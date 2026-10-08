@@ -115,10 +115,6 @@ pub(crate) fn validate(
             else {
                 continue;
             };
-            let Some(value) = super::parameter_projection::parameter_literal_value(parameter)
-            else {
-                continue;
-            };
             if super::parameter_projection::aggregate_parameter_accepts(
                 node.node_type.as_str(),
                 parameter.key.as_str(),
@@ -126,6 +122,10 @@ pub(crate) fn validate(
             )
             .is_some()
             {
+                let Some(value) = super::parameter_projection::parameter_literal_value(parameter)
+                else {
+                    continue;
+                };
                 let valid = super::schema_resolution::aggregate_column_names(Some(&value))
                     .is_ok_and(|columns| {
                         columns.iter().all(|name| {
@@ -157,6 +157,16 @@ pub(crate) fn validate(
             use yss_node_protocol::dataframe::{
                 FILTER_PREDICATE_TYPE_ID, PROJECT_COLUMNS_TYPE_ID, filter_comparison_is_compatible,
                 prepare_filter_predicate_json, prepare_project_columns_json,
+            };
+            if !matches!(
+                type_id.as_str(),
+                PROJECT_COLUMNS_TYPE_ID | FILTER_PREDICATE_TYPE_ID
+            ) {
+                continue;
+            }
+            let Some(value) = super::parameter_projection::parameter_literal_value(parameter)
+            else {
+                continue;
             };
             let valid = match type_id.as_str() {
                 PROJECT_COLUMNS_TYPE_ID => {

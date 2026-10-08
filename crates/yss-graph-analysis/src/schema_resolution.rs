@@ -644,15 +644,11 @@ impl EditorSchemaResolver<'_> {
                         TabularScalar::Bool(_) => Some(RelationalScalarType::Known(
                             yss_node_protocol::SemanticType::Binary,
                         )),
-                        TabularScalar::Integer(_) => Some(RelationalScalarType::Known(
+                        TabularScalar::Integer(_)
+                        | TabularScalar::Unsigned(_)
+                        | TabularScalar::Float64(_) => Some(RelationalScalarType::Known(
                             yss_node_protocol::SemanticType::Numeric,
                         )),
-                        TabularScalar::Unsigned(value) if i64::try_from(*value).is_ok() => Some(
-                            RelationalScalarType::Known(yss_node_protocol::SemanticType::Numeric),
-                        ),
-                        TabularScalar::Unsigned(_) | TabularScalar::Float64(_) => Some(
-                            RelationalScalarType::Known(yss_node_protocol::SemanticType::Numeric),
-                        ),
                         TabularScalar::String(_) => Some(RelationalScalarType::Known(
                             yss_node_protocol::SemanticType::Text,
                         )),

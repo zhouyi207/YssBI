@@ -330,16 +330,11 @@ fn apply_resolved_schemas(
         {
             continue;
         }
-        port.schema_state = resolved_schemas
-            .state(&port.address)
-            .cloned()
-            .unwrap_or_else(|| {
-                if port.schema.is_some() {
-                    GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream)
-                } else {
-                    port.schema_state.clone()
-                }
-            });
+        if let Some(state) = resolved_schemas.state(&port.address) {
+            port.schema_state = state.clone();
+        } else if port.schema.is_some() {
+            port.schema_state = GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream);
+        }
         if matches!(port.schema_state, GraphSchemaState::NotApplicable) && port.schema.is_some() {
             port.schema_state = GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream);
         } else if port.schema.is_none() && matches!(port.schema_state, GraphSchemaState::Pending(_))

@@ -116,16 +116,15 @@ pub(super) fn bind_pattern_generics(
     match pattern {
         TypeExpr::Generic(parameter) => {
             let candidates = domain.iter().cloned().collect::<BTreeSet<_>>();
-            let merged = bindings
-                .get(parameter)
-                .map_or(candidates.clone(), |existing| {
-                    existing
-                        .types()
-                        .iter()
-                        .filter(|value| candidates.contains(*value))
-                        .cloned()
-                        .collect()
-                });
+            let merged = match bindings.get(parameter) {
+                Some(existing) => existing
+                    .types()
+                    .iter()
+                    .filter(|value| candidates.contains(*value))
+                    .cloned()
+                    .collect(),
+                None => candidates,
+            };
             if let Some(domain) = TypeDomain::new(merged) {
                 bindings.insert(parameter.clone(), domain);
             } else {
