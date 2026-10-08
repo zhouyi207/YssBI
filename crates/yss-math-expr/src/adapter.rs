@@ -168,8 +168,8 @@ fn parser_error(error: mathlex::ParseError) -> MathError {
 
 #[derive(Clone, Copy)]
 enum RecursionToken {
-    Open,
-    Close,
+    // Paired pipes choose their direction from operand position.
+    Delimiter(Option<bool>),
     Descend,
     Sign,
     Boundary,
@@ -186,11 +186,20 @@ fn ensure_parser_depth(
             let tokens = mathlex::parser::tokenize(input).map_err(parser_error)?;
             check_parser_depth(
                 tokens.iter().map(|token| match token.value {
-                    Token::LParen | Token::LBracket | Token::LBrace => RecursionToken::Open,
-                    Token::RParen | Token::RBracket | Token::RBrace => RecursionToken::Close,
-                    Token::Caret | Token::DoubleStar | Token::Sqrt | Token::Not => {
-                        RecursionToken::Descend
+                    Token::LParen | Token::LBracket | Token::LBrace => {
+                        RecursionToken::Delimiter(Some(true))
                     }
+                    Token::RParen | Token::RBracket | Token::RBrace => {
+                        RecursionToken::Delimiter(Some(false))
+                    }
+                    Token::Caret
+                    | Token::DoubleStar
+                    | Token::Sqrt
+                    | Token::Not
+                    | Token::Grad
+                    | Token::Div
+                    | Token::Curl
+                    | Token::Laplacian => RecursionToken::Descend,
                     Token::Plus | Token::Minus => RecursionToken::Sign,
                     Token::Star
                     | Token::Slash
@@ -209,11 +218,12 @@ fn ensure_parser_depth(
                     LatexToken::LParen
                     | LatexToken::LBracket
                     | LatexToken::LBrace
-                    | LatexToken::BeginEnv(_) => RecursionToken::Open,
+                    | LatexToken::BeginEnv(_) => RecursionToken::Delimiter(Some(true)),
                     LatexToken::RParen
                     | LatexToken::RBracket
                     | LatexToken::RBrace
-                    | LatexToken::EndEnv(_) => RecursionToken::Close,
+                    | LatexToken::EndEnv(_) => RecursionToken::Delimiter(Some(false)),
+                    LatexToken::Pipe => RecursionToken::Delimiter(None),
                     LatexToken::Caret | LatexToken::Underscore | LatexToken::Lnot => {
                         RecursionToken::Descend
                     }
@@ -247,15 +257,16 @@ fn check_parser_depth(
     let mut expects_operand = true;
     for token in tokens {
         match token {
-            RecursionToken::Open => {
-                groups.push(depth);
-                ensure_depth(initial_depth + groups.len())?;
-                depth += 1;
-                expects_operand = true;
-            }
-            RecursionToken::Close => {
-                depth = groups.pop().unwrap_or(initial_depth);
-                expects_operand = false;
+            RecursionToken::Delimiter(direction) => {
+                let opening = direction.unwrap_or(expects_operand);
+                if opening {
+                    groups.push(depth);
+                    ensure_depth(initial_depth + groups.len())?;
+                    depth += 1;
+                } else {
+                    depth = groups.pop().unwrap_or(initial_depth);
+                }
+                expects_operand = opening;
             }
             RecursionToken::Descend => {
                 depth += 1;
@@ -1006,6 +1017,24 @@ mod tests {
                 MathExpr::Number(1.0)
             );
         }
+    }
+
+    #[test]
+    fn bounds_absolute_value_nesting_before_recursive_parsing() {
+        let nested = |groups| format!("{}x{}", "|".repeat(groups), "|".repeat(groups));
+        let error = parse_expression(&nested(1000), ParseOptions::latex(&[])).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::DepthLimit);
+        assert!(parse_expression(&nested(MAX_DEPTH - 1), ParseOptions::latex(&[])).is_ok());
+        assert!(parse_expression("|x| + |x+1|", ParseOptions::latex(&[])).is_ok());
+    }
+
+    #[test]
+    fn bounds_unsupported_gradient_prefixes_before_recursive_parsing() {
+        let input = format!("{}x", "grad ".repeat(1000));
+        let error = parse_expression(&input, ParseOptions::plain(&[])).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::DepthLimit);
+        let error = parse_expression("grad x", ParseOptions::plain(&[])).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::Unsupported);
     }
 
     #[test]
