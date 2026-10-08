@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use mathlex::parser::{LatexToken, tokenizer::Token};
 use mathlex::{BinaryOp as LexBinaryOp, ExprKind, Expression, UnaryOp as LexUnaryOp};
 
 use super::{
@@ -10,6 +11,8 @@ use super::{
 const MAX_INPUT_BYTES: usize = 16 * 1024;
 const MAX_NODES: usize = 256;
 const MAX_DEPTH: usize = 32;
+// Braced powers require both an operator and a group without doubling AST depth.
+const MAX_PARSER_DEPTH: usize = 2 * MAX_DEPTH;
 
 pub(super) fn parse_expression(
     input: &str,
@@ -55,14 +58,12 @@ fn parse_expression_with_budget(
             &protected_symbols.text
         }
     };
-    ensure_unary_depth(parser_input, depth)?;
+    ensure_parser_depth(parser_input, options.format, depth)?;
     let parsed = match options.format {
         MathInputFormat::Plain => mathlex::parse(parser_input),
         MathInputFormat::Latex => mathlex::parse_latex(parser_input),
     }
-    .map_err(|error| {
-        MathError::new(MathErrorKind::Parse, format!("数学表达式解析失败: {error}"))
-    })?;
+    .map_err(parser_error)?;
     convert(&parsed, options, depth, budget, &protected_symbols.names)
 }
 
@@ -161,16 +162,117 @@ fn ensure_depth(depth: usize) -> Result<(), MathError> {
     Ok(())
 }
 
-fn ensure_unary_depth(input: &str, depth: usize) -> Result<(), MathError> {
-    let mut signs = 0;
-    for character in input.chars() {
-        match character {
-            '+' | '-' => {
-                signs += 1;
-                ensure_depth(depth + signs)?;
+fn parser_error(error: mathlex::ParseError) -> MathError {
+    MathError::new(MathErrorKind::Parse, format!("数学表达式解析失败: {error}"))
+}
+
+#[derive(Clone, Copy)]
+enum RecursionToken {
+    Open,
+    Close,
+    Descend,
+    Sign,
+    Boundary,
+    Value,
+}
+
+fn ensure_parser_depth(
+    input: &str,
+    format: MathInputFormat,
+    depth: usize,
+) -> Result<(), MathError> {
+    match format {
+        MathInputFormat::Plain => {
+            let tokens = mathlex::parser::tokenize(input).map_err(parser_error)?;
+            check_parser_depth(
+                tokens.iter().map(|token| match token.value {
+                    Token::LParen | Token::LBracket | Token::LBrace => RecursionToken::Open,
+                    Token::RParen | Token::RBracket | Token::RBrace => RecursionToken::Close,
+                    Token::Caret | Token::DoubleStar | Token::Sqrt | Token::Not => {
+                        RecursionToken::Descend
+                    }
+                    Token::Plus | Token::Minus => RecursionToken::Sign,
+                    Token::Star
+                    | Token::Slash
+                    | Token::Percent
+                    | Token::Comma
+                    | Token::Semicolon => RecursionToken::Boundary,
+                    _ => RecursionToken::Value,
+                }),
+                depth,
+            )
+        }
+        MathInputFormat::Latex => {
+            let tokens = mathlex::parser::tokenize_latex(input).map_err(parser_error)?;
+            check_parser_depth(
+                tokens.iter().map(|(token, _)| match token {
+                    LatexToken::LParen
+                    | LatexToken::LBracket
+                    | LatexToken::LBrace
+                    | LatexToken::BeginEnv(_) => RecursionToken::Open,
+                    LatexToken::RParen
+                    | LatexToken::RBracket
+                    | LatexToken::RBrace
+                    | LatexToken::EndEnv(_) => RecursionToken::Close,
+                    LatexToken::Caret | LatexToken::Underscore | LatexToken::Lnot => {
+                        RecursionToken::Descend
+                    }
+                    LatexToken::Command(command)
+                        if matches!(command.as_str(), "cdot" | "times" | "div" | "pm" | "mp") =>
+                    {
+                        RecursionToken::Boundary
+                    }
+                    // Commands may take unbraced arguments and recurse without delimiters.
+                    LatexToken::Command(_) => RecursionToken::Descend,
+                    LatexToken::Plus | LatexToken::Minus => RecursionToken::Sign,
+                    LatexToken::Star
+                    | LatexToken::Slash
+                    | LatexToken::Comma
+                    | LatexToken::Cdot
+                    | LatexToken::Cross => RecursionToken::Boundary,
+                    _ => RecursionToken::Value,
+                }),
+                depth,
+            )
+        }
+    }
+}
+
+fn check_parser_depth(
+    tokens: impl IntoIterator<Item = RecursionToken>,
+    initial_depth: usize,
+) -> Result<(), MathError> {
+    let mut groups = Vec::new();
+    let mut depth = initial_depth;
+    let mut expects_operand = true;
+    for token in tokens {
+        match token {
+            RecursionToken::Open => {
+                groups.push(depth);
+                ensure_depth(initial_depth + groups.len())?;
+                depth += 1;
+                expects_operand = true;
             }
-            character if character.is_whitespace() => {}
-            _ => signs = 0,
+            RecursionToken::Close => {
+                depth = groups.pop().unwrap_or(initial_depth);
+                expects_operand = false;
+            }
+            RecursionToken::Descend => {
+                depth += 1;
+                expects_operand = true;
+            }
+            RecursionToken::Sign if expects_operand => depth += 1,
+            RecursionToken::Sign | RecursionToken::Boundary => {
+                depth = groups.last().map_or(initial_depth, |depth| depth + 1);
+                expects_operand = true;
+            }
+            RecursionToken::Value => expects_operand = false,
+        }
+        if depth > MAX_PARSER_DEPTH {
+            return Err(MathError::new(
+                MathErrorKind::DepthLimit,
+                format!("数学输入递归嵌套不能超过 {MAX_PARSER_DEPTH}"),
+            ));
         }
     }
     Ok(())
@@ -851,6 +953,50 @@ mod tests {
         assert_eq!(error.kind, MathErrorKind::DepthLimit);
         let at_limit = format!("{}1", "-".repeat(MAX_DEPTH - 1));
         assert!(parse_expression(&at_limit, ParseOptions::plain(&[])).is_ok());
+    }
+
+    #[test]
+    fn bounds_group_nesting_before_recursive_parsing() {
+        for format in [MathInputFormat::Plain, MathInputFormat::Latex] {
+            let options = ParseOptions {
+                format,
+                known_symbols: &[],
+            };
+            let nested = |groups| format!("{}1{}", "(".repeat(groups), ")".repeat(groups));
+            let error = parse_expression(&nested(1000), options).unwrap_err();
+            assert_eq!(error.kind, MathErrorKind::DepthLimit);
+            assert_eq!(
+                parse_expression(&nested(MAX_DEPTH - 1), options).unwrap(),
+                MathExpr::Number(1.0)
+            );
+        }
+    }
+
+    #[test]
+    fn bounds_power_recursion_without_counting_independent_branches() {
+        for operator in ["^", "**"] {
+            let input = std::iter::repeat_n("1", 1000)
+                .collect::<Vec<_>>()
+                .join(operator);
+            let error = parse_expression(&input, ParseOptions::plain(&[])).unwrap_err();
+            assert_eq!(error.kind, MathErrorKind::DepthLimit);
+        }
+        let braced = |powers| format!("{}1{}", "1^{".repeat(powers), "}".repeat(powers));
+        let error = parse_expression(&braced(1000), ParseOptions::latex(&[])).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::DepthLimit);
+        assert!(parse_expression(&braced(MAX_DEPTH - 1), ParseOptions::latex(&[])).is_ok());
+
+        fn balanced_powers(terms: usize) -> String {
+            if terms == 1 {
+                return "1e-3^2".into();
+            }
+            format!(
+                "({}+{})",
+                balanced_powers(terms / 2),
+                balanced_powers(terms - terms / 2)
+            )
+        }
+        assert!(parse_expression(&balanced_powers(64), ParseOptions::plain(&[])).is_ok());
     }
 
     #[test]
