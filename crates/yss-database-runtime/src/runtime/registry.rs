@@ -284,7 +284,6 @@ impl DatabaseSessionRuntime {
         Ok((
             DatabaseOperationLease {
                 runtime: Arc::clone(self),
-                active: true,
             },
             snapshot,
         ))
@@ -327,7 +326,6 @@ impl DatabaseSessionRuntime {
         drop(state);
         Ok(DatabaseOperationLease {
             runtime: Arc::clone(self),
-            active: true,
         })
     }
 
@@ -650,10 +648,7 @@ impl DatabaseSessionRuntime {
 
 impl Drop for DatabaseOperationLease {
     fn drop(&mut self) {
-        if self.active {
-            self.active = false;
-            self.runtime.release_operation_lease();
-        }
+        self.runtime.release_operation_lease();
     }
 }
 

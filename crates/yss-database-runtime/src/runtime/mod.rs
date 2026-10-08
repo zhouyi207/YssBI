@@ -158,14 +158,12 @@ impl DatabaseOutstandingWork {
 #[must_use = "database operation leases are released when this guard is dropped"]
 pub struct DatabaseOperationLease {
     pub(crate) runtime: Arc<DatabaseSessionRuntime>,
-    pub(crate) active: bool,
 }
 
 impl fmt::Debug for DatabaseOperationLease {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("DatabaseOperationLease")
-            .field("active", &self.active)
             .finish_non_exhaustive()
     }
 }
