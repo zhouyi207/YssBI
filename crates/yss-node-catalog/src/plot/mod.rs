@@ -29,7 +29,6 @@ enum PlotInputs {
 #[derive(Clone, Copy)]
 struct PlotSpec {
     id: &'static str,
-    kernel: &'static str,
     en: &'static str,
     zh: &'static str,
     aliases: &'static [&'static str],
@@ -40,7 +39,6 @@ struct PlotSpec {
 const SPECS: &[PlotSpec] = &[
     PlotSpec {
         id: "yssbi.plot.scatter.view",
-        kernel: "yssbi.plot.scatter.view",
         en: "Scatter Plot",
         zh: "散点图",
         aliases: &["scatterplot", "XY plot", "points"],
@@ -49,7 +47,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.line.view",
-        kernel: "yssbi.plot.line.view",
         en: "Line Plot",
         zh: "折线图",
         aliases: &["line chart", "time series plot", "curve"],
@@ -58,7 +55,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.ecdf.view",
-        kernel: "yssbi.plot.ecdf.view",
         en: "Empirical CDF",
         zh: "经验累积分布图",
         aliases: &["ECDF", "empirical cumulative distribution function", "CDF"],
@@ -67,7 +63,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.kde.view",
-        kernel: "yssbi.plot.kde.view",
         en: "Kernel Density Estimate",
         zh: "核密度估计图",
         aliases: &[
@@ -81,7 +76,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.histogram.view",
-        kernel: "yssbi.plot.histogram.view",
         en: "Histogram",
         zh: "直方图",
         aliases: &["frequency distribution", "bins", "Sturges rule"],
@@ -90,7 +84,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.correlation.view",
-        kernel: "yssbi.plot.correlation.view",
         en: "Correlation Plot",
         zh: "相关性图",
         aliases: &[
@@ -104,7 +97,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.correlogram.view",
-        kernel: "yssbi.plot.correlogram.view",
         en: "Correlogram (ACF & PACF)",
         zh: "相关图（ACF 与 PACF）",
         aliases: &["correlogram", "ACF", "PACF", "Ljung-Box", "autocorrelation"],
@@ -113,7 +105,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.boxplot.view",
-        kernel: "yssbi.plot.boxplot.view",
         en: "Box Plot",
         zh: "箱线图",
         aliases: &["boxplot", "box-and-whisker"],
@@ -122,7 +113,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.wordcloud.view",
-        kernel: "yssbi.plot.wordcloud.view",
         en: "Word Cloud",
         zh: "词云",
         aliases: &["word cloud", "term frequency"],
@@ -131,7 +121,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.errorbar.view",
-        kernel: "yssbi.plot.errorbar.view",
         en: "Error Bar Plot",
         zh: "误差线图",
         aliases: &["error bars", "intervals"],
@@ -140,7 +129,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.pp_qq.view",
-        kernel: "yssbi.plot.pp_qq.view",
         en: "P-P / Q-Q Plot",
         zh: "P-P/Q-Q图",
         aliases: &["probability plot", "quantile plot"],
@@ -149,7 +137,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.roc.view",
-        kernel: "yssbi.plot.roc.view",
         en: "ROC Curve",
         zh: "ROC曲线",
         aliases: &["ROC", "AUC", "receiver operating characteristic"],
@@ -158,7 +145,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.quadrant.view",
-        kernel: "yssbi.plot.quadrant.view",
         en: "Quadrant Plot",
         zh: "象限图",
         aliases: &["quadrant chart"],
@@ -167,7 +153,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.pareto.view",
-        kernel: "yssbi.plot.pareto.view",
         en: "Pareto Chart",
         zh: "帕累托图",
         aliases: &["Pareto", "cumulative frequency"],
@@ -176,7 +161,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.combination.view",
-        kernel: "yssbi.plot.combination.view",
         en: "Combination Chart",
         zh: "组合图",
         aliases: &["combo chart", "bar and line"],
@@ -185,7 +169,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.bubble.view",
-        kernel: "yssbi.plot.bubble.view",
         en: "Bubble Chart",
         zh: "气泡图",
         aliases: &["bubble plot", "size"],
@@ -194,7 +177,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.violin.view",
-        kernel: "yssbi.plot.violin.view",
         en: "Violin Plot",
         zh: "小提琴图",
         aliases: &["violin plot", "distribution"],
@@ -203,7 +185,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.heatmap.view",
-        kernel: "yssbi.plot.heatmap.view",
         en: "Heatmap",
         zh: "热力图",
         aliases: &["heat map", "matrix"],
@@ -212,7 +193,6 @@ const SPECS: &[PlotSpec] = &[
     },
     PlotSpec {
         id: "yssbi.plot.coefficient.view",
-        kernel: "yssbi.plot.coefficient.view",
         en: "Coefficient Plot",
         zh: "系数图",
         aliases: &["coefficient plot", "coefplot", "confidence intervals"],
@@ -296,7 +276,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     }];
     for spec in SPECS {
         add_messages(&mut messages, spec);
-        nodes.push(leaf(protocol(spec)?, spec.kernel));
+        nodes.push(leaf(protocol(spec)?, spec.id));
     }
     let fragment = ProviderFragment {
         categories,
@@ -322,7 +302,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
-                None,
             )?);
             ports.push(data_port(
                 "y",
@@ -330,7 +309,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
-                None,
             )?);
         }
         PlotInputs::NumericSeries => ports.push(data_port(
@@ -339,7 +317,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Input,
             numeric_data_series_type(),
             PortCardinality::Declared,
-            None,
         )?),
         PlotInputs::CorrelationSeries => ports.push(data_port(
             "series",
@@ -350,7 +327,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 min: 2,
                 max: Some(64),
             },
-            None,
         )?),
         PlotInputs::Correlogram => {
             ports.push(data_port(
@@ -359,7 +335,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
-                None,
             )?);
         }
         PlotInputs::Groups => ports.push(data_port(
@@ -371,7 +346,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 min: 1,
                 max: Some(64),
             },
-            None,
         )?),
         PlotInputs::Words | PlotInputs::Categories => ports.push(data_port(
             if matches!(spec.inputs, PlotInputs::Words) {
@@ -383,7 +357,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Input,
             data_series_type(concrete("core.text")?),
             PortCardinality::Declared,
-            None,
         )?),
         PlotInputs::ErrorBars => {
             for (key, title) in [
@@ -398,7 +371,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                     PortDirection::Input,
                     numeric_data_series_type(),
                     PortCardinality::Declared,
-                    None,
                 )?);
             }
         }
@@ -409,7 +381,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 data_series_type(concrete("core.binary")?),
                 PortCardinality::Declared,
-                None,
             )?);
             ports.push(data_port(
                 "scores",
@@ -417,7 +388,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
-                None,
             )?);
         }
         PlotInputs::Combination => {
@@ -427,7 +397,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 data_series_type(concrete("core.text")?),
                 PortCardinality::Declared,
-                None,
             )?);
             for (key, title) in [("bars", "Bars"), ("line", "Line")] {
                 ports.push(data_port(
@@ -436,7 +405,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                     PortDirection::Input,
                     numeric_data_series_type(),
                     PortCardinality::Declared,
-                    None,
                 )?);
             }
         }
@@ -448,7 +416,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                     PortDirection::Input,
                     numeric_data_series_type(),
                     PortCardinality::Declared,
-                    None,
                 )?);
             }
         }
@@ -458,7 +425,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Input,
             concrete("statistics.model.linear")?,
             PortCardinality::Declared,
-            None,
         )?),
     }
     ports.push(data_port(
@@ -467,7 +433,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         PortDirection::Output,
         concrete("plot.data")?,
         PortCardinality::Declared,
-        None,
     )?);
     Ok(NodeProtocol {
         type_id: node_id(spec.id)?,
@@ -601,7 +566,6 @@ fn data_port(
     direction: PortDirection,
     value_type: TypeExpr,
     cardinality: PortCardinality,
-    default_value: Option<TypedValue>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
@@ -612,7 +576,7 @@ fn data_port(
         connections: crate::data_connections(direction),
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Allowed,
-            default_value,
+            default_value: None,
         }),
         consumption: (direction == PortDirection::Input)
             .then_some(InputConsumption::FullyMaterialized),

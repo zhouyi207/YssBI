@@ -83,7 +83,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
 
 fn registered_node(spec: &NodeSpec) -> Result<RegisteredNode, BuiltinAssemblyError> {
     let protocol = protocol(spec)?;
-    Ok(leaf(protocol, spec.kernel))
+    Ok(leaf(protocol, spec.id))
 }
 
 fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {

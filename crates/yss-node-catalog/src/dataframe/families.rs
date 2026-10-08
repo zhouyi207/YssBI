@@ -43,7 +43,6 @@ pub(super) struct NodeSpec {
     pub aliases: &'static [&'static str],
     pub zh_aliases: &'static [&'static str],
     pub interface: InterfaceKind,
-    pub kernel: &'static str,
 }
 
 pub(super) const NODES: &[NodeSpec] = &[
@@ -325,6 +324,5 @@ const fn spec(
         aliases,
         zh_aliases,
         interface,
-        kernel: id,
     }
 }
