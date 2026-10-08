@@ -630,6 +630,72 @@ fn weighted_graph_inputs_reach_the_shared_report_query() {
 }
 
 #[test]
+fn residual_ranges_keep_population_highlights_and_original_observations() {
+    let (app, reference, _) = fixture_with_options(
+        48,
+        "OLS",
+        LinearSummaryOptions {
+            residual_plot: true,
+            ..Default::default()
+        },
+    );
+    let read = |x_range, max_points| {
+        let ResultAnalysisProjection::ResidualPlot(value) = app
+            .analyze_result(
+                reference,
+                ResultAnalysisRequest::ResidualPlot {
+                    max_points,
+                    x_range,
+                    adjacent: false,
+                    highlight_top_percent: Some(25.),
+                },
+            )
+            .unwrap()
+        else {
+            panic!("expected residual plot")
+        };
+        value
+    };
+    let full = read(None, 100);
+    assert_eq!(full.points.iter().filter(|p| p.highlighted).count(), 12);
+    let [a, b] = [full.points[12].x, full.points[35].x];
+    let range = [a.min(b), a.max(b)];
+    let matching = full
+        .points
+        .iter()
+        .filter(|p| p.x >= range[0] && p.x <= range[1])
+        .collect::<Vec<_>>();
+    assert!(matching.len() > 5);
+    let filtered = read(Some(range), 5);
+    assert_eq!(filtered.total_count, 48);
+    assert_eq!(filtered.matched_count, matching.len());
+    assert_eq!(filtered.points.len(), 5);
+    assert!(filtered.sampled);
+    assert_eq!(
+        filtered.points.first().unwrap().observation,
+        matching.first().unwrap().observation
+    );
+    assert_eq!(
+        filtered.points.last().unwrap().observation,
+        matching.last().unwrap().observation
+    );
+    for point in &filtered.points {
+        let original = matching
+            .iter()
+            .find(|p| p.observation == point.observation)
+            .unwrap();
+        assert_eq!(
+            (point.x, point.y, point.highlighted),
+            (original.x, original.y, original.highlighted)
+        );
+    }
+    let empty = read(Some([b.max(a) + 1000., b.max(a) + 1001.]), 5);
+    assert_eq!(empty.matched_count, 0);
+    assert!(empty.points.is_empty());
+    assert!(!empty.sampled);
+}
+
+#[test]
 fn diagnostic_queries_return_computed_tests_and_highlight_complete_population() {
     let (app, reference, fit) = fixture_with_options(
         48,

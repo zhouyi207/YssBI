@@ -1,7 +1,9 @@
 //! Report entities retain local presentation state under the result panel's lease.
+mod analysis;
 mod display;
 mod linear;
 mod page;
+mod residual;
 mod section;
 
 use std::sync::Arc;
@@ -61,7 +63,7 @@ impl ReportView {
                 services,
                 reference,
                 Title::Key("reportSections.structuredResult"),
-                Source::Value(value, 0),
+                Source::Value(value),
                 open,
             )
         }));

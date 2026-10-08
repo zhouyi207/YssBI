@@ -15,6 +15,16 @@ impl CartesianPlot {
         let reference_color = cx.theme().muted_foreground;
         let (x, y) = (self.data.x, self.data.y);
         let (width, height) = (chart.size.width.as_f32(), chart.size.height.as_f32());
+        if self.data.zero_line {
+            let baseline = self.data.position(&PlotPoint { x: 0., y: 0. }, chart).y;
+            super::super::frame::line(
+                point(chart.origin.x, baseline),
+                point(chart.right(), baseline),
+                1.,
+                reference_color,
+                window,
+            );
+        }
         let caches = PathCaches::for_paint(self.id.clone(), window, cx);
         caches.update(cx, |caches, _| {
             for (index, reference) in self.data.reference_lines.iter().enumerate() {
@@ -69,22 +79,35 @@ impl CartesianPlot {
             }
         });
         if self.data.kind == CartesianKind::Scatter {
-            for (index, datum) in self.data.result.data.iter().enumerate() {
-                let radius = px(self.data.radius(index));
-                if radius <= px(0.) {
-                    continue;
+            // Draw highlighted observations last so overlaps cannot hide them.
+            for highlighted in [false, true] {
+                if highlighted && self.data.observations.is_none() {
+                    break;
                 }
-                let position = self.data.position(datum, chart);
-                window.paint_quad(
-                    fill(
-                        Bounds::new(
-                            position - point(radius, radius),
-                            size(radius * 2., radius * 2.),
-                        ),
-                        color.opacity(0.7),
-                    )
-                    .corner_radii(radius),
-                );
+                for (index, datum) in self.data.result.data.iter().enumerate() {
+                    if self.data.highlighted(index) != highlighted {
+                        continue;
+                    }
+                    let radius = px(self.data.radius(index));
+                    if radius <= px(0.) {
+                        continue;
+                    }
+                    let position = self.data.position(datum, chart);
+                    window.paint_quad(
+                        fill(
+                            Bounds::new(
+                                position - point(radius, radius),
+                                size(radius * 2., radius * 2.),
+                            ),
+                            if highlighted {
+                                cx.theme().warning
+                            } else {
+                                color.opacity(0.7)
+                            },
+                        )
+                        .corner_radii(radius),
+                    );
+                }
             }
         }
     }

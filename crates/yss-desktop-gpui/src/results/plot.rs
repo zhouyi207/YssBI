@@ -85,6 +85,7 @@ impl PlotData {
                     } else {
                         plot.y_domain
                     },
+                    ..CartesianOptions::new(kind)
                 };
                 Self {
                     geometry: Geometry::Cartesian(Arc::new(CartesianData::new(

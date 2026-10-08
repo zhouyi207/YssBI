@@ -2680,7 +2680,6 @@
       "mapping": "变量映射",
       "significantCount": "本页显著系数：{{count}} / {{total}}",
       "significance": "显著性：*** p < 0.001，** p < 0.01，* p < 0.05，. p < 0.1",
-      "pendingAnalyses": "所选诊断与检验章节暂不可显示。",
       "emptySelection": "本次执行未选择报告内容，请修改 Summary 节点配置后重新执行。",
       "metrics": {
         "modelType": "模型",
@@ -2716,7 +2715,38 @@
         "Residual": "残差",
         "Total": "总计"
       },
-      "emptyCoefficients": "此模型没有可展示的系数。"
+      "emptyCoefficients": "此模型没有可展示的系数。",
+      "observation": "观测序号",
+      "highLeverage": "高杠杆值",
+      "unavailableTitle": "{{name}} · 不可用",
+      "unavailableReason": "不可用：{{reason}}",
+      "analysisFailed": "分析读取失败或数据格式无效；已显示的结果保持不变。",
+      "observationsCount": "观测数：{{count}}",
+      "leverageDensity": "杠杆值密度",
+      "leverage": "杠杆值",
+      "density": "密度",
+      "bg": "Breusch–Godfrey LM 检验",
+      "ljungBox": "Ljung–Box Q 检验",
+      "dw": "Durbin–Watson 检验",
+      "nullHypothesis": "H₀ 原假设",
+      "alternativeHypothesis": "H₁ 备择假设",
+      "tStatistic": "t 统计量",
+      "degreesOfFreedom": "自由度：{{first}}，{{second}}",
+      "adjacentResiduals": "残差与上一残差",
+      "fittedResiduals": "残差与拟合值",
+      "highlightPercent": "高亮杠杆值前 (%)",
+      "applyHighlight": "应用高亮",
+      "minX": "横轴最小值",
+      "maxX": "横轴最大值",
+      "applyRange": "应用范围",
+      "resetRange": "重置范围",
+      "sampledResiduals": "显示 {{shown}} 个抽样观测 · 匹配 {{matched}} 个 · 总计 {{total}} 个",
+      "residualCount": "显示 {{shown}} 个观测 · 匹配 {{matched}} 个 · 总计 {{total}} 个",
+      "noLeverage": "此模型不支持杠杆值高亮。",
+      "previousResidual": "上一残差",
+      "fitted": "拟合值",
+      "residual": "残差",
+      "noMatchingObservations": "当前范围内没有匹配的观测。"
     }
   }
 }

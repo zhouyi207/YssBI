@@ -6,12 +6,12 @@ use yss_relational_contract::RelationColumn;
 use yss_sci_contract::regression::linear::LinearRegressionResult;
 use yss_sci_contract::regression::report::LinearModelSummary;
 use yss_sci_contract::regression::summary::LinearSummaryOptions;
-use yss_sci_contract::time_series::acf_pacf::AcfPacfResult;
+pub use yss_sci_contract::time_series::acf_pacf::AcfPacfResult;
 
 use super::{MAX_RESULT_PAGE_ROWS, ResultPageKind, ResultPageProjection};
 use crate::session::{ApplicationState, SessionCaptureError};
-use yss_sci_contract::diagnostics::serial_correlation::SerialTestsOutput;
-use yss_sci_contract::hypothesis::HypothesisTestOutput;
+pub use yss_sci_contract::diagnostics::serial_correlation::SerialTestsOutput;
+pub use yss_sci_contract::hypothesis::HypothesisTestOutput;
 
 pub mod coefficients;
 pub mod presentation;

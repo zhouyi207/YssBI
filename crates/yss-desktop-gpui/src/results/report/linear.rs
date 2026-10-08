@@ -13,6 +13,7 @@ use yss_application::graph::results::report::{
 };
 
 use super::{
+    analysis::AnalysisKind,
     page::PageSource,
     section::{Section, Source, Title},
 };
@@ -24,7 +25,7 @@ pub(super) struct LinearReport {
     services: Arc<NativeServices>,
     report: LinearRegressionReportProjection,
     presentation: BTreeMap<&'static str, DisplayData>,
-    observations: Option<Entity<Section>>,
+    sections: Vec<Entity<Section>>,
     coefficients: Option<Arc<LinearCoefficientPage>>,
     equation: Option<equation::EquationData>,
     table: Option<Entity<TableState<ResultGrid>>>,
@@ -45,23 +46,65 @@ impl LinearReport {
         report: LinearRegressionReportProjection,
         cx: &mut Context<Self>,
     ) -> Self {
-        let observations = report.summary.observations.then(|| {
+        let selected = &report.summary;
+        let sections = [
+            (
+                selected.hypothesis_test,
+                "reportSections.hypothesisTest",
+                Source::Analysis(AnalysisKind::Hypothesis),
+                true,
+            ),
+            (
+                selected.diagnostics,
+                "reportSections.diagnosticTests",
+                Source::Analysis(AnalysisKind::Diagnostics),
+                false,
+            ),
+            (
+                selected.residual_plot,
+                "reportSections.residualPlot",
+                Source::Residual,
+                false,
+            ),
+            (
+                selected.observations,
+                "reportSections.observations",
+                Source::Page(PageSource::Observations),
+                false,
+            ),
+            (
+                selected.acf_pacf,
+                "reportSections.acfPacf",
+                Source::Analysis(AnalysisKind::AcfPacf),
+                true,
+            ),
+            (
+                selected.serial_tests,
+                "reportSections.serialTests",
+                Source::Analysis(AnalysisKind::SerialTests),
+                true,
+            ),
+        ]
+        .into_iter()
+        .filter(|(enabled, ..)| *enabled)
+        .map(|(_, key, source, open)| {
             cx.new(|_| {
                 Section::new(
                     services.clone(),
                     report.reference,
-                    Title::Key("reportSections.observations"),
-                    Source::Page(PageSource::Observations),
-                    false,
+                    Title::Key(key),
+                    source,
+                    open,
                 )
             })
-        });
+        })
+        .collect();
         let presentation = presentation::data(&report.model, report.condition_number);
         Self {
             services,
             report,
             presentation,
-            observations,
+            sections,
             coefficients: None,
             equation: None,
             table: None,
@@ -80,14 +123,5 @@ impl LinearReport {
     fn has_coefficients(&self) -> bool {
         let selected = &self.report.summary;
         selected.equation || selected.coefficient_table || selected.coefficient_chart
-    }
-
-    fn pending_analyses(&self) -> bool {
-        let selected = &self.report.summary;
-        selected.diagnostics
-            || selected.residual_plot
-            || selected.acf_pacf
-            || selected.serial_tests
-            || selected.hypothesis_test
     }
 }

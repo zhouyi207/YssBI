@@ -142,6 +142,18 @@
 - 样例窗口核对了含/不含截距的方程、映射、摘要、ANOVA、系数表与正负条形布局；完整真实结果交互与自动重绘验收仍开放。诊断、残差图、ACF/PACF、序列/假设检验及追加内容是后续独立批次。
 
 
+### 线性报告诊断与分析
+
+- 已逐项核对 LinearRegressionReport 的诊断/残差分支、ACFPACFBlock、SerialTestsBlock、HypothesisTestBlock 及报告使用的 Scatter/KDE/Correlogram 选项；AddReportContents 仍单独待迁移。
+- 原生章节直接读取已有 Application 分析接口，统计结果类型复用原 SCI 合约；诊断数组共用 100 行分页与虚拟表格，展开才准备页面，不新建统计或租约 owner。
+- 残差明确应用有限横轴范围和 0–100% 高亮比例，模式切换重置范围，相同选择复用已读结果；最多 2000 点、原观测编号、全样本排名与抽样计数由 Application 保留。
+- 共享绘制补齐零线、对称残差轴、高亮点和杠杆值密度的零起点；ACF/PACF 保留原置信带与滞后编号。检验卡片展示原值，假设文本保留原约束并可复制。
+- 隔离提交的 `cargo test -p yss-application --lib graph::results::report::tests::` 运行 8 项通过；本批新增一项保护范围筛选/抽样后的原观测编号、全样本高亮排名、匹配数量与空范围。
+- `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在隔离提交均通过。16 个改动 Rust 文件格式、64 个引用文案键、31 项新增中英文参数、本批三份文档的 287 条本地链接、模块索引及 `git diff --check` 通过。
+- 临时 `cargo build -p yss-desktop-gpui --example linear_analysis_review` 样例窗口目视核对高亮残差、三项序列检验、假设、ACF/PACF，以及 205 行诊断首页、空值、不可用原因与密度曲线。样例不代表真实服务或按钮交互验收；临时源文件提交前移除。
+- 完整真实结果交互、自动重绘、悬浮、筛选及生命周期验收继续开放，步骤见 GPUI README；未添加 UI 单元测试或新依赖。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -445,13 +457,13 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/results/internal/ui/info/AddReportContents.tsx](../../react/src/modules/results/internal/ui/info/AddReportContents.tsx) | 迁移：追加报告内容 | 已阅读选项、滞后阶数、假设与失败保留流程；需复用原 Summary 编辑和执行 owner | 待迁移 |
-| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节 | 方程、模型摘要、ANOVA、条件数、共享系数表/图及观测分页已接入；诊断分析与追加流程仍待迁移 | 基础章节已覆盖；分析与人工验收待完成 |
-| [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 迁移：类型化报告入口 | 结构化与线性报告沿用同一面板租约；数值/报告切换保留局部状态 | 代码已覆盖；线性分析仍待迁移 |
+| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节 | 方程、摘要、ANOVA、系数/观测页及全部选中分析已接入；追加内容流程仍待迁移 | 读取章节已覆盖；追加流程与人工验收待完成 |
+| [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 迁移：类型化报告入口 | 结构化与线性报告沿用同一面板租约；数值/报告切换保留局部状态 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/StructuredReportTable.tsx](../../react/src/modules/results/internal/ui/info/StructuredReportTable.tsx) | 迁移：声明表格与稳定性图 | Application 校验全部声明和行；原生共享表格、单位圆、当前页提示、分页与重试 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/StructuredResult.tsx](../../react/src/modules/results/internal/ui/info/StructuredResult.tsx) | 迁移：结构化报告 | 原方程文本、声明章节和结构化原值；嵌套数组按原路径读取，不复制统计逻辑 | 代码已覆盖；人工验收待完成 |
-| [modules/results/internal/ui/info/shared/ACFPACFBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/ACFPACFBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/info/shared/SerialTestsBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/SerialTestsBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/results/internal/ui/info/shared/ACFPACFBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/ACFPACFBlock.tsx) | 迁移/复用：报告与结果共享 correlogram | 首次展开读取原 ACF/PACF；分别从滞后 0/1 开始，保留置信带与观测数 | 代码已覆盖；真实结果验收待完成 |
+| [modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx) | 迁移：类型化检验与原约束文本 | 原 H₀/H₁ 支持复制，t/F、自由度及微小 p 值沿用原结果；不按变量名重写公式 | 代码已覆盖；真实结果验收待完成 |
+| [modules/results/internal/ui/info/shared/SerialTestsBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/SerialTestsBlock.tsx) | 迁移：原生统计卡片 | BG、Ljung–Box 与 DW 直接显示原统计量、滞后和概率，章节共享懒加载及重试 | 代码已覆盖；真实结果验收待完成 |
 | [modules/results/internal/ui/panel/ResultContent.tsx](../../react/src/modules/results/internal/ui/panel/ResultContent.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/results/internal/ui/panel/ResultInspector.tsx](../../react/src/modules/results/internal/ui/panel/ResultInspector.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/results/internal/ui/panel/ResultPanel.tsx](../../react/src/modules/results/internal/ui/panel/ResultPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -507,17 +519,17 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [shared/charts/ChartRenderer.tsx](../../react/src/shared/charts/ChartRenderer.tsx) | 迁移：共享 plots 按已验证类别分流，原生图形复用同一绘制 | 二十类 PlotData 结果已有共享绘制；报告的高亮/残差轴等专用选项仍随报告消费者审查 | 结果类别已覆盖；报告专用呈现及真实结果验收开放 |
+| [shared/charts/ChartRenderer.tsx](../../react/src/shared/charts/ChartRenderer.tsx) | 迁移：共享 plots 按已验证类别分流 | 二十类 PlotData 与报告专用高亮、对称残差轴、零线及密度横轴已接入 | 代码已覆盖；真实结果验收开放 |
 | [shared/charts/cartesian/CompositeChart.tsx](../../react/src/shared/charts/cartesian/CompositeChart.tsx) | 迁移/优化：帕累托与组合图共用原数据、Frame 轴和缓存曲线 | plots/composite 保留双轴/共轴、负柱、重复标签；帕累托每页 100 项，0–100% 轴及全样本累计不随页重算 | 代码已覆盖；真实结果与翻页验收待完成 |
 | [shared/charts/cartesian/EcdfChart.tsx](../../react/src/shared/charts/cartesian/EcdfChart.tsx) | 迁移：复用 StepAfter 曲线，累计值直接来自 Rust | plots/cartesian 从零基线绘制，Y 轴固定 [0,1]，保留点序和重复 X | 代码已覆盖；人工验收待完成 |
 | [shared/charts/cartesian/HistogramChart.tsx](../../react/src/shared/charts/cartesian/HistogramChart.tsx) | 迁移/优化：复用 BarChart；当前无生产调用的 compact 分支不单独迁移 | plots/histogram 共用原分箱次序与计数，重复标签按序号区分，悬浮计数保留精确整数 | 代码已覆盖；人工验收待完成 |
-| [shared/charts/cartesian/KdeChart.tsx](../../react/src/shared/charts/cartesian/KdeChart.tsx) | 分批迁移：复用 Area/Line，不在 GUI 估计密度 | 节点结果已绘制零基线面积与曲线；报告 Leverage 的 xMin 配置随报告迁移 | 部分完成；报告消费者开放 |
+| [shared/charts/cartesian/KdeChart.tsx](../../react/src/shared/charts/cartesian/KdeChart.tsx) | 迁移/复用：Area/Line，不在 GUI 估计密度 | 节点与报告共用零基线面积、曲线缓存；杠杆值横轴从零开始 | 代码已覆盖；真实结果验收待完成 |
 | [shared/charts/cartesian/LineChart.tsx](../../react/src/shared/charts/cartesian/LineChart.tsx) | 迁移/优化：复用组件 Line 与路径缓存，不重算后端点 | plots/cartesian 支持参考线、显式坐标、日期格式和点开关；独立图表与结果共用 | 代码已覆盖；人工验收待完成 |
-| [shared/charts/cartesian/ScatterChart.tsx](../../react/src/shared/charts/cartesian/ScatterChart.tsx) | 分批迁移：共享坐标与主题，保持参考线和气泡面积语义 | 已接入结果散点、气泡、象限、概率图与下降轴；报告高亮/对称残差轴留待报告批次 | 部分完成；报告专用样式开放 |
+| [shared/charts/cartesian/ScatterChart.tsx](../../react/src/shared/charts/cartesian/ScatterChart.tsx) | 迁移/复用：共享坐标、主题与原观测信息 | 结果散点/气泡/象限/概率图与报告残差共用绘制；保留高亮、对称轴、零线和观测编号 | 代码已覆盖；真实结果验收待完成 |
 | [shared/charts/categorical/WordCloudChart.tsx](../../react/src/shared/charts/categorical/WordCloudChart.tsx) | 迁移/优化：使用 GPUI 原生字体测量，复用 Plot 的悬浮与布局状态 | plots/wordcloud 按数据/尺寸/字体缓存螺旋排布，保留原词序、频次与中文；主题变化重新着色，实际排下词数单独呈现 | 代码已覆盖；真实结果、缩放及悬浮验收待完成 |
 | [shared/charts/core/theme.tsx](../../react/src/shared/charts/core/theme.tsx) | 复用原生主题：颜色随原窗口主题读取，不另存 Context 状态 | plots 与原生组件共享主题、网格、标签和曲线颜色 | 代码已覆盖；人工验收待完成 |
 | [shared/charts/statistical/CorrelationMatrixChart.tsx](../../react/src/shared/charts/statistical/CorrelationMatrixChart.tsx) | 迁移：复用 PlotAxis/PlotLabel 与现有混色，行列身份用原位置 | plots/matrix 保留方阵、空系数/空 p、重复标签和固定 [-1,1] 色阶；悬浮给出完整标签/原值 | 代码已覆盖；真实结果验收待完成 |
-| [shared/charts/statistical/CorrelogramChart.tsx](../../react/src/shared/charts/statistical/CorrelogramChart.tsx) | 迁移：只绘制原 ACF/PACF，不重算置信带或 Ljung–Box | plots/correlogram 保留正负柱、零线、置信区及 Q/p，结果面板分上下两图；报告消费者仍待接入 | 代码已覆盖；报告接入及真实结果验收开放 |
+| [shared/charts/statistical/CorrelogramChart.tsx](../../react/src/shared/charts/statistical/CorrelogramChart.tsx) | 迁移/复用：只绘制原 ACF/PACF | 报告与结果面板共享正负柱、零线和原置信区；Q/p 悬浮仍按原结果提供 | 代码已覆盖；真实结果验收待完成 |
 | [shared/charts/statistical/DistributionChart.tsx](../../react/src/shared/charts/statistical/DistributionChart.tsx) | 迁移：箱线/小提琴共用原分位数与像素轴，轮廓复用 PathCaches | plots/distribution 保留须线/中位数、原异常点/总数、分组标签与后端密度；渲染不排序样本或计算密度 | 代码已覆盖；真实结果验收待完成 |
 | [shared/charts/statistical/HeatmapChart.tsx](../../react/src/shared/charts/statistical/HeatmapChart.tsx) | 迁移/优化：矩阵与相关图共用绘制和悬浮，范围只准备一次 | plots/matrix 保留采样行号、重复列名、原值及最小/最大色阶；标签按空间稀疏展示，单元格不截断 | 代码已覆盖；真实结果验收待完成 |
 | [shared/charts/statistical/IntervalChart.tsx](../../react/src/shared/charts/statistical/IntervalChart.tsx) | 迁移/优化：误差线和系数复用区间绘制，系数范围按页提前准备 | plots/interval 显示原估计/上下界与系数零线；results/plot 每页 100 项，翻页更换悬浮身份 | 代码已覆盖；真实结果验收待完成 |

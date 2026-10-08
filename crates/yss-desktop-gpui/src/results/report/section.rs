@@ -12,18 +12,26 @@ use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
 
 use super::page::{PageSource, ReportPage};
+use super::{
+    analysis::{AnalysisKind, AnalysisView},
+    residual::ResidualView,
+};
 use crate::services::NativeServices;
 
 pub(super) enum Source {
     Equation(String),
     Page(PageSource),
-    Value(Arc<RuntimeValue>, usize),
+    Value(Arc<RuntimeValue>),
+    Rows(Arc<[RuntimeValue]>, usize),
+    Analysis(AnalysisKind),
+    Residual,
 }
 
 pub(super) enum Title {
     Content(String),
     Key(&'static str),
     Array { name: String, count: usize },
+    Unavailable(String),
 }
 
 impl Title {
@@ -35,6 +43,9 @@ impl Title {
                 "native.reports.arrayTitle",
                 &[("name", name.clone()), ("count", count.to_string())],
             ),
+            Self::Unavailable(name) => {
+                crate::text::format("native.reports.unavailableTitle", &[("name", name.clone())])
+            }
         }
     }
 }
@@ -51,6 +62,8 @@ impl From<ReportSectionContent> for Source {
 enum Body {
     Equation(String),
     Page(Entity<ReportPage>),
+    Analysis(Entity<AnalysisView>),
+    Residual(Entity<ResidualView>),
     Values {
         fields: Vec<(String, String)>,
         children: Vec<Entity<Section>>,
@@ -90,71 +103,88 @@ impl Section {
             return;
         };
         let source = match source {
-            Source::Value(value, offset) => match table_reference(&value) {
+            Source::Value(value) => match table_reference(&value) {
                 Some((part, _)) => Source::Page(PageSource::Array(part)),
-                None => Source::Value(value, offset),
+                None => match value.unannotated() {
+                    RuntimeValue::List(rows) => Source::Page(PageSource::Inline(rows.clone())),
+                    _ => Source::Value(value),
+                },
             },
             source => source,
         };
         self.body = Some(match source {
+            Source::Analysis(kind) => Body::Analysis(cx.new(|cx| {
+                let mut view = AnalysisView::new(self.services.clone(), self.reference, kind);
+                view.load(window, cx);
+                view
+            })),
+            Source::Residual => Body::Residual(cx.new(|cx| {
+                let mut view = ResidualView::new(self.services.clone(), self.reference, window, cx);
+                view.load(window, cx);
+                view
+            })),
             Source::Equation(text) => Body::Equation(text),
             Source::Page(source) => Body::Page(cx.new(|cx| {
                 let mut page = ReportPage::new(self.services.clone(), self.reference, source);
                 page.load(0, window, cx);
                 page
             })),
-            Source::Value(value, offset) => {
-                let empty = if matches!(value.unannotated(), RuntimeValue::List(_)) {
-                    "[]"
-                } else {
-                    "{}"
-                };
-                let entries = match value.unannotated() {
-                    RuntimeValue::Record(fields) => fields
-                        .iter()
-                        .map(|(key, value)| (key.to_string(), value.clone()))
-                        .collect(),
-                    RuntimeValue::List(values) => values
-                        .iter()
-                        .enumerate()
-                        .map(|(index, value)| ((offset + index + 1).to_string(), value.clone()))
-                        .collect(),
-                    _ => vec![(
-                        crate::text::translate("detail.fields.value"),
-                        (*value).clone(),
-                    )],
-                };
-                let mut fields = Vec::new();
-                let mut children = Vec::new();
-                for (key, value) in entries {
-                    if matches!(
-                        value.unannotated(),
-                        RuntimeValue::Record(_) | RuntimeValue::List(_)
-                    ) {
-                        let title = match table_reference(&value) {
-                            Some((_, count)) => Title::Array { name: key, count },
-                            None => Title::Content(key),
-                        };
-                        children.push(cx.new(|_| {
-                            Self::new(
-                                self.services.clone(),
-                                self.reference,
-                                title,
-                                Source::Value(Arc::new(value), 0),
-                                false,
-                            )
-                        }));
-                    } else {
-                        fields.push((key, super::scalar(&value)));
-                    }
-                }
-                Body::Values {
-                    fields,
-                    children,
-                    empty,
-                }
-            }
+            Source::Value(value) => self.values(&value, 0, cx),
+            // Already bounded by ReportPage; do not route this page into another pager.
+            Source::Rows(values, offset) => self.values(&RuntimeValue::List(values), offset, cx),
         });
+    }
+
+    fn values(&self, value: &RuntimeValue, offset: usize, cx: &mut Context<Self>) -> Body {
+        let empty = if matches!(value.unannotated(), RuntimeValue::List(_)) {
+            "[]"
+        } else {
+            "{}"
+        };
+        let entries = match value.unannotated() {
+            RuntimeValue::Record(fields) => fields
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect(),
+            RuntimeValue::List(values) => values
+                .iter()
+                .enumerate()
+                .map(|(index, value)| ((offset + index + 1).to_string(), value.clone()))
+                .collect(),
+            _ => vec![(
+                crate::text::translate("detail.fields.value"),
+                (*value).clone(),
+            )],
+        };
+        let mut fields = Vec::new();
+        let mut children = Vec::new();
+        for (key, value) in entries {
+            if matches!(
+                value.unannotated(),
+                RuntimeValue::Record(_) | RuntimeValue::List(_)
+            ) {
+                let title = match table_reference(&value) {
+                    Some((_, count)) => Title::Array { name: key, count },
+                    None => Title::Content(key),
+                };
+                children.push(cx.new(|_| {
+                    Self::new(
+                        self.services.clone(),
+                        self.reference,
+                        title,
+                        Source::Value(Arc::new(value)),
+                        false,
+                    )
+                }));
+            } else {
+                fields.push((key, super::scalar(&value)));
+            }
+        }
+        Body::Values {
+            fields,
+            children,
+            empty,
+        }
     }
 }
 
@@ -191,6 +221,8 @@ impl Render for Section {
                     )
             }
             Some(Body::Page(page)) => div().child(page.clone()),
+            Some(Body::Analysis(view)) => div().child(view.clone()),
+            Some(Body::Residual(view)) => div().child(view.clone()),
             Some(Body::Values {
                 fields,
                 children,

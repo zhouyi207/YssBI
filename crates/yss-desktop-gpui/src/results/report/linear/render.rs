@@ -101,22 +101,12 @@ impl Render for LinearReport {
                 cx,
             ));
         }
-        body.children(self.observations.iter().cloned())
-            .when(self.pending_analyses(), |body| {
-                body.child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(crate::text::translate("native.reports.pendingAnalyses")),
-                )
-            })
-            .when(
-                !self.has_coefficients()
-                    && !options.model_summary
-                    && !options.anova
-                    && !options.observations
-                    && !self.pending_analyses(),
-                |body| body.child(crate::text::translate("native.reports.emptySelection")),
-            )
+        body.children(self.sections.iter().cloned()).when(
+            !self.has_coefficients()
+                && !options.model_summary
+                && !options.anova
+                && self.sections.is_empty(),
+            |body| body.child(crate::text::translate("native.reports.emptySelection")),
+        )
     }
 }

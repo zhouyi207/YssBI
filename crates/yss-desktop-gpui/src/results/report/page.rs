@@ -7,7 +7,7 @@ use gpui_component::{
     table::{DataTable, TableState},
 };
 use yss_application::graph::results::{
-    ResultPageProjection,
+    ResultPageKind, ResultPageProjection,
     report::{ResultTablePart, structured::ReportTable},
 };
 use yss_graph_execution::result::ResultReference;
@@ -25,6 +25,7 @@ pub(super) enum PageSource {
     Declared(ReportTable),
     Array(ResultTablePart),
     Observations,
+    Inline(Arc<[RuntimeValue]>),
 }
 
 enum Content {
@@ -80,19 +81,34 @@ impl ReportPage {
         let reference = self.reference;
         let source = self.source.clone();
         let task = self.services.run(move |services| {
-            let part = match &source {
-                PageSource::Declared(table) => table.part(),
-                PageSource::Array(part) => part,
-                PageSource::Observations => &ResultTablePart::Observations,
+            let page = match &source {
+                PageSource::Inline(rows) => {
+                    let offset = offset.min(rows.len());
+                    let end = offset.saturating_add(PAGE_ROWS).min(rows.len());
+                    ResultPageProjection {
+                        offset,
+                        requested_limit: PAGE_ROWS,
+                        total_count: Some(rows.len()),
+                        has_more: end < rows.len(),
+                        kind: ResultPageKind::Sequence,
+                        columns: Box::default(),
+                        values: rows[offset..end].to_vec().into_boxed_slice(),
+                    }
+                }
+                source => {
+                    let part = match source {
+                        PageSource::Declared(table) => table.part().clone(),
+                        PageSource::Array(part) => part.clone(),
+                        PageSource::Observations => ResultTablePart::Observations,
+                        PageSource::Inline(_) => unreachable!("inline page handled above"),
+                    };
+                    services
+                        .application
+                        .query_result_table(reference, part, offset, PAGE_ROWS)?
+                }
             };
-            let page = services.application.query_result_table(
-                reference,
-                part.clone(),
-                offset,
-                PAGE_ROWS,
-            )?;
             let (page, roots) = match source {
-                PageSource::Observations => (page, None),
+                PageSource::Observations | PageSource::Inline(_) => (page, None),
                 PageSource::Declared(table) => {
                     let content = table.present(page)?;
                     (
@@ -163,10 +179,7 @@ impl ReportPage {
                     self.services.clone(),
                     self.reference,
                     Title::Key("reportSections.structuredResult"),
-                    Source::Value(
-                        Arc::new(RuntimeValue::List(page.values.into())),
-                        page.offset,
-                    ),
+                    Source::Rows(page.values.into(), page.offset),
                     true,
                 )
             }))

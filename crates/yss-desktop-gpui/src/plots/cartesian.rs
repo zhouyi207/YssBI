@@ -21,12 +21,20 @@ pub(crate) enum CartesianKind {
     Ecdf,
     Density,
 }
+pub(crate) struct ScatterObservation {
+    pub number: usize,
+    pub highlighted: bool,
+}
 pub(crate) struct CartesianOptions {
     pub kind: CartesianKind,
     pub reference_lines: Vec<[PlotPoint; 2]>,
     pub point_sizes: Option<Vec<f64>>,
     pub x_domain: Option<[f64; 2]>,
     pub y_domain: Option<[f64; 2]>,
+    pub observations: Option<Vec<ScatterObservation>>,
+    pub zero_line: bool,
+    pub symmetric_y: bool,
+    pub x_min: Option<f64>,
 }
 impl CartesianOptions {
     pub fn new(kind: CartesianKind) -> Self {
@@ -36,6 +44,10 @@ impl CartesianOptions {
             point_sizes: None,
             x_domain: None,
             y_domain: None,
+            observations: None,
+            zero_line: false,
+            symmetric_y: false,
+            x_min: None,
         }
     }
 }
@@ -46,6 +58,8 @@ pub(crate) struct CartesianData {
     reference_lines: Vec<[PlotPoint; 2]>,
     point_sizes: Option<Vec<f64>>,
     largest_size: f64,
+    observations: Option<Vec<ScatterObservation>>,
+    zero_line: bool,
     x: AxisDomain,
     y: AxisDomain,
 }
@@ -59,6 +73,9 @@ impl CartesianData {
                     .map(|p| p.x)
                     .chain(options.reference_lines.iter().flatten().map(|p| p.x)),
             )
+        });
+        let x = options.x_min.map_or(x, |min| {
+            AxisDomain::fixed([min, x.at(1.).clamp(min + 0.01, f64::MAX)])
         });
         let natural_y = AxisDomain::from_values(
             result
@@ -77,6 +94,16 @@ impl CartesianData {
                 }
                 _ => natural_y,
             });
+        let y = if options.symmetric_y {
+            let extent = y
+                .at(0.)
+                .abs()
+                .max(y.at(1.).abs())
+                .clamp(f64::MIN_POSITIVE, f64::MAX);
+            AxisDomain::fixed([-extent, extent])
+        } else {
+            y
+        };
         let largest_size = options
             .point_sizes
             .as_ref()
@@ -89,6 +116,8 @@ impl CartesianData {
             reference_lines: options.reference_lines,
             point_sizes: options.point_sizes,
             largest_size,
+            observations: options.observations,
+            zero_line: options.zero_line,
         }
     }
     fn radius(&self, index: usize) -> f32 {
@@ -99,6 +128,12 @@ impl CartesianData {
                 0.
             }
         })
+    }
+    fn highlighted(&self, index: usize) -> bool {
+        self.observations
+            .as_ref()
+            .and_then(|rows| rows.get(index))
+            .is_some_and(|row| row.highlighted)
     }
     fn position(&self, datum: &PlotPoint, chart: &Bounds<Pixels>) -> Point<Pixels> {
         point(
@@ -254,6 +289,25 @@ impl Plot for CartesianPlot {
                         ),
                     )
                 })
+                .when_some(
+                    self.data
+                        .observations
+                        .as_ref()
+                        .and_then(|rows| rows.get(state.index)),
+                    |tooltip, observation| {
+                        tooltip
+                            .plain_row(
+                                crate::text::translate("native.reports.observation"),
+                                observation.number.to_string(),
+                            )
+                            .when(observation.highlighted, |tooltip| {
+                                tooltip.plain_row(
+                                    crate::text::translate("native.reports.highLeverage"),
+                                    crate::text::translate("native.reports.yes"),
+                                )
+                            })
+                    },
+                )
                 .into_any_element(),
         )
     }
