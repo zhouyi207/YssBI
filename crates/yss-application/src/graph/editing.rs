@@ -281,8 +281,7 @@ impl ApplicationState {
         let snapshot = captured
             .project()
             .read_graph_editing(captured.project_instance_id(), path)?;
-        let editor =
-            GraphDocumentEditor::new(captured, path, locale, (*snapshot.document).clone())?;
+        let editor = GraphDocumentEditor::new(captured, path, locale, snapshot.document)?;
         let update = editor.finish(self)?;
         let result_state = super::results::observe_graph_result_inputs(
             captured,
@@ -348,7 +347,7 @@ impl ApplicationState {
             &captured,
             &request.graph_path,
             &request.locale,
-            (*operation.document).clone(),
+            Arc::clone(&operation.document),
         )?;
         let _ = editor.apply(mutation)?;
         let update = editor.finish(self)?;
@@ -356,7 +355,7 @@ impl ApplicationState {
             .project()
             .commit_graph_edit(
                 operation,
-                Arc::new(update.document.clone()),
+                Arc::clone(&update.document),
                 GraphHistoryAction::Edit(update.patch.clone()),
             )
             .map_err(ResourceMutationApplicationError::GraphCommit)?;
@@ -408,9 +407,9 @@ impl ApplicationState {
             request.version,
             redo,
         )?;
-        let mut document = (*operation.document).clone();
+        let mut document = Arc::clone(&operation.document);
         if let Some(patch) = &patch {
-            apply_graph_document_patch(&mut document, patch).map_err(|error| {
+            apply_graph_document_patch(Arc::make_mut(&mut document), patch).map_err(|error| {
                 ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
             })?;
         }
@@ -425,7 +424,7 @@ impl ApplicationState {
         };
         let receipt = captured
             .project()
-            .commit_graph_edit(operation, Arc::new(update.document.clone()), action)
+            .commit_graph_edit(operation, Arc::clone(&update.document), action)
             .map_err(ResourceMutationApplicationError::GraphCommit)?;
         let result_state = super::results::observe_graph_result_inputs(
             &captured,
@@ -477,12 +476,12 @@ impl ApplicationState {
             &captured,
             &request.graph_path,
             &request.locale,
-            (*operation.document).clone(),
+            Arc::clone(&operation.document),
         )?;
         let update = editor.finish(self)?;
         let receipt = captured
             .project()
-            .save_graph_candidate(operation, Arc::new(update.document.clone()))
+            .save_graph_candidate(operation, Arc::clone(&update.document))
             .map_err(|error| match error {
                 yss_project::ProjectGraphSaveError::Filesystem(error) => {
                     ResourceMutationApplicationError::Project(error)

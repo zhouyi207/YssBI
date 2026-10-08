@@ -211,6 +211,10 @@ Application 的每图协调队列有容量限制，过载返回类型化 `Editin
 失败后重读当前图状态；旧保存回执只证明原修订已保存，不能清除后续编辑的 dirty。回执随
 驻留编辑会话结束而释放，不提供跨进程提交恢复。
 
+操作级 GraphDocumentEditor 直接接收 Project 捕获的不可变正文，原文档与候选文档共享 `Arc`。
+有实际补丁时通过 `Arc::make_mut` 准备独立候选；读取响应、空补丁和 Save 不为编辑器准备复制正文。
+GraphDocumentChange 交付同一候选 `Arc`，Project 提交与响应复用它，自动化批次也沿用该路径。
+
 GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操作或 Harness 批次对应一个事务。历史按条目数和序列化字节数限制，阈值由 [graph_editing.rs](../../../yss-project/src/project_state/graph_editing.rs) 拥有。Undo/redo 恢复文档意图后重新 Resolve，不能恢复历史中的类型、诊断或结果 payload。结构有效但暂时不能运行的图仍可编辑，阻断诊断由 Graph Problems 展示。
 
 原生普通编辑、撤销、保存和连接候选查询使用明确图身份与编辑版本。运行或复制导出需要

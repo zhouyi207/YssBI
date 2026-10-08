@@ -220,7 +220,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             .project()
             .commit_graph_candidate(
                 overwrite.into_authority(),
-                Arc::new(connected.update.document.clone()),
+                Arc::clone(&connected.update.document),
             )
             .unwrap();
         let cold_resolve = || {
@@ -329,7 +329,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         RunGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            connected.update.document.clone(),
+            connected.update.document.as_ref().clone(),
             connected
                 .update
                 .projection_replacement
@@ -377,7 +377,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
     );
     let changed = app.change_graph_history(edit_request(), true).unwrap();
     run_drop(
-        changed.update.document.clone(),
+        changed.update.document.as_ref().clone(),
         &changed.update.projection_replacement.projection,
     );
     let updated = resolve();

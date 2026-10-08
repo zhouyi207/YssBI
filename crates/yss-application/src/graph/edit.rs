@@ -16,7 +16,7 @@ use yss_project_identity::ProjectInstanceId;
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphDocumentChange {
     pub changed: bool,
-    pub document: GraphDocument,
+    pub document: Arc<GraphDocument>,
     pub projection_replacement: GraphProjectionReplacement,
     pub patch: yss_graph_document::GraphDocumentPatch,
     pub result_inputs: yss_graph_execution::result::GraphResultInputs,
@@ -106,8 +106,8 @@ pub(crate) struct GraphDocumentEditor<'a> {
     captured: &'a Arc<ApplicationSession>,
     graph: &'a GraphResourcePath,
     locale: &'a str,
-    original: GraphDocument,
-    document: GraphDocument,
+    original: Arc<GraphDocument>,
+    document: Arc<GraphDocument>,
     context: GraphResolutionContext,
     catalog: CatalogMutationValidationSnapshot,
     patch: yss_graph_document::GraphDocumentPatch,
@@ -118,7 +118,7 @@ impl<'a> GraphDocumentEditor<'a> {
         captured: &'a Arc<ApplicationSession>,
         graph: &'a GraphResourcePath,
         locale: &'a str,
-        document: GraphDocument,
+        document: Arc<GraphDocument>,
     ) -> Result<Self, ResourceMutationApplicationError> {
         if !captured.project().has_resident_graph(graph)? {
             return Err(ResourceMutationApplicationError::GraphUnavailable {
@@ -191,9 +191,13 @@ impl<'a> GraphDocumentEditor<'a> {
                     None,
                 )
             };
-        apply_graph_document_patch(&mut self.document, &patch).map_err(|error| {
-            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-        })?;
+        if !patch.is_empty() {
+            apply_graph_document_patch(Arc::make_mut(&mut self.document), &patch).map_err(
+                |error| {
+                    ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+                },
+            )?;
+        }
         self.patch.operations.extend(patch.operations);
         Ok(copied)
     }
@@ -214,7 +218,7 @@ impl<'a> GraphDocumentEditor<'a> {
             .revalidate_captured_session(self.captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         Ok(GraphDocumentChange {
-            changed: self.document != self.original,
+            changed: !Arc::ptr_eq(&self.document, &self.original) && self.document != self.original,
             document: self.document,
             projection_replacement,
             patch: self.patch,
@@ -322,7 +326,8 @@ impl ApplicationState {
         mutation: EditorGraphMutation,
     ) -> Result<GraphDocumentChange, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let mut editor = GraphDocumentEditor::new(&captured, &graph_path, &locale, document)?;
+        let mut editor =
+            GraphDocumentEditor::new(&captured, &graph_path, &locale, Arc::new(document))?;
         let _ = editor.apply(mutation)?;
         let result = editor.finish(self)?;
         captured

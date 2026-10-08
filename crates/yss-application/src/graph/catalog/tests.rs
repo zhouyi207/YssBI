@@ -1220,7 +1220,7 @@ fn connection_mutations_reject_model_results_even_through_resolved_generic_outpu
             updated.document.connections.len(),
             document.connections.len() + 1
         );
-        let mut restored = updated.document;
+        let mut restored = updated.document.as_ref().clone();
         yss_graph_document_edit::apply_graph_document_patch(
             &mut restored,
             &updated.patch.inverse(),
@@ -1326,7 +1326,9 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
                 },
             )
             .unwrap()
-            .document;
+            .document
+            .as_ref()
+            .clone();
     }
     let original = document.clone();
     let captured = app.capture_session().unwrap();
@@ -1480,7 +1482,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
     }
     app.change_graph_history(edit_request(), false).unwrap();
     let restored = app.change_graph_history(edit_request(), false).unwrap();
-    assert_eq!(restored.update.document, original);
+    assert_eq!(restored.update.document.as_ref(), &original);
     let current = query(
         restored
             .update
@@ -1645,7 +1647,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
             instance.clone(),
             graph.clone(),
             "en-US".into(),
-            updated.document,
+            updated.document.as_ref().clone(),
             yss_graph_editor::EditorGraphMutation::CreateNode {
                 port_counts: Default::default(),
                 parameters: Default::default(),
@@ -1679,7 +1681,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     assert_eq!(port.connections.maximum, None);
     assert!(port.connections.can_append);
     assert!(!port.connections.can_replace);
-    let mut stale = updated.document;
+    let mut stale = updated.document.as_ref().clone();
     let constant = stale.constants.values_mut().next().unwrap();
     assert_eq!(constant.data_value, DataValue::Null);
     assert!(constant.tabular.is_some());

@@ -191,7 +191,7 @@ pub fn invoke_graph_capability(
                 application,
                 &captured,
                 request,
-                document.clone(),
+                Arc::clone(&operation.document),
                 before,
                 control,
             )?;
@@ -221,7 +221,7 @@ pub fn invoke_graph_capability(
             control.check()?;
             let committed = captured
                 .project()
-                .save_graph_edit(operation, Arc::new(transform.document), transform.patch)
+                .save_graph_edit(operation, transform.document, transform.patch)
                 .map_err(|error| match error {
                     yss_project::ProjectGraphSaveError::Filesystem(_) => {
                         graph_failure(CapabilityFailureCode::PersistenceUnavailable)
@@ -626,7 +626,7 @@ fn transform_graph_edit(
     application: &ApplicationState,
     captured: &Arc<ApplicationSession>,
     request: ApplyGraphEditRequest,
-    original: GraphDocument,
+    original: Arc<GraphDocument>,
     before: GraphInspection,
     control: &CapabilityControl,
 ) -> Result<(GraphDocumentChange, GraphEditReceipt), CapabilityFailure> {
