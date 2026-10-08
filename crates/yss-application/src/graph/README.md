@@ -125,7 +125,8 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 Application 捕获当前编辑版本与资源事实、解析一次语义，在查询结束时重验资源、应用会话和图版本。
 查询与编辑复用同一资源输入捕获；Application 查询直接持有当前文档引用，不构造 `GraphDocumentEditor` 的原始/待编辑文档副本或累计历史补丁。
 Graph Runtime 对每个候选复用提交所用的 mutation planner，包括动态端口认领、重复连接、方向、同节点、类型、容量和顺序检查；查询不提交补丁、不写历史或 dirty。
-没有旧连接需要替换时，Editor 规划借用原文档并复用 Document Edit 的完整结构校验；需要替换时才构造私有候选。
+Document Edit 的 `prepare_graph_document_patch_in_place` 交付只读的作用域候选，校验顺序 before-state 和完整结构；作用域结束时按相反顺序恢复成功应用的操作，包含校验失败和嵌套准备。恢复直接读取原补丁的 before-state，不依赖候选值的相等比较。原子应用与拥有正文的准备继续复用同一校验入口。
+Editor 的追加、替换和迁移规划借用连接变更视图；Document Edit 先核对移除项的 before-state 与插入身份，再按同一完整结构校验器读取保留及新增连接，不复制其余正文。容量与重复端点检查读取同一移除/插入集合。
 Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码的 invalid；迁移预览的替换列表只包含被挤掉的连接，不包含自身迁移的连接。
 桌面端口投影只交付连接数量与可用动作，不发送接受类型域、连接上限或顺序供前端再推导。Assistant 的图检查仍消费后端的接受类型说明和连接上限。
 响应携带语义输入 hash，前端按编辑版本、语义和资源发布身份接纳，并在下一次身份变化时丢弃。

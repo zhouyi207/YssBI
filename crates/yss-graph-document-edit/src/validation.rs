@@ -1,6 +1,9 @@
 use crate::DocumentError;
 use std::collections::{BTreeMap, BTreeSet};
-use yss_graph_document::{DynamicPortBinding, GraphDocument, NodeId, PortAddress, PortInstanceId};
+use yss_graph_document::{
+    ConnectionId, DocumentConnection, DynamicPortBinding, GraphDocument, NodeId, PortAddress,
+    PortInstanceId,
+};
 use yss_node_protocol::{PortKey, PortMemberGroupSpec};
 
 pub struct PortMemberGroupState {
@@ -77,6 +80,47 @@ pub fn user_created_port_instance_count<'a>(
 }
 
 pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentError> {
+    validate_document_with_connections(document, document.connections.iter())
+}
+
+/// Validate removals followed by insertions while borrowing the unchanged document content.
+pub fn validate_graph_document_connection_candidate(
+    document: &GraphDocument,
+    removals: &BTreeMap<ConnectionId, DocumentConnection>,
+    insertions: &BTreeMap<ConnectionId, DocumentConnection>,
+) -> Result<(), DocumentError> {
+    for (id, connection) in removals {
+        if id != &connection.id {
+            return Err(DocumentError::DuplicateConnection(connection.id));
+        }
+        crate::patch::validate_connection_removal(document, connection)?;
+    }
+    for (id, connection) in insertions {
+        if id != &connection.id
+            || (document.connections.contains_key(id) && !removals.contains_key(id))
+        {
+            return Err(DocumentError::DuplicateConnection(connection.id));
+        }
+    }
+    let mut retained = document
+        .connections
+        .iter()
+        .filter(|(id, _)| !removals.contains_key(id))
+        .peekable();
+    let mut inserted = insertions.iter().peekable();
+    let connections = std::iter::from_fn(move || match (retained.peek(), inserted.peek()) {
+        (Some((left, _)), Some((right, _))) if left < right => retained.next(),
+        (Some(_), None) => retained.next(),
+        (_, Some(_)) => inserted.next(),
+        (None, None) => None,
+    });
+    validate_document_with_connections(document, connections)
+}
+
+fn validate_document_with_connections<'a>(
+    document: &GraphDocument,
+    connections: impl Iterator<Item = (&'a ConnectionId, &'a DocumentConnection)>,
+) -> Result<(), DocumentError> {
     yss_graph_document::validate_constant_definitions(&document.constants)
         .map_err(|error| DocumentError::InvalidConstant(error.id))?;
     for (id, node) in &document.nodes {
@@ -93,7 +137,7 @@ pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentE
     for address in document.input_states.keys() {
         validate_address(document, address)?;
     }
-    for (id, connection) in &document.connections {
+    for (id, connection) in connections {
         if id != &connection.id {
             return Err(DocumentError::DuplicateConnection(connection.id));
         }

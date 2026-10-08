@@ -8,6 +8,7 @@ fn apply_operation(
     operation: &GraphDocumentOperation,
     document: &mut GraphDocument,
 ) -> Result<(), DocumentError> {
+    // A rejected operation must not write: scoped rollback records successful operations only.
     match operation {
         GraphDocumentOperation::SetConstant { id, before, after } => {
             if document.constants.get(id) != before.as_deref() {
@@ -136,15 +137,21 @@ fn remove_connection(
     document: &mut GraphDocument,
     connection: &DocumentConnection,
 ) -> Result<(), DocumentError> {
+    validate_connection_removal(document, connection)?;
+    document.connections.remove(&connection.id);
+    Ok(())
+}
+
+pub(crate) fn validate_connection_removal(
+    document: &GraphDocument,
+    connection: &DocumentConnection,
+) -> Result<(), DocumentError> {
     match document.connections.get(&connection.id) {
         None => Err(DocumentError::ConnectionNotFound(connection.id)),
         Some(current) if current != connection => {
             Err(DocumentError::ConnectionContentMismatch(connection.id))
         }
-        Some(_) => {
-            document.connections.remove(&connection.id);
-            Ok(())
-        }
+        Some(_) => Ok(()),
     }
 }
 
@@ -173,26 +180,120 @@ pub fn prepare_graph_document_patch(
     mut document: GraphDocument,
     patch: &GraphDocumentPatch,
 ) -> Result<GraphDocument, DocumentError> {
-    for operation in &patch.operations {
-        apply_operation(operation, &mut document)?;
-    }
-    validate_graph_document(&document)?;
+    apply_graph_document_patch(&mut document, patch)?;
     Ok(document)
+}
+
+/// A validated temporary patch whose changes are restored when the scope ends.
+#[must_use = "the staged patch is restored when its guard is dropped"]
+pub struct PreparedGraphDocumentPatch<'a> {
+    document: &'a mut GraphDocument,
+    operations: &'a [GraphDocumentOperation],
+    applied: usize,
+}
+
+impl PreparedGraphDocumentPatch<'_> {
+    pub fn document(&self) -> &GraphDocument {
+        self.document
+    }
+
+    pub fn prepare<'stage>(
+        &'stage mut self,
+        patch: &'stage GraphDocumentPatch,
+    ) -> Result<PreparedGraphDocumentPatch<'stage>, DocumentError> {
+        prepare_graph_document_patch_in_place(self.document, patch)
+    }
+
+    fn commit(mut self) {
+        self.applied = 0;
+    }
+}
+
+impl Drop for PreparedGraphDocumentPatch<'_> {
+    fn drop(&mut self) {
+        for operation in self.operations[..self.applied].iter().rev() {
+            restore_operation(operation, self.document);
+        }
+    }
+}
+
+/// Prepare a read-only temporary candidate without copying unrelated document content.
+pub fn prepare_graph_document_patch_in_place<'a>(
+    document: &'a mut GraphDocument,
+    patch: &'a GraphDocumentPatch,
+) -> Result<PreparedGraphDocumentPatch<'a>, DocumentError> {
+    let mut candidate = PreparedGraphDocumentPatch {
+        document,
+        operations: &patch.operations,
+        applied: 0,
+    };
+    for operation in &patch.operations {
+        apply_operation(operation, candidate.document)?;
+        candidate.applied += 1;
+    }
+    validate_graph_document(candidate.document)?;
+    Ok(candidate)
 }
 
 pub fn apply_graph_document_patch(
     document: &mut GraphDocument,
     patch: &GraphDocumentPatch,
 ) -> Result<(), DocumentError> {
-    *document = prepare_graph_document_patch(document.clone(), patch)?;
+    prepare_graph_document_patch_in_place(document, patch)?.commit();
     Ok(())
+}
+
+fn restore_operation(operation: &GraphDocumentOperation, document: &mut GraphDocument) {
+    match operation {
+        GraphDocumentOperation::SetConstant { id, before, .. } => {
+            if let Some(before) = before {
+                document.constants.insert(*id, before.as_ref().clone());
+            } else {
+                document.constants.remove(id);
+            }
+        }
+        GraphDocumentOperation::InsertNode { node } => {
+            document.nodes.remove(&node.id);
+        }
+        GraphDocumentOperation::RemoveNode { node }
+        | GraphDocumentOperation::UpdateNode { before: node, .. } => {
+            document.nodes.insert(node.id, node.clone());
+        }
+        GraphDocumentOperation::InsertPortBinding { address, .. } => {
+            document.port_bindings.remove(address);
+        }
+        GraphDocumentOperation::RemovePortBinding { address, binding } => {
+            document
+                .port_bindings
+                .insert(address.clone(), binding.clone());
+        }
+        GraphDocumentOperation::InsertConnection { connection } => {
+            document.connections.remove(&connection.id);
+        }
+        GraphDocumentOperation::RemoveConnection { connection } => {
+            document
+                .connections
+                .insert(connection.id, connection.clone());
+        }
+        GraphDocumentOperation::SetInputState {
+            address, before, ..
+        } => {
+            if let Some(before) = before {
+                document
+                    .input_states
+                    .insert(address.clone(), before.clone());
+            } else {
+                document.input_states.remove(address);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
-        prepare_graph_document_patch,
+        prepare_graph_document_patch, prepare_graph_document_patch_in_place,
     };
     use yss_graph_document::{
         DocumentNode, DynamicPortBinding, GraphDocument, NodeId, NodePosition, OrderKey,
@@ -274,5 +375,150 @@ mod tests {
 
         assert_eq!(error, DocumentError::UnexpectedPortBinding(declared_port));
         assert_eq!(document, before_invalid_patch);
+    }
+
+    #[test]
+    fn nested_patch_scopes_restore_the_parent_after_success_and_conflict() {
+        let id = NodeId::new();
+        let before = DocumentNode {
+            id,
+            node_type: NodeTypeId::new("yssbi.test.patch").unwrap(),
+            position: NodePosition { x: 1.0, y: 2.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        let mut outer = before.clone();
+        outer.user_label = Some("outer".into());
+        let mut inner = outer.clone();
+        inner.user_label = Some("inner".into());
+        let outer_patch = GraphDocumentPatch::new([GraphDocumentOperation::UpdateNode {
+            before: before.clone(),
+            after: outer.clone(),
+        }]);
+        let inner_operation = GraphDocumentOperation::UpdateNode {
+            before: outer.clone(),
+            after: inner.clone(),
+        };
+        let inner_patch = GraphDocumentPatch::new([inner_operation.clone()]);
+        let rejected = GraphDocumentPatch::new([
+            inner_operation,
+            GraphDocumentOperation::RemoveNode {
+                node: before.clone(),
+            },
+        ]);
+        let mut document = GraphDocument::default();
+        document.nodes.insert(id, before.clone());
+        let mut prepared =
+            prepare_graph_document_patch_in_place(&mut document, &outer_patch).unwrap();
+        assert_eq!(prepared.document().nodes[&id], outer);
+        {
+            let nested = prepared.prepare(&inner_patch).unwrap();
+            assert_eq!(nested.document().nodes[&id], inner);
+        }
+        assert_eq!(prepared.document().nodes[&id], outer);
+        assert!(
+            matches!(prepared.prepare(&rejected), Err(DocumentError::NodeContentMismatch(node)) if node == id)
+        );
+        assert_eq!(prepared.document().nodes[&id], outer);
+        drop(prepared);
+        assert_eq!(document.nodes[&id], before);
+    }
+
+    #[test]
+    fn failed_validation_restores_non_reflexive_intermediate_values() {
+        let id = NodeId::new();
+        let before = DocumentNode {
+            id,
+            node_type: NodeTypeId::new("yssbi.test.patch").unwrap(),
+            position: NodePosition { x: 1.0, y: 2.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        let mut after = before.clone();
+        after.position.x = f64::NAN;
+        let address = PortAddress::declared(id, PortKey::new("input").unwrap());
+        let patch = GraphDocumentPatch::new([
+            GraphDocumentOperation::UpdateNode {
+                before: before.clone(),
+                after,
+            },
+            GraphDocumentOperation::InsertPortBinding {
+                address: address.clone(),
+                binding: DynamicPortBinding::UserCreated {
+                    order: OrderKey::new("a"),
+                },
+            },
+        ]);
+        let mut document = GraphDocument::default();
+        document.nodes.insert(id, before);
+        let original = document.clone();
+        assert_eq!(
+            apply_graph_document_patch(&mut document, &patch),
+            Err(DocumentError::UnexpectedPortBinding(address))
+        );
+        assert_eq!(document, original);
+    }
+
+    #[test]
+    fn borrowed_connection_candidates_preserve_removal_preconditions_and_result_validation() {
+        use crate::validate_graph_document_connection_candidate;
+        use std::collections::BTreeMap;
+        use yss_graph_document::{ConnectionId, DocumentConnection};
+        let mut document = GraphDocument::default();
+        let nodes = [NodeId::new(), NodeId::new()];
+        for id in nodes {
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: NodeTypeId::new("yssbi.test.patch").unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        let id = ConnectionId::new();
+        let original = yss_graph_document::DocumentConnection {
+            id,
+            output: PortAddress::declared(nodes[0], PortKey::new("output").unwrap()),
+            input: PortAddress::declared(NodeId::new(), PortKey::new("input").unwrap()),
+            order: None,
+        };
+        document.connections.insert(id, original.clone());
+        let replacement = DocumentConnection {
+            input: PortAddress::declared(nodes[1], PortKey::new("input").unwrap()),
+            ..original.clone()
+        };
+        let removals = BTreeMap::from([(id, original.clone())]);
+        let insertions = BTreeMap::from([(id, replacement.clone())]);
+        validate_graph_document_connection_candidate(&document, &removals, &insertions).unwrap();
+        let patch = GraphDocumentPatch::new([
+            GraphDocumentOperation::RemoveConnection {
+                connection: original.clone(),
+            },
+            GraphDocumentOperation::InsertConnection {
+                connection: replacement.clone(),
+            },
+        ]);
+        let prepared = prepare_graph_document_patch(document.clone(), &patch).unwrap();
+        assert_eq!(prepared.connections[&id], replacement);
+        assert_eq!(document.connections[&id], original);
+
+        let wrong_before = BTreeMap::from([(id, replacement.clone())]);
+        assert_eq!(
+            validate_graph_document_connection_candidate(&document, &wrong_before, &insertions),
+            Err(DocumentError::ConnectionContentMismatch(id))
+        );
+        assert_eq!(
+            validate_graph_document_connection_candidate(&document, &BTreeMap::new(), &insertions),
+            Err(DocumentError::DuplicateConnection(id))
+        );
+        let invalid_after = BTreeMap::from([(id, original.clone())]);
+        let missing = original.input.node_id;
+        assert_eq!(
+            validate_graph_document_connection_candidate(&document, &removals, &invalid_after),
+            Err(DocumentError::EndpointNodeNotFound(missing))
+        );
     }
 }
