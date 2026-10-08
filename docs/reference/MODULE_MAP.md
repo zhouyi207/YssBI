@@ -38,7 +38,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-graph-document-edit` | `crates/yss-graph-document-edit` | [Cargo.toml](../../crates/yss-graph-document-edit/Cargo.toml) | — |
 | `yss-graph-editor` | `crates/yss-graph-editor` | [Cargo.toml](../../crates/yss-graph-editor/Cargo.toml) | — |
 | `yss-graph-execution` | `crates/yss-graph-execution` | [Cargo.toml](../../crates/yss-graph-execution/Cargo.toml) | [README](../../crates/yss-graph-execution/README.md) |
-| `yss-graph-resource-contract` | `crates/yss-graph-resource-contract` | [Cargo.toml](../../crates/yss-graph-resource-contract/Cargo.toml) | — |
+| `yss-graph-resource-contract` | `crates/yss-graph-resource-contract` | [Cargo.toml](../../crates/yss-graph-resource-contract/Cargo.toml) | [README](../../crates/yss-graph-resource-contract/README.md) |
 | `yss-graph-runtime` | `crates/yss-graph-runtime` | [Cargo.toml](../../crates/yss-graph-runtime/Cargo.toml) | [README](../../crates/yss-graph-runtime/README.md) |
 | `yss-graph-type-mapping` | `crates/yss-graph-type-mapping` | [Cargo.toml](../../crates/yss-graph-type-mapping/Cargo.toml) | [README](../../crates/yss-graph-type-mapping/README.md) |
 | `yss-harness-contract` | `crates/yss-harness-contract` | [Cargo.toml](../../crates/yss-harness-contract/Cargo.toml) | — |

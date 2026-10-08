@@ -27,7 +27,7 @@
 | 模块                                        | 职责                                                                             |
 | ------------------------------------------- | -------------------------------------------------------------------------------- |
 | `semantic_snapshot`                         | 节点、端口、参数、函数与诊断事实，以及快照的 ready 判定；字段由快照自身封装      |
-| `analysis`                                  | 将共享快照与 registry、kernel 和资源读取观测依据绑定                            |
+| `analysis`                                  | 将共享快照与 registry、kernel 及语义输入身份绑定                                |
 | `resolution`                                | 编排 Schema、节点、类型、输入绑定、语义及函数校验，最后一次组装完整快照          |
 | `node_projection`                           | 由 protocol 和文档构造节点；`interface` 子模块组装 declared、bound、derived 端口 |
 | `parameter_projection` / `port_projection`  | 参数有效值、校验与编辑事实；单个端口、可新增实例与 orphan 投影                   |
@@ -40,7 +40,7 @@
 
 完成状态统一从最终阻断诊断推导；内部解析故障仍优先于普通 incomplete。
 分析依据由 [Graph Analysis Contract](../yss-graph-analysis-contract/README.md) 定义。
-资源存在性与版本只保存在同一读取观测中，Analysis 与 Editor 投影不再保存单独的正版本表。
+实际资源与缺失读取只保存在快照的依赖记录中；分析环境及 Editor 投影只保留环境与语义身份。
 GroupApply/GroupTransform 通过 Registry 的函数调用角色参与资源闭包及循环检查。
 Analysis 校验目标签名恰为一个 DataFrame 参数并返回 DataFrame，发布结构化 `GroupMap` 调度事实；
 输出 Schema 在求值前为 Deferred，后续 Observed 列继续属于同一快照，不从第一组提前推断组合结构。

@@ -8,9 +8,7 @@ use std::sync::Barrier;
 
 use thiserror::Error;
 use yss_graph_analysis::{GraphAnalysis, GraphSemanticSnapshot, analyze};
-use yss_graph_analysis_contract::{
-    GraphAnalysisBasis, ResourceKey, ResourceObservedState, ResourceVersion,
-};
+use yss_graph_analysis_contract::GraphAnalysisBasis;
 use yss_graph_diagnostics::{
     GRAPH_DIAGNOSTIC_DEFINITIONS, GraphDiagnosticDefinitionError,
     validate_graph_diagnostic_definitions,
@@ -423,28 +421,6 @@ impl GraphRuntimeState {
             observations,
         );
         let dependencies = resources.dependencies();
-        let mut resolved_basis = GraphAnalysisBasis {
-            registry_fingerprint: basis.registry_fingerprint.clone(),
-            kernel_fingerprint: basis.kernel_fingerprint,
-            resource_observations: BTreeMap::new(),
-        };
-        for (key, observed) in dependencies.entries() {
-            let key = ResourceKey::new(key.storage_key());
-            let observation = if let Some(fingerprint) = observed {
-                let version = ResourceVersion::new(
-                    fingerprint
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect::<String>(),
-                );
-                ResourceObservedState::Present(version)
-            } else {
-                ResourceObservedState::Absent(None)
-            };
-            resolved_basis
-                .resource_observations
-                .insert(key, observation);
-        }
         let hash = graph_semantic_input_hash(
             document,
             &self.registry_fingerprint(),
@@ -474,7 +450,7 @@ impl GraphRuntimeState {
         };
         let dependency_fingerprint =
             resource_catalog.resolution_dependency_fingerprint(&dependencies);
-        let analysis = analyze(&resolved_basis, snapshot.with_dependencies(dependencies))
+        let analysis = analyze(basis, snapshot.with_dependencies(dependencies))
             .with_semantic_input_hash(hash)
             .with_observed_semantic_input_hash(observed_hash);
         cache.analysis = Some(CachedGraphAnalysis {
@@ -579,7 +555,6 @@ impl GraphRuntimeState {
         let basis = GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(self.registry_fingerprint()),
-            resource_observations: BTreeMap::new(),
         };
         let analysis =
             self.resolve_graph_document(graph_path, document, &basis, catalog, resources, locale);
@@ -791,7 +766,6 @@ mod tests {
         GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
-            resource_observations: BTreeMap::new(),
         }
     }
 

@@ -20,7 +20,6 @@ fn basis(runtime: &GraphRuntimeState) -> GraphAnalysisBasis {
             .fingerprint()
             .as_bytes(),
         registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
-        resource_observations: BTreeMap::new(),
     }
 }
 

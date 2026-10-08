@@ -6,10 +6,7 @@ use yss_graph_analysis::{
     GraphPortConnectionFacts, GraphPortEditorFact, GraphPortSemanticFact, GraphResolutionOutcome,
     GraphSemanticSnapshot,
 };
-use yss_graph_analysis_contract::{
-    DiagnosticCode, DiagnosticSeverity, GraphAnalysisBasis, ResourceKey, ResourceObservedState,
-    ResourceVersion,
-};
+use yss_graph_analysis_contract::{DiagnosticCode, DiagnosticSeverity, GraphAnalysisBasis};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, InputState,
     NodeId, NodePosition, ParameterValues, PortAddress,
@@ -120,12 +117,8 @@ fn analysis_with_facts(facts: GraphSemanticSnapshot) -> yss_graph_analysis::Grap
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
-        resource_observations: BTreeMap::from([(
-            ResourceKey::new("resource/source"),
-            ResourceObservedState::Present(ResourceVersion::new("7")),
-        )]),
     };
-    yss_graph_analysis::analyze(&basis, facts)
+    yss_graph_analysis::analyze(&basis, facts).with_semantic_input_hash([7; 32])
 }
 
 #[test]
@@ -218,11 +211,8 @@ fn editor_projection_closes_resource_node_port_and_connection_facts() {
     .expect("complete neutral facts should produce an editor model");
 
     assert_eq!(
-        model
-            .basis
-            .resource_observations
-            .get(&ResourceKey::new("resource/source")),
-        Some(&ResourceObservedState::Present(ResourceVersion::new("7")))
+        model.basis.semantic_input_hash,
+        *analysis.semantic_input_hash()
     );
     assert_eq!(model.nodes.len(), 2);
     assert_eq!(
@@ -407,7 +397,6 @@ fn editor_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([9; 32]),
-        resource_observations: BTreeMap::new(),
     };
     let analysis = yss_graph_analysis::analyze(
         &basis,

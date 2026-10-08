@@ -12,7 +12,6 @@ pub struct EditorProjectionBasis {
     pub graph_path: GraphResourcePath,
     pub registry_fingerprint: [u8; 32],
     pub semantic_input_hash: [u8; 32],
-    pub resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
 }
 
 #[derive(Clone, Debug, PartialEq)]

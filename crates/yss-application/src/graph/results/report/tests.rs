@@ -253,7 +253,6 @@ pub(crate) fn fixture_with_options(
                 captured.graph().registry_fingerprint(),
             ),
             kernel_fingerprint: runtime.kernels().fingerprint().as_bytes(),
-            resource_observations: BTreeMap::new(),
         },
         &catalog,
         &[],

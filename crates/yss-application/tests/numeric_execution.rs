@@ -895,7 +895,6 @@ fn analyze_document(
             kernel_fingerprint: yss_node_kernel::KernelRegistry::default()
                 .fingerprint()
                 .as_bytes(),
-            resource_observations: BTreeMap::new(),
         },
         resources,
         &[],

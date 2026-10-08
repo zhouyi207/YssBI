@@ -73,7 +73,6 @@ pub fn build_editor_projection(
             graph_path: input.graph_path.clone(),
             registry_fingerprint: input.registry_fingerprint,
             semantic_input_hash: *input.analysis.semantic_input_hash(),
-            resource_observations: input.analysis.resource_observations().clone(),
         },
         graph_path: input.graph_path.clone(),
         nodes,

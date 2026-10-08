@@ -16,12 +16,6 @@ impl GraphDependencyKey {
             }
         }
     }
-
-    pub fn storage_key(&self) -> String {
-        let digest = yss_canonical_hash::hash_canonical("yssbi.graph-dependency-key.v1", self)
-            .expect("resource identity is serializable");
-        digest.iter().map(|byte| format!("{byte:02x}")).collect()
-    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

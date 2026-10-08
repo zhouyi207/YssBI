@@ -204,7 +204,6 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             session.graph().registry_fingerprint(),
         ),
         kernel_fingerprint: first_fingerprint.as_bytes(),
-        resource_observations: BTreeMap::new(),
     };
     let resolve = |basis: &GraphAnalysisBasis, kernels: &yss_node_kernel::KernelRegistry| {
         let analysis = session.graph().resolve_graph_document(
