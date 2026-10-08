@@ -32,7 +32,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 nonnegative_integer_parameter("seed", 42)?,
             ]);
         } else {
-            parameters.push(positive_integer_parameter("levels", 2)?);
+            parameters.push(minimum_integer_parameter("levels", 2, 2)?);
         }
         for parameter in &mut parameters {
             let (en_title, zh_title, en_help, zh_help) = match parameter.key.as_str() {
@@ -141,4 +141,35 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_node_protocol::{ParameterIssueKind, ParameterValues, validate_parameter_values};
+
+    #[test]
+    fn factorial_and_orthogonal_parameters_reject_single_level_factors() {
+        let system = crate::build_builtin_node_system().unwrap();
+        for id in [
+            "yssbi.statistics.doe.family",
+            "yssbi.statistics.doe.orthogonal",
+        ] {
+            let protocol = system.registry.protocol(&id.parse().unwrap()).unwrap();
+            let mut values = ParameterValues::new();
+            let levels = ParameterKey::new("levels").unwrap();
+            values.insert(levels.clone(), 1.into());
+            let issues = validate_parameter_values(protocol, &values, system.registry.as_ref());
+            assert!(
+                issues.iter().any(|issue| issue.key.as_str() == "levels"
+                    && matches!(issue.kind, ParameterIssueKind::Constraint)),
+                "{id} must reject the single-level design that SCI cannot execute"
+            );
+
+            values.insert(levels, 2.into());
+            assert!(
+                validate_parameter_values(protocol, &values, system.registry.as_ref()).is_empty()
+            );
+        }
+    }
 }

@@ -9,6 +9,7 @@ subgroups, and balanced crossed continuous-measurement Gage R&R studies.
 `statistics/doe` owns experimental factor-level analysis and coded design generation interfaces, plus quadratic response surface and four-parameter
 continuous dose-response fits, separately
 from process monitoring and measurement-system declarations.
+Full factorial and orthogonal designs require at least two levels per factor; parameter validation enforces the same lower bound as SCI execution.
 
 > Status: Current
 > Scope: 内置节点定义、创建描述、分类、文档与节点目录本地化
