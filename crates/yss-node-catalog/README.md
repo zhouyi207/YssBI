@@ -150,6 +150,7 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 
 已执行的独立检验、诊断和后估计节点使用 `src/docs/zh/`、`src/docs/en/` 的 Markdown 正文，
 由 `src/documentation.rs` 映射并统一选择语言。`statistics/analyses.rs` 的简短本地化说明不替代完整帮助。
+`statistics/classical` 中相同的备择方向参数共用一份声明。
 正文聚焦输入与参数、逐方法的假设与核心公式、输出口径和必要的判读条件；
 符号随公式简要说明，不展开基础知识章节、完整推导或内部数值分支。
 非检验类诊断说明其统计含义，不虚构原假设或 p 值。维护要求见 [节点文档规则](src/docs/.rules)。
@@ -271,6 +272,7 @@ Gini 与 Dagum Gini 沿用 `yssbi.statistics.inequality.gini`、`yssbi.statistic
 GLM、Deming、分位数、单门槛和 RCS 分析。分层、逐步、单因素与多因素、分组、
 基准入口分别落实为分块 OLS、AIC/BIC 选择和明确的 OLS 批量分析；不推定多层模型
 或抽象工作流引擎。全部唯一输出为结构化 `result`，复用 Inspect 数值/报告切换。
+方法身份、中英文标题和搜索别名来自同一静态声明，节点 ID 按该方法身份构造。
 RCS 接收响应和单个自变量，结果保留节点及数值基函数设计并给出 OLS 拟合。
 分类响应保留原始标签和概率，有序 Logit 遵守显式 Ordinal 顺序；条件 Logit 为
 分层二元定义。GLM 只声明实际支持的分布/链接组合，条件参数进入真实计算。

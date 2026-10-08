@@ -1,203 +1,110 @@
 //! Executable estimators and model-building analyses in the regression category.
 use super::*;
-const SPECS: &[(&str, &str, &str, &str)] = &[
-    (
-        "yssbi.statistics.regression.robust",
-        "regression.robust",
-        "Regression Robust",
-        "Robust回归",
-    ),
-    (
-        "yssbi.statistics.regression.hierarchical",
+const SPECS: &[[&str; 3]] = &[
+    ["regression.robust", "Regression Robust", "Robust回归"],
+    [
         "regression.hierarchical",
         "Regression Hierarchical",
         "分层回归",
-    ),
-    (
-        "yssbi.statistics.regression.stepwise",
-        "regression.stepwise",
-        "Regression Stepwise",
-        "逐步回归",
-    ),
-    (
-        "yssbi.statistics.regression.curve",
-        "regression.curve",
-        "Regression Curve",
-        "曲线回归",
-    ),
-    (
-        "yssbi.statistics.regression.nonlinear",
-        "regression.nonlinear",
-        "Regression Nonlinear",
-        "非线性回归",
-    ),
-    (
-        "yssbi.statistics.regression.nonlinear_formula",
+    ],
+    ["regression.stepwise", "Regression Stepwise", "逐步回归"],
+    ["regression.curve", "Regression Curve", "曲线回归"],
+    ["regression.nonlinear", "Regression Nonlinear", "非线性回归"],
+    [
         "regression.nonlinear_formula",
         "Regression Nonlinear Formula",
         "非线性回归（自定义公式）",
-    ),
-    (
-        "yssbi.statistics.regression.ridge",
-        "regression.ridge",
-        "Regression Ridge",
-        "岭回归",
-    ),
-    (
-        "yssbi.statistics.regression.lasso",
-        "regression.lasso",
-        "Regression Lasso",
-        "Lasso回归",
-    ),
-    (
-        "yssbi.statistics.regression.pls",
-        "regression.pls",
-        "Regression PLS",
-        "PLS回归",
-    ),
-    (
-        "yssbi.statistics.regression.logit.multinomial",
+    ],
+    ["regression.ridge", "Regression Ridge", "岭回归"],
+    ["regression.lasso", "Regression Lasso", "Lasso回归"],
+    ["regression.pls", "Regression PLS", "PLS回归"],
+    [
         "regression.logit.multinomial",
         "Regression Logit Multinomial",
         "多分类Logit",
-    ),
-    (
-        "yssbi.statistics.regression.logit.ordinal",
+    ],
+    [
         "regression.logit.ordinal",
         "Regression Logit Ordinal",
         "有序Logit",
-    ),
-    (
-        "yssbi.statistics.regression.logit.firth",
+    ],
+    [
         "regression.logit.firth",
         "Regression Logit Firth",
         "Firth惩罚Logit回归",
-    ),
-    (
-        "yssbi.statistics.regression.poisson",
-        "regression.poisson",
-        "Regression Poisson",
-        "Poisson回归",
-    ),
-    (
-        "yssbi.statistics.regression.negative_binomial",
+    ],
+    ["regression.poisson", "Regression Poisson", "Poisson回归"],
+    [
         "regression.negative_binomial",
         "Regression Negative Binomial",
         "负二项回归",
-    ),
-    (
-        "yssbi.statistics.regression.zero_inflated_poisson",
+    ],
+    [
         "regression.zero_inflated_poisson",
         "Regression Zero Inflated Poisson",
         "零膨胀泊松回归",
-    ),
-    (
-        "yssbi.statistics.regression.zero_inflated_negative_binomial",
+    ],
+    [
         "regression.zero_inflated_negative_binomial",
         "Regression Zero Inflated Negative Binomial",
         "零膨胀负二项回归",
-    ),
-    (
-        "yssbi.statistics.regression.tobit",
-        "regression.tobit",
-        "Regression Tobit",
-        "Tobit模型",
-    ),
-    (
-        "yssbi.statistics.regression.logit.conditional",
+    ],
+    ["regression.tobit", "Regression Tobit", "Tobit模型"],
+    [
         "regression.logit.conditional",
         "Regression Logit Conditional",
         "条件Logit回归",
-    ),
-    (
-        "yssbi.statistics.regression.deming",
-        "regression.deming",
-        "Regression Deming",
-        "Deming回归",
-    ),
-    (
-        "yssbi.statistics.regression.quantile",
-        "regression.quantile",
-        "Regression Quantile",
-        "分位数回归",
-    ),
-    (
-        "yssbi.statistics.workflow.regression.univariate_multivariable",
+    ],
+    ["regression.deming", "Regression Deming", "Deming回归"],
+    ["regression.quantile", "Regression Quantile", "分位数回归"],
+    [
         "workflow.regression.univariate_multivariable",
         "Workflow Regression Univariate Multivariable",
         "单因素与多因素回归",
-    ),
-    (
-        "yssbi.statistics.workflow.regression.grouped",
+    ],
+    [
         "workflow.regression.grouped",
         "Workflow Regression Grouped",
         "分组回归",
-    ),
-    (
-        "yssbi.statistics.workflow.regression.baseline",
+    ],
+    [
         "workflow.regression.baseline",
         "Workflow Regression Baseline",
         "基准回归",
-    ),
-    (
-        "yssbi.statistics.regression.threshold",
-        "regression.threshold",
-        "Regression Threshold",
-        "门槛回归",
-    ),
-    (
-        "yssbi.statistics.transform.rcs",
-        "transform.rcs",
-        "Transform RCS",
-        "RCS样条分析",
-    ),
-    (
-        "yssbi.statistics.regression.glm",
-        "regression.glm",
-        "Regression GLM",
-        "GLM广义线性模型",
-    ),
-    (
-        "yssbi.statistics.regression.gamma",
-        "regression.gamma",
-        "Regression Gamma",
-        "Gamma回归",
-    ),
-    (
-        "yssbi.statistics.regression.inverse_gaussian",
+    ],
+    ["regression.threshold", "Regression Threshold", "门槛回归"],
+    ["transform.rcs", "Transform RCS", "RCS样条分析"],
+    ["regression.glm", "Regression GLM", "GLM广义线性模型"],
+    ["regression.gamma", "Regression Gamma", "Gamma回归"],
+    [
         "regression.inverse_gaussian",
         "Regression Inverse Gaussian",
         "逆高斯回归",
-    ),
-    (
-        "yssbi.statistics.regression.cloglog",
+    ],
+    [
         "regression.cloglog",
         "Regression Complementary Log-log",
         "Complementary log-log模型",
-    ),
-    (
-        "yssbi.statistics.regression.beta",
-        "regression.beta",
-        "Regression Beta",
-        "Beta回归",
-    ),
-    (
-        "yssbi.statistics.regression.fractional_response",
+    ],
+    ["regression.beta", "Regression Beta", "Beta回归"],
+    [
         "regression.fractional_response",
         "Regression Fractional Response",
         "Fractional Response模型",
-    ),
+    ],
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(id, method, en, zh) in SPECS {
+    for aliases in SPECS {
+        let [method, en, zh] = *aliases;
+        let id = format!("yssbi.statistics.{method}");
         let (ports, parameters) = interface(method)?;
         let mut parameters = parameters;
         for parameter in &mut parameters {
             let key = parameter.key.as_str();
             let (title_en, title_zh, help_en, help_zh) = parameter_text(key);
-            parameter.title_key = node_key(id, &format!("parameters.{key}.title"))?;
+            parameter.title_key = node_key(&id, &format!("parameters.{key}.title"))?;
             parameter.description_key =
-                Some(node_key(id, &format!("parameters.{key}.description"))?);
+                Some(node_key(&id, &format!("parameters.{key}.description"))?);
             for (locale, title, help) in
                 [("en-US", title_en, help_en), ("zh-CN", title_zh, help_zh)]
             {
@@ -220,132 +127,35 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         }
         fragment.nodes.push(leaf(
             NodeProtocol {
-                type_id: sid(id, NodeTypeId::new)?,
+                type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
-                    title_key: node_key(id, "title")?,
-                    documentation_key: Some(node_key(id, "documentation")?),
-                    aliases_key: Some(node_key(id, "aliases")?),
+                    title_key: node_key(&id, "title")?,
+                    documentation_key: Some(node_key(&id, "documentation")?),
+                    aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.regression", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
                     style_id: sid("builtin.dataframe", NodeStyleId::new)?,
                     hidden: false,
                 },
-                interface: assembled_interface(id, ports, vec![], vec![])?,
-                parameters: assembled_parameters(id, parameters)?,
+                interface: assembled_interface(&id, ports, vec![], vec![])?,
+                parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
                 execution: execution(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
             },
-            id,
+            &id,
         ));
-        let alias = aliases(method);
         for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
             fragment.messages.extend([
-                (locale, node_key_text(id, "title"), Text(title)),
-                (locale, node_key_text(id, "documentation"), Text(title)),
-                (locale, node_key_text(id, "aliases"), Aliases(alias)),
+                (locale, node_key_text(&id, "title"), Text(title)),
+                (locale, node_key_text(&id, "documentation"), Text(title)),
+                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
             ]);
         }
     }
     Ok(())
-}
-fn aliases(method: &str) -> &'static [&'static str] {
-    match method {
-        "regression.robust" => &["regression.robust", "Regression Robust", "Robust回归"],
-        "regression.hierarchical" => &[
-            "regression.hierarchical",
-            "Regression Hierarchical",
-            "分层回归",
-        ],
-        "regression.stepwise" => &["regression.stepwise", "Regression Stepwise", "逐步回归"],
-        "regression.curve" => &["regression.curve", "Regression Curve", "曲线回归"],
-        "regression.nonlinear" => &["regression.nonlinear", "Regression Nonlinear", "非线性回归"],
-        "regression.nonlinear_formula" => &[
-            "regression.nonlinear_formula",
-            "Regression Nonlinear Formula",
-            "非线性回归（自定义公式）",
-        ],
-        "regression.ridge" => &["regression.ridge", "Regression Ridge", "岭回归"],
-        "regression.lasso" => &["regression.lasso", "Regression Lasso", "Lasso回归"],
-        "regression.pls" => &["regression.pls", "Regression PLS", "PLS回归"],
-        "regression.logit.multinomial" => &[
-            "regression.logit.multinomial",
-            "Regression Logit Multinomial",
-            "多分类Logit",
-        ],
-        "regression.logit.ordinal" => &[
-            "regression.logit.ordinal",
-            "Regression Logit Ordinal",
-            "有序Logit",
-        ],
-        "regression.logit.firth" => &[
-            "regression.logit.firth",
-            "Regression Logit Firth",
-            "Firth惩罚Logit回归",
-        ],
-        "regression.poisson" => &["regression.poisson", "Regression Poisson", "Poisson回归"],
-        "regression.negative_binomial" => &[
-            "regression.negative_binomial",
-            "Regression Negative Binomial",
-            "负二项回归",
-        ],
-        "regression.zero_inflated_poisson" => &[
-            "regression.zero_inflated_poisson",
-            "Regression Zero Inflated Poisson",
-            "零膨胀泊松回归",
-        ],
-        "regression.zero_inflated_negative_binomial" => &[
-            "regression.zero_inflated_negative_binomial",
-            "Regression Zero Inflated Negative Binomial",
-            "零膨胀负二项回归",
-        ],
-        "regression.tobit" => &["regression.tobit", "Regression Tobit", "Tobit模型"],
-        "regression.logit.conditional" => &[
-            "regression.logit.conditional",
-            "Regression Logit Conditional",
-            "条件Logit回归",
-        ],
-        "regression.deming" => &["regression.deming", "Regression Deming", "Deming回归"],
-        "regression.quantile" => &["regression.quantile", "Regression Quantile", "分位数回归"],
-        "workflow.regression.univariate_multivariable" => &[
-            "workflow.regression.univariate_multivariable",
-            "Workflow Regression Univariate Multivariable",
-            "单因素与多因素回归",
-        ],
-        "workflow.regression.grouped" => &[
-            "workflow.regression.grouped",
-            "Workflow Regression Grouped",
-            "分组回归",
-        ],
-        "workflow.regression.baseline" => &[
-            "workflow.regression.baseline",
-            "Workflow Regression Baseline",
-            "基准回归",
-        ],
-        "regression.threshold" => &["regression.threshold", "Regression Threshold", "门槛回归"],
-        "transform.rcs" => &["transform.rcs", "Transform RCS", "RCS样条分析"],
-        "regression.glm" => &["regression.glm", "Regression GLM", "GLM广义线性模型"],
-        "regression.gamma" => &["regression.gamma", "Regression Gamma", "Gamma回归"],
-        "regression.inverse_gaussian" => &[
-            "regression.inverse_gaussian",
-            "Regression Inverse Gaussian",
-            "逆高斯回归",
-        ],
-        "regression.cloglog" => &[
-            "regression.cloglog",
-            "Regression Complementary Log-log",
-            "Complementary log-log模型",
-        ],
-        "regression.beta" => &["regression.beta", "Regression Beta", "Beta回归"],
-        "regression.fractional_response" => &[
-            "regression.fractional_response",
-            "Regression Fractional Response",
-            "Fractional Response模型",
-        ],
-        _ => unreachable!(),
-    }
 }
 fn when(key: &str, value: &str) -> Result<ParameterCondition, BuiltinAssemblyError> {
     Ok(ParameterCondition {

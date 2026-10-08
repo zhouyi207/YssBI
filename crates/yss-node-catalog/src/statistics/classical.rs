@@ -223,21 +223,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let parameters = match mode {
             "one" => vec![
                 decimal_parameter(id, "null_mean", "0")?,
-                alternative_parameter(id)?,
+                alternative_parameter()?,
             ],
             "independent" => vec![
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                alternative_parameter()?,
                 toggle_parameter("equal_variance", false)?,
             ],
-            "paired" => vec![choice_parameter(
-                "alternative",
-                "two_sided",
-                &["two_sided", "greater", "less"],
-            )?],
+            "paired" => vec![alternative_parameter()?],
             "summary" => vec![
                 choice_parameter(
                     "design",
@@ -245,37 +237,21 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                     &["one_sample", "independent", "paired"],
                 )?,
                 decimal_parameter(id, "null_value", "0")?,
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                alternative_parameter()?,
                 toggle_parameter("equal_variance", false)?,
             ],
             "zmean" => vec![
                 decimal_parameter(id, "null_mean", "0")?,
                 positive_decimal_parameter(id, "population_sd", "1")?,
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                alternative_parameter()?,
             ],
             "oneprop" | "binomial" => vec![
-                unit_interval_parameter(id, "null_probability", "0.5")?,
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                decimal_parameter(id, "null_probability", "0.5")?,
+                alternative_parameter()?,
             ],
             "twoprop" => vec![
                 decimal_parameter(id, "null_difference", "0")?,
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                alternative_parameter()?,
             ],
             "pearson_table" => vec![
                 bounded_integer_parameter("rows", 2, 2, 1000)?,
@@ -283,11 +259,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ],
             "poisson" => vec![
                 decimal_parameter(id, "null_rate", "1")?,
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                alternative_parameter()?,
             ],
             "equivalence" => vec![
                 decimal_parameter(id, "lower_bound", "-0.5")?,
@@ -295,17 +267,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ],
             "wilcoxon_one" => vec![
                 decimal_parameter(id, "null_median", "0")?,
-                choice_parameter(
-                    "alternative",
-                    "two_sided",
-                    &["two_sided", "greater", "less"],
-                )?,
+                alternative_parameter()?,
             ],
-            "wilcoxon_paired" | "mann_whitney" | "mann_kendall" => vec![choice_parameter(
-                "alternative",
-                "two_sided",
-                &["two_sided", "greater", "less"],
-            )?],
+            "wilcoxon_paired" | "mann_whitney" | "mann_kendall" => vec![alternative_parameter()?],
             "nonparam_family" => vec![choice_parameter(
                 "method",
                 "mann_whitney",
@@ -572,7 +536,7 @@ fn add_parameter_messages(out: &mut Vec<(&'static str, String, Message)>) {
     }
 }
 
-fn alternative_parameter(_id: &str) -> Result<Parameter, BuiltinAssemblyError> {
+fn alternative_parameter() -> Result<Parameter, BuiltinAssemblyError> {
     choice_parameter(
         "alternative",
         "two_sided",
@@ -602,14 +566,6 @@ fn positive_decimal_parameter(
     let mut parameter = decimal_parameter(node, key, default)?;
     parameter.constraints.push(ParameterConstraint::Positive);
     Ok(parameter)
-}
-
-fn unit_interval_parameter(
-    node: &'static str,
-    key: &'static str,
-    default: &'static str,
-) -> Result<Parameter, BuiltinAssemblyError> {
-    decimal_parameter(node, key, default)
 }
 
 fn category_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
