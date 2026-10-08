@@ -1,7 +1,7 @@
 //! Editing metadata for resident graphs. The document itself lives only in ProjectData.
 use serde::Serialize;
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use yss_graph_document::GraphDocumentPatch;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
@@ -127,6 +127,8 @@ pub(crate) struct GraphEditingMetadata {
     pub(crate) session_id: uuid::Uuid,
     pub(crate) saved_hash: [u8; 32],
     pub(crate) current_hash: [u8; 32],
+    // The hash describes this immutable body; the weak reference owns no document copy.
+    current_document: Weak<GraphDocument>,
     undo: VecDeque<HistoryEntry>,
     redo: VecDeque<HistoryEntry>,
     commands: VecDeque<CommandEntry>,
@@ -144,6 +146,7 @@ impl GraphEditingMetadata {
             session_id: uuid::Uuid::new_v4(),
             saved_hash: hash,
             current_hash: hash,
+            current_document: Weak::new(),
             undo: VecDeque::new(),
             redo: VecDeque::new(),
             commands: VecDeque::new(),
@@ -193,8 +196,9 @@ impl GraphEditingMetadata {
         }
     }
 
-    pub(crate) fn apply(&mut self, change: PreparedGraphEdit) {
+    pub(crate) fn apply(&mut self, change: PreparedGraphEdit, document: &Arc<GraphDocument>) {
         self.current_hash = change.after_hash;
+        self.current_document = Arc::downgrade(document);
         let saved_edit = matches!(&change.action, GraphHistoryAction::SavedEdit(_));
         match change.action {
             GraphHistoryAction::Edit(patch) | GraphHistoryAction::SavedEdit(patch) => {
@@ -362,6 +366,15 @@ impl ProjectState {
                     .get(path)
                     .copied()
                     .ok_or_else(editing_stale)?;
+                let editing = self.graph_editing.lock().unwrap();
+                if let Some(metadata) = editing.get(path)
+                    && metadata.current_document.ptr_eq(&Arc::downgrade(&document))
+                {
+                    return Ok(GraphEditingSnapshot {
+                        document,
+                        state: metadata.state(revision),
+                    });
+                }
                 (document, revision)
             };
             let hash = document_hash(&document)
@@ -369,6 +382,16 @@ impl ProjectState {
             let publication = self.mutation_publication.lock().unwrap();
             if publication.project_instance_id != project.as_str() {
                 return Err(editing_stale());
+            }
+            if self
+                .project_data
+                .read()
+                .unwrap()
+                .graphs
+                .get(path)
+                .is_none_or(|current| !Arc::ptr_eq(&current.document, &document))
+            {
+                continue;
             }
             if self
                 .graph_resource_revisions
@@ -388,6 +411,7 @@ impl ProjectState {
             if metadata.current_hash != hash {
                 *metadata = GraphEditingMetadata::new(hash);
             }
+            metadata.current_document = Arc::downgrade(&document);
             return Ok(GraphEditingSnapshot {
                 document,
                 state: metadata.state(revision),

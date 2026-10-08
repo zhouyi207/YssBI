@@ -34,6 +34,8 @@ Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEdit
 
 驻留 Graph 正文以不可变 `Arc<GraphDocument>` 保存在 ProjectData。编辑快照、修改捕获、执行捕获和保存准备共享该正文；提交安装候选正文，已有捕获保留原内容。读取及资源克隆不再复制整图，重命名等准备修改通过 `Arc::make_mut` 隔离已有快照。图文件仍序列化当前正文，不写入共享指针信息。
 
+GraphEditingMetadata 用弱引用标识 `current_hash` 所对应的不可变正文。重复读取同一正文直接返回现有编辑状态；提交将新指纹与候选正文一起关联。正文被替换或准备修改后，弱引用不再匹配，读取会重新计算指纹，并在 publication 锁内重验正文和资源版本后交付。弱引用不保留另一份正文或写权限。
+
 发布 delta 的资源身份由 `ResourceKey` 表达，文件生命周期种类由 `ResourceLifecycleKind` 表达；
 delta 不提供另一套资源分类或逆补丁接口。Graph 撤销仍使用文档 owner 的 `GraphDocumentPatch`。
 

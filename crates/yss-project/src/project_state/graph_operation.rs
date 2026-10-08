@@ -406,7 +406,7 @@ impl ProjectState {
                 let metadata = editing.entry(graph_path.clone()).or_insert_with(|| {
                     super::graph_editing::GraphEditingMetadata::new(history.before_hash)
                 });
-                metadata.apply(history);
+                metadata.apply(history, &graph.document);
                 return Ok((
                     GraphCommitReceipt {
                         project_instance_id: session.instance_id.clone(),
@@ -460,7 +460,7 @@ impl ProjectState {
                 super::graph_editing::GraphEditingMetadata::new(history.before_hash)
             });
             let kind = history.kind;
-            metadata.apply(history);
+            metadata.apply(history, &candidate_document);
             let editing_state = metadata.state(next_revision);
             let receipt = GraphCommitReceipt {
                 project_instance_id: session.instance_id,
