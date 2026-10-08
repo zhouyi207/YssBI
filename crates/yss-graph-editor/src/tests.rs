@@ -547,6 +547,92 @@ fn move_connections_uses_current_document_authority() {
     assert_eq!(moved.input, right);
 }
 
+fn fan_out_move_document() -> (GraphDocument, PortAddress, PortAddress, [NodeId; 2]) {
+    let mut document = GraphDocument::default();
+    let source = insert_node(&mut document, document_node("yssbi.constant.pi", 0.0));
+    let target = insert_node(&mut document, document_node("yssbi.constant.pi", 100.0));
+    let inputs = [
+        insert_node(
+            &mut document,
+            document_node("yssbi.numeric.subtract", 200.0),
+        ),
+        insert_node(
+            &mut document,
+            document_node("yssbi.numeric.subtract", 300.0),
+        ),
+    ];
+    let source = declared(source, "value");
+    let target = declared(target, "value");
+    for (index, node) in inputs.iter().enumerate() {
+        let id = yss_graph_document::ConnectionId::from_bytes((index as u128 + 1).to_be_bytes());
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: source.clone(),
+                input: declared(*node, "left"),
+                order: None,
+            },
+        );
+    }
+    (document, source, target, inputs)
+}
+
+#[test]
+fn output_move_preserves_all_branches_and_existing_target_links_with_exact_undo() {
+    let registry = build_builtin_node_system().unwrap().registry;
+    let (mut document, source, target, inputs) = fan_out_move_document();
+    let retained = DocumentConnection {
+        id: yss_graph_document::ConnectionId::new(),
+        output: target.clone(),
+        input: declared(inputs[0], "right"),
+        order: None,
+    };
+    document.connections.insert(retained.id, retained.clone());
+    let before = document.clone();
+    let patch = EditorGraphMutation::MoveConnections {
+        source,
+        target: target.clone(),
+    }
+    .into_patch(&graph_path(), &document, registry.as_ref())
+    .unwrap();
+    assert_eq!(document, before);
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+
+    assert_eq!(document.connections.len(), 3);
+    assert_eq!(document.connections.get(&retained.id), Some(&retained));
+    for node in inputs {
+        assert!(document.connections.values().any(|connection| {
+            connection.output == target && connection.input == declared(node, "left")
+        }));
+    }
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, before);
+}
+
+#[test]
+fn output_move_rejects_a_conflict_on_a_later_branch_without_editing() {
+    let registry = build_builtin_node_system().unwrap().registry;
+    let (mut document, source, target, inputs) = fan_out_move_document();
+    let id = yss_graph_document::ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: target.clone(),
+            input: declared(inputs[1], "left"),
+            order: None,
+        },
+    );
+    let before = document.clone();
+    let error = EditorGraphMutation::MoveConnections { source, target }
+        .into_patch(&graph_path(), &document, registry.as_ref())
+        .unwrap_err();
+    assert!(matches!(error, crate::MutationConflict::Editor(error)
+        if error.code == EditorMutationErrorCode::GraphConnectionAlreadyExists));
+    assert_eq!(document, before);
+}
+
 #[test]
 fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
     use std::sync::Arc;

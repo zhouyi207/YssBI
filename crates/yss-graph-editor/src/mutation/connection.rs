@@ -159,6 +159,9 @@ pub(crate) fn move_connection_operations(
         .cloned()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
+    // The removal view was structurally validated before planning branches.
+    // Resolved endpoints and distinct original connection IDs preserve those
+    // invariants; only capacity and duplicate pairs depend on earlier branches.
     for proposal in &proposals {
         let mut connections = document
             .connections
@@ -195,7 +198,6 @@ pub(crate) fn move_connection_operations(
             input.spec.connections,
         )?;
         insertions.insert(proposal.id, proposal.clone());
-        validate_graph_document_connection_candidate(document, &removals, &insertions)?;
     }
 
     let mut operations = removal_operations;

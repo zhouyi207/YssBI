@@ -127,6 +127,8 @@ Application 捕获当前编辑版本与资源事实、解析一次语义，在�
 Graph Runtime 对每个候选复用提交所用的 mutation planner，包括动态端口认领、重复连接、方向、同节点、类型、容量和顺序检查；查询不提交补丁、不写历史或 dirty。
 Document Edit 的 `prepare_graph_document_patch_in_place` 交付只读的作用域候选，校验顺序 before-state 和完整结构；作用域结束时按相反顺序恢复成功应用的操作，包含校验失败和嵌套准备。恢复直接读取原补丁的 before-state，不依赖候选值的相等比较。原子应用与拥有正文的准备继续复用同一校验入口。
 Editor 的追加、替换和迁移规划借用连接变更视图；Document Edit 先核对移除项的 before-state 与插入身份，再按同一完整结构校验器读取保留及新增连接，不复制其余正文。容量与重复端点检查读取同一移除/插入集合。
+迁移的移除视图只校验一次完整结构；逐分支复用端口解析检查端点，并使用原连线的互异身份规划。
+容量与重复端点检查仍包含已规划分支，最终补丁在 Runtime 和提交入口继续重验完整结构。
 Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码的 invalid；迁移预览的替换列表只包含被挤掉的连接，不包含自身迁移的连接。
 桌面端口投影只交付连接数量与可用动作，不发送接受类型域、连接上限或顺序供前端再推导。Assistant 的图检查仍消费后端的接受类型说明和连接上限。
 响应携带语义输入 hash，前端按编辑版本、语义和资源发布身份接纳，并在下一次身份变化时丢弃。
@@ -230,8 +232,8 @@ Application 仍在捕获、资源授权和交付边界重验当前项目、编�
 Document Edit 的补丁准备入口接收拥有所有权的候选，逐项校验 before-state、应用操作，并在返回前
 校验完整文档。需要保留共享原文时由调用方显式复制；私有候选的后续补丁直接移交同一正文，
 端口数量调整、批量重接及子图导入不逐项复制整图。失败不改动共享原文；
-`apply_graph_document_patch` 为可写文档准备独立候选，成功后才替换调用方的文档。
-Runtime 的认领候选移交给同一入口；最终提交仍核对 Project 的当前版本和修改权威。
+`apply_graph_document_patch` 在可写文档上准备作用域候选，成功后保留操作，失败时恢复原内容。
+Runtime 的认领与实际编辑使用嵌套作用域候选；最终提交仍核对 Project 的当前版本和修改权威。
 
 GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操作或 Harness 批次对应一个事务。历史按条目数和序列化字节数限制，阈值由 [graph_editing.rs](../../../yss-project/src/project_state/graph_editing.rs) 拥有。Undo/redo 恢复文档意图后重新 Resolve，不能恢复历史中的类型、诊断或结果 payload。结构有效但暂时不能运行的图仍可编辑，阻断诊断由 Graph Problems 展示。
 
