@@ -12428,7 +12428,6 @@ dependencies = [
 name = "yss-database-schema"
 version = "0.1.0"
 dependencies = [
- "thiserror 2.0.20",
  "yss-data-contract",
  "yss-database-contract",
 ]

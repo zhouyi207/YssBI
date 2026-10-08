@@ -1,7 +1,7 @@
 //! Backend-neutral runtime database schema facts and revision projections.
 //!
-//! This crate owns the typed schema/revision projection shared by database sessions, Graph
-//! contracts, and transport adapters. Physical adapters map their exact storage schemas into
+//! This crate owns the typed schema/revision projection shared by database sessions and
+//! application readers. Physical adapters map their exact storage schemas into
 //! this semantic vocabulary; these facts are never used to reconstruct storage types.
 
 use yss_data_contract::TabularColumnName;
@@ -117,12 +117,6 @@ pub struct DatabaseSchemaFact {
     runtime_revision: DatabaseRuntimeRevision,
     schema_revision: DatabaseSchemaRevision,
     columns: Box<[DatabaseColumnFact]>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum DatabaseSchemaFactError {
-    #[error("database schema contains an invalid column name")]
-    InvalidColumnName,
 }
 
 impl DatabaseSchemaFact {

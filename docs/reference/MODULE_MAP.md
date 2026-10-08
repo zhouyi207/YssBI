@@ -23,7 +23,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-database-engine` | `crates/yss-database-engine` | [Cargo.toml](../../crates/yss-database-engine/Cargo.toml) | [README](../../crates/yss-database-engine/README.md) |
 | `yss-database-io` | `crates/yss-database-io` | [Cargo.toml](../../crates/yss-database-io/Cargo.toml) | — |
 | `yss-database-runtime` | `crates/yss-database-runtime` | [Cargo.toml](../../crates/yss-database-runtime/Cargo.toml) | [README](../../crates/yss-database-runtime/README.md) |
-| `yss-database-schema` | `crates/yss-database-schema` | [Cargo.toml](../../crates/yss-database-schema/Cargo.toml) | — |
+| `yss-database-schema` | `crates/yss-database-schema` | [Cargo.toml](../../crates/yss-database-schema/Cargo.toml) | [README](../../crates/yss-database-schema/README.md) |
 | `yss-database-source` | `crates/yss-database-source` | [Cargo.toml](../../crates/yss-database-source/Cargo.toml) | — |
 | `yss-database-store` | `crates/yss-database-store` | [Cargo.toml](../../crates/yss-database-store/Cargo.toml) | [README](../../crates/yss-database-store/README.md) |
 | `yss-dataset-profile` | `crates/yss-dataset-profile` | [Cargo.toml](../../crates/yss-dataset-profile/Cargo.toml) | — |
