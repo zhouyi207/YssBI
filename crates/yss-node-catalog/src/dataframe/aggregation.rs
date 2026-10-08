@@ -50,7 +50,6 @@ pub(super) fn interface(
                 input,
                 if series { "DataSeries" } else { "Source" },
                 value_type,
-                None,
             )?,
             streaming_output(
                 "result",

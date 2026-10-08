@@ -74,7 +74,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             }
             (
                 vec![
-                    streaming_input("groups", "Groups", group_type, None)?,
+                    streaming_input("groups", "Groups", group_type)?,
                     streaming_output("result", "Result", dataframe_type()?, None)?,
                 ],
                 parameters,
@@ -82,7 +82,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         } else {
             (
                 vec![
-                    streaming_input("source", "Source", dataframe_type()?, None)?,
+                    streaming_input("source", "Source", dataframe_type()?)?,
                     streaming_output(
                         "groups",
                         "Groups",

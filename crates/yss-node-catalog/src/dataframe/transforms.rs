@@ -34,6 +34,22 @@ enum Kind {
     BackwardFill,
     Encode,
 }
+
+impl Kind {
+    fn is_frame(self) -> bool {
+        matches!(
+            self,
+            Self::Sort
+                | Self::Deduplicate
+                | Self::SetColumn
+                | Self::Mask
+                | Self::Unpivot
+                | Self::Pivot
+                | Self::Resample
+        )
+    }
+}
+
 struct Entry {
     id: &'static str,
     en: &'static str,
@@ -326,16 +342,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 Text(title),
             ));
         }
-        let frame = matches!(
-            entry.kind,
-            Kind::Sort
-                | Kind::Deduplicate
-                | Kind::SetColumn
-                | Kind::Mask
-                | Kind::Unpivot
-                | Kind::Pivot
-                | Kind::Resample
-        );
+        let frame = entry.kind.is_frame();
         let protocol = NodeProtocol {
             type_id: sid(entry.id, NodeTypeId::new)?,
             catalog: NodeCatalogProtocol {
@@ -496,10 +503,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
     );
     let element = TypeExpr::Generic(sid("element", TypeParameterId::new)?);
     let generic_series = data_series_type(element.clone());
-    let frame = matches!(
-        kind,
-        Sort | Deduplicate | SetColumn | Mask | Unpivot | Pivot | Resample
-    );
+    let frame = kind.is_frame();
     let mut parameters = Vec::new();
     let mut ports = if frame {
         relational_ports(derived_schema(
@@ -564,7 +568,6 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
                 },
                 "Series",
                 input,
-                None,
             )?,
             streaming_output(
                 "result",
@@ -618,21 +621,13 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
             ];
         }
         SetColumn => {
-            ports.insert(
-                1,
-                streaming_input("series", "Series", generic_series, None)?,
-            );
+            ports.insert(1, streaming_input("series", "Series", generic_series)?);
             parameters = vec![text_value("name", "computed")?];
         }
         Mask => {
             ports.insert(
                 1,
-                streaming_input(
-                    "mask",
-                    "Mask",
-                    data_series_type(concrete("core.binary")?),
-                    None,
-                )?,
+                streaming_input("mask", "Mask", data_series_type(concrete("core.binary")?))?,
             );
             parameters = vec![toggle("drop_matches", false)?];
         }
@@ -679,17 +674,17 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         Choose => {
             ports.insert(
                 1,
-                streaming_input("when_true", "When True", mixed(element.clone()), None)?,
+                streaming_input("when_true", "When True", mixed(element.clone()))?,
             );
             ports.insert(
                 2,
-                streaming_input("when_false", "When False", mixed(element), None)?,
+                streaming_input("when_false", "When False", mixed(element))?,
             );
         }
         Fill => {
             ports.insert(
                 1,
-                streaming_input("replacement", "Replacement", mixed(element), None)?,
+                streaming_input("replacement", "Replacement", mixed(element))?,
             );
         }
         Map => {
@@ -756,7 +751,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         DateDifference => {
             ports.insert(
                 1,
-                streaming_input("other", "Other", mixed(concrete("core.datetime")?), None)?,
+                streaming_input("other", "Other", mixed(concrete("core.datetime")?))?,
             );
             parameters = vec![choice_parameter(
                 "unit",

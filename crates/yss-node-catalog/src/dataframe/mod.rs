@@ -153,7 +153,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Limit => Ok((
             vec![
-                streaming_input("source", "Source", dataframe_type()?, None)?,
+                streaming_input("source", "Source", dataframe_type()?)?,
                 streaming_output(
                     "result",
                     "Result",
@@ -168,7 +168,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Rename => Ok((
             vec![
-                streaming_input("source", "Source", dataframe_type()?, None)?,
+                streaming_input("source", "Source", dataframe_type()?)?,
                 streaming_output(
                     "result",
                     "Result",
@@ -188,7 +188,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             let subset_type = data_series_type(concrete("core.text")?);
             Ok((
                 vec![
-                    streaming_input("source", "Source", dataframe_type()?, None)?,
+                    streaming_input("source", "Source", dataframe_type()?)?,
                     streaming_output(
                         "result",
                         "Result",
@@ -248,7 +248,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Decompose => Ok((
             vec![
-                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?)?,
                 derived_output(
                     "columns",
                     "Column",
@@ -298,8 +298,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Join => Ok((
             vec![
-                streaming_input("left", "Left", dataframe_type()?, None)?,
-                streaming_input("right", "Right", dataframe_type()?, None)?,
+                streaming_input("left", "Left", dataframe_type()?)?,
+                streaming_input("right", "Right", dataframe_type()?)?,
                 streaming_output(
                     "result",
                     "Result",
@@ -344,7 +344,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         SeriesSelect => Ok((
             vec![
-                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?)?,
                 data_output(
                     "series",
                     "DataSeries",
@@ -382,33 +382,28 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         SeriesLength | SeriesCount => Ok((
             vec![
-                data_input(
-                    "series",
-                    "DataSeries",
-                    generic_series_type("element")?,
-                    None,
-                )?,
+                data_input("series", "DataSeries", generic_series_type("element")?)?,
                 data_output("value", "Value", concrete("core.numeric")?, None)?,
             ],
             vec![],
         )),
         SeriesSum => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_input("series", "DataSeries", numeric_series_type())?,
                 data_output("value", "Value", concrete("core.numeric")?, None)?,
             ],
             vec![],
         )),
         SeriesMean => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_input("series", "DataSeries", numeric_series_type())?,
                 data_output("value", "Value", float_type()?, None)?,
             ],
             vec![],
         )),
         Standardize => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_input("series", "DataSeries", numeric_series_type())?,
                 streaming_output("standardized", "Standardized", float_series_type()?, None)?,
                 data_output("mean", "Mean", float_type()?, None)?,
                 data_output(
@@ -422,7 +417,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         InverseStandardize => Ok((
             vec![
-                streaming_input("standardized", "Standardized", float_series_type()?, None)?,
+                streaming_input("standardized", "Standardized", float_series_type()?)?,
                 scalar_input("mean", "Mean", "core.numeric")?,
                 scalar_input("standard_deviation", "Standard Deviation", "core.numeric")?,
                 streaming_output("series", "DataSeries", float_series_type()?, None)?,
@@ -438,7 +433,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             );
             Ok((
                 vec![
-                    data_input("source", "Source", series.clone(), None)?,
+                    data_input("source", "Source", series.clone())?,
                     data_output("result", "Result", series, None)?,
                 ],
                 vec![parameter(
@@ -455,7 +450,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         }
         TimeAlign => Ok((
             vec![
-                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?)?,
                 data_output(
                     "aligned",
                     "Aligned",
@@ -470,14 +465,14 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         TimeUnary => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_input("series", "DataSeries", numeric_series_type())?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
         )),
         TimeWindow => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_input("series", "DataSeries", numeric_series_type())?,
                 transforms::window_context()?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
@@ -491,12 +486,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         TimeLag => Ok((
             vec![
-                data_input(
-                    "series",
-                    "DataSeries",
-                    generic_series_type("element")?,
-                    None,
-                )?,
+                data_input("series", "DataSeries", generic_series_type("element")?)?,
                 transforms::window_context()?,
                 data_output("result", "Result", generic_series_type("element")?, None)?,
             ],
@@ -507,7 +497,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         PanelAlign => Ok((
             vec![
-                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?)?,
                 data_output(
                     "aligned",
                     "Aligned",
@@ -523,8 +513,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         PanelDifference => Ok((
             vec![
-                data_input("aligned", "Aligned", dataframe_type()?, None)?,
-                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_input("aligned", "Aligned", dataframe_type()?)?,
+                data_input("series", "DataSeries", numeric_series_type())?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![
@@ -571,7 +561,7 @@ fn choice_parameter(
 
 fn relational_ports(result_schema: SchemaExpr) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
-        streaming_input("source", "Source", dataframe_type()?, None)?,
+        streaming_input("source", "Source", dataframe_type()?)?,
         streaming_output("result", "Result", dataframe_type()?, Some(result_schema))?,
     ])
 }
@@ -580,7 +570,6 @@ fn data_input(
     key: &'static str,
     title: &'static str,
     value_type: TypeExpr,
-    schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
@@ -588,7 +577,7 @@ fn data_input(
         PortDirection::Input,
         value_type,
         PortCardinality::Declared,
-        schema,
+        None,
     )
 }
 
@@ -596,9 +585,8 @@ fn streaming_input(
     key: &'static str,
     title: &'static str,
     value_type: TypeExpr,
-    schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut spec = data_input(key, title, value_type, schema)?;
+    let mut spec = data_input(key, title, value_type)?;
     spec.consumption = Some(InputConsumption::Streaming);
     Ok(spec)
 }
@@ -608,7 +596,7 @@ fn scalar_input(
     title: &'static str,
     type_id: &'static str,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_input(key, title, concrete(type_id)?, None)
+    data_input(key, title, concrete(type_id)?)
 }
 
 fn user_input(
