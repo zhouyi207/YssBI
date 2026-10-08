@@ -226,7 +226,7 @@ IV 2SLS/LIML、Panel、VAR、VEC Summary，以及 Panel Compare 和 VAR Lag-orde
 Linear Summary 在 Parameters 的 Configure 分组声明内容开关及条件可见的检验参数，默认选模型概览、系数表、方程和 ANOVA。IV、Panel、VAR、VEC Summary 同样按所选内容组装报告；IV/VAR/VEC 的可选诊断默认关闭，仅在勾选后计算。Panel 默认包含模型、系数、效应及估计器统计，VEC 默认包含协整统计。内容选择是图参数，参与语义失效、历史与保存。Logit/Probit/Prais Summary 投影拟合统计，不在模型中重复保存完整报告。
 原始输入与估计配置属于 Fit；IV 2SLS、IV LIML、Panel、VAR 均有对应 Fit 定义，Panel DID 的 TWFE 节点也属于 Fit。
 ADF 使用 `adf.test`，输入 `series`，以 `lags`、`regression` 配置检验，唯一输出为 `statistics.result.adf` 类型的结构化 `result`。
-`adf.summary` 已删除，不提供旧节点或旧端口的兼容转换。上述方法及 Logit/Probit/Prais、VEC 的模型节点均已注册执行内核。Logit/Probit 的截距、迭代次数和容差，Prais 的 Prais–Winsten/Cochrane–Orcutt 变换，以及 IV 的非稳健/HC0–HC3 和 small 参数均进入实际计算。IV 支持多个内生变量与排除工具变量，外生自变量可为空；Summary 可选择第一阶段与过度识别检验，2SLS 还可选择内生性检验。OLS/WLS 的 Cluster 标准误使用可选 `clusters` 输入，只有选择 Cluster 时才允许且必须连接。
+`adf.summary` 已删除，不提供旧节点或旧端口的兼容转换。上述方法及 Logit/Probit/Prais、VEC 的模型节点均已注册执行内核。Logit/Probit 的截距、迭代次数和容差，Prais 的 Prais–Winsten/Cochrane–Orcutt 变换，以及 IV 的非稳健/HC0–HC3 和 small 参数均进入实际计算。IV 支持多个内生变量与排除工具变量，外生自变量可为空；Summary 可选择第一阶段与过度识别检验，2SLS 还可选择内生性检验。OLS/WLS 的 Cluster 标准误使用可选 `clusters` 输入，只有选择 Cluster 时才允许且必须连接；端口复用共享标签数列类型，接受数值、分类、顺序、二元、文本及标识语义，宽整数标识不经浮点转换。
 
 Panel 统一选择 FE、LSDV、FD、RE FGLS、RE MLE 或 Between，并选择 entity/time/two_way 维度。FD 仅支持 entity，Between 不支持 two_way；MLE/Between 仅支持 nonrobust，LSDV 必须有截距。不适用组合明确拒绝。通用 Panel Fit 输出模型及估计尺度的 fitted/residuals；源行分组保留在模型中。VAR 使用截距和连续滞后；IRF/FEVD 独立节点的 steps 默认 8，可选 1–1000。VAR/VEC Summary 的残差诊断启用后使用 serial_lags，默认 2，可选 1–40。VEC/协整秩支持 none/constant/trend。TWFE DID 的 treatment 是已构造的 Treat×Post，伪处理组随机化另用独立节点输入 treat/post、置换次数和种子；没有事件研究参数。
 

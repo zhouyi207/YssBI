@@ -287,6 +287,8 @@ DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命�
 分页、统计输入消费沿用各自的取消、deadline 和内存边界，不将非法计算值写成正常结果。
 
 线性回归 Fit 从节点参数构造 `OlsOptions` 和 `LinearRegressionMethod`，由 Node Kernel 调用 `yss_sci_runtime::regression::linear::linear_regression`，传入本次执行的取消标记和 deadline。OLS/WLS 支持截距、Nonrobust、HC0–HC3、HAC、Newey-West、Fixed Scale 和 Cluster；Cluster 的单个 `clusters` 输入与响应、自变量及权重共同对齐。GLS 接收相对误差协方差矩阵并估计尺度，标准误仅支持 Nonrobust。Summary 读取上游原生模型，不调用拟合；Predict 复用训练系数和截距。
+Cluster 标签独立读取为精确标量，复用 `common/inputs::categories` 编码，不提升为 f64；宽整数和文本标识保持分组身份。
+响应、自变量和权重继续使用紧凑数值读取，标签读取计入这些已驻留缓冲，编码前核对长度和合计预算。Fit 使用 revision 11。
 
 Logit/Probit/Prais、IV 2SLS/LIML、Panel、TWFE DID、ADF、VAR/VEC 及阶数/协整秩检验均有执行适配。模型以不可变 Record 保存中立拟合契约，Summary 在预算及执行控制检查后解码为对应契约，交给 Runtime 组装所选报告并调用需要的 SCI 分析；Fit 不附带完整报告。Logit/Probit Predict 使用既有系数。Panel/VAR/VEC 只输出模型，DID 输出模型和报告，不把未提供或多方程的观测结果伪装为单个拟合数列。参数组合和输出含义见 [Catalog](../yss-node-catalog/README.md) 与各节点帮助。
 

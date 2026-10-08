@@ -219,7 +219,7 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         ports.push(bounded_user_data_input(
             "clusters",
             "Cluster IDs",
-            series_type()?,
+            label_series()?,
             0,
             Some(1),
         )?);

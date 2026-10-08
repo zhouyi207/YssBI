@@ -34,7 +34,7 @@ pub(super) struct Column {
 }
 
 impl Column {
-    fn bytes(&self) -> Option<usize> {
+    pub(in crate::builtins) fn bytes(&self) -> Option<usize> {
         self.values.iter().try_fold(
             self.values
                 .len()
@@ -154,7 +154,7 @@ pub(super) fn load_with_retained_bytes(
     Ok(columns)
 }
 
-fn column_retaining(
+pub(in crate::builtins) fn column_retaining(
     value: &RuntimeValue,
     invocation: &KernelInvocation<'_>,
     retained: usize,

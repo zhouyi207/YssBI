@@ -104,27 +104,7 @@ pub(crate) fn execute(
             let mut inputs = vec![response];
             inputs.extend(group(invocation, "x"));
             inputs.extend(weights);
-            inputs.extend(clusters);
             let mut prepared = columns(&inputs, invocation, 0)?;
-            let cluster_covariance = if clustered {
-                let cluster_values = prepared.pop().ok_or(KernelError::InvalidNumericInput)?;
-                let mut levels = std::collections::BTreeMap::new();
-                let cluster_id = cluster_values
-                    .into_iter()
-                    .map(|v| {
-                        let id = levels.len();
-                        *levels
-                            .entry(if v == 0.0 { 0 } else { v.to_bits() })
-                            .or_insert(id)
-                    })
-                    .collect();
-                Some(OlsCovariance::Cluster {
-                    cluster_id,
-                    xtreg_fe_style: false,
-                })
-            } else {
-                None
-            };
             let n = prepared[0].len();
             check_fit_workspace(
                 n,
@@ -133,6 +113,27 @@ pub(crate) fn execute(
                 method,
                 invocation,
             )?;
+            let cluster_covariance = if clustered {
+                let retained = n
+                    .checked_mul(prepared.len())
+                    .and_then(|values| values.checked_mul(size_of::<f64>()))
+                    .ok_or(KernelError::BudgetExceeded)?;
+                let column =
+                    super::super::series::column_retaining(clusters[0], invocation, retained)?;
+                if column.values.len() != n {
+                    return Err(KernelError::ShapeMismatch);
+                }
+                invocation
+                    .control
+                    .check_bytes(column.bytes().and_then(|bytes| retained.checked_add(bytes)))?;
+                let (cluster_id, _) = super::common::categories(&column, false, invocation)?;
+                Some(OlsCovariance::Cluster {
+                    cluster_id,
+                    xtreg_fe_style: false,
+                })
+            } else {
+                None
+            };
             let method = match method {
                 "OLS" => LinearRegressionMethod::Ols,
                 "WLS" => LinearRegressionMethod::Wls {
@@ -345,6 +346,9 @@ pub(super) fn numeric_list(
     }
     Ok(RuntimeValue::List(output.into()))
 }
+
+#[cfg(test)]
+mod cluster_tests;
 
 #[cfg(test)]
 mod tests {

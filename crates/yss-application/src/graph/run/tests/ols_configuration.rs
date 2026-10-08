@@ -393,6 +393,74 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             coefficients(&local[&model_key])
         );
     }
+    apply(
+        &mut document,
+        EditorGraphMutation::SetParameters {
+            node_id: fit,
+            parameters: [("covariance".parse().unwrap(), "cluster".into())].into(),
+        },
+    );
+    apply(
+        &mut document,
+        EditorGraphMutation::AddPortInstance {
+            node_id: fit,
+            template_key: "clusters".parse().unwrap(),
+            placement: PortPlacement::Append,
+        },
+    );
+    let cluster_input = document
+        .port_bindings
+        .keys()
+        .find(|address| {
+            address.node_id == fit
+                && matches!(&address.port, yss_graph_document::PortRef::Instance { template, .. }
+                if template.as_str() == "clusters")
+        })
+        .unwrap()
+        .clone();
+    let constant_id = yss_graph_document::ConstantId::new();
+    let mut cluster_constant = yss_graph_document::GraphConstant {
+        id: constant_id,
+        name: "Clusters".into(),
+        data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
+            yss_data_contract::SemanticType::Text,
+        ))),
+        data_value: yss_data_contract::DataValue::String(
+            serde_json::json!({"value": ["north", "north", "south", "south", "east", "east"]})
+                .to_string()
+                .into(),
+        ),
+        tabular: None,
+        description: String::new(),
+        tags: vec![],
+    };
+    yss_graph_document::normalize_constant_value(&mut cluster_constant).unwrap();
+    document.constants.insert(constant_id, cluster_constant);
+    let clusters = NodeId::new();
+    document.nodes.insert(
+        clusters,
+        DocumentNode {
+            id: clusters,
+            node_type: "yssbi.constant.get".parse().unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            user_label: None,
+            parameters: [("constant".parse().unwrap(), constant_id.to_string().into())].into(),
+        },
+    );
+    let connection_id = yss_graph_document::ConnectionId::new();
+    document.connections.insert(
+        connection_id,
+        DocumentConnection {
+            id: connection_id,
+            output: port(clusters, "value"),
+            input: cluster_input,
+            order: None,
+        },
+    );
+    assert_eq!(
+        coefficients(&execute(&document)[&model_key]),
+        coefficients(&local[&model_key]),
+    );
     document
         .nodes
         .get_mut(&fit)
