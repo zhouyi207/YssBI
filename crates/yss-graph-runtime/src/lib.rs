@@ -492,10 +492,10 @@ impl GraphRuntimeState {
 
     pub fn materialize_open_candidate(
         &self,
-        document: &GraphDocument,
+        document: &Arc<GraphDocument>,
     ) -> Result<Arc<GraphDocument>, GraphMaterializationError> {
         validate_graph_document(document).map_err(|_| GraphMaterializationError::invariant())?;
-        let candidate = Arc::new(document.clone());
+        let candidate = Arc::clone(document);
         #[cfg(any(test, feature = "test-support"))]
         if let Some(control) = &self.test_control
             && control.before_materialization_return()
@@ -781,7 +781,7 @@ mod tests {
 
         assert!(
             runtime
-                .materialize_open_candidate(&GraphDocument::default())
+                .materialize_open_candidate(&Arc::new(GraphDocument::default()))
                 .is_err()
         );
         assert_eq!(control.events(), [GraphRuntimeTestEvent::Materialized]);
