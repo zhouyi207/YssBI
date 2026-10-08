@@ -13,11 +13,29 @@ use yss_graph_execution::{
     result::ResultReference,
 };
 pub use yss_sci_contract::visualization::PlotMetadata;
+pub use yss_sci_contract::{
+    survival::{NomogramAxis, NomogramPlot, NomogramTick},
+    visualization::{
+        CoefficientPlot, CoefficientPoint, CorrelationPlot, CorrelogramPlot, CorrelogramPoint,
+        DistributionGroup, DistributionPlot, HeatmapPlot, IntervalPlot, IntervalPoint,
+        PlotPoint as DensityPoint,
+    },
+};
 
 #[derive(Debug, PartialEq)]
 pub enum ResultPlotProjection {
     Cartesian(CartesianResultPlot),
     Histogram(HistogramResultPlot),
+    Correlation(CorrelationPlot),
+    Correlogram(CorrelogramPlot),
+    Distribution {
+        plot: DistributionPlot,
+        violin: bool,
+    },
+    Heatmap(HeatmapPlot),
+    Interval(IntervalPlot),
+    Coefficient(CoefficientPlot),
+    Nomogram(NomogramPlot),
 }
 
 #[derive(Debug, PartialEq)]

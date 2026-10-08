@@ -11,6 +11,8 @@ use yss_data_contract::TabularScalar;
 use yss_graph_execution::plan::PlotDataKind;
 use yss_node_kernel::RuntimeValue;
 use yss_sci_contract::visualization::PlotMetadata;
+mod nomogram;
+mod statistical;
 
 type Record = BTreeMap<Box<str>, RuntimeValue>;
 type Invalid = ResultQueryApplicationError;
@@ -30,6 +32,14 @@ pub(super) fn supports(kind: PlotDataKind) -> bool {
             | PlotDataKind::PpQq
             | PlotDataKind::Roc
             | PlotDataKind::Quadrant
+            | PlotDataKind::Correlation
+            | PlotDataKind::Correlogram
+            | PlotDataKind::Boxplot
+            | PlotDataKind::Violin
+            | PlotDataKind::Heatmap
+            | PlotDataKind::Errorbar
+            | PlotDataKind::Coefficient
+            | PlotDataKind::Nomogram
     )
 }
 
@@ -38,6 +48,18 @@ pub(super) fn project(
     value: &RuntimeValue,
 ) -> Result<ResultPlotProjection, Invalid> {
     let record = object(value)?;
+    match kind {
+        PlotDataKind::Correlation => return statistical::correlation(record),
+        PlotDataKind::Correlogram => return statistical::correlogram(record),
+        PlotDataKind::Heatmap => return statistical::heatmap(record),
+        PlotDataKind::Boxplot | PlotDataKind::Violin => {
+            return statistical::distribution(record, kind == PlotDataKind::Violin);
+        }
+        PlotDataKind::Errorbar => return statistical::interval(record),
+        PlotDataKind::Coefficient => return statistical::coefficient(record),
+        PlotDataKind::Nomogram => return nomogram::project(record),
+        _ => {}
+    }
     let rows = list(field(record, "data")?)?;
     if rows.is_empty() {
         return Err(invalid());
@@ -262,5 +284,37 @@ fn axis_format(value: Option<&RuntimeValue>) -> Result<PlotAxisFormat, Invalid> 
         Some("date") => Ok(PlotAxisFormat::Date),
         Some("datetime") => Ok(PlotAxisFormat::Datetime),
         _ => Err(invalid()),
+    }
+}
+
+fn rows<'a>(raw: &'a Record, key: &str, minimum: usize) -> Result<&'a [RuntimeValue], Invalid> {
+    let rows = list(field(raw, key)?)?;
+    if rows.len() < minimum {
+        return Err(invalid());
+    }
+    Ok(rows)
+}
+fn positive_count(value: &RuntimeValue) -> Result<usize, Invalid> {
+    let value = count(value)?;
+    if value == 0 {
+        return Err(invalid());
+    }
+    Ok(value)
+}
+fn positive(value: &RuntimeValue) -> Result<f64, Invalid> {
+    let value = number(value)?;
+    if value <= 0. {
+        return Err(invalid());
+    }
+    Ok(value)
+}
+fn nullable_number(value: &RuntimeValue) -> Result<Option<f64>, Invalid> {
+    if matches!(
+        value.unannotated(),
+        RuntimeValue::Scalar(TabularScalar::Null)
+    ) {
+        Ok(None)
+    } else {
+        number(value).map(Some)
     }
 }

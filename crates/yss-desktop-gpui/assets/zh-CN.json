@@ -2646,7 +2646,21 @@
       "bubbleSize": "气泡大小",
       "toolbar": "图形显示选项",
       "points": "显示数据点",
-      "axes": "X：{{x}} · Y：{{y}}"
+      "axes": "X：{{x}} · Y：{{y}}",
+      "row": "行",
+      "column": "列",
+      "correlation": "相关系数",
+      "value": "值",
+      "unavailable": "不可用",
+      "lag": "滞后阶数",
+      "whiskers": "须线范围",
+      "estimate": "估计值",
+      "lower": "下限",
+      "upper": "上限",
+      "horizon": "预测时点：{{value}}",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "page": "第 {{current}} / {{total}} 页 · {{count}} 项"
     }
   }
 }

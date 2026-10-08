@@ -7,6 +7,7 @@ use yss_graph_execution::{
 };
 use yss_node_kernel::RuntimeValue;
 use yss_sci_contract::visualization as sci;
+mod statistical;
 
 fn value(value: impl serde::Serialize) -> RuntimeValue {
     RuntimeValue::try_from(serde_json::to_value(value).unwrap()).unwrap()

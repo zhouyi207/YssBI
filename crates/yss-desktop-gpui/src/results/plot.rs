@@ -1,11 +1,18 @@
 //! Immutable geometry is prepared once on the result worker; controls only affect presentation.
+mod information;
+mod render;
 use crate::plots::{
     cartesian::{CartesianData, CartesianKind, CartesianOptions, CartesianPlot},
+    correlogram::{Correlogram, CorrelogramData},
+    distribution::{Distribution, DistributionData},
     histogram::{self, HistogramDatum},
+    interval::{Interval, IntervalData},
+    matrix::{MatrixData, MatrixPlot},
+    nomogram::{Nomogram, NomogramData},
 };
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*};
+use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Selectable, Sizable,
+    ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
     switch::Switch,
 };
@@ -21,6 +28,24 @@ enum Geometry {
         x_label: Option<Box<str>>,
         y_label: Option<Box<str>>,
         observations: Option<usize>,
+    },
+    Matrix {
+        data: Arc<MatrixData>,
+        observations: Option<usize>,
+    },
+    Correlogram {
+        acf: Arc<CorrelogramData>,
+        pacf: Arc<CorrelogramData>,
+        observations: usize,
+    },
+    Distribution(Arc<DistributionData>),
+    Interval {
+        data: Arc<IntervalData>,
+        confidence: Option<f64>,
+    },
+    Nomogram {
+        data: Arc<NomogramData>,
+        horizon: f64,
     },
 }
 pub(super) struct PlotData {
@@ -84,85 +109,86 @@ impl PlotData {
                 metadata: None,
                 annotation: PlotAnnotation::None,
             },
+            ResultPlotProjection::Correlation(plot) => {
+                let observations = Some(plot.observations);
+                Self::statistical(
+                    Geometry::Matrix {
+                        data: Arc::new(MatrixData::correlation(plot)),
+                        observations,
+                    },
+                    PlotDataKind::Correlation,
+                    None,
+                )
+            }
+            ResultPlotProjection::Heatmap(plot) => {
+                let metadata = Some(plot.metadata.clone());
+                Self::statistical(
+                    Geometry::Matrix {
+                        data: Arc::new(MatrixData::heatmap(plot)),
+                        observations: None,
+                    },
+                    PlotDataKind::Heatmap,
+                    metadata,
+                )
+            }
+            ResultPlotProjection::Correlogram(plot) => Self::statistical(
+                Geometry::Correlogram {
+                    acf: Arc::new(CorrelogramData::new(plot.acf, plot.ci_half_width)),
+                    pacf: Arc::new(CorrelogramData::new(plot.pacf, plot.ci_half_width)),
+                    observations: plot.n,
+                },
+                PlotDataKind::Correlogram,
+                None,
+            ),
+            ResultPlotProjection::Distribution { plot, violin } => Self::statistical(
+                Geometry::Distribution(Arc::new(DistributionData::new(plot.groups, violin))),
+                if violin {
+                    PlotDataKind::Violin
+                } else {
+                    PlotDataKind::Boxplot
+                },
+                None,
+            ),
+            ResultPlotProjection::Interval(plot) => Self::statistical(
+                Geometry::Interval {
+                    data: Arc::new(IntervalData::errors(plot.data)),
+                    confidence: None,
+                },
+                PlotDataKind::Errorbar,
+                Some(plot.metadata),
+            ),
+            ResultPlotProjection::Coefficient(plot) => Self::statistical(
+                Geometry::Interval {
+                    data: Arc::new(IntervalData::coefficients(plot.data)),
+                    confidence: Some(plot.confidence_level),
+                },
+                PlotDataKind::Coefficient,
+                None,
+            ),
+            ResultPlotProjection::Nomogram(plot) => Self::statistical(
+                Geometry::Nomogram {
+                    data: Arc::new(NomogramData::new(plot.axes)),
+                    horizon: plot.horizon,
+                },
+                PlotDataKind::Nomogram,
+                None,
+            ),
         }
     }
-    fn information(&self) -> Vec<String> {
-        let mut information = Vec::new();
-        if let Some(meta) = &self.metadata {
-            information.push(crate::text::format(
-                if meta.sampled {
-                    "plot.sampled"
-                } else {
-                    "plot.observations"
-                },
-                &[
-                    ("observations", meta.observations.to_string()),
-                    ("displayed", meta.displayed.to_string()),
-                ],
-            ));
+    fn statistical(geometry: Geometry, kind: PlotDataKind, metadata: Option<PlotMetadata>) -> Self {
+        Self {
+            geometry,
+            kind,
+            metadata,
+            annotation: PlotAnnotation::None,
         }
-        match &self.annotation {
-            PlotAnnotation::Roc {
-                auc,
-                positives,
-                negatives,
-            } => {
-                information.push(format!("AUC = {auc:.4}"));
-                information.push(crate::text::format(
-                    "plot.rocCounts",
-                    &[
-                        ("positives", positives.to_string()),
-                        ("negatives", negatives.to_string()),
-                    ],
-                ));
-            }
-            PlotAnnotation::Probability {
-                mean,
-                standard_deviation,
-                ..
-            } => information.push(crate::text::format(
-                "plot.normalReference",
-                &[
-                    (
-                        "mean",
-                        crate::plots::axis_value(
-                            *mean,
-                            yss_application::chart::PlotAxisFormat::Number,
-                        ),
-                    ),
-                    (
-                        "sd",
-                        crate::plots::axis_value(
-                            *standard_deviation,
-                            yss_application::chart::PlotAxisFormat::Number,
-                        ),
-                    ),
-                ],
-            )),
-            PlotAnnotation::Quadrant { counts } => information.push(crate::text::format(
-                "plot.quadrantCounts",
-                &[(
-                    "counts",
-                    counts
-                        .iter()
-                        .map(usize::to_string)
-                        .collect::<Vec<_>>()
-                        .join(" / "),
-                )],
-            )),
-            PlotAnnotation::None => {}
+    }
+    fn page_count(&self) -> usize {
+        if let Geometry::Interval { data, .. } = &self.geometry {
+            data.page_count()
+        } else {
+            1
         }
-        if let Geometry::Histogram {
-            observations: Some(count),
-            ..
-        } = &self.geometry
-        {
-            information.push(crate::text::format(
-                "plot.observations",
-                &[("observations", count.to_string())],
-            ));
-        }
-        information
     }
 }
 
@@ -170,6 +196,7 @@ pub(super) struct PlotView {
     data: PlotData,
     toolbar_open: bool,
     points_visible: bool,
+    page: usize,
 }
 impl PlotView {
     pub fn new(data: PlotData) -> Self {
@@ -177,100 +204,7 @@ impl PlotView {
             data,
             toolbar_open: false,
             points_visible: true,
+            page: 0,
         }
-    }
-}
-impl Render for PlotView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (x_label, y_label) = match &self.data.geometry {
-            Geometry::Cartesian(data) => (
-                data.result.x_label.as_deref(),
-                data.result.y_label.as_deref(),
-            ),
-            Geometry::Histogram {
-                x_label, y_label, ..
-            } => (x_label.as_deref(), y_label.as_deref()),
-        };
-        div()
-            .id("result-plot")
-            .size_full()
-            .min_h_0()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .p_3()
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_3()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .children(self.data.information())
-                    .when(self.data.kind == PlotDataKind::Line, |bar| {
-                        bar.child(
-                            Button::new("line-toolbar")
-                                .small()
-                                .ghost()
-                                .icon(IconName::Settings2)
-                                .tooltip(crate::text::translate("native.plots.toolbar"))
-                                .selected(self.toolbar_open)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.toolbar_open = !view.toolbar_open;
-                                    cx.notify();
-                                })),
-                        )
-                    }),
-            )
-            .when(
-                self.data.kind == PlotDataKind::Line && self.toolbar_open,
-                |view| {
-                    view.child(
-                        Switch::new("line-points")
-                            .small()
-                            .label(crate::text::translate("native.plots.points"))
-                            .checked(self.points_visible)
-                            .on_click(cx.listener(|view, checked: &bool, _, cx| {
-                                view.points_visible = *checked;
-                                cx.notify();
-                            })),
-                    )
-                },
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(crate::text::format(
-                        "native.plots.axes",
-                        &[
-                            ("x", x_label.unwrap_or("X").into()),
-                            ("y", y_label.unwrap_or("Y").into()),
-                        ],
-                    )),
-            )
-            .child(match &self.data.geometry {
-                Geometry::Cartesian(data) => div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(CartesianPlot {
-                        data: data.clone(),
-                        id: format!("result-plot-{}", cx.entity_id()).into(),
-                        generation: 0,
-                        show_points: self.data.kind == PlotDataKind::Line && self.points_visible,
-                    })
-                    .into_any_element(),
-                Geometry::Histogram { bins, .. } => div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(histogram::render(
-                        format!("result-histogram-{}", cx.entity_id()),
-                        bins,
-                        cx,
-                    ))
-                    .into_any_element(),
-            })
     }
 }
