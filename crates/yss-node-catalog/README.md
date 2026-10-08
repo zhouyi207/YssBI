@@ -100,6 +100,7 @@ Apply 和 Transform；后两者使用固定分组输入/表格输出，由 Execu
 
 `statistics/inference` 声明置信区间、多重比较、聚类稳健标准误和调整预测。
 `statistics/ports` 共享分类标签输入、线性/二元拟合联合类型及固定数值表输出声明。
+分组、类别、空间标识和离散状态端口复用同一标签数列联合类型。
 区间与比较表的字段由声明唯一持有，Graph 统一解析；中英文帮助明确推断自由度、
 多重校正方式及均值置信区间的含义。
 
@@ -142,6 +143,7 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 
 统计节点的 `Family` 表示方法族，`Stage` 表示对该方法执行的操作，目录分类表示用户在哪里找到节点。
 线性回归的 Fit、Summary、Predict 均使用 `Family::Linear`，预测由 `Stage::Predict` 表达。
+同一方法族的 Fit、Summary 和 Predict 端口复用模型类型映射；预测操作另校验支持的方法族。
 当前操作还包括独立统计检验使用的 `Test`；独立诊断与后估计由 `statistics/analyses.rs` 按实际输入模型或序列定义，不新增伪造的模型方法族。
 `category(spec)` 仅提供目录位置映射，不参与端口、模型类型或操作语义的判定。
 

@@ -63,25 +63,6 @@ const METHODS: &[(&str, &str, &str, &[&str])] = &[
         &["spatial.panel", "空间面板模型"],
     ),
 ];
-fn labels() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(
-        [
-            "core.numeric",
-            "core.binary",
-            "core.categorical",
-            "core.ordinal",
-            "core.text",
-            "core.identifier",
-        ]
-        .iter()
-        .map(|id| concrete(id).map(data_series_type))
-        .collect::<Result<Vec<_>, _>>()?,
-    ))
-    .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-        context: "spatial identifiers",
-        value: e.to_string().into(),
-    })
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh, aliases) in METHODS {
         let id = format!("yssbi.statistics.spatial.{method}");
@@ -94,7 +75,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 concrete("statistics.design.spatial_weights")?,
             )?);
         }
-        ports.push(data_input("units", "Unit identifier", labels()?)?);
+        ports.push(data_input("units", "Unit identifier", label_series()?)?);
         if weights {
             ports.extend([
                 data_input("x", "X coordinate", series_type()?)?,
@@ -102,7 +83,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ]);
         } else {
             if method == "panel" {
-                ports.push(data_input("periods", "Period identifier", labels()?)?);
+                ports.push(data_input("periods", "Period identifier", label_series()?)?);
             }
             ports.push(data_input("y", "Y", series_type()?)?);
             if method != "moran" {

@@ -120,18 +120,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(data_input("treatment", "Treatment", binary()?)?);
         }
         if method == "test.heterogeneity" {
-            ports.push(data_input(
-                "groups",
-                "Group",
-                union_series(&[
-                    "core.numeric",
-                    "core.binary",
-                    "core.categorical",
-                    "core.ordinal",
-                    "core.text",
-                    "core.identifier",
-                ])?,
-            )?);
+            ports.push(data_input("groups", "Group", label_series()?)?);
         }
         if method == "causal.rdd" {
             ports.push(data_input("running", "Running variable", series_type()?)?);

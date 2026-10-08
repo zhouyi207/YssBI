@@ -225,7 +225,7 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     if spec.family == Family::PanelDid {
         ports.push(data_output("result", "Result", result_type(spec.family)?)?);
     } else {
-        ports.push(data_output("model", "Model", model_type(spec)?)?);
+        ports.push(data_output("model", "Model", model_type(spec.family)?)?);
     }
     if !matches!(spec.family, Family::PanelDid | Family::Var | Family::Vec) {
         ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
@@ -236,7 +236,7 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 
 fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
-        data_input("model", "Model", model_type(spec)?)?,
+        data_input("model", "Model", model_type(spec.family)?)?,
         data_output("result", "Result", result_type(spec.family)?)?,
     ])
 }
@@ -1058,8 +1058,8 @@ fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
 fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(numeric_data_series_type())
 }
-fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
-    let id = match spec.family {
+fn model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
+    let id = match family {
         Family::Linear => "statistics.model.linear",
         Family::Logit => "statistics.model.logit",
         Family::Probit => "statistics.model.probit",
@@ -1073,34 +1073,24 @@ fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
         Family::Adf | Family::VecRank => {
             return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
                 context: "statistics fit model family",
-                value: format!("{:?}", spec.family).into(),
+                value: format!("{family:?}").into(),
             });
         }
     };
     concrete(id)
 }
 fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
-    let id = match family {
-        Family::Linear => "statistics.model.linear",
-        Family::Logit => "statistics.model.logit",
-        Family::Probit => "statistics.model.probit",
-        Family::Panel => "statistics.model.panel",
-        Family::Adf
-        | Family::Iv2sls
-        | Family::IvLiml
-        | Family::Prais
-        | Family::PanelDid
-        | Family::Var
-        | Family::Vec
-        | Family::VecRank => {
-            return Err(
-                BuiltinAssemblyError::UnsupportedStatisticsPredictionFamily {
-                    family: format!("{family:?}").into(),
-                },
-            );
-        }
-    };
-    concrete(id)
+    if !matches!(
+        family,
+        Family::Linear | Family::Logit | Family::Probit | Family::Panel
+    ) {
+        return Err(
+            BuiltinAssemblyError::UnsupportedStatisticsPredictionFamily {
+                family: format!("{family:?}").into(),
+            },
+        );
+    }
+    model_type(family)
 }
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.numeric")?))

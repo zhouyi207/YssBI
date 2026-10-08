@@ -388,19 +388,9 @@ fn union_series(ids: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyError> 
         value: e.to_string().into(),
     })
 }
-fn category_series() -> Result<TypeExpr, BuiltinAssemblyError> {
-    union_series(&[
-        "core.numeric",
-        "core.categorical",
-        "core.ordinal",
-        "core.binary",
-        "core.text",
-        "core.identifier",
-    ])
-}
 fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAssemblyError> {
     let response = match method {
-        "regression.logit.multinomial" => category_series()?,
+        "regression.logit.multinomial" => label_series()?,
         "regression.logit.ordinal" => union_series(&["core.numeric", "core.ordinal"])?,
         "regression.logit.firth"
         | "regression.logit.conditional"
@@ -421,7 +411,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         method,
         "regression.logit.conditional" | "workflow.regression.grouped"
     ) {
-        ports.push(data_input("groups", "Group", category_series()?)?);
+        ports.push(data_input("groups", "Group", label_series()?)?);
     }
     if method == "regression.threshold" {
         ports.push(data_input(

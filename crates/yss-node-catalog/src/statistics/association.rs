@@ -114,16 +114,6 @@ fn union_series(semantics: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyE
 fn rank_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     union_series(&["core.numeric", "core.ordinal"])
 }
-fn category_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    union_series(&[
-        "core.numeric",
-        "core.categorical",
-        "core.ordinal",
-        "core.binary",
-        "core.text",
-        "core.identifier",
-    ])
-}
 fn condition(key: &str, value: &str) -> Result<ParameterCondition, BuiltinAssemblyError> {
     Ok(ParameterCondition {
         key: sid(key, ParameterKey::new)?,
@@ -209,7 +199,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "ratings",
                 "Rater",
                 match method {
-                    "kappa" => category_type()?,
+                    "kappa" => label_series()?,
                     "kendall_w" => rank_type()?,
                     _ => series_type()?,
                 },

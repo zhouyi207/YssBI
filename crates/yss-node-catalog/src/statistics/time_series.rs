@@ -214,23 +214,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     for &(method, en, zh, aliases) in METHODS {
         let id = format!("yssbi.statistics.{method}");
         let input = if method == "timeseries.markov_prediction" {
-            normalize_type_expr(TypeExpr::Union(
-                [
-                    "core.numeric",
-                    "core.binary",
-                    "core.categorical",
-                    "core.ordinal",
-                    "core.text",
-                    "core.identifier",
-                ]
-                .iter()
-                .map(|id| concrete(id).map(data_series_type))
-                .collect::<Result<Vec<_>, _>>()?,
-            ))
-            .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-                context: "time-series states",
-                value: e.to_string().into(),
-            })?
+            label_series()?
         } else {
             series_type()?
         };

@@ -99,16 +99,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         );
         let evaluation = matches!(method, "plot.calibration" | "plot.decision_curve");
         let binary = || union_series(&["core.numeric", "core.binary"]);
-        let labels = || {
-            union_series(&[
-                "core.numeric",
-                "core.binary",
-                "core.categorical",
-                "core.ordinal",
-                "core.text",
-                "core.identifier",
-            ])
-        };
         let mut ports = if method == "plot.nomogram" {
             vec![data_input(
                 "model",
@@ -148,7 +138,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(bounded_user_data_input(
                 "groups",
                 "Group (optional)",
-                labels()?,
+                label_series()?,
                 0,
                 Some(1),
             )?);
@@ -157,10 +147,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(data_input("treatment", "Treatment", binary()?)?);
         }
         if matches!(method, "workflow.subgroup" | "survival.logrank") {
-            ports.push(data_input("groups", "Group", labels()?)?);
+            ports.push(data_input("groups", "Group", label_series()?)?);
         }
         if method == "survival.time_dependent_cox" {
-            ports.push(data_input("subjects", "Subject identifier", labels()?)?);
+            ports.push(data_input(
+                "subjects",
+                "Subject identifier",
+                label_series()?,
+            )?);
         }
         if cox || parametric {
             ports.push(bounded_user_data_input(

@@ -46,26 +46,6 @@ const METHODS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-fn label_series() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(
-        [
-            "core.numeric",
-            "core.binary",
-            "core.categorical",
-            "core.ordinal",
-            "core.text",
-            "core.identifier",
-        ]
-        .iter()
-        .map(|id| concrete(id).map(data_series_type))
-        .collect::<Result<Vec<_>, _>>()?,
-    ))
-    .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-        context: "longitudinal grouping",
-        value: e.to_string().into(),
-    })
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.{method}");
