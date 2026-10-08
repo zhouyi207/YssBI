@@ -582,10 +582,7 @@ fn data_port(
         direction: PortDirection::Output,
         value_type,
         cardinality: PortCardinality::Declared,
-        connections: ConnectionsPerPort::Multiple {
-            max: None,
-            ordered: false,
-        },
+        connections: crate::data_connections(PortDirection::Output),
         input_binding: None,
         consumption: None,
         production: Some(OutputProduction::FullyMaterialized),

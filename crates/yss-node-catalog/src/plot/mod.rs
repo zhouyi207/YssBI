@@ -609,14 +609,7 @@ fn data_port(
         direction,
         value_type,
         cardinality,
-        connections: if direction == PortDirection::Input {
-            ConnectionsPerPort::Single
-        } else {
-            ConnectionsPerPort::Multiple {
-                max: None,
-                ordered: false,
-            }
-        },
+        connections: crate::data_connections(direction),
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Allowed,
             default_value,
