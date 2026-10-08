@@ -32,6 +32,8 @@ Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEdit
 
 `GraphOperationCapture` 交付已经通过项目身份、资源版本和驻留检查的文档及修改权威；未驻留资源在捕获入口返回 `GraphUnavailable`，成功捕获不附加另一份驻留状态标记。
 
+驻留 Graph 正文以不可变 `Arc<GraphDocument>` 保存在 ProjectData。编辑快照、修改捕获、执行捕获和保存准备共享该正文；提交安装候选正文，已有捕获保留原内容。读取及资源克隆不再复制整图，重命名等准备修改通过 `Arc::make_mut` 隔离已有快照。图文件仍序列化当前正文，不写入共享指针信息。
+
 发布 delta 的资源身份由 `ResourceKey` 表达，文件生命周期种类由 `ResourceLifecycleKind` 表达；
 delta 不提供另一套资源分类或逆补丁接口。Graph 撤销仍使用文档 owner 的 `GraphDocumentPatch`。
 

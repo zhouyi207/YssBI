@@ -394,7 +394,7 @@ mod tests {
             Err(ProjectResourceMutationError::StaleProjectLifecycle(_))
         ));
         let current = state.get_data().unwrap();
-        assert_eq!(current.graphs[&path].document, document);
+        assert_eq!(current.graphs[&path].document.as_ref(), &document);
         assert_eq!(
             current.graphs[&path].function.as_ref().unwrap().signature,
             FunctionSignature::default()

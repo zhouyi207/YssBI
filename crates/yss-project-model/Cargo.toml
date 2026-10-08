@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-serde.workspace = true
+serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 pulldown-cmark.workspace = true
 yss-project-layout = { path = "../yss-project-layout" }

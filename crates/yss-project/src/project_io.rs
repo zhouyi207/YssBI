@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +25,7 @@ use yss_project_model::{GraphResourceDocument, ProjectData};
 pub struct GraphResourceFile {
     pub kind: GraphResourceKind,
     pub name: String,
-    pub document: NodeGraphDocument,
+    pub document: Arc<NodeGraphDocument>,
     pub function: Option<yss_project_history::FunctionDocument>,
 }
 

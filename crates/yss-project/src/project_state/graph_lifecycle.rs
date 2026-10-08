@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use crate::{ProjectState, ResourceLifecycleOperation};
 
@@ -177,8 +178,12 @@ impl ProjectState {
             .unwrap_or(ResourceRevision::INITIAL);
         let mut duplicate = source;
         duplicate.name = name;
-        duplicate.document =
-            duplicate_document(&duplicate.document, source_path, &target, registry);
+        duplicate.document = Arc::new(duplicate_document(
+            &duplicate.document,
+            source_path,
+            &target,
+            registry,
+        ));
         if let Some(function) = duplicate.function.as_mut() {
             function.revision = revision;
         }
@@ -279,7 +284,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         lifecycle_token: u64,
-    ) -> Result<GraphDocument, ProjectOperationError> {
+    ) -> Result<Arc<GraphDocument>, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
             return Err(ProjectOperationError::StaleProjectLifecycle {
@@ -673,7 +678,12 @@ impl ProjectState {
         let mut editing_updates = Vec::new();
         for resource in [&mut source, &mut persisted_source] {
             resource.name = requested.as_str().to_owned();
-            remap_document(&mut resource.document, graph_path, &target, registry);
+            remap_document(
+                Arc::make_mut(&mut resource.document),
+                graph_path,
+                &target,
+                registry,
+            );
             if let Some(function) = resource.function.as_mut() {
                 function.revision = next_revision;
             }
@@ -719,10 +729,18 @@ impl ProjectState {
                 message: error.to_string(),
             })?;
             let mut changed = current_data.graphs.get(&path).unwrap_or(&persisted).clone();
-            let current_changed =
-                remap_document(&mut changed.document, graph_path, &target, registry);
-            let saved_changed =
-                remap_document(&mut persisted.document, graph_path, &target, registry);
+            let current_changed = remap_document(
+                Arc::make_mut(&mut changed.document),
+                graph_path,
+                &target,
+                registry,
+            );
+            let saved_changed = remap_document(
+                Arc::make_mut(&mut persisted.document),
+                graph_path,
+                &target,
+                registry,
+            );
             let editing_update = self.prepare_graph_editing_remap(
                 registry,
                 &path,

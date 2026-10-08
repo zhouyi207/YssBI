@@ -109,7 +109,7 @@ fn dataframe_arguments_specialize_independently_and_missing_columns_keep_inner_l
         )]),
         BTreeMap::new(),
     )
-    .with_function_document(&function, body.clone());
+    .with_function_document(&function, body.clone().into());
     let mut root = GraphDocument::default();
     let call = NodeId::new();
     root.nodes.insert(

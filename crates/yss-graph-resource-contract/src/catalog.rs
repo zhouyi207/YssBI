@@ -125,10 +125,10 @@ impl ResourceCatalogSnapshot {
     pub fn with_function_document(
         mut self,
         path: &GraphResourcePath,
-        document: yss_graph_document::GraphDocument,
+        document: Arc<yss_graph_document::GraphDocument>,
     ) -> Self {
         if let Some(entry) = Arc::make_mut(&mut self.functions).get_mut(path) {
-            entry.document = Some(Arc::new(document));
+            entry.document = Some(document);
         }
         self
     }

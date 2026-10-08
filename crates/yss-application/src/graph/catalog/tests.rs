@@ -145,8 +145,8 @@ fn compatible_project(path: &GraphResourcePath) -> ProjectData {
 }
 
 fn compatible_draft(source_node: NodeId) -> GraphDocument {
-    let mut graph = GraphResourceDocument::new("Main", GraphResourceKind::EventGraph);
-    graph.document.nodes.insert(
+    let mut document = GraphDocument::default();
+    document.nodes.insert(
         source_node,
         DocumentNode {
             id: source_node,
@@ -157,12 +157,12 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
         },
     );
     set_constant(
-        &mut graph.document,
+        &mut document,
         source_node,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Integer(0),
     );
-    graph.document
+    document
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
         let mut resource =
             GraphResourceDocument::new(path.display_name(), GraphResourceKind::FunctionGraph);
         let id = NodeId::new();
-        resource.document.nodes.insert(
+        Arc::make_mut(&mut resource.document).nodes.insert(
             id,
             DocumentNode {
                 id,
@@ -276,24 +276,26 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
         (&outer_signature_reader, None, "tests.function.signature"),
     ] {
         let id = NodeId::new();
-        data.graphs.get_mut(owner).unwrap().document.nodes.insert(
-            id,
-            DocumentNode {
+        Arc::make_mut(&mut data.graphs.get_mut(owner).unwrap().document)
+            .nodes
+            .insert(
                 id,
-                node_type: kind.parse().unwrap(),
-                position: NodePosition { x: 0.0, y: 0.0 },
-                parameters: target
-                    .map(|target| {
-                        [(
-                            "target".parse().unwrap(),
-                            serde_json::json!(target.as_str()),
-                        )]
-                        .into()
-                    })
-                    .unwrap_or_default(),
-                user_label: None,
-            },
-        );
+                DocumentNode {
+                    id,
+                    node_type: kind.parse().unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: target
+                        .map(|target| {
+                            [(
+                                "target".parse().unwrap(),
+                                serde_json::json!(target.as_str()),
+                            )]
+                            .into()
+                        })
+                        .unwrap_or_default(),
+                    user_label: None,
+                },
+            );
     }
     let root_document = data.graphs[&caller].document.clone();
     let project = TestProject::active("registered-function-capture", data);
@@ -446,7 +448,7 @@ fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
             user_label: None,
         },
     );
-    project.graphs.get_mut(&graph).unwrap().document = document;
+    project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let staged = staged_session(
         project,
         "connection-candidates",
@@ -587,7 +589,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
         })
         .collect();
     let mut resource = GraphResourceDocument::new("Caller", GraphResourceKind::EventGraph);
-    resource.document = document.clone();
+    resource.document = Arc::new(document.clone());
     let mut project = ProjectData::new();
     project.graphs.insert(function.clone(), definition);
     project.graphs.insert(caller.clone(), resource);
@@ -629,7 +631,12 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     assert_eq!(saved.document.input_states, document.input_states);
     let projection = session
         .application
-        .resolve_graph_document(instance, caller, saved.document, "en-US".into())
+        .resolve_graph_document(
+            instance,
+            caller,
+            saved.document.as_ref().clone(),
+            "en-US".into(),
+        )
         .unwrap();
     let projected = projection
         .nodes
@@ -1762,7 +1769,7 @@ fn clipboard_export_uses_project_declarations_without_database_schema_capture() 
         );
     }
     let node_ids = document.nodes.keys().copied().collect();
-    project.graphs.get_mut(&graph).unwrap().document = document;
+    project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let staged = staged_session(
         project,
         "clipboard-declarations",
@@ -1813,7 +1820,7 @@ fn clipboard_export_rejects_a_snapshot_from_before_a_committed_edit() {
     let node = NodeId::new();
     let document = compatible_draft(node);
     let mut project = compatible_project(&graph);
-    project.graphs.get_mut(&graph).unwrap().document = document;
+    project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let staged = staged_session(
         project,
         "clipboard-current-document",

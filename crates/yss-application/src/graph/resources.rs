@@ -71,7 +71,7 @@ fn build_function_graph(
                 },
             )
         })?;
-        resource.document.nodes.insert(
+        Arc::make_mut(&mut resource.document).nodes.insert(
             id,
             yss_graph_document::DocumentNode {
                 id,

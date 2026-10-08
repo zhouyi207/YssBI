@@ -389,7 +389,7 @@ impl ProjectState {
                 *metadata = GraphEditingMetadata::new(hash);
             }
             return Ok(GraphEditingSnapshot {
-                document: Arc::new(document),
+                document,
                 state: metadata.state(revision),
             });
         }
@@ -561,7 +561,7 @@ mod tests {
         let path = GraphResourcePath::new("events/Current.yssbi-event").unwrap();
         let id = NodeId::new();
         let mut graph = GraphResourceDocument::new("Current", GraphResourceKind::EventGraph);
-        graph.document.nodes.insert(
+        Arc::make_mut(&mut graph.document).nodes.insert(
             id,
             DocumentNode {
                 id,
@@ -664,8 +664,10 @@ mod tests {
         let project = &session.instance_id;
         let file = session.root.as_path().join(path.as_str());
         let original_file = std::fs::read(&file).unwrap();
+        let original_snapshot = state.read_graph_editing(project, &path).unwrap();
         let receipt = move_node(state, project, &path, node);
         assert!(receipt.editing.dirty && receipt.editing.can_undo);
+        assert_eq!(original_snapshot.document.nodes[&node].position.x, 0.0);
         assert_eq!(
             state
                 .read_resident_graph(&path)

@@ -238,7 +238,7 @@ impl ProjectState {
             }
             (
                 publication.authority_generation(),
-                Arc::new(graph.document.clone()),
+                Arc::clone(&graph.document),
                 revision,
             )
         };
@@ -398,7 +398,7 @@ impl ProjectState {
                 });
             }
 
-            let document_changed = candidate_document.as_ref() != &graph.document;
+            let document_changed = candidate_document.as_ref() != graph.document.as_ref();
             // Every accepted command advances its version, including no-ops and Save.
             // Once its bounded receipt expires, its old version cannot authorize a second write.
             if !document_changed && !command_owned {
@@ -444,9 +444,8 @@ impl ProjectState {
                     graph_path: graph_path.clone(),
                 });
             }
-            let after_document = candidate_document.as_ref().clone();
             let mut resource = graph.clone();
-            resource.document = after_document;
+            resource.document = Arc::clone(&candidate_document);
             Self::install_validated_resident_graph(&mut data, graph_path.clone(), resource);
 
             let mut graph_resource_revisions = self
@@ -543,7 +542,7 @@ impl ProjectState {
                 message: format!("graph '{graph_path}' is not resident"),
             }
         })?;
-        resource.document = candidate_document.as_ref().clone();
+        resource.document = Arc::clone(&candidate_document);
         let contents =
             crate::project_io::serialize_graph_resource_document(&resource).map_err(|error| {
                 ProjectOperationError::TransactionPrepareFailed {
@@ -614,7 +613,7 @@ mod tests {
         let node_id = NodeId::new();
         let mut resource =
             GraphResourceDocument::new("Main", yss_graph_document::GraphResourceKind::EventGraph);
-        resource.document.nodes.insert(
+        Arc::make_mut(&mut resource.document).nodes.insert(
             node_id,
             DocumentNode {
                 id: node_id,

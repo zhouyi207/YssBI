@@ -13,6 +13,7 @@ pub use patch::ProjectDataPatch;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_database_contract::DatabaseDecl;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
@@ -34,7 +35,7 @@ pub fn normalize_project_name(name: &str) -> String {
 pub struct GraphResourceDocument {
     pub name: String,
     pub kind: GraphResourceKind,
-    pub document: GraphDocument,
+    pub document: Arc<GraphDocument>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function: Option<FunctionDocument>,
 }
@@ -44,7 +45,7 @@ impl GraphResourceDocument {
         Self {
             name: name.into(),
             kind,
-            document: GraphDocument::default(),
+            document: Arc::new(GraphDocument::default()),
             function: matches!(kind, GraphResourceKind::FunctionGraph)
                 .then(|| FunctionDocument::new(FunctionSignature::default())),
         }
@@ -101,6 +102,10 @@ mod tests {
         let value = serde_json::to_value(&event).unwrap();
 
         assert_eq!(value["kind"], serde_json::json!("event_graph"));
+        assert_eq!(
+            value["document"],
+            serde_json::to_value(event.document.as_ref()).unwrap()
+        );
         assert!(value.get("function").is_none());
         assert_eq!(
             serde_json::from_value::<GraphResourceDocument>(value).unwrap(),

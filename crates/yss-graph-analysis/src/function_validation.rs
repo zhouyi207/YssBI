@@ -317,7 +317,7 @@ mod tests {
             BTreeMap::new(),
         );
         functions.iter().fold(catalog, |catalog, (path, _, body)| {
-            catalog.with_function_document(path, body.clone())
+            catalog.with_function_document(path, body.clone().into())
         })
     }
 
@@ -670,7 +670,7 @@ mod tests {
                         && diagnostic.blocking
                 )
         );
-        let resources = resources.with_function_document(&b, body(&a, &[]));
+        let resources = resources.with_function_document(&b, body(&a, &[]).into());
         let mismatched = crate::resolve_graph_semantics(&root, &registry, &resources);
         assert!(mismatched.ready().is_none());
         assert!(

@@ -1171,11 +1171,11 @@ fn function_labels_and_bodies_refresh_even_when_execution_identity_is_unchanged(
         "After"
     );
     let (body, body_node, id) = constant_document();
-    let with_body = catalog("After").with_function_document(&path, body.clone());
+    let with_body = catalog("After").with_function_document(&path, body.clone().into());
     let first_body = resolve(&runtime, &document, &with_body);
     let mut edited_body = body;
     edited_body.constants.get_mut(&id).unwrap().name = "Body constant".into();
-    let edited_catalog = catalog("After").with_function_document(&path, edited_body.clone());
+    let edited_catalog = catalog("After").with_function_document(&path, edited_body.clone().into());
     let new_body = resolve(&runtime, &document, &edited_catalog);
     assert_reused(&first_body, &new_body, constant, false);
     assert_eq!(
@@ -1187,7 +1187,7 @@ fn function_labels_and_bodies_refresh_even_when_execution_identity_is_unchanged(
         resolve(&self::runtime(), &document, &edited_catalog)
     );
     edited_body.nodes.get_mut(&body_node).unwrap().position.x = 50.0;
-    let moved_catalog = catalog("After").with_function_document(&path, edited_body);
+    let moved_catalog = catalog("After").with_function_document(&path, edited_body.into());
     assert_reused(
         &new_body,
         &resolve(&runtime, &document, &moved_catalog),
@@ -1296,16 +1296,18 @@ fn snapshot_rechecks_transitive_function_bodies() {
             .collect(),
         BTreeMap::new(),
     )
-    .with_function_document(&a, a_body);
+    .with_function_document(&a, a_body.into());
     let missing = resolve(&runtime, &document, &catalog);
     let present = resolve(
         &runtime,
         &document,
-        &catalog.clone().with_function_document(&b, b_body.clone()),
+        &catalog
+            .clone()
+            .with_function_document(&b, b_body.clone().into()),
     );
     assert_reused(&missing, &present, constant, false);
     b_body.constants.get_mut(&id).unwrap().data_value = DataValue::Integer(7);
-    let changed_catalog = catalog.with_function_document(&b, b_body);
+    let changed_catalog = catalog.with_function_document(&b, b_body.into());
     let changed = resolve(&runtime, &document, &changed_catalog);
     assert_reused(&present, &changed, constant, false);
     assert_ne!(present.semantic_input_hash(), changed.semantic_input_hash());

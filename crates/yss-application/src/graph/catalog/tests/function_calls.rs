@@ -80,7 +80,7 @@ fn function(
         type_name: "DataFrame".into(),
     }];
     signature.return_type = Some("DataFrame".into());
-    let body = &mut resource.document;
+    let body = Arc::make_mut(&mut resource.document);
     let entry = node(
         body,
         "yssbi.project.function.entry",
@@ -134,7 +134,7 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
     let mut data = compatible_project(&graph);
     data.graphs.insert(inner.clone(), inner_resource);
     data.graphs.insert(wrapper.clone(), wrapper_resource);
-    let root = &mut data.graphs.get_mut(&graph).unwrap().document;
+    let root = Arc::make_mut(&mut data.graphs.get_mut(&graph).unwrap().document);
     let mut outputs = Vec::new();
     for literal in [
         r#"{"sales":[1,2],"empty":[null,null]}"#,

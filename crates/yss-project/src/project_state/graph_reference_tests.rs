@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     GraphDocumentOperation, GraphDocumentPatch, GraphResourceKind, InputState,
@@ -50,7 +51,7 @@ fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
         (NodeId::new(), "tests.function.default", "target"),
         (text, "yssbi.dataframe.rename", "to"),
     ] {
-        graph.document.nodes.insert(
+        Arc::make_mut(&mut graph.document).nodes.insert(
             id,
             DocumentNode {
                 id,
@@ -68,7 +69,7 @@ fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
     for (i, connected) in [(0, true), (1, false)] {
         let address =
             PortAddress::instance(call, "arguments".parse().unwrap(), PortInstanceId::new());
-        graph.document.port_bindings.insert(
+        Arc::make_mut(&mut graph.document).port_bindings.insert(
             address.clone(),
             DynamicPortBinding::Resolved {
                 origin: DynamicMemberLocator::FunctionParameter {
@@ -81,7 +82,7 @@ fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
         );
         if connected {
             let id = ConnectionId::new();
-            graph.document.connections.insert(
+            Arc::make_mut(&mut graph.document).connections.insert(
                 id,
                 DocumentConnection {
                     id,
@@ -91,7 +92,7 @@ fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
                 },
             );
         } else {
-            graph.document.input_states.insert(
+            Arc::make_mut(&mut graph.document).input_states.insert(
                 address,
                 InputState {
                     literal_override: Some(yss_node_protocol::TypedValue {
@@ -189,7 +190,7 @@ fn duplicate_preserves_registered_constant_references_on_disk() {
 
     let source = GraphResourcePath::new("events/Constants.yssbi-event").unwrap();
     let mut graph = GraphResourceDocument::new("Constants", GraphResourceKind::EventGraph);
-    graph.document.constants.insert(
+    Arc::make_mut(&mut graph.document).constants.insert(
         id,
         GraphConstant {
             id,
@@ -227,7 +228,7 @@ fn duplicate_preserves_registered_constant_references_on_disk() {
         if let Some(value) = value {
             parameters.insert("selection".parse().unwrap(), value);
         }
-        graph.document.nodes.insert(
+        Arc::make_mut(&mut graph.document).nodes.insert(
             node_id,
             DocumentNode {
                 id: node_id,
@@ -412,7 +413,7 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
             .map(|node| GraphDocumentOperation::RemoveNode { node }),
     );
     let patch = GraphDocumentPatch::new(operations);
-    let mut removed = original.document.clone();
+    let mut removed = original.document.as_ref().clone();
     apply_graph_document_patch(&mut removed, &patch).unwrap();
     let capture = state
         .capture_graph_edit(

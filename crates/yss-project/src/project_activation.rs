@@ -218,7 +218,7 @@ mod tests {
             "Main",
             yss_graph_document::GraphResourceKind::EventGraph,
         );
-        graph.document.constants.insert(
+        Arc::make_mut(&mut graph.document).constants.insert(
             id,
             yss_graph_document::GraphConstant {
                 id,

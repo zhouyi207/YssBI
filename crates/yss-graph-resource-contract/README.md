@@ -6,6 +6,8 @@
 > Update when: 资源事实、读取追踪或依赖匹配契约改变时
 
 `ResourceCatalogSnapshot` 保存本次捕获的函数声明/正文与数据库 Schema。
+`with_function_document` 接收不可变 `Arc<GraphDocument>`，复用 Project 捕获的正文；
+资源目录克隆和依赖读取保留同一正文，修改后的目录安装新的正文快照。
 `tracked()` 建立一次解析的读取范围；读取已有资源和查找缺失资源都会记录身份，
 缓存复用通过 `record_dependencies` 将之前的读取纳入同一范围。
 

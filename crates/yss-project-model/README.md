@@ -9,6 +9,10 @@
 Event Graph and Function Graph have independent project index entries and application factories.
 The resident `graphs` collection holds their shared node-graph editing contents;
 it is not the project's file classification or navigation index.
+`GraphResourceDocument.document` shares an immutable `Arc<GraphDocument>` with
+captured reads and operations. Preparing an edit creates a new document; changes
+to a cloned resource use `Arc::make_mut` so existing snapshots retain their contents.
+Serialization borrows the body and writes the same graph document fields.
 `mind.rs` owns `MindDocument`, `MindEdit` and `MindPath`; `doc.rs` owns
 `DocDocument`, `DocEdit` and `DocPath`. A Mind edit cannot carry Markdown changes,
 and a Doc edit cannot carry tree operations. Their paths reject the other kind's

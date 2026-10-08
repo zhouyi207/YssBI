@@ -14,7 +14,7 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
     let mut data = compatible_project(&graph);
     data.graphs.insert(inner.clone(), inner_resource);
     data.graphs.insert(wrapper.clone(), wrapper_resource);
-    let root = &mut data.graphs.get_mut(&graph).unwrap().document;
+    let root = Arc::make_mut(&mut data.graphs.get_mut(&graph).unwrap().document);
     let source = node(root, "yssbi.constant.get", ParameterValues::new());
     set_constant(
         root,

@@ -762,7 +762,7 @@ fn validate_current_authority_contents(
         .graphs
         .get(&authority.graph_path)
         .ok_or(ProjectEffectCommitError::StaleProjectSession)?;
-    if graph.document != *authority.document {
+    if graph.document != authority.document {
         return Err(ProjectEffectCommitError::GraphChanged);
     }
     for expected in authority.resource_grants.iter() {
@@ -863,7 +863,7 @@ impl ProjectState {
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();
         let resource_grants: Arc<[ProjectResourceGrant]> = Arc::from(grants);
-        let document = Arc::new(graph.document.clone());
+        let document = Arc::clone(&graph.document);
         let authority = ProjectExecutionAuthority {
             session,
             graph_path: request.graph_path,
