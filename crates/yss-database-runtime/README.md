@@ -1,5 +1,10 @@
 # Database runtime
 
+> Status: Current
+> Scope: Session-scoped dataset instances, queries, edit history and publication handoff
+> Canonical owners: This crate owns runtime state; Dataset Store owns committed data and Project owns resource publication
+> Update when: Session, snapshot, query, mutation or handoff contracts change
+
 ## Crate responsibilities
 
 | Crate                   | Responsibility                                                           |
@@ -69,8 +74,9 @@ positional row payload for an already admitted page, while query admission still
 Project/Runtime revision basis.
 
 Column snapshots use Arrow and apply projection and bounds before materialization. DataView pages include stable
-row IDs; relation reads hide internal identity/order fields. Display DTOs convert unsafe
-JavaScript integers to decimal strings. `DatabaseColumnFact` carries a semantic Graph type and
+row IDs; relation reads hide internal identity/order fields. Native page snapshots consume the
+shared Arrow scalar projection directly and retain full-width signed/unsigned integer carriers.
+JSON consumers apply their display encoding at the output boundary. `DatabaseColumnFact` carries a semantic Graph type and
 an independent display label, exact Physical label, the field's Semantic configuration and supported
 Semantic choices derived by the Arrow adapter from the exact Physical type;
 none reconstructs the stored Arrow schema. The seven Semantic types and conversion constraints

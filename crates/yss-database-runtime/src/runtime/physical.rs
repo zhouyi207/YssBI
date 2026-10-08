@@ -164,13 +164,11 @@ impl DatabaseRuntimePhysicalState {
                     .ok_or_else(|| {
                         DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
                     })?;
-                for value in yss_database_arrow::array_to_json(array.as_ref()).map_err(|_| {
-                    DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
-                })? {
-                    values.push(serde_json::from_value(value).map_err(|_| {
+                let scalars =
+                    yss_database_arrow::array_to_scalars(array.as_ref()).map_err(|_| {
                         DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
-                    })?);
-                }
+                    })?;
+                values.extend(scalars);
             }
         }
         let columns = schema

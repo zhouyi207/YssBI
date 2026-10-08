@@ -1050,6 +1050,33 @@ mod tests {
     }
 
     #[test]
+    fn page_snapshots_keep_exact_signed_values_after_committed_edits() {
+        let (_fixture, session) = session_with_table("typed-page");
+        let database = DatabaseId::from_existing(SALES_ID.into());
+        let (prepared, mut physical) = prepare_change(
+            &session,
+            DatabaseMutationOperation::EditCell {
+                row: 0,
+                column: "value".into(),
+                value: TabularScalar::Integer(i64::MAX),
+                row_id: Some(0),
+            },
+            "wide-page-value",
+        );
+        let committed = commit_database_runtime_change(&session, prepared).unwrap();
+        physical.commit().unwrap();
+        committed.confirm();
+        physical.confirm().unwrap();
+
+        let page = page_snapshot(&session, database, 0, 1).unwrap();
+        assert_eq!(page.row_ids(), &[0]);
+        assert_eq!(
+            page.rows().columns()[0].values(),
+            &[TabularScalar::Integer(i64::MAX)]
+        );
+    }
+
+    #[test]
     fn arrow_snapshots_reject_empty_and_duplicate_column_selections() {
         let (_fixture, session) = session_with_table("session");
         let column = TabularColumnName::try_from("value").unwrap();

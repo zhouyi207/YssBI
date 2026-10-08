@@ -1,8 +1,8 @@
 //! Session-scoped database state, authority, physical routing, and typed query APIs.
 //!
 //! This crate owns the runtime that composes canonical database contracts with
-//! the committed dataset store and DataFusion. Project publication, Application workflows, transport DTOs, and
-//! Tauri delivery remain outside this boundary.
+//! the committed dataset store and DataFusion. Project owns resource publication;
+//! Application coordinates workflows and the native host consumes typed snapshots.
 
 mod database_instance;
 mod database_state;
