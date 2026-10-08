@@ -132,7 +132,7 @@ Node Kernel 调用 `yss-sci-runtime`，Application 不直接依赖 SCI runtime�
 
 `project/` 聚合生命周期、查询、文件变更和失败投影；`ProjectManagement` 由 `project` 明确导出，注册服务不随项目会话替换。`database/` 聚合查询、导入导出、示例及私有 `mutation` 协调；准备、提交、补偿和恢复仍在原有协议内完成。
 
-[ProjectManagement](src/project/registry.rs) 持有进程级 `ProjectRegistry` 和项目选择器任务取消注册表，接收注入的 `ProjectRegistryStore`。扫描和清理在应用层登记任务，完成或 future 被丢弃时释放登记；旧任务结束不能清除较新任务的取消入口。注册表规则仍由 `yss-project-registry` 实现，进度编码和通道排空仍由 IPC 负责。
+[ProjectManagement](src/project/registry.rs) 持有进程级 `ProjectRegistry` 和项目选择器任务取消注册表，接收注入的 `ProjectRegistryStore`。扫描和清理在应用层登记任务，完成或 future 被丢弃时释放登记；旧任务结束不能清除较新任务的取消入口。注册表规则由 `yss-project-registry` 实现，类型化进度经调用方提供的 `ProjectProgressSink` 交付；原生呈现与后续查询由宿主负责。
 
 ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。项目切换不重建注册存储和模型 provider；Harness 在启动和创建会话时按当前项目绑定协调旧会话。SQLite、Rig 和文件监听器由 Application runtime 选择，事件由调用方注入的中立 sink 交付。
 

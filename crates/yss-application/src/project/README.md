@@ -9,7 +9,7 @@
 
 通用文件能力集中在 [yss-filesystem](../../../yss-filesystem/README.md)，其运行、开发和构建依赖都不包含内部 crate。FS 不解释项目入口、图表/图文档、资源版本或索引失效；Project 解释这些业务规则并映射 ProjectOperationError，Application 组装带项目路径过滤器的监听器。文件事务默认接受任意字节，项目文档校验由 Project 显式提供。
 
-项目发现由 `yss-project-registry` 的私有 `discovery` 模块使用 `walkdir` 遍历候选目录，链接与重解析点判断复用 `yss-filesystem`。注册流程采用发现结果并通过存储端口持久化；直接注册和扫描复用已有记录时，共用项目根身份校验。项目默认名称与规范化规则由 `yss-project-model` 统一拥有。共享进度与任务取消归 `yss-project-progress`，通信适配负责向前端投递进度。
+项目发现由 `yss-project-registry` 的私有 `discovery` 模块使用 `walkdir` 遍历候选目录，链接与重解析点判断复用 `yss-filesystem`。注册流程采用发现结果并通过存储端口持久化；直接注册和扫描复用已有记录时，共用项目根身份校验。项目默认名称与规范化规则由 `yss-project-model` 统一拥有。共享进度与任务取消归 `yss-project-progress`；Application 将调用方提供的 `ProjectProgressSink` 传给注册服务，由原生宿主呈现类型化进度。
 
 注册存储由 Application runtime 注入 SQLite adapter；adapter 将原生文件路径直接交给 SQLx，不把应用数据目录中的百分号等文件名字符解释为 URL 编码。
 
@@ -69,7 +69,7 @@ Project 文件、resource revision 和提交事务由 Project owner 管理。Gra
 GUI 的数据库列表请求还必须携带项目身份与已取得索引的 publication revision；Application 在读取前后
 复用 Project 的 `validate_project_index_version`，使用声明快照捕获的 authority generation，避免把另一次
 发布的数据拼入首次项目加载。插件没有索引基线时显式使用同会话的当前声明快照，继续重验原读取依据。
-项目路径查询也要求调用方项目身份，规范化在 Application 完成，IPC 不再重复访问文件系统做同一次规范化。
+项目路径查询也要求调用方项目身份，规范化在 Application 完成；原生宿主使用返回的路径投影，不重复访问文件系统做同一次规范化。
 
 工作台保存逐一提交当前脏 Graph 和 Chart，使用各资源的保存回执；项目事件流交付生命周期、资源提交和索引失效事实，不再另设整项目保存命令及无消费者的保存完成事件。
 

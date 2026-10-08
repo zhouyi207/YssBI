@@ -160,7 +160,7 @@ To Categorical 和分类 Data Labels 在空配置且没有源值域时，复用 
 
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
-`KernelError` 表达维度、参数、行对齐、预算、调用契约、科学计算、取消和超时等稳定原因，不携带图地址。Execution 的 `OperationExecutionError` 补充图来源与阶段，IPC 和前端保留对应 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
+`KernelError` 表达维度、参数、行对齐、预算、调用契约、科学计算、取消和超时等稳定原因，不携带图地址。Execution 的 `OperationExecutionError` 补充图来源与阶段；Application 的类型化 `RunApplicationEventKind::RunErrored` 携带对应 `RunFailure`，经图活动和调用方 sink 交付原生宿主。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
 纵向、生存、多元分析、推断、ANOVA、空间、线性回归、回归模型、时序预测、因果模型、相关一致性、不平等统计与可视化适配共用 `statistics::common::computation_error`，保持 SCI 的取消、超时、形状、参数范围与计算失败分类，不各自维护同一映射。SCI Contract 的 `DataOutOfRange` 保持为数值输入错误；非法置信度、覆盖率与推断选项保持为参数错误。相关一致性内核使用 revision 3，使能力指纹涵盖修正后的错误分类。
 
 `statistics/survival` 适配 15 个生存分析节点，复用统计输入的联合物化、精确分类标签、

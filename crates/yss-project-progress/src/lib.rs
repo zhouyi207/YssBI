@@ -22,7 +22,7 @@ pub enum ProjectCleanupProgress {
     Removing { removed: usize, total: usize },
 }
 
-/// Output port implemented by delivery adapters such as a bounded IPC queue.
+/// Output port for caller-provided delivery of typed project progress.
 pub trait ProjectProgressSink: Send + Sync {
     fn publish(&self, progress: ProjectProgress);
 }
