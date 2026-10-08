@@ -29,13 +29,11 @@ pub fn run(
             let n = values.len();
             let mean = sample_sum(&values, control)? / n as f64;
             let variance = sample_variance(&values, mean, control)?;
-            finish(
+            finish_t(
                 "t.one_sample",
                 format!("mean = {null_mean}"),
-                "t",
                 mean - null_mean,
-                (variance / n as f64).sqrt(),
-                (n - 1) as f64,
+                ((variance / n as f64).sqrt(), (n - 1) as f64),
                 alternative,
                 vec![n],
                 control,
@@ -87,13 +85,11 @@ pub fn run(
             let n = differences.len();
             let mean = sample_sum(&differences, control)? / n as f64;
             let variance = sample_variance(&differences, mean, control)?;
-            finish(
+            finish_t(
                 "t.paired",
                 "mean(before - after) = 0".into(),
-                "t",
                 mean,
-                (variance / n as f64).sqrt(),
-                (n - 1) as f64,
+                ((variance / n as f64).sqrt(), (n - 1) as f64),
                 alternative,
                 vec![n],
                 control,
@@ -122,13 +118,11 @@ pub fn run(
             match (design, second_count, second_mean, second_sd) {
                 (SummaryTDesign::Paired, None, None, None) => {
                     let se = first_sd / (first_count as f64).sqrt();
-                    finish(
+                    finish_t(
                         "t.summary_paired",
                         format!("mean difference = {null_difference}"),
-                        "t",
                         first_mean - null_difference,
-                        se,
-                        (first_count - 1) as f64,
+                        (se, (first_count - 1) as f64),
                         alternative,
                         vec![first_count],
                         control,
@@ -136,13 +130,11 @@ pub fn run(
                 }
                 (SummaryTDesign::OneSample, None, None, None) => {
                     let se = first_sd / (first_count as f64).sqrt();
-                    finish(
+                    finish_t(
                         "t.summary_one_sample",
                         format!("mean = {null_difference}"),
-                        "t",
                         first_mean - null_difference,
-                        se,
-                        (first_count - 1) as f64,
+                        (se, (first_count - 1) as f64),
                         alternative,
                         vec![first_count],
                         control,
@@ -154,13 +146,11 @@ pub fn run(
                     let estimate = first_mean - mean2;
                     let (se, df) =
                         summary_independent_se_df(first_count, first_sd, n2, sd2, equal_variance)?;
-                    finish(
+                    finish_t(
                         "t.summary_independent",
                         format!("mean1 - mean2 = {null_difference}"),
-                        "t",
                         estimate - null_difference,
-                        se,
-                        df,
+                        (se, df),
                         alternative,
                         vec![first_count, n2],
                         control,
@@ -402,13 +392,11 @@ fn independent(
     let var1 = sample_variance(first, mean1, control)?;
     let var2 = sample_variance(second, mean2, control)?;
     let (se, df) = summary_independent_se_df(n1, var1.sqrt(), n2, var2.sqrt(), equal_variance)?;
-    finish(
+    finish_t(
         method,
         format!("mean1 - mean2 = {null_difference}"),
-        "t",
         mean1 - mean2 - null_difference,
-        se,
-        df,
+        (se, df),
         alternative,
         vec![n1, n2],
         control,
@@ -485,17 +473,16 @@ fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), 
     Ok(())
 }
 
-fn finish(
+fn finish_t(
     method: &str,
     null_hypothesis: String,
-    statistic_name: &str,
     estimate: f64,
-    standard_error: f64,
-    df: f64,
+    standard_error_df: (f64, f64),
     alternative: Alternative,
     sample_sizes: Vec<usize>,
     control: &ScientificExecutionControl,
 ) -> Result<ClassicalTestResult, HypothesisError> {
+    let (standard_error, df) = standard_error_df;
     if !estimate.is_finite()
         || !standard_error.is_finite()
         || standard_error <= 0.0
@@ -524,7 +511,7 @@ fn finish(
         method: method.into(),
         null_hypothesis,
         alternative: alternative.into(),
-        statistic_name: statistic_name.into(),
+        statistic_name: "t".into(),
         statistic,
         degrees_of_freedom: vec![df],
         p_value,

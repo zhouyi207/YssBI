@@ -582,7 +582,9 @@ fn scale_limits_anova_uses_dynamic_terms_and_repeated_cells() {
         .collect::<Vec<_>>();
     let factors = (0..9)
         .map(|j| Factor {
-            values: (0..subjects.len()).map(|i| (i % cells >> j) & 1).collect(),
+            values: (0..subjects.len())
+                .map(|i| ((i % cells) >> j) & 1)
+                .collect(),
             levels: 2,
         })
         .collect::<Vec<_>>();

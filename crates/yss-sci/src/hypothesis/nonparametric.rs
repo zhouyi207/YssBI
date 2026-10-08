@@ -646,7 +646,6 @@ fn mann_kendall(
     }
     ordered.truncate(unique);
     let mut tree = vec![0i64; ordered.len() + 1];
-    let mut seen = 0i64;
     let mut s = 0i64;
     for (i, value) in values.iter().enumerate() {
         checkpoint(control, i)?;
@@ -656,13 +655,12 @@ fn mann_kendall(
             + 1;
         let less = fenwick_sum(&tree, rank - 1);
         let less_or_equal = fenwick_sum(&tree, rank);
-        s += less - (seen - less_or_equal);
+        s += less - (i as i64 - less_or_equal);
         let mut index = rank;
         while index < tree.len() {
             tree[index] += 1;
             index += index & index.wrapping_neg();
         }
-        seen += 1;
     }
     let (_, ties) = ranks(&values, control)?;
     let tie = ties

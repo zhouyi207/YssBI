@@ -80,8 +80,12 @@ fn time_series_arima_css_and_integrated_intervals_match_scipy_reference() {
         let first = case["first_row"].as_u64().unwrap() as usize;
         assert!(r.fitted[..first].iter().all(Option::is_none));
         assert_eq!(r.effective_observations, y.len() - first);
-        for i in first..y.len() {
-            close(r.fitted[i].unwrap() + r.residuals[i].unwrap(), y[i], 1e-12);
+        for (i, value) in y.iter().enumerate().skip(first) {
+            close(
+                r.fitted[i].unwrap() + r.residuals[i].unwrap(),
+                *value,
+                1e-12,
+            );
         }
     }
 }

@@ -136,7 +136,7 @@ fn partial_correlation_matches_independent_least_squares_and_rejects_rank_loss()
         partial(
             &x,
             &y,
-            &[x.clone()],
+            std::slice::from_ref(&x),
             CorrelationOptions::default(),
             &control
         )

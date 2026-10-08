@@ -42,16 +42,18 @@ fn independence(
     if row.len() != column.len() || row.is_empty() {
         return Err("crosstab requires aligned non-empty categorical columns".into());
     }
-    let (rows, cols, table) = count_table(row, column, control)?;
-    if rows.len() < 2 || cols.len() < 2 {
+    let table = count_table(row, column, control)?;
+    let rows = table.len();
+    let cols = table.first().map_or(0, Vec::len);
+    if rows < 2 || cols < 2 {
         return Err("independence test requires at least two levels in both variables".into());
     }
     let mut n = 0u64;
-    let mut row_totals = vec![0.0; rows.len()];
-    let mut col_totals = vec![0.0; cols.len()];
+    let mut row_totals = vec![0.0; rows];
+    let mut col_totals = vec![0.0; cols];
     for (r, cells) in table.iter().enumerate() {
         for (c, count) in cells.iter().enumerate() {
-            checkpoint(control, r * cols.len() + c)?;
+            checkpoint(control, r * cols + c)?;
             n += count;
             row_totals[r] += *count as f64;
             col_totals[c] += *count as f64;
@@ -60,9 +62,9 @@ fn independence(
     let n = n as f64;
     let mut statistic = 0.0;
     let mut min_expected = f64::INFINITY;
-    for r in 0..rows.len() {
-        for c in 0..cols.len() {
-            checkpoint(control, r * cols.len() + c)?;
+    for r in 0..rows {
+        for c in 0..cols {
+            checkpoint(control, r * cols + c)?;
             let expected = row_totals[r] * col_totals[c] / n;
             if expected <= 0.0 {
                 return Err("crosstab contains an empty marginal".into());
@@ -75,7 +77,7 @@ fn independence(
         "chisquare.crosstab",
         "row and column classifications are independent",
         statistic,
-        ((rows.len() - 1) * (cols.len() - 1)) as f64,
+        ((rows - 1) * (cols - 1)) as f64,
         n as usize,
         control,
     )?;
@@ -176,8 +178,8 @@ fn fisher(
     if row.len() != column.len() || row.is_empty() {
         return Err("Fisher exact test requires aligned categorical columns".into());
     }
-    let (categories_row, categories_col, table) = count_table(row, column, control)?;
-    if categories_row.len() != 2 || categories_col.len() != 2 {
+    let table = count_table(row, column, control)?;
+    if table.len() != 2 || table[0].len() != 2 {
         return Err("Fisher exact test currently requires a 2 by 2 table".into());
     }
     let [a, b, c, d] = [table[0][0], table[0][1], table[1][0], table[1][1]];
@@ -311,7 +313,7 @@ fn multiple_proportions(
     values: Vec<f64>,
     control: &ScientificExecutionControl,
 ) -> Result<ClassicalTestResult, HypothesisError> {
-    if values.len() < 6 || values.len() % 2 != 0 {
+    if values.len() < 6 || !values.len().is_multiple_of(2) {
         return Err("multiple-proportion test requires at least three success/total pairs".into());
     }
     let groups = values.len() / 2;
@@ -353,7 +355,7 @@ fn count_table(
     row: Vec<Box<str>>,
     column: Vec<Box<str>>,
     control: &ScientificExecutionControl,
-) -> Result<(Vec<Box<str>>, Vec<Box<str>>, Vec<Vec<u64>>), HypothesisError> {
+) -> Result<Vec<Vec<u64>>, HypothesisError> {
     let mut row_levels = BTreeSet::new();
     let mut column_levels = BTreeSet::new();
     for (i, (r, c)) in row.iter().zip(&column).enumerate() {
@@ -390,7 +392,7 @@ fn count_table(
         checkpoint(control, i)?;
         table[ri[r.as_ref()]][ci[c.as_ref()]] += 1;
     }
-    Ok((rows, columns, table))
+    Ok(table)
 }
 
 fn fisher_two_sided(
