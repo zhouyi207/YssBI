@@ -228,6 +228,7 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   失败、取消和实际关闭释放租约；面板拖动重挂载保留同一租约。普通重跑不替换已打开的结果。
 - `results/table` 与 `results/value`：虚拟表格、概览与按需展开字段；结构化报告的数组只展示后端数据引用，
   点击后按原 ResultTablePart 读取有界页。标量保留空值、布尔值与宽整数，前端不计算统计量。
+  线性模型和报告的普通 JSON 元数据复用 Node Kernel 的运行值转换，字段树与表引用保留原结构。
 - `workbench/logs`：直接订阅中立 LogRuntime 的已提交记录，recent buffer 有界、虚拟列表绘制；
   清空只清视图，缺口和慢消费恢复 recent snapshot，存储失败显示不可用。关闭释放原生订阅。
 - `services/paths`：保持应用标识和各平台数据/日志目录约定；`YSSBI_APP_DATA_DIR` 可指定绝对路径，

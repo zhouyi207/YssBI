@@ -1,7 +1,7 @@
 //! Display conversion only; all numerical and statistical values come from Rust results.
 use std::{collections::BTreeSet, sync::Arc};
 use yss_application::graph::results::{ResultValueProjection, report::ResultTablePart};
-use yss_data_contract::{DataValue, TabularScalar};
+use yss_data_contract::TabularScalar;
 use yss_node_kernel::RuntimeValue;
 
 pub struct ValueRow {
@@ -122,6 +122,5 @@ pub fn overview(projection: &ResultValueProjection) -> anyhow::Result<Arc<Runtim
             "observations": { "kind": "tableRef", "part": "observations", "rowCount": report.observation_count },
         }),
     };
-    let data: DataValue = serde_json::from_value(json)?;
-    Ok(Arc::new(RuntimeValue::try_from(&data)?))
+    Ok(Arc::new(RuntimeValue::try_from(json)?))
 }
