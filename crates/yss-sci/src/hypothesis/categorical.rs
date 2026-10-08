@@ -2,7 +2,7 @@
 use super::checkpoint;
 use statrs::distribution::{Binomial, ChiSquared, ContinuousCDF, DiscreteCDF};
 use statrs::function::gamma::ln_gamma;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use yss_sci_contract::hypothesis::{CategoricalHypothesisTest as Input, ClassicalTestResult};
 use yss_sci_contract::{execution::ScientificExecutionControl, hypothesis::HypothesisError};
 
@@ -356,32 +356,20 @@ fn count_table(
     column: Vec<Box<str>>,
     control: &ScientificExecutionControl,
 ) -> Result<Vec<Vec<u64>>, HypothesisError> {
-    let mut row_levels = BTreeSet::new();
-    let mut column_levels = BTreeSet::new();
+    let mut rows = BTreeMap::<&str, usize>::new();
+    let mut columns = BTreeMap::<&str, usize>::new();
     for (i, (r, c)) in row.iter().zip(&column).enumerate() {
         checkpoint(control, i)?;
-        row_levels.insert(r.clone());
-        column_levels.insert(c.clone());
+        rows.entry(r.as_ref()).or_default();
+        columns.entry(c.as_ref()).or_default();
     }
-    let mut rows = Vec::with_capacity(row_levels.len());
-    for (i, key) in row_levels.into_iter().enumerate() {
+    for (i, index) in rows.values_mut().enumerate() {
         checkpoint(control, i)?;
-        rows.push(key);
+        *index = i;
     }
-    let mut columns = Vec::with_capacity(column_levels.len());
-    for (i, key) in column_levels.into_iter().enumerate() {
+    for (i, index) in columns.values_mut().enumerate() {
         checkpoint(control, i)?;
-        columns.push(key);
-    }
-    let mut ri = BTreeMap::new();
-    let mut ci = BTreeMap::new();
-    for (i, key) in rows.iter().enumerate() {
-        checkpoint(control, i)?;
-        ri.insert(key.as_ref(), i);
-    }
-    for (i, key) in columns.iter().enumerate() {
-        checkpoint(control, i)?;
-        ci.insert(key.as_ref(), i);
+        *index = i;
     }
     let mut table = Vec::with_capacity(rows.len());
     for _ in 0..rows.len() {
@@ -390,7 +378,7 @@ fn count_table(
     }
     for (i, (r, c)) in row.iter().zip(&column).enumerate() {
         checkpoint(control, i)?;
-        table[ri[r.as_ref()]][ci[c.as_ref()]] += 1;
+        table[rows[r.as_ref()]][columns[c.as_ref()]] += 1;
     }
     Ok(table)
 }

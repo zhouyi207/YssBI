@@ -416,11 +416,13 @@ references do not create an unadmitted full-column string expansion. Count-table
 admits linear category indexes before constructing them, then uses actual row and
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 5, except the
-paired t, McNemar and CMH kernels, which use revision 6.
+paired t, McNemar, CMH, categorical independence and Fisher exact kernels, which use revision 6.
 CMH exposure and outcome reuse the controlled scalar-column and binary numeric
 reader, without encoding numeric observations as category strings. Each temporary
 column is released after conversion; admission includes retained earlier columns,
 the current scalar buffer and its numeric output. Strata keep their exact typed keys.
+Independence and Fisher count tables reuse SCI's borrowed ordered label indexes;
+their lexical cell ordering and existing workspace admission remain unchanged.
 
 Paired t and McNemar tests use the shared numeric-column reader to pair equal-length
 measurements by their current positions. Database series from independent sources and

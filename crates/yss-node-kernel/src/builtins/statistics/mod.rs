@@ -115,6 +115,8 @@ pub(super) fn install(
                         | "yssbi.statistics.workflow.moderated_mediation"
                         | "yssbi.statistics.diagnostic.ph"
                         | "yssbi.statistics.test.cmh"
+                        | "yssbi.statistics.test.chisquare.crosstab"
+                        | "yssbi.statistics.test.fisher_exact"
                 ) {
                     5
                 } else if id == "yssbi.statistics.iv.2sls.summary" {
@@ -203,10 +205,8 @@ pub(super) fn install(
                             | "yssbi.statistics.test.z.proportion"
                             | "yssbi.statistics.test.binomial"
                             | "yssbi.statistics.test.proportion.two"
-                            | "yssbi.statistics.test.chisquare.crosstab"
                             | "yssbi.statistics.test.chisquare.general"
                             | "yssbi.statistics.test.chisquare.goodness_of_fit"
-                            | "yssbi.statistics.test.fisher_exact"
                             | "yssbi.statistics.test.proportion.multiple"
                             | "yssbi.statistics.test.poisson"
                             | "yssbi.statistics.test.equivalence"

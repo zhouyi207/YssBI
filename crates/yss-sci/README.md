@@ -616,6 +616,11 @@ use the shared OLS configuration. Result organization does not change solver or
 convergence policy.
 
 Classical hypothesis tests are organized under `hypothesis`: `sample_mean` owns mean, proportion, Poisson and equivalence tests; `categorical` owns count-table tests; `nonparametric` owns rank and sequence tests; and `variance` owns variance-homogeneity tests. These functions accept neutral contract requests and return common result records. The node catalog and kernel own graph-facing interfaces and dispatch.
+Categorical count-table preparation borrows labels from its owned input arrays in
+one ordered index per dimension. It keeps lexical row/column order and exact cell
+counts without cloning labels per observation or retaining separate level vectors.
+`tests/categorical_tables.rs` covers repeated long labels whose first appearance
+order differs from the table's lexical order.
 
 All four entrypoints also accept the caller's `ScientificExecutionControl`. Input,
 rank/tie, table and variance scans, exact binomial/Poisson/Fisher enumeration,
