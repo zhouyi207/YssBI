@@ -1,7 +1,7 @@
-use super::super::{numeric_input, series};
+use super::super::series;
 use super::{
     Input,
-    common::{computation_error, materialize, text, value},
+    common::{computation_error, materialize, numeric, text, value},
 };
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use std::cmp::Ordering;
@@ -78,17 +78,6 @@ fn options(method: Method, inv: &KernelInvocation<'_>) -> Result<AnovaOptions, K
     })
 }
 
-fn numerical(column: &series::Column, inv: &KernelInvocation<'_>) -> Result<Vec<f64>, KernelError> {
-    let mut values = inv.control.reserve(column.values.len())?;
-    for (i, scalar) in column.values.iter().enumerate() {
-        if i.is_multiple_of(1024) {
-            inv.check_control()?;
-        }
-        values.push(numeric_input(Some(&RuntimeValue::Scalar(scalar.clone())))?);
-    }
-    Ok(values)
-}
-
 fn factor(
     column: &series::Column,
     inv: &KernelInvocation<'_>,
@@ -157,13 +146,13 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
     let mut subject_ids = None;
     for (key, column) in inv.input_keys.iter().zip(&columns) {
         match *key {
-            "y" => responses.push(numerical(column, inv)?),
+            "y" => responses.push(numeric(column, false, inv)?),
             "factors" => {
                 let (coded, levels) = factor(column, inv)?;
                 factors.push(coded);
                 labels.push(levels);
             }
-            "covariates" => covariates.push(numerical(column, inv)?),
+            "covariates" => covariates.push(numeric(column, false, inv)?),
             "subjects" => subject_ids = Some(subjects(column, inv)?),
             _ => return Err(KernelError::InputLayoutMismatch),
         }
