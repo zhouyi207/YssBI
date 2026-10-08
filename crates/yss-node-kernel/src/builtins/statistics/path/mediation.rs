@@ -30,7 +30,7 @@ fn mediation(
             match text(inv, "stage")? {
                 "first" => MediatedStage::First,
                 "second" => MediatedStage::Second,
-                _ => return Err(KernelError::InvalidNumericInput),
+                _ => return Err(KernelError::InvalidParameter),
             }
         } else {
             MediatedStage::None
