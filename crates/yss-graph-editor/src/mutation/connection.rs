@@ -497,24 +497,24 @@ fn endpoint_capacity(
     address: &PortAddress,
     capability: ConnectionsPerPort,
 ) -> Result<EndpointCapacity, MutationConflict> {
-    let connections = document
-        .connections
-        .values()
-        .filter(|connection| connection.output == *address || connection.input == *address)
-        .cloned()
-        .collect::<Vec<_>>();
     match capability {
-        ConnectionsPerPort::Single if connections.is_empty() => Ok(EndpointCapacity::Append),
-        ConnectionsPerPort::Single => Ok(EndpointCapacity::Replace(connections)),
-        ConnectionsPerPort::Multiple { max, .. }
-            if max.is_some_and(|maximum| connections.len() >= usize::from(maximum)) =>
-        {
-            Err(editor_error(
-                EditorMutationErrorCode::GraphConnectionLimitReached,
-                format!("port '{address}' has reached its connection limit"),
-            ))
+        ConnectionsPerPort::Single => {
+            let connections = document
+                .connections
+                .values()
+                .filter(|connection| connection.output == *address || connection.input == *address)
+                .cloned()
+                .collect::<Vec<_>>();
+            if connections.is_empty() {
+                Ok(EndpointCapacity::Append)
+            } else {
+                Ok(EndpointCapacity::Replace(connections))
+            }
         }
-        ConnectionsPerPort::Multiple { .. } => Ok(EndpointCapacity::Append),
+        ConnectionsPerPort::Multiple { .. } => {
+            validate_connection_capacity(document, address, capability)
+                .map(|()| EndpointCapacity::Append)
+        }
     }
 }
 
@@ -523,13 +523,26 @@ fn validate_connection_capacity(
     address: &PortAddress,
     capability: ConnectionsPerPort,
 ) -> Result<(), MutationConflict> {
-    endpoint_capacity(document, address, capability).and_then(|capacity| match capacity {
-        EndpointCapacity::Append => Ok(()),
-        EndpointCapacity::Replace(_) => Err(editor_error(
+    let maximum = match capability {
+        ConnectionsPerPort::Single => Some(1),
+        ConnectionsPerPort::Multiple { max, .. } => max.map(usize::from),
+    };
+    if let Some(maximum) = maximum
+        && document
+            .connections
+            .values()
+            .filter(|connection| connection.output == *address || connection.input == *address)
+            .take(maximum)
+            .count()
+            >= maximum
+    {
+        Err(editor_error(
             EditorMutationErrorCode::GraphConnectionLimitReached,
             format!("port '{address}' has reached its connection limit"),
-        )),
-    })
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn resolve_literal_target<'a>(

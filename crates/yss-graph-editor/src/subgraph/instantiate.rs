@@ -45,20 +45,6 @@ pub(super) fn instantiate_with_identities(
     let node_types = validate_insert_nodes(graph_path, registry, catalog, &snapshot, anchor)?;
     let instance_keys = validate_portable_references(registry, catalog, &snapshot, &node_types)?;
 
-    let temporary_ids = InstantiationIds {
-        nodes: temporary_node_ids(document, node_types.keys()),
-        instances: temporary_port_instance_ids(document, instance_keys.iter()),
-        connections: temporary_connection_ids(document, snapshot.connections.len()),
-    };
-    plan_instantiation(
-        document,
-        registry,
-        &snapshot,
-        &constant_operations,
-        anchor,
-        &temporary_ids,
-    )?;
-
     let ids = InstantiationIds {
         nodes: fresh_node_ids(document, node_types.keys()),
         instances: fresh_port_instance_ids(document, instance_keys.iter()),
@@ -72,8 +58,6 @@ pub(super) fn instantiate_with_identities(
         anchor,
         &ids,
     )?;
-    yss_graph_document_edit::prepare_graph_document_patch(document.clone(), &patch)
-        .map_err(|error| invalid_clipboard(format!("subgraph patch validation failed: {error}")))?;
     let mut addresses = snapshot
         .port_bindings
         .iter()
@@ -861,74 +845,6 @@ fn instantiate_address(
         },
     };
     Ok(PortAddress { node_id, port })
-}
-
-fn temporary_node_ids<'a>(
-    document: &GraphDocument,
-    local_ids: impl Iterator<Item = &'a ClipboardNodeId>,
-) -> BTreeMap<ClipboardNodeId, NodeId> {
-    let mut used = document.nodes.keys().copied().collect::<BTreeSet<_>>();
-    local_ids
-        .enumerate()
-        .map(|(index, local_id)| {
-            let mut value = u128::MAX - index as u128;
-            let id = loop {
-                let candidate = NodeId::from_uuid(uuid::Uuid::from_u128(value));
-                if used.insert(candidate) {
-                    break candidate;
-                }
-                value -= 1;
-            };
-            (local_id.clone(), id)
-        })
-        .collect()
-}
-
-fn temporary_port_instance_ids<'a>(
-    document: &GraphDocument,
-    keys: impl Iterator<Item = &'a LocalInstanceKey>,
-) -> BTreeMap<LocalInstanceKey, PortInstanceId> {
-    let mut used = document
-        .port_bindings
-        .keys()
-        .filter_map(|address| match address.port {
-            PortRef::Instance { instance_id, .. } => Some(instance_id),
-            PortRef::Declared { .. } => None,
-        })
-        .collect::<BTreeSet<_>>();
-    keys.enumerate()
-        .map(|(index, key)| {
-            let mut value = u128::MAX / 2 - index as u128;
-            let id = loop {
-                let candidate = PortInstanceId::from_uuid(uuid::Uuid::from_u128(value));
-                if used.insert(candidate) {
-                    break candidate;
-                }
-                value -= 1;
-            };
-            (key.clone(), id)
-        })
-        .collect()
-}
-
-fn temporary_connection_ids(document: &GraphDocument, count: usize) -> Vec<ConnectionId> {
-    let mut used = document
-        .connections
-        .keys()
-        .copied()
-        .collect::<BTreeSet<_>>();
-    (0..count)
-        .map(|index| {
-            let mut value = u128::MAX / 4 - index as u128;
-            loop {
-                let candidate = ConnectionId::from_uuid(uuid::Uuid::from_u128(value));
-                if used.insert(candidate) {
-                    break candidate;
-                }
-                value -= 1;
-            }
-        })
-        .collect()
 }
 
 fn fresh_node_ids<'a>(

@@ -267,6 +267,95 @@ fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone(
 }
 
 #[test]
+fn bounded_connection_limits_reject_overflow_and_reopen_after_disconnect() {
+    use std::sync::Arc;
+    use yss_node_protocol::{ConnectionsPerPort, NodeTypingSpec};
+    use yss_node_registry::{
+        LeafImplementation, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
+    };
+    let builtin = build_builtin_node_system().unwrap();
+    let mut protocol = builtin
+        .registry
+        .protocol(&"yssbi.logic.not".parse().unwrap())
+        .unwrap()
+        .clone();
+    protocol.type_id = "tests.connections.bounded".parse().unwrap();
+    protocol.typing = NodeTypingSpec::Fixed;
+    for port in &mut protocol.interface.ports {
+        port.value_type = TypeExpr::Concrete("core.binary".parse().unwrap());
+        port.connections = ConnectionsPerPort::Multiple {
+            max: Some(2),
+            ordered: false,
+        };
+    }
+    let mut builder = NodeRegistryBuilder::new();
+    yss_node_catalog::register_builtin_nodes(&mut builder).unwrap();
+    let mut provider = ProviderRegistration::new("tests.connections".parse().unwrap());
+    provider.nodes = [RegisteredNode::leaf(
+        Arc::new(protocol),
+        LeafImplementation::new("tests.connections.bounded"),
+    )]
+    .into();
+    builder.register_provider(provider).unwrap();
+    let registry = builder.freeze().unwrap();
+    let mut document = GraphDocument::default();
+    let sources = std::array::from_fn::<_, 3, _>(|_| {
+        insert_node(
+            &mut document,
+            document_node("tests.connections.bounded", 0.0),
+        )
+    });
+    let targets = std::array::from_fn::<_, 3, _>(|_| {
+        insert_node(
+            &mut document,
+            document_node("tests.connections.bounded", 100.0),
+        )
+    });
+    let connect = |document: &GraphDocument, source, target| {
+        EditorGraphMutation::Connect {
+            output: declared(source, "result"),
+            input: declared(target, "input"),
+            order: None,
+        }
+        .into_patch(&graph_path(), document, &registry)
+    };
+    for (source, target) in [
+        (sources[0], targets[0]),
+        (sources[0], targets[1]),
+        (sources[1], targets[0]),
+    ] {
+        let patch = connect(&document, source, target).unwrap();
+        apply_graph_document_patch(&mut document, &patch).unwrap();
+    }
+    let full = document.clone();
+    for (source, target) in [(sources[0], targets[2]), (sources[2], targets[0])] {
+        assert!(matches!(
+            connect(&document, source, target),
+            Err(crate::MutationConflict::Editor(error))
+                if error.code == EditorMutationErrorCode::GraphConnectionLimitReached
+        ));
+    }
+    assert_eq!(document, full);
+    let released = document
+        .connections
+        .values()
+        .find(|connection| connection.input.node_id == targets[1])
+        .unwrap()
+        .id;
+    let disconnect = EditorGraphMutation::DisconnectConnections {
+        connection_ids: vec![released],
+    }
+    .into_patch(&graph_path(), &document, &registry)
+    .unwrap();
+    apply_graph_document_patch(&mut document, &disconnect).unwrap();
+    let replacement = connect(&document, sources[0], targets[2]).unwrap();
+    apply_graph_document_patch(&mut document, &replacement).unwrap();
+    apply_graph_document_patch(&mut document, &replacement.inverse()).unwrap();
+    apply_graph_document_patch(&mut document, &disconnect.inverse()).unwrap();
+    assert_eq!(document, full);
+}
+
+#[test]
 fn connect_rejects_a_known_type_outside_the_input_class() {
     use std::sync::Arc;
     use yss_node_protocol::{NodeTypingSpec, ParameterCondition, ParameterEditorSpec, TypedValue};
@@ -1132,4 +1221,73 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
     .unwrap();
     apply_graph_document_patch(&mut source, &patch).unwrap();
     assert_eq!(source.constants.len(), 1);
+}
+
+#[test]
+fn clipboard_connection_limits_reject_partial_imports_and_allow_undo() {
+    let builtin = build_builtin_node_system().unwrap();
+    let catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::new(),
+    };
+    let mut source = GraphDocument::default();
+    let nodes = std::array::from_fn::<_, 3, _>(|_| {
+        insert_node(&mut source, document_node("yssbi.logic.not", 0.0))
+    });
+    let input = declared(nodes[2], "input");
+    source.input_states.insert(
+        input.clone(),
+        yss_graph_document::InputState {
+            literal_override: Some(yss_node_protocol::TypedValue {
+                value_type: TypeExpr::Concrete("core.binary".parse().unwrap()),
+                value: yss_data_contract::DataValue::Bool(false),
+            }),
+        },
+    );
+    for node in &nodes[..2] {
+        let id = yss_graph_document::ConnectionId::new();
+        source.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: declared(*node, "result"),
+                input: input.clone(),
+                order: None,
+            },
+        );
+    }
+    let mut snapshot =
+        crate::export_subgraph(&source, &builtin.registry, &catalog, nodes.to_vec()).unwrap();
+    let mut target = GraphDocument::default();
+    let existing = source.nodes[&nodes[0]].clone();
+    target.nodes.insert(existing.id, existing);
+    let before = target.clone();
+    let plan = |snapshot| {
+        EditorGraphMutation::InsertSubgraph {
+            snapshot,
+            anchor: NodePosition { x: 200.0, y: 0.0 },
+        }
+        .into_patch_with_context(
+            &graph_path(),
+            &before,
+            &builtin.registry,
+            EditorMutationContext {
+                catalog: Some(&catalog),
+                semantics: None,
+            },
+        )
+    };
+    assert!(matches!(
+        plan(snapshot.clone()),
+        Err(crate::MutationConflict::ClipboardSubgraphInvalid(detail))
+            if detail.contains("connection limit")
+    ));
+    assert_eq!(target, before);
+    snapshot.connections.pop().unwrap();
+    let patch = plan(snapshot).unwrap();
+    apply_graph_document_patch(&mut target, &patch).unwrap();
+    assert_eq!(target.nodes.len(), 4);
+    assert_eq!(target.connections.len(), 1);
+    assert_eq!(target.input_states.len(), 1);
+    apply_graph_document_patch(&mut target, &patch.inverse()).unwrap();
+    assert_eq!(target, before);
 }
