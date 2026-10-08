@@ -2,6 +2,7 @@ use super::{
     NodeProtocol, ParameterConstraint, ParameterEditorSpec, ParameterKey, ParameterValues,
     TypeClassId, TypeConstructorId, TypeExpr, TypeId, TypedValue,
 };
+use serde::Deserialize;
 use yss_data_contract::DataValue;
 use yss_data_contract::DecimalLiteral;
 
@@ -33,9 +34,10 @@ pub fn validate_typed_literal(
     declared_type: &TypeExpr,
     nominal: &impl TypeValidationContext,
 ) -> Result<TypedValue, LiteralValidationIssue> {
-    let decoded = serde_json::from_value::<TypedValue>(wire.clone())
-        .map_err(|_| LiteralValidationIssue::MalformedWire)?;
-    validate_typed_value(decoded, declared_type, nominal)
+    let decoded =
+        TypedValue::deserialize(wire).map_err(|_| LiteralValidationIssue::MalformedWire)?;
+    validate_typed_value(&decoded, declared_type, nominal)?;
+    Ok(decoded)
 }
 
 pub fn normalize_json_literal(
@@ -46,21 +48,23 @@ pub fn normalize_json_literal(
     let value_type = resolve_json_literal_type(raw, declared_type, nominal)
         .ok_or(LiteralValidationIssue::ValueTypeMismatch)?;
     let value = json_literal_to_protocol_value(raw, &value_type)?;
-    validate_typed_value(TypedValue { value_type, value }, declared_type, nominal)
+    let decoded = TypedValue { value_type, value };
+    validate_typed_value(&decoded, declared_type, nominal)?;
+    Ok(decoded)
 }
 
 pub fn validate_typed_value(
-    decoded: TypedValue,
+    decoded: &TypedValue,
     declared_type: &TypeExpr,
     nominal: &impl TypeValidationContext,
-) -> Result<TypedValue, LiteralValidationIssue> {
+) -> Result<(), LiteralValidationIssue> {
     if !type_expr_accepts(declared_type, &decoded.value_type, nominal) {
         return Err(LiteralValidationIssue::DeclaredTypeMismatch);
     }
     if !protocol_value_matches_type(&decoded.value, &decoded.value_type, nominal) {
         return Err(LiteralValidationIssue::ValueTypeMismatch);
     }
-    Ok(decoded)
+    Ok(())
 }
 
 fn json_literal_to_protocol_value(
@@ -591,8 +595,8 @@ mod tests {
             value: DataValue::List(vec![]),
         };
         assert_eq!(
-            validate_typed_value(expected.clone(), &declared, &NoNominalValidator),
-            Ok(expected.clone())
+            validate_typed_value(&expected, &declared, &NoNominalValidator),
+            Ok(())
         );
         assert_eq!(
             normalize_json_literal(&serde_json::json!([]), &declared, &NoNominalValidator),

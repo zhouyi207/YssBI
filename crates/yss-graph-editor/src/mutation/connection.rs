@@ -562,7 +562,7 @@ pub(crate) fn validate_literal_target(
 ) -> Result<(), MutationConflict> {
     let port = resolve_literal_target(document, registry, address)?;
     if let Some(literal) = literal {
-        yss_node_protocol::validate_typed_value(literal.clone(), &port.spec.value_type, registry)
+        yss_node_protocol::validate_typed_value(literal, &port.spec.value_type, registry)
             .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())

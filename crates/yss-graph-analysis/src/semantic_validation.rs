@@ -101,7 +101,7 @@ pub(crate) fn validate(
                 address,
             ));
         }
-        if validate_typed_value(literal.clone(), &port.accepted_type, registry).is_err() {
+        if validate_typed_value(literal, &port.accepted_type, registry).is_err() {
             diagnostics.push(port_problem(
                 GraphDiagnosticKind::InputLiteralInvalid,
                 address,

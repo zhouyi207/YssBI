@@ -14,6 +14,10 @@ Configuration JSON Schema projects these declarations without loading a graph or
 `TypeExpr` represents declared patterns; normalization flattens, deduplicates and orders unions.
 `TypedValue` carries a declared value type and the shared Data Contract value. Literal validation
 checks type acceptance and value shape through the caller's nominal validation context.
+`validate_typed_value` borrows an existing `TypedValue` and returns only the
+validation result; Analysis and Editor do not clone literal bodies to check them.
+Wire decoding borrows its JSON input, and the decoding/normalization entries
+return the single validated value they construct.
 JSON arrays infer one homogeneous element type without retaining or sorting every element's
 type. An empty array uses a fully resolved declared element type; unresolved generic or class
 patterns still require values from which to infer a type.
