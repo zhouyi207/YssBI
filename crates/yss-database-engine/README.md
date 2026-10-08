@@ -15,6 +15,8 @@ streams a bounded `RelationPage`. Arrow conversion uses the existing `TabularSca
 preserving signed/unsigned integers at full width. The page limit accounts for scalar containers
 and owned text bytes as well as each source batch. Stream waits use the shared cancellation and
 deadline control. JSON encoding belongs to the consumer's output boundary.
+Engine and Runtime pages share the Arrow adapter's projection budget; text expansion is checked
+while producing each value, before allocating an oversized display column.
 
 Exact Arrow snapshots, aggregate/profile queries and numeric materialization retain their
 separate entry points. Display pages do not replace the committed or computed Arrow schema.

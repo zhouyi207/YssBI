@@ -84,6 +84,9 @@ Project/Runtime revision basis.
 Column snapshots use Arrow and apply projection and bounds before materialization. DataView pages include stable
 row IDs; relation reads hide internal identity/order fields. Native page snapshots consume the
 shared Arrow scalar projection directly and retain full-width signed/unsigned integer carriers.
+Their byte budget covers native scalar containers, owned text and stable row ID payloads, in
+addition to the Engine's Arrow input limit. A projection that exceeds the budget returns the
+existing Constraint classification.
 JSON consumers apply their display encoding at the output boundary. `DatabaseColumnFact` carries a semantic Graph type and
 an independent display label, exact Physical label, the field's Semantic configuration and supported
 Semantic choices derived by the Arrow adapter from the exact Physical type;

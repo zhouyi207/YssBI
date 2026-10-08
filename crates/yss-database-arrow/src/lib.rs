@@ -41,6 +41,8 @@ pub enum TabularArrowError {
     InvalidSchema,
     #[error("tabular batch construction failed")]
     BuildFailed,
+    #[error("tabular scalar projection exceeds its byte budget")]
+    MemoryLimitExceeded,
 }
 
 #[cfg(test)]

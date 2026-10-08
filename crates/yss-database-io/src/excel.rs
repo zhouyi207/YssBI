@@ -262,11 +262,17 @@ mod tests {
         assert_eq!(reader.schema().field(1).data_type(), &DataType::Float64);
         let batch = reader.collect::<Result<Vec<_>, _>>().unwrap().remove(0);
         assert_eq!(
-            serde_json::to_value(array_to_scalars(batch.column(0).as_ref()).unwrap()).unwrap(),
+            serde_json::to_value(
+                array_to_scalars(batch.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap()
+            )
+            .unwrap(),
             serde_json::json!(["2025-10-13T12:59:02.400", "2025-10-14T00:00:00", null])
         );
         assert_eq!(
-            serde_json::to_value(array_to_scalars(batch.column(1).as_ref()).unwrap()).unwrap(),
+            serde_json::to_value(
+                array_to_scalars(batch.column(1).as_ref(), &mut (16 * 1024 * 1024)).unwrap()
+            )
+            .unwrap(),
             serde_json::json!([1.5, null, null])
         );
     }

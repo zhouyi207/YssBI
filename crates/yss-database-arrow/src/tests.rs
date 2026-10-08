@@ -41,8 +41,37 @@ fn snapshot_scalars_preserve_physical_number_carriers_and_nulls() {
             ],
         ),
     ] {
-        assert_eq!(array_to_scalars(array.as_ref()).unwrap(), expected);
+        assert_eq!(
+            array_to_scalars(array.as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
+            expected
+        );
     }
+}
+
+#[test]
+fn snapshot_dictionary_projection_charges_each_owned_label_and_preserves_logical_nulls() {
+    let label = "repeated-label";
+    let array = DictionaryArray::<Int8Type>::try_new(
+        Int8Array::from(vec![Some(0), Some(0), Some(1), None]),
+        Arc::new(StringArray::from(vec![Some(label), None])),
+    )
+    .unwrap();
+    let containers = array.len() * std::mem::size_of::<TabularScalar>();
+    let mut remaining = containers + label.len() * 2;
+    assert_eq!(
+        array_to_scalars(&array, &mut remaining).unwrap(),
+        vec![
+            TabularScalar::String(label.into()),
+            TabularScalar::String(label.into()),
+            TabularScalar::Null,
+            TabularScalar::Null,
+        ]
+    );
+    assert_eq!(remaining, 0);
+    assert_eq!(
+        array_to_scalars(&array, &mut (containers + label.len())),
+        Err(TabularArrowError::MemoryLimitExceeded)
+    );
 }
 
 #[test]
@@ -242,7 +271,8 @@ fn column_semantics_enforce_explicit_domains_and_numeric_constraints() {
         array_to_scalars(
             json_to_array(&text, &[json!(""), json!("001"), json!(null)])
                 .unwrap()
-                .as_ref()
+                .as_ref(),
+            &mut (16 * 1024 * 1024)
         )
         .unwrap(),
         vec![
@@ -302,7 +332,8 @@ fn physical_casts_reject_precision_loss_and_preserve_semantics() {
         array_to_scalars(
             lossless_cast(&Int64Array::from(vec![1, 2]), &DataType::Float64, false)
                 .unwrap()
-                .as_ref()
+                .as_ref(),
+            &mut (16 * 1024 * 1024)
         )
         .unwrap(),
         vec![
@@ -465,7 +496,7 @@ fn semantic_conversion_preserves_nulls_and_rejects_loss_without_requiring_text_i
         .convert(&array)
         .unwrap();
     assert_eq!(
-        array_to_scalars(result.as_ref()).unwrap(),
+        array_to_scalars(result.as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
         vec![V::Integer(1), V::Integer(0), V::Null]
     );
 }
@@ -496,7 +527,7 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
         &DataType::Timestamp(TimeUnit::Nanosecond, None)
     );
     assert_eq!(
-        array_to_scalars(normalized.column(0).as_ref()).unwrap(),
+        array_to_scalars(normalized.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
         vec![
             TabularScalar::String("1970-01-01T07:59:59.999999999".into()),
             TabularScalar::Null,
@@ -509,7 +540,7 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
     });
     let dst = TimestampSecondArray::from(ticks.to_vec()).with_timezone("America/New_York");
     assert_eq!(
-        array_to_scalars(&dst).unwrap(),
+        array_to_scalars(&dst, &mut (16 * 1024 * 1024)).unwrap(),
         vec![
             TabularScalar::String("2024-03-10T01:30:00".into()),
             TabularScalar::String("2024-03-10T03:30:00".into()),
@@ -790,7 +821,7 @@ fn storage_schema_preserves_identity_exact_types_and_category_domain() {
         )
         .unwrap();
         assert_eq!(
-            array_to_scalars(&array).unwrap(),
+            array_to_scalars(&array, &mut (16 * 1024 * 1024)).unwrap(),
             vec![TabularScalar::String(expected.into()), TabularScalar::Null]
         );
     }
@@ -936,7 +967,7 @@ fn edited_values_reject_overflow_and_decimal_truncation() {
         )
         .unwrap();
         assert_eq!(
-            array_to_scalars(array.as_ref()).unwrap(),
+            array_to_scalars(array.as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
             vec![expected, V::Null]
         );
     }
@@ -990,7 +1021,7 @@ fn document_literals_keep_unsigned_values_and_reject_lossy_numeric_mixing() {
     ]))
     .unwrap();
     assert_eq!(
-        array_to_scalars(batch.column(0).as_ref()).unwrap(),
+        array_to_scalars(batch.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
         vec![TabularScalar::Integer(-1), TabularScalar::Integer(10)]
     );
 }

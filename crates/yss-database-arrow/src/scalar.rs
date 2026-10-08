@@ -345,16 +345,27 @@ fn decimal_coefficient(text: &str, precision: u8, scale: i8) -> Result<String, T
 /// Snapshot scalars retain signed/unsigned carriers and finite Float32/Float64 values.
 /// Exact decimals, calendar values and category labels retain their textual projection.
 /// Non-finite Float32/Float64 values use the existing page null representation.
-pub fn array_to_scalars(array: &dyn Array) -> Result<Vec<TabularScalar>, TabularArrowError> {
-    use arrow::util::display::array_value_to_string;
+/// The shared remaining budget is charged before allocating scalar containers or owned text.
+pub fn array_to_scalars(
+    array: &dyn Array,
+    remaining_bytes: &mut usize,
+) -> Result<Vec<TabularScalar>, TabularArrowError> {
+    use arrow::util::display::{ArrayFormatter, FormatOptions};
+    let scalar_bytes = array
+        .len()
+        .checked_mul(std::mem::size_of::<TabularScalar>())
+        .ok_or(TabularArrowError::MemoryLimitExceeded)?;
+    *remaining_bytes = remaining_bytes
+        .checked_sub(scalar_bytes)
+        .ok_or(TabularArrowError::MemoryLimitExceeded)?;
     let normalized = crate::timezone_free_array(array)?;
     let array = normalized.as_ref();
-    if matches!(array.data_type(), DataType::Dictionary(_, _)) {
-        return array_to_scalars(strict_cast(array, &DataType::Utf8)?.as_ref());
-    }
+    let nulls = array.logical_nulls();
+    let options = FormatOptions::default();
+    let mut formatter = None;
     (0..array.len())
         .map(|row| {
-            if array.is_null(row) {
+            if nulls.as_ref().is_some_and(|nulls| nulls.is_null(row)) {
                 return Ok(TabularScalar::Null);
             }
             macro_rules! native {
@@ -395,12 +406,53 @@ pub fn array_to_scalars(array: &dyn Array) -> Result<Vec<TabularScalar>, Tabular
                 DataType::UInt64 => native!(UInt64Array, Unsigned),
                 DataType::Float32 => float!(Float32Array),
                 DataType::Float64 => float!(Float64Array),
-                _ => array_value_to_string(array, row)
-                    .map(|value| TabularScalar::String(value.into_boxed_str()))
-                    .map_err(|_| TabularArrowError::InvalidValue),
+                _ => {
+                    if formatter.is_none() {
+                        formatter = Some(
+                            ArrayFormatter::try_new(array, &options)
+                                .map_err(|_| TabularArrowError::InvalidValue)?,
+                        );
+                    }
+                    let mut text = ScalarText {
+                        value: String::new(),
+                        remaining_bytes,
+                        exhausted: false,
+                    };
+                    formatter
+                        .as_ref()
+                        .ok_or(TabularArrowError::InvalidValue)?
+                        .value(row)
+                        .write(&mut text)
+                        .map_err(|_| {
+                            if text.exhausted {
+                                TabularArrowError::MemoryLimitExceeded
+                            } else {
+                                TabularArrowError::InvalidValue
+                            }
+                        })?;
+                    Ok(TabularScalar::String(text.value.into_boxed_str()))
+                }
             }
         })
         .collect()
+}
+
+struct ScalarText<'a> {
+    value: String,
+    remaining_bytes: &'a mut usize,
+    exhausted: bool,
+}
+
+impl std::fmt::Write for ScalarText<'_> {
+    fn write_str(&mut self, value: &str) -> std::fmt::Result {
+        let Some(remaining) = self.remaining_bytes.checked_sub(value.len()) else {
+            self.exhausted = true;
+            return Err(std::fmt::Error);
+        };
+        *self.remaining_bytes = remaining;
+        self.value.push_str(value);
+        Ok(())
+    }
 }
 
 /// Materialize a document literal, whose contract has no exact storage dtype. Mixed numeric

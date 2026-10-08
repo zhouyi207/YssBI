@@ -21,11 +21,17 @@ fn csv_datetime_offsets_are_removed_before_timestamp_decoding() {
     ));
     let batch = reader.collect::<Result<Vec<_>, _>>().unwrap().remove(0);
     assert_eq!(
-        serde_json::to_value(array_to_scalars(batch.column(0).as_ref()).unwrap()).unwrap(),
+        serde_json::to_value(
+            array_to_scalars(batch.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap()
+        )
+        .unwrap(),
         serde_json::json!(["2026-09-11T10:00:00", "2026-09-11T10:00:00", null])
     );
     assert_eq!(
-        serde_json::to_value(&array_to_scalars(batch.column(1).as_ref()).unwrap()[0]).unwrap(),
+        serde_json::to_value(
+            &array_to_scalars(batch.column(1).as_ref(), &mut (16 * 1024 * 1024)).unwrap()[0]
+        )
+        .unwrap(),
         serde_json::json!("keep +08:00")
     );
 }
@@ -106,9 +112,10 @@ fn batches_round_trip_exact_schema_and_values_through_ipc_and_parquet() {
     assert_eq!(pages.len(), 4);
     for (index, page) in pages.iter().enumerate() {
         for column in 0..3 {
-            let expected = array_to_scalars(batch.column(column).as_ref()).unwrap();
+            let expected =
+                array_to_scalars(batch.column(column).as_ref(), &mut (16 * 1024 * 1024)).unwrap();
             assert_eq!(
-                array_to_scalars(page.column(column).as_ref()).unwrap(),
+                array_to_scalars(page.column(column).as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
                 vec![expected[index % 2].clone()]
             );
         }
@@ -307,11 +314,17 @@ fn csv_wide_multiline_values_are_batched_by_bytes_and_oversized_records_fail() {
         assert!(batch.get_array_memory_size() <= MAX_CSV_BATCH_BYTES);
         assert!(batch.num_rows() < 5000);
         assert_eq!(
-            serde_json::to_value(&array_to_scalars(batch.column(0).as_ref()).unwrap()[0]).unwrap(),
+            serde_json::to_value(
+                &array_to_scalars(batch.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap()[0]
+            )
+            .unwrap(),
             serde_json::json!(u64::MAX.to_string())
         );
         assert_eq!(
-            serde_json::to_value(&array_to_scalars(batch.column(1).as_ref()).unwrap()[0]).unwrap(),
+            serde_json::to_value(
+                &array_to_scalars(batch.column(1).as_ref(), &mut (16 * 1024 * 1024)).unwrap()[0]
+            )
+            .unwrap(),
             serde_json::json!(label)
         );
         count += batch.num_rows();
@@ -374,7 +387,10 @@ fn ipc_rekeys_independent_dictionaries_against_the_persisted_category_domain() {
     for expected in ["high", "low"] {
         let batch = reader.next().unwrap().unwrap();
         assert_eq!(
-            serde_json::to_value(array_to_scalars(batch.column(0).as_ref()).unwrap()).unwrap(),
+            serde_json::to_value(
+                array_to_scalars(batch.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap()
+            )
+            .unwrap(),
             serde_json::json!([expected, null])
         );
     }

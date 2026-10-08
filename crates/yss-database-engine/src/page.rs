@@ -22,7 +22,7 @@ pub(crate) async fn read_page(
     let mut stream = page.stream(control.clone()).await?;
     let mut count = 0usize;
     let mut emitted = 0usize;
-    let mut scalar_bytes = 0usize;
+    let mut remaining_bytes = control.max_input_bytes;
     while let Some(batch) = stream.next().await {
         let batch = batch?;
         control.check()?;
@@ -34,27 +34,17 @@ pub(crate) async fn read_page(
             .ok_or(RelationError::MemoryLimitExceeded)?;
         let take = batch.num_rows().min(limit.saturating_sub(emitted));
         emitted += take;
-        scalar_bytes = take
-            .checked_mul(columns.len())
-            .and_then(|count| count.checked_mul(std::mem::size_of::<TabularScalar>()))
-            .and_then(|bytes| scalar_bytes.checked_add(bytes))
-            .ok_or(RelationError::MemoryLimitExceeded)?;
-        if scalar_bytes > control.max_input_bytes {
-            return Err(RelationError::MemoryLimitExceeded);
-        }
         for (source, target) in batch.columns().iter().zip(&mut columns) {
-            let values = yss_database_arrow::array_to_scalars(source.slice(0, take).as_ref())
-                .map_err(|_| RelationError::InvalidInput)?;
-            for value in &values {
-                if let TabularScalar::String(value) = value {
-                    scalar_bytes = scalar_bytes
-                        .checked_add(value.len())
-                        .ok_or(RelationError::MemoryLimitExceeded)?;
-                    if scalar_bytes > control.max_input_bytes {
-                        return Err(RelationError::MemoryLimitExceeded);
-                    }
+            let values = yss_database_arrow::array_to_scalars(
+                source.slice(0, take).as_ref(),
+                &mut remaining_bytes,
+            )
+            .map_err(|error| match error {
+                yss_database_arrow::TabularArrowError::MemoryLimitExceeded => {
+                    RelationError::MemoryLimitExceeded
                 }
-            }
+                _ => RelationError::InvalidInput,
+            })?;
             target.extend(values);
         }
     }

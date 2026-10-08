@@ -11,6 +11,10 @@ integers retain their carriers and full width, and finite Float32/Float64 values
 Their non-finite values retain the page null representation. Decimal, calendar and category
 values retain their exact text; calendar normalization preserves wall-clock fields.
 JSON consumers apply the shared scalar display encoding at their output boundary.
+The caller supplies a shared remaining byte budget, charged for scalar containers before
+allocation and for owned text as it is written. Dictionary labels are formatted per row without
+expanding the entire dictionary column first; logical null values remain null. Exceeding the
+projection budget returns `TabularArrowError::MemoryLimitExceeded`.
 
 `json_to_array` admits edited values against an explicit physical field; `to_record_batch`
 materializes ordered document literals. Neither projection replaces the source schema.

@@ -1008,6 +1008,77 @@ mod tests {
     }
 
     #[test]
+    fn native_page_projection_rejects_scalar_payloads_over_the_budget() {
+        use arrow::array::{ArrayRef, Int32Array};
+        use arrow::datatypes::{Field, Schema};
+        use arrow::record_batch::RecordBatch;
+        use std::sync::Arc;
+
+        let schema = Arc::new(Schema::new(
+            (0..20)
+                .map(|index| Field::new(format!("value_{index}"), DataType::Int32, false))
+                .collect::<Vec<_>>(),
+        ));
+        let columns = (0..20)
+            .map(|_| Arc::new(Int32Array::from_iter_values(0..128)) as ArrayRef)
+            .collect();
+        let fixture = DatasetFixture::new(SALES_ID, RecordBatch::try_new(schema, columns).unwrap());
+        let declaration = fixture.instance.decl.clone();
+        let observations = DatabaseDeclarationObservationSet::try_from_iter([(
+            declaration.id.clone(),
+            DatabaseDeclarationObservation::new(
+                DatabaseDeclarationRevision::from_existing(1),
+                DatabaseDeclarationFingerprint::from_decl(&declaration),
+            ),
+        )])
+        .unwrap();
+        let session = DatabaseRuntimeRegistry::new()
+            .open_session_with_instances(
+                DatabaseSessionOpenRequest::new(
+                    DatabaseSessionIdentity::from_existing("native-page-budget".into()),
+                    NonZeroU64::new(1).unwrap(),
+                    vec![declaration].into(),
+                    observations,
+                ),
+                [fixture.instance.clone()],
+            )
+            .unwrap();
+        let query = yss_database_engine::DatasetRowsQuery {
+            columns: vec![],
+            filters: vec![],
+            order: vec![],
+            offset: 0,
+            limit: 128,
+        };
+        let control = crate::database_instance::query_control(32 * 1024);
+        let raw = fixture
+            .instance
+            .query()
+            .unwrap()
+            .page_query(&query, &control)
+            .unwrap();
+        assert_eq!(
+            raw.batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+            128
+        );
+        assert!(
+            raw.batches
+                .iter()
+                .map(RecordBatch::get_array_memory_size)
+                .sum::<usize>()
+                <= control.max_input_bytes
+        );
+        let error = page_query_snapshot(
+            &session,
+            DatabaseId::from_existing(SALES_ID.into()),
+            &query,
+            &control,
+        )
+        .expect_err("native scalar expansion must be constrained");
+        assert_eq!(error.code(), crate::error::DatabaseErrorCode::Constraint);
+    }
+
+    #[test]
     fn page_snapshots_keep_exact_signed_values_after_committed_edits() {
         let (_fixture, session) = session_with_table("typed-page");
         let database = DatabaseId::from_existing(SALES_ID.into());

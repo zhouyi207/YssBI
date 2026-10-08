@@ -150,13 +150,35 @@ impl DatabaseRuntimePhysicalState {
             .iter()
             .map(|_| Vec::new())
             .collect::<Vec<_>>();
+        let mut remaining_bytes = control.max_input_bytes;
+        let memory_limit = || {
+            failure(
+                database,
+                DatabaseOperation::Query,
+                DatasetStoreError::Query(
+                    yss_relational_contract::RelationError::MemoryLimitExceeded,
+                ),
+            )
+        };
         for batch in page.batches {
+            control.check().map_err(|error| {
+                failure(
+                    database,
+                    DatabaseOperation::Query,
+                    DatasetStoreError::Query(error),
+                )
+            })?;
             let ids = batch
                 .column_by_name(&roles.row_id)
                 .and_then(|array| array.as_any().downcast_ref::<Int64Array>())
                 .ok_or_else(|| {
                     DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
                 })?;
+            remaining_bytes = ids
+                .len()
+                .checked_mul(std::mem::size_of::<i64>())
+                .and_then(|bytes| remaining_bytes.checked_sub(bytes))
+                .ok_or_else(memory_limit)?;
             row_ids.extend(ids.values().iter().copied());
             for (column, values) in schema.columns().iter().zip(&mut values) {
                 let array = batch
@@ -165,9 +187,16 @@ impl DatabaseRuntimePhysicalState {
                         DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
                     })?;
                 let scalars =
-                    yss_database_arrow::array_to_scalars(array.as_ref()).map_err(|_| {
-                        DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
-                    })?;
+                    yss_database_arrow::array_to_scalars(array.as_ref(), &mut remaining_bytes)
+                        .map_err(|error| match error {
+                            yss_database_arrow::TabularArrowError::MemoryLimitExceeded => {
+                                memory_limit()
+                            }
+                            _ => DatabaseError::schema(
+                                DatabaseOperation::Query,
+                                Some(database.clone()),
+                            ),
+                        })?;
                 values.extend(scalars);
             }
         }

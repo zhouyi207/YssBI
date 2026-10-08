@@ -359,7 +359,11 @@ fn datetime_column_cast_retains_clock_values_and_forced_nulls_in_persisted_data(
         .unwrap()
         .unwrap();
     assert_eq!(
-        yss_database_arrow::array_to_scalars(data.column_by_name("at").unwrap().as_ref()).unwrap(),
+        yss_database_arrow::array_to_scalars(
+            data.column_by_name("at").unwrap().as_ref(),
+            &mut (16 * 1024 * 1024)
+        )
+        .unwrap(),
         vec![
             TabularScalar::String("2026-09-11T10:00:00".into()),
             TabularScalar::String("2026-09-11T10:00:00".into()),
