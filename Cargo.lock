@@ -12636,6 +12636,7 @@ dependencies = [
  "yss-canonical-hash",
  "yss-data-contract",
  "yss-database-arrow",
+ "yss-database-engine",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-document",

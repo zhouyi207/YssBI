@@ -65,6 +65,9 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
+结果边界将同行域中同一数列表达式的多个输出引用一起冻结；它们共享同一稳定列，避免重复求值。
+同名但不同表达式仍独立冻结，列名不能作为表达式身份。
+
 View 的观察意图引用已连接输出的结果，保留各个请求节点身份；多个 View 可观察同一输出。
 其禁止内联值和默认值的输入策略由 Catalog 声明，Analysis 在计划准备前阻断非法输入，Execution 不为 View 另造结果值。
 
@@ -148,5 +151,6 @@ Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；A
 ## 相关模块
 
 科学计算适配属于 Node Kernel。报告读取不经过 Execution 的临时计算入口；本 crate 的 SCI runtime/contract 依赖仅用于 `ols_bench` 示例，不进入生产依赖。
+Database Engine 仅作为数列快照回归的测试依赖，用真实关系表达式与数据验证重复引用；不进入生产依赖。
 
 [内核与数值/关系操作](../yss-node-kernel/README.md) · [Results 查询与租约](../../react/src/features/application/results/README.md) · [Application 编排](../yss-application/src/graph/README.md)

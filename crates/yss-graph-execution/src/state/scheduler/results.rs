@@ -1,5 +1,5 @@
 //! Explicit result boundaries evaluate handles; internal DAG expressions remain composable.
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use yss_node_kernel::{KernelControl, KernelError, RuntimeValue, kernel_error};
 use yss_relational_contract::{RelationControl, RelationFactory};
@@ -23,26 +23,34 @@ pub(super) fn stabilize_outputs(
         if let RuntimeValue::Series(first) = &values[index] {
             // Freeze columns from one row domain together so Decompose retains
             // alignment across its outputs without evaluating the source per column.
-            let mut names = BTreeSet::new();
-            let group = values
-                .iter()
-                .enumerate()
-                .filter_map(|(i, value)| {
-                    if !boundaries[i] || done[i] {
-                        return None;
+            let mut names = BTreeMap::<String, usize>::new();
+            let mut columns = Vec::<yss_relational_contract::SeriesHandle>::new();
+            let mut bindings = Vec::new();
+            for (i, value) in values.iter().enumerate() {
+                if !boundaries[i] || done[i] {
+                    continue;
+                }
+                let RuntimeValue::Series(series) = value else {
+                    continue;
+                };
+                if !series.relation().shares_row_domain(first.relation()) {
+                    continue;
+                }
+                let position = if let Some(&position) = names.get(series.column()) {
+                    // Equal names alone do not prove equal expressions. Repeated
+                    // references share one frozen column; distinct expressions wait.
+                    if columns[position] != *series {
+                        continue;
                     }
-                    let RuntimeValue::Series(series) = value else {
-                        return None;
-                    };
-                    (series.relation().shares_row_domain(first.relation())
-                        && names.insert(series.column().to_owned()))
-                    .then_some((i, series.clone()))
-                })
-                .collect::<Vec<_>>();
-            let columns = group
-                .iter()
-                .map(|(_, series)| series.clone())
-                .collect::<Vec<_>>();
+                    position
+                } else {
+                    let position = columns.len();
+                    names.insert(series.column().to_owned(), position);
+                    columns.push(series.clone());
+                    position
+                };
+                bindings.push((i, position));
+            }
             let projected = first
                 .relation()
                 .project_series(&columns)
@@ -50,12 +58,13 @@ pub(super) fn stabilize_outputs(
             let stable = Arc::clone(relations)
                 .snapshot(&projected, &control)
                 .map_err(kernel_error)?;
-            for (i, series) in group {
-                values[i] = RuntimeValue::Series(
-                    stable
-                        .select_series(series.column())
-                        .map_err(kernel_error)?,
-                );
+            for series in &mut columns {
+                *series = stable
+                    .select_series(series.column())
+                    .map_err(kernel_error)?;
+            }
+            for (i, position) in bindings {
+                values[i] = RuntimeValue::Series(columns[position].clone());
                 done[i] = true;
             }
         } else {
@@ -115,3 +124,6 @@ fn stabilize(
         _ => value.clone(),
     })
 }
+
+#[cfg(test)]
+mod tests;

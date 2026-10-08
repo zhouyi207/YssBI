@@ -27,6 +27,7 @@ yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 yss-database-arrow = { path = "../yss-database-arrow" }
 
 [dev-dependencies]
+yss-database-engine = { path = "../yss-database-engine" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 arrow-array.workspace = true
