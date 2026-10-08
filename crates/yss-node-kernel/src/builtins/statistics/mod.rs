@@ -132,7 +132,13 @@ pub(super) fn install(
                     )
                 {
                     5
-                } else if id.starts_with("yssbi.plot.")
+                } else if id.starts_with("yssbi.statistics.meta.")
+                    || id.starts_with("yssbi.statistics.psychometrics.")
+                    || matches!(
+                        id,
+                        "yssbi.statistics.plot.forest" | "yssbi.statistics.plot.funnel"
+                    )
+                    || id.starts_with("yssbi.plot.")
                     || id.ends_with(".granger")
                     || matches!(
                         id,

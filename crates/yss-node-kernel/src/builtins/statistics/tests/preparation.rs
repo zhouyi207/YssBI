@@ -1,5 +1,7 @@
 use super::*;
-use arrow_array::{ArrayRef, Float64Array, RecordBatch, UInt64Array};
+use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, UInt64Array};
+use arrow_schema::{DataType, Field, Schema};
+use yss_data_contract::{ColumnSemantic, SemanticType};
 use yss_database_engine::DataFusionRuntime;
 use yss_relational_contract::{RelationControl, RelationFactory};
 
@@ -94,6 +96,104 @@ fn prepared_numeric_columns_preserve_mixed_source_questionnaire_outputs() {
         page.data.columns()[4].values(),
         &[TabularScalar::Null, TabularScalar::Null],
     );
+    let heterogeneity = KernelRegistry::default()
+        .execute(
+            &KernelId::new("yssbi.statistics.meta.cochran_q".into()).unwrap(),
+            &KernelInvocation {
+                relations: &factory,
+                inputs: &[
+                    RuntimeValue::Series(source.select_series("database_item").unwrap()),
+                    series(&[1., 1., 1., 1.]),
+                ],
+                input_keys: &["effects", "variances"],
+                parameters: Default::default(),
+                outputs: &[KernelOutputSpec {
+                    data_type: ValueType::Struct("statistics.report".into()),
+                    fields: None,
+                }],
+                control: &control,
+            },
+        )
+        .unwrap();
+    let q = crate::builtins::numeric_input(Some(field(&heterogeneity[0], "q").unwrap())).unwrap();
+    assert!((q - 5.).abs() < 1e-12);
+    assert_eq!(
+        field(&heterogeneity[0], "degrees_of_freedom").unwrap(),
+        &int(3)
+    );
+}
+
+#[test]
+fn numeric_only_adapters_reject_categorical_relation_codes() {
+    let (factory, control) = fixture();
+    let relation_control = RelationControl {
+        cancellation: control.cancellation.clone(),
+        deadline: control.deadline,
+        max_input_bytes: control.max_input_bytes,
+    };
+    let field = yss_database_arrow::with_column_semantic(
+        Field::new("coded_item", DataType::Int64, false),
+        &ColumnSemantic::new(SemanticType::Categorical),
+    )
+    .unwrap();
+    let source = factory
+        .clone()
+        .materialize(
+            RecordBatch::try_new(
+                Arc::new(Schema::new(vec![field])),
+                vec![Arc::new(Int64Array::from(vec![1, 2, 3, 4]))],
+            )
+            .unwrap(),
+            &relation_control,
+        )
+        .unwrap();
+    let coded = source.select_series("coded_item").unwrap();
+    assert_eq!(
+        yss_database_arrow::column_semantic(coded.plan().field())
+            .unwrap()
+            .kind,
+        SemanticType::Categorical,
+    );
+    for (id, keys, specifications, second) in [
+        (
+            "yssbi.statistics.psychometrics.reliability",
+            ["items", "items"],
+            outputs(&[
+                "item",
+                "mean",
+                "standard_deviation",
+                "corrected_item_total_correlation",
+                "alpha_if_deleted",
+            ])
+            .to_vec(),
+            series(&[2., 4., 6., 8.]),
+        ),
+        (
+            "yssbi.statistics.meta.cochran_q",
+            ["effects", "variances"],
+            vec![KernelOutputSpec {
+                data_type: ValueType::Struct("statistics.report".into()),
+                fields: None,
+            }],
+            series(&[1., 1., 1., 1.]),
+        ),
+    ] {
+        let result = KernelRegistry::default().execute(
+            &KernelId::new(id.into()).unwrap(),
+            &KernelInvocation {
+                relations: &factory,
+                inputs: &[RuntimeValue::Series(coded.clone()), second],
+                input_keys: &keys,
+                parameters: Default::default(),
+                outputs: &specifications,
+                control: &control,
+            },
+        );
+        assert!(
+            matches!(result, Err(KernelError::InvalidNumericInput)),
+            "{id}: {result:?}",
+        );
+    }
 }
 
 #[test]

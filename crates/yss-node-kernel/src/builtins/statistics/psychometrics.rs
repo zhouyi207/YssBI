@@ -52,9 +52,13 @@ fn named(
     )
 }
 fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
-    let (inputs, retained) = materialize(inv)?;
-    let n = inputs.first().map_or(0, |c| c.values.len());
-    let p = inputs.len();
+    let columns = columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, 0)?;
+    let n = columns.first().map_or(0, Vec::len);
+    let p = columns.len();
+    let retained = n
+        .checked_mul(p)
+        .and_then(|values| values.checked_mul(size_of::<f64>()))
+        .ok_or(KernelError::BudgetExceeded)?;
     inv.control.check_bytes((|| {
         let matrix = if method == Method::Validity {
             n.checked_mul(p)?
@@ -69,10 +73,6 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             .checked_add(p.checked_mul(32 * STRUCTURED_VALUE_BYTES * STRUCTURED_VALUE_COPIES)?)?
             .checked_add(65536)
     })())?;
-    let columns = inputs
-        .into_iter()
-        .map(|v| numeric(&v, false, inv))
-        .collect::<Result<Vec<_>, _>>()?;
     let c = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     match method {
         Method::Validity => Ok(vec![named(

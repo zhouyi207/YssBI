@@ -10,17 +10,20 @@ mod registration;
 pub(super) use registration::register;
 
 fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
-    let (columns, retained) = materialize(inv)?;
-    let n = columns.first().map_or(0, |c| c.values.len());
+    let data = columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, 0)?;
+    let n = data.first().map_or(0, Vec::len);
+    let retained = n
+        .checked_mul(data.len())
+        .and_then(|values| values.checked_mul(size_of::<f64>()))
+        .ok_or(KernelError::BudgetExceeded)?;
     let p = if method == "regression" {
-        columns.len().saturating_sub(1)
+        data.len().saturating_sub(1)
     } else {
         1
     };
-    // Admit aligned scalars, WLS workspaces, paged relation conversion and plot/report trees
+    // Admit compact numeric columns, WLS workspaces, paged relations and plot/report trees
     // together; the study count has no fixed limit.
     inv.control.check_bytes((|| {
-        let numeric = n.checked_mul(columns.len())?.checked_mul(8)?;
         let workspace = n
             .checked_mul(p.checked_add(16)?)?
             .checked_mul(32)?
@@ -37,16 +40,11 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             })?
             .checked_mul(STRUCTURED_VALUE_BYTES * STRUCTURED_VALUE_COPIES)?;
         retained
-            .checked_add(numeric)?
             .checked_add(workspace)?
             .checked_add(table)?
             .checked_add(report)?
             .checked_add(65536)
     })())?;
-    let data = columns
-        .into_iter()
-        .map(|c| numeric(&c, false, inv))
-        .collect::<Result<Vec<_>, _>>()?;
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     if matches!(
         method,
