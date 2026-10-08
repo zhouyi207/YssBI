@@ -331,6 +331,13 @@ optimized entity-moment GMM with general sandwich inference.
 
 ## Additional regression estimators
 
+Shared design preparation reports absent design columns as `ShapeMismatch`,
+insufficient samples as `EmptyInput`, and nonidentifiable full-rank designs as
+`DataOutOfRange`. Nonfinite values produced by design scaling remain computation
+failures; tuning and iteration settings retain parameter violations. Regression
+estimators, parametric survival, mixed/GEE, causal, Meta and mediation-bootstrap
+models and collinearity diagnostics use this same preparation contract.
+
 `regression::models` owns controlled estimators over neutral numeric columns:
 Huber/Tukey M-estimation with MAD/H1 inference, Ridge/Lasso with an unpenalized
 intercept, PLS1, quantile IRLS with IID density covariance, curve families, bounded

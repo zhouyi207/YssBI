@@ -82,7 +82,28 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(
-                1 + if id == "yssbi.statistics.iv.2sls.summary" {
+                1 + if matches!(
+                    id,
+                    "yssbi.statistics.meta.inverse_variance"
+                        | "yssbi.statistics.meta.fixed_effect"
+                        | "yssbi.statistics.meta.random_effect"
+                        | "yssbi.statistics.meta.cochran_q"
+                        | "yssbi.statistics.meta.i_squared"
+                        | "yssbi.statistics.meta.tau_squared"
+                        | "yssbi.statistics.meta.regression"
+                        | "yssbi.statistics.meta.egger"
+                        | "yssbi.statistics.meta.begg"
+                        | "yssbi.statistics.meta.leave_one_out"
+                        | "yssbi.statistics.meta.sensitivity"
+                        | "yssbi.statistics.meta.forest"
+                        | "yssbi.statistics.meta.funnel"
+                        | "yssbi.statistics.plot.forest"
+                        | "yssbi.statistics.plot.funnel"
+                        | "yssbi.statistics.workflow.mediation"
+                        | "yssbi.statistics.workflow.moderated_mediation"
+                ) {
+                    5
+                } else if id == "yssbi.statistics.iv.2sls.summary" {
                     8
                 } else if matches!(
                     id,
@@ -135,9 +156,27 @@ pub(super) fn install(
                 } else if id.starts_with("yssbi.statistics.meta.")
                     || id.starts_with("yssbi.statistics.psychometrics.")
                     || id == "yssbi.statistics.inference.cluster_robust"
+                    || id.starts_with("yssbi.statistics.mixed.")
                     || matches!(
                         id,
-                        "yssbi.statistics.plot.forest" | "yssbi.statistics.plot.funnel"
+                        "yssbi.statistics.longitudinal.gee"
+                            | "yssbi.statistics.diagnostic.collinearity"
+                            | "yssbi.statistics.econometrics.gmm"
+                            | "yssbi.statistics.econometrics.heckman_two_step"
+                            | "yssbi.statistics.econometrics.sfa"
+                            | "yssbi.statistics.econometrics.sur"
+                            | "yssbi.statistics.causal.psm"
+                            | "yssbi.statistics.causal.ipw"
+                            | "yssbi.statistics.causal.regression_adjustment"
+                            | "yssbi.statistics.causal.aipw"
+                    )
+                    || matches!(
+                        id,
+                        "yssbi.statistics.survival.exponential"
+                            | "yssbi.statistics.survival.weibull"
+                            | "yssbi.statistics.survival.lognormal"
+                            | "yssbi.statistics.survival.loglogistic"
+                            | "yssbi.statistics.survival.aft"
                     )
                     || id.starts_with("yssbi.plot.")
                     || id.ends_with(".granger")
@@ -147,8 +186,6 @@ pub(super) fn install(
                             | "yssbi.statistics.diagnostic.white"
                             | "yssbi.statistics.diagnostic.information_matrix"
                             | "yssbi.statistics.workflow.moderation_advanced"
-                            | "yssbi.statistics.workflow.mediation"
-                            | "yssbi.statistics.workflow.moderated_mediation"
                             | "yssbi.statistics.sem.path"
                             | "yssbi.statistics.doe.response_surface"
                             | "yssbi.statistics.timeseries.ecm"

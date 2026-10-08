@@ -12,6 +12,69 @@ fn control() -> ScientificExecutionControl {
         deadline: Instant::now() + Duration::from_secs(30),
     }
 }
+
+#[test]
+fn shared_design_failures_distinguish_data_calculation_and_tuning() {
+    use yss_sci_contract::execution::ScientificInputViolation as Violation;
+    let options = RobustOptions {
+        constant: true,
+        loss: RobustLoss::Huber,
+        tuning: 1.345,
+        iteration: IterationOptions::default(),
+    };
+    for (response, predictors, options, expected) in [
+        (
+            vec![1., 3.],
+            vec![vec![0., 1.]],
+            options,
+            Error::InvalidInput {
+                violation: Violation::EmptyInput,
+            },
+        ),
+        (
+            vec![1., 3., 2.],
+            vec![vec![1., 1., 1.]],
+            options,
+            Error::InvalidInput {
+                violation: Violation::DataOutOfRange,
+            },
+        ),
+        (
+            vec![1., 3., 2.],
+            vec![],
+            RobustOptions {
+                constant: false,
+                ..options
+            },
+            Error::InvalidInput {
+                violation: Violation::ShapeMismatch,
+            },
+        ),
+        (
+            vec![1., 3., 2.],
+            vec![vec![-f64::MAX, f64::MAX, f64::MAX]],
+            options,
+            Error::ComputationFailed,
+        ),
+        (
+            vec![1., 3., 2.],
+            vec![vec![0., 1., 2.]],
+            RobustOptions {
+                tuning: 0.0,
+                ..options
+            },
+            Error::InvalidInput {
+                violation: Violation::ParameterOutOfRange,
+            },
+        ),
+    ] {
+        assert_eq!(
+            robust(&response, &predictors, options, &control()).unwrap_err(),
+            expected
+        );
+    }
+}
+
 fn reference() -> Value {
     serde_json::from_str(include_str!("fixtures/reference.json")).unwrap()
 }

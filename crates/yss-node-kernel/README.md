@@ -76,6 +76,11 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 预算准入，不设置行数上限。调整预测按已存设计评估，不隐式重建交互项。
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
 不归为参数错误。`inference.cluster_robust` 使用 revision 5。
+共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
+直接使用该准备的回归模型内核采用 revision 4，逐步回归采用 revision 5；五个参数生存拟合内核
+（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 5。
+复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图及
+中介 bootstrap 采用 revision 6，能力指纹涵盖共享输入错误契约。
 
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
 AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型

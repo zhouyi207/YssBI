@@ -105,8 +105,11 @@ impl Design {
     ) -> Result<Self> {
         control.check()?;
         let p = predictors.len() + usize::from(constant);
-        if p == 0 || n < 2 || (rank && n <= p) {
-            return Err(parameter());
+        if p == 0 {
+            return Err(invalid(Violation::ShapeMismatch));
+        }
+        if n < 2 || (rank && n <= p) {
+            return Err(invalid(Violation::EmptyInput));
         }
         let mut means = Vec::with_capacity(predictors.len());
         let mut scales = Vec::with_capacity(predictors.len());
@@ -119,7 +122,7 @@ impl Design {
                 1.0
             };
             if !m.is_finite() || !s.is_finite() || s <= 0.0 {
-                return Err(parameter());
+                return Err(failed());
             }
             means.push(m);
             scales.push(s);
@@ -135,7 +138,7 @@ impl Design {
         if rank {
             let (r, _) = matrix_rank(x.as_ref()).map_err(|_| failed())?;
             if r != p {
-                return Err(parameter());
+                return Err(invalid(Violation::DataOutOfRange));
             }
         }
         control.check()?;

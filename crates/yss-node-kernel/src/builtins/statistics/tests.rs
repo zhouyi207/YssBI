@@ -9,6 +9,7 @@ mod meta;
 mod panel_models;
 mod path;
 mod preparation;
+mod regression_models;
 mod spatial;
 mod survival;
 mod time_series;

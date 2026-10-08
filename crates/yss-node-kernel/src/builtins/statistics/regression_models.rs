@@ -153,10 +153,32 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(
-                    1 + if matches!(
+                    1 + if method == "regression.stepwise" {
+                        4
+                    } else if matches!(
                         method,
-                        "regression.hierarchical"
-                            | "regression.stepwise"
+                        "regression.robust"
+                            | "regression.ridge"
+                            | "regression.lasso"
+                            | "regression.pls"
+                            | "regression.logit.multinomial"
+                            | "regression.logit.ordinal"
+                            | "regression.logit.firth"
+                            | "regression.poisson"
+                            | "regression.negative_binomial"
+                            | "regression.zero_inflated_poisson"
+                            | "regression.zero_inflated_negative_binomial"
+                            | "regression.tobit"
+                            | "regression.logit.conditional"
+                            | "regression.quantile"
+                            | "regression.threshold"
+                            | "regression.glm"
+                            | "regression.gamma"
+                            | "regression.inverse_gaussian"
+                            | "regression.cloglog"
+                            | "regression.beta"
+                            | "regression.fractional_response"
+                            | "regression.hierarchical"
                             | "regression.curve"
                             | "workflow.regression.baseline"
                             | "workflow.regression.univariate_multivariable"
