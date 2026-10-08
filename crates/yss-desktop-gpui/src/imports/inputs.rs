@@ -1,10 +1,11 @@
 //! Native form values become the existing typed import request only on explicit confirmation.
-use super::{ImportDialog, ImportKind};
-use gpui::{App, AppContext, Context, Entity, Window};
-use gpui_component::input::InputState;
+use super::{ImportDialog, ImportKind, ImportStage};
+use gpui::{App, AppContext, Context, Entity, EntityInputHandler, Focusable, Window};
+use gpui_component::input::{Enter, InputState};
 use yss_database_contract::DatabaseImportSource;
 
 pub(super) struct ConnectionInputs {
+    kind: ImportKind,
     pub host: Entity<InputState>,
     pub port: Entity<InputState>,
     pub user: Entity<InputState>,
@@ -16,6 +17,7 @@ pub(super) struct ConnectionInputs {
 impl ConnectionInputs {
     pub fn new(window: &mut Window, cx: &mut Context<ImportDialog>) -> Self {
         Self {
+            kind: ImportKind::Postgres,
             host: cx.new(|cx| InputState::new(window, cx).default_value("localhost")),
             port: cx.new(|cx| InputState::new(window, cx).default_value("5432")),
             user: cx.new(|cx| InputState::new(window, cx).placeholder("用户名")),
@@ -25,9 +27,26 @@ impl ConnectionInputs {
             raw: false,
         }
     }
+    pub fn select_kind(
+        &mut self,
+        kind: ImportKind,
+        window: &mut Window,
+        cx: &mut Context<ImportDialog>,
+    ) {
+        if self.kind == kind {
+            return;
+        }
+        // Only a previous default follows the engine; keep the user's custom port.
+        if self.port.read(cx).value() == default_port(self.kind) {
+            self.port.update(cx, |input, cx| {
+                input.set_value(default_port(kind), window, cx)
+            });
+        }
+        self.kind = kind;
+    }
     pub fn dirty(&self, cx: &App) -> bool {
         self.host.read(cx).value() != "localhost"
-            || !matches!(self.port.read(cx).value().as_ref(), "5432" | "3306")
+            || self.port.read(cx).value() != default_port(self.kind)
             || [&self.user, &self.password, &self.database, &self.raw_url]
                 .into_iter()
                 .any(|input| !input.read(cx).value().is_empty())
@@ -79,7 +98,63 @@ impl ConnectionInputs {
         Ok(url.to_string())
     }
 }
+
+fn default_port(kind: ImportKind) -> &'static str {
+    if kind == ImportKind::Postgres {
+        "5432"
+    } else {
+        "3306"
+    }
+}
 impl ImportDialog {
+    pub(super) fn submit_input(
+        &mut self,
+        action: &Enter,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if action.secondary || action.shift {
+            cx.propagate();
+            return;
+        }
+        if self.busy() {
+            return;
+        }
+        let fields: &[&Entity<InputState>] = match self.stage {
+            ImportStage::Connection(_) => &[
+                &self.name,
+                &self.connection.host,
+                &self.connection.port,
+                &self.connection.user,
+                &self.connection.password,
+                &self.connection.database,
+                &self.connection.raw_url,
+            ],
+            ImportStage::File(..) => &[&self.name, &self.delimiter, &self.infer_rows],
+            _ => {
+                cx.propagate();
+                return;
+            }
+        };
+        let Some(input) = fields
+            .iter()
+            .find(|input| input.focus_handle(cx).is_focused(window))
+        else {
+            cx.propagate();
+            return;
+        };
+        if input.update(cx, |input, cx| {
+            input.marked_text_range(window, cx).is_some()
+        }) {
+            return;
+        }
+        match self.stage {
+            ImportStage::Connection(_) => self.connect(window, cx),
+            ImportStage::File(..) => self.submit_file(cx, window),
+            _ => unreachable!("only active input forms handle Enter"),
+        }
+    }
+
     pub(super) fn csv_source(
         &self,
         path: String,

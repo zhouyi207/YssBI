@@ -1,140 +1,27 @@
-use super::{ImportDialog, ImportKind, ImportRequest, ImportStage, ImportTask, SourceLocation};
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, uniform_list};
+use super::{ImportDialog, ImportKind, ImportStage, ImportTask};
+use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme, Disableable, IconName, Selectable, Sizable, WindowExt,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
-    input::Input,
+    input::{Enter, Input},
 };
 
 impl Render for ImportDialog {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let busy = self.busy();
+        let compact = f32::from(window.viewport_size().width) <= 720.;
         let mut content = match &self.stage {
             ImportStage::Sources => self.render_sources(cx),
             ImportStage::File(kind, path) => self.render_file(*kind, path.clone(), cx),
             ImportStage::Connection(kind) => self.render_connection(*kind, cx),
             ImportStage::Selection { source, choices } => {
-                let title = match source {
-                    SourceLocation::Excel(_) => "选择工作表",
-                    SourceLocation::Sql { .. } => "选择数据表",
-                };
-                let count = choices.len();
-                let generation = self.generation;
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_3()
-                    .child(div().text_sm().child(format!("{title} · {count} 项")))
-                    .child(self.name_field(cx))
-                    .child(
-                        uniform_list(
-                            "import-source-choices",
-                            count,
-                            cx.processor(move |view, range: std::ops::Range<usize>, _, cx| {
-                                let ImportStage::Selection { choices, .. } = &view.stage else {
-                                    return vec![];
-                                };
-                                range
-                                    .map(|index| {
-                                        let name = choices[index].clone();
-                                        div()
-                                            .px_1()
-                                            .py_1()
-                                            .child(
-                                                Button::new(("source-table", index))
-                                                    .w_full()
-                                                    .ghost()
-                                                    .label(name.clone())
-                                                    .disabled(view.busy())
-                                                    .on_click(cx.listener(
-                                                        move |view, _, window, cx| {
-                                                            view.select_table(
-                                                                name.clone(),
-                                                                generation,
-                                                                window,
-                                                                cx,
-                                                            )
-                                                        },
-                                                    )),
-                                            )
-                                            .into_any_element()
-                                    })
-                                    .collect()
-                            }),
-                        )
-                        .h(px(320.)),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child("选择后将复制数据到项目；来源保持原状。"),
-                    )
-                    .into_any_element()
+                self.render_selection(source, choices, cx)
             }
-            ImportStage::Samples(samples) => {
-                let mut view = div()
-                    .id("import-sample-list")
-                    .max_h(px(390.))
-                    .overflow_y_scroll()
-                    .flex()
-                    .flex_col()
-                    .gap_3();
-                for sample in samples {
-                    let sample = sample.clone();
-                    view = view.child(
-                        div()
-                            .py_3()
-                            .border_b_1()
-                            .border_color(cx.theme().border)
-                            .flex()
-                            .items_center()
-                            .gap_3()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .child(div().text_sm().child(sample.name.clone()))
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(format!(
-                                                "{} 行 · {} 列 · {:.1} MB",
-                                                sample.row_count,
-                                                sample.column_count,
-                                                sample.byte_size as f64 / 1_000_000.
-                                            )),
-                                    ),
-                            )
-                            .child(
-                                Button::new(gpui::SharedString::from(sample.id.clone()))
-                                    .small()
-                                    .label("导入")
-                                    .disabled(busy)
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        view.submit(
-                                            ImportRequest::Sample {
-                                                id: sample.id.clone(),
-                                                version: sample.version,
-                                            },
-                                            window,
-                                            cx,
-                                        )
-                                    })),
-                            ),
-                    );
-                }
-                view.child(
-                    Button::new("sample-retry")
-                        .small()
-                        .ghost()
-                        .label("重新读取示例")
-                        .disabled(busy)
-                        .on_click(cx.listener(|view, _, window, cx| view.samples(window, cx))),
-                )
-                .into_any_element()
-            }
+            ImportStage::Samples {
+                entries,
+                load_failed,
+            } => self.render_samples(entries, *load_failed, cx),
         };
         if !matches!(self.stage, ImportStage::Sources) {
             content = div()
@@ -154,6 +41,11 @@ impl Render for ImportDialog {
                 .into_any_element();
         }
         div()
+            .on_action(
+                cx.listener(|view, action: &Enter, window, cx| {
+                    view.submit_input(action, window, cx)
+                }),
+            )
             .flex()
             .flex_col()
             .gap_3()
@@ -166,9 +58,10 @@ impl Render for ImportDialog {
             .child(
                 div()
                     .flex()
+                    .when(compact, |view| view.flex_col())
                     .gap_4()
                     .min_h(px(350.))
-                    .child(self.render_navigation(cx))
+                    .child(self.render_navigation(compact, cx))
                     .child(div().flex_1().min_w_0().child(content)),
             )
             .when_some(self.error.clone(), |view, error| {
@@ -183,11 +76,14 @@ impl Render for ImportDialog {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(match self.task {
-                                Some(ImportTask::Picker) => "正在选择文件…",
-                                Some(ImportTask::Discovery) => "正在读取来源…",
-                                Some(ImportTask::Import) => "正在导入数据…",
-                                None => "",
+                            .child(match self.task.as_ref() {
+                                Some(ImportTask::Picker) => "正在选择文件…".to_owned(),
+                                Some(ImportTask::Discovery) => "正在读取来源…".to_owned(),
+                                Some(ImportTask::Import) => "正在导入数据…".to_owned(),
+                                Some(ImportTask::ImportSample(_)) => {
+                                    crate::text::translate("importModal.samples.importing")
+                                }
+                                None => String::new(),
                             }),
                     )
                     .child(
@@ -206,15 +102,17 @@ impl Render for ImportDialog {
     }
 }
 impl ImportDialog {
-    fn render_navigation(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn render_navigation(&self, compact: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
         let mut navigation = div()
-            .w(px(150.))
             .flex_shrink_0()
             .flex()
-            .flex_col()
             .gap_2()
-            .pr_3()
-            .border_r_1()
+            .when(compact, |view| {
+                view.w_full().flex_wrap().pb_3().border_b_1()
+            })
+            .when(!compact, |view| {
+                view.w(px(150.)).flex_col().pr_3().border_r_1()
+            })
             .border_color(cx.theme().border);
         for (index, label) in ["本地文件", "数据库连接", "示例数据"]
             .into_iter()
@@ -291,7 +189,7 @@ impl ImportDialog {
         }
         view.into_any_element()
     }
-    fn name_field(&self, cx: &Context<Self>) -> gpui::AnyElement {
+    pub(super) fn name_field(&self, cx: &Context<Self>) -> gpui::AnyElement {
         div()
             .flex()
             .flex_col()

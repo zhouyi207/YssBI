@@ -1,7 +1,12 @@
 //! Import inputs and discovery are transient; Application owns every imported dataset.
 mod discovery;
+mod feedback;
 mod inputs;
 mod render;
+mod samples;
+mod selection;
+
+pub(crate) use feedback::{IMPORT_FAILED, sample_import_failure};
 
 use crate::{services::NativeServices, workbench::Workbench};
 use gpui::{AppContext, Context, Entity, PromptLevel, WeakEntity, Window};
@@ -97,13 +102,17 @@ enum ImportStage {
         source: SourceLocation,
         choices: Vec<String>,
     },
-    Samples(Vec<SampleDataset>),
+    Samples {
+        entries: Vec<SampleDataset>,
+        load_failed: bool,
+    },
 }
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum ImportTask {
     Picker,
     Discovery,
     Import,
+    ImportSample(String),
 }
 
 pub(crate) struct ImportDialog {
@@ -156,17 +165,7 @@ impl ImportDialog {
         }
         self.error = None;
         if kind.remote() {
-            self.connection.port.update(cx, |input, cx| {
-                input.set_value(
-                    if kind == ImportKind::Postgres {
-                        "5432"
-                    } else {
-                        "3306"
-                    },
-                    window,
-                    cx,
-                )
-            });
+            self.connection.select_kind(kind, window, cx);
             self.stage = ImportStage::Connection(kind);
         } else {
             self.choose_file(kind, window, cx);
@@ -202,6 +201,9 @@ impl ImportDialog {
         (!name.is_empty()).then_some(name)
     }
     fn submit_file(&mut self, cx: &mut Context<Self>, window: &mut Window) {
+        if self.busy() {
+            return;
+        }
         let ImportStage::File(kind, path) = &self.stage else {
             return;
         };
@@ -266,26 +268,32 @@ impl ImportDialog {
             return;
         };
         let dialog = cx.entity().downgrade();
+        let task = match &request {
+            ImportRequest::Sample { id, .. } => ImportTask::ImportSample(id.clone()),
+            ImportRequest::Source { .. } => ImportTask::Import,
+        };
         let started = owner.update(cx, |view, cx| {
             view.start_database_import(self.scope.clone(), request, dialog, window, cx)
         });
         if started {
-            self.task = Some(ImportTask::Import);
+            self.task = Some(task);
             self.error = None;
         } else {
             self.error = Some("项目仍在读取或提交，请稍后重试。".into());
         }
         cx.notify();
     }
-    pub(crate) fn finished(&mut self, failed: bool, window: &mut Window, cx: &mut Context<Self>) {
+
+    pub(crate) fn finished(
+        &mut self,
+        outcome: Result<(), &'static str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.task = None;
-        if failed {
-            self.error = Some(
-                "导入未完成，输入已保留。请检查来源与项目目录，重试前确认目录中是否已生成数据。"
-                    .into(),
-            );
-        } else {
-            window.close_dialog(cx);
+        match outcome {
+            Err(key) => self.error = Some(crate::text::translate(key)),
+            Ok(()) => window.close_dialog(cx),
         }
         cx.notify();
     }

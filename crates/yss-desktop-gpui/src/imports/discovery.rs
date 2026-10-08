@@ -9,6 +9,9 @@ impl ImportDialog {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.busy() {
+            return;
+        }
         self.task = Some(ImportTask::Picker);
         let prompt = cx.prompt_for_paths(PathPromptOptions {
             files: true,
@@ -61,6 +64,9 @@ impl ImportDialog {
         self.discover(source, window, cx);
     }
     pub(super) fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy() {
+            return;
+        }
         let ImportStage::Connection(kind) = self.stage else {
             return;
         };
@@ -130,16 +136,36 @@ impl ImportDialog {
         }
         self.task = Some(ImportTask::Discovery);
         self.error = None;
-        self.stage = ImportStage::Samples(vec![]);
-        let job = self.services.run(|services| Ok(services.samples.list()?));
+        self.stage = ImportStage::Samples {
+            entries: vec![],
+            load_failed: false,
+        };
+        let job = self.services.run(|services| {
+            Ok(services
+                .samples
+                .list()
+                .map_err(|error| super::feedback::sample_failure(&error)))
+        });
         cx.spawn_in(window, async move |view, cx| {
-            let result = job.await.ok().and_then(Result::ok);
+            let result = job.await.ok().and_then(Result::ok).unwrap_or(Err(
+                "importModal.samples.errors.sample_resource_unavailable",
+            ));
             let _ = view.update_in(cx, |view, _, cx| {
                 view.task = None;
-                if let Some(samples) = result {
-                    view.stage = ImportStage::Samples(samples);
-                } else {
-                    view.error = Some("示例数据目录未读取，请检查安装资源后重试。".into());
+                match result {
+                    Ok(entries) => {
+                        view.stage = ImportStage::Samples {
+                            entries,
+                            load_failed: false,
+                        };
+                    }
+                    Err(key) => {
+                        view.stage = ImportStage::Samples {
+                            entries: vec![],
+                            load_failed: true,
+                        };
+                        view.error = Some(crate::text::translate(key));
+                    }
                 }
                 cx.notify();
             });

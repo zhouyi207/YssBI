@@ -41,6 +41,18 @@
 - `cargo test -p yss-application --lib harness::models::tests::` 八项通过，覆盖发现草稿/过期回执、账户身份、密钥替换与配置持久化。
 - `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 与 `cargo clippy -p yss-application -p yss-harness-contract --lib --tests --no-deps -- -D warnings` 通过；UI 人工验收保持开放，具体路径见 GPUI README。
 
+### 数据导入
+
+- 已逐项阅读六个导入组件、导入步骤 hook、示例目录 hook 与 Application 调用编排，核对失败输入保留、重复提交、目录读取、表选择和完成后的资源打开。
+- 原生 `ImportDialog` 使用统一步骤状态承接各子弹窗，复用原文件选择器、URL 输入和 Application 导入/发现服务；表选择继续使用虚拟列表。
+- 补齐选择页来源标题：本地文件名可悬浮查看路径，远端只呈现引擎与服务器地址；不移植包含认证信息的原始连接串提示框。
+- 示例页补齐本地化名称、用途说明、KB/MB 大小、加载/空目录/读取失败与重试、当前项进度。回调仅捕获 ID/版本，读取与导入错误不再统一丢弃分类。
+- 连接草稿返回后保留自定义端口，切换引擎只更新原默认端口；脏输入判断使用当前引擎默认值。表单 Enter 复用当前步骤的提交入口与忙碌保护，窄窗口分类改为横向排列。
+- 原生继续在显式确认或选择后提交，保留 CSV 参数与可选项目名称，不移植单表自动提交；GPUI 路径选择器不提供扩展名过滤，由所选入口的原 Reader 校验文件内容。
+- React 的“其他 / REST API”只有禁用占位，没有导入服务，因此无需注册原生操作；实际支持来源继续保留 Parquet。
+- `cargo test -p yss-application --lib database::tests::bundled_samples_import_edit_and_reopen_as_independent_project_datasets -- --exact` 一项通过，实际覆盖五个示例的独立导入、重复导入、编辑、保存和重开。
+- `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；这批界面人工验收仍开放，具体操作见 GPUI README。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -183,12 +195,12 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/data-explorer/internal/ui/import/ExcelSheetSelectModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/ExcelSheetSelectModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/data-explorer/internal/ui/import/ImportModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/ImportModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/data-explorer/internal/ui/import/SampleDatasetList.tsx](../../react/src/modules/data-explorer/internal/ui/import/SampleDatasetList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/data-explorer/internal/ui/import/SqlConnectionModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/SqlConnectionModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/data-explorer/internal/ui/import/SqlRemoteTableSelectModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/SqlRemoteTableSelectModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/data-explorer/internal/ui/import/SqliteTableSelectModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/SqliteTableSelectModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/data-explorer/internal/ui/import/ExcelSheetSelectModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/ExcelSheetSelectModal.tsx) | 优化：工作表选择复用原生统一步骤和虚拟列表，无需另建弹窗状态 | `imports/selection` 补齐文件名与完整路径提示；失败保留工作表列表与输入，返回继续原流程 | 代码已覆盖；人工验收待完成 |
+| [modules/data-explorer/internal/ui/import/ImportModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/ImportModal.tsx) | 迁移/优化：原生分类、步骤和窗口复用原服务；禁用的 REST API 占位无需迁移 | 三类来源、取消/忙碌保护与失败保留已接入；补齐窄窗口分类；保留显式确认及原生路径选择器，完成后按实际回执打开数据 | 代码已覆盖；人工验收待完成 |
+| [modules/data-explorer/internal/ui/import/SampleDatasetList.tsx](../../react/src/modules/data-explorer/internal/ui/import/SampleDatasetList.tsx) | 迁移：目录与导入继续由 Application 持有，视图仅持有读投影和当前任务 | `imports/samples` 补齐名称/说明、尺寸单位、空/加载/失败/重试和当前项进度；`feedback` 保留类型化错误分类 | 示例业务回归通过；人工验收待完成 |
+| [modules/data-explorer/internal/ui/import/SqlConnectionModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/SqlConnectionModal.tsx) | 优化：复用原生输入和 URL 编码，连接草稿留在统一流程，不新增连接存储 | `imports/inputs` 保留字段/遮蔽连接串模式与失败草稿；修复返回后的端口重置和默认端口脏判断 | 代码已覆盖；人工验收待完成 |
+| [modules/data-explorer/internal/ui/import/SqlRemoteTableSelectModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/SqlRemoteTableSelectModal.tsx) | 优化：与 Excel/SQLite 共用虚拟选择列表，连接读取沿用原 Application | `imports/selection` 补齐服务器标识；提示框不包含认证或查询参数；失败后保留表选择与连接草稿 | 代码已覆盖；人工验收待完成 |
+| [modules/data-explorer/internal/ui/import/SqliteTableSelectModal.tsx](../../react/src/modules/data-explorer/internal/ui/import/SqliteTableSelectModal.tsx) | 优化：复用同一来源选择器和原 SQLite 发现/导入入口 | `imports/selection` 补齐数据库文件名/路径提示，保留显式选择、返回和失败输入 | 代码已覆盖；人工验收待完成 |
 
 ## modules/database-editor
 

@@ -1,7 +1,7 @@
 //! Import submission and index installation reuse the existing Application boundary.
 use super::Workbench;
 use crate::{
-    imports::{ImportDialog, ImportRequest, ImportScope},
+    imports::{IMPORT_FAILED, ImportDialog, ImportRequest, ImportScope, sample_import_failure},
     project::DesktopProject,
 };
 use gpui::{AppContext, Context, WeakEntity, Window, prelude::*, px};
@@ -68,7 +68,7 @@ impl Workbench {
                         source,
                         name,
                     )
-                    .map_err(anyhow::Error::from),
+                    .map_err(|_| IMPORT_FAILED),
                 ImportRequest::Sample { id, version } => services
                     .application
                     .import_sample_dataset_for_application(
@@ -78,9 +78,9 @@ impl Workbench {
                         &id,
                         version,
                     )
-                    .map_err(anyhow::Error::from),
+                    .map_err(|error| sample_import_failure(&error)),
             };
-            let id = result.ok().map(|receipt| {
+            let imported = result.map(|receipt| {
                 publisher.publish_resource(receipt.mutation);
                 receipt.data.id
             });
@@ -89,7 +89,7 @@ impl Workbench {
                 .query_project_index(scope.project.clone(), "zh-CN", true)
                 .ok()
                 .map(|snapshot| DesktopProject::new(scope.project, snapshot));
-            Ok((id, project))
+            Ok((imported, project))
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
@@ -103,19 +103,19 @@ impl Workbench {
                     return;
                 }
                 view.busy = false;
-                let (id, index) = result.unwrap_or((None, None));
+                let (imported, index) = result.unwrap_or((Err(IMPORT_FAILED), None));
                 if let Some(index) = index {
                     view.install_project_index(index, window, cx);
                 }
                 // Import can commit before a failed session refresh; re-query the actual owners in either case.
                 view.rebind_session(window, cx);
-                let failed = id.is_none();
-                if let Some(id) = id {
-                    view.open_database(id, None, window, cx);
-                } else {
-                    view.error = Some("导入未完成，请检查来源与项目目录。".into());
+                match &imported {
+                    Ok(id) => view.open_database(id.clone(), None, window, cx),
+                    Err(key) => view.error = Some(crate::text::translate(key)),
                 }
-                let _ = dialog.update(cx, |dialog, cx| dialog.finished(failed, window, cx));
+                let _ = dialog.update(cx, |dialog, cx| {
+                    dialog.finished(imported.map(|_| ()), window, cx)
+                });
                 cx.notify();
             });
         })
