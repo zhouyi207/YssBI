@@ -86,6 +86,13 @@ pub(super) fn install(
                     && id != "yssbi.statistics.survival.competing_risks")
                     || id == "yssbi.statistics.workflow.subgroup"
                 {
+                    7
+                } else if matches!(
+                    id,
+                    "yssbi.statistics.survival.competing_risks"
+                        | "yssbi.statistics.plot.calibration"
+                        | "yssbi.statistics.plot.decision_curve"
+                ) {
                     6
                 } else if matches!(
                     id,
@@ -107,9 +114,6 @@ pub(super) fn install(
                         | "yssbi.statistics.workflow.mediation"
                         | "yssbi.statistics.workflow.moderated_mediation"
                         | "yssbi.statistics.diagnostic.ph"
-                        | "yssbi.statistics.survival.competing_risks"
-                        | "yssbi.statistics.plot.calibration"
-                        | "yssbi.statistics.plot.decision_curve"
                 ) {
                     5
                 } else if id == "yssbi.statistics.iv.2sls.summary" {

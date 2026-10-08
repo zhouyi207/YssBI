@@ -1,8 +1,9 @@
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
-use yss_data_contract::TabularScalar;
 use yss_sci_contract::{execution::*, regression::models::IterationOptions, survival::*};
 use yss_sci_runtime::survival::{cox, evaluation, nonparametric, parametric};
+
+mod input;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     for method in [
@@ -142,24 +143,6 @@ fn name_cox(model: &mut CoxResult, labels: &[String], skip: usize) {
         ratio.term.clone_from(label);
     }
 }
-fn status_code(v: &TabularScalar) -> Result<usize, KernelError> {
-    match v {
-        TabularScalar::Integer(v) => {
-            usize::try_from(*v).map_err(|_| KernelError::InvalidNumericInput)
-        }
-        TabularScalar::Unsigned(v) => {
-            usize::try_from(*v).map_err(|_| KernelError::InvalidNumericInput)
-        }
-        TabularScalar::Float64(v)
-            if v.as_f64() >= 0.0
-                && v.as_f64() < (usize::MAX as f64)
-                && v.as_f64().fract() == 0.0 =>
-        {
-            Ok(v.as_f64() as usize)
-        }
-        _ => Err(KernelError::InvalidNumericInput),
-    }
-}
 fn prediction_table(
     time: &[f64],
     event: &[f64],
@@ -210,105 +193,24 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             inv,
         )?]);
     }
-    let (materialized, retained) = materialize(inv)?;
-    let n = materialized.first().map_or(0, |c| c.values.len());
-    let index = |key: &str| {
-        inv.input_keys
-            .iter()
-            .position(|k| *k == key)
-            .ok_or(KernelError::InvalidNumericInput)
-    };
-    let read = |key: &str, binary| numeric(&materialized[index(key)?], binary, inv);
-    let label_key = if method == "survival.time_dependent_cox" {
-        "subjects"
-    } else {
-        "groups"
-    };
-    let (group_codes, group_labels) = if let Ok(i) = index(label_key) {
-        categories(&materialized[i], false, inv)?
-    } else {
-        (vec![0; n], vec![TabularScalar::String("All".into())])
-    };
-    let status: Option<Vec<usize>> = if method == "survival.competing_risks" {
-        Some(
-            materialized[index("status")?]
-                .values
-                .iter()
-                .map(status_code)
-                .collect::<Result<Vec<_>, _>>()?,
-        )
-    } else {
-        None
-    };
-    let causes = status.as_ref().map_or(0, |v| {
-        v.iter()
-            .filter(|&&s| s > 0)
-            .collect::<std::collections::BTreeSet<_>>()
-            .len()
-    });
-    let predictors = group(inv, "x");
-    let width = predictors
-        .len()
-        .checked_add(if method == "workflow.subgroup" {
-            group_labels.len()
-        } else {
-            0
-        })
-        .and_then(|v| v.checked_add(4))
-        .ok_or(KernelError::BudgetExceeded)?;
-    // Only subgroup labels become design columns; Log-rank labels size its covariance.
-    let matrix_width = if method == "survival.logrank" {
-        group_labels.len()
-    } else {
-        width
-    };
-    let plot_points = if method == "plot.decision_curve" {
-        integer(inv, "decision_points")?
-    } else {
-        n
-    };
-    inv.control.check_bytes((|| {
-        let matrix_items = matrix_width.checked_mul(matrix_width)?;
-        let workspace = n
-            .checked_mul(width.checked_add(8)?)?
-            .checked_mul(128)?
-            .checked_add(matrix_items.checked_mul(192)?)?
-            .checked_add(causes.checked_mul(128)?)?;
-        let output_items = n
-            .checked_mul(causes.checked_add(24)?)?
-            .checked_add(matrix_items)?
-            .checked_add(plot_points.checked_mul(16)?)?
-            .checked_add(group_labels.len().checked_mul(8)?)?;
-        retained.checked_add(workspace)?.checked_add(
-            output_items.checked_mul(STRUCTURED_VALUE_BYTES * STRUCTURED_VALUE_COPIES)?,
-        )
-    })())?;
-    let labels = predictors
-        .iter()
-        .enumerate()
-        .map(|(j, v)| input_label(v, format!("x{}", j + 1)))
-        .collect::<Vec<_>>();
-    let mut x = vec![];
-    for (i, key) in inv.input_keys.iter().enumerate() {
-        if *key == "x" {
-            x.push(numeric(&materialized[i], false, inv)?);
-        }
-    }
-    let time = read(
-        if method == "survival.time_dependent_cox" {
-            "stop"
-        } else {
-            "time"
-        },
-        false,
-    )?;
+    let input::PreparedInputs {
+        time,
+        event,
+        predictors: x,
+        predictor_labels: labels,
+        group_codes,
+        group_labels,
+        status,
+        start,
+        treatment,
+        predicted_risk,
+    } = input::prepare(method, inv)?;
     if let Some(status) = status {
         return Ok(vec![value(
             nonparametric::competing_risks(&time, &status, &control).map_err(computation_error)?,
             inv,
         )?]);
     }
-    let event = read("event", true)?;
     let output = match method {
         "survival.kaplan_meier" | "survival.nelson_aalen" => {
             let r = nonparametric::curves(
@@ -369,7 +271,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         }
         "survival.time_dependent_cox" => {
             let mut r = cox::time_dependent(
-                &read("start", false)?,
+                &start,
                 &time,
                 &event,
                 &group_codes,
@@ -385,7 +287,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             let mut r = cox::subgroup(
                 &time,
                 &event,
-                &read("treatment", true)?,
+                &treatment,
                 &group_codes,
                 &x,
                 cox_options(inv)?,
@@ -409,7 +311,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             evaluation::calibration(
                 &time,
                 &event,
-                &read("predicted_risk", false)?,
+                &predicted_risk,
                 number(inv, "survival_horizon")?,
                 integer(inv, "calibration_bins")?,
                 &control,
@@ -421,7 +323,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             evaluation::decision_curve(
                 &time,
                 &event,
-                &read("predicted_risk", false)?,
+                &predicted_risk,
                 DecisionOptions {
                     horizon: number(inv, "survival_horizon")?,
                     minimum_threshold: number(inv, "decision_threshold_min")?,

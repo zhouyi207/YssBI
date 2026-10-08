@@ -1,6 +1,161 @@
 use super::*;
 
 #[test]
+fn survival_predictions_from_mixed_inputs_retain_pairing_for_evaluation() {
+    use arrow_array::{ArrayRef, Float64Array, RecordBatch};
+    use yss_database_engine::DataFusionRuntime;
+    use yss_relational_contract::{RelationControl, RelationFactory};
+
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../../yss-sci/tests/fixtures/survival_category_reference.json"
+    ))
+    .unwrap();
+    let data = &fixture["data"];
+    let time: Vec<f64> = serde_json::from_value(data["time"].clone()).unwrap();
+    let event: Vec<f64> = serde_json::from_value(data["event"].clone()).unwrap();
+    let predictors: Vec<Vec<f64>> = serde_json::from_value(data["predictors"].clone()).unwrap();
+    let factory: Arc<dyn RelationFactory> = DataFusionRuntime::unbounded(32).unwrap();
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    let relation_control = RelationControl {
+        cancellation: control.cancellation.clone(),
+        deadline: control.deadline,
+        max_input_bytes: control.max_input_bytes,
+    };
+    let source = factory
+        .clone()
+        .materialize(
+            RecordBatch::try_from_iter([
+                (
+                    "age",
+                    Arc::new(Float64Array::from(predictors[0].clone())) as ArrayRef,
+                ),
+                (
+                    "marker",
+                    Arc::new(Float64Array::from(predictors[1].clone())) as ArrayRef,
+                ),
+            ])
+            .unwrap(),
+            &relation_control,
+        )
+        .unwrap();
+    let values = [
+        series(&time),
+        RuntimeValue::List(event.iter().map(|&v| flag(v == 1.0)).collect()),
+        RuntimeValue::Series(source.select_series("age").unwrap()),
+        RuntimeValue::Series(source.select_series("marker").unwrap()),
+    ];
+    let outputs = [
+        KernelOutputSpec {
+            data_type: ValueType::Struct("statistics.report".into()),
+            fields: None,
+        },
+        KernelOutputSpec {
+            data_type: ValueType::DataFrame,
+            fields: Some(
+                ["time", "event", "risk"]
+                    .iter()
+                    .map(|name| KernelField {
+                        name: (*name).into(),
+                        data_type: ValueType::number(),
+                    })
+                    .collect(),
+            ),
+        },
+    ];
+    let registry = KernelRegistry::default();
+    for (method, expected) in [
+        ("survival.cox", &fixture["cox"]["efron"]["risk"]),
+        ("survival.weibull", &fixture["aft"]["weibull"]["risk"]),
+    ] {
+        let mut parameters = vec![
+            ("max_iterations", int(1000)),
+            ("tolerance", number(1e-8)),
+            ("survival_horizon", number(2.0)),
+        ];
+        if method == "survival.cox" {
+            parameters.push(("survival_ties", string("efron")));
+        }
+        let result = registry
+            .execute(
+                &KernelId::new(format!("yssbi.statistics.{method}").into()).unwrap(),
+                &KernelInvocation {
+                    relations: &factory,
+                    inputs: &values,
+                    input_keys: &["time", "event", "x", "x"],
+                    parameters: parameters
+                        .iter()
+                        .map(|(k, v)| {
+                            (
+                                KernelParameterKey::new((*k).into()).unwrap(),
+                                Cow::Borrowed(v),
+                            )
+                        })
+                        .collect(),
+                    outputs: &outputs,
+                    control: &control,
+                },
+            )
+            .unwrap();
+        let RuntimeValue::Relation(predictions) = &result[1] else {
+            panic!("predictions must retain a relation")
+        };
+        let page = predictions.page(0, time.len(), &relation_control).unwrap();
+        for (row, &time) in time.iter().enumerate() {
+            for (column, expected) in [
+                (0, time),
+                (1, event[row]),
+                (2, expected[row].as_f64().unwrap()),
+            ] {
+                let value = &page.data.columns()[column].values()[row];
+                let actual =
+                    crate::builtins::numeric_input(Some(&RuntimeValue::Scalar(value.clone())))
+                        .unwrap();
+                assert!(
+                    (actual - expected).abs() < 1e-6,
+                    "{method}: row {row}, column {column}: {actual} != {expected}"
+                );
+            }
+        }
+        let inputs = ["time", "event", "risk"]
+            .iter()
+            .map(|name| RuntimeValue::Series(predictions.select_series(name).unwrap()))
+            .collect::<Vec<_>>();
+        let parameters = [
+            ("survival_horizon", number(2.0)),
+            ("calibration_bins", int(4)),
+        ];
+        let calibrated = registry
+            .execute(
+                &KernelId::new("yssbi.statistics.plot.calibration".into()).unwrap(),
+                &KernelInvocation {
+                    relations: &factory,
+                    inputs: &inputs,
+                    input_keys: &["time", "event", "predicted_risk"],
+                    parameters: parameters
+                        .iter()
+                        .map(|(k, v)| {
+                            (
+                                KernelParameterKey::new((*k).into()).unwrap(),
+                                Cow::Borrowed(v),
+                            )
+                        })
+                        .collect(),
+                    outputs: &outputs[..1],
+                    control: &control,
+                },
+            )
+            .unwrap();
+        let RuntimeValue::List(bins) = field(&calibrated[0], "bins").unwrap() else {
+            panic!("calibration bins must be a list")
+        };
+        assert_eq!(bins.len(), 4);
+    }
+}
+
+#[test]
 fn survival_workspace_distinguishes_group_metadata_from_matrix_dimensions() {
     let relations = crate::tests::relations();
     let registry = KernelRegistry::default();
