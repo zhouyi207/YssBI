@@ -1199,19 +1199,33 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
     ] {
         let title = format!("parameters.statistics.{key}.title");
         let description = format!("parameters.statistics.{key}.description");
+        let (en_description, zh_description) = match key {
+            "steps" => (
+                "VAR impulse-response or forecast-error variance-decomposition horizons, from 1 to 1000; default 8. Results include period zero.",
+                "VAR 脉冲响应或预测误差方差分解的期数，范围 1–1000，默认 8；结果包含第 0 期。",
+            ),
+            "acf_max_lag" | "serial_lags" => (
+                "Positive lag order up to 40; the available order also depends on the fitted sample.",
+                "正整数滞后阶数，最大 40；可用阶数还受拟合样本限制。",
+            ),
+            "bg_nomiss0" => (
+                "Fill initial lagged residuals with zero in the Breusch–Godfrey test.",
+                "在 Breusch–Godfrey 检验中将初始滞后残差补零。",
+            ),
+            "hypothesis" => (
+                "Coefficient constraints, for example x1 = 0 or x1 = x2; use names from the fitted model.",
+                "系数约束，例如 x1 = 0 或 x1 = x2；使用已拟合模型中的系数名称。",
+            ),
+            _ => (
+                "Only selected summary contents and their dependencies are computed.",
+                "仅计算选中的汇总内容及其必要依赖。",
+            ),
+        };
         out.extend([
             ("en-US", title.to_owned(), Text(en)),
             ("zh-CN", title.to_owned(), Text(zh)),
-            (
-                "en-US",
-                description.to_owned(),
-                Text("Only selected summary contents and their dependencies are computed."),
-            ),
-            (
-                "zh-CN",
-                description.to_owned(),
-                Text("仅计算选中的汇总内容及其必要依赖。"),
-            ),
+            ("en-US", description.to_owned(), Text(en_description)),
+            ("zh-CN", description.to_owned(), Text(zh_description)),
         ]);
     }
     for (key, en, zh) in [
@@ -1296,7 +1310,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         "constant",
         "max_iterations",
         "tolerance",
-        "covariance_structure",
         "covariance",
         "estimator",
         "effects",

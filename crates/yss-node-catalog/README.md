@@ -216,6 +216,7 @@ PCA 支持相关/协方差形式；主轴因子支持无旋转/正交 varimax、
 现有 IV 和 DID 节点归入“计量与因果分析”，Panel 模型归入“面板模型”；ADF、VAR、VEC 与协整检验归入“时间序列”。现有 Predict 节点归入“预测与估计后分析”；Summary 跟随方法所在主分类，不因包含诊断指标就归入“模型诊断与比较”。尚无节点的分类保留注册，展示与筛选由通用目录树处理。
 
 所有统计 Summary 的唯一输入为对应方法的已拟合 `model`，只输出结构化 `result`，不接收原始数据或估计参数。统计检验、诊断和描述结果同样不另设 `report` 端口；Inspect 在同一结果上切换数值与 JSON 报告。Fit 的模型、拟合值与残差等独立数据输出保留各自契约。
+共享参数说明按其用途区分汇总内容选择、响应期数、滞后阶数和系数约束；独立检验与估计后分析复用对应说明。
 
 IV 2SLS/LIML、Panel、VAR、VEC Summary，以及 Panel Compare 和 VAR Lag-order Selection 的 `result` 声明为既有 `statistics.report`；报告不能再连接需要拟合模型的 Summary、Predict 或估计后分析输入。真正 Fit 的模型类型保持独立，报告呈现仍由 Graph 的输出类别决定。
 
