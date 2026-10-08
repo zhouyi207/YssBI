@@ -24,9 +24,10 @@ report projections, while SCI remains the single owner of numerical signatures
 and implementations. Report fields preserve computed numeric precision;
 rounding belongs to display formatting.
 
-Input errors share Contract's `execution::ScientificInputViolation`. The controlled
-linear/ACF error adapter preserves that violation for `Regression` and `AcfPacf`;
-other operation codes still map to `ComputationFailed` at this boundary.
+Input errors share Contract's `execution::ScientificInputViolation`. Controlled
+linear admission uses Contract's `SciError::into_computation_error`, preserving input
+violations independently of operation names. ACF/PACF receives the shared computation
+error directly from SCI; Runtime does not maintain a second conversion policy.
 
 `hypothesis::{sample_mean_test, categorical_test, rank_test, variance_test}`
 forwards the caller's `ScientificExecutionControl` with each neutral request to

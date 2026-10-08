@@ -134,6 +134,7 @@ pub(super) fn install(
                     5
                 } else if id.starts_with("yssbi.statistics.meta.")
                     || id.starts_with("yssbi.statistics.psychometrics.")
+                    || id == "yssbi.statistics.inference.cluster_robust"
                     || matches!(
                         id,
                         "yssbi.statistics.plot.forest" | "yssbi.statistics.plot.funnel"

@@ -74,6 +74,8 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 `common/models` 统一借用线性拟合或预算化解码二元拟合，供模型诊断与调整预测复用。
 原始观测通过共享物化路径按位置核对长度；聚类标识保留精确类型。输入、工作区和输出合并
 预算准入，不设置行数上限。调整预测按已存设计评估，不隐式重建交互项。
+聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
+不归为参数错误。`inference.cluster_robust` 使用 revision 5。
 
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
 AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型

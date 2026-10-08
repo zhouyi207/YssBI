@@ -9,21 +9,3 @@ use yss_sci_contract::execution::{ScientificComputationError, ScientificInputVio
 pub(crate) const fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {
     ScientificComputationError::InvalidInput { violation }
 }
-
-pub(crate) fn map_sci_error(error: SciError) -> ScientificComputationError {
-    match error {
-        SciError::InvalidInput {
-            operation,
-            violation,
-        } => {
-            if !matches!(
-                operation,
-                SciOperationCode::AcfPacf | SciOperationCode::Regression
-            ) {
-                return ScientificComputationError::ComputationFailed;
-            }
-            invalid(violation)
-        }
-        SciError::ComputationFailed { .. } => ScientificComputationError::ComputationFailed,
-    }
-}

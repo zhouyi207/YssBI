@@ -4,6 +4,7 @@ mod causal_models;
 mod decision;
 mod descriptive;
 mod diagnostics;
+mod inference;
 mod meta;
 mod panel_models;
 mod path;

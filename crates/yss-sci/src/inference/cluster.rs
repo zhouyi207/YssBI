@@ -1,11 +1,12 @@
 //! One-way OLS CR1 covariance with cluster-count t inference.
 use crate::regression::{
     linear::fit::fit_ols,
-    models::common::{Result, coefficient_table, failed, names, parameter, validate},
+    models::common::{Result, coefficient_table, failed, invalid, names, validate},
 };
 use std::collections::BTreeSet;
 use yss_sci_contract::{
-    execution::ScientificExecutionControl as Control,
+    SciError,
+    execution::{ScientificExecutionControl as Control, ScientificInputViolation as Violation},
     inference::ClusterInference,
     regression::{OlsCovariance, OlsOptions, fit::RegressionStatistics},
 };
@@ -21,11 +22,26 @@ pub fn fit(
     control.check()?;
     let n = response.len();
     let k = predictors.len() + usize::from(constant);
-    let g = groups.iter().copied().collect::<BTreeSet<_>>().len();
-    if groups.len() != n || g < 2 || n <= k {
-        return Err(parameter());
+    if groups.len() != n {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if n <= k {
+        return Err(invalid(Violation::EmptyInput));
     }
     validate(&response, &predictors, control)?;
+    let g = {
+        let mut distinct = BTreeSet::new();
+        for (index, &group) in groups.iter().enumerate() {
+            if index % 1024 == 0 {
+                control.check()?;
+            }
+            distinct.insert(group);
+        }
+        distinct.len()
+    };
+    if g < 2 {
+        return Err(invalid(Violation::DataOutOfRange));
+    }
     let fit = fit_ols(
         response,
         &predictors,
@@ -44,7 +60,7 @@ pub fn fit(
             missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
         },
     )
-    .map_err(|_| failed())?;
+    .map_err(SciError::into_computation_error)?;
     control.check()?;
     let covariance = fit.statistics.coefficient_statistics().covariance.clone();
     let cov = Mat::from_fn(k, k, |j, l| covariance[j][l]);

@@ -147,6 +147,10 @@ the borrowed model contract.
 `SciError` carries typed operation and failure facts. Runtime and Node Kernel
 map those facts at their own boundaries; this crate does not maintain a separate
 host-facing string-code mapping.
+`SciError::into_computation_error` preserves the shared input violation
+or computation failure when the caller's computation context already identifies
+the operation. SCI composition and Runtime use this neutral conversion without
+operation-name filtering or another error vocabulary.
 
 `ScientificInputViolation` distinguishes missing/insufficient observations,
 nonfinite observations, incompatible input shapes, data outside the statistic's

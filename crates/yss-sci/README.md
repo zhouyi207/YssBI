@@ -99,6 +99,10 @@ facts; they do not pretend to be ANOVA inference or a validated joint optimum.
 `inference` owns normal/t confidence intervals, pooled-ANOVA/Welch pairwise
 contrasts with Holm/Bonferroni adjustment, and OLS CR1 cluster inference. Cluster
 covariance reuses the linear estimator; coefficient tests use cluster-count df.
+Cluster admission reports incompatible group lengths as `ShapeMismatch`, insufficient
+samples as `EmptyInput`, and fewer than two clusters as `DataOutOfRange`. Group scans
+check execution control, and downstream OLS errors retain their shared violation
+through Contract's neutral conversion.
 `regression/postestimation` owns shared evaluation grids, binary-link derivatives
 and Delta variance for adjusted means and binary marginal effects. Evaluation
 retains fitted row order and applies explicit column overrides without rebuilding

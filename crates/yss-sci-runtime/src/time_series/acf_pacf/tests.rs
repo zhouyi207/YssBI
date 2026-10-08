@@ -9,10 +9,8 @@ fn active_control() -> ScientificExecutionControl {
 }
 
 use super::acf_pacf;
-use crate::error::map_sci_error;
 use yss_sci_contract::execution::{ScientificComputationError, ScientificInputViolation};
 use yss_sci_contract::time_series::acf_pacf::AcfPacfRequest;
-use yss_sci_contract::{SciError, SciOperationCode};
 
 #[test]
 fn acf_pacf_maps_results_and_rejects_invalid_requests() {
@@ -62,36 +60,6 @@ fn acf_pacf_maps_results_and_rejects_invalid_requests() {
         Err(ScientificComputationError::InvalidInput {
             violation: ScientificInputViolation::ParameterOutOfRange,
         })
-    );
-    assert_eq!(
-        map_sci_error(SciError::ComputationFailed {
-            operation: SciOperationCode::AcfPacf,
-        }),
-        ScientificComputationError::ComputationFailed
-    );
-    for violation in [
-        ScientificInputViolation::EmptyInput,
-        ScientificInputViolation::NonFiniteInput,
-        ScientificInputViolation::ShapeMismatch,
-        ScientificInputViolation::DataOutOfRange,
-        ScientificInputViolation::ParameterOutOfRange,
-    ] {
-        for operation in [SciOperationCode::AcfPacf, SciOperationCode::Regression] {
-            assert_eq!(
-                map_sci_error(SciError::InvalidInput {
-                    operation,
-                    violation,
-                }),
-                ScientificComputationError::InvalidInput { violation }
-            );
-        }
-    }
-    assert_eq!(
-        map_sci_error(SciError::InvalidInput {
-            operation: SciOperationCode::Panel,
-            violation: ScientificInputViolation::ShapeMismatch,
-        }),
-        ScientificComputationError::ComputationFailed
     );
 }
 

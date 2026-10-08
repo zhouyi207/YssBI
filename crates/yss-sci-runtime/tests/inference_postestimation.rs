@@ -43,6 +43,47 @@ fn metadata(n: usize) -> StatisticalObservationMetadata {
 }
 
 #[test]
+fn cluster_input_failures_preserve_shapes_and_data_domain() {
+    for (response, predictors, groups, violation) in [
+        (
+            vec![1., 2., 4.],
+            vec![vec![0., 1., 2.]],
+            vec![0, 1],
+            ScientificInputViolation::ShapeMismatch,
+        ),
+        (
+            vec![1., 2., 4.],
+            vec![vec![0., 1., 2.]],
+            vec![0, 0, 0],
+            ScientificInputViolation::DataOutOfRange,
+        ),
+        (
+            vec![1., 2.],
+            vec![vec![0., 1.]],
+            vec![0, 1],
+            ScientificInputViolation::EmptyInput,
+        ),
+        (
+            vec![1., 2., 4.],
+            vec![],
+            vec![0, 1, 0],
+            ScientificInputViolation::EmptyInput,
+        ),
+        (
+            vec![1., f64::NAN, 4.],
+            vec![vec![0., 1., 2.]],
+            vec![0, 1, 0],
+            ScientificInputViolation::NonFiniteInput,
+        ),
+    ] {
+        assert_eq!(
+            cluster::fit(response, predictors, groups, true, &control()).unwrap_err(),
+            ScientificComputationError::InvalidInput { violation },
+        );
+    }
+}
+
+#[test]
 fn cluster_cr1_covariance_and_cluster_df_match_statsmodels_without_row_cap() {
     let f = fixture();
     let y: Vec<f64> = serde_json::from_value(f["response"].clone()).unwrap();

@@ -1,6 +1,7 @@
 //! Linear regression entry points with admission and execution-control checks.
 pub mod prais;
-use crate::error::{invalid, map_sci_error};
+use crate::error::invalid;
+use yss_sci_contract::SciError;
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
@@ -61,7 +62,7 @@ pub fn linear_regression(
         request.method,
         metadata,
     )
-    .map_err(map_sci_error)?;
+    .map_err(SciError::into_computation_error)?;
     control.check()?;
     let report = crate::regression::report::linear_regression_report(&fit)
         .map_err(|_| ScientificComputationError::ComputationFailed)?;
