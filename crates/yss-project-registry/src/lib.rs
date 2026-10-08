@@ -128,8 +128,10 @@ impl ProjectRegistry {
         id: &str,
     ) -> Result<Option<ProjectRecord>, ProjectRegistryError> {
         Ok(self
-            .list_projects()
-            .await?
+            .store
+            .load()
+            .await
+            .map_err(ProjectRegistryError::Store)?
             .into_iter()
             .find(|record| record.id.as_str() == id))
     }
@@ -141,7 +143,11 @@ impl ProjectRegistry {
         let identity = binding
             .identity()
             .ok_or(ProjectRegistryError::RootIdentityMissing)?;
-        let records = self.list_projects().await?;
+        let records = self
+            .store
+            .load()
+            .await
+            .map_err(ProjectRegistryError::Store)?;
         binding
             .revalidate()
             .map_err(|_| ProjectRegistryError::IdentityChanged)?;
@@ -172,7 +178,7 @@ impl ProjectRegistry {
                 )
             })
             .ok_or(ProjectRegistryError::RootIdentityMissing)?;
-        let path = normalize_existing_path(path).map_err(|_| ProjectRegistryError::InvalidPath)?;
+        let path = normalize_existing_path(path)?;
 
         if let Some(existing) = self.fetch_by_root(&binding).await? {
             let updated = ProjectRecord {
@@ -260,6 +266,7 @@ impl ProjectRegistry {
             if project.root_identity_state == ProjectRootIdentityState::Valid
                 && current_identity.as_ref().map(|identity| identity.as_str())
                     == Some(project.root_identity.as_str())
+                && normalize_existing_path(&project.path).is_ok()
             {
                 continue;
             }
@@ -354,32 +361,19 @@ fn now_string() -> String {
     seconds.to_string()
 }
 
-pub fn default_project_parent_directory() -> Result<String, String> {
+pub fn default_project_parent_directory() -> Result<String, std::env::VarError> {
     #[cfg(windows)]
-    {
-        let userprofile =
-            std::env::var("USERPROFILE").map_err(|_| "无法读取用户目录".to_string())?;
-        let docs = PathBuf::from(&userprofile).join("Documents");
-        if docs.is_dir() {
-            Ok(dunce::simplified(&docs).to_string_lossy().into_owned())
-        } else {
-            Ok(dunce::simplified(Path::new(&userprofile))
-                .to_string_lossy()
-                .into_owned())
-        }
-    }
+    let variable = "USERPROFILE";
     #[cfg(not(windows))]
-    {
-        let home = std::env::var("HOME").map_err(|_| "无法读取 HOME".to_string())?;
-        let docs = PathBuf::from(&home).join("Documents");
-        if docs.is_dir() {
-            Ok(dunce::simplified(&docs).to_string_lossy().into_owned())
-        } else {
-            Ok(dunce::simplified(Path::new(&home))
-                .to_string_lossy()
-                .into_owned())
-        }
-    }
+    let variable = "HOME";
+    let parent = PathBuf::from(std::env::var(variable)?);
+    let documents = parent.join("Documents");
+    let directory = if documents.is_dir() {
+        &documents
+    } else {
+        &parent
+    };
+    Ok(dunce::simplified(directory).to_string_lossy().into_owned())
 }
 
 pub fn validate_new_project_path(path: &str) -> Result<(), ProjectPathValidationError> {
@@ -435,10 +429,10 @@ fn project_root_path(path: impl AsRef<Path>) -> PathBuf {
     }
 }
 
-pub fn normalize_existing_path(path: &str) -> Result<String, String> {
+pub fn normalize_existing_path(path: &str) -> Result<String, ProjectRegistryError> {
     let path = path.trim();
     if path.is_empty() {
-        return Err("路径不能为空".into());
+        return Err(ProjectRegistryError::InvalidPath);
     }
     let input = PathBuf::from(path);
     let pb = if input.is_dir() {
@@ -446,22 +440,20 @@ pub fn normalize_existing_path(path: &str) -> Result<String, String> {
     } else {
         input
     };
-    if !pb.exists() {
-        return Err("项目文件不存在".into());
-    }
-    if !pb.is_file() {
-        return Err("项目路径必须是文件".into());
+    let metadata = std::fs::symlink_metadata(&pb).map_err(|_| ProjectRegistryError::InvalidPath)?;
+    if !metadata.is_file() || yss_filesystem::metadata_is_redirect(&metadata) {
+        return Err(ProjectRegistryError::InvalidPath);
     }
     let file_name = pb
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| "无效的项目文件路径".to_string())?;
+        .ok_or(ProjectRegistryError::InvalidPath)?;
     if !file_name.eq_ignore_ascii_case(PROJECT_METADATA_FILE) {
-        return Err(format!("项目文件必须是 {PROJECT_METADATA_FILE}"));
+        return Err(ProjectRegistryError::InvalidPath);
     }
     dunce::canonicalize(&pb)
         .map(|path| path.to_string_lossy().into_owned())
-        .map_err(|error| format!("无法解析项目路径: {error}"))
+        .map_err(|_| ProjectRegistryError::InvalidPath)
 }
 
 #[cfg(test)]
@@ -707,6 +699,52 @@ mod tests {
         assert_eq!(created.id, reopened.id);
         assert_eq!(created.path, reopened.path);
         assert_eq!(registry.list_projects().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn registration_rejects_redirected_metadata_without_creating_a_record() {
+        let directory = TestDirectory::new("redirected-metadata");
+        let root = directory.child("project");
+        let outside = directory.child("outside");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join(PROJECT_METADATA_FILE), "{}").unwrap();
+        std::os::unix::fs::symlink(
+            outside.join(PROJECT_METADATA_FILE),
+            root.join(PROJECT_METADATA_FILE),
+        )
+        .unwrap();
+        let registry = registry(Vec::new());
+        assert!(matches!(
+            registry
+                .register_project("Redirected", root.to_str().unwrap())
+                .await,
+            Err(ProjectRegistryError::InvalidPath)
+        ));
+        assert!(registry.list_projects().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn cleanup_removes_a_project_whose_metadata_was_deleted() {
+        let directory = TestDirectory::new("missing-metadata");
+        let metadata = directory.child(PROJECT_METADATA_FILE);
+        std::fs::write(&metadata, "{}").unwrap();
+        let registry = registry(Vec::new());
+        registry
+            .register_project("Example", directory.path().to_str().unwrap())
+            .await
+            .unwrap();
+        std::fs::remove_file(metadata).unwrap();
+
+        let cancellations = ProjectTaskCancellationRegistry::new();
+        let result = registry
+            .cleanup_invalid_projects(None, cancellations.begin())
+            .await
+            .unwrap();
+        assert_eq!(result.removed, 1);
+        assert!(registry.list_projects().await.unwrap().is_empty());
+        assert!(directory.path().is_dir());
     }
 
     #[tokio::test]
