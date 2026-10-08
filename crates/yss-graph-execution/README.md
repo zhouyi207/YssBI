@@ -35,6 +35,7 @@
 
 `execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。
 Application 校验文档、捕获解析与语义身份后，Execution 的 `GraphExecutionScope` 按目标输出选择必要上游；
+全图请求直接选择所有语义节点，单节点请求按节点身份遍历依赖，只有显式输出请求构建输出地址索引。
 范围就绪性由 Analysis 检查，资源授权只消费这些节点及可达函数的语义资源引用，普通路径字符串不作为资源。
 `prepare_graph_package` 只构造选中范围的操作、参数及输出，缓存与计划身份包含该范围。
 Application 重验依赖、捕获结果发布依据并准备资源绑定。运行不隐式保存，也不回退磁盘旧文档。
@@ -54,6 +55,9 @@ CurrentInputs 不触发这种补算。结构边界之前已经成功发布的结
 Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。计划中的 input slots 继续携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
 Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline 及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
+输入 coercion 保留于计划校验，标量广播由 Kernel 执行，调度器交付原值。
+
+`PlanValidationControl` 按已确认的保留决定继续归属本模块，当前尚未接入计划准入；计划校验不检查它的 deadline。
 
 `RunExecutionControl` 只携带取消和 deadline。调度器通过 `KernelControl::new` 为所有节点创建
 无固定内存上限的执行控制，输入读取、工作区、结果编码、函数私有帧、分组调用和快照共享该策略。

@@ -125,18 +125,3 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
         ))
     }
 }
-
-fn apply_input_coercions(
-    mut value: RuntimeValue,
-    coercions: &[crate::plan::PlanInputCoercionKind],
-) -> Result<RuntimeValue, OperationExecutionError> {
-    for coercion in coercions {
-        value = match coercion {
-            // Broadcast is a kernel-owned shape operation. Keeping the scalar
-            // value here makes the coercion explicit without fabricating a
-            // DataSeries length in the scheduler.
-            crate::plan::PlanInputCoercionKind::BroadcastScalarToSeries => value,
-        };
-    }
-    Ok(value)
-}

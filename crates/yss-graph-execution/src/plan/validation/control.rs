@@ -2,7 +2,7 @@ use std::time::Instant;
 
 #[allow(
     dead_code,
-    reason = "validation control is activated by plan admission"
+    reason = "reserved plan validation control; not connected to admission"
 )]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PlanValidationControl {
@@ -12,7 +12,7 @@ pub struct PlanValidationControl {
 impl PlanValidationControl {
     #[allow(
         dead_code,
-        reason = "validation control is activated by plan admission"
+        reason = "reserved plan validation control; not connected to admission"
     )]
     pub const fn new(deadline: Instant) -> Self {
         Self { deadline }
@@ -20,7 +20,7 @@ impl PlanValidationControl {
 
     #[allow(
         dead_code,
-        reason = "validation control is activated by plan admission"
+        reason = "reserved plan validation control; not connected to admission"
     )]
     pub const fn deadline(self) -> Instant {
         self.deadline

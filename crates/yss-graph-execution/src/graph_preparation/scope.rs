@@ -24,51 +24,48 @@ impl GraphExecutionScope {
         semantics: &GraphSemanticSnapshot,
         demand: &PlanExecutionDemand,
     ) -> Result<Self, GraphPlanError> {
-        let by_id = semantics
-            .nodes()
-            .iter()
-            .map(|node| (node.node_id, node))
-            .collect::<BTreeMap<_, _>>();
-        let by_output = semantics
-            .nodes()
-            .iter()
-            .flat_map(|node| {
-                node.ports
-                    .iter()
-                    .filter(|port| port.direction == PortDirection::Output)
-                    .map(move |port| (port.address.to_string(), node.node_id))
-            })
-            .collect::<BTreeMap<_, _>>();
-        let mut pending = Vec::new();
-        match demand {
+        let mut pending = match demand {
             PlanExecutionDemand::Default
             | PlanExecutionDemand::Outputs {
                 include_default_results: true,
                 ..
             } => return Ok(Self::all(semantics)),
             PlanExecutionDemand::Node { node, .. } => {
-                let id = NodeId::from_uuid(
+                vec![NodeId::from_uuid(
                     uuid::Uuid::parse_str(node.as_str())
                         .map_err(|_| GraphPlanError::InvalidGraph)?,
-                );
-                if !by_id.contains_key(&id) {
-                    return Err(GraphPlanError::InvalidGraph);
-                }
-                pending.push(id);
+                )]
             }
             PlanExecutionDemand::Outputs { outputs, .. } => {
-                for output in outputs {
-                    if output.graph().as_str() != graph.as_str() {
-                        return Err(GraphPlanError::InvalidGraph);
-                    }
-                    pending.push(
-                        *by_output
+                let by_output = semantics
+                    .nodes()
+                    .iter()
+                    .flat_map(|node| {
+                        node.ports
+                            .iter()
+                            .filter(|port| port.direction == PortDirection::Output)
+                            .map(move |port| (port.address.to_string(), node.node_id))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                outputs
+                    .iter()
+                    .map(|output| {
+                        if output.graph().as_str() != graph.as_str() {
+                            return Err(GraphPlanError::InvalidGraph);
+                        }
+                        by_output
                             .get(output.port().as_str())
-                            .ok_or(GraphPlanError::InvalidGraph)?,
-                    );
-                }
+                            .copied()
+                            .ok_or(GraphPlanError::InvalidGraph)
+                    })
+                    .collect::<Result<_, _>>()?
             }
-        }
+        };
+        let by_id = semantics
+            .nodes()
+            .iter()
+            .map(|node| (node.node_id, node))
+            .collect::<BTreeMap<_, _>>();
         let mut nodes = BTreeSet::new();
         while let Some(id) = pending.pop() {
             if !nodes.insert(id) {

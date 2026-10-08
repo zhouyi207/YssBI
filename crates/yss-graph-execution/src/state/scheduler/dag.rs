@@ -76,23 +76,20 @@ impl NeutralPlanExecutor {
             let inputs = operation
                 .inputs()
                 .iter()
-                .map(|binding| {
-                    let value = match binding.source() {
-                        crate::plan::PlanInputSource::Value(reference) => values
-                            .get(reference.index() as usize)
-                            .and_then(Option::as_ref)
-                            .cloned()
-                            .ok_or(OperationExecutionError::Failed),
-                        crate::plan::PlanInputSource::Parameter(handle) => {
-                            let Some(payload) = package.parameters().entries().get(handle) else {
-                                return Err(OperationExecutionError::Failed);
-                            };
-                            parameter_value(payload.value(), resources)
-                                .map(std::borrow::Cow::into_owned)
-                                .map_err(OperationExecutionError::from)
-                        }
-                    }?;
-                    apply_input_coercions(value, &binding.contract().coercions)
+                .map(|binding| match binding.source() {
+                    crate::plan::PlanInputSource::Value(reference) => values
+                        .get(reference.index() as usize)
+                        .and_then(Option::as_ref)
+                        .cloned()
+                        .ok_or(OperationExecutionError::Failed),
+                    crate::plan::PlanInputSource::Parameter(handle) => {
+                        let Some(payload) = package.parameters().entries().get(handle) else {
+                            return Err(OperationExecutionError::Failed);
+                        };
+                        parameter_value(payload.value(), resources)
+                            .map(std::borrow::Cow::into_owned)
+                            .map_err(OperationExecutionError::from)
+                    }
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error| error.at_node(operation.source()))?;

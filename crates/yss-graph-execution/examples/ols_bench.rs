@@ -1,4 +1,4 @@
-//! OLS measurement using the first 100,000 rows of the data-engine benchmark fixture.
+//! OLS measurement using 100,000 synthetic rows.
 use std::time::{Duration, Instant};
 use yss_sci_contract::execution::{ScientificCancellationToken, ScientificExecutionControl};
 use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
