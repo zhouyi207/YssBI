@@ -107,10 +107,14 @@ pub(crate) fn resolve_node_types(
             .nodes
             .get(&node_id)
             .filter(|cached| cached.input_fingerprint == input_fingerprint)
-            .cloned()
         {
-            states.extend(cached.output_states);
-            coercions.extend(cached.coercions);
+            states.extend(
+                cached
+                    .output_states
+                    .iter()
+                    .map(|(address, state)| (address.clone(), state.clone())),
+            );
+            coercions.extend_from_slice(&cached.coercions);
             cache.reused_nodes = cache.reused_nodes.saturating_add(1);
         } else {
             apply_node_rule(
@@ -161,13 +165,12 @@ pub(crate) fn resolve_node_types(
             resolved.insert(port.address.clone(), port.type_state.clone());
         }
 
-        let unresolved_outputs = nodes[index]
+        for address in nodes[index]
             .ports
             .iter()
             .filter(|port| !port.orphan && port.type_state.exact().is_none())
-            .map(|port| port.address.clone())
-            .collect::<Vec<_>>();
-        for address in unresolved_outputs {
+            .map(|port| &port.address)
+        {
             diagnostics.push(graph_problem(
                 GraphDiagnosticKind::TypeResolutionIncomplete,
                 GraphDiagnosticLocation::Port(address.clone()),
@@ -236,11 +239,10 @@ fn resolve_input_state(
         let mut accepted_states = Vec::new();
         let mut diagnostics = Vec::new();
         for connection in port_connections {
-            let source = resolved
+            let accepted = resolved
                 .get(&connection.output)
-                .cloned()
+                .map(|source| restrict_to_pattern(source, &port.accepted_type, types))
                 .unwrap_or(TypeState::Unknown(TypeUnknownReason::UnresolvedUpstream));
-            let accepted = restrict_to_pattern(&source, &port.accepted_type, types);
             if matches!(accepted, TypeState::Conflict(_)) {
                 diagnostics.push(graph_problem(
                     GraphDiagnosticKind::TypeConnectionMismatch,
