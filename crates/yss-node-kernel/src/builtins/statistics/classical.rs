@@ -291,11 +291,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         &[],
         1,
         |inv| {
-            let exposed = category_binary_values(inv, "exposed", 0)?;
+            let exposed = binary_values(inv, "exposed", 0)?;
             let retained = inv
                 .control
                 .check_bytes(exposed.len().checked_mul(size_of::<f64>()))?;
-            let outcome = category_binary_values(inv, "outcome", retained)?;
+            let outcome = binary_values(inv, "outcome", retained)?;
             let retained = inv.control.check_bytes(
                 exposed
                     .len()
@@ -822,34 +822,37 @@ fn binary_counts(inv: &KernelInvocation<'_>, key: &str) -> Result<(usize, usize)
     Ok((successes, values.len()))
 }
 
-fn category_binary_values(
+fn binary_values(
     inv: &KernelInvocation<'_>,
     key: &str,
     retained: usize,
 ) -> Result<Vec<f64>, KernelError> {
-    let categories = category_values(inv, key, retained)?;
-    let labels = category_bytes(&categories, inv)?;
-    inv.control.check_bytes(
-        categories
-            .len()
-            .checked_mul(size_of::<f64>())
-            .and_then(|n| n.checked_add(labels))
-            .and_then(|n| n.checked_add(retained)),
-    )?;
-    categories
-        .iter()
-        .enumerate()
-        .map(|(i, value)| {
-            if i.is_multiple_of(1024) {
-                inv.check_control()?;
-            }
-            match value.as_ref() {
-                "b:1" | "i:1" | "u:1" | "f:3ff0000000000000" => Ok(1.0),
-                "b:0" | "i:0" | "u:0" | "f:0000000000000000" => Ok(0.0),
-                _ => Err(KernelError::InvalidNumericInput),
-            }
-        })
-        .collect()
+    let input = group(inv, key)
+        .into_iter()
+        .next()
+        .ok_or(KernelError::InvalidNumericInput)?;
+    let column =
+        super::super::series::column_retaining(input, inv, retained).map_err(
+            |error| match error {
+                KernelError::InvalidParameter => KernelError::InvalidNumericInput,
+                error => error,
+            },
+        )?;
+    inv.control.check_bytes((|| {
+        retained
+            .checked_add(column.bytes()?)?
+            .checked_add(column.values.len().checked_mul(size_of::<f64>())?)
+    })())?;
+    let values = numeric(&column, true, inv)?;
+    for (i, &value) in values.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        if value != 0.0 && value != 1.0 {
+            return Err(KernelError::InvalidNumericInput);
+        }
+    }
+    Ok(values)
 }
 
 fn category_values(

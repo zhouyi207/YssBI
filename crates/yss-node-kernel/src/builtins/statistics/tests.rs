@@ -1,6 +1,7 @@
 use super::common::field;
 mod association;
 mod causal_models;
+mod classical;
 mod decision;
 mod descriptive;
 mod diagnostics;
