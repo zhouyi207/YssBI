@@ -39,9 +39,6 @@ const SPECS: &[(&str, &str, &str)] = &[
         "多维尺度分析（MDS）",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|spec| spec.0 == id)
-}
 fn numeric_group(
     key: &'static str,
     label: &'static str,

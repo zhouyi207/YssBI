@@ -99,10 +99,6 @@ const METHODS: &[(&str, &str, &str, &[&str])] = &[
         &["GJR", "非对称波动率"],
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.")
-        .is_some_and(|id| METHODS.iter().any(|m| m.0 == id))
-}
 fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     let mut p = match method {
         "timeseries.arima" | "timeseries.sarima" => vec![

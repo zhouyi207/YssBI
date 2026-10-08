@@ -32,10 +32,6 @@ const NODES: &[PreferenceNode] = &[
         ],
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.decision.")
-        .is_some_and(|s| NODES.iter().any(|n| n.0 == s))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh, inputs) in NODES {
         let mut ports = inputs

@@ -4,16 +4,6 @@ mod mediation;
 mod moderation;
 mod parameters;
 mod recursive;
-pub(super) fn implemented(id: &str) -> bool {
-    matches!(
-        id,
-        "yssbi.statistics.workflow.moderation"
-            | "yssbi.statistics.workflow.moderation_advanced"
-            | "yssbi.statistics.workflow.mediation"
-            | "yssbi.statistics.workflow.moderated_mediation"
-            | "yssbi.statistics.sem.path"
-    )
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     moderation::append(fragment)?;
     mediation::append(fragment)?;

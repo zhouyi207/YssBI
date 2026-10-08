@@ -40,10 +40,6 @@ const METHODS: &[(&str, &str, &str, bool)] = &[
         true,
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.survey.")
-        .is_some_and(|id| METHODS.iter().any(|m| m.0 == id))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh, regression) in METHODS {
         let id = format!("yssbi.statistics.survey.{method}");

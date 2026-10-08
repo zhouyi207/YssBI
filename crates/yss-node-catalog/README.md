@@ -252,6 +252,7 @@ Meta 分析的 20 个既有入口由 `statistics/meta/` 提供端口与参数，
 [暂缓节点](DEFERRED_NODES.md)；暂缓节点保留目录身份与不可用状态。
 
 方法清单中的统计入口由 `src/statistics/inventory/entries.rs` 维护，运行时不读取规划 CSV。频数归入数据序列，数据描述归入描述统计，分类汇总由 GroupBy 承接，独立基线分析入口已移除；FEVD 的两条来源共享一个入口。
+装配先收集具体节点定义，再按已声明的节点身份补齐清单中的占位入口，不另维护“已实现”分类函数或状态清单。节点能否执行仍由 Application 使用当前冻结 Kernel 注册表判断，声明存在不代表内核已经安装。
 这些来源记录继续保留方法身份；已经实现的诊断及后估计由 `statistics/analyses.rs`、描述统计由 `statistics/descriptive.rs` 完善原 ID 的端口、参数和内核绑定，不重复生成骨架。其余入口保留名称、搜索别名、分类、用途、来源编号和范围说明，尚无内核，仍在目录中显示为不可用且不进入 AI 可执行节点搜索。
 
 泰尔指数沿用 `yssbi.statistics.inequality.theil`，计算自然对数 Theil T。Detail 的 `theil_form` 默认个体等权，分组形式输入组均值，并通过已有可选输入配置添加一个 `weights` 数列，表示组人数或人口占比。权重自动归一化，零权重组不计入计算；零值允许，负值、缺失值及非正加权均值拒绝。唯一 `result` 为包含 `theil_t`、`form` 和 `observations` 的结构化数据。分组结果仅反映组间差异，不推断组内差异或总体分解，详见节点帮助。

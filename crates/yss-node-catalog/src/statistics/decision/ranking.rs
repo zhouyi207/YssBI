@@ -33,10 +33,6 @@ const NODES: &[(&str, &str, &str)] = &[
         "熵权 TOPSIS",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.")
-        .is_some_and(|id| NODES.iter().any(|n| n.0 == id))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(suffix, en, zh) in NODES {
         let method = suffix.split('.').next_back().unwrap();

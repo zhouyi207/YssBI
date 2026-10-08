@@ -84,9 +84,6 @@ const SPECS: &[(&str, &str, &str, &str, &str, &str)] = &[
     ),
 ];
 
-pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|spec| spec.0 == id)
-}
 fn aliases(method: &str) -> &'static [&'static str] {
     match method {
         "pearson" => &["association.pearson", "Pearson", "相关"],

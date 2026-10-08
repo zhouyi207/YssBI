@@ -188,9 +188,6 @@ const SPECS: &[(&str, &str, &str, &str)] = &[
         "Fractional Response模型",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|s| s.0 == id)
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(id, method, en, zh) in SPECS {
         let (ports, parameters) = interface(method)?;

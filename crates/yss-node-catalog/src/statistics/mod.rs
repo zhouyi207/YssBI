@@ -46,6 +46,12 @@ use families::{Family, NODES, NodeSpec, Stage};
 use ports::{fitted_regression_type, fixed_numeric_table, label_series};
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
+    let mut fragment = defined_provider_fragment()?;
+    inventory::append(&mut fragment)?;
+    Ok(fragment)
+}
+
+fn defined_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut messages = Vec::new();
     add_shared_messages(&mut messages);
     let nodes = NODES
@@ -62,7 +68,6 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         messages,
         ..ProviderFragment::default()
     };
-    inventory::append(&mut fragment)?;
     decision::append(&mut fragment)?;
     psychometrics::append(&mut fragment)?;
     path::append(&mut fragment)?;

@@ -124,10 +124,6 @@ const SPECS: &[(&str, &str, &str, &str, &str)] = &[
     ),
 ];
 
-pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|spec| spec.0 == id) || models::implemented(id)
-}
-
 fn help(id: &str) -> (&'static str, &'static str) {
     match id.rsplit('.').next().unwrap_or_default() {
         "breusch_pagan" => (

@@ -22,11 +22,6 @@ const ENTRIES: [(&str, &str, &str); 4] = [
         "题项分析（区分度）",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    ENTRIES
-        .iter()
-        .any(|e| id.strip_prefix("yssbi.statistics.psychometrics.") == Some(e.0))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for (suffix, en, zh) in ENTRIES {
         let id = format!("yssbi.statistics.psychometrics.{suffix}");

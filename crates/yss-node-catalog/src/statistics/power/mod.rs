@@ -79,10 +79,6 @@ const METHODS: &[(&str, &str, &str)] = &[
         "均值等效功效（已知方差）",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.power.")
-        .is_some_and(|id| METHODS.iter().any(|m| m.0 == id))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.power.{method}");

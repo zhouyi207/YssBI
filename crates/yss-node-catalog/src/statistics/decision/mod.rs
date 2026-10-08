@@ -8,15 +8,6 @@ mod parameters;
 mod preferences;
 mod ranking;
 mod systems;
-pub(super) fn implemented(id: &str) -> bool {
-    ranking::implemented(id)
-        || systems::implemented(id)
-        || preferences::implemented(id)
-        || market::implemented(id)
-        || matrices::implemented(id)
-        || experts::implemented(id)
-        || conjoint::implemented(id)
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     ranking::append(fragment)?;
     systems::append(fragment)?;

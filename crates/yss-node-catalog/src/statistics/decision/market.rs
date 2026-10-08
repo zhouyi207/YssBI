@@ -1,10 +1,4 @@
 use super::*;
-pub(super) fn implemented(id: &str) -> bool {
-    matches!(
-        id,
-        "yssbi.statistics.decision.turf" | "yssbi.statistics.decision.psm"
-    )
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     emit(
         fragment,

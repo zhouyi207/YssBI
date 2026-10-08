@@ -62,10 +62,6 @@ const SPECS: &[(&str, &str, &str, &str, &[&str])] = &[
     ),
 ];
 
-pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|s| s.1 == id)
-}
-
 fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     let covariance = |default| {
         choice_parameter(

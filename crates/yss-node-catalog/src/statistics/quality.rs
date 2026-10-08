@@ -17,11 +17,6 @@ const ENTRIES: [(&str, &str, &str); 3] = [
         "测量系统分析（交叉 Gage R&R）",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    ENTRIES
-        .iter()
-        .any(|e| id.strip_prefix("yssbi.statistics.") == Some(e.0))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for (suffix, en, zh) in ENTRIES {
         let id = format!("yssbi.statistics.{suffix}");

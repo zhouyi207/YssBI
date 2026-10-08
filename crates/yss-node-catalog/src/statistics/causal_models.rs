@@ -82,11 +82,6 @@ const METHODS: &[(&str, &str, &str, &[&str])] = &[
     ),
 ];
 
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.")
-        .is_some_and(|s| METHODS.iter().any(|m| m.0 == s))
-}
-
 fn union_series(ids: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyError> {
     normalize_type_expr(TypeExpr::Union(
         ids.iter()

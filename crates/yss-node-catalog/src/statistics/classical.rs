@@ -217,10 +217,6 @@ const SPECS: &[(&str, &str, &str, &[&str], &str)] = &[
     ),
 ];
 
-pub(super) fn implemented(id: &str) -> bool {
-    SPECS.iter().any(|spec| spec.0 == id)
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     add_parameter_messages(&mut fragment.messages);
     for &(id, en, zh, aliases, mode) in SPECS {

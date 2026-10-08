@@ -1,7 +1,4 @@
 use super::*;
-pub(super) fn implemented(id: &str) -> bool {
-    id == "yssbi.statistics.workflow.delphi"
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     emit(
         fragment,

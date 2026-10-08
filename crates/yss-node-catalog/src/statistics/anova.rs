@@ -23,11 +23,6 @@ const METHODS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.anova.")
-        .is_some_and(|method| METHODS.iter().any(|spec| spec.0 == method))
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.anova.{method}");

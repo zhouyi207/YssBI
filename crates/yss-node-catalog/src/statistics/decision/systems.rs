@@ -8,10 +8,6 @@ const NODES: &[(&str, &str, &str)] = &[
     ),
     ("obstacle_degree", "Obstacle degree", "障碍度"),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.decision.")
-        .is_some_and(|s| NODES.iter().any(|n| n.0 == s))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in NODES {
         let mut parameters = vec![];

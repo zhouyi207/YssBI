@@ -5,10 +5,6 @@ pub(super) const THEIL_ID: &str = "yssbi.statistics.inequality.theil";
 pub(super) const GINI_ID: &str = "yssbi.statistics.inequality.gini";
 pub(super) const DAGUM_ID: &str = "yssbi.statistics.inequality.dagum_gini";
 
-pub(super) fn implemented(id: &str) -> bool {
-    matches!(id, THEIL_ID | GINI_ID | DAGUM_ID)
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     append_description(fragment)?;
     for (id, en, zh, en_help, zh_help, aliases) in [

@@ -69,10 +69,6 @@ const NODES: &[(&str, &str, &str)] = &[
     ("plot.forest", "Forest plot", "森林图"),
     ("plot.funnel", "Funnel plot", "漏斗图"),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.")
-        .is_some_and(|suffix| NODES.iter().any(|n| n.0 == suffix))
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(suffix, en, zh) in NODES {
         let id = format!("yssbi.statistics.{suffix}");

@@ -34,10 +34,6 @@ const METHODS: &[(&str, &str, &str)] = &[
         "比例风险 PH 假设检验",
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.diagnostic.")
-        .is_some_and(|method| METHODS.iter().any(|m| m.0 == method))
-}
 fn binary_series() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalize_type_expr(TypeExpr::Union(vec![
         series_type()?,

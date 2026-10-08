@@ -63,10 +63,6 @@ const METHODS: &[(&str, &str, &str, &[&str])] = &[
         &["spatial.panel", "空间面板模型"],
     ),
 ];
-pub(super) fn implemented(id: &str) -> bool {
-    id.strip_prefix("yssbi.statistics.spatial.")
-        .is_some_and(|s| METHODS.iter().any(|m| m.0 == s))
-}
 fn labels() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalize_type_expr(TypeExpr::Union(
         [
