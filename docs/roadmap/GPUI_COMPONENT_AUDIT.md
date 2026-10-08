@@ -120,6 +120,17 @@
 - 临时 `cargo build -p yss-desktop-gpui --example review_categorical_plots` 复用生产 PlotView/plots，目视核对帕累托首/末页、双轴/共轴、负柱、重复标签、中文/长词/换行和拥挤词云；修正百分比刻度显示并复看。临时预览源文件在提交前移除。
 - Fedora 预览中的 `📈` 有测量和排布位置，但字形不可见；同窗口普通 GPUI 文本也复现。该字体渲染问题、真实结果打开/关闭、悬浮、分页按钮、窗口缩放和主题/字体切换验收继续开放。报告专用呈现及独立图形窗口另行审查。
 
+### 结构化统计报告
+
+- 已阅读 ReportView、StructuredResult、StructuredReportTable、StructuredData、Section、DataTable、KeyValue，以及声明解析、分页 hook 和数值/报告容器；线性报告与追加内容流程已阅读，仍单独待迁移。
+- Application 在原 Results owner 增加有界声明与页展示校验，直接消费 RuntimeValue；原 `query_result_table`、结果身份、租约和数组引用继续复用，没有 IPC、JSON 往返或新依赖。
+- GPUI 增加数值/报告切换，报告实体保留章节与页状态。章节首次展开才加载；原方程以纯文本和复制入口呈现；标量记录共用虚拟表格，嵌套数组保留原绝对路径和 100 行页。
+- 稳定性图使用原根、等比例坐标与单位圆，悬浮只展示原模值；分页超过一页有明确提示，不据当前页推断整体稳定性。错误声明保留原值，页失败保留上次成功页和重试入口。
+- `cargo test -p yss-application --lib graph::results::report::structured::tests -- --nocapture` 两项通过，保护声明绑定/预算、宽整数/空值/完整页/无效行；`cargo test -p yss-application --lib graph::results::structured::tests -- --nocapture` 三项通过，保护真实 Poisson 无声明报告、嵌套路径、结果租约与完整数组分页。
+- 临时 `cargo build -p yss-desktop-gpui --example review_structured_reports` 使用样例页核对原生表格、方程、空值、完整整数、单位圆、范围与无效声明布局；样例页不作为真实服务或交互验收证据。当前 X11 截图在调整窗口尺寸后才显示后续帧，自动重绘及完整交互保留待验收，不加入无效的整窗刷新绕行。
+- 独立提交内容通过 `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；12 个变更 Rust 文件格式、翻译键、模块索引、文档本地链接与 `git diff --check` 通过。
+- 本批未添加 UI 单元测试；具体交互步骤和生命周期验收见 GPUI README。线性回归专项章节、追加报告内容与独立结果窗口仍开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -191,13 +202,13 @@
 | [components/ui-presentation/CoefficientChart.tsx](../../react/src/components/ui-presentation/CoefficientChart.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [components/ui-presentation/CoefficientTable.tsx](../../react/src/components/ui-presentation/CoefficientTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [components/ui-presentation/Controls.tsx](../../react/src/components/ui-presentation/Controls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/DataTable.tsx](../../react/src/components/ui-presentation/DataTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [components/ui-presentation/DataTable.tsx](../../react/src/components/ui-presentation/DataTable.tsx) | 复用原生组件：虚拟 Table | 结构化报告已复用 `results/table`，保留精确数值；线性报告格式与 p 值样式随专项报告处理 | 结构化报告已覆盖；其余消费者待迁移 |
 | [components/ui-presentation/Equation.tsx](../../react/src/components/ui-presentation/Equation.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [components/ui-presentation/FormulaMappingTable.tsx](../../react/src/components/ui-presentation/FormulaMappingTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/KeyValue.tsx](../../react/src/components/ui-presentation/KeyValue.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/Section.tsx](../../react/src/components/ui-presentation/Section.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [components/ui-presentation/KeyValue.tsx](../../react/src/components/ui-presentation/KeyValue.tsx) | 迁移：原生字段展示 | 结构化值已使用原生字段/值布局；线性报告的展示格式随专项报告处理 | 部分覆盖；人工验收待完成 |
+| [components/ui-presentation/Section.tsx](../../react/src/components/ui-presentation/Section.tsx) | 复用原生组件：Collapsible | `results/report/section` 首次展开创建内容，保留折叠与页状态；不迁移 DOM details | 代码已覆盖；人工验收待完成 |
 | [components/ui-presentation/StatCard.tsx](../../react/src/components/ui-presentation/StatCard.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/StructuredData.tsx](../../react/src/components/ui-presentation/StructuredData.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [components/ui-presentation/StructuredData.tsx](../../react/src/components/ui-presentation/StructuredData.tsx) | 迁移：通用结构化值 | 原生标量/记录表格、字段与嵌套数组；分页 100 行，宽整数和空值保持原值 | 代码已覆盖；人工验收待完成 |
 | [components/ui-presentation/TableFrame.tsx](../../react/src/components/ui-presentation/TableFrame.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 
 ## features/application
@@ -422,11 +433,11 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/results/internal/ui/info/AddReportContents.tsx](../../react/src/modules/results/internal/ui/info/AddReportContents.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/info/StructuredReportTable.tsx](../../react/src/modules/results/internal/ui/info/StructuredReportTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/info/StructuredResult.tsx](../../react/src/modules/results/internal/ui/info/StructuredResult.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/results/internal/ui/info/AddReportContents.tsx](../../react/src/modules/results/internal/ui/info/AddReportContents.tsx) | 迁移：追加报告内容 | 已阅读选项、滞后阶数、假设与失败保留流程；需复用原 Summary 编辑和执行 owner | 待迁移 |
+| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节 | 已阅读章节、分页、诊断及追加内容流程；现有原生只显示概览，需继续接入类型化分析 | 待迁移 |
+| [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 迁移：类型化报告入口 | 结构化报告及无效声明反馈已接入；同一面板租约保留数值/报告切换状态 | 结构化部分已覆盖；线性报告待迁移 |
+| [modules/results/internal/ui/info/StructuredReportTable.tsx](../../react/src/modules/results/internal/ui/info/StructuredReportTable.tsx) | 迁移：声明表格与稳定性图 | Application 校验全部声明和行；原生共享表格、单位圆、当前页提示、分页与重试 | 代码已覆盖；人工验收待完成 |
+| [modules/results/internal/ui/info/StructuredResult.tsx](../../react/src/modules/results/internal/ui/info/StructuredResult.tsx) | 迁移：结构化报告 | 原方程文本、声明章节和结构化原值；嵌套数组按原路径读取，不复制统计逻辑 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/shared/ACFPACFBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/ACFPACFBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/results/internal/ui/info/shared/SerialTestsBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/SerialTestsBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

@@ -1,6 +1,7 @@
 //! Native result panels own view state and one Application result lease.
 mod plot;
 mod query;
+mod report;
 mod table;
 mod value;
 
@@ -9,7 +10,7 @@ use gpui::{
     Window, div, prelude::*, px, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, Sizable,
+    ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
     table::{DataTable, TableState},
@@ -37,6 +38,8 @@ pub struct ResultPanel {
     focus: FocusHandle,
     value: Option<Arc<RuntimeValue>>,
     plot: Option<Entity<plot::PlotView>>,
+    report: Option<Entity<report::ReportView>>,
+    report_mode: bool,
     rows: Vec<value::ValueRow>,
     expanded: BTreeSet<String>,
     tables: bool,
@@ -62,6 +65,8 @@ impl ResultPanel {
             focus: cx.focus_handle(),
             value: None,
             plot: None,
+            report: None,
+            report_mode: false,
             rows: vec![],
             expanded: BTreeSet::new(),
             tables: false,
@@ -112,7 +117,22 @@ impl ResultPanel {
                             ResultContent::Plot(data) => {
                                 view.plot = Some(cx.new(|_| plot::PlotView::new(data)));
                             }
-                            ResultContent::Value { value, tables } => {
+                            ResultContent::Value {
+                                value,
+                                tables,
+                                report,
+                            } => {
+                                if let Some(report) = report {
+                                    view.report = Some(cx.new(|cx| {
+                                        report::ReportView::new(
+                                            view.services.clone(),
+                                            view.reference,
+                                            value.clone(),
+                                            report,
+                                            cx,
+                                        )
+                                    }));
+                                }
                                 view.tables = tables;
                                 view.rows = value::rows(&value, &view.expanded, tables);
                                 view.value = Some(value);
@@ -226,15 +246,19 @@ impl ResultPanel {
 
 impl Render for ResultPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let paging = self.table.as_ref().map(|table| {
-            let page = table.read(cx).delegate();
-            (
-                page.offset,
-                page.row_count(),
-                page.total_count,
-                page.has_more,
-            )
-        });
+        let paging = self
+            .table
+            .as_ref()
+            .filter(|_| !self.report_mode)
+            .map(|table| {
+                let page = table.read(cx).delegate();
+                (
+                    page.offset,
+                    page.row_count(),
+                    page.total_count,
+                    page.has_more,
+                )
+            });
         div()
             .id("result-view")
             .track_focus(&self.focus)
@@ -250,21 +274,44 @@ impl Render for ResultPanel {
                     .items_center()
                     .border_b_1()
                     .border_color(cx.theme().border)
-                    .when(self.value.is_some(), |bar| {
-                        bar.child(
-                            Button::new("result-overview")
-                                .small()
-                                .ghost()
-                                .icon(IconName::ArrowLeft)
-                                .label("返回概览")
-                                .disabled(self.loading)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.table = None;
-                                    view.part = None;
-                                    cx.notify();
-                                })),
+                    .when(self.report.is_some(), |bar| {
+                        bar.children(
+                            [
+                                (false, "sourceInspector.numericView"),
+                                (true, "sourceInspector.reportView"),
+                            ]
+                            .into_iter()
+                            .map(|(report, key)| {
+                                Button::new(("result-mode", usize::from(report)))
+                                    .small()
+                                    .ghost()
+                                    .selected(self.report_mode == report)
+                                    .label(crate::text::translate(key))
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.report_mode = report;
+                                        cx.notify();
+                                    }))
+                            }),
                         )
                     })
+                    .when(
+                        !self.report_mode && self.value.is_some() && self.table.is_some(),
+                        |bar| {
+                            bar.child(
+                                Button::new("result-overview")
+                                    .small()
+                                    .ghost()
+                                    .icon(IconName::ArrowLeft)
+                                    .label("返回概览")
+                                    .disabled(self.loading)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.table = None;
+                                        view.part = None;
+                                        cx.notify();
+                                    })),
+                            )
+                        },
+                    )
                     .when_some(paging, |bar, (offset, count, total, has_more)| {
                         bar.child(
                             Button::new("result-prev")
@@ -324,22 +371,30 @@ impl Render for ResultPanel {
                 div()
                     .flex_1()
                     .min_h_0()
-                    .when_some(self.table.as_ref(), |body, table| {
-                        body.child(DataTable::new(table).small().stripe(true))
-                    })
+                    .when_some(
+                        self.report.as_ref().filter(|_| self.report_mode),
+                        |body, report| body.child(report.clone()),
+                    )
+                    .when_some(
+                        self.table.as_ref().filter(|_| !self.report_mode),
+                        |body, table| body.child(DataTable::new(table).small().stripe(true)),
+                    )
                     .when_some(self.plot.as_ref(), |body, plot| body.child(plot.clone()))
-                    .when(self.table.is_none() && self.plot.is_none(), |body| {
-                        body.child(
-                            uniform_list(
-                                "result-values",
-                                self.rows.len(),
-                                cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
-                                    range.map(|index| view.render_row(index, cx)).collect()
-                                }),
+                    .when(
+                        !self.report_mode && self.table.is_none() && self.plot.is_none(),
+                        |body| {
+                            body.child(
+                                uniform_list(
+                                    "result-values",
+                                    self.rows.len(),
+                                    cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
+                                        range.map(|index| view.render_row(index, cx)).collect()
+                                    }),
+                                )
+                                .size_full(),
                             )
-                            .size_full(),
-                        )
-                    }),
+                        },
+                    ),
             )
     }
 }
@@ -368,6 +423,7 @@ impl BasePanel for ResultPanel {
         self.table = None;
         self.value = None;
         self.plot = None;
+        self.report = None;
         self.rows.clear();
         cx.emit(ResultEvent::Closed);
     }

@@ -16,6 +16,81 @@ pub struct ResultGrid {
 
 impl ResultGrid {
     pub fn from_page(page: ResultPageProjection) -> Self {
+        Self::with_format(page, display)
+    }
+    pub fn from_report(page: ResultPageProjection) -> Self {
+        Self::with_format(page, super::report::scalar)
+    }
+
+    /// A bounded array page can use the same grid when every cell is scalar.
+    pub fn from_structured(page: &ResultPageProjection) -> Option<Self> {
+        use yss_application::graph::results::report::structured::table_reference;
+        const MAX_COLUMNS: usize = 64;
+        let scalar = |value: &RuntimeValue| matches!(value.unannotated(), RuntimeValue::Scalar(_));
+        let values = &page.values;
+        let (names, rows): (Vec<String>, Vec<Vec<String>>) = if values.iter().all(scalar) {
+            let rows = values
+                .iter()
+                .map(|value| vec![super::report::scalar(value)])
+                .collect();
+            (vec!["value".into()], rows)
+        } else {
+            let records = values
+                .iter()
+                .map(|value| {
+                    let RuntimeValue::Record(fields) = value.unannotated() else {
+                        return None;
+                    };
+                    (fields.len() <= MAX_COLUMNS
+                        && table_reference(value).is_none()
+                        && fields.values().all(scalar))
+                    .then_some(fields)
+                })
+                .collect::<Option<Vec<_>>>()?;
+            // Disjoint record keys must not turn a bounded page into a huge sparse matrix.
+            let mut names = std::collections::BTreeSet::new();
+            for fields in &records {
+                for key in fields.keys() {
+                    names.insert(key.to_string());
+                    if names.len() > MAX_COLUMNS {
+                        return None;
+                    }
+                }
+            }
+            let names = names.into_iter().collect::<Vec<_>>();
+            let rows = records
+                .into_iter()
+                .map(|fields| {
+                    names
+                        .iter()
+                        .map(|key| {
+                            fields
+                                .get(key.as_str())
+                                .map(super::report::scalar)
+                                .unwrap_or_default()
+                        })
+                        .collect()
+                })
+                .collect();
+            (names, rows)
+        };
+        // An empty record is a value, not a table with no visible columns.
+        if names.is_empty() {
+            return None;
+        }
+        Some(Self {
+            columns: names
+                .iter()
+                .enumerate()
+                .map(|(index, name)| Column::new(index.to_string(), name.clone()).width(px(180.)))
+                .collect(),
+            rows,
+            offset: page.offset,
+            total_count: page.total_count,
+            has_more: page.has_more,
+        })
+    }
+    fn with_format(page: ResultPageProjection, display: fn(&RuntimeValue) -> String) -> Self {
         let names: Vec<String> = page
             .columns
             .iter()
@@ -26,7 +101,8 @@ impl ResultGrid {
         } else {
             names
                 .iter()
-                .map(|name| Column::new(name.clone(), name.clone()).width(px(180.)))
+                .enumerate()
+                .map(|(index, name)| Column::new(index.to_string(), name.clone()).width(px(180.)))
                 .collect()
         };
         let rows = page

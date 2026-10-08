@@ -34,6 +34,9 @@ pub enum ResultContent {
     Value {
         value: Arc<RuntimeValue>,
         tables: bool,
+        report: Option<
+            Result<Vec<yss_application::graph::results::report::structured::ReportSection>, ()>,
+        >,
     },
     Page(ResultGrid),
 }
@@ -85,14 +88,20 @@ pub fn open(
                 .application
                 .query_result_projection(reference)?
                 .ok_or_else(|| anyhow!("result unavailable"))?;
-            let tables = matches!(projection, ResultValueProjection::LinearReport(_))
-                || snapshot.value().category()
-                    == yss_graph_execution::plan::ResultCategory::StatisticalReport(
-                        yss_graph_execution::plan::StatisticalReportKind::Structured,
-                    );
+            let structured = snapshot.value().category()
+                == yss_graph_execution::plan::ResultCategory::StatisticalReport(
+                    yss_graph_execution::plan::StatisticalReportKind::Structured,
+                );
+            let tables = matches!(projection, ResultValueProjection::LinearReport(_)) || structured;
+            let value = super::value::overview(&projection)?;
+            let report = structured.then(|| {
+                yss_application::graph::results::report::structured::sections(&value)
+                    .map_err(|_| ())
+            });
             ResultContent::Value {
-                value: super::value::overview(&projection)?,
+                value,
                 tables,
+                report,
             }
         }
     };

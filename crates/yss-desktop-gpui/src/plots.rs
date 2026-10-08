@@ -10,4 +10,5 @@ pub(crate) mod histogram;
 pub(crate) mod interval;
 pub(crate) mod matrix;
 pub(crate) mod nomogram;
+pub(crate) mod stability;
 pub(crate) mod wordcloud;

@@ -253,6 +253,14 @@ fn poisson_report_reads_bounded_json_and_complete_array_pages_with_a_lease() {
         .unwrap()
         .execution()
         .invalidate_graph_results("events/poisson.yssbi-event");
+    let crate::graph::results::ResultValueProjection::Value(native) =
+        app.query_result_projection(reference).unwrap().unwrap()
+    else {
+        panic!("structured report projection");
+    };
+    let sections = crate::graph::results::report::structured::sections(&native).unwrap();
+    // This producer has no display declaration; native consumers retain its structured view.
+    assert!(sections.is_empty());
     let part = value["fitted"]["part"].as_str().unwrap();
     let first = app
         .query_result_table(reference, part.parse().unwrap(), 0, 100)

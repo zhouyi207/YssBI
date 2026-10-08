@@ -14,6 +14,7 @@ use yss_sci_contract::diagnostics::serial_correlation::SerialTestsOutput;
 use yss_sci_contract::hypothesis::HypothesisTestOutput;
 
 pub(crate) mod presentation;
+pub mod structured;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResultTablePart {
