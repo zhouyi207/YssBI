@@ -342,68 +342,73 @@ fn decimal_coefficient(text: &str, precision: u8, scale: i8) -> Result<String, T
     Ok(digits)
 }
 
-/// Paging projection: JavaScript-safe integers stay numeric; wider integers and exact decimal,
-/// temporal and category values use text. NaN/infinity have the existing UI null representation.
-pub fn array_to_json(array: &dyn Array) -> Result<Vec<Value>, TabularArrowError> {
+/// Snapshot scalars retain signed/unsigned integer carriers and finite floating values.
+/// Exact decimals, calendar values and category labels retain their textual projection.
+/// Non-finite floats use the existing page null representation.
+pub fn array_to_scalars(array: &dyn Array) -> Result<Vec<TabularScalar>, TabularArrowError> {
     use arrow::util::display::array_value_to_string;
     let normalized = crate::timezone_free_array(array)?;
     let array = normalized.as_ref();
     if matches!(array.data_type(), DataType::Dictionary(_, _)) {
-        return array_to_json(strict_cast(array, &DataType::Utf8)?.as_ref());
+        return array_to_scalars(strict_cast(array, &DataType::Utf8)?.as_ref());
     }
     (0..array.len())
         .map(|row| {
             if array.is_null(row) {
-                return Ok(Value::Null);
+                return Ok(TabularScalar::Null);
             }
             macro_rules! native {
-                ($array:ty) => {
-                    serde_json::to_value(
+                ($array:ty, $kind:ident) => {
+                    Ok(TabularScalar::$kind(
                         array
                             .as_any()
                             .downcast_ref::<$array>()
                             .ok_or(TabularArrowError::InvalidValue)?
-                            .value(row),
-                    )
-                    .map_err(|_| TabularArrowError::InvalidValue)
+                            .value(row)
+                            .into(),
+                    ))
                 };
             }
+            macro_rules! float {
+                ($array:ty) => {{
+                    let value: f64 = array
+                        .as_any()
+                        .downcast_ref::<$array>()
+                        .ok_or(TabularArrowError::InvalidValue)?
+                        .value(row)
+                        .into();
+                    Ok(value
+                        .try_into()
+                        .map(TabularScalar::Float64)
+                        .unwrap_or(TabularScalar::Null))
+                }};
+            }
             match array.data_type() {
-                DataType::Boolean => native!(BooleanArray),
-                DataType::Int8 => native!(Int8Array),
-                DataType::Int16 => native!(Int16Array),
-                DataType::Int32 => native!(Int32Array),
-                DataType::Int64 => serde_json::to_value(
-                    TabularScalar::Integer(
-                        array
-                            .as_any()
-                            .downcast_ref::<Int64Array>()
-                            .ok_or(TabularArrowError::InvalidValue)?
-                            .value(row),
-                    )
-                    .display_value(),
-                )
-                .map_err(|_| TabularArrowError::InvalidValue),
-                DataType::UInt8 => native!(UInt8Array),
-                DataType::UInt16 => native!(UInt16Array),
-                DataType::UInt32 => native!(UInt32Array),
-                DataType::UInt64 => serde_json::to_value(
-                    TabularScalar::Unsigned(
-                        array
-                            .as_any()
-                            .downcast_ref::<UInt64Array>()
-                            .ok_or(TabularArrowError::InvalidValue)?
-                            .value(row),
-                    )
-                    .display_value(),
-                )
-                .map_err(|_| TabularArrowError::InvalidValue),
-                DataType::Float32 => native!(Float32Array),
-                DataType::Float64 => native!(Float64Array),
+                DataType::Boolean => native!(BooleanArray, Bool),
+                DataType::Int8 => native!(Int8Array, Integer),
+                DataType::Int16 => native!(Int16Array, Integer),
+                DataType::Int32 => native!(Int32Array, Integer),
+                DataType::Int64 => native!(Int64Array, Integer),
+                DataType::UInt8 => native!(UInt8Array, Unsigned),
+                DataType::UInt16 => native!(UInt16Array, Unsigned),
+                DataType::UInt32 => native!(UInt32Array, Unsigned),
+                DataType::UInt64 => native!(UInt64Array, Unsigned),
+                DataType::Float32 => float!(Float32Array),
+                DataType::Float64 => float!(Float64Array),
                 _ => array_value_to_string(array, row)
-                    .map(Value::String)
+                    .map(|value| TabularScalar::String(value.into_boxed_str()))
                     .map_err(|_| TabularArrowError::InvalidValue),
             }
+        })
+        .collect()
+}
+
+/// JSON display projection; callers needing native carriers use `array_to_scalars`.
+pub fn array_to_json(array: &dyn Array) -> Result<Vec<Value>, TabularArrowError> {
+    array_to_scalars(array)?
+        .into_iter()
+        .map(|value| {
+            serde_json::to_value(value.display_value()).map_err(|_| TabularArrowError::InvalidValue)
         })
         .collect()
 }

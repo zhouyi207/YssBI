@@ -20,7 +20,9 @@ pub use semantic::{
     with_column_semantic,
 };
 
-pub use scalar::{array_to_json, json_to_array, normalize_batch_categories, to_record_batch};
+pub use scalar::{
+    array_to_json, array_to_scalars, json_to_array, normalize_batch_categories, to_record_batch,
+};
 pub use schema::{
     CategoryDomain, DatasetRowColumns, column_identity, data_type_name, database_schema_fact,
     dataset_row_columns, physical_type_name, validate_storage_schema, with_column_metadata,

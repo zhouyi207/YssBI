@@ -18,7 +18,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-canonical-hash` | `crates/yss-canonical-hash` | [Cargo.toml](../../crates/yss-canonical-hash/Cargo.toml) | — |
 | `yss-chart-document` | `crates/yss-chart-document` | [Cargo.toml](../../crates/yss-chart-document/Cargo.toml) | — |
 | `yss-data-contract` | `crates/yss-data-contract` | [Cargo.toml](../../crates/yss-data-contract/Cargo.toml) | [README](../../crates/yss-data-contract/README.md) |
-| `yss-database-arrow` | `crates/yss-database-arrow` | [Cargo.toml](../../crates/yss-database-arrow/Cargo.toml) | — |
+| `yss-database-arrow` | `crates/yss-database-arrow` | [Cargo.toml](../../crates/yss-database-arrow/Cargo.toml) | [README](../../crates/yss-database-arrow/README.md) |
 | `yss-database-contract` | `crates/yss-database-contract` | [Cargo.toml](../../crates/yss-database-contract/Cargo.toml) | — |
 | `yss-database-engine` | `crates/yss-database-engine` | [Cargo.toml](../../crates/yss-database-engine/Cargo.toml) | — |
 | `yss-database-io` | `crates/yss-database-io` | [Cargo.toml](../../crates/yss-database-io/Cargo.toml) | — |

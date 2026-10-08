@@ -9,6 +9,43 @@ use yss_database_contract::DatabaseId;
 use super::*;
 
 #[test]
+fn snapshot_scalars_preserve_physical_number_carriers_and_nulls() {
+    use arrow::array::{ArrayRef, Float32Array, Int64Array};
+    for (array, expected) in [
+        (
+            Arc::new(Int64Array::from(vec![Some(7), Some(i64::MIN), None])) as ArrayRef,
+            vec![
+                TabularScalar::Integer(7),
+                TabularScalar::Integer(i64::MIN),
+                TabularScalar::Null,
+            ],
+        ),
+        (
+            Arc::new(UInt64Array::from(vec![Some(7), Some(u64::MAX), None])) as ArrayRef,
+            vec![
+                TabularScalar::Unsigned(7),
+                TabularScalar::Unsigned(u64::MAX),
+                TabularScalar::Null,
+            ],
+        ),
+        (
+            Arc::new(Float32Array::from(vec![
+                Some(1.25),
+                Some(f32::INFINITY),
+                None,
+            ])) as ArrayRef,
+            vec![
+                TabularScalar::Float64(1.25.try_into().unwrap()),
+                TabularScalar::Null,
+                TabularScalar::Null,
+            ],
+        ),
+    ] {
+        assert_eq!(array_to_scalars(array.as_ref()).unwrap(), expected);
+    }
+}
+
+#[test]
 #[ignore = "manual conversion timing probe"]
 fn conversion_hot_path_timing() {
     use std::{hint::black_box, time::Instant};
