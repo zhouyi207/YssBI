@@ -12,11 +12,21 @@
 | `root` / `identity`           | 路径规范化、原生目录身份、RootBinding 重验、独立的 TransactionId |
 | `coordinator`                 | 按根目录排序的访问 lease、关闭准入、排空和最终 lease             |
 | `transaction` / `recovery`    | 暂存、提交、显式/Drop 回滚、恢复标记与故障注入                   |
-| `lifecycle`                   | 安全读取文件树、枚举和目录操作策略                               |
+| `lifecycle`                   | 安全文件清单枚举和目录操作策略                                   |
 | `change`                      | 安全 RelativePath、FileChange 与 RescanRequired                  |
 | `watcher` / `watcher::notify` | 监听接口、epoch 隔离、关闭和排空；notify 平台实现                |
 
 RootBinding 接收明确的目录路径；它不会把某个文件名当作项目入口，也不会根据文件名自动选择父目录。RootIdentity 表示原生目录对象身份，TransactionId 只标识文件事务。项目操作 ID 与保存到注册库的身份投影由调用方显式转换。
+
+目标根目录已存在时，`bind_existing` 保留首次捕获的原生身份，拒绝等待期间被替换的目录；
+首次捕获时尚不存在的目标目录允许在创建后绑定身份。事务目标与复制源共用 `RelativePath`
+的普通相对路径校验，拒绝前导当前目录、父目录和绝对路径组件；事务目标还按共享 portable path
+规则排除暂存目录及其大小写别名。
+`remove_directory_if_created` 接收捕获的 RootBinding 与创建事实，只在目录身份重验通过后清理；
+重验失败时保留同路径的替换目录。
+
+`read_file_inventory` 在枚举前绑定源目录，在返回前重验根身份；根目录及其祖先的链接或重解析点
+由现有 RootBinding 拒绝。清单只保存相对路径，不加载整棵树的文件正文。事务复制通过暂存文件流式读取。
 
 `FilesystemTransaction::prepare` 默认接受任意字节，不执行 JSON 或业务文档校验。需要校验时，调用方使用 `prepare_with_validator` 或 `prepare_with_file_validator` 提供规则。提交后必须调用 `finalize` 确认，或调用 `rollback` 撤销；未确认的提交沿用 Drop 回滚语义。失败恢复状态只描述文件系统结果，上层决定如何暂停或恢复业务。
 

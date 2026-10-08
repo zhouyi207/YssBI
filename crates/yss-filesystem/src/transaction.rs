@@ -50,15 +50,16 @@ pub enum StagedFilesystemMutation {
 }
 
 impl StagedFilesystemMutation {
-    fn relative_paths(&self) -> Vec<&Path> {
-        match self {
+    fn relative_paths(&self) -> impl Iterator<Item = &Path> {
+        let (first, second): (&Path, Option<&Path>) = match self {
             Self::Write { relative_path, .. }
             | Self::CopyFile { relative_path, .. }
             | Self::RemoveFile { relative_path }
             | Self::CreateDirectory { relative_path }
-            | Self::RemoveDirectoryIfEmpty { relative_path } => vec![relative_path],
-            Self::MoveFile { from, to } => vec![from, to],
-        }
+            | Self::RemoveDirectoryIfEmpty { relative_path } => (relative_path, None),
+            Self::MoveFile { from, to } => (from, Some(to)),
+        };
+        [Some(first), second].into_iter().flatten()
     }
 }
 

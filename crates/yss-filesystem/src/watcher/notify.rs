@@ -276,7 +276,7 @@ mod tests {
         change_from_event(root, event, &|_| true)
     }
 
-    fn path_event(root: &Path, relative: &str) -> Event {
+    fn path_event(root: &Path, relative: impl AsRef<Path>) -> Event {
         Event {
             kind: EventKind::Modify(ModifyKind::Any),
             paths: vec![root.join(relative)],
@@ -311,7 +311,10 @@ mod tests {
     #[test]
     fn observed_paths_outside_the_root_are_rejected() {
         let root = PathBuf::from("watch-root");
-        let outside = path_event(root.as_path(), r"..\other\metadata.yssbi");
+        let outside = path_event(
+            root.as_path(),
+            Path::new("..").join("other").join("metadata.yssbi"),
+        );
 
         assert!(observe(root.as_path(), &outside).is_none());
     }
@@ -349,7 +352,7 @@ mod tests {
         let event = Event {
             kind: EventKind::Modify(ModifyKind::Name(RenameMode::Any)),
             paths: vec![
-                root.join(r"..\other\metadata.yssbi"),
+                root.join("..").join("other").join("metadata.yssbi"),
                 root.join("metadata.yssbi"),
             ],
             attrs: EventAttributes::default(),

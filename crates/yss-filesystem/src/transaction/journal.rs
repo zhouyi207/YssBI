@@ -47,7 +47,6 @@ pub(super) fn capture_mutation_before_images(
     };
     let entries = mutation
         .relative_paths()
-        .into_iter()
         .map(|path| capture_before_image(root, path))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(MutationJournal { kind, entries })

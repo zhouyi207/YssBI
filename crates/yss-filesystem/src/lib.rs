@@ -15,8 +15,8 @@ mod windows_path_identity;
 pub use coordinator::{FilesystemCoordinator, FilesystemLeaseSet, RootLifecycleGuard};
 pub use error::FilesystemError;
 pub use lifecycle::{
-    FileInventory, SourceTree, ensure_directory, read_file_inventory, read_source_tree,
-    remove_directory_if_created, validate_destination_policy,
+    FileInventory, ensure_directory, read_file_inventory, remove_directory_if_created,
+    validate_destination_policy,
 };
 pub use recovery::RecoveryMarker;
 pub use root::{NormalizedRoot, RootBinding};

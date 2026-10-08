@@ -65,15 +65,16 @@ impl Drop for PreparedProjectDeletion {
 }
 
 struct DestinationRootGuard {
-    root: PathBuf,
+    binding: RootBinding,
     remove_on_drop: bool,
 }
 
 impl DestinationRootGuard {
-    fn ensure(root: &Path) -> Result<Self, ProjectOperationError> {
+    fn ensure(binding: &RootBinding) -> Result<Self, ProjectOperationError> {
+        let created = ensure_directory(binding.normalized().as_path())?;
         Ok(Self {
-            root: root.to_path_buf(),
-            remove_on_drop: ensure_directory(root)?,
+            binding: binding.bind_existing()?,
+            remove_on_drop: created,
         })
     }
 
@@ -84,7 +85,7 @@ impl DestinationRootGuard {
 
 impl Drop for DestinationRootGuard {
     fn drop(&mut self) {
-        remove_directory_if_created(&self.root, self.remove_on_drop);
+        remove_directory_if_created(&self.binding, self.remove_on_drop);
     }
 }
 
@@ -128,8 +129,7 @@ impl ProjectState {
             ));
         }
         validate_destination_policy(destination_root.as_path())?;
-        let mut root_guard = DestinationRootGuard::ensure(destination_root.as_path())?;
-        let destination_binding = destination_binding.bind_existing()?;
+        let mut root_guard = DestinationRootGuard::ensure(&destination_binding)?;
         let mutations = copy_mutations(session.root.as_path(), &authority)?;
         let context = lifecycle_context(
             ProjectSession {
@@ -146,9 +146,9 @@ impl ProjectState {
             validate_project_copy_staged_file,
         )?;
         self.validate_project_session(&session)?;
-        destination_binding.revalidate()?;
+        root_guard.binding.revalidate()?;
         let committed = prepared.commit()?;
-        destination_binding.revalidate()?;
+        root_guard.binding.revalidate()?;
         self.validate_project_session(&session)?;
         if self.capture_prepared_authority_basis(&session.root)? != Some(authority_basis.clone()) {
             return Err(stale(
@@ -183,8 +183,7 @@ impl ProjectState {
         validate_destination_policy(destination_root.as_path())?;
         let lease = self.filesystem().acquire(destination_root.clone())?;
         validate_destination_policy(destination_root.as_path())?;
-        let mut root_guard = DestinationRootGuard::ensure(destination_root.as_path())?;
-        let destination_binding = destination_binding.bind_existing()?;
+        let mut root_guard = DestinationRootGuard::ensure(&destination_binding)?;
         let mut data = ProjectData::new();
         data.metadata.project_name = project_name.clone();
         data.metadata.export_time = current_export_time();
@@ -202,9 +201,9 @@ impl ProjectState {
             new_project_mutations(&data)?,
             validate_project_copy_file,
         )?;
-        destination_binding.revalidate()?;
+        root_guard.binding.revalidate()?;
         let committed = prepared.commit()?;
-        destination_binding.revalidate()?;
+        root_guard.binding.revalidate()?;
         yss_database_store::DatasetStore::create(destination_root.as_path())
             .map_err(prepare_error)?;
         committed.finalize();

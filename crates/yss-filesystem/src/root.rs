@@ -52,7 +52,9 @@ impl RootBinding {
 
     pub fn bind_existing(&self) -> Result<Self, FilesystemError> {
         let rebound = Self::for_existing(&self.caller_root)?;
-        if rebound.normalized != self.normalized {
+        if rebound.normalized != self.normalized
+            || (self.identity.is_some() && rebound.identity != self.identity)
+        {
             return Err(invalid_root(
                 &self.caller_root,
                 "filesystem root changed while waiting",

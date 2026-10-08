@@ -106,7 +106,6 @@ pub(super) fn apply_mutation(
 ) -> Result<(), ApplyMutationError> {
     let relative = mutation
         .relative_paths()
-        .into_iter()
         .next()
         .expect("filesystem mutation has at least one path");
     let live = root.join(relative);

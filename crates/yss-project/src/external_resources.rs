@@ -271,14 +271,14 @@ mod tests {
                 )
                 .is_err()
         );
-        let tree = yss_filesystem::read_source_tree(session.root.as_path()).unwrap();
+        let tree = yss_filesystem::read_file_inventory(session.root.as_path()).unwrap();
         assert!(
             tree.files
-                .contains_key(&PathBuf::from(&receipt.resource_ref).join("summary.csv"))
+                .contains(&PathBuf::from(&receipt.resource_ref).join("summary.csv"))
         );
         assert!(
             tree.files
-                .keys()
+                .iter()
                 .all(|path| !path.starts_with(".yssbi-transaction"))
         );
         assert!(

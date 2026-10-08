@@ -39,6 +39,9 @@ Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑�
 
 Save As 以捕获的当前 ProjectData 覆盖目标副本中的 Graph、Chart、Mind 和 Doc 正文；Mind/Doc 复用各自 `FileContent::encode`，包含未保存编辑。复制不保存或修改源项目，仍在目标 publication 前重验源项目身份及 authority generation。
 
+创建项目和 Save As 的目标目录守卫持有同一份 FS RootBinding，在事务前后重验原生目录身份；
+失败清理要求本次创建事实并重验目录身份；身份已变的目标不执行回滚清理。
+
 Graph 复制、重命名及函数签名修改接收调用方当前会话的冻结 `NodeRegistry` 借用。Project 通过注册角色
 识别函数引用，覆盖当前文档、磁盘正文和可逆历史，不按内置节点 ID 维护另一份角色表。
 Project 不保存节点注册配置，也不依赖 Catalog、Analysis 或 Graph Runtime。重命名保留显式引用，当前适用的

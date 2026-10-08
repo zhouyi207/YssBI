@@ -1,5 +1,5 @@
 use super::{StagedFilesystemMutation, TRANSACTION_DIRECTORY, prepare_error};
-use crate::FilesystemError;
+use crate::{FilesystemError, RelativePath};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Component, Path, PathBuf};
 use unicode_casefold::UnicodeCaseFold;
@@ -25,15 +25,10 @@ pub(super) fn validate_mutation_paths(
 ) -> Result<(), FilesystemError> {
     let mut owners = HashMap::new();
     for mutation in mutations {
-        let paths = mutation.relative_paths();
-        for relative in &paths {
-            let valid = !relative.as_os_str().is_empty()
-                && !relative.is_absolute()
-                && relative.components().all(|component| {
-                    matches!(component, Component::Normal(_) | Component::CurDir)
-                })
+        for relative in mutation.relative_paths() {
+            let valid = RelativePath::validate(relative).is_ok()
                 && relative.components().next().is_some_and(|component| {
-                    !matches!(component, Component::Normal(name) if name == TRANSACTION_DIRECTORY)
+                    matches!(component, Component::Normal(name) if portable_path_key(Path::new(name)) != TRANSACTION_DIRECTORY)
                 });
             if !valid {
                 return Err(prepare_error(format!(
@@ -153,12 +148,7 @@ pub fn read_secure_file(root: &Path, relative: &Path) -> std::io::Result<Vec<u8>
 }
 
 pub(super) fn validate_copy_source(root: &Path, relative: &Path) -> std::io::Result<PathBuf> {
-    if relative.as_os_str().is_empty()
-        || relative.is_absolute()
-        || !relative
-            .components()
-            .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
-    {
+    if RelativePath::validate(relative).is_err() {
         return Err(std::io::Error::other(format!(
             "source '{}' is not a safe relative path",
             relative.display()

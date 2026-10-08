@@ -33,6 +33,11 @@ pub struct RelativePath(PathBuf);
 impl RelativePath {
     pub fn try_new(path: impl Into<PathBuf>) -> Result<Self, RelativePathError> {
         let path = path.into();
+        Self::validate(&path)?;
+        Ok(Self(path))
+    }
+
+    pub(crate) fn validate(path: &Path) -> Result<(), RelativePathError> {
         if path.as_os_str().is_empty() {
             return Err(RelativePathError::Empty);
         }
@@ -45,7 +50,7 @@ impl RelativePath {
         {
             return Err(RelativePathError::NonNormalComponent);
         }
-        Ok(Self(path))
+        Ok(())
     }
 
     pub fn as_path(&self) -> &Path {

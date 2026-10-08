@@ -234,6 +234,106 @@ fn root_paths_do_not_infer_a_parent_from_file_names() {
 }
 
 #[test]
+fn transaction_targets_cannot_address_the_reserved_staging_tree() {
+    let temporary = TestDirectory::new("transaction-reserved-staging-path");
+    let reserved = temporary.path().join(".yssbi-transaction");
+    std::fs::create_dir(&reserved).unwrap();
+    let preserved = reserved.join("preserved.bin");
+    std::fs::write(&preserved, b"another transaction's bytes").unwrap();
+    let root = normalized(temporary.path());
+    for relative_path in [
+        PathBuf::from(".")
+            .join(".yssbi-transaction")
+            .join("preserved.bin"),
+        PathBuf::from(".YSSBI-TRANSACTION").join("preserved.bin"),
+    ] {
+        let result = FilesystemTransaction::prepare(
+            transaction_context(root.clone()),
+            temporary.coordinator().acquire(root.clone()).unwrap(),
+            vec![StagedFilesystemMutation::Write {
+                relative_path,
+                contents: vec![0, 255],
+            }],
+        );
+        assert!(matches!(
+            result,
+            Err(super::FilesystemError::TransactionPrepareFailed { .. })
+        ));
+    }
+    assert_eq!(
+        std::fs::read(preserved).unwrap(),
+        b"another transaction's bytes"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn inventory_rejects_redirected_source_roots_before_enumeration() {
+    let temporary = TestDirectory::new("filesystem-inventory-root-link");
+    let outside = TestDirectory::new("filesystem-inventory-outside");
+    std::fs::write(outside.path().join("external.bin"), [0, 255]).unwrap();
+    let redirected = temporary.path().join("source");
+    std::os::unix::fs::symlink(outside.path(), &redirected).unwrap();
+    assert!(matches!(
+        super::read_file_inventory(&redirected),
+        Err(super::FilesystemError::InvalidRoot { .. })
+    ));
+}
+
+#[test]
+fn created_directory_cleanup_preserves_a_replaced_root() {
+    let temporary = TestDirectory::new("filesystem-created-root-cleanup");
+    let destination = temporary.path().join("destination");
+    assert!(super::ensure_directory(&destination).unwrap());
+    let binding = crate::RootBinding::for_existing(&destination).unwrap();
+    std::fs::rename(&destination, temporary.path().join("original")).unwrap();
+    std::fs::create_dir(&destination).unwrap();
+    let preserved = destination.join("external.bin");
+    std::fs::write(&preserved, [17, 255]).unwrap();
+    let replacement = crate::RootBinding::for_existing(&destination).unwrap();
+    assert_ne!(binding.identity(), replacement.identity());
+
+    super::remove_directory_if_created(&binding, true);
+    assert_eq!(std::fs::read(preserved).unwrap(), [17, 255]);
+
+    let fresh = temporary.path().join("fresh");
+    let created = super::ensure_directory(&fresh).unwrap();
+    let fresh_binding = crate::RootBinding::for_existing(&fresh).unwrap();
+    super::remove_directory_if_created(&fresh_binding, created);
+    assert!(!fresh.exists());
+}
+
+#[test]
+fn destination_binding_rejects_replaced_roots_and_admits_new_directories() {
+    let temporary = TestDirectory::new("filesystem-destination-identity");
+    let destination = temporary.path().join("destination");
+    std::fs::create_dir(&destination).unwrap();
+    let existing = crate::RootBinding::for_destination(&destination).unwrap();
+    assert_eq!(
+        existing.bind_existing().unwrap().identity(),
+        existing.identity()
+    );
+
+    std::fs::rename(&destination, temporary.path().join("original")).unwrap();
+    std::fs::create_dir(&destination).unwrap();
+    let replacement = crate::RootBinding::for_existing(&destination).unwrap();
+    assert_eq!(existing.normalized(), replacement.normalized());
+    assert_ne!(existing.identity(), replacement.identity());
+    assert!(matches!(
+        existing.bind_existing(),
+        Err(super::FilesystemError::InvalidRoot { .. })
+    ));
+
+    let new_destination = temporary.path().join("new-destination");
+    let missing = crate::RootBinding::for_destination(&new_destination).unwrap();
+    assert!(missing.identity().is_none());
+    std::fs::create_dir(&new_destination).unwrap();
+    let bound = missing.bind_existing().unwrap();
+    assert!(bound.identity().is_some());
+    bound.revalidate().unwrap();
+}
+
+#[test]
 fn lifecycle_close_rejects_new_operations_and_reopens_only_after_final_lease() {
     let temporary = TestDirectory::new("filesystem-lifecycle-close");
     let root = normalized(temporary.path().join("project"));

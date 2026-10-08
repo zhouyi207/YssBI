@@ -50,10 +50,11 @@ impl PreparedFilesystemTransaction {
                     | StagedFilesystemMutation::MoveFile { .. }
                     | StagedFilesystemMutation::RemoveDirectoryIfEmpty { .. }
             ) {
-                for relative_path in mutation.relative_paths() {
-                    if let Err(error) = validate_secure_path(&root, relative_path, true) {
-                        return self.commit_failed(&root, index, error.to_string(), false);
-                    }
+                let validation_error = mutation
+                    .relative_paths()
+                    .find_map(|relative| validate_secure_path(&root, relative, true).err());
+                if let Some(error) = validation_error {
+                    return self.commit_failed(&root, index, error.to_string(), false);
                 }
             }
             if let Err(error) = apply_mutation(

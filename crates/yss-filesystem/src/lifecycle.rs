@@ -1,11 +1,6 @@
-use crate::{FilesystemError, metadata_is_redirect, read_secure_file};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::{FilesystemError, RootBinding, metadata_is_redirect};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-
-pub struct SourceTree {
-    pub directories: BTreeSet<PathBuf>,
-    pub files: BTreeMap<PathBuf, Vec<u8>>,
-}
 
 pub struct FileInventory {
     pub directories: BTreeSet<PathBuf>,
@@ -20,9 +15,9 @@ pub fn ensure_directory(root: &Path) -> Result<bool, FilesystemError> {
     Ok(created)
 }
 
-pub fn remove_directory_if_created(root: &Path, created: bool) {
-    if created {
-        let _ = std::fs::remove_dir_all(root);
+pub fn remove_directory_if_created(binding: &RootBinding, created: bool) {
+    if created && binding.revalidate().is_ok() {
+        let _ = std::fs::remove_dir_all(binding.normalized().as_path());
     }
 }
 
@@ -51,28 +46,14 @@ pub fn validate_destination_policy(root: &Path) -> Result<(), FilesystemError> {
     Ok(())
 }
 
-pub fn read_source_tree(source_root: &Path) -> Result<SourceTree, FilesystemError> {
-    let inventory = read_file_inventory(source_root)?;
-    let files = inventory
-        .files
-        .into_iter()
-        .map(|relative| {
-            let contents = read_secure_file(source_root, &relative).map_err(prepare_error)?;
-            Ok((relative, contents))
-        })
-        .collect::<Result<_, FilesystemError>>()?;
-    Ok(SourceTree {
-        directories: inventory.directories,
-        files,
-    })
-}
-
 pub fn read_file_inventory(source_root: &Path) -> Result<FileInventory, FilesystemError> {
+    let binding = RootBinding::for_existing(source_root)?;
     let mut tree = FileInventory {
         directories: BTreeSet::new(),
         files: BTreeSet::new(),
     };
     collect_source_files(source_root, source_root, &mut tree)?;
+    binding.revalidate()?;
     Ok(tree)
 }
 
